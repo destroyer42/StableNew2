@@ -3,7 +3,7 @@ from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from src.gui.state import CancelToken
+from src.controller.runtime_state import CancelToken
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.pipeline.stage_sequencer import StageConfig, StageMetadata

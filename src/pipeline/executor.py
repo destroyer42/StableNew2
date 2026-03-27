@@ -58,7 +58,7 @@ from src.utils.error_envelope_v2 import serialize_envelope, wrap_exception
 from src.utils.process_inspector_v2 import collect_gpu_snapshot, collect_process_risk_snapshot
 
 from ..api import SDWebUIClient
-from ..gui.state import CancellationError, CancelToken
+from ..controller.runtime_state import CancellationError, CancelToken
 from ..utils import (
     ConfigManager,
     LogContext,

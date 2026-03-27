@@ -14,7 +14,6 @@ from typing import Any, Literal, Protocol
 from src.config.app_config import get_process_container_config, get_watchdog_config
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
-from src.gui.pipeline_panel_v2 import format_queue_job_summary
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
     JobView,
@@ -45,6 +44,35 @@ except ImportError:  # pragma: no cover - psutil is optional for cleanup
     psutil = None  # type: ignore[assignment]
 
 logger = logging.getLogger(__name__)
+
+
+def _format_queue_job_summary(job: Any) -> str:
+    if job is None:
+        return ""
+    config = getattr(job, "config_snapshot", None) or getattr(job, "pipeline_config", None) or {}
+
+    def _value(key: str, fallback: Any = "") -> Any:
+        if isinstance(config, dict):
+            return config.get(key, fallback)
+        return getattr(config, key, fallback)
+
+    model = _value("model") or _value("model_name") or "unknown"
+    prompt = _value("prompt") or ""
+    seed = _value("seed") or getattr(job, "seed", None)
+    status = getattr(job, "status", None)
+    prompt_preview = prompt.strip().splitlines()[0] if prompt.strip() else ""
+    if prompt_preview and len(prompt_preview) < len(prompt.strip()):
+        prompt_preview = prompt_preview[:40].rstrip() + "..."
+    summary_parts: list[str] = [model]
+    summary_parts.append(f"seed={seed or 'auto'}")
+    if status:
+        summary_parts.append(str(status))
+    if prompt_preview:
+        summary_parts.append(f'prompt="{prompt_preview}"')
+    job_id = getattr(job, "job_id", "") or ""
+    if job_id:
+        summary_parts.append(job_id)
+    return " | ".join(summary_parts)
 
 
 def _terminate_single_process(proc: psutil.Process, *, timeout: float) -> None:
@@ -1048,7 +1076,7 @@ class JobService:
 
     def _emit_queue_updated(self) -> None:
         jobs = self.job_queue.list_jobs()
-        summaries = [format_queue_job_summary(job) for job in jobs]
+        summaries = [_format_queue_job_summary(job) for job in jobs]
         self._emit(self.EVENT_QUEUE_UPDATED, summaries)
 
     def _set_queue_status(self, status: QueueStatus) -> None:

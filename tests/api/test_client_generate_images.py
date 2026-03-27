@@ -109,6 +109,32 @@ class _SessionWithHttpError:
         return _HttpErrorResponse()
 
 
+class _CudaOomHttpErrorResponse:
+    def __init__(self) -> None:
+        self.status_code = 500
+        self.text = json.dumps(
+            {
+                "error": "RuntimeError",
+                "errors": "CUDA error: out of memory",
+            }
+        )
+
+    def raise_for_status(self) -> None:
+        raise requests.HTTPError("500 Server Error", response=self)
+
+    def close(self) -> None:
+        return None
+
+
+class _SessionWithCudaOomHttpError:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def request(self, *args, **kwargs):
+        self.calls += 1
+        return _CudaOomHttpErrorResponse()
+
+
 def test_perform_request_raises_final_http_error_with_diagnostics() -> None:
     client = SDWebUIClient()
     client._session = _SessionWithHttpError()
@@ -126,6 +152,20 @@ def test_perform_request_raises_final_http_error_with_diagnostics() -> None:
     assert isinstance(diagnostics, dict)
     assert diagnostics["request_summary"]["status"] == 500
     assert "NansException" in diagnostics["request_summary"]["response_snippet"]
+
+
+def test_generate_images_txt2img_structured_cuda_oom_is_fail_fast() -> None:
+    client = SDWebUIClient()
+    oom_session = _SessionWithCudaOomHttpError()
+    client._session = oom_session
+    client._sleep = lambda _: None
+
+    outcome = client.generate_images(stage="txt2img", payload={"prompt": "oom"})
+
+    assert outcome.error is not None
+    assert outcome.error.code == GenerateErrorCode.UNKNOWN
+    assert outcome.error.message == "RuntimeError: CUDA error: out of memory"
+    assert oom_session.calls == 1
 
 
 class _FakeResponse:

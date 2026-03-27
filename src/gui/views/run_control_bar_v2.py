@@ -7,7 +7,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
-from src.gui.state import PipelineState
+from src.controller.runtime_state import PipelineState
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.pipeline.randomizer_v2 import build_prompt_variants, get_variant_count
 from src.pipeline.run_plan import PlannedJob, RunPlan

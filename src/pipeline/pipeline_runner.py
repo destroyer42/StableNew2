@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from src.api.client import SDWebUIClient
-from src.gui.state import CancellationError
+from src.controller.runtime_state import CancellationError
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata

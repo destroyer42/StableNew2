@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from src.controller.app_controller import AppController
-from src.gui.controller import PipelineController
+from src.controller.core_pipeline_controller import CorePipelineController
 from src.services.watchdog_system_v2 import SystemWatchdogV2
 
 
@@ -34,7 +34,7 @@ def test_progress_reporting_updates_heartbeat():
     mock_app_controller.last_ui_heartbeat_ts = 0.0
     
     # Create a pipeline controller
-    controller = PipelineController()
+    controller = CorePipelineController()
     
     # Patch AppController from the correct module
     with patch('src.controller.app_controller.AppController') as mock_app_class:

@@ -14,6 +14,10 @@ class _StubRoot:
     def __init__(self, geometry: str = "1200x800+100+50") -> None:
         self._geometry = geometry
         self.deiconified = 0
+        self._state = "normal"
+        self.lifted = 0
+        self.focused = 0
+        self.bound_events: list[str] = []
 
     def geometry(self, value: str | None = None) -> str:
         if value is not None:
@@ -21,7 +25,10 @@ class _StubRoot:
         return self._geometry
 
     def state(self) -> str:
-        return "normal"
+        return self._state
+
+    def set_state(self, value: str) -> None:
+        self._state = value
 
     def winfo_screenwidth(self) -> int:
         return 1920
@@ -33,7 +40,20 @@ class _StubRoot:
         return None
 
     def deiconify(self) -> None:
+        self._state = "normal"
         self.deiconified += 1
+
+    def lift(self) -> None:
+        self.lifted += 1
+
+    def focus_force(self) -> None:
+        self.focused += 1
+
+    def after_idle(self, callback) -> None:
+        callback()
+
+    def bind(self, sequence: str, callback, add=None) -> None:
+        self.bound_events.append(sequence)
 
 
 class _StubNotebook:
@@ -286,3 +306,44 @@ def test_save_ui_state_replaces_offscreen_geometry(tmp_path: Path) -> None:
     saved = store.load_state()
     assert saved is not None
     assert saved["window"]["geometry"] == f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+
+
+def test_capture_visible_window_geometry_ignores_iconic_offscreen_geometry() -> None:
+    window = MainWindowV2.__new__(MainWindowV2)
+    visible_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}+200+120"
+    window.root = _StubRoot(visible_geometry)
+    window._last_visible_window_geometry = None
+
+    window._capture_visible_window_geometry()
+    assert window._last_visible_window_geometry == visible_geometry
+
+    window.root.geometry("1984x1110+-32000+-32000")
+    window.root.set_state("iconic")
+    window._capture_visible_window_geometry()
+
+    assert window._last_visible_window_geometry == visible_geometry
+
+
+def test_ensure_window_visible_after_restore_uses_last_visible_geometry() -> None:
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot("1984x1110+-32000+-32000")
+    visible_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}+200+120"
+    window._last_visible_window_geometry = visible_geometry
+
+    window._ensure_window_visible_after_restore()
+
+    assert window.root.geometry() == visible_geometry
+    assert window.root.deiconified == 1
+    assert window.root.lifted == 1
+    assert window.root.focused == 1
+
+
+def test_on_window_map_restores_visible_geometry_after_minimize() -> None:
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot("1984x1110+-32000+-32000")
+    visible_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}+140+90"
+    window._last_visible_window_geometry = visible_geometry
+
+    window._on_window_map()
+
+    assert window.root.geometry() == visible_geometry

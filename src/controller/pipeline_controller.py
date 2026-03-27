@@ -16,10 +16,11 @@ from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from typing import Any
 
+from src.controller.core_pipeline_controller import CorePipelineController
 from src.controller.job_execution_controller import JobExecutionController
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service import JobService
-from src.gui.controller import PipelineController as _GUIPipelineController
+from src.controller.runtime_state import GUIState, PipelineState
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
@@ -37,7 +38,6 @@ from src.controller.webui_connection_controller import (
 )
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
 from src.gui.prompt_workspace_state import PromptWorkspaceState
-from src.gui.state import GUIState, PipelineState
 from src.history.history_record import HistoryRecord
 from src.learning.model_defaults_resolver import (
     GuiDefaultsResolver,
@@ -78,7 +78,7 @@ class PreviewSummaryDTO:
     cfg_scale: float | None
 
 
-class PipelineController(_GUIPipelineController):
+class PipelineController(CorePipelineController):
     def _build_njrs_from_pack_bundle(
         self, pack_entries: list[PackJobEntry]
     ) -> list[NormalizedJobRecord]:

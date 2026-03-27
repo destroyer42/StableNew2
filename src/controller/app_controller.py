@@ -370,6 +370,11 @@ class AppController:
         self._ui_debounce_pending = False
         self._ui_debounce_delay_ms = 150  # Coalesce updates within 150ms window
         self._preview_refresh_request_id = 0
+        self._runtime_status_lock = threading.Lock()
+        self._runtime_status_flush_scheduled = False
+        self._pending_runtime_status = None
+        self._last_runtime_status_flush_ts = 0.0
+        self._runtime_status_min_interval_ms = 250
         
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
@@ -652,6 +657,16 @@ class AppController:
 
     def _run_in_gui_thread(self, fn: Callable[[], None]) -> None:
         """Schedule the callable on the Tk main thread, safe from any thread."""
+        import threading
+
+        ui_thread_id = getattr(self, "_ui_thread_id", threading.get_ident())
+        if threading.get_ident() == ui_thread_id:
+            fn()
+            return
+        scheduler = getattr(self, "_ui_scheduler", None)
+        if callable(scheduler):
+            scheduler(fn)
+            return
         mw = getattr(self, "main_window", None)
         if mw is not None:
             dispatcher = getattr(mw, "run_in_main_thread", None)
@@ -825,17 +840,46 @@ class AppController:
                     current_step=status_data.get("current_step", 0),
                     total_steps=status_data.get("total_steps", 0),
                 )
-                
-                # Update app_state on GUI thread
-                def _update_state() -> None:
-                    if hasattr(self.app_state, "set_runtime_status"):
-                        self.app_state.set_runtime_status(runtime_status)
-                
-                self._ui_dispatch(_update_state)
+                self._queue_runtime_status_update(runtime_status)
             except Exception as exc:
                 logger.warning(f"Failed to process runtime status update: {exc}")
         
         return _status_callback
+
+    def _queue_runtime_status_update(self, runtime_status: Any) -> None:
+        import time
+
+        delay_ms = 0
+        should_schedule = False
+        with self._runtime_status_lock:
+            self._pending_runtime_status = runtime_status
+            if self._runtime_status_flush_scheduled:
+                return
+            elapsed_ms = (time.monotonic() - self._last_runtime_status_flush_ts) * 1000.0
+            if elapsed_ms >= float(self._runtime_status_min_interval_ms):
+                delay_ms = 0
+            else:
+                delay_ms = max(1, int(self._runtime_status_min_interval_ms - elapsed_ms))
+            self._runtime_status_flush_scheduled = True
+            should_schedule = True
+
+        if should_schedule:
+            self._ui_dispatch_later(delay_ms, self._flush_runtime_status_update)
+
+    def _flush_runtime_status_update(self) -> None:
+        import time
+
+        runtime_status = None
+        with self._runtime_status_lock:
+            runtime_status = self._pending_runtime_status
+            self._pending_runtime_status = None
+            self._runtime_status_flush_scheduled = False
+            self._last_runtime_status_flush_ts = time.monotonic()
+
+        if runtime_status is None:
+            return
+        if hasattr(self.app_state, "set_runtime_status"):
+            self.app_state.set_runtime_status(runtime_status)
 
     def _apply_initial_resource_probe_grace(self) -> None:
         setter = getattr(self._api_client, "set_startup_probe_grace", None)
@@ -2269,9 +2313,11 @@ class AppController:
     def _setup_queue_callbacks(self) -> None:
         if not self.job_service:
             return
+        use_event_dispatcher = False
         if hasattr(self.job_service, "set_event_dispatcher"):
             try:
                 self.job_service.set_event_dispatcher(self._run_in_gui_thread)
+                use_event_dispatcher = True
             except Exception:
                 pass
 
@@ -2292,23 +2338,26 @@ class AppController:
 
             return _wrapped
 
+        def _queue_callback(handler: Callable[..., None]) -> Callable[..., None]:
+            return handler if use_event_dispatcher else _wrap_ui_callback(handler)
+
         self.job_service.register_callback(
-            JobService.EVENT_QUEUE_UPDATED, _wrap_ui_callback(self._on_queue_updated)
+            JobService.EVENT_QUEUE_UPDATED, _queue_callback(self._on_queue_updated)
         )
         self.job_service.register_callback(
-            JobService.EVENT_QUEUE_STATUS, _wrap_ui_callback(self._on_queue_status_changed)
+            JobService.EVENT_QUEUE_STATUS, _queue_callback(self._on_queue_status_changed)
         )
         self.job_service.register_callback(
-            JobService.EVENT_JOB_STARTED, _wrap_ui_callback(self._on_job_started)
+            JobService.EVENT_JOB_STARTED, _queue_callback(self._on_job_started)
         )
         self.job_service.register_callback(
-            JobService.EVENT_JOB_FINISHED, _wrap_ui_callback(self._on_job_finished)
+            JobService.EVENT_JOB_FINISHED, _queue_callback(self._on_job_finished)
         )
         self.job_service.register_callback(
-            JobService.EVENT_JOB_FAILED, _wrap_ui_callback(self._on_job_failed)
+            JobService.EVENT_JOB_FAILED, _queue_callback(self._on_job_failed)
         )
         self.job_service.register_callback(
-            JobService.EVENT_QUEUE_EMPTY, _wrap_ui_callback(self._on_queue_empty)
+            JobService.EVENT_QUEUE_EMPTY, _queue_callback(self._on_queue_empty)
         )
         self._refresh_job_history()
         # PR-GUI-F3: Load persisted queue state on startup
@@ -2317,7 +2366,7 @@ class AppController:
         if hasattr(self.job_service, "set_status_callback"):
             try:
                 self.job_service.set_status_callback(
-                    "gui_queue_history", _wrap_ui_callback(self._on_job_status_for_panels)
+                    "gui_queue_history", _queue_callback(self._on_job_status_for_panels)
                 )
             except Exception:
                 pass

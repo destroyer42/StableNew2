@@ -1,10 +1,9 @@
 {
-  "workdir": "C:\\Users\\rob\\AppData\\Local\\Temp\\pytest-of-rob\\pytest-1323\\test_data0",
+  "workdir": "C:\\Users\\rob\\stable-diffusion-webui",
   "command": [
     "webui-user.bat",
     "--api",
-    "--xformers",
-    "--medvram-sdxl"
+    "--xformers"
   ],
-  "timestamp": 1774577239.7658277
+  "timestamp": 1774609742.9238544
 }

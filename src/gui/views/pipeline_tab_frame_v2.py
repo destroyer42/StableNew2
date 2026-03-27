@@ -11,7 +11,6 @@ from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
-from src.gui.state import PipelineState
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
@@ -24,6 +23,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
 )
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.zone_map_v2 import get_pipeline_stage_order
+from src.controller.runtime_state import PipelineState
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
 
@@ -264,7 +264,7 @@ class PipelineTabFrame(ttk.Frame):
                 self.app_state.subscribe("job_draft", self._on_job_draft_changed)
                 self.app_state.subscribe("queue_items", self._on_queue_items_changed)
                 self.app_state.subscribe("running_job", self._on_running_job_changed)
-                self.app_state.subscribe("runtime_status", self._on_running_job_changed)
+                self.app_state.subscribe("runtime_status", self._on_runtime_status_changed)
                 self.app_state.subscribe("queue_status", self._on_queue_status_changed)
                 self.app_state.subscribe("history_items", self._on_history_items_changed)
             except Exception:
@@ -515,6 +515,15 @@ class PipelineTabFrame(ttk.Frame):
         try:
             if hasattr(self, "queue_panel"):
                 self.queue_panel.update_from_app_state(self.app_state)
+        except Exception:
+            pass
+
+    def _on_runtime_status_changed(self) -> None:
+        if self.app_state is None:
+            return
+        try:
+            if hasattr(self, "running_job_panel"):
+                self.running_job_panel.update_from_app_state(self.app_state)
         except Exception:
             pass
 

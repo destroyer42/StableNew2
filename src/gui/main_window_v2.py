@@ -128,6 +128,7 @@ class MainWindowV2:
         self._disposed = False
         self._close_in_progress = False
         self._graceful_exit_handler: Callable[[str], None] | None = None
+        self._last_visible_window_geometry: str | None = None
         self.app_state = app_state or AppStateV2()
         self.webui_process_manager = webui_manager
         self.app_controller = app_controller
@@ -339,6 +340,11 @@ class MainWindowV2:
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
         try:
             self.root.bind("<Destroy>", self._on_destroy, add="+")
+        except Exception:
+            pass
+        try:
+            self.root.bind("<Configure>", self._on_window_configure, add="+")
+            self.root.bind("<Map>", self._on_window_map, add="+")
         except Exception:
             pass
 
@@ -573,6 +579,7 @@ class MainWindowV2:
             self.root.deiconify()
         except Exception:
             pass
+        self._capture_visible_window_geometry()
 
     def _parse_window_geometry(self, geometry: str) -> tuple[int, int, int | None, int | None] | None:
         text = str(geometry or "").strip()
@@ -620,6 +627,68 @@ class MainWindowV2:
             and (x + width) > margin_x
             and (y + height) > margin_y
         )
+
+    def _capture_visible_window_geometry(self) -> None:
+        try:
+            state = str(self.root.state() or "").lower()
+        except Exception:
+            state = "normal"
+        if state not in {"normal", "zoomed"}:
+            return
+        try:
+            geometry = str(self.root.geometry() or "").strip()
+        except Exception:
+            return
+        if not geometry:
+            return
+        if state == "zoomed" or self._is_window_geometry_visible(geometry):
+            self._last_visible_window_geometry = geometry
+
+    def _ensure_window_visible_after_restore(self) -> None:
+        try:
+            state = str(self.root.state() or "").lower()
+        except Exception:
+            state = "normal"
+        if state == "iconic":
+            return
+        try:
+            geometry = str(self.root.geometry() or "").strip()
+        except Exception:
+            geometry = ""
+        if geometry and self._is_window_geometry_visible(geometry):
+            self._capture_visible_window_geometry()
+            return
+        fallback_geometry = self._last_visible_window_geometry
+        if fallback_geometry and not self._is_window_geometry_visible(fallback_geometry):
+            fallback_geometry = None
+        if not fallback_geometry:
+            fallback_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+        try:
+            self.root.deiconify()
+        except Exception:
+            pass
+        try:
+            self.root.geometry(fallback_geometry)
+        except Exception:
+            return
+        try:
+            self.root.lift()
+        except Exception:
+            pass
+        try:
+            self.root.focus_force()
+        except Exception:
+            pass
+        self._last_visible_window_geometry = fallback_geometry
+
+    def _on_window_configure(self, _event: Any | None = None) -> None:
+        self._capture_visible_window_geometry()
+
+    def _on_window_map(self, _event: Any | None = None) -> None:
+        try:
+            self.root.after_idle(self._ensure_window_visible_after_restore)
+        except Exception:
+            self._ensure_window_visible_after_restore()
 
     def update_pack_list(self, packs: list[str]) -> None:
         left = getattr(self, "left_zone", None)
