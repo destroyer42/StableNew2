@@ -277,6 +277,8 @@ Completion record:
 
 ### PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep
 
+Status: Completed 2026-03-26
+
 Purpose:
 
 - clean up popups, dialogs, inspectors, and secondary windows that often get missed
@@ -297,7 +299,13 @@ Execution gate:
 
 - secondary surfaces no longer lag behind primary tabs in dark-mode and layout quality
 
+Completion record:
+
+- `docs/CompletedPR/PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep.md`
+
 ### PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist
+
+Status: Completed 2026-03-26
 
 Purpose:
 
@@ -322,6 +330,11 @@ Execution gate:
 
 - future GUI work has a clear standard and lower regression risk
 
+Completion record:
+
+- `docs/GUI_CONSISTENCY_MAINTENANCE_CHECKLIST_v2.6.md`
+- `docs/CompletedPR/PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist.md`
+
 ## 6. Recommended Order
 
 1. `PR-UX-272-GUI-Audit-and-Consistency-Inventory` Completed 2026-03-25
@@ -330,8 +343,8 @@ Execution gate:
 4. `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
 5. `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
 6. `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
-7. `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep`
-8. `PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist`
+7. `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep` Completed 2026-03-26
+8. `PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist` Completed 2026-03-26
 
 ## 7. Validation Expectations
 

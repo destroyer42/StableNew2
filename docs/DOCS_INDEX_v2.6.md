@@ -2,7 +2,7 @@ DOCS_INDEX_v2.6.md
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-25
+Updated: 2026-03-26
 
 ## 0. Purpose
 
@@ -35,6 +35,7 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/Learning_System_Spec_v2.6.md`
 - `docs/GUI_Ownership_Map_v2.6.md`
 - `docs/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md`
+- `docs/GUI_CONSISTENCY_MAINTENANCE_CHECKLIST_v2.6.md`
 - `docs/Movie_Clips_Workflow_v2.6.md`
 - `docs/Image_Metadata_Contract_v2.6.md`
 - `docs/schemas/stablenew.image-metadata.v2.6.json`

@@ -11,6 +11,7 @@ from tkinter import ttk
 from src.pipeline.reprocess_builder import ReprocessEffectiveSettingsPreview, ReprocessStageSettingsPreview
 from src.gui.controllers.review_workflow_adapter import ReviewWorkspaceHandoff
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
+from src.gui.theme_v2 import BACKGROUND_DARK
 from src.gui.panels_v2.reprocess_panel_v2 import ReprocessPanelV2
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.queue.job_history_store import JobHistoryEntry
@@ -431,3 +432,22 @@ def test_review_tab_can_open_latest_derived_compare_from_staged_candidate(
     assert rendered == [
         (str(source_image), str(derived_image), "Source vs Latest Derived (face triage)")
     ]
+
+
+@pytest.mark.gui
+def test_review_tab_history_import_picker_uses_themed_popup(tk_root: tk.Tk) -> None:
+    entry = SimpleNamespace(
+        job_id="job-1",
+        status=SimpleNamespace(value="completed"),
+        prompt_pack_id="Pack A",
+        payload_summary="",
+    )
+    tab = ReviewTabFrame(tk_root, app_state=SimpleNamespace(history_items=[entry]))
+    try:
+        tab._on_open_history_import_picker()  # noqa: SLF001
+        assert tab._history_import_window is not None  # noqa: SLF001
+        assert tab._history_import_window.cget("bg") == BACKGROUND_DARK  # noqa: SLF001
+    finally:
+        if tab._history_import_window is not None and tab._history_import_window.winfo_exists():  # noqa: SLF001
+            tab._history_import_window.destroy()  # noqa: SLF001
+        tab.destroy()

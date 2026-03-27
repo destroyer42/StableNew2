@@ -66,6 +66,8 @@ class JobExplanationPanelV2(tk.Toplevel):
 
         stage_frame = ttk.LabelFrame(container, text="Stage Prompts")
         stage_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 8))
+        stage_frame.columnconfigure(0, weight=1)
+        stage_frame.rowconfigure(0, weight=1)
         columns = ("stage", "prompt", "negative", "global_terms", "status")
         self.stage_tree = ttk.Treeview(stage_frame, columns=columns, show="headings", height=6)
         for col, label in [
@@ -79,7 +81,12 @@ class JobExplanationPanelV2(tk.Toplevel):
             self.stage_tree.column(
                 col, width=120 if col in {"stage", "status"} else 220, anchor=tk.W
             )
-        self.stage_tree.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self.stage_tree.grid(row=0, column=0, sticky="nsew", padx=(4, 0), pady=4)
+        self._stage_scrollbar = ttk.Scrollbar(
+            stage_frame, orient="vertical", command=self.stage_tree.yview
+        )
+        self._stage_scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 4), pady=4)
+        self.stage_tree.configure(yscrollcommand=self._stage_scrollbar.set)
 
         flow_frame = ttk.LabelFrame(container, text="Stage Flow")
         flow_frame.pack(fill=tk.X, pady=(0, 8))
@@ -88,9 +95,23 @@ class JobExplanationPanelV2(tk.Toplevel):
 
         metadata_frame = ttk.LabelFrame(container, text="Config Snapshot")
         metadata_frame.pack(fill=tk.BOTH, expand=True)
+        metadata_frame.columnconfigure(0, weight=1)
+        metadata_frame.rowconfigure(0, weight=1)
         self._metadata_text = tk.Text(metadata_frame, height=6, wrap=tk.NONE)
         style_text_widget(self._metadata_text, elevated=True)
-        self._metadata_text.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+        self._metadata_text.grid(row=0, column=0, sticky="nsew", padx=(4, 0), pady=(4, 0))
+        self._metadata_y_scrollbar = ttk.Scrollbar(
+            metadata_frame, orient="vertical", command=self._metadata_text.yview
+        )
+        self._metadata_y_scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 4), pady=(4, 0))
+        self._metadata_x_scrollbar = ttk.Scrollbar(
+            metadata_frame, orient="horizontal", command=self._metadata_text.xview
+        )
+        self._metadata_x_scrollbar.grid(row=1, column=0, sticky="ew", padx=(4, 0), pady=(0, 4))
+        self._metadata_text.configure(
+            yscrollcommand=self._metadata_y_scrollbar.set,
+            xscrollcommand=self._metadata_x_scrollbar.set,
+        )
         self._metadata_text.configure(state=tk.DISABLED)
 
         self._load_data()

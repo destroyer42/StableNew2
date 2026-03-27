@@ -27,6 +27,8 @@ def test_artifact_metadata_inspector_dialog_renders_sections(tk_root: tk.Tk) -> 
         assert dialog.cget("bg") == BACKGROUND_DARK
         assert "sample.png" in dialog._artifact_var.get()  # noqa: SLF001
         assert dialog._normalized_text.cget("bg") == BACKGROUND_ELEVATED  # noqa: SLF001
+        assert dialog._normalized_text.cget("wrap") == "none"  # noqa: SLF001
+        assert len(dialog._normalized_text.master.winfo_children()) == 3  # noqa: SLF001
         normalized = dialog._normalized_text.get("1.0", "end-1c")  # noqa: SLF001
         raw = dialog._raw_text.get("1.0", "end-1c")  # noqa: SLF001
         assert '"model": "modelA"' in normalized

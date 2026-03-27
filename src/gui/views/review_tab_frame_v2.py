@@ -14,7 +14,7 @@ from src.gui.help_text.workflow_guidance_v2 import (
 )
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
-from src.gui.theme_v2 import style_listbox_widget, style_text_widget
+from src.gui.theme_v2 import apply_toplevel_theme, style_canvas_widget, style_listbox_widget, style_text_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.pipeline_layout_contract import (
@@ -1035,6 +1035,7 @@ class ReviewTabFrame(ttk.Frame):
         else:
             viewer = tk.Toplevel(self)
             self._compare_window = viewer
+            apply_toplevel_theme(viewer)
             viewer.bind("<Left>", lambda _event: self._show_previous_image_and_refresh_viewer())
             viewer.bind("<Right>", lambda _event: self._show_next_image_and_refresh_viewer())
             viewer.bind("<Escape>", lambda _event: viewer.destroy())
@@ -1042,6 +1043,7 @@ class ReviewTabFrame(ttk.Frame):
         viewer.title(f"{title_prefix} - {image_path.name}")
         viewer.transient(self.winfo_toplevel())
         viewer.resizable(True, True)
+        viewer.minsize(720, 520)
 
         frame = ttk.Frame(viewer, padding=6)
         frame.pack(fill=tk.BOTH, expand=True)
@@ -1069,6 +1071,7 @@ class ReviewTabFrame(ttk.Frame):
         ).grid(row=1, column=0, sticky="w", pady=(0, 6))
 
         canvas = tk.Canvas(frame, bg=TOKENS.colors.surface_secondary, highlightthickness=0)
+        style_canvas_widget(canvas, elevated=True)
         canvas.grid(row=2, column=0, sticky="nsew")
         v_scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
         h_scroll = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
@@ -1133,7 +1136,9 @@ class ReviewTabFrame(ttk.Frame):
         self._history_import_window = window
         window.title("Import Recent Job To Staged Curation")
         window.transient(self.winfo_toplevel())
+        apply_toplevel_theme(window)
         window.geometry("900x420")
+        window.minsize(720, 320)
 
         frame = ttk.Frame(window, padding=8)
         frame.pack(fill="both", expand=True)
@@ -1179,6 +1184,12 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TButton",
             command=lambda: self._import_selected_history_job(tree),
         ).pack(side="left")
+        ttk.Button(
+            action_bar,
+            text="Close",
+            style="Dark.TButton",
+            command=window.destroy,
+        ).pack(side="right")
 
     def _import_selected_history_job(self, tree: ttk.Treeview) -> None:
         selection = tree.selection()

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from types import SimpleNamespace
 
 import pytest
 
@@ -54,5 +55,26 @@ def test_learning_review_dialog_uses_dark_theme_when_empty(tk_root: tk.Tk) -> No
     dialog = LearningReviewDialogV2(tk_root, controller=object(), records=[])
     try:
         assert dialog.cget("bg") == BACKGROUND_DARK
+    finally:
+        dialog.destroy()
+
+
+@pytest.mark.gui
+def test_learning_review_dialog_uses_scrollable_body_for_records(tk_root: tk.Tk) -> None:
+    records = [
+        SimpleNamespace(
+            timestamp="2026-03-26T12:00:00",
+            prompt_summary="very long prompt summary " * 8,
+            pipeline_summary="model-x",
+            rating=4,
+            tags=["tag1", "tag2"],
+        )
+    ]
+    dialog = LearningReviewDialogV2(tk_root, controller=object(), records=records)
+    try:
+        assert dialog.cget("bg") == BACKGROUND_DARK
+        assert dialog._body_canvas is not None  # noqa: SLF001
+        assert dialog._body_canvas.cget("bg") == BACKGROUND_ELEVATED  # noqa: SLF001
+        assert len(dialog._rows) == 1  # noqa: SLF001
     finally:
         dialog.destroy()

@@ -70,12 +70,14 @@ class ArtifactMetadataInspectorDialog(tk.Toplevel):
         frame = ttk.Frame(notebook, padding=8)
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(0, weight=1)
-        text = tk.Text(frame, wrap="word", state="disabled")
+        text = tk.Text(frame, wrap="none", state="disabled")
         style_text_widget(text, elevated=True)
         text.grid(row=0, column=0, sticky="nsew")
-        scroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
-        scroll.grid(row=0, column=1, sticky="ns")
-        text.configure(yscrollcommand=scroll.set)
+        v_scroll = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
+        v_scroll.grid(row=0, column=1, sticky="ns")
+        h_scroll = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
+        h_scroll.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        text.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
         notebook.add(frame, text=title)
         return text
 

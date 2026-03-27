@@ -57,9 +57,11 @@ The biggest remaining cross-cutting debt is now narrower and more product-facing
   cleanup rather than missing refinement foundations
 - Pipeline sidebar and review/reprocess UX still carry product-level cleanup
   debt around pack discovery, scan roots, and duplicated surfaces
-- StableNew-owned secondary motion now has a shared engine/provenance layer and
-  an active SVD-native backend path with canonical manifest, replay, and
-  container summaries; AnimateDiff and workflow-video rollout remain queued
+- StableNew-owned secondary motion now has a shared engine/provenance layer
+  across SVD native, AnimateDiff, and workflow-video, with canonical manifest,
+  replay, and container-summary coverage already landed through
+  `PR-VIDEO-241`; remaining video work is now follow-on UX, metadata
+  inspection, and structural cleanup rather than missing backend rollout
 
 ## 3. Status of the Older Revised Video Queue
 
@@ -787,9 +789,9 @@ the current product:
 
 Priority note:
 
-- this tranche is now explicitly prioritized ahead of the remaining
-  `PR-VIDEO-238` through `PR-VIDEO-241` sequence after the active image
-  output-route regression is closed
+- this tranche is now explicitly prioritized after the image output-route
+  regression is closed and after recognizing `PR-VIDEO-238` through
+  `PR-VIDEO-241` as completed backend/runtime work
 - immediate order:
   1. close the image output-route regression
   2. treat `PR-LEARN-259A` as verified baseline
@@ -963,10 +965,13 @@ These are the important missing capabilities that are not just "nice to have":
   closure after the new ADetailer-safe slice
 - replay and learning still need fuller canonical refinement-decision
   provenance beyond the current runner/manifest/image-metadata path
-- secondary motion is still missing as a StableNew-owned, replayable video
-  layer across AnimateDiff, SVD native, and workflow-video backends
-- manifests, replay fragments, container metadata, and learning still need a
-  canonical secondary-motion provenance path distinct from `motion_profile`
+- secondary motion backend/runtime rollout is complete through `PR-VIDEO-241`;
+  remaining video debt is now mainly operator UX exposure, inspection clarity,
+  and longer-tail structural cleanup
+- manifests, replay fragments, container metadata, and learning now carry
+  canonical secondary-motion provenance; remaining work is chiefly presentation,
+  inspection ergonomics, and broader contract cleanup rather than missing core
+  provenance paths
 - image/runtime stability still needs GPU-pressure-aware guardrails and better
   failure damping before more runtime-heavy backend rollout
 - continuity and story-planning still need richer UX exposure on top of the now-coherent video workspace
