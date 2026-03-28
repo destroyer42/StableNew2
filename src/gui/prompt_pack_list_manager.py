@@ -5,18 +5,20 @@ Manages loading, saving, and editing custom prompt pack lists.
 import json
 from pathlib import Path
 
+from src.state.workspace_paths import workspace_paths
+
 
 class PromptPackListManager:
     """Manages loading, saving, and editing custom prompt pack lists."""
 
-    def __init__(self, file_path: str = "state/custom_pack_lists.json"):
+    def __init__(self, file_path: str | Path | None = None):
         """
         Initializes the list manager.
 
         Args:
             file_path: The path to the JSON file storing the lists.
         """
-        self.file_path = Path(file_path)
+        self.file_path = Path(file_path) if file_path else workspace_paths.custom_pack_lists()
         self.lists: dict[str, list[str]] = self._load()
 
     def _load(self) -> dict[str, list[str]]:

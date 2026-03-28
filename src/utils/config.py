@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
+from src.state.workspace_paths import workspace_paths
 
 DEFAULT_GLOBAL_NEGATIVE_PROMPT = (
     "blurry, bad quality, distorted, ugly, malformed, nsfw, nude, naked, explicit, "
@@ -20,7 +21,7 @@ DEFAULT_GLOBAL_POSITIVE_PROMPT = (
 )
 
 logger = logging.getLogger(__name__)
-LAST_RUN_PATH = Path("state/last_run_v2.json")
+LAST_RUN_PATH = workspace_paths.last_run_v2()
 
 
 def _normalize_scheduler_name(scheduler: str | None) -> str | None:
@@ -970,7 +971,7 @@ class ConfigManager:
 
 
 # PR-203: Queue state persistence
-QUEUE_STATE_PATH = Path("state/queue_state_v2.json")
+QUEUE_STATE_PATH = workspace_paths.queue_state()
 
 
 def save_queue_state(queue_data: dict[str, Any]) -> bool:

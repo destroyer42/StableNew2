@@ -1,6 +1,6 @@
 ---
 name: "S3-C CI pipeline"
-about: "GitHub Actions: ruff, black, mypy, pytest, pre-commit on PRs"
+about: "GitHub Actions: Ruff, required smoke gate, and optional full-suite truth sync"
 title: "S3-C CI pipeline: "
 labels: [sprint-3, ci, infra]
 assignees: ""
@@ -8,17 +8,19 @@ assignees: ""
 
 
 ## Goal
-Ensure every PR runs formatting, type checks, linting, and tests.
+Keep the documented CI contract aligned with the actual required and optional
+GitHub Actions gates.
 
 ## DoD
-- Workflow YAML runs ruff/black/mypy/pytest + pre-commit.
-- Caches Python deps; fails on test/lint errors.
-- Badges in README.
+- Workflow YAML runs Ruff plus the named required smoke gate.
+- The required gate fails on real lint and smoke-test errors.
+- Optional full-suite coverage remains visible and accurately documented.
 
 ## Tasks
-- [ ] Add `.github/workflows/ci.yml`.
-- [ ] Cache pip; configure matrix for Python 3.11.
-- [ ] Add status badges to README.
+- [ ] Keep `.github/workflows/ci.yml` aligned with the canonical smoke script.
+- [ ] Keep docs and templates aligned with the actual CI jobs.
+- [ ] Add optional gates only when they are real and documented.
 
 ## Test commands
-- Push a failing dummy branch; verify CI fails appropriately.
+- Push a failing branch and verify the required gate fails.
+- Verify the optional full-suite job still reports separately.

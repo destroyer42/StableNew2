@@ -497,6 +497,16 @@ Tests covering history persistence/replay MUST exercise `HistoryMigrationEngine`
 
 Tests MUST capture logs or use stub runners to verify whether `run_njr` vs `run(config)` was invoked.
 
+### CI Required Smoke Contract
+
+The canonical required CI smoke gate is `python tools/ci/run_required_smoke.py`.
+That script is the single source of truth for the deterministic required pytest
+subset used by `.github/workflows/ci.yml`.
+
+Do not duplicate the required-smoke pytest ignore list in docs, issue
+templates, or secondary scripts. If the required gate changes, update the
+script and the small set of docs that point to it in the same PR.
+
 ### Replay Testing (CORE1-D3)
 
 - Replay tests MUST assert that the replay path builds RunPlan via `build_run_plan_from_njr` and calls `PipelineRunner.run_njr` with that plan.

@@ -35,9 +35,9 @@ jobs:
       run: |
         ruff check src
 
-    - name: Run fast deterministic tests — required
+    - name: Run required deterministic smoke gate
       run: |
-        pytest tests/ --ignore=tests/gui/ --ignore=tests/gui_v2/ --ignore=tests/journey/ --ignore=tests/journeys/ --ignore=tests/integration/ -x -q --disable-warnings
+        python tools/ci/run_required_smoke.py
 
     - name: Upload test results
       uses: actions/upload-artifact@v4

@@ -14,11 +14,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.state.workspace_paths import workspace_paths
 from src.utils.jsonl_codec import JSONLCodec
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_QUEUE_STATE_PATH = Path("state") / "queue_state_v2.json"
+DEFAULT_QUEUE_STATE_PATH = workspace_paths.queue_state()
 
 SCHEMA_VERSION = "2.6"
 

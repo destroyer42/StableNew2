@@ -14,6 +14,12 @@ ARCHIVE_IMPORT_PATTERNS = (
     re.compile(r"\bfrom\s+src\.controller\.archive\.pipeline_config_assembler\s+import\b"),
     re.compile(r"\bimport\s+src\.controller\.archive\.pipeline_config_types\b"),
     re.compile(r"\bimport\s+src\.controller\.archive\.pipeline_config_assembler\b"),
+    re.compile(
+        r"\bfrom\s+tools\.archive_reference(?:\.[A-Za-z_][A-Za-z0-9_]*)+\s+import\b"
+    ),
+    re.compile(
+        r"\bimport\s+tools\.archive_reference(?:\.[A-Za-z_][A-Za-z0-9_]*)+\b"
+    ),
 )
 
 GUI_PIPELINE_IMPORT_PATTERNS = (
@@ -64,7 +70,7 @@ def test_only_allowlisted_source_modules_import_legacy_pipeline_config_archive()
                 violations.append(str(rel))
 
     assert violations == [], (
-        "Unexpected non-legacy source imports of pipeline_config archive modules:\n"
+        "Unexpected source imports of archive/reference modules:\n"
         + "\n".join(sorted(violations))
     )
 

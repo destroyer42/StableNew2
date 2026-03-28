@@ -849,6 +849,18 @@ class AppController:
 
     def _queue_runtime_status_update(self, runtime_status: Any) -> None:
         import time
+        import threading
+
+        if not hasattr(self, "_runtime_status_lock"):
+            self._runtime_status_lock = threading.Lock()
+        if not hasattr(self, "_pending_runtime_status"):
+            self._pending_runtime_status = None
+        if not hasattr(self, "_runtime_status_flush_scheduled"):
+            self._runtime_status_flush_scheduled = False
+        if not hasattr(self, "_last_runtime_status_flush_ts"):
+            self._last_runtime_status_flush_ts = 0.0
+        if not hasattr(self, "_runtime_status_min_interval_ms"):
+            self._runtime_status_min_interval_ms = 250
 
         delay_ms = 0
         should_schedule = False

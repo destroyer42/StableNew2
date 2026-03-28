@@ -17,7 +17,6 @@ from typing import Any
 
 import pytest
 
-from src.controller.archive.pipeline_config_types import PipelineConfig
 from src.controller.job_service import JobService
 from src.pipeline.payload_builder import build_sdxl_payload
 from src.pipeline.pipeline_runner import PipelineRunResult
@@ -32,6 +31,9 @@ from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from tests.helpers.job_helpers import make_test_job_from_njr, make_test_njr
+from tools.archive_reference.controller.legacy_pipeline_config_types import (
+    PipelineConfig,
+)
 
 pytestmark = [pytest.mark.compat, pytest.mark.legacy]
 

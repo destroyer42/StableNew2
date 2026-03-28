@@ -34,11 +34,12 @@ from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 from src.controller.ports.runtime_ports import NJRSummaryPort, NJRUISummaryPort
 from src.state.output_routing import get_output_root, iter_output_run_dirs
+from src.state.workspace_paths import workspace_paths
 
 logger = logging.getLogger(__name__)
 
 # PR-PERSIST-001: Preview panel state persistence
-PREVIEW_STATE_PATH = Path("state") / "preview_panel_state.json"
+PREVIEW_STATE_PATH = workspace_paths.preview_panel_state()
 _THUMBNAIL_CACHE_MISS = object()
 
 

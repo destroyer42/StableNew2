@@ -21,6 +21,7 @@ from src.gui.theme_v2 import (
     TEXT_PRIMARY,
 )
 from src.gui.zone_map_v2 import get_pipeline_stage_order
+from src.state.workspace_paths import workspace_paths
 from src.utils.file_io import read_prompt_pack
 
 from .base_generation_panel_v2 import BaseGenerationPanelV2
@@ -33,7 +34,7 @@ from .recipe_summary_v2 import build_saved_recipe_summary
 logger = logging.getLogger(__name__)
 
 # PR-PERSIST-001: Sidebar state persistence
-SIDEBAR_STATE_PATH = Path("state") / "sidebar_state.json"
+SIDEBAR_STATE_PATH = workspace_paths.sidebar_state()
 
 
 class _SidebarCard(BaseStageCardV2):

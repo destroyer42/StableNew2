@@ -1337,23 +1337,27 @@ class SDWebUIClient:
                 "scale": upscaling_resize,
             },
         )
-        with self._request_context(
-            "post",
-            "/sdapi/v1/extra-single-image",
-            json=payload,
-            stage="upscale",
-            policy=UPSCALE_RETRY_POLICY,
-            timeout=timeout or UPSCALE_SINGLE_IMAGE_TIMEOUT,
-        ) as response:
-            if response is None:
-                _log_stage_failure("upscale", "No response from extra-single-image")
-                return None
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/extra-single-image",
+                json=payload,
+                stage="upscale",
+                policy=UPSCALE_RETRY_POLICY,
+                timeout=timeout or UPSCALE_SINGLE_IMAGE_TIMEOUT,
+            ) as response:
+                if response is None:
+                    _log_stage_failure("upscale", "No response from extra-single-image")
+                    return None
 
-            try:
-                data = response.json()
-            except ValueError as exc:
-                _log_stage_failure("upscale", exc)
-                return None
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    _log_stage_failure("upscale", exc)
+                    return None
+        except Exception as exc:
+            _log_stage_failure("upscale", exc)
+            return None
 
         # Log face restoration usage
         face_restoration_used = []
@@ -1771,16 +1775,20 @@ class SDWebUIClient:
 
         if self._resource_endpoint_startup_grace_active("/sdapi/v1/scripts"):
             return {}
-        with self._request_context("get", "/sdapi/v1/scripts", timeout=10) as response:
-            if response is None:
-                logger.warning("Failed to get scripts from API")
-                return {}
+        try:
+            with self._request_context("get", "/sdapi/v1/scripts", timeout=10) as response:
+                if response is None:
+                    logger.warning("Failed to get scripts from API")
+                    return {}
 
-            try:
-                data = response.json()
-            except ValueError as exc:
-                logger.warning("Failed to parse scripts response: %s", exc)
-                return {}
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    logger.warning("Failed to parse scripts response: %s", exc)
+                    return {}
+        except Exception as exc:
+            logger.warning("Failed to get scripts from API: %s", exc)
+            return {}
 
         if isinstance(data, dict):
             return data

@@ -13,9 +13,11 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from src.state.workspace_paths import workspace_paths
+
 logger = logging.getLogger(__name__)
 
-UI_STATE_PATH = Path("state") / "ui_state.json"
+UI_STATE_PATH = workspace_paths.ui_state()
 SCHEMA_VERSION = "2.6"
 DEFAULT_CONTENT_VISIBILITY_STATE = {"mode": "nsfw"}
 

@@ -1,3 +1,5 @@
+"""Reference-only legacy PipelineConfig assembler kept outside ``src``."""
+
 from __future__ import annotations
 
 import math
@@ -5,16 +7,13 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any
 
-from src.controller.archive.pipeline_config_types import PipelineConfig
-"""
-# VIEW-ONLY (v2.6)
-This module is archive-only and may import legacy PipelineConfig types from
-src.controller.archive.pipeline_config_types for reference.
-"""
-from src.utils.config import ConfigManager
-from src.utils.randomizer import PromptRandomizer
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.state import PipelineState
+from src.utils.config import ConfigManager
+from src.utils.randomizer import PromptRandomizer
+from tools.archive_reference.controller.legacy_pipeline_config_types import (
+    PipelineConfig,
+)
 
 
 @dataclass
@@ -40,7 +39,8 @@ class GuiOverrides:
 
 @dataclass
 class PlannedJob:
-    """A single job in a RunPlan."""
+    """A single job in a legacy RunPlan."""
+
     prompt_text: str
     lora_settings: dict[str, dict[str, Any]] | None = None
     randomizer_metadata: dict[str, Any] | None = None
@@ -48,15 +48,21 @@ class PlannedJob:
 
 @dataclass
 class RunPlan:
-    """Plan for a pipeline run with multiple jobs."""
+    """Reference-only legacy plan for a multi-job pipeline run."""
+
     jobs: list[PlannedJob]
     summary: str = ""
 
 
 class PipelineConfigAssembler:
-    """Translate GUI/controller inputs into a PipelineConfig instance."""
+    """Translate historical GUI/controller inputs into a PipelineConfig."""
 
-    def __init__(self, *, config_manager: ConfigManager | None = None, max_megapixels: float = 16.0) -> None:
+    def __init__(
+        self,
+        *,
+        config_manager: ConfigManager | None = None,
+        max_megapixels: float = 16.0,
+    ) -> None:
         self._config_manager = config_manager or ConfigManager()
         self._max_megapixels = max(max_megapixels, 0.1)
 
@@ -73,7 +79,9 @@ class PipelineConfigAssembler:
         base = deepcopy(base_config or self._default_txt2img())
         merged = self._merge_base_and_overrides(base, gui_overrides)
 
-        preset_value = gui_overrides.get("resolution_preset") or merged.get("resolution_preset")
+        preset_value = gui_overrides.get("resolution_preset") or merged.get(
+            "resolution_preset"
+        )
         if preset_value:
             merged = self._apply_resolution_preset(merged, preset_value)
 
@@ -93,18 +101,28 @@ class PipelineConfigAssembler:
             "batch_size": gui_overrides.get("batch_size"),
             "seed_mode": gui_overrides.get("seed_mode"),
         }
-        metadata["output"] = {k: v for k, v in output_meta.items() if v not in (None, "")}
+        metadata["output"] = {
+            key: value for key, value in output_meta.items() if value not in (None, "")
+        }
         if learning_metadata:
             metadata["learning"] = learning_metadata
-            metadata["learning_enabled"] = bool(learning_metadata.get("learning_enabled", True))
+            metadata["learning_enabled"] = bool(
+                learning_metadata.get("learning_enabled", True)
+            )
         if randomizer_metadata:
             metadata["randomizer"] = randomizer_metadata
 
-        selected_model = gui_overrides.get("model_name") or gui_overrides.get("model") or merged.get("model", "")
+        selected_model = (
+            gui_overrides.get("model_name")
+            or gui_overrides.get("model")
+            or merged.get("model", "")
+        )
 
         return PipelineConfig(
             prompt=gui_overrides.get("prompt", merged.get("prompt", "")),
-            negative_prompt=gui_overrides.get("negative_prompt", merged.get("negative_prompt", "")),
+            negative_prompt=gui_overrides.get(
+                "negative_prompt", merged.get("negative_prompt", "")
+            ),
             model=selected_model,
             sampler=gui_overrides.get("sampler", merged.get("sampler_name", "")),
             width=int(merged.get("width", 512)),
@@ -147,7 +165,9 @@ class PipelineConfigAssembler:
         cfg["height"] = max(64, int(height * scale))
         return cfg
 
-    def attach_randomizer_metadata(self, config: PipelineConfig, rand_meta: dict[str, Any]) -> PipelineConfig:
+    def attach_randomizer_metadata(
+        self, config: PipelineConfig, rand_meta: dict[str, Any]
+    ) -> PipelineConfig:
         config.metadata = config.metadata or {}
         config.metadata["randomizer"] = rand_meta
         return config
@@ -156,7 +176,9 @@ class PipelineConfigAssembler:
         defaults = self._config_manager.get_default_config()
         return deepcopy(defaults.get("txt2img", {}))
 
-    def _normalize_overrides(self, overrides: GuiOverrides | dict[str, Any] | None) -> dict[str, Any]:
+    def _normalize_overrides(
+        self, overrides: GuiOverrides | dict[str, Any] | None
+    ) -> dict[str, Any]:
         if overrides is None:
             return {}
         if isinstance(overrides, GuiOverrides):
@@ -181,15 +203,19 @@ class PipelineConfigAssembler:
             }
         return dict(overrides)
 
-    def _merge_base_and_overrides(self, base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
+    def _merge_base_and_overrides(
+        self, base: dict[str, Any], overrides: dict[str, Any]
+    ) -> dict[str, Any]:
         merged = deepcopy(base or {})
-        for k, v in overrides.items():
-            if v is None:
+        for key, value in overrides.items():
+            if value is None:
                 continue
-            merged[k] = v
+            merged[key] = value
         return merged
 
-    def _apply_resolution_preset(self, cfg: dict[str, Any], preset: str) -> dict[str, Any]:
+    def _apply_resolution_preset(
+        self, cfg: dict[str, Any], preset: str
+    ) -> dict[str, Any]:
         width_height = self._parse_resolution_preset(preset)
         if width_height:
             cfg["width"], cfg["height"] = width_height
@@ -218,33 +244,36 @@ class PipelineConfigAssembler:
         prompt_workspace_state: PromptWorkspaceState,
         pipeline_state: PipelineState,
     ) -> RunPlan:
-        """Build a RunPlan from the current prompt and pipeline state."""
+        """Build a legacy RunPlan from prompt and pipeline state."""
         prompt_text = prompt_workspace_state.get_current_prompt_text()
         if not prompt_text.strip():
             return RunPlan(jobs=[], summary="No prompt text")
 
-        # Get randomizer config from pipeline_state
-        randomizer_config = {
-            "enabled": pipeline_state.randomizer_mode != "off",
-            "mode": pipeline_state.randomizer_mode,
-            "max_variants": pipeline_state.max_variants,
-        }
-
-        randomizer = PromptRandomizer(randomizer_config)
+        randomizer = PromptRandomizer(
+            {
+                "enabled": pipeline_state.randomizer_mode != "off",
+                "mode": pipeline_state.randomizer_mode,
+                "max_variants": pipeline_state.max_variants,
+            }
+        )
         variants = randomizer.generate(prompt_text)
 
-        jobs = []
+        jobs: list[PlannedJob] = []
         for variant in variants:
-            # Convert LoraRuntimeSettings to dict
             lora_dict = {}
             for name, settings in pipeline_state.lora_settings.items():
-                lora_dict[name] = {"enabled": settings.enabled, "strength": settings.strength}
-            job = PlannedJob(
-                prompt_text=variant.text,
-                lora_settings=lora_dict if lora_dict else None,
-                randomizer_metadata={"variant_label": variant.label} if variant.label else None,
+                lora_dict[name] = {
+                    "enabled": settings.enabled,
+                    "strength": settings.strength,
+                }
+            jobs.append(
+                PlannedJob(
+                    prompt_text=variant.text,
+                    lora_settings=lora_dict if lora_dict else None,
+                    randomizer_metadata=(
+                        {"variant_label": variant.label} if variant.label else None
+                    ),
+                )
             )
-            jobs.append(job)
 
-        summary = f"{len(jobs)} job(s) planned"
-        return RunPlan(jobs=jobs, summary=summary)
+        return RunPlan(jobs=jobs, summary=f"{len(jobs)} job(s) planned")
