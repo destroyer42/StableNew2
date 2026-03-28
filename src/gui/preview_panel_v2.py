@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
 import time
 import tkinter as tk
@@ -127,7 +128,6 @@ class PreviewPanelV2(ttk.Frame):
             style=STATUS_LABEL_STYLE,
             foreground="#7aa2d6",
         )
-        self.visibility_banner.pack(anchor=tk.W, pady=(0, 4))
 
         self.prompt_label = ttk.Label(left_frame, text="Prompt (+)", style=STATUS_LABEL_STYLE)
         self.prompt_label.pack(anchor=tk.W)
@@ -609,12 +609,7 @@ class PreviewPanelV2(ttk.Frame):
                 "name": getattr(summary_obj, "prompt_pack_name", ""),
             },
         )
-        if self._content_visibility_mode == "sfw" and (
-            positive == REDACTED_TEXT or negative == REDACTED_TEXT
-        ):
-            self.visibility_banner.configure(text="SFW mode active: explicit preview text hidden.")
-        else:
-            self.visibility_banner.configure(text="")
+        self.visibility_banner.configure(text="")
         logger.debug(f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}")
         self._set_text_widget(self.prompt_text, positive)
         self._set_text_widget(self.negative_prompt_text, negative)
@@ -1024,19 +1019,26 @@ class PreviewPanelV2(ttk.Frame):
 
         return None
 
-    def _find_immediate_output_image(self, summary: UnifiedJobSummary | Any | None) -> Path | None:
+    def _find_immediate_output_image(
+        self,
+        summary: UnifiedJobSummary | Any | None,
+        *,
+        _depth: int = 0,
+    ) -> Path | None:
         """Return explicit output paths without scanning output directories."""
         if summary is None:
+            return None
+        if _depth >= 8:
             return None
 
         source_job = getattr(summary, "source_job", None)
         if source_job is not None and source_job is not summary:
-            source_image = self._find_immediate_output_image(source_job)
+            source_image = self._find_immediate_output_image(source_job, _depth=_depth + 1)
             if source_image and source_image.exists():
                 return source_image
 
         thumbnail_path = getattr(summary, "thumbnail_path", None)
-        if thumbnail_path:
+        if isinstance(thumbnail_path, (str, os.PathLike)):
             thumbnail = Path(thumbnail_path)
             if thumbnail.exists():
                 return thumbnail
@@ -1044,7 +1046,7 @@ class PreviewPanelV2(ttk.Frame):
         output_paths = getattr(summary, "output_paths", None)
         if isinstance(output_paths, list):
             for candidate in reversed(output_paths):
-                if candidate:
+                if isinstance(candidate, (str, os.PathLike)):
                     image_path = Path(candidate)
                     if image_path.exists():
                         return image_path
@@ -1054,13 +1056,13 @@ class PreviewPanelV2(ttk.Frame):
             metadata = result.get("metadata")
             if isinstance(metadata, dict):
                 candidate = metadata.get("path") or metadata.get("output_path")
-                if candidate and Path(candidate).exists():
+                if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
                     return Path(candidate)
             if isinstance(metadata, list):
                 for entry in reversed(metadata):
                     if isinstance(entry, dict):
                         candidate = entry.get("path") or entry.get("output_path")
-                        if candidate and Path(candidate).exists():
+                        if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
                             return Path(candidate)
 
         return None

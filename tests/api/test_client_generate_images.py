@@ -13,7 +13,7 @@ from src.api.types import GenerateErrorCode
 def test_generate_images_success(monkeypatch):
     client = SDWebUIClient()
 
-    def fake_txt2img(payload):
+    def fake_txt2img(payload, *, raise_on_error=False):
         return {"images": ["img"], "info": {"steps": 10}}
 
     monkeypatch.setattr(client, "txt2img", fake_txt2img)
@@ -28,7 +28,7 @@ def test_generate_images_success(monkeypatch):
 def test_generate_images_connection_error(monkeypatch):
     client = SDWebUIClient()
 
-    def fake_txt2img(payload):
+    def fake_txt2img(payload, *, raise_on_error=False):
         raise requests.ConnectionError("network fail")
 
     monkeypatch.setattr(client, "txt2img", fake_txt2img)
@@ -43,7 +43,7 @@ def test_generate_images_connection_error(monkeypatch):
 def test_generate_images_webui_unavailable_error_maps_to_connection(monkeypatch):
     client = SDWebUIClient()
 
-    def fake_txt2img(payload):
+    def fake_txt2img(payload, *, raise_on_error=False):
         raise WebUIUnavailableError(
             endpoint="/sdapi/v1/txt2img",
             method="POST",
@@ -63,7 +63,7 @@ def test_generate_images_webui_unavailable_error_maps_to_connection(monkeypatch)
 def test_generate_images_http_error_uses_webui_error_payload(monkeypatch):
     client = SDWebUIClient()
 
-    def fake_img2img(payload, *, policy=None):
+    def fake_img2img(payload, *, policy=None, raise_on_error=False):
         exc = requests.HTTPError("500 Server Error: Internal Server Error for url: http://127.0.0.1:7860/sdapi/v1/img2img")
         exc.diagnostics_context = {
             "request_summary": {

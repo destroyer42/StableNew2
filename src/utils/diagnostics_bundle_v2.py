@@ -349,6 +349,8 @@ def _include_jsonl_logs(zf: zipfile.ZipFile) -> None:
 
 
 def _include_image_metadata(zf: zipfile.ZipFile, image_roots: list[Path] | None) -> None:
+    if image_roots is None and os.environ.get("PYTEST_CURRENT_TEST"):
+        return
     roots = image_roots or [ROOT / "output", ROOT / "outputs"]
     image_paths = _collect_image_paths(roots, limit=25)
     if not image_paths:

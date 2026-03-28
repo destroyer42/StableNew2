@@ -44,9 +44,6 @@ class HeaderZone(ttk.Frame):
         self.preview_button = ttk.Button(self, text="Preview", style="Secondary.TButton")
         self.settings_button = ttk.Button(self, text="Settings", style="Secondary.TButton")
         self.refresh_button = ttk.Button(self, text="Refresh", style="Secondary.TButton")
-        self.visibility_button = ttk.Button(
-            self, text="Visibility: NSFW", style="Secondary.TButton"
-        )
         self.help_button = ttk.Button(self, text="Help Mode: Off", style="Secondary.TButton")
         self.debug_button = ttk.Button(self, text="Debug", style="Secondary.TButton")
 
@@ -57,7 +54,6 @@ class HeaderZone(ttk.Frame):
                 self.preview_button,
                 self.settings_button,
                 self.refresh_button,
-                self.visibility_button,
                 self.help_button,
                 self.debug_button,
             ]
@@ -737,7 +733,6 @@ class MainWindowV2:
                         btn.configure(command=callback)
                     except Exception:
                         pass
-            header.visibility_button.configure(command=self._toggle_content_visibility_mode)
         else:
             # Best-effort fallback wiring using pipeline/pack controllers
             if self.pipeline_controller:
@@ -751,7 +746,6 @@ class MainWindowV2:
                     header.run_button.configure(command=start_cb)
                 if callable(stop_cb):
                     header.stop_button.configure(command=stop_cb)
-            header.visibility_button.configure(command=self._toggle_content_visibility_mode)
             header.help_button.configure(command=self._toggle_help_mode)
 
         if getattr(self, "app_state", None) and hasattr(self.app_state, "subscribe"):
@@ -775,7 +769,6 @@ class MainWindowV2:
             except Exception:
                 pass
         self._update_run_button_state()
-        self._update_content_visibility_button_state()
         self._update_help_button_state()
 
     def _update_run_button_state(self, *_: Any) -> None:
@@ -804,28 +797,9 @@ class MainWindowV2:
         if callable(toggle):
             toggle()
 
-    def _toggle_content_visibility_mode(self) -> None:
-        app_state = getattr(self, "app_state", None)
-        if app_state is None:
-            return
-        toggle = getattr(app_state, "toggle_content_visibility_mode", None)
-        if callable(toggle):
-            toggle()
-
     def _on_content_visibility_mode_changed(self, *_: Any) -> None:
         mode = str(getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw")
-        self._update_content_visibility_button_state()
         self._notify_content_visibility_targets(mode)
-
-    def _update_content_visibility_button_state(self, *_: Any) -> None:
-        header = getattr(self, "header_zone", None)
-        if header is None:
-            return
-        button = getattr(header, "visibility_button", None)
-        if button is None:
-            return
-        mode = str(getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw").upper()
-        button.configure(text=f"Visibility: {mode}")
 
     def _notify_content_visibility_targets(self, mode: str) -> None:
         targets = [
@@ -1150,6 +1124,10 @@ class MainWindowV2:
             dialog,
             config_manager=config_manager,
             status_text=status,
+            content_visibility_mode=str(
+                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            ),
+            on_content_visibility_mode_change=self._apply_content_visibility_mode_from_settings,
             on_save=lambda values: self._handle_settings_saved(values, dialog),
             on_cancel=lambda: dialog.destroy(),
         )
@@ -1158,6 +1136,14 @@ class MainWindowV2:
             dialog.grab_set()
         except Exception:
             pass
+
+    def _apply_content_visibility_mode_from_settings(self, mode: str) -> None:
+        app_state = getattr(self, "app_state", None)
+        if app_state is None:
+            return
+        setter = getattr(app_state, "set_content_visibility_mode", None)
+        if callable(setter):
+            setter(mode)
 
     def _handle_settings_saved(self, values: dict[str, Any], dialog: tk.Toplevel) -> None:
         controller = getattr(self.app_state, "controller", None)

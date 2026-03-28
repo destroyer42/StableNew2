@@ -1,9 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from src.video import ComfyHealthCheckTimeout, ComfyWorkflowVideoBackend, VideoExecutionRequest
+
+
+def _ready_process_manager(base_url: str = "http://127.0.0.1:8188") -> object:
+    return SimpleNamespace(
+        ensure_running=lambda: True,
+        _config=SimpleNamespace(base_url=base_url),
+    )
 
 
 def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
@@ -52,7 +60,12 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
         write_video_container_metadata,
     )
 
-    backend = ComfyWorkflowVideoBackend(client=client, history_poll_interval=0.01, history_timeout=1.0)
+    backend = ComfyWorkflowVideoBackend(
+        client=client,
+        process_manager=_ready_process_manager(),
+        history_poll_interval=0.01,
+        history_timeout=1.0,
+    )
 
     result = backend.execute(
         pipeline=Mock(),
@@ -112,7 +125,12 @@ def test_comfy_workflow_backend_fails_fast_when_dependencies_missing(
         lambda *_args, **_kwargs: True,
     )
 
-    backend = ComfyWorkflowVideoBackend(client=client, history_poll_interval=0.01, history_timeout=1.0)
+    backend = ComfyWorkflowVideoBackend(
+        client=client,
+        process_manager=_ready_process_manager(),
+        history_poll_interval=0.01,
+        history_timeout=1.0,
+    )
 
     try:
         backend.execute(
@@ -182,7 +200,10 @@ def test_comfy_workflow_backend_execute_segment_stamps_provenance(
     )
 
     backend = ComfyWorkflowVideoBackend(
-        client=client, history_poll_interval=0.01, history_timeout=1.0
+        client=client,
+        process_manager=_ready_process_manager(),
+        history_poll_interval=0.01,
+        history_timeout=1.0,
     )
 
     result = backend.execute_segment(
@@ -324,7 +345,12 @@ def test_comfy_workflow_backend_promotes_reencoded_secondary_motion_video(
         },
     )
 
-    backend = ComfyWorkflowVideoBackend(client=client, history_poll_interval=0.01, history_timeout=1.0)
+    backend = ComfyWorkflowVideoBackend(
+        client=client,
+        process_manager=_ready_process_manager(),
+        history_poll_interval=0.01,
+        history_timeout=1.0,
+    )
     result = backend.execute(
         pipeline=Mock(),
         request=VideoExecutionRequest(
@@ -432,7 +458,12 @@ def test_comfy_workflow_backend_preserves_original_video_when_secondary_motion_u
         },
     )
 
-    backend = ComfyWorkflowVideoBackend(client=client, history_poll_interval=0.01, history_timeout=1.0)
+    backend = ComfyWorkflowVideoBackend(
+        client=client,
+        process_manager=_ready_process_manager(),
+        history_poll_interval=0.01,
+        history_timeout=1.0,
+    )
     result = backend.execute(
         pipeline=Mock(),
         request=VideoExecutionRequest(

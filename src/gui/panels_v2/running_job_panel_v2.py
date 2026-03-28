@@ -83,7 +83,6 @@ class RunningJobPanelV2(ttk.Frame):
             text="",
             style=STATUS_LABEL_STYLE,
         )
-        self.visibility_banner.pack(side="right")
         self.on_content_visibility_mode_changed()
 
         # Job info label
@@ -545,10 +544,7 @@ class RunningJobPanelV2(ttk.Frame):
         self._update_display()
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
-        value = str(
-            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
-        ).lower()
-        self.visibility_banner.configure(text="SFW mode active" if value == "sfw" else "")
+        self.visibility_banner.configure(text="")
 
     def _on_content_visibility_mode_changed(self) -> None:
         self.on_content_visibility_mode_changed()

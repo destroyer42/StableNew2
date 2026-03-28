@@ -1,13 +1,11 @@
-"""
-Test script to confirm WebUI returns HTTP 500 during model loading.
-"""
+"""Manual timing script for observing WebUI endpoint behavior during model loading."""
 import time
 import requests
 import json
 
 BASE_URL = "http://127.0.0.1:7860"
 
-def test_endpoint(endpoint, method="GET", json_data=None):
+def probe_endpoint(endpoint, method="GET", json_data=None):
     """Test an endpoint and return status code."""
     try:
         if method == "GET":
@@ -31,10 +29,10 @@ def main():
     }
     
     for i in range(60):  # Test for 60 seconds
-        models_status, models_resp = test_endpoint("/sdapi/v1/sd-models")
-        options_status, options_resp = test_endpoint("/sdapi/v1/options")
-        progress_status, progress_resp = test_endpoint("/sdapi/v1/progress")
-        txt2img_status, txt2img_resp = test_endpoint("/sdapi/v1/txt2img", "POST", payload)
+        models_status, models_resp = probe_endpoint("/sdapi/v1/sd-models")
+        options_status, options_resp = probe_endpoint("/sdapi/v1/options")
+        progress_status, progress_resp = probe_endpoint("/sdapi/v1/progress")
+        txt2img_status, txt2img_resp = probe_endpoint("/sdapi/v1/txt2img", "POST", payload)
         
         print(f"\n[{i:02d}s] Endpoint Status:")
         print(f"  /sd-models:  {models_status}")

@@ -187,7 +187,6 @@ class ReviewTabFrame(ttk.Frame):
         )
         self.selection_label.grid(row=0, column=5, sticky="e")
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
-        self.visibility_banner.grid(row=1, column=5, sticky="e")
 
         self.workflow_hint_label = ttk.Label(
             header,
@@ -1277,12 +1276,7 @@ class ReviewTabFrame(ttk.Frame):
         )
         self._set_readonly_text(self.current_prompt_text, prompt_value)
         self._set_readonly_text(self.current_negative_text, negative_value)
-        if self._content_visibility_mode == "sfw" and (
-            prompt_value == REDACTED_TEXT or negative_value == REDACTED_TEXT
-        ):
-            self.visibility_banner.config(text="SFW mode active: source prompts hidden")
-        else:
-            self.visibility_banner.config(text="")
+        self.visibility_banner.config(text="")
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(

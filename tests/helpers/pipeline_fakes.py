@@ -50,16 +50,17 @@ class FakePipeline:
             self._output_writer(output_path)
         return {"path": str(output_path), "images": [str(output_path)]}
 
-    def run_upscale_stage(
-        self,
-        input_image: Any,
-        config: dict[str, Any],
-        output_dir: Path,
-        *,
-        image_name: str | None = None,
-        cancel_token: Any | None = None,
-        **_kwargs: Any,
-    ) -> dict[str, Any]:
+    def run_upscale_stage(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        input_image = kwargs.get("input_image")
+        if input_image is None:
+            input_image = kwargs.get("input_image_path")
+        if input_image is None and args:
+            input_image = args[0]
+        output_dir = kwargs.get("output_dir")
+        if output_dir is None and len(args) >= 3:
+            output_dir = args[2]
+        output_dir = Path(output_dir or ".")
+        image_name = kwargs.get("image_name")
         self.calls.append(("upscale", image_name or "upscale"))
         self.stage_events.append({"stage": "upscale"})
         output_path = output_dir / f"{image_name or 'upscale'}.png"
@@ -67,17 +68,17 @@ class FakePipeline:
             self._output_writer(output_path)
         return {"path": str(output_path), "images": [str(output_path)]}
 
-    def run_adetailer_stage(
-        self,
-        input_image: Any,
-        config: dict[str, Any],
-        output_dir: Path,
-        *,
-        image_name: str | None = None,
-        prompt: str | None = None,
-        cancel_token: Any | None = None,
-        **_kwargs: Any,
-    ) -> dict[str, Any]:
+    def run_adetailer_stage(self, *args: Any, **kwargs: Any) -> dict[str, Any]:
+        input_image = kwargs.get("input_image")
+        if input_image is None:
+            input_image = kwargs.get("input_image_path")
+        if input_image is None and args:
+            input_image = args[0]
+        output_dir = kwargs.get("output_dir")
+        if output_dir is None and len(args) >= 3:
+            output_dir = args[2]
+        output_dir = Path(output_dir or ".")
+        image_name = kwargs.get("image_name")
         self.calls.append(("adetailer", image_name or "adetailer"))
         self.stage_events.append({"stage": "adetailer"})
         output_path = output_dir / f"{image_name or 'adetailer'}.png"

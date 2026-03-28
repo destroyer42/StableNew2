@@ -133,7 +133,6 @@ class LearningTabFrame(ttk.Frame):
             style=BODY_LABEL_STYLE,
             foreground=TOKENS.colors.status_info,
         )
-        self._visibility_banner.grid(row=1, column=0, sticky="w", pady=(4, 0))
         self._learning_enabled_var = tk.BooleanVar(
             value=self.app_state.learning_enabled if self.app_state else False
         )
@@ -1436,10 +1435,7 @@ class LearningTabFrame(ttk.Frame):
         self._content_visibility_mode = str(
             mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )
-        if self._content_visibility_mode == "sfw":
-            self._visibility_banner.configure(text="SFW mode active: explicit source prompts hidden")
-        else:
-            self._visibility_banner.configure(text="")
+        self._visibility_banner.configure(text="")
         review_panel = getattr(self, "review_panel", None)
         if review_panel is not None:
             callback = getattr(review_panel, "on_content_visibility_mode_changed", None)

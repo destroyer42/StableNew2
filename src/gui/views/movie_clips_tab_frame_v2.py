@@ -185,7 +185,6 @@ class MovieClipsTabFrameV2(ttk.Frame):
         )
         self.status_label.grid(row=0, column=7, sticky="e", padx=(8, 0))
         self.visibility_banner = ttk.Label(header, text="", style="Muted.TLabel")
-        self.visibility_banner.grid(row=1, column=7, sticky="e", padx=(8, 0))
         ttk.Label(
             header,
             textvariable=self.source_summary_var,
@@ -609,10 +608,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
             pass
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
-        value = str(
-            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
-        ).lower()
-        self.visibility_banner.configure(text="SFW mode active" if value == "sfw" else "")
+        self.visibility_banner.configure(text="")
 
     def _on_content_visibility_mode_changed(self) -> None:
         self.on_content_visibility_mode_changed()

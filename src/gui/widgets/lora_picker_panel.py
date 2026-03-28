@@ -70,12 +70,6 @@ class LoRAPickerPanel(ttk.Frame):
         ttk.Label(header_frame, text="LoRAs", font=("Segoe UI", 10, "bold")).grid(
             row=0, column=0, sticky="w"
         )
-        self._visibility_status_var = tk.StringVar(value="")
-        ttk.Label(
-            header_frame,
-            textvariable=self._visibility_status_var,
-            foreground="#7aa2d6",
-        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
         
         ttk.Button(
             header_frame,
@@ -147,7 +141,6 @@ class LoRAPickerPanel(ttk.Frame):
     def _refresh_visible_lora_names(self) -> None:
         resolver = ContentVisibilityResolver(self._content_visibility_mode)
         visible: list[str] = []
-        hidden_count = 0
         for name in self._available_loras:
             resource = self.scanner.get_lora_info(name)
             subject = {
@@ -157,14 +150,8 @@ class LoRAPickerPanel(ttk.Frame):
             }
             if resolver.is_visible(subject):
                 visible.append(name)
-            else:
-                hidden_count += 1
         self._visible_loras = sorted(visible)
         self.lora_name_combo["values"] = self._visible_loras
-        if self._content_visibility_mode == "sfw" and hidden_count:
-            self._visibility_status_var.set(f"SFW mode active: {hidden_count} LoRA(s) hidden.")
-        else:
-            self._visibility_status_var.set("")
     
 
     def _on_add_lora(self) -> None:

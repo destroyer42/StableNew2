@@ -95,13 +95,13 @@ def test_save_includes_matrix_config(tmp_path):
     with open(json_path, "r", encoding="utf-8") as f:
         data = json.load(f)
     
-    assert "matrix" in data
-    assert data["matrix"]["enabled"] is True
-    assert data["matrix"]["mode"] == "fanout"
-    assert data["matrix"]["limit"] == 4
-    assert len(data["matrix"]["slots"]) == 2
-    assert data["matrix"]["slots"][0]["name"] == "job"
-    assert data["matrix"]["slots"][0]["values"] == ["wizard", "knight"]
+    assert "pack_data" in data
+    assert data["pack_data"]["matrix"]["enabled"] is True
+    assert data["pack_data"]["matrix"]["mode"] == "fanout"
+    assert data["pack_data"]["matrix"]["limit"] == 4
+    assert len(data["pack_data"]["matrix"]["slots"]) == 2
+    assert data["pack_data"]["matrix"]["slots"][0]["name"] == "job"
+    assert data["pack_data"]["matrix"]["slots"][0]["values"] == ["wizard", "knight"]
 
 
 def test_load_with_matrix_config(tmp_path):

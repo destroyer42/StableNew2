@@ -100,7 +100,6 @@ class PromptPackPanelV2(ttk.Frame):
         apply_validation_colors(self.meta_label, "normal")
         self.visibility_notice_var = tk.StringVar(value="")
         self.visibility_notice_label = ttk.Label(meta_frame, textvariable=self.visibility_notice_var, wraplength=260)
-        self.visibility_notice_label.pack(anchor=tk.W, pady=(4, 0))
 
         self.apply_button = ttk.Button(self, text="Apply to Prompt", command=self._on_apply_clicked)
         self.apply_button.pack(anchor=tk.E, pady=(theme_mod.PADDING_SM, 0))
@@ -160,7 +159,7 @@ class PromptPackPanelV2(ttk.Frame):
                 pass
 
     def set_visibility_notice(self, text: str) -> None:
-        self.visibility_notice_var.set(str(text or ""))
+        self.visibility_notice_var.set("")
 
 
 __all__ = ["PromptPackPanelV2"]

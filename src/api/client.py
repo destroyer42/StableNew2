@@ -1064,22 +1064,25 @@ class SDWebUIClient:
         Returns:
             True if API is ready, False otherwise
         """
+        try:
+            with self._request_context(
+                "get",
+                "/sdapi/v1/sd-models",
+                timeout=10,
+                max_retries=max_retries,
+                backoff_factor=retry_delay,
+            ) as response:
+                if response is None:
+                    logger.error("SD WebUI API is not ready after max retries")
+                    return False
 
-        with self._request_context(
-            "get",
-            "/sdapi/v1/sd-models",
-            timeout=10,
-            max_retries=max_retries,
-            backoff_factor=retry_delay,
-        ) as response:
-            if response is None:
-                logger.error("SD WebUI API is not ready after max retries")
-                return False
+                logger.info("SD WebUI API is ready")
+                return True
+        except requests.RequestException as exc:
+            logger.warning("SD WebUI API readiness check failed: %s", exc)
+            return False
 
-            logger.info("SD WebUI API is ready")
-            return True
-
-    def txt2img(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+    def txt2img(self, payload: dict[str, Any], *, raise_on_error: bool = False) -> dict[str, Any] | None:
         """
         Generate image from text prompt.
 
@@ -1100,27 +1103,33 @@ class SDWebUIClient:
                 "n_iter": payload.get("n_iter"),
             },
         )
-        with self._request_context(
-            "post",
-            "/sdapi/v1/txt2img",
-            json=payload,
-            stage="txt2img",
-            policy=TXT2IMG_RETRY_POLICY,
-        ) as response:
-            if response is None:
-                return None
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/txt2img",
+                json=payload,
+                stage="txt2img",
+                policy=TXT2IMG_RETRY_POLICY,
+            ) as response:
+                if response is None:
+                    return None
 
-            try:
-                data = response.json()
-                # Log response size for diagnostics
-                response_size_mb = len(response.content) / (1024 * 1024)
-                if response_size_mb > 10.0:
-                    logger.warning(f"Large txt2img response: {response_size_mb:.1f}MB")
-                else:
-                    logger.debug(f"txt2img response size: {response_size_mb:.1f}MB")
-            except ValueError as exc:
-                logger.error(f"txt2img response parsing failed: {exc}")
-                return None
+                try:
+                    data = response.json()
+                    # Log response size for diagnostics
+                    response_size_mb = len(response.content) / (1024 * 1024)
+                    if response_size_mb > 10.0:
+                        logger.warning(f"Large txt2img response: {response_size_mb:.1f}MB")
+                    else:
+                        logger.debug(f"txt2img response size: {response_size_mb:.1f}MB")
+                except ValueError as exc:
+                    logger.error(f"txt2img response parsing failed: {exc}")
+                    return None
+        except Exception as exc:
+            if raise_on_error:
+                raise
+            _log_stage_failure("txt2img", exc)
+            return None
 
         # Log parameters returned by the API for correlation
         try:
@@ -1154,7 +1163,13 @@ class SDWebUIClient:
         )
         return data
 
-    def img2img(self, payload: dict[str, Any], *, policy: RetryPolicy | None = None) -> dict[str, Any] | None:
+    def img2img(
+        self,
+        payload: dict[str, Any],
+        *,
+        policy: RetryPolicy | None = None,
+        raise_on_error: bool = False,
+    ) -> dict[str, Any] | None:
         """
         Refine image using img2img.
 
@@ -1166,27 +1181,33 @@ class SDWebUIClient:
             Response data including base64 encoded images
         """
         effective_policy = policy if policy is not None else IMG2IMG_RETRY_POLICY
-        with self._request_context(
-            "post",
-            "/sdapi/v1/img2img",
-            json=payload,
-            stage="img2img",
-            policy=effective_policy,
-        ) as response:
-            if response is None:
-                return None
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/img2img",
+                json=payload,
+                stage="img2img",
+                policy=effective_policy,
+            ) as response:
+                if response is None:
+                    return None
 
-            try:
-                data = response.json()
-                # Log response size for diagnostics
-                response_size_mb = len(response.content) / (1024 * 1024)
-                if response_size_mb > 10.0:
-                    logger.warning(f"Large img2img response: {response_size_mb:.1f}MB")
-                else:
-                    logger.debug(f"img2img response size: {response_size_mb:.1f}MB")
-            except ValueError as exc:
-                logger.error(f"img2img response parsing failed: {exc}")
-                return None
+                try:
+                    data = response.json()
+                    # Log response size for diagnostics
+                    response_size_mb = len(response.content) / (1024 * 1024)
+                    if response_size_mb > 10.0:
+                        logger.warning(f"Large img2img response: {response_size_mb:.1f}MB")
+                    else:
+                        logger.debug(f"img2img response size: {response_size_mb:.1f}MB")
+                except ValueError as exc:
+                    logger.error(f"img2img response parsing failed: {exc}")
+                    return None
+        except Exception as exc:
+            if raise_on_error:
+                raise
+            _log_stage_failure("img2img", exc)
+            return None
 
         # Log parameters returned by the API for correlation
         try:
@@ -1231,21 +1252,25 @@ class SDWebUIClient:
             "image": _format_as_data_url(image_base64),
             "model": model or "clip",
         }
-        with self._request_context(
-            "post",
-            "/sdapi/v1/interrogate",
-            json=payload,
-            stage="interrogate",
-            timeout=30,
-        ) as response:
-            if response is None:
-                return None
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/interrogate",
+                json=payload,
+                stage="interrogate",
+                timeout=30,
+            ) as response:
+                if response is None:
+                    return None
 
-            try:
-                data = response.json()
-            except ValueError as exc:
-                logger.error("interrogate response parsing failed: %s", exc)
-                return None
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    logger.error("interrogate response parsing failed: %s", exc)
+                    return None
+        except Exception as exc:
+            _log_stage_failure("interrogate", exc)
+            return None
 
         caption = ""
         if isinstance(data, dict):
@@ -1257,7 +1282,7 @@ class SDWebUIClient:
         logger.info("interrogate completed successfully")
         return caption
 
-    def upscale(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+    def upscale(self, payload: dict[str, Any], *, raise_on_error: bool = False) -> dict[str, Any] | None:
         """
         Upscale image using extra-single-image endpoint.
 
@@ -1267,21 +1292,27 @@ class SDWebUIClient:
         Returns:
             Response data including base64 encoded upscaled image
         """
-        with self._request_context(
-            "post",
-            "/sdapi/v1/extra-single-image",
-            json=payload,
-            stage="upscale",
-            policy=UPSCALE_RETRY_POLICY,
-        ) as response:
-            if response is None:
-                return None
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/extra-single-image",
+                json=payload,
+                stage="upscale",
+                policy=UPSCALE_RETRY_POLICY,
+            ) as response:
+                if response is None:
+                    return None
 
-            try:
-                data = response.json()
-            except ValueError as exc:
-                logger.error(f"Upscale response parsing failed: {exc}")
-                return None
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    logger.error(f"Upscale response parsing failed: {exc}")
+                    return None
+        except Exception as exc:
+            if raise_on_error:
+                raise
+            _log_stage_failure("upscale", exc)
+            return None
 
         logger.info("Upscaling completed successfully")
         return data
@@ -1434,15 +1465,19 @@ class SDWebUIClient:
         stage_normalized = (stage or "txt2img").lower()
         try:
             if stage_normalized == "txt2img":
-                response = self.txt2img(payload)
+                response = self.txt2img(payload, raise_on_error=True)
             elif stage_normalized == "img2img":
-                response = self.img2img(payload)
+                response = self.img2img(payload, raise_on_error=True)
             elif stage_normalized == "adetailer":
                 # ADetailer uses the img2img endpoint but with a fail-fast retry policy:
                 # GPU OOM loops never recover without a restart, so retrying is wasteful.
-                response = self.img2img(payload, policy=ADETAILER_RETRY_POLICY)
+                response = self.img2img(
+                    payload,
+                    policy=ADETAILER_RETRY_POLICY,
+                    raise_on_error=True,
+                )
             elif stage_normalized in {"upscale", "upscale_image"}:
-                response = self.upscale(payload)
+                response = self.upscale(payload, raise_on_error=True)
             else:
                 raise ValueError(f"Unsupported stage: {stage}")
 

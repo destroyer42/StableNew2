@@ -75,7 +75,7 @@ def _build_stage(stage_type: str, order_index: int) -> StageExecution:
 
 @pytest.fixture(autouse=True)
 def stub_pipeline(monkeypatch):
-    monkeypatch.setattr("src.pipeline.pipeline_runner.Pipeline", RecordingPipeline)
+    monkeypatch.setattr("src.pipeline.executor.Pipeline", RecordingPipeline)
 
 
 def _prime_runner_for_txt_only(runner: PipelineRunner):

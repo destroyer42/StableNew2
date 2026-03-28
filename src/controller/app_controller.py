@@ -4838,10 +4838,10 @@ class AppController:
         return getattr(pipeline_tab, "stage_cards_panel", None)
 
     def _get_sidebar_panel(self) -> Any:
-        return getattr(self.main_window, "sidebar_panel_v2", None)
+        return getattr(getattr(self, "main_window", None), "sidebar_panel_v2", None)
 
     def _get_prompt_tab(self) -> Any:
-        return getattr(self.main_window, "prompt_tab", None)
+        return getattr(getattr(self, "main_window", None), "prompt_tab", None)
 
     def _read_prompt_optimizer_ui_config(self) -> dict[str, Any] | None:
         prompt_tab = self._get_prompt_tab()
@@ -5405,10 +5405,11 @@ class AppController:
             config: Configuration dict to modify (modifies in-place)
         """
         # Get sidebar reference from main window
-        if not self.main_window:
+        main_window = getattr(self, "main_window", None)
+        if not main_window:
             return
         
-        sidebar = getattr(self.main_window, "sidebar_panel_v2", None)
+        sidebar = getattr(main_window, "sidebar_panel_v2", None)
         if not sidebar:
             return
         
@@ -5823,6 +5824,14 @@ class AppController:
                 self.current_operation_label = None
                 self.last_ui_action = None
         
+        can_schedule_back_to_ui = bool(
+            getattr(self, "main_window", None)
+            and callable(getattr(self.main_window, "run_in_main_thread", None))
+        )
+        if not self.threaded or not can_schedule_back_to_ui:
+            _worker()
+            return
+
         # PR-HB-002: Use tracked thread for clean shutdown
         self._spawn_tracked_thread(
             target=_worker,

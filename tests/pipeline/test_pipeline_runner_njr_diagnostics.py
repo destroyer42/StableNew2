@@ -10,9 +10,10 @@ from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
 def test_pipeline_runner_records_stage_events(monkeypatch, tmp_path) -> None:
     class DummyPipeline:
-        def __init__(self, api_client, structured_logger):
+        def __init__(self, api_client, structured_logger, status_callback=None):
             self.api_client = api_client
             self.logger = structured_logger
+            self.status_callback = status_callback
 
         def run_txt2img_stage(
             self,
@@ -28,7 +29,7 @@ def test_pipeline_runner_records_stage_events(monkeypatch, tmp_path) -> None:
             output_path = run_dir / (image_name or "txt2img.png")
             return {"path": str(output_path), "images": [str(output_path)]}
 
-    monkeypatch.setattr("src.pipeline.pipeline_runner.Pipeline", DummyPipeline)
+    monkeypatch.setattr("src.pipeline.executor.Pipeline", DummyPipeline)
     runner = PipelineRunner(
         api_client=SimpleNamespace(),
         structured_logger=StructuredLogger(output_dir=str(tmp_path)),

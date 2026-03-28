@@ -149,7 +149,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             row=1, column=0, columnspan=4, sticky="w", pady=(6, 0)
         )
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
-        self.visibility_banner.grid(row=1, column=4, sticky="e", pady=(6, 0))
         ttk.Label(header, textvariable=self.source_summary_var, style="Muted.TLabel").grid(
             row=2, column=0, columnspan=4, sticky="w", pady=(4, 0)
         )
@@ -458,10 +457,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         widget.insert("1.0", value)
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
-        value = str(
-            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
-        ).lower()
-        self.visibility_banner.configure(text="SFW mode active" if value == "sfw" else "")
+        self.visibility_banner.configure(text="")
 
     def _on_content_visibility_mode_changed(self) -> None:
         self.on_content_visibility_mode_changed()

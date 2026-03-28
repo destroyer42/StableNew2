@@ -5,6 +5,7 @@ from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, MagicMock, patch
 import tkinter as tk
+from types import SimpleNamespace
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent))
@@ -32,10 +33,11 @@ def test_pr_005_thumbnail_loading():
             "Missing _find_latest_output_image method"
         
         # Test with mock job summary
-        mock_summary = Mock()
-        mock_summary.job_id = "test_job_123"
-        mock_summary.output_dir = "outputs"
-        mock_summary.result = None  # No result yet
+        mock_summary = SimpleNamespace(
+            job_id="test_job_123",
+            output_dir="outputs",
+            result=None,
+        )
         
         # Test image finding (will return None since no actual files)
         image_path = panel._find_latest_output_image(mock_summary)

@@ -9,6 +9,7 @@ from PIL import Image
 
 from src.controller.content_visibility_resolver import REDACTED_TEXT
 from src.gui.app_state_v2 import AppStateV2
+from src.gui.engine_settings_dialog import EngineSettingsDialog
 from src.gui.preview_panel_v2 import PreviewPanelV2
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrameV2
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
@@ -16,6 +17,7 @@ from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.photo_optimize.store import PhotoOptimizeStore
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StagePromptInfo
 from src.services.ui_state_store import UIStateStore
+from src.utils.config import ConfigManager
 from src.utils.image_metadata import ReadPayloadResult
 from tests.helpers.gui_harness_v2 import GuiV2Harness
 
@@ -64,19 +66,28 @@ def _build_explicit_preview_job() -> NormalizedJobRecord:
 
 
 @pytest.mark.gui
-def test_main_window_visibility_button_toggles_mode(tk_root: tk.Tk, tmp_path: Path) -> None:
+def test_main_window_visibility_setting_moves_into_settings_dialog(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
     store = UIStateStore(tmp_path / "ui_state.json")
     with patch("src.gui.main_window_v2.get_ui_state_store", return_value=store):
         harness = GuiV2Harness(tk_root)
         try:
             assert harness.controller.app_state.content_visibility_mode == "nsfw"
-            assert harness.window.header_zone.visibility_button.cget("text") == "Visibility: NSFW"
+            assert not hasattr(harness.window.header_zone, "visibility_button")
 
-            harness.window.header_zone.visibility_button.invoke()
+            harness.window.open_engine_settings_dialog(config_manager=ConfigManager(tmp_path / "presets"))
+            tk_root.update()
+            dialog = next(
+                child for child in harness.window.root.winfo_children() if isinstance(child, tk.Toplevel)
+            )
+            panel = next(child for child in dialog.winfo_children() if isinstance(child, EngineSettingsDialog))
+            panel._webui_base_url_var.set("http://127.0.0.1:7860")
+            panel._content_visibility_mode_var.set("sfw")
+            panel._handle_save()
             tk_root.update()
 
             assert harness.controller.app_state.content_visibility_mode == "sfw"
-            assert harness.window.header_zone.visibility_button.cget("text") == "Visibility: SFW"
         finally:
             harness.cleanup()
 
@@ -104,7 +115,6 @@ def test_prompt_tab_filters_pack_list_live_on_mode_change(
         visible_after = list(tab.pack_listbox.get(0, tk.END))
         assert "safe_pack" in visible_after
         assert "explicit_pack" not in visible_after
-        assert "prompt pack" in tab.visibility_notice_var.get().lower()
     finally:
         tab.destroy()
 
@@ -121,7 +131,7 @@ def test_preview_panel_redacts_explicit_preview_text_live(tk_root: tk.Tk) -> Non
         tk_root.update()
 
         assert _read_text(panel.prompt_text) == REDACTED_TEXT
-        assert "SFW mode active" in panel.visibility_banner.cget("text")
+        assert panel.visibility_banner.cget("text") == ""
     finally:
         panel.destroy()
 
@@ -152,7 +162,7 @@ def test_review_tab_redacts_source_prompts_live(
         tk_root.update()
 
         assert _read_text(tab.current_prompt_text) == REDACTED_TEXT
-        assert "SFW mode active" in tab.visibility_banner.cget("text")
+        assert tab.visibility_banner.cget("text") == ""
     finally:
         tab.destroy()
 
@@ -175,6 +185,6 @@ def test_photo_optimize_tab_redacts_baseline_prompts_live(
         tk_root.update()
 
         assert _read_text(tab.current_prompt_text) == REDACTED_TEXT
-        assert "SFW mode active" in tab.visibility_banner.cget("text")
+        assert tab.visibility_banner.cget("text") == ""
     finally:
         tab.destroy()

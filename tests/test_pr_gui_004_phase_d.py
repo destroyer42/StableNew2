@@ -15,7 +15,8 @@ def test_phase_d_integration():
     print("STEP 1: Parse test TXT file")
     print("=" * 60)
     
-    txt_path = Path("test_lora_embed_load.txt")
+    fixtures_dir = Path(__file__).resolve().parent / "fixtures" / "lora_embed"
+    txt_path = fixtures_dir / "test_lora_embed_load.txt"
     with open(txt_path, "r", encoding="utf-8") as f:
         txt_content = f.read()
     
@@ -69,7 +70,7 @@ def test_phase_d_integration():
         json_data = json.load(f)
     
     print("JSON slots[0]:")
-    print(json.dumps(json_data["slots"][0], indent=2))
+    print(json.dumps(json_data["pack_data"]["slots"][0], indent=2))
     print()
     
     # Step 4: Verify TXT export

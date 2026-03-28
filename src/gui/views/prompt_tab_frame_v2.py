@@ -190,14 +190,6 @@ class PromptTabFrame(ttk.Frame):
         self.pack_listbox.bind("<Double-Button-1>", lambda e: self._on_load_selected_pack())
         enable_mousewheel(self.pack_listbox)
         self._refresh_pack_list()
-        self.visibility_notice_var = tk.StringVar(value="")
-        self.visibility_notice_label = ttk.Label(
-            self.left_frame,
-            textvariable=self.visibility_notice_var,
-            foreground=TOKENS.colors.status_info,
-            wraplength=320,
-        )
-        self.visibility_notice_label.pack(fill="x", pady=(0, 8))
         
         # Slot List Section (bottom)
         ttk.Separator(self.left_frame, orient="horizontal").pack(fill="x", pady=(0, 8))
@@ -860,12 +852,9 @@ class PromptTabFrame(ttk.Frame):
         packs_dir = Path("packs")
         if not packs_dir.exists():
             packs_dir.mkdir(parents=True, exist_ok=True)
-            if hasattr(self, "visibility_notice_var"):
-                self.visibility_notice_var.set("")
             return
 
         resolver = self._visibility_resolver()
-        hidden_count = 0
         txt_files = sorted(packs_dir.glob("*.txt"))
         for txt_file in txt_files:
             pack_text = ""
@@ -875,15 +864,6 @@ class PromptTabFrame(ttk.Frame):
                 pass
             if resolver.is_visible({"name": txt_file.stem, "prompt": pack_text}):
                 self.pack_listbox.insert("end", txt_file.stem)
-            else:
-                hidden_count += 1
-        if hasattr(self, "visibility_notice_var"):
-            if self._content_visibility_mode == "sfw" and hidden_count:
-                self.visibility_notice_var.set(
-                    f"SFW mode active: {hidden_count} prompt pack(s) hidden and explicit prompts redacted."
-                )
-            else:
-                self.visibility_notice_var.set("")
     
     def _on_load_selected_pack(self) -> None:
         """Load the selected pack from the pack list."""

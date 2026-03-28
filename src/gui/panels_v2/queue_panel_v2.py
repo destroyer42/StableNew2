@@ -150,7 +150,6 @@ class QueuePanelV2(ttk.Frame):
             style=STATUS_LABEL_STYLE,
             foreground=TOKENS.colors.status_info,
         )
-        self.visibility_banner.pack(anchor="w", pady=(0, 2))
 
         # Queue ETA label (estimated total time)
         self.queue_eta_label = ttk.Label(
@@ -1041,13 +1040,7 @@ class QueuePanelV2(ttk.Frame):
             self._refresh_display()
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
-        value = str(
-            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
-        ).lower()
-        if value == "sfw":
-            self.visibility_banner.configure(text="SFW mode active: explicit prompt details are hidden elsewhere.")
-        else:
-            self.visibility_banner.configure(text="")
+        self.visibility_banner.configure(text="")
 
     def _on_content_visibility_mode_changed(self) -> None:
         self.on_content_visibility_mode_changed()

@@ -27,7 +27,7 @@ def test_prompt_workspace_state_basic_flow(tmp_path: Path):
     assert state.dirty is True
 
     meta = state.get_current_prompt_metadata()
-    assert meta.text_length == len("First")
+    assert meta.text_length == len("First\n")
     assert meta.matrix_count == 0
 
     saved_path = state.save_current_pack(tmp_path / "saved.json")

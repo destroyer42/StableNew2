@@ -278,8 +278,6 @@ class JSONLJobHistoryStore(JobHistoryStore):
         # where GUI tries to load before write finishes, resulting in stale/empty data.
         with self._lock:
             self._pending_entries[entry.job_id] = entry
-            if self._cached_entries is not None:
-                self._cached_entries[entry.job_id] = entry
         
         # Always emit callback immediately (don't wait for write to complete)
         # This allows GUI to update immediately even though file write is async
@@ -323,7 +321,13 @@ class JSONLJobHistoryStore(JobHistoryStore):
                         latest[entry.job_id] = entry
                     except Exception:
                         continue
-                latest.update(self._pending_entries)
+                resolved_pending = [
+                    job_id
+                    for job_id, pending in self._pending_entries.items()
+                    if latest.get(job_id) == pending
+                ]
+                for job_id in resolved_pending:
+                    self._pending_entries.pop(job_id, None)
                 
                 # Update cache
                 self._cached_entries = latest

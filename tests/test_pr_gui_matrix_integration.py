@@ -20,7 +20,10 @@ from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 @pytest.fixture
 def root():
     """Create Tk root for GUI tests."""
-    root = tk.Tk()
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tk unavailable in this environment: {exc}")
     yield root
     root.destroy()
 
@@ -265,9 +268,9 @@ class TestSlotValidation:
         prompt_frame.editor.insert("1.0", "[[missing]]")
         prompt_frame._validate_matrix_slots()
         prompt_frame._show_validation_warning()
-        
+
         label_text = prompt_frame.pack_name_label.cget("text")
-        assert "⚠️" in label_text
+        assert "Undefined slots" in label_text
         assert "missing" in label_text
 
 

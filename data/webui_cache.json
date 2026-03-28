@@ -1,10 +1,10 @@
 {
-  "workdir": "C:\\Users\\rob\\AppData\\Local\\Temp\\pytest-of-rob\\pytest-1376\\test_data0",
+  "workdir": "C:\\Users\\rob\\AppData\\Local\\Temp\\pytest-of-rob\\pytest-1416\\test_data0",
   "command": [
     "webui-user.bat",
     "--api",
     "--xformers",
     "--medvram-sdxl"
   ],
-  "timestamp": 1774706978.4144266
+  "timestamp": 1774715711.721251
 }

@@ -324,11 +324,11 @@ class TestSingleNodeJobRunnerTimeout:
 
     def test_runner_stop_timeout_sufficient(self):
         """Verify SingleNodeJobRunner.stop() has 10s timeout (not 2s)."""
+        from src.queue.job_queue import JobQueue
         from src.queue.single_node_runner import SingleNodeJobRunner
 
-        # Create a mock runner
         runner = SingleNodeJobRunner(
-            job_queue=Mock(),
+            job_queue=JobQueue(),
             run_callable=None,
             poll_interval=0.1,
         )

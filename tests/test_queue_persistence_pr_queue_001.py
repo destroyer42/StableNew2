@@ -1,140 +1,120 @@
-"""
-Test suite for PR-QUEUE-001: Queue Persistence Integrity
+"""Current-truth regressions for queue persistence and preview-to-queue submission."""
 
-Validates:
-1. Queue state saves/restores without corruption
-2. No orphan jobs created on restore
-3. Deferred autostart logic properly removed
-4. Queue submission handles all preview jobs without arbitrary limits
-"""
+from __future__ import annotations
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import asdict, dataclass, field
+from types import MethodType, SimpleNamespace
+from typing import Any
+
+from src.controller.app_controller import AppController
 from src.controller.job_execution_controller import JobExecutionController
-from src.queue.job_model import Job, JobStatus, JobPriority
+from src.controller.pipeline_controller import PipelineController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.queue.job_model import Job, JobPriority
 from src.services.queue_store_v2 import QueueSnapshotV1
+
+
+def _make_normalized_record(job_id: str) -> NormalizedJobRecord:
+    record = NormalizedJobRecord(
+        job_id=job_id,
+        config={"prompt_pack_id": "pack-1", "model": "test-model"},
+        path_output_dir="output",
+        filename_template="{seed}",
+        prompt_pack_id="pack-1",
+        seed=42,
+    )
+    record.prompt_source = "pack"
+    return record
 
 
 @dataclass
 class MockQueue:
-    """Mock queue that tracks restore calls."""
-    jobs: list[Job]
+    jobs: list[Job] = field(default_factory=list)
     restore_called: bool = False
     restored_jobs: list[Job] | None = None
-    
-    def list_jobs(self):
-        return self.jobs
-    
-    def restore_jobs(self, jobs: list[Job]):
+    listeners: list[Any] = field(default_factory=list)
+
+    def list_jobs(self) -> list[Job]:
+        return list(self.jobs)
+
+    def restore_jobs(self, jobs: list[Job]) -> None:
         self.restore_called = True
         self.restored_jobs = list(jobs)
         self.jobs.extend(jobs)
 
+    def register_state_listener(self, callback: Any) -> None:
+        self.listeners.append(callback)
+
 
 class TestQueuePersistenceIntegrity:
-    """Verify queue state persistence doesn't corrupt or duplicate jobs."""
-    
-    def test_restore_does_not_use_deferred_autostart(self):
-        """PR-QUEUE-001: Ensure _deferred_autostart logic was fully removed."""
-        mock_runner = Mock()
-        mock_runner.start = Mock()
-        mock_runner.stop = Mock()
-        mock_runner.is_running = Mock(return_value=False)
-        
-        mock_queue = MockQueue(jobs=[])
-        
-        snapshot = QueueSnapshotV1(
-            jobs=[
-                {
-                    "queue_id": "test-job-1",
-                    "njr_snapshot": {
-                        "normalized_job": {
-                            "job_id": "test-job-1",
-                            "positive_prompt": "test",
-                            "negative_prompt": "",
-                            "base_model": "test_model",
-                            "sampler_name": "Euler",
-                            "scheduler": "Normal",
-                            "steps": 20,
-                            "cfg_scale": 7.0,
-                            "width": 512,
-                            "height": 512,
-                            "seed": -1,
-                            "batch_index": 0,
-                            "batch_total": 1,
-                        }
-                    },
-                    "priority": 1,
-                    "status": "queued",
-                    "created_at": "2025-12-25T00:00:00",
-                    "queue_schema": "2.6",
-                    "metadata": {},
-                }
-            ],
-            auto_run_enabled=True,
-            paused=False,
+    def test_restore_marks_deferred_autostart_without_starting_runner(self, monkeypatch) -> None:
+        entry = {
+            "queue_id": "test-job-1",
+            "njr_snapshot": {"normalized_job": asdict(_make_normalized_record("test-job-1"))},
+            "priority": 1,
+            "status": "queued",
+            "created_at": "2025-12-25T00:00:00",
+            "queue_schema": "2.6",
+            "metadata": {},
+        }
+        snapshot = QueueSnapshotV1(jobs=[entry], auto_run_enabled=True, paused=False)
+        mock_runner = SimpleNamespace(
+            start=lambda: None,
+            stop=lambda: None,
+            is_running=lambda: False,
         )
-        
-        with patch("src.controller.job_execution_controller.load_queue_snapshot", return_value=snapshot):
-            controller = JobExecutionController(
-                runner=mock_runner,
-                queue=mock_queue,
-                execute_fn=Mock(),
-            )
-            
-            # Verify _deferred_autostart attribute doesn't exist
-            assert not hasattr(controller, "_deferred_autostart"), \
-                "_deferred_autostart should not exist (removed in PR-CORE1-D22A)"
-            
-            # Verify jobs were restored
-            assert mock_queue.restore_called, "restore_jobs should have been called"
-            assert mock_queue.restored_jobs is not None
-            assert len(mock_queue.restored_jobs) == 1
-    
-    def test_restore_handles_empty_snapshot_gracefully(self):
-        """Verify empty/missing snapshots don't crash."""
-        mock_runner = Mock()
-        mock_queue = MockQueue(jobs=[])
-        
-        with patch("src.controller.job_execution_controller.load_queue_snapshot", return_value=None):
-            controller = JobExecutionController(
-                runner=mock_runner,
-                queue=mock_queue,
-                execute_fn=Mock(),
-            )
-            
-            assert not mock_queue.restore_called
-            assert len(mock_queue.jobs) == 0
-    
-    def test_restore_filters_non_queued_jobs(self):
-        """Verify only QUEUED jobs are restored (not COMPLETED, FAILED, etc)."""
-        mock_runner = Mock()
-        mock_queue = MockQueue(jobs=[])
-        
+        mock_runner.start_calls = 0
+
+        def _start() -> None:
+            mock_runner.start_calls += 1
+
+        mock_runner.start = _start
+        mock_queue = MockQueue()
+        monkeypatch.setattr(
+            "src.controller.job_execution_controller.load_queue_snapshot",
+            lambda *_, **__: snapshot,
+        )
+
+        controller = JobExecutionController(
+            runner=mock_runner,
+            queue=mock_queue,
+            execute_job=lambda job: {"ok": True},
+        )
+
+        assert controller._deferred_autostart is True
+        assert mock_runner.start_calls == 0
+        assert mock_queue.restore_called is True
+        assert mock_queue.restored_jobs is not None
+        assert len(mock_queue.restored_jobs) == 1
+
+        controller.trigger_deferred_autostart()
+
+        assert mock_runner.start_calls == 1
+        assert controller._deferred_autostart is False
+
+    def test_restore_handles_empty_snapshot_gracefully(self, monkeypatch) -> None:
+        mock_queue = MockQueue()
+        monkeypatch.setattr(
+            "src.controller.job_execution_controller.load_queue_snapshot",
+            lambda *_, **__: None,
+        )
+
+        controller = JobExecutionController(
+            runner=SimpleNamespace(start=lambda: None, stop=lambda: None, is_running=lambda: False),
+            queue=mock_queue,
+            execute_job=lambda job: {"ok": True},
+        )
+
+        assert mock_queue.restore_called is False
+        assert controller._deferred_autostart is False
+        assert mock_queue.jobs == []
+
+    def test_restore_filters_non_queued_jobs(self, monkeypatch) -> None:
         snapshot = QueueSnapshotV1(
             jobs=[
                 {
                     "queue_id": "queued-job",
-                    "njr_snapshot": {
-                        "normalized_job": {
-                            "job_id": "queued-job",
-                            "positive_prompt": "test",
-                            "negative_prompt": "",
-                            "base_model": "test_model",
-                            "sampler_name": "Euler",
-                            "scheduler": "Normal",
-                            "steps": 20,
-                            "cfg_scale": 7.0,
-                            "width": 512,
-                            "height": 512,
-                            "seed": -1,
-                            "batch_index": 0,
-                            "batch_total": 1,
-                        }
-                    },
+                    "njr_snapshot": {"normalized_job": asdict(_make_normalized_record("queued-job"))},
                     "priority": 1,
                     "status": "queued",
                     "created_at": "2025-12-25T00:00:00",
@@ -144,24 +124,10 @@ class TestQueuePersistenceIntegrity:
                 {
                     "queue_id": "completed-job",
                     "njr_snapshot": {
-                        "normalized_job": {
-                            "job_id": "completed-job",
-                            "positive_prompt": "test2",
-                            "negative_prompt": "",
-                            "base_model": "test_model",
-                            "sampler_name": "Euler",
-                            "scheduler": "Normal",
-                            "steps": 20,
-                            "cfg_scale": 7.0,
-                            "width": 512,
-                            "height": 512,
-                            "seed": -1,
-                            "batch_index": 0,
-                            "batch_total": 1,
-                        }
+                        "normalized_job": asdict(_make_normalized_record("completed-job"))
                     },
                     "priority": 1,
-                    "status": "completed",  # Should NOT be restored
+                    "status": "completed",
                     "created_at": "2025-12-25T00:00:00",
                     "queue_schema": "2.6",
                     "metadata": {},
@@ -170,105 +136,133 @@ class TestQueuePersistenceIntegrity:
             auto_run_enabled=False,
             paused=False,
         )
-        
-        with patch("src.controller.job_execution_controller.load_queue_snapshot", return_value=snapshot):
-            controller = JobExecutionController(
-                runner=mock_runner,
-                queue=mock_queue,
-                execute_fn=Mock(),
-            )
-            
-            # Only queued job should be restored
-            assert mock_queue.restore_called
-            assert mock_queue.restored_jobs is not None
-            assert len(mock_queue.restored_jobs) == 1
-            assert mock_queue.restored_jobs[0].job_id == "queued-job"
+        mock_queue = MockQueue()
+        monkeypatch.setattr(
+            "src.controller.job_execution_controller.load_queue_snapshot",
+            lambda *_, **__: snapshot,
+        )
+
+        controller = JobExecutionController(
+            runner=SimpleNamespace(start=lambda: None, stop=lambda: None, is_running=lambda: False),
+            queue=mock_queue,
+            execute_job=lambda job: {"ok": True},
+        )
+
+        assert mock_queue.restore_called is True
+        assert mock_queue.restored_jobs is not None
+        assert [job.job_id for job in mock_queue.restored_jobs] == ["queued-job"]
+        assert controller._deferred_autostart is False
 
 
 class TestQueueSubmissionLimits:
-    """Verify there are no arbitrary limits on queue submission."""
-    
-    def test_submit_large_batch_of_jobs(self):
-        """Verify submitting >10 jobs doesn't hit hidden limits."""
-        from src.controller.pipeline_controller import PipelineController
-        from src.models.pack_job_entry import PackJobEntry
-        
-        # Create 20 mock NormalizedJobRecords
-        records = []
-        for i in range(20):
-            njr = NormalizedJobRecord(
-                job_id=f"job-{i}",
-                positive_prompt=f"test prompt {i}",
-                negative_prompt="",
-                base_model="test_model",
-                sampler_name="Euler",
-                scheduler="Normal",
-                steps=20,
-                cfg_scale=7.0,
-                width=512,
-                height=512,
-                seed=-1,
-                batch_index=0,
-                batch_total=1,
-                prompt_pack_id="test_pack",
-            )
-            records.append(njr)
-        
-        mock_job_service = Mock()
-        mock_job_service.submit_job_with_run_mode = Mock()
-        mock_job_service.auto_run_enabled = False
-        mock_job_service._batch_mode = False
-        
-        controller = PipelineController(
-            app_state=Mock(),
-            config_manager=Mock(),
-            webui_connection=Mock(),
-            job_service=mock_job_service,
+    def test_submit_large_batch_of_jobs(self) -> None:
+        controller = object.__new__(PipelineController)
+        submitted_jobs: list[Job] = []
+        controller._job_service = SimpleNamespace(
+            submit_job_with_run_mode=lambda job, emit_queue_updated=False: submitted_jobs.append(job),
+            _emit_queue_updated=lambda: None,
+            job_queue=None,
         )
-        
-        # Submit all 20 jobs
+        controller._last_run_config = None
+        controller._sort_jobs_by_model = MethodType(lambda self, records: list(records), controller)
+        controller._ensure_record_prompt_pack_metadata = MethodType(
+            lambda self, record, prompt_pack_id, prompt_pack_name: None,
+            controller,
+        )
+        controller._log_add_to_queue_event = MethodType(lambda self, job_id: None, controller)
+        controller._run_job = MethodType(lambda self, job: {}, controller)
+        controller._to_queue_job = MethodType(
+            lambda self, record, **kwargs: Job(
+                job_id=record.job_id,
+                priority=JobPriority.NORMAL,
+                run_mode=kwargs["run_mode"],
+                source=kwargs["source"],
+                prompt_source=kwargs["prompt_source"],
+                prompt_pack_id=kwargs.get("prompt_pack_id"),
+                config_snapshot=record.to_queue_snapshot(),
+            ),
+            controller,
+        )
+
+        records = [_make_normalized_record(f"job-{index}") for index in range(20)]
+
         submitted = controller.submit_preview_jobs_to_queue(records=records)
-        
-        # All 20 should be submitted (no arbitrary limit like 3)
-        assert submitted == 20, f"Expected 20 jobs submitted, got {submitted}"
-        assert mock_job_service.submit_job_with_run_mode.call_count == 20
+
+        assert submitted == 20
+        assert len(submitted_jobs) == 20
+        assert [job.job_id for job in submitted_jobs] == [f"job-{index}" for index in range(20)]
 
 
 class TestQueueSubmissionErrorHandling:
-    """Verify queue operations handle errors gracefully without crashing GUI."""
-    
-    def test_enqueue_handles_none_controller_gracefully(self):
-        """Verify enqueue doesn't crash if pipeline_controller is None."""
-        from src.controller.app_controller import AppController
-        
-        controller = AppController()
-        controller.pipeline_controller = None
-        controller._append_log = Mock()
-        controller._queue_submit_in_progress = False
-        
-        # Should not crash
-        controller._enqueue_draft_jobs_async()
-        
-        # Should log error
-        controller._append_log.assert_called()
-        error_logs = [call[0][0] for call in controller._append_log.call_args_list if "ERROR" in call[0][0]]
-        assert len(error_logs) > 0, "Should have logged an ERROR message"
-    
-    def test_enqueue_logs_traceback_on_exception(self):
-        """Verify full traceback is captured when queue submission fails."""
-        from src.controller.app_controller import AppController
-        
-        controller = AppController()
-        mock_pipeline = Mock()
-        mock_pipeline.get_preview_jobs = Mock(side_effect=RuntimeError("Test error"))
-        controller.pipeline_controller = mock_pipeline
-        controller._append_log = Mock()
-        controller._queue_submit_in_progress = False
-        
-        # Should not crash
-        controller._enqueue_draft_jobs_async()
-        
-        # Should log full traceback
-        log_calls = [call[0][0] for call in controller._append_log.call_args_list]
-        assert any("Traceback" in log for log in log_calls), "Should have logged traceback"
-        assert any("Test error" in log for log in log_calls), "Should have logged error message"
+    def _build_app_controller(self, pipeline_controller: Any) -> AppController:
+        controller = object.__new__(AppController)
+        controller.pipeline_controller = pipeline_controller
+        controller.app_state = SimpleNamespace(
+            preview_jobs=[],
+            clear_job_draft=lambda: None,
+            set_preview_jobs=lambda jobs: None,
+        )
+        controller._append_messages: list[str] = []
+        controller._append_log = lambda text: controller._append_messages.append(text)
+        controller._ui_dispatch = lambda fn: fn()
+        controller._queue_submit_in_progress = True
+        controller._submit_preview_jobs_to_queue_async = MethodType(
+            AppController._submit_preview_jobs_to_queue_async,
+            controller,
+        )
+        return controller
+
+    def test_async_queue_submission_resets_flag_and_logs_error(self) -> None:
+        pipeline_controller = SimpleNamespace(
+            submit_preview_jobs_to_queue=lambda **kwargs: (_ for _ in ()).throw(
+                RuntimeError("Test error")
+            ),
+            enqueue_draft_jobs=lambda **kwargs: (_ for _ in ()).throw(RuntimeError("Test error")),
+        )
+        controller = self._build_app_controller(pipeline_controller)
+        preview_jobs = [SimpleNamespace(job_id="job-1")]
+
+        controller._submit_preview_jobs_to_queue_async(
+            pipeline_controller,
+            preview_jobs,
+            {"run_mode": "queue"},
+            "MainThread",
+        )
+
+        assert controller._queue_submit_in_progress is False
+        assert any("Test error" in message for message in controller._append_messages)
+
+    def test_async_queue_submission_clears_preview_on_success(self) -> None:
+        preview_jobs = [SimpleNamespace(job_id="job-1"), SimpleNamespace(job_id="job-2")]
+        cleared: list[list[Any]] = []
+        app_state = SimpleNamespace(
+            preview_jobs=list(preview_jobs),
+            clear_job_draft=lambda: cleared.append(["draft"]),
+            set_preview_jobs=lambda jobs: cleared.append(list(jobs)),
+        )
+        pipeline_controller = SimpleNamespace(
+            submit_preview_jobs_to_queue=lambda **kwargs: len(kwargs["records"]),
+        )
+        controller = object.__new__(AppController)
+        controller.pipeline_controller = pipeline_controller
+        controller.app_state = app_state
+        controller._append_messages = []
+        controller._append_log = lambda text: controller._append_messages.append(text)
+        controller._ui_dispatch = lambda fn: fn()
+        controller._queue_submit_in_progress = True
+        controller._submit_preview_jobs_to_queue_async = MethodType(
+            AppController._submit_preview_jobs_to_queue_async,
+            controller,
+        )
+
+        controller._submit_preview_jobs_to_queue_async(
+            pipeline_controller,
+            preview_jobs,
+            {"run_mode": "queue"},
+            "MainThread",
+        )
+
+        assert controller._queue_submit_in_progress is False
+        assert ["draft"] in cleared
+        assert [] in cleared
+        assert any("Submitted 2 job(s)" in message for message in controller._append_messages)

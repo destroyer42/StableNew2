@@ -167,7 +167,6 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             "Analyze the current working image and write the returned caption into the baseline prompt.",
         )
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
-        self.visibility_banner.grid(row=1, column=0, columnspan=5, sticky="w", pady=(6, 0))
         ttk.Label(header, text="Batch", style="Dark.TLabel").grid(
             row=0, column=4, sticky="w", padx=(10, 4)
         )
@@ -1260,12 +1259,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         negative_value = resolver.redact_text(subject.get("negative_prompt", ""), item=subject)
         self._set_readonly_text(self.current_prompt_text, prompt_value)
         self._set_readonly_text(self.current_negative_text, negative_value)
-        if self._content_visibility_mode == "sfw" and (
-            prompt_value == REDACTED_TEXT or negative_value == REDACTED_TEXT
-        ):
-            self.visibility_banner.config(text="SFW mode active: source prompts hidden")
-        else:
-            self.visibility_banner.config(text="")
+        self.visibility_banner.config(text="")
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(

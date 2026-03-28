@@ -16,6 +16,22 @@ def _build_history_queue(tmp_path: Path) -> tuple[JobQueue, JSONLJobHistoryStore
     return JobQueue(history_store=history_store), history_store
 
 
+def _wait_for_history_entry(
+    history_store: JSONLJobHistoryStore,
+    job_id: str,
+    *,
+    timeout: float = 1.0,
+    poll_interval: float = 0.01,
+):
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        entry = history_store.get_job(job_id)
+        if entry is not None:
+            return entry
+        time.sleep(poll_interval)
+    return history_store.get_job(job_id)
+
+
 def test_successful_job_moves_to_history(tmp_path: Path) -> None:
     queue, history_store = _build_history_queue(tmp_path)
 
@@ -30,13 +46,17 @@ def test_successful_job_moves_to_history(tmp_path: Path) -> None:
     queue.submit(job)
 
     runner.start()
-    time.sleep(0.05)
+    deadline = time.time() + 1.0
+    while time.time() < deadline:
+        if executed == ["success-job"] and not queue.list_jobs():
+            break
+        time.sleep(0.01)
     runner.stop()
 
     assert executed == ["success-job"]
     assert not queue.list_jobs()
 
-    entry = history_store.get_job(job.job_id)
+    entry = _wait_for_history_entry(history_store, job.job_id)
     assert entry is not None
     assert entry.status == JobStatus.COMPLETED
     assert entry.error_message is None
@@ -58,12 +78,16 @@ def test_webui_down_marks_job_failed(tmp_path: Path) -> None:
     queue.submit(job)
 
     runner.start()
-    time.sleep(0.05)
+    deadline = time.time() + 1.0
+    while time.time() < deadline:
+        if not queue.list_jobs():
+            break
+        time.sleep(0.01)
     runner.stop()
 
     assert not queue.list_jobs()
 
-    entry = history_store.get_job(job.job_id)
+    entry = _wait_for_history_entry(history_store, job.job_id)
     assert entry is not None
     assert entry.status == JobStatus.FAILED
     assert entry.error_message is not None

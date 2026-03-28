@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).parent / "src"))
 
 def test_single_instance_lock_is_acquired():
     """Test that SingleInstanceLock.is_acquired() method exists and works."""
-    from utils.single_instance import SingleInstanceLock
+    from src.utils.single_instance import SingleInstanceLock
     
     print("Testing SingleInstanceLock.is_acquired()...")
     print("-" * 60)

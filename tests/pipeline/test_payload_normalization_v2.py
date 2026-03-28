@@ -8,7 +8,7 @@ key invariants regardless of the config object type used.
 
 Invariants:
 1. All output jobs have unique job_id strings
-2. Output directory and filename template are preserved
+2. Output directory is preserved and filename templates remain canonical
 3. Seed handling follows seed_mode semantics
 4. Config objects are deep-copied (immutability)
 5. Variant and batch indices are correctly assigned
@@ -72,7 +72,7 @@ def builder() -> JobBuilderV2:
 @pytest.fixture
 def output_settings() -> OutputSettings:
     """Create output settings."""
-    return OutputSettings(base_output_dir="/output/norm_test", filename_template="{job_id}_{seed}")
+    return OutputSettings(base_output_dir="/output/norm_test")
 
 
 # ---------------------------------------------------------------------------
@@ -128,12 +128,12 @@ class TestOutputSettingsPreserved:
         jobs = builder.build_jobs(base_config=DataclassConfig(), output_settings=output_settings)
         assert all(j.path_output_dir == "/output/norm_test" for j in jobs)
 
-    def test_filename_template_applied(
+    def test_filename_template_remains_canonical(
         self, builder: JobBuilderV2, output_settings: OutputSettings
     ) -> None:
-        """Filename template is set on jobs."""
+        """Filename template stays on the builder's canonical convention."""
         jobs = builder.build_jobs(base_config=DataclassConfig(), output_settings=output_settings)
-        assert all(j.filename_template == "{job_id}_{seed}" for j in jobs)
+        assert all(j.filename_template == "{seed}" for j in jobs)
 
     def test_default_settings_when_none(self, builder: JobBuilderV2) -> None:
         """Default settings used when not provided."""

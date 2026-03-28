@@ -1,38 +1,17 @@
-"""Minimal test to check if ADetailer card renders."""
+"""Headless-safe smoke coverage for ADetailer stage card construction."""
+
+from __future__ import annotations
 
 import tkinter as tk
-import sys
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).parent))
 
 from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
 
 
-def test_card_render():
-    root = tk.Tk()
-    root.title("ADetailer Card Test")
-    root.geometry("600x800")
-    
-    try:
-        card = ADetailerStageCardV2(root, collapsible=True, collapse_key="test")
-        card.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        print("✓ Card created successfully")
-        print(f"✓ Card has {len(list(card.watchable_vars()))} watchable variables")
-        print(f"✓ Body frame children: {len(card.body_frame.winfo_children())}")
-        
-        # Keep window open for visual inspection
-        root.mainloop()
-        
-    except Exception as e:
-        print(f"✗ Error: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-    
-    return 0
+def test_adetailer_card_constructs_without_entering_mainloop(tk_root: tk.Tk) -> None:
+    card = ADetailerStageCardV2(tk_root, collapsible=True, collapse_key="test")
+    card.pack(fill="both", expand=True, padx=20, pady=20)
+    tk_root.update_idletasks()
 
-
-if __name__ == "__main__":
-    sys.exit(test_card_render())
+    assert card.winfo_exists()
+    assert len(list(card.watchable_vars())) > 0
+    assert len(card.body_frame.winfo_children()) > 0

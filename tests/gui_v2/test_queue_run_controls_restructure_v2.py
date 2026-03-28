@@ -275,8 +275,8 @@ class TestQueuePanelHasControls:
         finally:
             root.destroy()
 
-    def test_queue_panel_visibility_banner_updates_with_mode_change(self):
-        """QueuePanelV2 should surface the SFW banner when the global mode changes."""
+    def test_queue_panel_keeps_visibility_banner_hidden_when_mode_changes(self):
+        """QueuePanelV2 should not surface visibility copy on the main pipeline screen."""
         root = _skip_if_no_tk()
         try:
             from src.gui.app_state_v2 import AppStateV2
@@ -293,7 +293,7 @@ class TestQueuePanelHasControls:
             app_state.set_content_visibility_mode("sfw")
             root.update()
 
-            assert "SFW mode active" in panel.visibility_banner.cget("text")
+            assert panel.visibility_banner.cget("text") == ""
         finally:
             root.destroy()
 

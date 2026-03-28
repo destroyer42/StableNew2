@@ -63,7 +63,6 @@ class HistoryPanelV2(ttk.Frame):
             style=STATUS_LABEL_STYLE,
             foreground=TOKENS.colors.status_info,
         )
-        self.visibility_banner.pack(side="right")
 
         # History listbox
         list_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -218,10 +217,7 @@ class HistoryPanelV2(ttk.Frame):
         return list(self._history_items)
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
-        value = str(
-            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
-        ).lower()
-        self.visibility_banner.configure(text="SFW mode active" if value == "sfw" else "")
+        self.visibility_banner.configure(text="")
 
     def _on_content_visibility_mode_changed(self) -> None:
         self.on_content_visibility_mode_changed()

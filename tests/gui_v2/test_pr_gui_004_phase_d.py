@@ -70,7 +70,7 @@ def test_phase_d_integration():
         json_data = json.load(f)
     
     print("JSON slots[0]:")
-    print(json.dumps(json_data["slots"][0], indent=2))
+    print(json.dumps(json_data["pack_data"]["slots"][0], indent=2))
     print()
     
     # Step 4: Verify TXT export

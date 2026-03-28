@@ -270,7 +270,15 @@ class PipelineController(CorePipelineController):
             _logger.debug("Could not extract config variant plan: %s", exc)
 
         # Build jobs via JobBuilderV2
-        base_config = None
+        if base_config is None:
+            assembler = getattr(self, "_config_assembler", None)
+            build_from_gui_input = getattr(assembler, "build_from_gui_input", None)
+            if callable(build_from_gui_input):
+                try:
+                    base_config = build_from_gui_input()
+                except Exception as exc:
+                    _logger.warning("Config assembler failed to build base config: %s", exc)
+                    base_config = None
         try:
             jobs = self._job_builder.build_jobs(
                 base_config=base_config,

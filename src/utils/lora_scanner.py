@@ -137,6 +137,11 @@ class LoRAScanner:
                 
                 # Verify file still exists and size matches
                 path = resource_data["path"]
+                if self.webui_root is not None:
+                    try:
+                        path.relative_to(self.webui_root)
+                    except ValueError:
+                        continue
                 if path.exists() and path.stat().st_size == resource_data["file_size"]:
                     self._lora_cache[name] = LoRAResource(**resource_data)
         

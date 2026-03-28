@@ -33,10 +33,10 @@ def test_is_pack_job_property_true_for_pack() -> None:
     assert record.is_pack_job
 
 
-def test_split_queueable_records_filters_packless() -> None:
+def test_split_queueable_records_filters_pack_source_without_pack_id() -> None:
     controller = PipelineController.__new__(PipelineController)
     pack_record = _make_record(prompt_source="pack", prompt_pack_id="pack-id")
-    manual_record = _make_record(prompt_source="manual", prompt_pack_id=None)
-    queueable, non_queueable = controller._split_queueable_records([pack_record, manual_record])
+    packless_pack_record = _make_record(prompt_source="pack", prompt_pack_id=None)
+    queueable, non_queueable = controller._split_queueable_records([pack_record, packless_pack_record])
     assert pack_record in queueable
-    assert manual_record in non_queueable
+    assert packless_pack_record in non_queueable
