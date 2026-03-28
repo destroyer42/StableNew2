@@ -253,10 +253,11 @@ class TestQueuePanelHasControls:
         root = _skip_if_no_tk()
         try:
             from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+            from src.gui.app_state_v2 import AppStateV2
             from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)
-            panel = QueuePanelV2(root)
+            panel = QueuePanelV2(root, app_state=AppStateV2())
             panel.pack()
 
             # Initial state should be "Pause Queue"
@@ -271,6 +272,71 @@ class TestQueuePanelHasControls:
 
             panel.update_from_app_state(MockAppState())
             assert "Resume" in panel.pause_resume_button.cget("text")
+        finally:
+            root.destroy()
+
+    def test_queue_panel_visibility_banner_updates_with_mode_change(self):
+        """QueuePanelV2 should surface the SFW banner when the global mode changes."""
+        root = _skip_if_no_tk()
+        try:
+            from src.gui.app_state_v2 import AppStateV2
+            from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+            from src.gui.theme_v2 import apply_theme
+
+            apply_theme(root)
+            app_state = AppStateV2()
+            panel = QueuePanelV2(root, app_state=app_state)
+            panel.pack()
+
+            assert panel.visibility_banner.cget("text") == ""
+
+            app_state.set_content_visibility_mode("sfw")
+            root.update()
+
+            assert "SFW mode active" in panel.visibility_banner.cget("text")
+        finally:
+            root.destroy()
+
+    def test_queue_panel_skips_listbox_rebuild_when_rendered_rows_are_unchanged(self):
+        """Repeated state refreshes with the same rows should not rebuild the listbox."""
+        root = _skip_if_no_tk()
+        try:
+            from types import SimpleNamespace
+
+            from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+            from src.gui.theme_v2 import apply_theme
+
+            apply_theme(root)
+            panel = QueuePanelV2(root)
+            panel.pack()
+
+            queued_job = SimpleNamespace(
+                job_id="queued-1",
+                status="QUEUED",
+                get_display_summary=lambda: "queued-1",
+            )
+
+            panel.update_jobs([queued_job])
+
+            delete_calls: list[tuple[object, ...]] = []
+            insert_calls: list[tuple[object, ...]] = []
+            original_delete = panel.job_listbox.delete
+            original_insert = panel.job_listbox.insert
+
+            def _tracked_delete(*args):
+                delete_calls.append(args)
+                return original_delete(*args)
+
+            def _tracked_insert(*args):
+                insert_calls.append(args)
+                return original_insert(*args)
+
+            panel.job_listbox.delete = _tracked_delete  # type: ignore[assignment]
+            panel.job_listbox.insert = _tracked_insert  # type: ignore[assignment]
+            panel.update_jobs([queued_job])
+
+            assert delete_calls == []
+            assert insert_calls == []
         finally:
             root.destroy()
 

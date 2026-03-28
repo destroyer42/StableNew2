@@ -2,7 +2,7 @@ StableNew Roadmap v2.6.md
 (Canonical Edition)
 
 Status: Authoritative  
-Updated: 2026-03-24  
+Updated: 2026-03-28  
 Applies To: Codex, Copilot, ChatGPT Planner, Human Contributors
 
 ## 0. Strategic Objective
@@ -916,6 +916,31 @@ Planned rollout:
 - `PR-LEARN-264-Canonical-Metadata-Schemas-and-Contracts`
   Completed 2026-03-23
 
+### Completed follow-on: Content Visibility Safety Tranche
+
+Status: Completed 2026-03-27
+
+This follow-on tranche is now complete for the active prompt, preview, queue,
+history, learning, review, and video-facing GUI surfaces.
+
+Delivered outcomes:
+
+- `PR-CONFIG-271` added the canonical persisted `sfw` / `nsfw` mode contract
+  and app-state notification path
+- `PR-CTRL-272` added the shared resolver and wired filtering/redaction through
+  prompt-pack, LoRA, history, and discovered-review selector paths
+- `PR-GUI-273` added the global shell toggle plus live cross-tab filtering,
+  redaction notices, and refresh wiring across mounted v2 surfaces
+- `PR-TEST-274` added deterministic regression, journey, and learning-path
+  hardening for persistence, live updates, and legacy metadata fallback
+
+Completion records:
+
+- `docs/CompletedPR/PR-CONFIG-271-Content-Visibility-Mode-Contract-and-Persistence.md`
+- `docs/CompletedPR/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md`
+- `docs/CompletedPR/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md`
+- `docs/CompletedPR/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
+
 Sequencing note:
 
 - close the current image output-route regression before beginning this tranche,
@@ -932,12 +957,35 @@ That queue converts the 2026-03-21 deep-research audit into a repo-truth-based
 remediation sequence. The highest-priority follow-on items are:
 
 - `PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset`
+  Completed 2026-03-27
 - `PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation`
+  Not completed as of 2026-03-28; archive Python modules still remain under
+  `src/**/archive/**`, including
+  `src/controller/archive/pipeline_config_assembler.py`,
+  `src/controller/archive/pipeline_config_types.py`,
+  `src/gui/views/archive/pipeline_config_panel.py`, and
+  `src/gui/panels_v2/archive/pipeline_config_panel_v2.py`
 - `PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement`
+  Not completed as of 2026-03-28; no canonical completion record or active PR
+  spec is present under `docs/CompletedPR/` or `docs/PR_Backlog/`
 - `PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract`
+  Not completed as of 2026-03-28; no canonical completion record or active PR
+  spec is present under `docs/CompletedPR/` or `docs/PR_Backlog/`
 - `PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards`
+  Not completed as of 2026-03-28; existing enforcement coverage such as
+  `tests/system/test_architecture_enforcement_v2.py` and
+  `tests/safety/test_controller_core_no_gui_imports.py` provides partial
+  groundwork, but there is no canonical completion record or active PR spec for
+  the broader queue item
 - `PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction`
+  Not completed as of 2026-03-28; earlier work from `PR-CTRL-205` and
+  `PR-CTRL-221` extracted bounded services, but the dedicated follow-on PR is
+  not documented as complete and `PipelineController` remains a large facade
 - `PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes`
+  Not completed as of 2026-03-28; `src/controller/ports/runtime_ports.py` and
+  `tests/controller/test_runtime_ports_contract.py` exist as narrow groundwork,
+  but there is no canonical completion record or active PR spec for the larger
+  backend-port-boundary rollout
 - `PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization`
   Completed 2026-03-21
 - `PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters`
@@ -947,11 +995,32 @@ remediation sequence. The highest-priority follow-on items are:
 - `PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split`
   Completed 2026-03-21
 - `PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation`
+  Not completed as of 2026-03-28; replay groundwork exists in
+  `src/pipeline/replay_engine.py` plus replay tests such as
+  `tests/pipeline/test_replay_vs_fresh_v2.py`, but there is no canonical
+  completion record or active PR spec for the formal fidelity-contract rollout
 - `PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition`
+  Not completed as of 2026-03-28; GUI and CLI still do not share one explicit
+  `ApplicationKernel` / bootstrap composition layer, and there is no canonical
+  completion record or active PR spec for this queue item
 - `PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes`
+  Not completed as of 2026-03-28; partial capability/probe groundwork exists,
+  including `src/video/comfy_dependency_probe.py`,
+  `src/video/svd_capabilities.py`, and related tests, but the broader
+  cross-product optional-dependency contract is not documented as complete
 - `PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion`
+  Not completed as of 2026-03-28; mypy is configured in `pyproject.toml`, but
+  `.github/workflows/ci.yml` does not currently run a mypy smoke job and there
+  is no canonical completion record or active PR spec for this gate
 - `PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure`
+  Not completed as of 2026-03-28; intent-related contract groundwork exists in
+  current NJR/config surfaces, but there is no canonical completion record or
+  active PR spec for the explicit version/hash-closure rollout
 - `PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure`
+  Not completed as of 2026-03-28; workflow-registry groundwork exists in
+  `src/video/workflow_registry.py` and `tests/video/test_workflow_registry.py`,
+  but the dedicated governance-and-pinning closeout PR is not documented as
+  complete
 
 Recommendation L is now delivered through `PR-OBS-249A` through
 `PR-OBS-249D`. After `PR-OBS-249D`, the bottom log is the operator surface and
@@ -961,10 +1030,12 @@ the Debug Hub is the detailed trace surface.
 
 These are the important missing capabilities that are not just "nice to have":
 
-- adaptive refinement still needs prompt-patch, upscale-policy, and learning
-  closure after the new ADetailer-safe slice
-- replay and learning still need fuller canonical refinement-decision
-  provenance beyond the current runner/manifest/image-metadata path
+- adaptive refinement rollout is complete through prompt-patch,
+  upscale-policy, and learning-aware feedback; remaining work is inspection
+  ergonomics, presentation clarity, and follow-on tuning rather than missing
+  execution slices
+- replay and learning still need clearer operator-facing inspection and
+  summarization of canonical refinement-decision provenance
 - secondary motion backend/runtime rollout is complete through `PR-VIDEO-241`;
   remaining video debt is now mainly operator UX exposure, inspection clarity,
   and longer-tail structural cleanup
@@ -972,8 +1043,12 @@ These are the important missing capabilities that are not just "nice to have":
   canonical secondary-motion provenance; remaining work is chiefly presentation,
   inspection ergonomics, and broader contract cleanup rather than missing core
   provenance paths
-- image/runtime stability still needs GPU-pressure-aware guardrails and better
-  failure damping before more runtime-heavy backend rollout
+- image/runtime stability now has pressure guardrails, runtime admission
+  control, and workload-aware guarded-launch policy; remaining work is
+  follow-on validation, diagnostics clarity, and longer-tail runtime cleanup
+- content visibility now has a canonical persisted mode, shared resolver, live
+  cross-tab filtering, and regression coverage; remaining work is optional
+  policy strictness tuning rather than missing foundation behavior
 - continuity and story-planning still need richer UX exposure on top of the now-coherent video workspace
 - further controller reduction is still desirable, but no longer blocked on the GUI config adapter seam
 

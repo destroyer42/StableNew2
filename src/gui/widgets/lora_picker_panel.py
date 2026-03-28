@@ -17,6 +17,7 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Any, cast
 
+from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
 from src.gui.enhanced_slider import EnhancedSlider
 from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.lora_keyword_dialog import LoRAKeywordDialog
@@ -47,7 +48,9 @@ class LoRAPickerPanel(ttk.Frame):
         self._entry_widgets: dict[str, dict[str, object]] = {}
         # Initialize scanner
         self.scanner = get_lora_scanner(webui_root)
+        self._content_visibility_mode = self._discover_content_visibility_mode()
         self._available_loras: list[str] = []
+        self._visible_loras: list[str] = []
         
         self._build_ui()
         
@@ -67,6 +70,12 @@ class LoRAPickerPanel(ttk.Frame):
         ttk.Label(header_frame, text="LoRAs", font=("Segoe UI", 10, "bold")).grid(
             row=0, column=0, sticky="w"
         )
+        self._visibility_status_var = tk.StringVar(value="")
+        ttk.Label(
+            header_frame,
+            textvariable=self._visibility_status_var,
+            foreground="#7aa2d6",
+        ).grid(row=1, column=0, sticky="w", pady=(2, 0))
         
         ttk.Button(
             header_frame,
@@ -120,12 +129,50 @@ class LoRAPickerPanel(ttk.Frame):
         
         # Enable mousewheel scrolling
         canvas.bind_all("<MouseWheel>", lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+
+    def _discover_content_visibility_mode(self) -> str:
+        widget = getattr(self, "master", None)
+        while widget is not None:
+            app_state = getattr(widget, "app_state", None)
+            mode = getattr(app_state, "content_visibility_mode", None)
+            if isinstance(mode, str) and mode.strip():
+                return mode
+            widget = getattr(widget, "master", None)
+        return "nsfw"
+
+    def set_content_visibility_mode(self, mode: str) -> None:
+        self._content_visibility_mode = str(mode or "nsfw")
+        self._refresh_visible_lora_names()
+
+    def _refresh_visible_lora_names(self) -> None:
+        resolver = ContentVisibilityResolver(self._content_visibility_mode)
+        visible: list[str] = []
+        hidden_count = 0
+        for name in self._available_loras:
+            resource = self.scanner.get_lora_info(name)
+            subject = {
+                "name": name,
+                "keywords": list(getattr(resource, "keywords", []) or []),
+                "description": str(getattr(resource, "description", "") or ""),
+            }
+            if resolver.is_visible(subject):
+                visible.append(name)
+            else:
+                hidden_count += 1
+        self._visible_loras = sorted(visible)
+        self.lora_name_combo["values"] = self._visible_loras
+        if self._content_visibility_mode == "sfw" and hidden_count:
+            self._visibility_status_var.set(f"SFW mode active: {hidden_count} LoRA(s) hidden.")
+        else:
+            self._visibility_status_var.set("")
     
 
     def _on_add_lora(self) -> None:
         """Add a new LoRA to the list."""
         name = self.lora_name_var.get().strip()
         if not name:
+            return
+        if self._visible_loras and name not in self._visible_loras:
             return
         
         # Check for duplicates
@@ -145,6 +192,15 @@ class LoRAPickerPanel(ttk.Frame):
     
     def _add_lora_entry(self, name: str, strength: float) -> None:
         """Add a LoRA entry widget to the list."""
+        resolver = ContentVisibilityResolver(self._content_visibility_mode)
+        resource = self.scanner.get_lora_info(name)
+        subject = {
+            "name": name,
+            "keywords": list(getattr(resource, "keywords", []) or []),
+            "description": str(getattr(resource, "description", "") or ""),
+        }
+        hidden = self._content_visibility_mode == "sfw" and not resolver.is_visible(subject)
+        display_name = REDACTED_TEXT if hidden else name
         entry_frame = ttk.Frame(self.lora_list_frame, relief="solid", borderwidth=1, padding=(6, 4))
         entry_frame.pack(fill="x", padx=2, pady=2)
         entry_frame.columnconfigure(0, weight=1)
@@ -158,13 +214,13 @@ class LoRAPickerPanel(ttk.Frame):
 
         name_label = ttk.Label(
             name_row,
-            text=name,
+            text=display_name,
             font=("Segoe UI", 9),
             justify="left",
             wraplength=self.NAME_WRAP_LENGTH,
         )
         name_label.grid(row=0, column=0, sticky="ew")
-        attach_tooltip(name_label, name)
+        attach_tooltip(name_label, display_name)
 
         strength_var = tk.DoubleVar(value=strength)
         
@@ -179,6 +235,8 @@ class LoRAPickerPanel(ttk.Frame):
 
         keywords_button = ttk.Button(controls_row, text="Keywords", command=on_keywords)
         keywords_button.grid(row=0, column=1, sticky="e", padx=(4, 0))
+        if hidden:
+            keywords_button.state(["disabled"])
 
         def on_strength_change(value: float | str) -> None:
             try:
@@ -291,7 +349,7 @@ class LoRAPickerPanel(ttk.Frame):
         try:
             self.scanner.scan_loras()
             self._available_loras = self.scanner.get_lora_names()
-            self.lora_name_combo["values"] = sorted(self._available_loras)
+            self._refresh_visible_lora_names()
         except Exception:
             pass
     
@@ -300,7 +358,7 @@ class LoRAPickerPanel(ttk.Frame):
         try:
             self.scanner.scan_loras(force_rescan=True)
             self._available_loras = self.scanner.get_lora_names()
-            self.lora_name_combo["values"] = sorted(self._available_loras)
+            self._refresh_visible_lora_names()
         except Exception:
             pass
     

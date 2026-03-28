@@ -103,6 +103,15 @@ class MovieClipsTabFrameV2(ttk.Frame):
         for variable in (self.fps_var, self.codec_var, self.quality_var, self.mode_var):
             variable.trace_add("write", lambda *_: self._update_effective_settings_summary())
         self._update_effective_settings_summary()
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
+        self.on_content_visibility_mode_changed()
 
         # Trace source mode toggle
         self.source_mode_var.trace_add("write", lambda *_: self._on_source_mode_changed())
@@ -175,6 +184,8 @@ class MovieClipsTabFrameV2(ttk.Frame):
             style="Dark.TLabel",
         )
         self.status_label.grid(row=0, column=7, sticky="e", padx=(8, 0))
+        self.visibility_banner = ttk.Label(header, text="", style="Muted.TLabel")
+        self.visibility_banner.grid(row=1, column=7, sticky="e", padx=(8, 0))
         ttk.Label(
             header,
             textvariable=self.source_summary_var,
@@ -596,6 +607,15 @@ class MovieClipsTabFrameV2(ttk.Frame):
             self.build_status_label.configure(text=msg)
         except Exception:
             pass
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        value = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        ).lower()
+        self.visibility_banner.configure(text="SFW mode active" if value == "sfw" else "")
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()
 
     def _collect_settings(self) -> dict[str, Any]:
         return {

@@ -1,6 +1,6 @@
 # PR-CTRL-272 - Content Visibility Resolver and Selector Wiring
 
-Status: Specification
+Status: Completed 2026-03-27
 Priority: HIGH
 Effort: LARGE
 Phase: Controller + Data Selection Hardening
@@ -155,9 +155,19 @@ References:
 Planner: ChatGPT
 Executor: Codex
 Reviewer: Human + ChatGPT
-Approval Status: Pending
+Approval Status: Executed
 
 ## 14. Next Steps
 
 1. PR-GUI-273 for cross-tab UX wiring.
 2. PR-TEST-274 for full-system hardening.
+
+## 15. Post-Implementation Summary
+
+- added the shared resolver in `src/controller/content_visibility_resolver.py`
+- wired app-controller pack discovery, history service, prompt redaction, LoRA
+  filtering, and discovered-review metadata normalization through the resolver
+- added deterministic coverage in
+  `tests/controller/test_content_visibility_resolver.py`
+- focused verification passed:
+  `pytest -q tests/controller/test_content_visibility_resolver.py`

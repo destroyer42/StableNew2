@@ -9,6 +9,7 @@ from __future__ import annotations
 import json
 import logging
 import threading
+import time
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
@@ -16,6 +17,7 @@ from tkinter import ttk
 from types import SimpleNamespace
 from typing import Any
 
+from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
 from src.gui.design_system_v2 import DANGER_BUTTON
 from src.gui.theme_v2 import (
     BACKGROUND_ELEVATED,
@@ -37,10 +39,13 @@ logger = logging.getLogger(__name__)
 
 # PR-PERSIST-001: Preview panel state persistence
 PREVIEW_STATE_PATH = Path("state") / "preview_panel_state.json"
+_THUMBNAIL_CACHE_MISS = object()
 
 
 class PreviewPanelV2(ttk.Frame):
     """Container for preview/inspector content (structure only)."""
+    NEGATIVE_THUMBNAIL_CACHE_TTL_S = 1.0
+    POSITIVE_THUMBNAIL_CACHE_TTL_S = 15.0
 
     def __init__(
         self,
@@ -56,6 +61,11 @@ class PreviewPanelV2(ttk.Frame):
         self.app_state = app_state
         self.theme = theme
         self._job_summaries: list[JobUiSummary] = []
+        self._content_visibility_mode = str(
+            getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        self._thumbnail_lookup_cache: dict[tuple[str, ...], tuple[float, str | None]] = {}
+        self._thumbnail_lookup_pending: set[tuple[str, ...]] = set()
 
         header_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         header_frame.pack(fill="x", pady=(0, 4))
@@ -110,6 +120,13 @@ class PreviewPanelV2(ttk.Frame):
             left_frame, text="No job selected", style=STATUS_LABEL_STYLE
         )
         self.job_count_label.pack(anchor=tk.W, pady=(0, 4))
+        self.visibility_banner = ttk.Label(
+            left_frame,
+            text="",
+            style=STATUS_LABEL_STYLE,
+            foreground="#7aa2d6",
+        )
+        self.visibility_banner.pack(anchor=tk.W, pady=(0, 4))
 
         self.prompt_label = ttk.Label(left_frame, text="Prompt (+)", style=STATUS_LABEL_STYLE)
         self.prompt_label.pack(anchor=tk.W)
@@ -507,7 +524,21 @@ class PreviewPanelV2(ttk.Frame):
         except Exception as e:
             logger.debug(f"[PreviewPanel] Failed to subscribe: {e}")
             pass
+        try:
+            self.app_state.subscribe("content_visibility_mode", self._on_content_visibility_mode_changed)
+        except Exception:
+            pass
         self._on_preview_jobs_changed()
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._content_visibility_mode = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        last_summary = self._job_summaries[-1] if self._job_summaries else None
+        self._render_summary(last_summary, len(self._job_summaries))
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()
 
     def _on_preview_jobs_changed(self) -> None:
         logger.debug("[PreviewPanel] _on_preview_jobs_changed called")
@@ -524,6 +555,7 @@ class PreviewPanelV2(ttk.Frame):
         if summary is None:
             logger.debug("[PreviewPanel] Rendering empty state")
             self.job_count_label.config(text="No job selected")
+            self.visibility_banner.configure(text="")
             self._set_text_widget(self.prompt_text, "")
             self._set_text_widget(self.negative_prompt_text, "")
             self.model_label.config(text="Model: -")
@@ -549,6 +581,7 @@ class PreviewPanelV2(ttk.Frame):
         if summary_obj is None:
             logger.debug("[PreviewPanel] _normalize_summary returned None")
             self.job_count_label.config(text="No job selected")
+            self.visibility_banner.configure(text="")
             self._update_thumbnail()
             return
 
@@ -558,6 +591,29 @@ class PreviewPanelV2(ttk.Frame):
 
         positive = getattr(summary_obj, "positive_preview", "") or ""
         negative = getattr(summary_obj, "negative_preview", "") or ""
+        resolver = ContentVisibilityResolver(self._content_visibility_mode)
+        positive = resolver.redact_text(
+            positive,
+            item={
+                "positive_preview": positive,
+                "negative_preview": negative,
+                "name": getattr(summary_obj, "prompt_pack_name", ""),
+            },
+        )
+        negative = resolver.redact_text(
+            negative,
+            item={
+                "positive_preview": getattr(summary_obj, "positive_preview", "") or "",
+                "negative_preview": getattr(summary_obj, "negative_preview", "") or "",
+                "name": getattr(summary_obj, "prompt_pack_name", ""),
+            },
+        )
+        if self._content_visibility_mode == "sfw" and (
+            positive == REDACTED_TEXT or negative == REDACTED_TEXT
+        ):
+            self.visibility_banner.configure(text="SFW mode active: explicit preview text hidden.")
+        else:
+            self.visibility_banner.configure(text="")
         logger.debug(f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}")
         self._set_text_widget(self.prompt_text, positive)
         self._set_text_widget(self.negative_prompt_text, negative)
@@ -967,14 +1023,14 @@ class PreviewPanelV2(ttk.Frame):
 
         return None
 
-    def _find_latest_output_image(self, summary: UnifiedJobSummary | Any | None) -> Path | None:
-        """Inspect a summary/result object to find the latest output image."""
+    def _find_immediate_output_image(self, summary: UnifiedJobSummary | Any | None) -> Path | None:
+        """Return explicit output paths without scanning output directories."""
         if summary is None:
             return None
 
         source_job = getattr(summary, "source_job", None)
         if source_job is not None and source_job is not summary:
-            source_image = self._find_latest_output_image(source_job)
+            source_image = self._find_immediate_output_image(source_job)
             if source_image and source_image.exists():
                 return source_image
 
@@ -992,7 +1048,6 @@ class PreviewPanelV2(ttk.Frame):
                     if image_path.exists():
                         return image_path
 
-        # If summary carries a result dict with metadata paths, use that first
         result = getattr(summary, "result", None)
         if isinstance(result, dict):
             metadata = result.get("metadata")
@@ -1006,6 +1061,14 @@ class PreviewPanelV2(ttk.Frame):
                         candidate = entry.get("path") or entry.get("output_path")
                         if candidate and Path(candidate).exists():
                             return Path(candidate)
+
+        return None
+
+    def _find_latest_output_image(self, summary: UnifiedJobSummary | Any | None) -> Path | None:
+        """Inspect a summary/result object to find the latest output image."""
+        immediate = self._find_immediate_output_image(summary)
+        if immediate is not None:
+            return immediate
 
         # If the summary has a job_id, look for a run folder named with it
         job_id = getattr(summary, "job_id", None)
@@ -1023,6 +1086,118 @@ class PreviewPanelV2(ttk.Frame):
 
         return None
 
+    def _make_thumbnail_lookup_key(self, job: Any | None, pack_name: str | None) -> tuple[str, ...]:
+        summary = job
+        output_paths = getattr(summary, "output_paths", None)
+        output_values: tuple[str, ...] = ()
+        if isinstance(output_paths, (list, tuple)):
+            output_values = tuple(str(path) for path in output_paths if path)
+        thumbnail_path = str(getattr(summary, "thumbnail_path", "") or "")
+        result = getattr(summary, "result", None)
+        metadata_paths: list[str] = []
+        if isinstance(result, dict):
+            metadata = result.get("metadata")
+            if isinstance(metadata, dict):
+                candidate = metadata.get("path") or metadata.get("output_path")
+                if candidate:
+                    metadata_paths.append(str(candidate))
+            elif isinstance(metadata, list):
+                for entry in metadata:
+                    if isinstance(entry, dict):
+                        candidate = entry.get("path") or entry.get("output_path")
+                        if candidate:
+                            metadata_paths.append(str(candidate))
+        return (
+            str(getattr(summary, "job_id", "") or ""),
+            str(pack_name or getattr(summary, "prompt_pack_name", "") or ""),
+            str(getattr(summary, "label", "") or getattr(summary, "base_model", "") or ""),
+            thumbnail_path,
+            *output_values,
+            *metadata_paths,
+        )
+
+    def _get_cached_thumbnail_lookup(self, request_key: tuple[str, ...]) -> Path | None | object:
+        cached = self._thumbnail_lookup_cache.get(request_key)
+        if cached is None:
+            return _THUMBNAIL_CACHE_MISS
+        cached_at, cached_path = cached
+        ttl = (
+            self.POSITIVE_THUMBNAIL_CACHE_TTL_S
+            if cached_path
+            else self.NEGATIVE_THUMBNAIL_CACHE_TTL_S
+        )
+        if (time.monotonic() - cached_at) > ttl:
+            self._thumbnail_lookup_cache.pop(request_key, None)
+            return _THUMBNAIL_CACHE_MISS
+        if not cached_path:
+            return None
+        candidate = Path(cached_path)
+        if not candidate.exists():
+            self._thumbnail_lookup_cache.pop(request_key, None)
+            return _THUMBNAIL_CACHE_MISS
+        return candidate
+
+    def _schedule_thumbnail_lookup(
+        self,
+        job: Any,
+        pack_name: str | None,
+        request_key: tuple[str, ...],
+    ) -> None:
+        if request_key in self._thumbnail_lookup_pending:
+            return
+        self._thumbnail_lookup_pending.add(request_key)
+
+        def _lookup() -> None:
+            resolved: Path | None = None
+            try:
+                resolved = self._find_latest_output_image(job)
+                if resolved is None:
+                    recent = self._find_recent_thumbnail(job, pack_name)
+                    resolved = Path(recent) if recent else None
+            except Exception:
+                resolved = None
+
+            def _apply() -> None:
+                self._apply_thumbnail_lookup_result(request_key, resolved)
+
+            try:
+                self.after(0, _apply)
+            except Exception:
+                self._thumbnail_lookup_pending.discard(request_key)
+
+        from src.utils.thread_registry import get_thread_registry
+
+        registry = get_thread_registry()
+        registry.spawn(
+            target=_lookup,
+            name=f"Preview-ThumbLookup-{id(self)}",
+            daemon=False,
+            purpose="Resolve preview thumbnail candidates without blocking Tk",
+        )
+
+    def _apply_thumbnail_lookup_result(
+        self,
+        request_key: tuple[str, ...],
+        resolved_path: Path | None,
+    ) -> None:
+        self._thumbnail_lookup_pending.discard(request_key)
+        self._thumbnail_lookup_cache[request_key] = (
+            time.monotonic(),
+            str(resolved_path) if resolved_path else None,
+        )
+
+        current_key = self._make_thumbnail_lookup_key(
+            getattr(self, "_current_preview_job", None),
+            getattr(self, "_current_pack_name", None),
+        )
+        if request_key != current_key or not self._show_preview_var.get():
+            return
+
+        if resolved_path and resolved_path.exists():
+            self.thumbnail.set_image_from_path(resolved_path)
+        else:
+            self.thumbnail.clear()
+
     def _update_thumbnail(self, job: Any | None = None, pack_name: str | None = None, show_preview: bool = True) -> None:
         """Update the thumbnail display for the current preview job."""
         # Check if preview is disabled
@@ -1034,19 +1209,23 @@ class PreviewPanelV2(ttk.Frame):
             self.thumbnail.clear()
             return
 
-        # Prefer explicit output path from summary/result if available
-        explicit_path = self._find_latest_output_image(job)
+        # Prefer explicit output path from summary/result if available.
+        explicit_path = self._find_immediate_output_image(job)
         if explicit_path:
             self.thumbnail.set_image_from_path(explicit_path)
             return
 
-        # Try to find a matching image
-        thumb_path = self._find_recent_thumbnail(job, pack_name)
+        request_key = self._make_thumbnail_lookup_key(job, pack_name)
+        cached_path = self._get_cached_thumbnail_lookup(request_key)
+        if cached_path is not _THUMBNAIL_CACHE_MISS:
+            if cached_path is None:
+                self.thumbnail.clear()
+            else:
+                self.thumbnail.set_image_from_path(cached_path)
+            return
 
-        if thumb_path:
-            self.thumbnail.set_image_from_path(thumb_path)
-        else:
-            self.thumbnail.clear()
+        self.thumbnail.set_loading()
+        self._schedule_thumbnail_lookup(job, pack_name, request_key)
 
     def _on_preview_checkbox_changed(self) -> None:
         """Handle preview checkbox state change."""

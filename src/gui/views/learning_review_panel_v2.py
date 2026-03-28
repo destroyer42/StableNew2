@@ -34,6 +34,8 @@ class LearningReviewPanel(ttk.Frame):
 
         self.status_label = ttk.Label(self.status_frame, text="No variant selected")
         self.status_label.pack(anchor="w")
+        self.visibility_label = ttk.Label(self.status_frame, text="")
+        self.visibility_label.pack(anchor="w")
 
         self.progress_label = ttk.Label(self.status_frame, text="")
         self.progress_label.pack(anchor="w")
@@ -222,6 +224,10 @@ class LearningReviewPanel(ttk.Frame):
             self.recommendations_text.insert(tk.END, "Recommendation system not available.")
 
         self.recommendations_text.config(state="disabled")
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        value = str(mode or "nsfw").lower()
+        self.visibility_label.config(text="SFW mode active" if value == "sfw" else "")
 
 
 LearningReviewPanel = LearningReviewPanel

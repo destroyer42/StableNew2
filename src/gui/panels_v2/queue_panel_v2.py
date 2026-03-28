@@ -63,6 +63,9 @@ class QueuePanelV2(ttk.Frame):
         self._auto_run_enabled = bool(getattr(app_state, "auto_run_queue", True))
         self._running_job_id: str | None = None  # PR-GUI-F2: Track running job for highlighting
         self._summaries: list[UnifiedJobSummary] = []
+        self._last_rendered_job_rows: tuple[str, ...] = ()
+        self._last_rendered_count_text: str = "(0 jobs)"
+        self._last_rendered_queue_eta_text: str = ""
 
         # Title row
         title_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -141,6 +144,13 @@ class QueuePanelV2(ttk.Frame):
             style=STATUS_LABEL_STYLE,
         )
         self.queue_status_label.pack(anchor="w", pady=(0, 2))
+        self.visibility_banner = ttk.Label(
+            self,
+            text="",
+            style=STATUS_LABEL_STYLE,
+            foreground=TOKENS.colors.status_info,
+        )
+        self.visibility_banner.pack(anchor="w", pady=(0, 2))
 
         # Queue ETA label (estimated total time)
         self.queue_eta_label = ttk.Label(
@@ -269,8 +279,16 @@ class QueuePanelV2(ttk.Frame):
                 self.app_state.subscribe("queue_jobs", self._on_queue_jobs_changed)
             except Exception:
                 pass
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
             self._on_queue_summaries_changed()
             self._on_running_summary_changed()
+            self._on_content_visibility_mode_changed()
 
     def _dispatch_to_ui(self, fn: Callable[[], None]) -> bool:
         """Ensure widget mutations occur on the Tk main thread."""
@@ -687,13 +705,13 @@ class QueuePanelV2(ttk.Frame):
         )
 
         self._jobs = list(jobs)
-        self.job_listbox.delete(0, tk.END)
 
         # PR-PIPE-002: Get stats service for per-job ETA
         stats_service = None
         if self.controller:
             stats_service = getattr(self.controller, "duration_stats_service", None)
 
+        rendered_rows: list[str] = []
         for i, job in enumerate(self._jobs):
             # PR-GUI-F2: Add 1-based order number prefix
             order_num = i + 1
@@ -720,22 +738,37 @@ class QueuePanelV2(ttk.Frame):
             else:
                 display_text = f"#{order_num}  {base_summary}{eta_str}"
 
-            self.job_listbox.insert(tk.END, display_text)
+            rendered_rows.append(display_text)
 
-        # Update count label
         count = len(self._jobs)
-        self.count_label.configure(text=f"({count} job{'s' if count != 1 else ''})")
+        count_text = f"({count} job{'s' if count != 1 else ''})"
 
-        # PR-PIPE-002: Update ETA label using duration stats
+        queue_eta_text = ""
         if count > 0:
             total_seconds, confidence = self._compute_queue_eta()
-            eta_text = self._format_queue_eta(total_seconds)
+            queue_eta_text = self._format_queue_eta(total_seconds)
             # Add confidence indicator
             if confidence:
-                eta_text = f"{eta_text} {confidence}"
-            self.queue_eta_label.configure(text=eta_text)
-        else:
-            self.queue_eta_label.configure(text="")
+                queue_eta_text = f"{queue_eta_text} {confidence}"
+
+        rendered_signature = tuple(rendered_rows)
+        if (
+            rendered_signature == self._last_rendered_job_rows
+            and count_text == self._last_rendered_count_text
+            and queue_eta_text == self._last_rendered_queue_eta_text
+        ):
+            self._update_button_states()
+            return
+
+        self.job_listbox.delete(0, tk.END)
+        for display_text in rendered_rows:
+            self.job_listbox.insert(tk.END, display_text)
+
+        self.count_label.configure(text=count_text)
+        self.queue_eta_label.configure(text=queue_eta_text)
+        self._last_rendered_job_rows = rendered_signature
+        self._last_rendered_count_text = count_text
+        self._last_rendered_queue_eta_text = queue_eta_text
 
         # Restore selection if possible
         if old_job_id:
@@ -1006,6 +1039,18 @@ class QueuePanelV2(ttk.Frame):
         if running_job:
             self._running_job_id = getattr(running_job, "job_id", None)
             self._refresh_display()
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        value = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        ).lower()
+        if value == "sfw":
+            self.visibility_banner.configure(text="SFW mode active: explicit prompt details are hidden elsewhere.")
+        else:
+            self.visibility_banner.configure(text="")
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()
 
     @staticmethod
     def _format_queue_item_with_pack_metadata(summary: UnifiedJobSummary) -> str:

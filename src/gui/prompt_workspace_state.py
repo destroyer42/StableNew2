@@ -2,6 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.controller.content_visibility_resolver import (
+    ContentVisibilityResolver,
+    build_content_visibility_payload,
+)
 from src.gui.models.prompt_metadata import PromptMetadata, build_prompt_metadata
 from src.gui.models.prompt_pack_model import PromptPackModel
 
@@ -89,6 +93,37 @@ class PromptWorkspaceState:
             return ""
         slot = self.current_pack.get_slot(self._current_slot_index)
         return getattr(slot, "negative", "")
+
+    def get_current_content_visibility_payload(self) -> dict[str, object]:
+        return build_content_visibility_payload(
+            {
+                "positive_prompt": self.get_current_prompt_text(),
+                "negative_prompt": self.get_current_negative_text(),
+                "name": self.get_current_pack_name(),
+            }
+        )
+
+    def get_current_prompt_text_for_mode(self, mode: str) -> str:
+        resolver = ContentVisibilityResolver(mode)
+        return resolver.redact_text(
+            self.get_current_prompt_text(),
+            item={
+                "positive_prompt": self.get_current_prompt_text(),
+                "negative_prompt": self.get_current_negative_text(),
+                "name": self.get_current_pack_name(),
+            },
+        )
+
+    def get_current_negative_text_for_mode(self, mode: str) -> str:
+        resolver = ContentVisibilityResolver(mode)
+        return resolver.redact_text(
+            self.get_current_negative_text(),
+            item={
+                "positive_prompt": self.get_current_prompt_text(),
+                "negative_prompt": self.get_current_negative_text(),
+                "name": self.get_current_pack_name(),
+            },
+        )
 
     def get_current_prompt_metadata(self) -> PromptMetadata:
         """Build metadata from positive AND negative text for LoRA/embedding detection."""

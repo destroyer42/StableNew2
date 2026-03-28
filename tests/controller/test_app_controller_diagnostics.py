@@ -84,3 +84,30 @@ def test_watchdog_violation_generates_bundle(monkeypatch, tmp_path: Path) -> Non
 
     assert recorded
     assert recorded[0]["reason"].startswith("watchdog_")
+
+
+def test_diagnostics_snapshot_includes_pipeline_tab_metrics() -> None:
+    controller = AppController(
+        None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()
+    )
+    controller.main_window = type(
+        "Window",
+        (),
+        {
+            "pipeline_tab": type(
+                "PipelineTab",
+                (),
+                {
+                    "get_diagnostics_snapshot": lambda self: {
+                        "callback_metrics": {
+                            "_on_runtime_status_changed": {"count": 3, "avg_ms": 1.5}
+                        }
+                    }
+                },
+            )()
+        },
+    )()
+
+    snapshot = controller.get_diagnostics_snapshot()
+
+    assert snapshot["pipeline_tab"]["callback_metrics"]["_on_runtime_status_changed"]["count"] == 3

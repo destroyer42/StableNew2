@@ -285,6 +285,44 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
         values = self.panel.history_tree.item(children[0])["values"]
         assert len(values) == 11
 
+    def test_populate_history_skips_tree_rebuild_when_rows_are_unchanged(self) -> None:
+        entries = [
+            JobHistoryEntry(
+                job_id="job-1",
+                created_at=datetime.now(),
+                status=JobStatus.COMPLETED,
+                snapshot={
+                    "normalized_job": {
+                        "base_model": "test_model_1",
+                        "seed": 111,
+                    }
+                },
+                duration_ms=15000,
+            )
+        ]
+
+        self.panel._populate_history(entries)
+
+        delete_calls: list[tuple[object, ...]] = []
+        insert_calls: list[tuple[object, ...]] = []
+        original_delete = self.panel.history_tree.delete
+        original_insert = self.panel.history_tree.insert
+
+        def _tracked_delete(*args):
+            delete_calls.append(args)
+            return original_delete(*args)
+
+        def _tracked_insert(*args, **kwargs):
+            insert_calls.append(args)
+            return original_insert(*args, **kwargs)
+
+        self.panel.history_tree.delete = _tracked_delete  # type: ignore[assignment]
+        self.panel.history_tree.insert = _tracked_insert  # type: ignore[assignment]
+        self.panel._populate_history(list(entries))
+
+        assert delete_calls == []
+        assert insert_calls == []
+
     def test_extract_image_count_prefers_canonical_video_artifact_count(self) -> None:
         """Canonical video artifact count should drive the Images column."""
         entry = JobHistoryEntry(

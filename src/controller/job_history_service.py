@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 import json
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
 
+from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.history.history_record import HistoryRecord
 from src.pipeline.artifact_contract import artifact_manifest_payload
 from src.pipeline.job_models_v2 import JobView
@@ -61,12 +63,18 @@ class JobHistoryService:
         except Exception:
             pass
 
-    def list_active_jobs(self) -> list[JobView]:
+    def list_active_jobs(self, visibility_mode: str | None = None) -> list[JobView]:
         active_statuses = {JobStatus.QUEUED, JobStatus.RUNNING}
         jobs = [j for j in self._queue.list_jobs() if j.status in active_statuses]
-        return [self._from_job(j, is_active=True) for j in jobs]
+        views = [self._from_job(j, is_active=True) for j in jobs]
+        return self._filter_job_views(views, visibility_mode)
 
-    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> list[JobView]:
+    def list_recent_jobs(
+        self,
+        limit: int = 50,
+        status: JobStatus | None = None,
+        visibility_mode: str | None = None,
+    ) -> list[JobView]:
         history_entries = self._history.list_jobs(status=status, limit=limit)
         active_by_id = {
             j.job_id: j
@@ -80,15 +88,23 @@ class JobHistoryService:
                 view_models.append(self._from_job(active_job, is_active=True))
             else:
                 view_models.append(self._from_history(entry))
-        return view_models
+        return self._filter_job_views(view_models, visibility_mode)
 
-    def get_job(self, job_id: str) -> JobView | None:
+    def get_job(self, job_id: str, visibility_mode: str | None = None) -> JobView | None:
         active = next((j for j in self._queue.list_jobs() if j.job_id == job_id), None)
         if active:
-            return self._from_job(active, is_active=True)
+            return self._apply_job_view_visibility(
+                self._from_job(active, is_active=True),
+                visibility_mode,
+                allow_redacted=True,
+            )
         entry = self._history.get_job(job_id)
         if entry:
-            return self._from_history(entry)
+            return self._apply_job_view_visibility(
+                self._from_history(entry),
+                visibility_mode,
+                allow_redacted=True,
+            )
         return None
 
     def cancel_job(self, job_id: str) -> bool:
@@ -333,6 +349,59 @@ class JobHistoryService:
             snapshot=getattr(job, "snapshot", None),
         )
 
+    @staticmethod
+    def _job_view_subject(view: JobView) -> dict[str, Any]:
+        return {
+            "name": view.prompt_pack_name,
+            "prompt": view.prompt,
+            "negative_prompt": view.negative_prompt,
+            "positive_preview": view.positive_preview,
+            "negative_preview": view.negative_preview,
+            "label": view.label,
+            "result": view.result or {},
+        }
+
+    def _apply_job_view_visibility(
+        self,
+        view: JobView,
+        visibility_mode: str | None,
+        *,
+        allow_redacted: bool,
+    ) -> JobView | None:
+        if not visibility_mode:
+            return view
+        resolver = ContentVisibilityResolver(visibility_mode)
+        subject = self._job_view_subject(view)
+        decision = resolver.decide(subject, allow_redacted=allow_redacted)
+        if not decision.visible:
+            return None
+        if not decision.redacted:
+            return view
+        return replace(
+            view,
+            prompt=resolver.redact_text(view.prompt, item=subject),
+            negative_prompt=(
+                resolver.redact_text(view.negative_prompt, item=subject)
+                if view.negative_prompt is not None
+                else None
+            ),
+            positive_preview=resolver.redact_text(view.positive_preview, item=subject),
+            negative_preview=(
+                resolver.redact_text(view.negative_preview, item=subject)
+                if view.negative_preview is not None
+                else None
+            ),
+            prompt_pack_name=resolver.redact_text(view.prompt_pack_name, item={"name": view.prompt_pack_name}),
+        )
+
+    def _filter_job_views(self, views: list[JobView], visibility_mode: str | None) -> list[JobView]:
+        filtered: list[JobView] = []
+        for view in views:
+            visible = self._apply_job_view_visibility(view, visibility_mode, allow_redacted=False)
+            if visible is not None:
+                filtered.append(visible)
+        return filtered
+
     def summarize_history_record(self, record: HistoryRecord) -> JobView:
         njr = normalized_job_from_snapshot(record.njr_snapshot)
         if njr is None:
@@ -557,15 +626,20 @@ class NullHistoryService(JobHistoryService):
         """No-op record for failed jobs."""
         pass
 
-    def list_active_jobs(self) -> list[JobView]:
+    def list_active_jobs(self, visibility_mode: str | None = None) -> list[JobView]:
         """Return empty list - no active jobs tracked."""
         return []
 
-    def list_recent_jobs(self, limit: int = 50, status: JobStatus | None = None) -> list[JobView]:
+    def list_recent_jobs(
+        self,
+        limit: int = 50,
+        status: JobStatus | None = None,
+        visibility_mode: str | None = None,
+    ) -> list[JobView]:
         """Return empty list - no history tracked."""
         return []
 
-    def get_job(self, job_id: str) -> JobView | None:
+    def get_job(self, job_id: str, visibility_mode: str | None = None) -> JobView | None:
         """Return None - no jobs tracked."""
         return None
 

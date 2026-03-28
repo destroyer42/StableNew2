@@ -41,6 +41,7 @@ class JobHistoryPanelV2(ttk.Frame):
         self._item_to_job: dict[str, str] = {}
         self._selected_job_id: str | None = None
         self._tooltip: tk.Toplevel | None = None
+        self._last_history_signature: tuple[tuple[str, tuple[str, ...]], ...] = ()
 
         header_style = theme_mod.STATUS_STRONG_LABEL_STYLE
         ttk.Label(self, text="Job History", style=header_style).pack(anchor=tk.W, pady=(0, 4))
@@ -185,15 +186,42 @@ class JobHistoryPanelV2(ttk.Frame):
         self._populate_history(items)
 
     def _populate_history(self, entries: list[JobHistoryEntry]) -> None:
+        selected_job_id = self._selected_job_id
+        rows = [
+            (entry, self._entry_values(entry))
+            for entry in entries
+        ]
+        signature = tuple((entry.job_id, values) for entry, values in rows)
+        if signature == self._last_history_signature:
+            self.empty_state_var.set(
+                "No recent jobs yet. Queue an image or video job to populate history."
+                if not entries
+                else ""
+            )
+            return
+
         for item in self.history_tree.get_children():
             self.history_tree.delete(item)
         self._entries.clear()
         self._item_to_job.clear()
-        for entry in entries:
-            values = self._entry_values(entry)
+        restored_item_id: str | None = None
+        for entry, values in rows:
             item_id = self.history_tree.insert("", "end", values=values)
             self._entries[entry.job_id] = entry
             self._item_to_job[item_id] = entry.job_id
+            if selected_job_id and entry.job_id == selected_job_id:
+                restored_item_id = item_id
+        self._last_history_signature = signature
+        self.empty_state_var.set(
+            "No recent jobs yet. Queue an image or video job to populate history."
+            if not entries
+            else ""
+        )
+        if restored_item_id and selected_job_id in self._entries:
+            self.history_tree.selection_set(restored_item_id)
+            self._selected_job_id = selected_job_id
+            self._update_action_buttons(self._entries[selected_job_id])
+            return
         self._selected_job_id = None
         self.open_btn.configure(state=tk.DISABLED)
         self.replay_btn.configure(state=tk.DISABLED)
@@ -201,11 +229,6 @@ class JobHistoryPanelV2(ttk.Frame):
         self.video_workflow_btn.configure(state=tk.DISABLED)
         self.movie_clips_btn.configure(state=tk.DISABLED)
         self.explain_btn.configure(state=tk.DISABLED)
-        self.empty_state_var.set(
-            "No recent jobs yet. Queue an image or video job to populate history."
-            if not entries
-            else ""
-        )
 
     def _entry_values(self, entry: JobHistoryEntry) -> tuple[str, ...]:
         time_text = self._format_time(entry.completed_at or entry.started_at or entry.created_at)

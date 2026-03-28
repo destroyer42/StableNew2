@@ -55,6 +55,14 @@ class RunningJobPanelV2(ttk.Frame):
         self._runtime_status: RuntimeJobStatus | None = None  # Dynamic execution state
         self._queue_origin: int | None = None  # PR-GUI-F2: Original queue position (1-based)
         self._timer_id: str | None = None  # Tk after() timer ID for elapsed time updates
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
 
         # Title with queue origin indicator
         title_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -70,6 +78,13 @@ class RunningJobPanelV2(ttk.Frame):
             style=STATUS_STRONG_LABEL_STYLE,
         )
         self.queue_origin_label.pack(side="left", padx=(8, 0))
+        self.visibility_banner = ttk.Label(
+            title_frame,
+            text="",
+            style=STATUS_LABEL_STYLE,
+        )
+        self.visibility_banner.pack(side="right")
+        self.on_content_visibility_mode_changed()
 
         # Job info label
         self.job_info_label = ttk.Label(
@@ -528,3 +543,12 @@ class RunningJobPanelV2(ttk.Frame):
         
         # Update display with both static and dynamic data
         self._update_display()
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        value = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        ).lower()
+        self.visibility_banner.configure(text="SFW mode active" if value == "sfw" else "")
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()

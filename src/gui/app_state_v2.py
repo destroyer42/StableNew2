@@ -15,6 +15,7 @@ from src.pipeline.job_models_v2 import (
 from src.queue.job_history_store import JobHistoryEntry
 from src.api.webui_resource_service import build_empty_resource_map, normalize_resource_map
 from src.gui.config_adapter_v26 import GuiConfigAdapterV26
+from src.gui.content_visibility import ContentVisibilityMode, normalize_content_visibility_mode
 from src.utils.config import LoraRuntimeConfig
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -156,6 +157,7 @@ class AppStateV2:
     adetailer_config: dict[str, Any] = field(default_factory=dict)
     collapse_states: dict[str, bool] = field(default_factory=dict)
     help_mode_enabled: bool = False
+    content_visibility_mode: str = ContentVisibilityMode.NSFW.value
 
     # PR-111: Run Controls UX state flags
     is_run_in_progress: bool = False
@@ -249,6 +251,23 @@ class AppStateV2:
         enabled = not bool(self.help_mode_enabled)
         self.set_help_mode_enabled(enabled)
         return enabled
+
+    def set_content_visibility_mode(self, mode: str | ContentVisibilityMode) -> ContentVisibilityMode:
+        normalized = normalize_content_visibility_mode(mode)
+        value = normalized.value
+        if self.content_visibility_mode != value:
+            self.content_visibility_mode = value
+            self._notify("content_visibility_mode")
+        return normalized
+
+    def toggle_content_visibility_mode(self) -> ContentVisibilityMode:
+        current = normalize_content_visibility_mode(self.content_visibility_mode)
+        target = (
+            ContentVisibilityMode.SFW
+            if current == ContentVisibilityMode.NSFW
+            else ContentVisibilityMode.NSFW
+        )
+        return self.set_content_visibility_mode(target)
 
     def set_current_pack(self, value: str | None) -> None:
         """DEPRECATED: Use set_selected_prompt_pack instead."""

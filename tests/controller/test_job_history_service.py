@@ -84,6 +84,56 @@ def test_history_service_records_result(tmp_path):
     assert entry.result == {"mode": "test"}
 
 
+def test_history_service_filters_explicit_legacy_payload_summary_in_sfw(tmp_path):
+    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
+    queue = JobQueue(history_store=store)
+    service = JobHistoryService(queue, store)
+
+    legacy_job = Job(job_id="legacy-explicit", priority=JobPriority.NORMAL)
+    queue.submit(legacy_job)
+    queue.mark_running(legacy_job.job_id)
+    queue.mark_completed(legacy_job.job_id)
+    store.save_entry(service._build_entry(legacy_job, status=JobStatus.COMPLETED, result={}))
+
+    explicit_entry = store.get_job("legacy-explicit")
+    assert explicit_entry is not None
+    explicit_entry.payload_summary = "studio nude portrait"
+    explicit_entry.result = {"metadata": "legacy-record"}
+    store.save_entry(explicit_entry)
+
+    filtered = service.list_recent_jobs(visibility_mode="sfw")
+    assert [entry.job_id for entry in filtered] == []
+
+    detail = service.get_job("legacy-explicit", visibility_mode="sfw")
+    assert detail is not None
+    assert detail.positive_preview == "[Hidden in SFW mode]"
+
+
+def test_history_service_keeps_unknown_legacy_entries_visible_in_sfw(tmp_path):
+    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
+    queue = JobQueue(history_store=store)
+    service = JobHistoryService(queue, store)
+
+    legacy_job = Job(job_id="legacy-unknown", priority=JobPriority.NORMAL)
+    queue.submit(legacy_job)
+    queue.mark_running(legacy_job.job_id)
+    queue.mark_completed(legacy_job.job_id)
+    store.save_entry(service._build_entry(legacy_job, status=JobStatus.COMPLETED, result={}))
+
+    unknown_entry = store.get_job("legacy-unknown")
+    assert unknown_entry is not None
+    unknown_entry.payload_summary = "portrait study"
+    unknown_entry.result = {"metadata": ["unexpected-shape"]}
+    store.save_entry(unknown_entry)
+
+    filtered = service.list_recent_jobs(visibility_mode="sfw")
+    assert [entry.job_id for entry in filtered] == ["legacy-unknown"]
+
+    detail = service.get_job("legacy-unknown", visibility_mode="sfw")
+    assert detail is not None
+    assert detail.positive_preview == "portrait study"
+
+
 # ---------------------------------------------------------------------------
 # PR-VIDEO-215: video bundle normalisation
 # ---------------------------------------------------------------------------

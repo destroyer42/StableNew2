@@ -10,6 +10,7 @@ from typing import Any
 from src.api.webui_process_manager import WebUIProcessManager, build_default_webui_process_config
 from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
 from src.gui.app_state_v2 import AppStateV2
+from src.gui.content_visibility import ContentVisibilitySettings
 from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
 from src.gui.engine_settings_dialog import EngineSettingsDialog
 from src.gui.gui_invoker import GuiInvoker
@@ -43,6 +44,9 @@ class HeaderZone(ttk.Frame):
         self.preview_button = ttk.Button(self, text="Preview", style="Secondary.TButton")
         self.settings_button = ttk.Button(self, text="Settings", style="Secondary.TButton")
         self.refresh_button = ttk.Button(self, text="Refresh", style="Secondary.TButton")
+        self.visibility_button = ttk.Button(
+            self, text="Visibility: NSFW", style="Secondary.TButton"
+        )
         self.help_button = ttk.Button(self, text="Help Mode: Off", style="Secondary.TButton")
         self.debug_button = ttk.Button(self, text="Debug", style="Secondary.TButton")
 
@@ -53,6 +57,7 @@ class HeaderZone(ttk.Frame):
                 self.preview_button,
                 self.settings_button,
                 self.refresh_button,
+                self.visibility_button,
                 self.help_button,
                 self.debug_button,
             ]
@@ -538,6 +543,11 @@ class MainWindowV2:
                     self.app_state.set_learning_enabled(bool(learning_state.get("enabled", True)))
                 except Exception:
                     pass
+            try:
+                visibility = ContentVisibilitySettings.from_payload(state.get("content_visibility"))
+                self.app_state.set_content_visibility_mode(visibility.mode)
+            except Exception:
+                pass
             
             if saved_geometry:
                 try:
@@ -727,6 +737,7 @@ class MainWindowV2:
                         btn.configure(command=callback)
                     except Exception:
                         pass
+            header.visibility_button.configure(command=self._toggle_content_visibility_mode)
         else:
             # Best-effort fallback wiring using pipeline/pack controllers
             if self.pipeline_controller:
@@ -740,6 +751,7 @@ class MainWindowV2:
                     header.run_button.configure(command=start_cb)
                 if callable(stop_cb):
                     header.stop_button.configure(command=stop_cb)
+            header.visibility_button.configure(command=self._toggle_content_visibility_mode)
             header.help_button.configure(command=self._toggle_help_mode)
 
         if getattr(self, "app_state", None) and hasattr(self.app_state, "subscribe"):
@@ -755,7 +767,15 @@ class MainWindowV2:
                 self.app_state.subscribe("help_mode", self._update_help_button_state)
             except Exception:
                 pass
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
         self._update_run_button_state()
+        self._update_content_visibility_button_state()
         self._update_help_button_state()
 
     def _update_run_button_state(self, *_: Any) -> None:
@@ -783,6 +803,50 @@ class MainWindowV2:
         toggle = getattr(app_state, "toggle_help_mode", None)
         if callable(toggle):
             toggle()
+
+    def _toggle_content_visibility_mode(self) -> None:
+        app_state = getattr(self, "app_state", None)
+        if app_state is None:
+            return
+        toggle = getattr(app_state, "toggle_content_visibility_mode", None)
+        if callable(toggle):
+            toggle()
+
+    def _on_content_visibility_mode_changed(self, *_: Any) -> None:
+        mode = str(getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw")
+        self._update_content_visibility_button_state()
+        self._notify_content_visibility_targets(mode)
+
+    def _update_content_visibility_button_state(self, *_: Any) -> None:
+        header = getattr(self, "header_zone", None)
+        if header is None:
+            return
+        button = getattr(header, "visibility_button", None)
+        if button is None:
+            return
+        mode = str(getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw").upper()
+        button.configure(text=f"Visibility: {mode}")
+
+    def _notify_content_visibility_targets(self, mode: str) -> None:
+        targets = [
+            getattr(self, "prompt_tab", None),
+            getattr(self, "review_tab", None),
+            getattr(self, "learning_tab", None),
+            getattr(self, "photo_optimize_tab", None),
+            getattr(self, "movie_clips_tab", None),
+            getattr(self, "video_workflow_tab", None),
+        ]
+        pipeline_tab = getattr(self, "pipeline_tab", None)
+        if pipeline_tab is not None:
+            for attr in ("preview_panel", "queue_panel", "running_job_panel", "history_panel"):
+                targets.append(getattr(pipeline_tab, attr, None))
+        for target in targets:
+            callback = getattr(target, "on_content_visibility_mode_changed", None)
+            if callable(callback):
+                try:
+                    callback(mode)
+                except Exception:
+                    continue
 
     def _update_help_button_state(self, *_: Any) -> None:
         header = getattr(self, "header_zone", None)
@@ -1153,6 +1217,9 @@ class MainWindowV2:
                 "tabs": {
                     "selected_index": selected_tab_index
                 },
+                "content_visibility": ContentVisibilitySettings.from_payload(
+                    {"mode": getattr(self.app_state, "content_visibility_mode", "nsfw")}
+                ).to_payload(),
             }
             try:
                 learning_tab = getattr(self, "learning_tab", None)

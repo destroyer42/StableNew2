@@ -376,3 +376,38 @@ def test_entry_supports_image_handoff_false_for_video() -> None:
         }
     }
     assert panel._entry_supports_image_handoff(entry) is False
+
+
+@pytest.mark.gui
+def test_job_history_panel_handles_mixed_legacy_entries_without_crashing(tk_root) -> None:
+    controller = DummyController()
+    app_state = AppStateV2()
+    panel = JobHistoryPanelV2(tk_root, controller=controller, app_state=app_state)
+
+    bare_entry = _make_entry("job-bare")
+    bare_entry.payload_summary = "portrait study"
+    bare_entry.result = {"metadata": "legacy-string"}
+
+    mixed_entry = _make_entry("job-mixed")
+    mixed_entry.payload_summary = "studio nude portrait"
+    mixed_entry.result = {
+        "artifact": {
+            "schema": "stablenew.artifact.v2.6",
+            "artifact_type": "image",
+            "primary_path": "/out/legacy.png",
+            "output_paths": ["/out/legacy.png"],
+        },
+        "metadata": [{"safe_for_work": False}],
+    }
+
+    app_state.set_history_items([bare_entry, mixed_entry])
+    tk_root.update_idletasks()
+
+    children = panel.history_tree.get_children()
+    assert len(children) == 2
+
+    panel.history_tree.selection_set(children[1])
+    panel.history_tree.event_generate("<<TreeviewSelect>>")
+
+    assert panel.open_btn.instate(["!disabled"])
+    assert panel.svd_btn.instate(["!disabled"])

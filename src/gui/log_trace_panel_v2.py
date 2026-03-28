@@ -41,6 +41,7 @@ class LogTracePanelV2(ttk.Frame):
         self._last_log_version = -1
         self._last_filter_signature: tuple[str, str, str, str, str] | None = None
         self._render_entry_limit = 150 if audience == "operator" else 300
+        self._deferred_refresh_id: str | None = None
 
         header = ttk.Frame(self)
         header.pack(side=tk.TOP, fill=tk.X)
@@ -256,6 +257,17 @@ class LogTracePanelV2(ttk.Frame):
             self._log_text.see(tk.END)
         else:
             self._log_text.yview_moveto(current_yview[0])
+
+    def schedule_refresh_soon(self, delay_ms: int = 125) -> None:
+        """Coalesce bursty refresh requests into a single near-term repaint."""
+        if self._deferred_refresh_id is not None:
+            return
+
+        def _run() -> None:
+            self._deferred_refresh_id = None
+            self.refresh()
+
+        self._deferred_refresh_id = self.after(max(0, int(delay_ms)), _run)
 
     def _get_payload(self, entry: dict[str, object]) -> dict[str, Any] | None:
         payload = entry.get("payload")

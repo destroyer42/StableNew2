@@ -6,6 +6,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
@@ -36,8 +37,10 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self._history_index_by_row: list[int] = []
         self._suspend_asset_persist = False
         self._app_state_resource_listener: Any = None
+        self._app_state_visibility_listener: Any = None
         self._model_name_map: dict[str, str] = {}
         self._vae_name_map: dict[str, str] = {"Automatic": ""}
+        self._content_visibility_mode = "nsfw"
 
         self.prompt_mode_var = tk.StringVar(value="append")
         self.negative_mode_var = tk.StringVar(value="append")
@@ -125,9 +128,8 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self.prompt_delta_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self.negative_delta_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
 
-        self._set_readonly_text(self.current_prompt_text, "")
-        self._set_readonly_text(self.current_negative_text, "")
         self.bind_app_state(app_state)
+        self._apply_content_visibility_mode()
         self._refresh_assets()
 
     def _build_header(self) -> None:
@@ -164,6 +166,8 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             interrogate_btn,
             "Analyze the current working image and write the returned caption into the baseline prompt.",
         )
+        self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
+        self.visibility_banner.grid(row=1, column=0, columnspan=5, sticky="w", pady=(6, 0))
         ttk.Label(header, text="Batch", style="Dark.TLabel").grid(
             row=0, column=4, sticky="w", padx=(10, 4)
         )
@@ -891,8 +895,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self.vae_var.set("")
         self.tags_var.set("")
         self._load_baseline_config_form({})
-        self._set_readonly_text(self.current_prompt_text, "")
-        self._set_readonly_text(self.current_negative_text, "")
+        self._apply_content_visibility_mode()
         self._set_text(self.prompt_delta_text, "")
         self._set_text(self.negative_delta_text, "")
         self._refresh_prompt_diff()
@@ -930,8 +933,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             self.stage_adetailer_var.set(bool(asset.baseline.stage_defaults.get("adetailer", False)))
             self.stage_upscale_var.set(bool(asset.baseline.stage_defaults.get("upscale", False)))
             self._load_baseline_config_form(asset.baseline.config)
-            self._set_readonly_text(self.current_prompt_text, asset.baseline.prompt)
-            self._set_readonly_text(self.current_negative_text, asset.baseline.negative_prompt)
+            self._apply_content_visibility_mode()
             self._reset_prompt_mode_state(asset)
             self._populate_history(asset)
             self._refresh_preview(asset)
@@ -1137,8 +1139,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             baseline=baseline,
         )
         self._current_asset = updated
-        self._set_readonly_text(self.current_prompt_text, updated.baseline.prompt)
-        self._set_readonly_text(self.current_negative_text, updated.baseline.negative_prompt)
+        self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
         self._refresh_preview(updated)
 
@@ -1228,14 +1229,53 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             prompt_mode=self.prompt_mode_var.get(),
             negative_prompt_mode=self.negative_mode_var.get(),
         )
-        self.diff_before_label.config(text=diff.before_text)
-        self.diff_after_label.config(text=diff.after_text)
+        resolver = self._visibility_resolver()
+        subject = self._current_visibility_subject()
+        self.diff_before_label.config(text=resolver.redact_text(diff.before_text, item=subject))
+        self.diff_after_label.config(text=resolver.redact_text(diff.after_text, item=subject))
 
     def _set_readonly_text(self, widget: tk.Text, value: str) -> None:
         widget.configure(state="normal")
         widget.delete("1.0", tk.END)
         widget.insert("1.0", value or "")
         widget.configure(state="disabled")
+
+    def _visibility_resolver(self) -> ContentVisibilityResolver:
+        return ContentVisibilityResolver(self._content_visibility_mode)
+
+    def _current_visibility_subject(self) -> dict[str, str]:
+        asset = self._current_asset
+        if asset is None:
+            return {"positive_prompt": "", "negative_prompt": "", "name": ""}
+        return {
+            "positive_prompt": asset.baseline.prompt,
+            "negative_prompt": asset.baseline.negative_prompt,
+            "name": asset.source_filename,
+        }
+
+    def _apply_content_visibility_mode(self) -> None:
+        resolver = self._visibility_resolver()
+        subject = self._current_visibility_subject()
+        prompt_value = resolver.redact_text(subject.get("positive_prompt", ""), item=subject)
+        negative_value = resolver.redact_text(subject.get("negative_prompt", ""), item=subject)
+        self._set_readonly_text(self.current_prompt_text, prompt_value)
+        self._set_readonly_text(self.current_negative_text, negative_value)
+        if self._content_visibility_mode == "sfw" and (
+            prompt_value == REDACTED_TEXT or negative_value == REDACTED_TEXT
+        ):
+            self.visibility_banner.config(text="SFW mode active: source prompts hidden")
+        else:
+            self.visibility_banner.config(text="")
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._content_visibility_mode = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        self._apply_content_visibility_mode()
+        self._refresh_prompt_diff()
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()
 
     def _set_text(self, widget: tk.Text, value: str) -> None:
         widget.delete("1.0", tk.END)
@@ -1588,13 +1628,20 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             return
         old_state = self.app_state
         old_listener = self._app_state_resource_listener
+        old_visibility_listener = self._app_state_visibility_listener
         if old_state is not None and old_listener is not None and hasattr(old_state, "unsubscribe"):
             try:
                 old_state.unsubscribe("resources", old_listener)
             except Exception:
                 pass
+        if old_state is not None and old_visibility_listener is not None and hasattr(old_state, "unsubscribe"):
+            try:
+                old_state.unsubscribe("content_visibility_mode", old_visibility_listener)
+            except Exception:
+                pass
         self.app_state = app_state
         self._app_state_resource_listener = None
+        self._app_state_visibility_listener = None
         if self.app_state is not None and hasattr(self.app_state, "subscribe"):
             self._app_state_resource_listener = lambda: self._on_app_state_resources_changed(
                 getattr(self.app_state, "resources", None)
@@ -1603,9 +1650,18 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
                 self.app_state.subscribe("resources", self._app_state_resource_listener)
             except Exception:
                 self._app_state_resource_listener = None
+            self._app_state_visibility_listener = self._on_content_visibility_mode_changed
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._app_state_visibility_listener,
+                )
+            except Exception:
+                self._app_state_visibility_listener = None
         self._on_app_state_resources_changed(
             getattr(self.app_state, "resources", None) if self.app_state is not None else None
         )
+        self.on_content_visibility_mode_changed()
 
     def restore_photo_optimize_state(self, payload: dict[str, Any] | None) -> bool:
         if not isinstance(payload, dict):
@@ -1631,7 +1687,15 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
                 self.app_state.unsubscribe("resources", self._app_state_resource_listener)
             except Exception:
                 pass
+        if self.app_state is not None and self._app_state_visibility_listener is not None and hasattr(
+            self.app_state, "unsubscribe"
+        ):
+            try:
+                self.app_state.unsubscribe("content_visibility_mode", self._app_state_visibility_listener)
+            except Exception:
+                pass
         self._app_state_resource_listener = None
+        self._app_state_visibility_listener = None
         super().destroy()
 
 

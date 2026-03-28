@@ -1496,10 +1496,11 @@ class Pipeline:
                 )
             )
         if pressure_status == "unsafe":
+            pressure_severity = "degraded" if stage_name == "txt2img" else "poisoned"
             runtime_causes.append(
                 self._build_runtime_cause(
                     code="unsafe_pressure",
-                    severity="poisoned",
+                    severity=pressure_severity,
                     message="stage pressure classified unsafe",
                     details={"pressure_assessment": dict(pressure_assessment or {})},
                 )
@@ -1584,7 +1585,7 @@ class Pipeline:
         guarded_active = app_config.is_guarded_webui_launch_profile(launch_profile)
         cause_codes = set(self._runtime_cause_codes(runtime_state))
         has_unsafe_pressure = "unsafe_pressure" in cause_codes or pressure_status == "unsafe"
-        should_force_guarded = pressure_status == "high_pressure" and not guarded_active
+        should_force_guarded = pressure_status in {"high_pressure", "unsafe"} and not guarded_active
         should_attempt_recovery = (status == "poisoned" and not has_unsafe_pressure) or should_force_guarded
         if should_attempt_recovery and self._attempt_webui_recovery(
             stage=stage_name,
@@ -1611,7 +1612,7 @@ class Pipeline:
             recovered_status = str(runtime_state.get("status") or "healthy")
             if recovered_status == "healthy":
                 return runtime_state
-            if recovered_status == "degraded" and pressure_status != "unsafe":
+            if recovered_status == "degraded" and (pressure_status != "unsafe" or stage_name == "txt2img"):
                 return runtime_state
 
         if pressure_status == "unsafe" and stage_name in {"adetailer", "upscale"}:

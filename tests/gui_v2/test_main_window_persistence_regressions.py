@@ -133,6 +133,14 @@ class _StubWebUIManager:
         self.called += 1
 
 
+class _StubAppState:
+    def __init__(self, *, content_visibility_mode: str = "nsfw") -> None:
+        self.content_visibility_mode = content_visibility_mode
+
+    def set_learning_enabled(self, _value: bool) -> None:
+        return None
+
+
 def test_save_ui_state_preserves_existing_learning_payload_when_tab_returns_none(tmp_path: Path) -> None:
     store = UIStateStore(tmp_path / "ui_state.json")
     store.save_state(
@@ -149,6 +157,7 @@ def test_save_ui_state_preserves_existing_learning_payload_when_tab_returns_none
     window.root = _StubRoot()
     window.center_notebook = _StubNotebook()
     window.learning_tab = _StubLearningTab(None)
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -169,6 +178,7 @@ def test_save_ui_state_persists_photo_optimize_selection(tmp_path: Path) -> None
     window.center_notebook = _StubNotebook()
     window.learning_tab = _StubLearningTab({})
     window.photo_optimize_tab = _StubPhotoOptimizeTab({"selected_asset_id": "photo_123"})
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -188,6 +198,7 @@ def test_save_ui_state_persists_svd_selection(tmp_path: Path) -> None:
     window.center_notebook = _StubNotebook()
     window.learning_tab = _StubLearningTab({})
     window.svd_tab = _StubSVDTab({"source_image_path": "C:/tmp/source.png", "num_frames": 25})
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -213,6 +224,7 @@ def test_save_ui_state_persists_video_workflow_selection(tmp_path: Path) -> None
             "end_anchor_path": "C:/tmp/end.png",
         }
     )
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -222,6 +234,25 @@ def test_save_ui_state_persists_video_workflow_selection(tmp_path: Path) -> None
     saved = store.load_state()
     assert saved is not None
     assert saved["video_workflow"]["workflow_id"] == "ltx_multiframe_anchor_v1"
+
+
+def test_save_ui_state_persists_content_visibility_mode(tmp_path: Path) -> None:
+    store = UIStateStore(tmp_path / "ui_state.json")
+
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot()
+    window.center_notebook = _StubNotebook()
+    window.learning_tab = _StubLearningTab({})
+    window.app_state = _StubAppState(content_visibility_mode="sfw")
+
+    from unittest.mock import patch
+
+    with patch("src.gui.main_window_v2.get_ui_state_store", return_value=store):
+        window._save_ui_state()
+
+    saved = store.load_state()
+    assert saved is not None
+    assert saved["content_visibility"] == {"mode": "sfw"}
 
 
 def test_trigger_deferred_queue_autostart_calls_job_controller() -> None:
@@ -275,11 +306,7 @@ def test_ensure_window_geometry_ignores_offscreen_saved_geometry(tmp_path: Path)
 
     window = MainWindowV2.__new__(MainWindowV2)
     window.root = _StubRoot("1x1+0+0")
-    window.app_state = type(
-        "State",
-        (),
-        {"set_learning_enabled": lambda self, value: None},
-    )()
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -297,6 +324,7 @@ def test_save_ui_state_replaces_offscreen_geometry(tmp_path: Path) -> None:
     window.root = _StubRoot("1984x1110+-32000+-32000")
     window.center_notebook = _StubNotebook()
     window.learning_tab = _StubLearningTab({})
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 

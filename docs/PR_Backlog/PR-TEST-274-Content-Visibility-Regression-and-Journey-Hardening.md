@@ -1,6 +1,6 @@
 # PR-TEST-274 - Content Visibility Regression and Journey Hardening
 
-Status: Specification
+Status: Completed 2026-03-27
 Priority: HIGH
 Effort: MEDIUM
 Phase: Validation + Hardening
@@ -138,9 +138,22 @@ After PR-CONFIG-271, PR-CTRL-272, and PR-GUI-273, this PR ensures the feature re
 Planner: ChatGPT
 Executor: Codex
 Reviewer: Human + ChatGPT
-Approval Status: Pending
+Approval Status: Executed
 
 ## 14. Next Steps
 
 1. Optional PR for user-configurable strictness profile ("strict SFW" vs "balanced SFW").
 2. Optional diagnostics dashboard panel for filtered-content counters.
+
+## 15. Post-Implementation Summary
+
+- added restart-persistence coverage in
+  `tests/gui_v2/test_content_visibility_mode_persistence.py`
+- added end-to-end journey coverage in
+  `tests/journey/test_content_visibility_mode_journey.py`
+- added learning metadata normalization coverage in
+  `tests/learning/test_content_visibility_learning_filters.py`
+- hardened existing GUI and controller regressions against persisted UI-state
+  leakage from disk
+- focused verification passed:
+  `pytest -q tests/journey/test_content_visibility_mode_journey.py`

@@ -121,6 +121,10 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/CompletedPR/PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing.md`
 - `docs/CompletedPR/PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics.md`
 - `docs/CompletedPR/PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries.md`
+- `docs/CompletedPR/PR-CONFIG-271-Content-Visibility-Mode-Contract-and-Persistence.md`
+- `docs/CompletedPR/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md`
+- `docs/CompletedPR/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md`
+- `docs/CompletedPR/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
 - `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 - `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 - `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`

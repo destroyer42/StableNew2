@@ -55,6 +55,64 @@ def test_runtime_admission_recovers_guarded_profile_for_heavy_stage(monkeypatch)
     assert recovered[0]["profile_override"] == "sdxl_guarded"
 
 
+def test_runtime_admission_recovers_unsafe_txt2img_by_switching_to_guarded_profile(monkeypatch) -> None:
+    client = Mock()
+    pipeline = Pipeline(client, Mock())
+
+    states = [
+        {
+            "status": "poisoned",
+            "launch_profile": "standard",
+            "runtime_causes": [
+                {"code": "connection_dead", "severity": "poisoned", "message": "webui connection check failed"},
+                {"code": "unsafe_pressure", "severity": "degraded", "message": "stage pressure classified unsafe"},
+            ],
+            "reasons": ["webui connection check failed", "stage pressure classified unsafe"],
+        },
+        {
+            "status": "degraded",
+            "launch_profile": "sdxl_guarded",
+            "runtime_causes": [
+                {"code": "unsafe_pressure", "severity": "degraded", "message": "stage pressure classified unsafe"},
+            ],
+            "reasons": ["stage pressure classified unsafe"],
+        },
+    ]
+
+    monkeypatch.setattr(pipeline, "_assess_runtime_state", lambda **kwargs: states.pop(0))
+    monkeypatch.setattr(
+        pipeline,
+        "_attempt_runtime_soft_recovery",
+        lambda **kwargs: (
+            {
+                "status": "poisoned",
+                "launch_profile": "standard",
+                "runtime_causes": [
+                    {"code": "connection_dead", "severity": "poisoned", "message": "webui connection check failed"},
+                    {"code": "unsafe_pressure", "severity": "degraded", "message": "stage pressure classified unsafe"},
+                ],
+                "reasons": ["webui connection check failed", "stage pressure classified unsafe"],
+            },
+            [{"step": "reprobe", "status": "poisoned"}],
+        ),
+    )
+    recovered = []
+    monkeypatch.setattr(
+        pipeline,
+        "_attempt_webui_recovery",
+        lambda **kwargs: recovered.append(kwargs) or True,
+    )
+
+    result = pipeline._ensure_runtime_admissible(
+        stage_name="txt2img",
+        pressure_assessment={"status": "unsafe"},
+    )
+
+    assert result["status"] == "degraded"
+    assert recovered
+    assert recovered[0]["profile_override"] == "sdxl_guarded"
+
+
 def test_runtime_admission_refuses_unsafe_upscale_when_runtime_stays_poisoned(monkeypatch) -> None:
     client = Mock()
     pipeline = Pipeline(client, Mock())
@@ -100,6 +158,39 @@ def test_runtime_admission_does_not_restart_guarded_high_pressure_runtime_when_o
     )
 
     assert result["status"] == "degraded"
+
+
+def test_assess_runtime_state_marks_unsafe_txt2img_pressure_as_degraded(monkeypatch) -> None:
+    client = Mock()
+    client.check_connection.return_value = True
+    client.get_runtime_failure_state.return_value = {}
+    client.get_progress_snapshot.return_value = None
+    pipeline = Pipeline(client, Mock())
+
+    class _Manager:
+        def get_launch_profile(self) -> str:
+            return "sdxl_guarded"
+
+    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: _Manager())
+    monkeypatch.setattr(
+        "src.pipeline.executor.collect_process_risk_snapshot",
+        lambda: {"status": "normal"},
+    )
+
+    runtime_state = pipeline._assess_runtime_state(
+        stage_name="txt2img",
+        pressure_assessment={"status": "unsafe"},
+    )
+
+    assert runtime_state["status"] == "degraded"
+    assert runtime_state["runtime_causes"] == [
+        {
+            "code": "unsafe_pressure",
+            "severity": "degraded",
+            "message": "stage pressure classified unsafe",
+            "details": {"pressure_assessment": {"status": "unsafe"}},
+        }
+    ]
 
 
 def test_runtime_admission_uses_soft_recovery_for_stale_progress_before_restart(monkeypatch) -> None:

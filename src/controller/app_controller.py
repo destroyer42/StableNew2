@@ -75,6 +75,7 @@ from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
 from src.controller.app_controller_services.learning_completion_router import (
     build_learning_completion_handler,
 )
+from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.controller.app_controller_services.gui_config_service import GuiConfigService
 from src.controller.app_controller_services.run_submission_service import (
     QueueRunSubmissionService,
@@ -3180,9 +3181,10 @@ class AppController:
             return
 
         trace_panel = getattr(self.main_window, "log_trace_panel_v2", None)
-        if trace_panel and hasattr(trace_panel, "refresh"):
+        schedule_refresh = getattr(trace_panel, "schedule_refresh_soon", None)
+        if callable(schedule_refresh):
             try:
-                trace_panel.refresh()
+                schedule_refresh()
             except Exception:
                 pass
 
@@ -3374,6 +3376,13 @@ class AppController:
             "last_ui_heartbeat_ts": getattr(self, "last_ui_heartbeat_ts", None),
             "last_runner_activity_ts": getattr(self, "last_runner_activity_ts", None),
         }
+        pipeline_tab = getattr(getattr(self, "main_window", None), "pipeline_tab", None)
+        getter = getattr(pipeline_tab, "get_diagnostics_snapshot", None)
+        if callable(getter):
+            try:
+                data["pipeline_tab"] = getter()
+            except Exception:
+                data["pipeline_tab"] = None
         data["last_bundle"] = (
             str(self._last_diagnostics_bundle) if self._last_diagnostics_bundle else None
         )
@@ -4305,7 +4314,36 @@ class AppController:
 
     def load_packs(self) -> None:
         """Discover packs and push them to the GUI."""
-        self.packs = discover_packs(self._packs_dir)
+        discovered = discover_packs(self._packs_dir)
+        resolver = ContentVisibilityResolver(
+            getattr(self.app_state, "content_visibility_mode", "nsfw")
+        )
+        visible_packs: list[PromptPackInfo] = []
+        for pack in discovered:
+            prompts = []
+            try:
+                prompts = read_prompt_pack(pack.path)
+            except Exception:
+                prompts = []
+            if resolver.is_visible(
+                {
+                    "name": pack.name,
+                    "description": " ".join(
+                        " ".join(
+                            part
+                            for part in (
+                                str(prompt.get("positive") or "").strip(),
+                                str(prompt.get("negative") or "").strip(),
+                            )
+                            if part
+                        )
+                        for prompt in prompts
+                        if isinstance(prompt, Mapping)
+                    ),
+                }
+            ):
+                visible_packs.append(pack)
+        self.packs = visible_packs
         pack_names = [pack.name for pack in self.packs]
         if self.main_window is not None and hasattr(self.main_window, "update_pack_list"):
             self.main_window.update_pack_list(pack_names)

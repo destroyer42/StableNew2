@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 UI_STATE_PATH = Path("state") / "ui_state.json"
 SCHEMA_VERSION = "2.6"
+DEFAULT_CONTENT_VISIBILITY_STATE = {"mode": "nsfw"}
 
 
 class UIStateStore:
@@ -76,6 +77,11 @@ class UIStateStore:
                     f"Unsupported UI state schema: {state.get('schema_version')}, expected {SCHEMA_VERSION}"
                 )
                 return None
+            content_visibility = state.get("content_visibility")
+            if not isinstance(content_visibility, dict):
+                state["content_visibility"] = dict(DEFAULT_CONTENT_VISIBILITY_STATE)
+            elif content_visibility.get("mode") not in {"sfw", "nsfw"}:
+                state["content_visibility"] = dict(DEFAULT_CONTENT_VISIBILITY_STATE)
             
             logger.debug(f"Loaded UI state from {self._path}")
             return state

@@ -1,6 +1,6 @@
 # PR-GUI-273 - Mode Toggle UX and Cross-Tab Filtering
 
-Status: Specification
+Status: Completed 2026-03-27
 Priority: HIGH
 Effort: LARGE
 Phase: GUI Integration + UX Consistency
@@ -155,9 +155,19 @@ With persisted mode state and resolver wiring in place, this PR delivers the use
 Planner: ChatGPT
 Executor: Codex
 Reviewer: Human + ChatGPT
-Approval Status: Pending
+Approval Status: Executed
 
 ## 14. Next Steps
 
 1. PR-TEST-274 hardening + coverage expansion.
 2. Optional follow-up for configurable SFW policy strictness.
+
+## 15. Post-Implementation Summary
+
+- added the global visibility toggle in `src/gui/main_window_v2.py`
+- wired live refresh and notices across prompt, preview, queue, history,
+  review, learning, photo-optimize, movie-clips, and video-workflow surfaces
+- added integration coverage in
+  `tests/gui_v2/test_content_visibility_toggle_integration.py`
+- focused verification passed:
+  `pytest -q tests/gui_v2/test_content_visibility_toggle_integration.py`

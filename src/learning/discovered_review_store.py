@@ -19,6 +19,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from src.controller.content_visibility_resolver import normalize_content_visibility_payload
 from src.curation.curation_manifest import build_selection_event_block
 from src.curation.models import SelectionEvent
 from src.learning.discovered_review_models import (
@@ -67,7 +68,14 @@ class DiscoveredReviewStore:
 
         experiment.updated_at = _utc_now_iso()
         self._write_json(group_dir / "meta.json", experiment.to_meta_dict())
-        self._write_json(group_dir / "items.json", experiment.to_items_list())
+        items_payload = experiment.to_items_list()
+        for item in items_payload:
+            extra_fields = dict(item.get("extra_fields") or {})
+            extra_fields["content_visibility"] = normalize_content_visibility_payload(
+                extra_fields.get("content_visibility")
+            )
+            item["extra_fields"] = extra_fields
+        self._write_json(group_dir / "items.json", items_payload)
 
         review_state = {
             item.item_id: {
@@ -100,6 +108,11 @@ class DiscoveredReviewStore:
                 item_dict["rating"] = state.get("rating", RATING_UNRATED)
                 item_dict["rating_notes"] = state.get("rating_notes", "")
                 item_dict["rated_at"] = state.get("rated_at", "")
+            extra_fields = dict(item_dict.get("extra_fields") or {})
+            extra_fields["content_visibility"] = normalize_content_visibility_payload(
+                extra_fields.get("content_visibility")
+            )
+            item_dict["extra_fields"] = extra_fields
             resolved_artifact = self._repair_output_path(str(item_dict.get("artifact_path") or ""))
             if resolved_artifact and resolved_artifact != str(item_dict.get("artifact_path") or ""):
                 item_dict["artifact_path"] = resolved_artifact

@@ -21,6 +21,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from src.controller.content_visibility_resolver import build_content_visibility_payload
 from src.learning.output_scan_models import ScanRecord, _utc_now_iso
 from src.learning.discovered_review_models import OutputScanIndexEntry
 from src.utils.image_metadata import (
@@ -94,6 +95,16 @@ def _normalize_record(record: ScanRecord) -> ScanRecord:
     record.prompt_hash = _prompt_hash(record.positive_prompt, record.negative_prompt)
     record.input_lineage_key = _input_lineage_key(record.input_image_path)
     record.dedupe_key = _dedupe_key(record)
+    extra_fields = dict(record.extra_fields or {})
+    extra_fields["content_visibility"] = build_content_visibility_payload(
+        {
+            "content_visibility": extra_fields.get("content_visibility"),
+            "positive_prompt": record.positive_prompt,
+            "negative_prompt": record.negative_prompt,
+            "extra_fields": extra_fields,
+        }
+    )
+    record.extra_fields = extra_fields
     return record
 
 
@@ -196,6 +207,18 @@ def _record_from_manifest(manifest_path: Path, artifact_path: Path) -> ScanRecor
         positive_prompt=positive,
         negative_prompt=negative,
         input_image_path=input_img,
+        extra_fields={
+            "content_visibility": build_content_visibility_payload(
+                {
+                    "content_visibility": data.get("content_visibility"),
+                    "content_rating": data.get("content_rating"),
+                    "safe_for_work": data.get("safe_for_work"),
+                    "tags": data.get("tags") or gen.get("tags") or stage_manifest.get("tags"),
+                    "positive_prompt": positive,
+                    "negative_prompt": negative,
+                }
+            )
+        },
         scan_source="manifest",
         scanned_at=_utc_now_iso(),
     )
@@ -240,6 +263,18 @@ def _record_from_embedded(image_path: Path) -> ScanRecord | None:
         height=_safe_int(gen.get("height") or payload.get("height")),
         positive_prompt=positive,
         negative_prompt=negative,
+        extra_fields={
+            "content_visibility": build_content_visibility_payload(
+                {
+                    "content_visibility": payload.get("content_visibility"),
+                    "content_rating": payload.get("content_rating"),
+                    "safe_for_work": payload.get("safe_for_work"),
+                    "tags": payload.get("tags"),
+                    "positive_prompt": positive,
+                    "negative_prompt": negative,
+                }
+            )
+        },
         scan_source="embedded",
         scanned_at=_utc_now_iso(),
     )

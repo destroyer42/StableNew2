@@ -1,6 +1,6 @@
 # PR-CONFIG-271 - Content Visibility Mode Contract and Persistence
 
-Status: Specification
+Status: Completed 2026-03-27
 Priority: HIGH
 Effort: MEDIUM
 Phase: GUI + Learning Safety Hardening
@@ -157,10 +157,19 @@ References:
 Planner: ChatGPT
 Executor: Codex
 Reviewer: Human + ChatGPT
-Approval Status: Pending
+Approval Status: Executed
 
 ## 14. Next Steps
 
 1. PR-CTRL-272: resolver service + query wiring.
 2. PR-GUI-273: global toggle placement + tab integrations.
 3. PR-TEST-274: full regression and journey hardening.
+
+## 15. Post-Implementation Summary
+
+- added canonical visibility-mode helpers in `src/gui/content_visibility.py`
+- extended `AppStateV2` with persisted mode state and notification hooks
+- restored and saved the mode through `MainWindowV2` and `UIStateStore`
+- added regression coverage in `tests/gui_v2/test_content_visibility_contract.py`
+- focused verification passed:
+  `pytest -q tests/gui_v2/test_content_visibility_contract.py`

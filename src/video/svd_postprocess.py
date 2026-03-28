@@ -7,6 +7,7 @@ import gc
 import importlib.util
 import json
 import logging
+import math
 import os
 import shutil
 import subprocess
@@ -28,6 +29,7 @@ _REQUIRED_FACELIB_FILES = (
     "detection_Resnet50_Final.pth",
     "parsing_parsenet.pth",
 )
+_RIFE_CUSTOM_FRAMECOUNT_UNSUPPORTED = "only rife-v4 model support custom numframe and timestep"
 
 
 def get_codeformer_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str]:
@@ -455,27 +457,28 @@ class SVDPostprocessRunner:
         )
         try:
             save_video_frames(frames=frames, output_dir=input_dir, prefix="frame")
-            cmd = [
-                str(executable),
-                "-i",
-                str(input_dir.resolve()),
-                "-o",
-                str(output_dir.resolve()),
-                "-n",
-                str(target_count),
-            ]
-            model_dir = postprocess.interpolation.model_dir
-            if model_dir:
-                cmd.extend(["-m", str(model_dir)])
-            completed = subprocess.run(
-                cmd,
-                cwd=str(executable.parent),
-                capture_output=True,
-                text=True,
-                check=False,
+            cmd = self._build_rife_command(
+                executable=executable,
+                input_dir=input_dir,
+                output_dir=output_dir,
+                postprocess=postprocess,
+                target_count=target_count,
             )
+            completed = self._run_rife_command(cmd=cmd, executable=executable)
             if completed.returncode != 0:
                 message = completed.stderr.strip() or completed.stdout.strip() or "unknown interpolation error"
+                if self._is_rife_custom_framecount_unsupported(message):
+                    logger.warning(
+                        "[SVD][postprocess] stage=interpolation runtime rejected custom frame target; "
+                        "falling back to compatibility mode for multiplier=%s",
+                        postprocess.interpolation.multiplier,
+                    )
+                    return self._run_rife_compatibility_stage(
+                        frames=frames,
+                        postprocess=postprocess,
+                        work_dir=work_dir,
+                        executable=executable,
+                    )
                 raise SVDPostprocessError(f"RIFE interpolation failed: {message}")
         finally:
             self._close_images(frames)
@@ -489,6 +492,100 @@ class SVDPostprocessRunner:
             len(interpolated),
         )
         return interpolated
+
+    def _run_rife_compatibility_stage(
+        self,
+        *,
+        frames: list[Image.Image],
+        postprocess: SVDPostprocessConfig,
+        work_dir: Path,
+        executable: Path,
+    ) -> list[Image.Image]:
+        multiplier = int(postprocess.interpolation.multiplier)
+        if multiplier < 2 or not self._is_power_of_two(multiplier):
+            raise SVDPostprocessError(
+                "RIFE runtime does not support custom frame targets for the selected model, "
+                f"and multiplier {multiplier} cannot be reproduced in compatibility mode. "
+                "Use multiplier 2 or 4, or switch to a rife-v4 model."
+            )
+
+        current_frames = list(frames)
+        owns_current_frames = False
+        pass_count = int(math.log2(multiplier))
+        for pass_index in range(pass_count):
+            input_dir = work_dir / f"rife_input_pass_{pass_index + 1}"
+            output_dir = work_dir / f"rife_output_pass_{pass_index + 1}"
+            self._reset_dir(input_dir)
+            self._reset_dir(output_dir)
+            try:
+                save_video_frames(frames=current_frames, output_dir=input_dir, prefix="frame")
+                cmd = self._build_rife_command(
+                    executable=executable,
+                    input_dir=input_dir,
+                    output_dir=output_dir,
+                    postprocess=postprocess,
+                    target_count=None,
+                )
+                completed = self._run_rife_command(cmd=cmd, executable=executable)
+                if completed.returncode != 0:
+                    message = completed.stderr.strip() or completed.stdout.strip() or "unknown interpolation error"
+                    raise SVDPostprocessError(f"RIFE interpolation failed: {message}")
+            finally:
+                if owns_current_frames:
+                    self._close_images(current_frames)
+                    current_frames.clear()
+                    self._release_runtime_memory()
+            current_frames = self._load_frame_sequence(output_dir)
+            owns_current_frames = True
+            if not current_frames:
+                raise SVDPostprocessError("RIFE interpolation produced no output frames")
+            logger.info(
+                "[SVD][postprocess] stage=interpolation compatibility pass=%s output_frames=%s",
+                pass_index + 1,
+                len(current_frames),
+            )
+        return current_frames
+
+    @staticmethod
+    def _build_rife_command(
+        *,
+        executable: Path,
+        input_dir: Path,
+        output_dir: Path,
+        postprocess: SVDPostprocessConfig,
+        target_count: int | None,
+    ) -> list[str]:
+        cmd = [
+            str(executable),
+            "-i",
+            str(input_dir.resolve()),
+            "-o",
+            str(output_dir.resolve()),
+        ]
+        if target_count is not None:
+            cmd.extend(["-n", str(target_count)])
+        model_dir = postprocess.interpolation.model_dir
+        if model_dir:
+            cmd.extend(["-m", str(model_dir)])
+        return cmd
+
+    @staticmethod
+    def _run_rife_command(*, cmd: list[str], executable: Path) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            cmd,
+            cwd=str(executable.parent),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    @staticmethod
+    def _is_rife_custom_framecount_unsupported(message: str) -> bool:
+        return _RIFE_CUSTOM_FRAMECOUNT_UNSUPPORTED in str(message or "").strip().lower()
+
+    @staticmethod
+    def _is_power_of_two(value: int) -> bool:
+        return value > 0 and (value & (value - 1)) == 0
 
     @staticmethod
     def _reset_dir(path: Path) -> None:

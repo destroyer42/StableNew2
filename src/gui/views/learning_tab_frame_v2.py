@@ -5,6 +5,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.layout_v2 import configure_grid_columns
 from src.gui.help_text.workflow_guidance_v2 import (
@@ -19,6 +20,7 @@ from src.gui.learning_review_dialog_v2 import LearningReviewDialogV2
 from src.gui.learning_state import LearningState
 from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE, style_text_widget
 from src.gui.tooltip import attach_tooltip
+from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.pipeline_layout_contract import (
     get_three_pane_workspace_column_specs,
     get_two_pane_workspace_column_specs,
@@ -55,6 +57,9 @@ class LearningTabFrame(ttk.Frame):
     ) -> None:
         super().__init__(master, *args, **kwargs)
         self.app_state = app_state
+        self._content_visibility_mode = str(
+            getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
         self.pipeline_controller = pipeline_controller
         self.app_controller = app_controller  # PR-LEARN-002: Store app_controller reference
         
@@ -122,6 +127,13 @@ class LearningTabFrame(ttk.Frame):
             style=BODY_LABEL_STYLE,
         )
         header_label.grid(row=0, column=0, sticky="w")
+        self._visibility_banner = ttk.Label(
+            self.header_frame,
+            text="",
+            style=BODY_LABEL_STYLE,
+            foreground=TOKENS.colors.status_info,
+        )
+        self._visibility_banner.grid(row=1, column=0, sticky="w", pady=(4, 0))
         self._learning_enabled_var = tk.BooleanVar(
             value=self.app_state.learning_enabled if self.app_state else False
         )
@@ -152,6 +164,14 @@ class LearningTabFrame(ttk.Frame):
             command=self._show_automation_help,
         )
         help_btn.pack(side="left", padx=(4, 0))
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
         ttk.Button(
             self.header_frame,
             text="Review learning runs",
@@ -1173,8 +1193,20 @@ class LearningTabFrame(ttk.Frame):
         self._staged_effective_settings_var.set(
             effective_settings_summary or "Effective settings: not available for this candidate yet"
         )
-        self._set_readonly_text(self._staged_source_prompt_text, source_prompt)
-        self._set_readonly_text(self._staged_source_negative_prompt_text, source_negative_prompt)
+        resolver = self._visibility_resolver()
+        visibility_subject = {
+            "positive_prompt": source_prompt,
+            "negative_prompt": source_negative_prompt,
+            "name": str(getattr(item, "artifact_path", "") or ""),
+        }
+        self._set_readonly_text(
+            self._staged_source_prompt_text,
+            resolver.redact_text(source_prompt, item=visibility_subject),
+        )
+        self._set_readonly_text(
+            self._staged_source_negative_prompt_text,
+            resolver.redact_text(source_negative_prompt, item=visibility_subject),
+        )
         self._staged_prior_review_var.set(self._format_prior_review_summary(prior_review_summary))
         if isinstance(replay_summary, dict):
             replay_bits = [
@@ -1396,6 +1428,36 @@ class LearningTabFrame(ttk.Frame):
         widget.delete("1.0", tk.END)
         widget.insert("1.0", value.strip() or "(not available)")
         widget.configure(state="disabled")
+
+    def _visibility_resolver(self) -> ContentVisibilityResolver:
+        return ContentVisibilityResolver(self._content_visibility_mode)
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._content_visibility_mode = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        if self._content_visibility_mode == "sfw":
+            self._visibility_banner.configure(text="SFW mode active: explicit source prompts hidden")
+        else:
+            self._visibility_banner.configure(text="")
+        review_panel = getattr(self, "review_panel", None)
+        if review_panel is not None:
+            callback = getattr(review_panel, "on_content_visibility_mode_changed", None)
+            if callable(callback):
+                try:
+                    callback(self._content_visibility_mode)
+                except Exception:
+                    pass
+        self._refresh_discovered_inbox()
+        self._refresh_staged_curation_inbox()
+        self._update_staged_preview(
+            self.learning_state.selected_staged_curation_item_id
+            if getattr(self.learning_state, "selected_staged_curation_item_id", None)
+            else None
+        )
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()
 
     def _submit_staged_jobs(self, target_stage: str) -> None:
         if not self._staged_current_group_id:

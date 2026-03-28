@@ -81,6 +81,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._refresh_workflow_choices()
         self._set_text_value(self.prompt_text, str(defaults.get("prompt") or ""))
         self._set_text_value(self.negative_prompt_text, str(defaults.get("negative_prompt") or ""))
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
         for variable in (
             self.workflow_var,
             self.source_image_var,
@@ -90,6 +98,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         ):
             variable.trace_add("write", lambda *_args: self._refresh_workspace_summary())
         self._refresh_workspace_summary()
+        self.on_content_visibility_mode_changed()
 
     def _load_defaults(self) -> dict[str, Any]:
         controller = getattr(self, "app_controller", None)
@@ -139,6 +148,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         ttk.Label(header, textvariable=self.status_var, style="Dark.TLabel").grid(
             row=1, column=0, columnspan=4, sticky="w", pady=(6, 0)
         )
+        self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
+        self.visibility_banner.grid(row=1, column=4, sticky="e", pady=(6, 0))
         ttk.Label(header, textvariable=self.source_summary_var, style="Muted.TLabel").grid(
             row=2, column=0, columnspan=4, sticky="w", pady=(4, 0)
         )
@@ -445,6 +456,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
     def _set_text_value(self, widget: tk.Text, value: str) -> None:
         widget.delete("1.0", "end")
         widget.insert("1.0", value)
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        value = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        ).lower()
+        self.visibility_banner.configure(text="SFW mode active" if value == "sfw" else "")
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()
 
     def _on_browse_source(self) -> None:
         path = filedialog.askopenfilename(

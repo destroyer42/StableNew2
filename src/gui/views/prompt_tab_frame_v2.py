@@ -13,8 +13,13 @@ from __future__ import annotations
 
 import tkinter as tk
 import tkinter.simpledialog
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from src.controller.content_visibility_resolver import (
+    REDACTED_TEXT,
+    ContentVisibilityResolver,
+)
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 from src.config.app_config import STABLENEW_WEBUI_ROOT
 from src.gui.app_state_v2 import AppStateV2
@@ -70,10 +75,20 @@ class PromptTabFrame(ttk.Frame):
                 self.app_state.prompt_workspace_state = self.workspace_state
             except Exception:
                 pass
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    lambda: self.on_content_visibility_mode_changed(
+                        getattr(self.app_state, "content_visibility_mode", "nsfw")
+                    ),
+                )
+            except Exception:
+                pass
         self.workspace_state.set_current_slot_index(0)
         self._suppress_editor_change = False
         self._prompt_optimizer_guard = False
         self._prompt_optimizer_vars = self._build_prompt_optimizer_vars()
+        self._content_visibility_mode = self._read_content_visibility_mode()
         
         # Autocomplete for [[slot]] insertion
         self._autocomplete_list: tk.Listbox | None = None
@@ -96,6 +111,42 @@ class PromptTabFrame(ttk.Frame):
         self._build_left_panel()
         self._build_center_panel()
         self._build_right_panel()
+        self._refresh_editor()
+        self._refresh_metadata()
+        self.on_content_visibility_mode_changed(self._content_visibility_mode)
+
+    def _read_content_visibility_mode(self) -> str:
+        return str(
+            getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+
+    def _visibility_resolver(self) -> ContentVisibilityResolver:
+        return ContentVisibilityResolver(self._content_visibility_mode)
+
+    def _current_slot_visibility_subject(self) -> dict[str, str]:
+        return {
+            "name": self.workspace_state.get_current_pack_name(),
+            "positive_prompt": self.workspace_state.get_current_prompt_text(),
+            "negative_prompt": self.workspace_state.get_current_negative_text(),
+        }
+
+    def _set_editor_widget_text(self, widget: tk.Text, value: str, *, readonly: bool) -> None:
+        widget.configure(state="normal")
+        widget.delete("1.0", "end")
+        if value:
+            widget.insert("1.0", value)
+        widget.edit_modified(False)
+        if readonly:
+            widget.configure(state="disabled")
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._content_visibility_mode = str(mode or self._read_content_visibility_mode() or "nsfw")
+        if hasattr(self, "lora_picker"):
+            try:
+                self.lora_picker.set_content_visibility_mode(self._content_visibility_mode)
+            except Exception:
+                pass
+        self._refresh_pack_list()
         self._refresh_editor()
         self._refresh_metadata()
 
@@ -139,6 +190,14 @@ class PromptTabFrame(ttk.Frame):
         self.pack_listbox.bind("<Double-Button-1>", lambda e: self._on_load_selected_pack())
         enable_mousewheel(self.pack_listbox)
         self._refresh_pack_list()
+        self.visibility_notice_var = tk.StringVar(value="")
+        self.visibility_notice_label = ttk.Label(
+            self.left_frame,
+            textvariable=self.visibility_notice_var,
+            foreground=TOKENS.colors.status_info,
+            wraplength=320,
+        )
+        self.visibility_notice_label.pack(fill="x", pady=(0, 8))
         
         # Slot List Section (bottom)
         ttk.Separator(self.left_frame, orient="horizontal").pack(fill="x", pady=(0, 8))
@@ -513,20 +572,24 @@ class PromptTabFrame(ttk.Frame):
 
     def _refresh_editor(self) -> None:
         slot = self.workspace_state.get_slot(self.workspace_state.get_current_slot_index())
+        mode = self._content_visibility_mode
+        positive_text = self.workspace_state.get_current_prompt_text_for_mode(mode)
+        negative_text = self.workspace_state.get_current_negative_text_for_mode(mode)
         self._suppress_editor_change = True
         try:
             # Update positive editor
-            self.editor.delete("1.0", "end")
-            if slot.text:
-                self.editor.insert("1.0", slot.text)
-            self.editor.edit_modified(False)
+            self._set_editor_widget_text(
+                self.editor,
+                positive_text or slot.text,
+                readonly=positive_text == REDACTED_TEXT,
+            )
 
             # Update negative editor
-            self.negative_editor.delete("1.0", "end")
-            negative = getattr(slot, "negative", "")
-            if negative:
-                self.negative_editor.insert("1.0", negative)
-            self.negative_editor.edit_modified(False)
+            self._set_editor_widget_text(
+                self.negative_editor,
+                negative_text or getattr(slot, "negative", ""),
+                readonly=negative_text == REDACTED_TEXT,
+            )
 
             # Update LoRA picker
             if hasattr(self, "lora_picker"):
@@ -645,6 +708,8 @@ class PromptTabFrame(ttk.Frame):
         """Refresh metadata/preview panel with full prompt preview."""
         pack = self.workspace_state.current_pack
         slot_index = self.workspace_state.get_current_slot_index()
+        resolver = self._visibility_resolver()
+        subject = self._current_slot_visibility_subject()
         
         # Get current slot data
         current_slot = self.workspace_state.get_current_slot() if pack else None
@@ -684,7 +749,7 @@ class PromptTabFrame(ttk.Frame):
                 preview_lines.append(render_embedding_reference(emb_name, emb_weight))
         
         # Positive prompt
-        positive_text = current_slot.text.strip()
+        positive_text = resolver.redact_text(current_slot.text.strip(), item=subject)
         if positive_text:
             preview_lines.append(positive_text)
         else:
@@ -694,7 +759,12 @@ class PromptTabFrame(ttk.Frame):
         if current_slot.loras:
             lora_line_parts = []
             for lora_name, lora_weight in current_slot.loras:
-                lora_line_parts.append(f"<lora:{lora_name}:{lora_weight}>")
+                if positive_text == REDACTED_TEXT and self._content_visibility_mode == "sfw":
+                    lora_line_parts.append(f"<lora:{REDACTED_TEXT}:{lora_weight}>")
+                elif resolver.is_visible({"name": lora_name}):
+                    lora_line_parts.append(f"<lora:{lora_name}:{lora_weight}>")
+                elif self._content_visibility_mode == "sfw":
+                    lora_line_parts.append(f"<lora:{REDACTED_TEXT}:{lora_weight}>")
             preview_lines.append(" ".join(lora_line_parts))
         
         preview_lines.append("")
@@ -705,7 +775,7 @@ class PromptTabFrame(ttk.Frame):
                 preview_lines.append(f"neg: {render_embedding_reference(emb_name, emb_weight)}")
         
         # Negative prompt
-        negative_text = current_slot.negative.strip()
+        negative_text = resolver.redact_text(current_slot.negative.strip(), item=subject)
         if negative_text:
             preview_lines.append(f"neg: {negative_text}")
         else:
@@ -786,19 +856,34 @@ class PromptTabFrame(ttk.Frame):
     
     def _refresh_pack_list(self) -> None:
         """Refresh the list of available packs from the packs directory."""
-        from pathlib import Path
-        
         self.pack_listbox.delete(0, "end")
-        
         packs_dir = Path("packs")
         if not packs_dir.exists():
             packs_dir.mkdir(parents=True, exist_ok=True)
+            if hasattr(self, "visibility_notice_var"):
+                self.visibility_notice_var.set("")
             return
-        
-        # Find all TXT files in packs directory
+
+        resolver = self._visibility_resolver()
+        hidden_count = 0
         txt_files = sorted(packs_dir.glob("*.txt"))
         for txt_file in txt_files:
-            self.pack_listbox.insert("end", txt_file.stem)
+            pack_text = ""
+            try:
+                pack_text = txt_file.read_text(encoding="utf-8")
+            except Exception:
+                pass
+            if resolver.is_visible({"name": txt_file.stem, "prompt": pack_text}):
+                self.pack_listbox.insert("end", txt_file.stem)
+            else:
+                hidden_count += 1
+        if hasattr(self, "visibility_notice_var"):
+            if self._content_visibility_mode == "sfw" and hidden_count:
+                self.visibility_notice_var.set(
+                    f"SFW mode active: {hidden_count} prompt pack(s) hidden and explicit prompts redacted."
+                )
+            else:
+                self.visibility_notice_var.set("")
     
     def _on_load_selected_pack(self) -> None:
         """Load the selected pack from the pack list."""

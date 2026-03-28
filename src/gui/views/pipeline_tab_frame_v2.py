@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import tkinter as tk
 from tkinter import ttk
 from typing import Any
@@ -37,6 +38,7 @@ class PipelineTabFrame(ttk.Frame):
     MIN_COLUMN_WIDTH = design_system.Spacing.XL * 25  # ~400
     LOGGING_ROW_MIN_HEIGHT = design_system.Spacing.XL * 10
     LOGGING_ROW_WEIGHT = 1
+    SLOW_UPDATE_THRESHOLD_MS = 20.0
 
     def __init__(
         self,
@@ -56,6 +58,7 @@ class PipelineTabFrame(ttk.Frame):
         self.pipeline_controller = pipeline_controller
         self.theme = theme
         self.state_manager = getattr(self.pipeline_controller, "state_manager", None)
+        self._callback_metrics: dict[str, dict[str, float | int]] = {}
 
         # Initialize pipeline state and enable variables for test compatibility
         self.pipeline_state = PipelineState()
@@ -429,14 +432,17 @@ class PipelineTabFrame(ttk.Frame):
         logger.info(message)
 
     def _handle_sidebar_change(self) -> None:
-        self._apply_stage_visibility()
-        self._sync_state_overrides()
-        if hasattr(self, "preview_panel"):
-            try:
-                self.preview_panel.update_from_controls(self.sidebar)
-            except Exception:
-                pass
-        self._refresh_preview_from_pipeline_jobs()
+        def _run() -> None:
+            self._apply_stage_visibility()
+            self._sync_state_overrides()
+            if hasattr(self, "preview_panel"):
+                try:
+                    self.preview_panel.update_from_controls(self.sidebar)
+                except Exception:
+                    pass
+            self._refresh_preview_from_pipeline_jobs()
+
+        self._measure_callback("_handle_sidebar_change", _run)
 
     def _on_restore_last_run_clicked(self) -> None:
         controller = self.app_controller or self.pipeline_controller
@@ -450,33 +456,42 @@ class PipelineTabFrame(ttk.Frame):
     def _on_app_state_resources_changed(
         self, resources: dict[str, list[Any]] | None = None
     ) -> None:
-        panel = getattr(self, "stage_cards_panel", None)
-        if panel is not None and resources:
-            panel.apply_resource_update(resources)
+        def _run() -> None:
+            panel = getattr(self, "stage_cards_panel", None)
+            if panel is not None and resources:
+                panel.apply_resource_update(resources)
+
+        self._measure_callback("_on_app_state_resources_changed", _run)
 
     def _on_job_draft_changed(self) -> None:
-        if self.app_state is None:
-            return
-        try:
-            self._refresh_preview_from_pipeline_jobs()
-        except Exception:
-            pass
+        def _run() -> None:
+            if self.app_state is None:
+                return
+            try:
+                self._refresh_preview_from_pipeline_jobs()
+            except Exception:
+                pass
+
+        self._measure_callback("_on_job_draft_changed", _run)
 
     def _refresh_preview_from_pipeline_jobs(self) -> bool:
         """Attempt to render JobUiSummary data before falling back to draft text."""
-        records = self._get_pipeline_preview_jobs()
-        has_records = bool(records)
-        if has_records and self.app_state and hasattr(self.app_state, "set_preview_jobs"):
+        def _run() -> bool:
+            records = self._get_pipeline_preview_jobs()
+            has_records = bool(records)
+            if has_records and self.app_state and hasattr(self.app_state, "set_preview_jobs"):
+                try:
+                    self.app_state.set_preview_jobs(records)
+                except Exception:
+                    pass
             try:
-                self.app_state.set_preview_jobs(records)
+                if hasattr(self, "preview_panel"):
+                    self.preview_panel.update_from_app_state(self.app_state)
             except Exception:
                 pass
-        try:
-            if hasattr(self, "preview_panel"):
-                self.preview_panel.update_from_app_state(self.app_state)
-        except Exception:
-            pass
-        return has_records
+            return has_records
+
+        return bool(self._measure_callback("_refresh_preview_from_pipeline_jobs", _run))
 
     def _get_pipeline_preview_jobs(self) -> list[NormalizedJobRecord]:
         controller = self.pipeline_controller or getattr(
@@ -493,57 +508,115 @@ class PipelineTabFrame(ttk.Frame):
             return []
 
     def _on_queue_items_changed(self) -> None:
-        if self.app_state is None:
-            return
-        # PR-GUI-F1: Queue items are now displayed in QueuePanelV2
-        try:
-            if hasattr(self, "queue_panel"):
-                self.queue_panel.update_from_app_state(self.app_state)
-        except Exception:
-            pass
+        def _run() -> None:
+            if self.app_state is None:
+                return
+            # PR-GUI-F1: Queue items are now displayed in QueuePanelV2
+            try:
+                if hasattr(self, "queue_panel"):
+                    self.queue_panel.update_from_app_state(self.app_state)
+            except Exception:
+                pass
+
+        self._measure_callback("_on_queue_items_changed", _run)
 
     def _on_running_job_changed(self) -> None:
-        if self.app_state is None:
-            return
-        # PR-GUI-F1: Running job is now displayed in RunningJobPanelV2
-        try:
-            if hasattr(self, "running_job_panel"):
-                self.running_job_panel.update_from_app_state(self.app_state)
-        except Exception:
-            pass
-        # Also update queue panel for status
-        try:
-            if hasattr(self, "queue_panel"):
-                self.queue_panel.update_from_app_state(self.app_state)
-        except Exception:
-            pass
+        def _run() -> None:
+            if self.app_state is None:
+                return
+            # PR-GUI-F1: Running job is now displayed in RunningJobPanelV2
+            try:
+                if hasattr(self, "running_job_panel"):
+                    self.running_job_panel.update_from_app_state(self.app_state)
+            except Exception:
+                pass
+            # Also update queue panel for status
+            try:
+                if hasattr(self, "queue_panel"):
+                    self.queue_panel.update_from_app_state(self.app_state)
+            except Exception:
+                pass
+
+        self._measure_callback("_on_running_job_changed", _run)
 
     def _on_runtime_status_changed(self) -> None:
-        if self.app_state is None:
-            return
-        try:
-            if hasattr(self, "running_job_panel"):
-                self.running_job_panel.update_from_app_state(self.app_state)
-        except Exception:
-            pass
+        def _run() -> None:
+            if self.app_state is None:
+                return
+            try:
+                if hasattr(self, "running_job_panel"):
+                    self.running_job_panel.update_from_app_state(self.app_state)
+            except Exception:
+                pass
+
+        self._measure_callback("_on_runtime_status_changed", _run)
 
     def _on_queue_status_changed(self) -> None:
-        if self.app_state is None:
-            return
-        # PR-GUI-F1: Queue status is now displayed in QueuePanelV2
-        try:
-            if hasattr(self, "queue_panel"):
-                self.queue_panel.update_queue_status(self.app_state.queue_status)
-        except Exception:
-            pass
+        def _run() -> None:
+            if self.app_state is None:
+                return
+            # PR-GUI-F1: Queue status is now displayed in QueuePanelV2
+            try:
+                if hasattr(self, "queue_panel"):
+                    self.queue_panel.update_queue_status(self.app_state.queue_status)
+            except Exception:
+                pass
+
+        self._measure_callback("_on_queue_status_changed", _run)
 
     def _on_history_items_changed(self) -> None:
-        if self.app_state is None or not hasattr(self, "history_panel"):
-            return
+        def _run() -> None:
+            if self.app_state is None or not hasattr(self, "history_panel"):
+                return
+            try:
+                self.history_panel._on_history_items_changed()
+            except Exception:
+                pass
+
+        self._measure_callback("_on_history_items_changed", _run)
+
+    def _measure_callback(self, name: str, fn: Any) -> Any:
+        start = time.perf_counter()
         try:
-            self.history_panel._on_history_items_changed()
-        except Exception:
-            pass
+            return fn()
+        finally:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_callback_metric(name, elapsed_ms)
+
+    def _record_callback_metric(self, name: str, elapsed_ms: float) -> None:
+        metrics = self._callback_metrics.setdefault(
+            name,
+            {
+                "count": 0,
+                "total_ms": 0.0,
+                "max_ms": 0.0,
+                "last_ms": 0.0,
+                "slow_count": 0,
+            },
+        )
+        metrics["count"] = int(metrics["count"]) + 1
+        metrics["total_ms"] = float(metrics["total_ms"]) + float(elapsed_ms)
+        metrics["last_ms"] = float(elapsed_ms)
+        metrics["max_ms"] = max(float(metrics["max_ms"]), float(elapsed_ms))
+        if elapsed_ms >= float(self.SLOW_UPDATE_THRESHOLD_MS):
+            metrics["slow_count"] = int(metrics["slow_count"]) + 1
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        callback_metrics: dict[str, dict[str, float | int]] = {}
+        for name, metrics in sorted(self._callback_metrics.items()):
+            count = int(metrics.get("count", 0) or 0)
+            total_ms = float(metrics.get("total_ms", 0.0) or 0.0)
+            callback_metrics[name] = {
+                "count": count,
+                "avg_ms": round(total_ms / count, 3) if count else 0.0,
+                "max_ms": round(float(metrics.get("max_ms", 0.0) or 0.0), 3),
+                "last_ms": round(float(metrics.get("last_ms", 0.0) or 0.0), 3),
+                "slow_count": int(metrics.get("slow_count", 0) or 0),
+            }
+        return {
+            "slow_threshold_ms": float(self.SLOW_UPDATE_THRESHOLD_MS),
+            "callback_metrics": callback_metrics,
+        }
 
 
 PipelineTabFrame = PipelineTabFrame
