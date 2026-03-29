@@ -439,6 +439,31 @@ Only **static, hand-authored** JSON/JSONL fixtures representing well-formed mode
 
 Controllers do not:
 
+### 5.1 GUI Responsiveness Contract
+
+The GUI boundary is not only about ownership of execution logic; it is also
+about ownership of repaint cadence.
+
+Required rules:
+
+- Controllers must not mutate Tk widgets directly; they publish state and GUI
+  layers render that state.
+- Runtime-heavy GUI keys must batch via `AppStateV2` invalidation rather than
+  immediate listener fan-out.
+- User-edit and selection keys remain immediate; batching is reserved for hot
+  runtime keys such as queue/history/preview/runtime status and operator log.
+- Pipeline hot-surface refresh ownership belongs to `PipelineTabFrameV2`, which
+  coalesces queue/history/preview/running-panel refreshes into one flush tick.
+- Hidden or unmapped hot surfaces must defer work instead of consuming Tk time.
+
+Minimum required regression coverage for GUI responsiveness changes:
+
+- batched-vs-immediate notification tests
+- controller/UI boundary tests for log and status projection
+- hot-surface scheduler ownership/coalescing tests
+- architecture guard tests that block controller-side Tk imports and direct
+  widget mutation
+
 assemble payloads
 
 execute payload-based jobs (RunPayload / `Job.payload`)

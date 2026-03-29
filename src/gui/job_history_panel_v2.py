@@ -33,12 +33,14 @@ class JobHistoryPanelV2(ttk.Frame):
         app_state: Any | None = None,
         theme: Any | None = None,
         folder_opener: Callable[[str], None] | None = None,
+        manage_app_state_subscriptions: bool = True,
         **kwargs,
     ) -> None:
         style_name = theme_mod.SURFACE_FRAME_STYLE
         super().__init__(master, style=style_name, padding=theme_mod.PADDING_MD, **kwargs)
         self.controller = controller
         self.app_state = app_state
+        self._manage_app_state_subscriptions = bool(manage_app_state_subscriptions)
         self._folder_opener = folder_opener or self._default_open_folder
         self._entries: dict[str, JobHistoryEntry] = {}
         self._item_to_job: dict[str, str] = {}
@@ -166,7 +168,7 @@ class JobHistoryPanelV2(ttk.Frame):
             anchor=tk.W, pady=(4, 0)
         )
 
-        if app_state and hasattr(app_state, "subscribe"):
+        if self._manage_app_state_subscriptions and app_state and hasattr(app_state, "subscribe"):
             app_state.subscribe("history_items", self._on_history_items_changed)
             try:
                 self._on_history_items_changed()
@@ -181,6 +183,11 @@ class JobHistoryPanelV2(ttk.Frame):
                 return
             except Exception:
                 pass
+        self._on_history_items_changed()
+
+    def update_from_app_state(self, app_state: Any | None = None) -> None:
+        if app_state is not None:
+            self.app_state = app_state
         self._on_history_items_changed()
 
     def _on_history_items_changed(self) -> None:

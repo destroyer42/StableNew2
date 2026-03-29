@@ -235,6 +235,29 @@ def test_app_controller_load_packs_filters_nsfw_packs_in_sfw_mode(tmp_path: Path
     assert window.updated_packs[-1] == ["alpha"]
 
 
+def test_app_controller_reloads_visible_packs_when_mode_changes(tmp_path: Path) -> None:
+    packs_dir = tmp_path / "packs"
+    packs_dir.mkdir(parents=True, exist_ok=True)
+    (packs_dir / "alpha.txt").write_text("sunlit mountains\n", encoding="utf-8")
+    (packs_dir / "beta.txt").write_text("nude portrait\n", encoding="utf-8")
+
+    window = DummyWindow()
+    controller = AppController(
+        window,
+        threaded=False,
+        packs_dir=packs_dir,
+        pipeline_runner=NoopPipelineRunner(),
+        job_service=make_stubbed_job_service(),
+    )
+    controller.load_packs()
+    assert window.updated_packs[-1] == ["alpha", "beta"]
+
+    window.app_state.set_content_visibility_mode("sfw")
+
+    assert [pack.name for pack in controller.packs] == ["alpha"]
+    assert window.updated_packs[-1] == ["alpha"]
+
+
 def test_output_scanner_stamps_visibility_payload_from_manifest(tmp_path: Path) -> None:
     output_root = tmp_path / "output" / "job-1"
     manifests = output_root / "manifests"

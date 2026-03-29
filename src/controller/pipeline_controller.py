@@ -1601,6 +1601,21 @@ class PipelineController(CorePipelineController):
 
         return sorted_records
 
+    def _is_queue_submission_blocked(self) -> bool:
+        app_controller = getattr(self, "_app_controller", None)
+        if getattr(app_controller, "_is_shutting_down", False):
+            return True
+        registry = getattr(app_controller, "_thread_registry", None)
+        if registry is None:
+            return False
+        is_shutdown_requested = getattr(registry, "is_shutdown_requested", None)
+        if callable(is_shutdown_requested):
+            try:
+                return bool(is_shutdown_requested())
+            except Exception:
+                return False
+        return False
+
     def _submit_normalized_jobs(
         self,
         records: list[NormalizedJobRecord],
@@ -1616,6 +1631,11 @@ class PipelineController(CorePipelineController):
             if not allowed:
                 _logger.warning("[PipelineController] Learning enqueue blocked: %s", reason)
                 return 0
+        if self._is_queue_submission_blocked():
+            _logger.info(
+                "[PipelineController] Skipping queue submission because shutdown is in progress"
+            )
+            return 0
         
         _logger.info(f"[PipelineController] _submit_normalized_jobs called with {len(records)} NormalizedJobRecord(s)")
         
@@ -1638,6 +1658,13 @@ class PipelineController(CorePipelineController):
                 batch_context = candidate_context
         with batch_context:
             for idx, record in enumerate(records):
+                if self._is_queue_submission_blocked():
+                    _logger.info(
+                        "[PipelineController] Stopping queue submission after %d/%d jobs because shutdown is in progress",
+                        submitted,
+                        len(records),
+                    )
+                    break
                 _logger.info(f"[PipelineController] Submitting NJR {idx+1}/{len(records)}: pack={record.prompt_pack_id}, row={record.prompt_pack_row_index}")
                 prompt_pack_id = None
                 cfg = record.config

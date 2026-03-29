@@ -32,6 +32,17 @@ GUI_DIRECT_RUN_PATTERNS = (
     re.compile(r"\brun_njr_v2\s*\("),
 )
 
+CONTROLLER_TK_IMPORT_PATTERNS = (
+    re.compile(r"\bimport\s+tkinter\b"),
+    re.compile(r"\bfrom\s+tkinter\s+import\b"),
+)
+
+CONTROLLER_DIRECT_WIDGET_MUTATION_PATTERNS = (
+    re.compile(r"\blog_text\.(?:insert|delete|see)\s*\("),
+    re.compile(r"\bapi_status_label\.configure\s*\("),
+    re.compile(r"\bstatus_label\.configure\s*\("),
+)
+
 LEGACY_ADAPTER_PATTERNS = (
     re.compile(r"\blegacy_njr_adapter\b"),
     re.compile(r"\bbuild_njr_from_legacy_pipeline_config\s*\("),
@@ -89,6 +100,24 @@ def test_gui_modules_do_not_call_runner_entrypoints_directly() -> None:
     violations = _find_pattern_hits(gui_files, GUI_DIRECT_RUN_PATTERNS)
     assert violations == [], (
         "GUI modules must not invoke runner entrypoints directly:\n"
+        + "\n".join(sorted(violations))
+    )
+
+
+def test_controller_modules_do_not_import_tkinter_directly() -> None:
+    controller_files = _iter_python_files(SRC_ROOT / "controller")
+    violations = _find_pattern_hits(controller_files, CONTROLLER_TK_IMPORT_PATTERNS)
+    assert violations == [], (
+        "Controller modules must not import tkinter directly:\n"
+        + "\n".join(sorted(violations))
+    )
+
+
+def test_controller_modules_do_not_mutate_widgets_directly() -> None:
+    controller_files = _iter_python_files(SRC_ROOT / "controller")
+    violations = _find_pattern_hits(controller_files, CONTROLLER_DIRECT_WIDGET_MUTATION_PATTERNS)
+    assert violations == [], (
+        "Controller modules must not mutate Tk widgets directly:\n"
         + "\n".join(sorted(violations))
     )
 

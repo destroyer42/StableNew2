@@ -55,6 +55,8 @@ All new Tk widgets, panels, dialogs, and views go here.
 4. `app_state_v2.py` is the one place runtime draft state lives; do not invent shadow state in sub-panels.
 5. `ui_tokens.py` is the single style source-of-truth; do not hardcode colours or fonts in panels.
 6. Controllers in `controllers/` orchestrate; they do not own prompt construction or job submission logic.
+7. Controllers must not mutate Tk widgets directly. GUI-visible operator logs, queue/history/preview surfaces, and status indicators must flow through `AppStateV2` plus GUI-owned projection code.
+8. Hot runtime surfaces in the pipeline shell are owned by `PipelineTabFrameV2`; child panels may render standalone, but when mounted in the pipeline shell they must not independently subscribe to hot runtime state.
 
 ---
 
@@ -122,6 +124,7 @@ The following patterns are defects regardless of which directory they appear in:
 - State mutation in a `view_contracts/` file
 - Tk import in any `src/gui_v2/` file
 - Shadow state for queue or history in any panel (the single truth lives in `AppStateV2` and the queue/history subsystems)
+- Controller-side direct widget mutation such as `log_text.insert/delete/see` or status-label `.configure(...)` calls
 
 ---
 

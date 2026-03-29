@@ -79,6 +79,8 @@ class LeftZone(ttk.Frame):
 class BottomZone(ttk.Frame):
     def __init__(self, master: tk.Misc, *, controller=None, app_state=None):
         super().__init__(master, style="StatusBar.TFrame")
+        self._app_state = app_state
+        self._rendered_operator_log_snapshot: tuple[str, ...] = ()
         self.status_bar_v2 = StatusBarV2(self, controller=controller, app_state=app_state)
         self.status_bar_v2.grid(row=1, column=0, sticky="ew")
 
@@ -104,6 +106,42 @@ class BottomZone(ttk.Frame):
         self.rowconfigure(0, weight=1)  # log panel
         self.rowconfigure(1, weight=0)  # status bar
         self.columnconfigure(0, weight=1)
+
+        if app_state is not None:
+            try:
+                app_state.subscribe("operator_log", self._on_operator_log_changed)
+            except Exception:
+                pass
+            self._on_operator_log_changed()
+
+    def _on_operator_log_changed(self) -> None:
+        state = getattr(self, "_app_state", None)
+        if state is None:
+            return
+        current_snapshot = tuple(getattr(state, "operator_log", []) or [])
+        if current_snapshot == self._rendered_operator_log_snapshot:
+            return
+
+        try:
+            self.log_text.config(state=tk.NORMAL)
+            if (
+                self._rendered_operator_log_snapshot
+                and len(current_snapshot) >= len(self._rendered_operator_log_snapshot)
+                and current_snapshot[: len(self._rendered_operator_log_snapshot)]
+                == self._rendered_operator_log_snapshot
+            ):
+                for line in current_snapshot[len(self._rendered_operator_log_snapshot) :]:
+                    self.log_text.insert("end", line + "\n")
+            else:
+                self.log_text.delete("1.0", "end")
+                if current_snapshot:
+                    self.log_text.insert("1.0", "\n".join(current_snapshot) + "\n")
+            if current_snapshot:
+                self.log_text.see("end")
+            self.log_text.config(state=tk.DISABLED)
+            self._rendered_operator_log_snapshot = current_snapshot
+        except Exception:
+            pass
 
 
 DEFAULT_MAIN_WINDOW_WIDTH = int(PipelineTabFrame.DEFAULT_COLUMN_WIDTH * 3.1)
@@ -865,7 +903,7 @@ class MainWindowV2:
         if hasattr(left, "packs_list") and callable(getattr(ctrl, "on_pack_selected", None)):
             try:
                 left.packs_list.bind(
-                    "<<ListboxSelect>>", lambda _e: self._handle_pack_selection(ctrl)
+                    "<<ListboxSelect>>", lambda _e: self._handle_pack_selection(ctrl), add="+"
                 )
             except Exception:
                 pass

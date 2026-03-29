@@ -101,7 +101,8 @@ def test_diagnostics_snapshot_includes_pipeline_tab_metrics() -> None:
                     "get_diagnostics_snapshot": lambda self: {
                         "callback_metrics": {
                             "_on_runtime_status_changed": {"count": 3, "avg_ms": 1.5}
-                        }
+                        },
+                        "hot_surface_scheduler": {"count": 2, "avg_ms": 4.0},
                     }
                 },
             )()
@@ -111,3 +112,4 @@ def test_diagnostics_snapshot_includes_pipeline_tab_metrics() -> None:
     snapshot = controller.get_diagnostics_snapshot()
 
     assert snapshot["pipeline_tab"]["callback_metrics"]["_on_runtime_status_changed"]["count"] == 3
+    assert snapshot["pipeline_tab"]["hot_surface_scheduler"]["count"] == 2

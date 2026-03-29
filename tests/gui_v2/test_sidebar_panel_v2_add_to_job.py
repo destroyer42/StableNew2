@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import tkinter as tk
+from pathlib import Path
+
+import pytest
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
+from tests.helpers.gui_harness_v2 import GuiV2Harness
 
 
 class _FakePackListManager:
@@ -55,3 +59,27 @@ def test_add_to_job_with_pack_selection_calls_pack_handler(monkeypatch, tk_root:
     panel._on_add_to_job()
     assert controller.pack_calls == [["pack-alpha"]]
     assert controller.calls == []
+
+
+@pytest.mark.gui
+def test_main_window_pack_selection_keeps_sidebar_actions_live(
+    tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    packs_dir = tmp_path / "packs"
+    packs_dir.mkdir(parents=True, exist_ok=True)
+    (packs_dir / "safe_pack.txt").write_text("portrait of a traveler", encoding="utf-8")
+
+    harness = GuiV2Harness(tk_root)
+    try:
+        harness.controller.load_packs()
+        sidebar = harness.pipeline_tab.sidebar
+        assert str(sidebar.add_to_job_button.cget("state")) == "disabled"
+
+        sidebar.pack_listbox.selection_set(0)
+        sidebar.pack_listbox.event_generate("<<ListboxSelect>>")
+        tk_root.update()
+
+        assert str(sidebar.add_to_job_button.cget("state")) == "normal"
+    finally:
+        harness.cleanup()

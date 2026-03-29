@@ -1597,15 +1597,44 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
 
     try:
         from src.config import app_config
+        from src.utils.config import ConfigManager
     except Exception:
         return None
+
+    launch_profile = app_config.get_webui_launch_profile()
+
+    settings = ConfigManager().load_settings()
+    configured_workdir = str(settings.get("webui_workdir") or "").strip()
+    configured_base_url = str(settings.get("webui_base_url") or "").strip() or os.environ.get(
+        "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
+    )
+    configured_autostart = bool(settings.get("webui_autostart_enabled", app_config.is_webui_autostart_enabled()))
+    configured_timeout = float(
+        settings.get("webui_health_total_timeout_seconds")
+        or app_config.get_webui_health_total_timeout_seconds()
+    )
+    if configured_workdir:
+        workdir_path = Path(configured_workdir)
+        if workdir_path.exists() and workdir_path.is_dir():
+            command = list(app_config.resolve_webui_launch_command(launch_profile))
+            command_path = workdir_path / command[0]
+            if command_path.exists():
+                _save_webui_cache(
+                    {"workdir": configured_workdir, "command": command, "timestamp": time.time()}
+                )
+                return WebUIProcessConfig(
+                    command=command,
+                    working_dir=configured_workdir,
+                    launch_profile=launch_profile,
+                    startup_timeout_seconds=configured_timeout,
+                    autostart_enabled=configured_autostart,
+                    base_url=configured_base_url,
+                )
 
     # First try cached location
     cache = _load_webui_cache()
     cached_workdir = cache.get("workdir")
     cached_command = cache.get("command")
-
-    launch_profile = app_config.get_webui_launch_profile()
 
     if cached_workdir and cached_command:
         workdir_path = Path(cached_workdir)
@@ -1618,8 +1647,9 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                     command=cached_command,
                     working_dir=cached_workdir,
                     launch_profile=launch_profile,
-                    autostart_enabled=app_config.is_webui_autostart_enabled(),
-                    base_url=os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
+                    startup_timeout_seconds=configured_timeout,
+                    autostart_enabled=configured_autostart,
+                    base_url=configured_base_url,
                 )
                 return config
 
@@ -1635,8 +1665,9 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
             command=command,
             working_dir=workdir,
             launch_profile=launch_profile,
-            autostart_enabled=app_config.is_webui_autostart_enabled(),
-            base_url=os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
+            startup_timeout_seconds=configured_timeout,
+            autostart_enabled=configured_autostart,
+            base_url=configured_base_url,
         )
 
     # Last resort: detect automatically (expensive)
@@ -1660,8 +1691,9 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                 command=command,
                 working_dir=workdir,
                 launch_profile=launch_profile,
-                autostart_enabled=app_config.is_webui_autostart_enabled(),
-                base_url=os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
+                startup_timeout_seconds=configured_timeout,
+                autostart_enabled=configured_autostart,
+                base_url=configured_base_url,
             )
 
     return None

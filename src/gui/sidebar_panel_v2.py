@@ -660,10 +660,17 @@ class SidebarPanelV2(ttk.Frame):
         if not packs:
             packs = summaries
         if self._manual_pack_names:
+            summary_by_name = {summary.name: summary for summary in summaries}
             packs = [
-                PromptPackSummary(name=pn, description="", prompt_count=1, path=Path(""))
+                summary_by_name[pn]
                 for pn in self._manual_pack_names
+                if pn in summary_by_name
             ]
+            if not packs:
+                packs = [
+                    PromptPackSummary(name=pn, description="", prompt_count=1, path=Path(""))
+                    for pn in self._manual_pack_names
+                ]
         self._current_pack_names = [summary.name for summary in packs]
         self.pack_listbox.delete(0, "end")
         for name in self._current_pack_names:
@@ -994,12 +1001,24 @@ class SidebarPanelV2(ttk.Frame):
 
     def set_pack_names(self, names: list[str]) -> None:
         """Best-effort helper for simple string lists (used by AppController)."""
-        self._manual_pack_names = names
-        self._current_pack_names = list(names)
+        selected_names: set[str] = set()
         if self.pack_listbox:
-            self.pack_listbox.delete(0, "end")
-            for name in self._current_pack_names:
-                self.pack_listbox.insert("end", name)
+            try:
+                selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
+                selected_names = {
+                    self._current_pack_names[i]
+                    for i in selection
+                    if i < len(self._current_pack_names)
+                }
+            except Exception:
+                selected_names = set()
+        self._manual_pack_names = list(names)
+        self._populate_packs_for_selected_list()
+        if selected_names and self.pack_listbox:
+            for index, name in enumerate(self._current_pack_names):
+                if name in selected_names:
+                    self.pack_listbox.selection_set(index)
+            self._update_pack_actions_state()
 
     def _set_pack_list_values(self, names: list[str]) -> None:
         self.pack_list_names = names

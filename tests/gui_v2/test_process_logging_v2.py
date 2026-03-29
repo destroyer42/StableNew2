@@ -33,10 +33,17 @@ class _DummyProcess:
 
 class _DummyThread:
     def __init__(self, *args, **kwargs) -> None:  # noqa: ARG002 - signature compatibility
-        pass
+        self.daemon = bool(kwargs.get("daemon", False))
+        self._alive = False
 
     def start(self) -> None:
-        pass
+        self._alive = True
+
+    def is_alive(self) -> bool:
+        return self._alive
+
+    def join(self, timeout: float | None = None) -> None:  # noqa: ARG002 - signature compatibility
+        self._alive = False
 
 
 @pytest.mark.gui
@@ -59,8 +66,18 @@ def test_webui_launch_emits_proc_log(monkeypatch) -> None:
 
     try:
         controller.on_launch_webui_clicked()
+        window.app_state.flush_now()
+        root.update()
         entries = list(window.gui_log_handler.get_entries())
-        assert any("[PROC] launch" in entry["message"] for entry in entries)
+        log_text = window.bottom_zone.log_text.get("1.0", "end")
+        assert "[webui] Launch requested by user." in log_text
+        assert any(
+            (
+                "[webui] Launch requested by user." in entry["message"]
+                or "WebUI launch profile resolved" in entry["message"]
+            )
+            for entry in entries
+        )
     finally:
         try:
             root.destroy()
@@ -79,10 +96,12 @@ def test_process_inspector_shortcut_logs(monkeypatch) -> None:
     pipeline_tab = window.pipeline_tab
     sample = process_inspector_v2.ProcessInfo(
         pid=99,
+        parent_pid=12,
         name="python",
         cmdline=("python", "example.py"),
         cwd="/tmp",
         create_time=0.0,
+        rss_mb=128.0,
         env_markers=("STABLENEW_RUN_ID=abc",),
     )
     monkeypatch.setattr(
@@ -91,6 +110,8 @@ def test_process_inspector_shortcut_logs(monkeypatch) -> None:
         lambda: [sample],
     )
     pipeline_tab._run_process_inspector()
+    window.app_state.flush_now()
+    root.update()
 
     log_text = window.bottom_zone.log_text.get("1.0", "end")
     assert "[PROC] inspector" in log_text

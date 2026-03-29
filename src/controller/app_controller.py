@@ -86,6 +86,12 @@ import uuid
 from src.config.app_config import (
     get_jsonl_log_config,
     is_debug_shutdown_inspector_enabled,
+    set_webui_autostart_enabled,
+    set_webui_health_initial_timeout_seconds,
+    set_webui_health_retry_count,
+    set_webui_health_retry_interval_seconds,
+    set_webui_health_total_timeout_seconds,
+    set_webui_workdir,
     set_job_history_path,
 )
 from src.controller.job_history_service import JobHistoryService
@@ -411,7 +417,10 @@ class AppController:
         # Pipeline runner and controller setup
         # Don't do port discovery on startup - too slow (50+ seconds if WebUI not running)
         # Use default port and discover later if connection fails
-        default_url = os.getenv("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
+        settings = self._config_manager.load_settings()
+        default_url = str(settings.get("webui_base_url") or "").strip() or os.getenv(
+            "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
+        )
         
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
@@ -441,6 +450,7 @@ class AppController:
         self._duration_stats_service = None
         self._last_diagnostics_bundle: Path | None = None
         self._last_diagnostics_bundle_reason: str | None = None
+        self._app_state_visibility_listener = None
 
         self._diagnostics_lock = threading.Lock()
         self._last_error_envelope: UnifiedErrorEnvelope | None = None
@@ -593,6 +603,7 @@ class AppController:
             self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
         # Let the GUI wire its callbacks to us
         if self.main_window is not None:
+            self._bind_app_state_visibility_listener()
             self._attach_to_gui()
             if hasattr(self.main_window, "connect_controller"):
                 self.main_window.connect_controller(self)
@@ -1336,6 +1347,13 @@ class AppController:
         thread_name = threading.current_thread().name
         self._append_log(f"[D21] on_add_job_to_queue_v2 ENTRY (thread={thread_name})")
         self._ensure_run_mode_default("add_to_queue")
+        if self._is_preview_queue_submission_blocked():
+            self._append_log(
+                f"[controller] Ignoring add-to-queue request because shutdown is in progress "
+                f"(thread={thread_name})"
+            )
+            self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
+            return
         controller = getattr(self, "pipeline_controller", None)
         run_config = self._prepare_queue_run_config()
         if getattr(self, "_queue_submit_in_progress", False):
@@ -1383,6 +1401,21 @@ class AppController:
             )
         self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
 
+    def _is_preview_queue_submission_blocked(self) -> bool:
+        return bool(getattr(self, "_is_shutting_down", False))
+
+    def _should_dispatch_preview_queue_finish_to_ui(self) -> bool:
+        return not self._is_preview_queue_submission_blocked()
+
+    def _log_preview_queue_finish(self, message: str, *, error: bool = False) -> None:
+        if self._is_preview_queue_submission_blocked():
+            if error:
+                logger.warning(message)
+            else:
+                logger.info(message)
+            return
+        self._append_log(message)
+
     def _submit_preview_jobs_to_queue_async(
         self,
         controller: Any,
@@ -1393,8 +1426,11 @@ class AppController:
         submitted = 0
         error: Exception | None = None
         clear_preview_on_success = bool(preview_records)
+        blocked_by_shutdown = False
         try:
-            if preview_records:
+            if self._is_preview_queue_submission_blocked():
+                blocked_by_shutdown = True
+            elif preview_records:
                 submitted = int(
                     controller.submit_preview_jobs_to_queue(
                         records=preview_records,
@@ -1410,12 +1446,19 @@ class AppController:
         def _finish() -> None:
             self._queue_submit_in_progress = False
             if error is not None:
-                self._append_log(
+                self._log_preview_queue_finish(
                     f"[controller] enqueue_draft_jobs error: {error!r} "
+                    f"(thread={origin_thread_name})",
+                    error=True,
+                )
+                return
+            if blocked_by_shutdown:
+                self._log_preview_queue_finish(
+                    f"[controller] Skipped preview queue submission because shutdown is in progress "
                     f"(thread={origin_thread_name})"
                 )
                 return
-            if submitted > 0 and clear_preview_on_success:
+            if submitted > 0 and clear_preview_on_success and submitted >= len(preview_records):
                 app_state = getattr(self, "app_state", None)
                 if app_state is not None:
                     clear_fn = getattr(app_state, "clear_job_draft", None)
@@ -1430,19 +1473,25 @@ class AppController:
                             preview_setter([])
                         except Exception:
                             pass
-                self._append_log(
+                self._log_preview_queue_finish(
                     f"[controller] Submitted {submitted} job(s) from preview to queue "
                     f"(thread={origin_thread_name})"
                 )
                 return
+            if submitted > 0 and clear_preview_on_success:
+                self._log_preview_queue_finish(
+                    f"[controller] Preview queue submission stopped early after {submitted} job(s); "
+                    f"draft preview was preserved (thread={origin_thread_name})"
+                )
+                return
             if submitted > 0:
-                self._append_log(
+                self._log_preview_queue_finish(
                     f"[controller] Submitted {submitted} job(s) from preview to queue "
                     f"(thread={origin_thread_name})"
                 )
 
         dispatch = getattr(self, "_ui_dispatch", None)
-        if callable(dispatch):
+        if callable(dispatch) and self._should_dispatch_preview_queue_finish_to_ui():
             dispatch(_finish)
         else:
             _finish()
@@ -2238,8 +2287,20 @@ class AppController:
 
     def set_main_window(self, main_window: MainWindow) -> None:
         """Set the main window and wire GUI callbacks."""
+        previous_state = getattr(self, "app_state", None)
+        previous_listener = getattr(self, "_app_state_visibility_listener", None)
+        if (
+            previous_state is not None
+            and previous_listener is not None
+            and hasattr(previous_state, "unsubscribe")
+        ):
+            try:
+                previous_state.unsubscribe("content_visibility_mode", previous_listener)
+            except Exception:
+                pass
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
+        self._bind_app_state_visibility_listener()
         self._attach_to_gui()
         if hasattr(self.main_window, "connect_controller"):
             self.main_window.connect_controller(self)
@@ -2247,6 +2308,26 @@ class AppController:
         # Initial status
         self._update_status("Idle")
         self.load_packs()
+
+    def _bind_app_state_visibility_listener(self) -> None:
+        app_state = getattr(self, "app_state", None)
+        if app_state is None or not hasattr(app_state, "subscribe"):
+            self._app_state_visibility_listener = None
+            return
+        listener = getattr(self, "_app_state_visibility_listener", None)
+        if listener is None:
+            listener = self._on_content_visibility_mode_changed
+            self._app_state_visibility_listener = listener
+        try:
+            app_state.subscribe("content_visibility_mode", listener)
+        except Exception:
+            self._app_state_visibility_listener = None
+
+    def _on_content_visibility_mode_changed(self, *_: Any) -> None:
+        try:
+            self.load_packs()
+        except Exception as exc:
+            logger.debug("Failed to reload packs after visibility mode change: %s", exc)
 
     # ------------------------------------------------------------------
     # GUI Wiring
@@ -2291,9 +2372,7 @@ class AppController:
             if hasattr(left, "preset_combo"):
                 left.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
 
-        # Initial API status (placeholder)
-        if bottom is not None and hasattr(bottom, "api_status_label"):
-            bottom.api_status_label.configure(text="API: Unknown")
+        self._update_webui_state("disconnected")
 
         # Flush deferred status if any
         if getattr(self, "_pending_status_text", None):
@@ -3010,6 +3089,24 @@ class AppController:
             return
         self._config_manager.update_settings(new_values)
         self._config_manager.save_settings()
+        if "webui_workdir" in new_values:
+            set_webui_workdir(str(new_values.get("webui_workdir") or "").strip() or None)
+        if "webui_autostart_enabled" in new_values:
+            set_webui_autostart_enabled(bool(new_values.get("webui_autostart_enabled")))
+        if "webui_health_initial_timeout_seconds" in new_values:
+            set_webui_health_initial_timeout_seconds(
+                float(new_values.get("webui_health_initial_timeout_seconds") or 0.0)
+            )
+        if "webui_health_retry_count" in new_values:
+            set_webui_health_retry_count(int(new_values.get("webui_health_retry_count") or 0))
+        if "webui_health_retry_interval_seconds" in new_values:
+            set_webui_health_retry_interval_seconds(
+                float(new_values.get("webui_health_retry_interval_seconds") or 0.0)
+            )
+        if "webui_health_total_timeout_seconds" in new_values:
+            set_webui_health_total_timeout_seconds(
+                float(new_values.get("webui_health_total_timeout_seconds") or 0.0)
+            )
         prompt_optimizer = new_values.get("prompt_optimizer")
         if isinstance(prompt_optimizer, dict):
             self._apply_prompt_optimizer_ui_config(prompt_optimizer)
@@ -3096,6 +3193,13 @@ class AppController:
         import threading
 
         self._pending_status_text = text
+        app_state = getattr(self, "app_state", None)
+        status_setter = getattr(app_state, "set_status_text", None)
+        if callable(status_setter):
+            try:
+                status_setter(text)
+            except Exception:
+                pass
         thread_name = threading.current_thread().name
         status_bar = getattr(self.main_window, "status_bar_v2", None)
 
@@ -3105,21 +3209,6 @@ class AppController:
                     status_bar.update_status(text=text)
                 except Exception:
                     pass
-            bottom_zone = getattr(self.main_window, "bottom_zone", None)
-            if bottom_zone is None:
-                logger.debug(
-                    "AppController._update_status(%s) called before bottom_zone exists; deferring",
-                    text,
-                )
-                return
-            status_label = getattr(bottom_zone, "status_label", None)
-            if status_label is None:
-                logger.debug(
-                    "AppController._update_status(%s) called before status_label exists on bottom_zone; deferring",
-                    text,
-                )
-                return
-            status_label.configure(text=f"Status: {text}")
 
         # Only update UI on main thread; otherwise, dispatch via controller scheduler
         if thread_name != "MainThread":
@@ -3178,27 +3267,13 @@ class AppController:
                 pass
 
     def _append_log(self, text: str) -> None:
-        bottom_zone = getattr(self.main_window, "bottom_zone", None)
-        if bottom_zone is None:
-            logger.debug(
-                "AppController._append_log(%s) called before bottom_zone exists; deferring",
-                text,
-            )
-            return
-
-        log_widget = getattr(bottom_zone, "log_text", None)
-        if log_widget is None:
-            logger.debug(
-                "AppController._append_log(%s) called before log_text exists on bottom_zone; deferring",
-                text,
-            )
-            return
-
-        try:
-            log_widget.insert("end", text + "\n")
-            log_widget.see("end")
-        except Exception:
-            return
+        app_state = getattr(self, "app_state", None)
+        append_operator_log_line = getattr(app_state, "append_operator_log_line", None)
+        if callable(append_operator_log_line):
+            try:
+                append_operator_log_line(text)
+            except Exception:
+                logger.debug("AppController._append_log(%s) failed to append operator log", text)
 
         trace_panel = getattr(self.main_window, "log_trace_panel_v2", None)
         schedule_refresh = getattr(trace_panel, "schedule_refresh_soon", None)

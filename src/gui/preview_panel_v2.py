@@ -57,12 +57,14 @@ class PreviewPanelV2(ttk.Frame):
         controller: Any | None = None,
         app_state: Any | None = None,
         theme: Any | None = None,
+        manage_app_state_subscriptions: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=PADDING_MD, **kwargs)
         self.controller = controller
         self.app_state = app_state
         self.theme = theme
+        self._manage_app_state_subscriptions = bool(manage_app_state_subscriptions)
         self._job_summaries: list[JobUiSummary] = []
         self._content_visibility_mode = str(
             getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
@@ -526,18 +528,20 @@ class PreviewPanelV2(ttk.Frame):
         if not self.app_state or not hasattr(self.app_state, "subscribe"):
             logger.debug(f"[PreviewPanel] Cannot subscribe - app_state={self.app_state}, has_subscribe={hasattr(self.app_state, 'subscribe') if self.app_state else False}")
             return
-        try:
-            logger.debug("[PreviewPanel] Subscribing to preview_jobs changes")
-            self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
-            logger.debug("[PreviewPanel] Successfully subscribed to preview_jobs")
-        except Exception as e:
-            logger.debug(f"[PreviewPanel] Failed to subscribe: {e}")
-            pass
+        if self._manage_app_state_subscriptions:
+            try:
+                logger.debug("[PreviewPanel] Subscribing to preview_jobs changes")
+                self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
+                logger.debug("[PreviewPanel] Successfully subscribed to preview_jobs")
+            except Exception as e:
+                logger.debug(f"[PreviewPanel] Failed to subscribe: {e}")
+                pass
         try:
             self.app_state.subscribe("content_visibility_mode", self._on_content_visibility_mode_changed)
         except Exception:
             pass
-        self._on_preview_jobs_changed()
+        if self._manage_app_state_subscriptions:
+            self._on_preview_jobs_changed()
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(
@@ -1210,6 +1214,11 @@ class PreviewPanelV2(ttk.Frame):
         )
         if request_key != current_key or not self._show_preview_var.get():
             return
+        try:
+            if not self.winfo_ismapped():
+                return
+        except Exception:
+            pass
 
         if resolved_path and resolved_path.exists():
             self.thumbnail.set_image_from_path(resolved_path)

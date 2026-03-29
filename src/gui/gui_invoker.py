@@ -22,6 +22,7 @@ class GuiInvoker:
         self._max_callbacks_per_pump = 32
         self._max_pump_duration_ms = 8.0
         self._pump_scheduled = False
+        self._timers: set[threading.Timer] = set()
         self._schedule_pump()
 
     def invoke(self, fn: Callable[[], None]) -> None:
@@ -46,6 +47,31 @@ class GuiInvoker:
             with self._lock:
                 self._disposed = True
                 self._pump_scheduled = False
+
+    def invoke_later(self, delay_ms: int, fn: Callable[[], None]) -> None:
+        """Schedule a callable to be invoked after a delay, then marshal via the Tk pump."""
+        try:
+            delay_seconds = max(0.0, float(delay_ms) / 1000.0)
+        except Exception:
+            delay_seconds = 0.0
+        if delay_seconds <= 0:
+            self.invoke(fn)
+            return
+
+        def _fire() -> None:
+            with self._lock:
+                self._timers.discard(timer)
+                if self._disposed:
+                    return
+            self.invoke(fn)
+
+        timer = threading.Timer(delay_seconds, _fire)
+        timer.daemon = True
+        with self._lock:
+            if self._disposed:
+                return
+            self._timers.add(timer)
+        timer.start()
 
     def _pump(self) -> None:
         callbacks: list[Callable[[], None]] = []
@@ -86,3 +112,10 @@ class GuiInvoker:
             self._disposed = True
             self._pending.clear()
             self._pending_ids.clear()
+            timers = list(self._timers)
+            self._timers.clear()
+        for timer in timers:
+            try:
+                timer.cancel()
+            except Exception:
+                continue

@@ -56,11 +56,13 @@ class QueuePanelV2(ttk.Frame):
         *,
         controller: Any | None = None,
         app_state: Any | None = None,
+        manage_app_state_subscriptions: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=(8, 8, 8, 8), **kwargs)
         self.controller = controller
         self.app_state = app_state
+        self._manage_app_state_subscriptions = bool(manage_app_state_subscriptions)
         self._jobs: list[UnifiedJobSummary] = []
         self._is_queue_paused = False
         self._auto_run_enabled = bool(getattr(app_state, "auto_run_queue", True))
@@ -264,7 +266,7 @@ class QueuePanelV2(ttk.Frame):
         # PR-PIPE-003: Bind keyboard shortcuts
         self._bind_keyboard_shortcuts()
 
-        if self.app_state and hasattr(self.app_state, "subscribe"):
+        if self._manage_app_state_subscriptions and self.app_state and hasattr(self.app_state, "subscribe"):
             try:
                 self.app_state.subscribe("queue_job_summaries", self._on_queue_summaries_changed)
             except Exception:
@@ -273,7 +275,6 @@ class QueuePanelV2(ttk.Frame):
                 self.app_state.subscribe("running_job_summary", self._on_running_summary_changed)
             except Exception:
                 pass
-            # PR-CORE-D: Subscribe to lifecycle events for real-time updates
             try:
                 self.app_state.subscribe("log_events", self._on_lifecycle_event)
             except Exception:

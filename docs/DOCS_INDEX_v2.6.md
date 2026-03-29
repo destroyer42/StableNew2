@@ -2,7 +2,7 @@ DOCS_INDEX_v2.6.md
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-27
+Updated: 2026-03-28
 
 ## 0. Purpose
 
@@ -111,6 +111,11 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md`
 - `docs/PR_Backlog/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md`
 - `docs/PR_Backlog/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
+- `docs/PR_Backlog/PR-GUI-283-AppController-UI-Boundary-Closure-and-Operator-Log-Projection.md`
+- `docs/PR_Backlog/PR-GUI-284-AppState-Batched-Invalidation-and-Flush-Contract.md`
+- `docs/PR_Backlog/PR-GUI-285-Hot-Surface-Refresh-Scheduler-and-Subscription-Ownership.md`
+- `docs/PR_Backlog/PR-GUI-286-Incremental-Projection-Reconciliation-and-Visibility-Gating.md`
+- `docs/PR_Backlog/PR-HARDEN-287-Runtime-Status-Backpressure-GUI-Perf-Journey-and-Architecture-Guards.md`
 
 ### 1.5 Reference and history
 
@@ -125,6 +130,9 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/CompletedPR/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md`
 - `docs/CompletedPR/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md`
 - `docs/CompletedPR/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
+- `docs/CompletedPR/PR-GUI-283-AppController-UI-Boundary-Closure-and-Operator-Log-Projection.md`
+- `docs/CompletedPR/PR-GUI-284-AppState-Batched-Invalidation-and-Flush-Contract.md`
+- `docs/CompletedPR/PR-GUI-285-Hot-Surface-Refresh-Scheduler-and-Subscription-Ownership.md`
 - `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 - `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 - `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`

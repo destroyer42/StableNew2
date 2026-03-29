@@ -193,6 +193,7 @@ def build_default_comfy_process_config(
     config_manager: ConfigManager | None = None,
 ) -> ComfyProcessConfig | None:
     manager = config_manager or ConfigManager()
+    raw_settings = manager._load_settings()
     settings = manager.load_settings()
     command = list(settings.get("comfy_command") or [])
     if not command:
@@ -203,10 +204,13 @@ def build_default_comfy_process_config(
     working_dir = str(settings.get("comfy_workdir") or "").strip() or None
     if working_dir:
         working_dir = str(Path(working_dir))
+    autostart_enabled = raw_settings.get("comfy_autostart_enabled")
+    if autostart_enabled is None:
+        autostart_enabled = bool(command)
     return ComfyProcessConfig(
         command=command,
         working_dir=working_dir,
-        autostart_enabled=bool(settings.get("comfy_autostart_enabled", False)),
+        autostart_enabled=bool(autostart_enabled),
         base_url=str(settings.get("comfy_base_url") or "http://127.0.0.1:8188"),
         startup_timeout_seconds=float(settings.get("comfy_health_total_timeout_seconds") or 30.0),
     )

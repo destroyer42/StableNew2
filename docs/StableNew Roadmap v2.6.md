@@ -947,6 +947,44 @@ Sequencing note:
   because discovered/imported review quality depends on correct output
   classification
 
+## 4AB. GUI Responsiveness Closure Tranche
+
+Status: In Progress 2026-03-28
+
+This tranche closes the gap between runner/controller architectural separation
+and actual GUI repaint-cadence ownership.
+
+Repo-truth status:
+
+- `PR-GUI-283-AppController-UI-Boundary-Closure-and-Operator-Log-Projection`
+  Completed 2026-03-28
+- `PR-GUI-284-AppState-Batched-Invalidation-and-Flush-Contract`
+  Completed 2026-03-28
+- `PR-GUI-285-Hot-Surface-Refresh-Scheduler-and-Subscription-Ownership`
+  Completed 2026-03-28
+- `PR-GUI-286-Incremental-Projection-Reconciliation-and-Visibility-Gating`
+  In progress as of 2026-03-28; pipeline-shell hot surfaces now defer hidden
+  queue/history/preview work and preview thumbnail async apply skips hidden
+  widget mutation, but the broader non-pipeline visibility-gating sweep remains
+  open
+- `PR-HARDEN-287-Runtime-Status-Backpressure-GUI-Perf-Journey-and-Architecture-Guards`
+  In progress as of 2026-03-28; runtime-status throttling and controller-side
+  Tk/direct-widget enforcement are now landed, but the final perf-threshold
+  closeout and explicit tranche completion record are still open
+
+Delivered outcomes so far:
+
+- `AppController` no longer writes operator-log or bottom-status text directly
+  into Tk widgets
+- `AppStateV2` now batches hot runtime keys and exposes an explicit operator-log
+  buffer plus `flush_now()`
+- `PipelineTabFrameV2` owns hot queue/history/preview refresh scheduling for
+  the pipeline shell
+- hidden pipeline hot surfaces now defer work instead of burning Tk time while
+  unmapped
+- architecture enforcement now blocks controller-side Tk imports and direct
+  widget mutation patterns
+
 ## 4B. Post-`PR-VIDEO-241` Structural Queue
 
 The next major queue after the secondary motion tranche is tracked in:
