@@ -22,7 +22,7 @@ This document is the contract layer for the metadata work landed in:
 - PR-LEARN-263 inspector and debug path
 
 Low-level image-container encoding details remain in
-`docs/Image_Metadata_Contract_v2.6.md`, but field naming, precedence, and
+`docs/Architecture/Image_Metadata_Contract_v2.6.md`, but field naming, precedence, and
 cross-surface semantics are defined here.
 
 ## 2. Contract Families

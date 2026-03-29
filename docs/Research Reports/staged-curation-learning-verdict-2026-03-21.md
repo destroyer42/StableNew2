@@ -139,4 +139,4 @@ Immediate sequencing recommendation:
 
 The executable rollout for that tranche is tracked in:
 
-- [STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md](/c:/Users/rob/projects/StableNew/docs/PR_Backlog/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md)
+- [STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md](/c:/Users/rob/projects/StableNew/docs/CompletedPlans/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md)

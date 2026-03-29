@@ -14,7 +14,7 @@ ownership explicit so follow-on runtime PRs can be judged against one canon.
 - `README.md`
 - `docs/ARCHITECTURE_v2.6.md`
 - `docs/StableNew Roadmap v2.6.md`
-- `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
+- `docs/CompletedPlans/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
 - `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
 - `docs/DOCS_INDEX_v2.6.md`
 - `docs/archive/superseded/StableNew_Architecture_v2.6.md`

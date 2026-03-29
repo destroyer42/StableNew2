@@ -20,7 +20,7 @@ introduced across PR-LEARN-261 through PR-LEARN-263.
 - updated [docs/DOCS_INDEX_v2.6.md](c:/Users/rob/projects/StableNew/docs/DOCS_INDEX_v2.6.md)
   so the new canonical contract and schema companions are part of the active
   doc set
-- updated [docs/Image_Metadata_Contract_v2.6.md](c:/Users/rob/projects/StableNew/docs/Image_Metadata_Contract_v2.6.md)
+- updated [docs/Architecture/Image_Metadata_Contract_v2.6.md](c:/Users/rob/projects/StableNew/docs/Architecture/Image_Metadata_Contract_v2.6.md)
   to point field-level semantics at the new canonical artifact-metadata
   contract while keeping its low-level carrier/encoding role
 - added focused drift protection in [tests/review/test_metadata_contract_schemas.py](c:/Users/rob/projects/StableNew/tests/review/test_metadata_contract_schemas.py)

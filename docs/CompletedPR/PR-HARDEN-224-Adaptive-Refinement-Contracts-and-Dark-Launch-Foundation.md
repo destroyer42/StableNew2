@@ -25,7 +25,7 @@ mutation work began.
   to preserve the nested contract through request-building flows
 - added import-boundary coverage in
   `tests/refinement/test_refinement_layer_imports.py`
-- added the active schema document `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
+- added the active schema document `docs/Architecture/REFINEMENT_POLICY_SCHEMA_v1.md`
 
 ## Key Files
 
@@ -35,7 +35,7 @@ mutation work began.
 - `src/pipeline/job_builder_v2.py`
 - `src/pipeline/prompt_pack_job_builder.py`
 - `src/pipeline/cli_njr_builder.py`
-- `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
+- `docs/Architecture/REFINEMENT_POLICY_SCHEMA_v1.md`
 
 ## Tests
 
@@ -50,7 +50,7 @@ Focused verification passed:
 Bookkeeping closure recorded in:
 
 - `docs/DOCS_INDEX_v2.6.md`
-- `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
+- `docs/Architecture/REFINEMENT_POLICY_SCHEMA_v1.md`
 - `docs/StableNew Roadmap v2.6.md`
 - `docs/CompletedPlans/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
 

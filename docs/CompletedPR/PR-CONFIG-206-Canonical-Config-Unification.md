@@ -86,7 +86,7 @@ Passed:
 Updated:
 
 - [ARCHITECTURE_v2.6.md](/c:/Users/rob/projects/StableNew/docs/ARCHITECTURE_v2.6.md)
-- [MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md](/c:/Users/rob/projects/StableNew/docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md)
+- [MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md](/c:/Users/rob/projects/StableNew/docs/CompletedPlans/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md)
 
 ## Outstanding Debt
 

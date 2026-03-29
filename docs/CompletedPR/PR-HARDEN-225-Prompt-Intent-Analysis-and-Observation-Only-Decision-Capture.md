@@ -21,7 +21,7 @@ metadata block without mutating any stage config or executor payload.
 - updated `src/pipeline/pipeline_runner.py` to stamp
   `run_result.metadata["adaptive_refinement"]` only when the feature is enabled
   in `observe` mode
-- froze the observation bundle shape in `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
+- froze the observation bundle shape in `docs/Architecture/REFINEMENT_POLICY_SCHEMA_v1.md`
 
 ## Key Files
 
@@ -31,7 +31,7 @@ metadata block without mutating any stage config or executor payload.
 - `src/refinement/detectors/null_detector.py`
 - `src/refinement/refinement_policy_registry.py`
 - `src/pipeline/pipeline_runner.py`
-- `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
+- `docs/Architecture/REFINEMENT_POLICY_SCHEMA_v1.md`
 
 ## Tests
 
@@ -45,7 +45,7 @@ Focused verification passed:
 
 Bookkeeping closure recorded in:
 
-- `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
+- `docs/Architecture/REFINEMENT_POLICY_SCHEMA_v1.md`
 - `docs/StableNew Roadmap v2.6.md`
 - `docs/CompletedPlans/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
 

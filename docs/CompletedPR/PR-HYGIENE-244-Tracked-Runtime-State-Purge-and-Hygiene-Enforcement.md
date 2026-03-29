@@ -7,7 +7,7 @@ Status: Completed 2026-03-29
 - runtime-state paths are centralized behind `src/state/workspace_paths.py`
 - mutable queue/UI/sidebar/preview/last-run state writes use the canonical workspace-path boundary
 - tracked runtime state is kept out of git by policy and enforcement
-- the short canonical hygiene contract now lives in `docs/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
+- the short canonical hygiene contract now lives in `docs/runbooks/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
 
 ## Validation
 

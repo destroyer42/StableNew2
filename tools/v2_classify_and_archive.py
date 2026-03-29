@@ -8,7 +8,7 @@ from pathlib import Path
 
 from src.utils.file_access_log_v2_5_2025_11_26 import log_file_access
 
-LEGACY_MD = Path("docs/LEGACY_CANDIDATES.md")
+LEGACY_MD = Path("inventory/LEGACY_CANDIDATES.md")
 
 
 def load_legacy_candidates() -> set[str]:

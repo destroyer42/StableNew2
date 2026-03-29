@@ -440,7 +440,7 @@ The following paths are permanently excluded via `.gitignore`:
 | `data/photo_optimize/assets/` | User-uploaded originals and generated outputs |
 | `state/` | All mutable UI/queue/preview runtime state files |
 
-See `docs/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md` for the short canonical runtime-state contract.
+See `docs/runbooks/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md` for the short canonical runtime-state contract.
 
 ### Enforcement
 

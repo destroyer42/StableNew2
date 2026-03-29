@@ -41,16 +41,16 @@ completed implementation records, and historical planning notes.
 - `docs/Subsystems/GUI/GUI_Ownership_Map_v2.6.md`
 - `docs/Subsystems/GUI/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md`
 - `docs/Subsystems/GUI/GUI_CONSISTENCY_MAINTENANCE_CHECKLIST_v2.6.md`
-- `docs/Movie_Clips_Workflow_v2.6.md`
-- `docs/Image_Metadata_Contract_v2.6.md`
+- `docs/Subsystems/Video/Movie_Clips_Workflow_v2.6.md`
+- `docs/Architecture/Image_Metadata_Contract_v2.6.md`
 - `docs/schemas/stablenew.image-metadata.v2.6.json`
 - `docs/schemas/stablenew.review.v2.6.json`
 - `docs/schemas/portable_review_summary.v2.6.json`
 - `docs/schemas/artifact_metadata_inspection.v2.6.json`
-- `docs/StableNew Secondary Motion Layer Design.md`
+- `docs/Architecture/StableNew Secondary Motion Layer Design.md`
 - `docs/Architecture/Prompt_Optimizer_WorldClass_v3_Design.md`
-- `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
-- `docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
+- `docs/Architecture/REFINEMENT_POLICY_SCHEMA_v1.md`
+- `docs/Architecture/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
 - `docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md`
 - `docs/Research Reports/WebUI Restart and Lost Connection Investigation 2026-03-20.md`
 - `docs/Research Reports/WebUI GPU Pressure and Stall Investigation 2026-03-21.md`
@@ -61,11 +61,11 @@ completed implementation records, and historical planning notes.
 
 ### 1.4 Tier 4 - Active backlog and planning queue
 
-- `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
+- `docs/PR_Backlog/CORE_TOP_20_EXECUTABLE_MINI_ROADMAP_v2.6.md`
+- `docs/PR_Backlog/PR-CORE-001 - Finalize Native SVD Integration.md`
+- `docs/PR_Backlog/PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback.md`
 - `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
-- `docs/PR_Backlog/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md`
-- `docs/PR_Backlog/D-NSFW-SFW-001-Content-Visibility-Mode-Discovery.md`
 
 ### 1.5 Reference and history
 
@@ -74,6 +74,22 @@ completed implementation records, and historical planning notes.
   multi-PR sequence records
 - `docs/NeedsReview/` contains ambiguous or recently superseded material that
   still needs an explicit disposition
+- completed rollout docs that no longer belong in the active backlog now live
+  in `docs/CompletedPlans/`, including
+  `MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`,
+  `STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`, and
+  `UX_HELP_AND_IN-PRODUCT_GUIDANCE_EXECUTABLE_SEQUENCE_v2.6.md`
+- superseded queue snapshots and retired backlog specs now live in
+  `docs/archive/reference/`, including
+  `MASTER_PR_SEQUENCE_FROM_CURRENT_REPO_STATE_v2.6.md`,
+  `REVISED_MINI_ROADMAP_PR_ORDER_v2.6.md`,
+  `HYBRID_STAGED_CURATION_REVIEW_HANDOFF_PR_SEQUENCE_v2.6.md`,
+  `VIDEO_AND_SECONDARY_MOTION_REMAINING_WORK_SEQUENCE_v2.6.md`,
+  `PR-TEST-280-Full-Suite-Collection-Recovery-and-Test-Hygiene.md`, and
+  `PR-POLISH-282-Canonical-Roadmap-Video-Status-Harmonization.md`
+- retired discovery docs moved out of the backlog now live in
+  `docs/archive/discovery/`, including
+  `D-NSFW-SFW-001-Content-Visibility-Mode-Discovery.md`
 - `docs/CompletedPlans/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/CompletedPlans/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/CompletedPlans/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
@@ -113,7 +129,7 @@ completed implementation records, and historical planning notes.
 - `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 - `docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 - `docs/archive/` contains historical, superseded, and reference-only material
-- `docs/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
+- `docs/runbooks/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
 
 ## 2. Canonical Reading Order
 
@@ -147,9 +163,6 @@ Read in this order:
 - `docs/runbooks/` is for active operator runbooks
 - `docs/schemas/` is for active machine-readable contract companions
 - `docs/archive/` is reference-only and not active canon
-- during the reorganization transition, some Tier 3 files still remain in the
-  root; treat those placements as migration debt and do not add new Tier 3
-  docs to the root
 
 ## 4. Explicit Non-Active Documents
 

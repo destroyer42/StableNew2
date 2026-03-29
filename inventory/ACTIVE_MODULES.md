@@ -1,0 +1,283 @@
+# Active Modules
+
+Generated: 2026-03-29T15:26:24.866905Z
+
+Total tracked files: 1086
+Reachable from src/main.py: 275
+
+## List
+- `src/api/client.py`
+- `src/api/healthcheck.py`
+- `src/api/types.py`
+- `src/api/webui_api.py`
+- `src/api/webui_process_manager.py`
+- `src/api/webui_resource_service.py`
+- `src/api/webui_resources.py`
+- `src/app/bootstrap.py`
+- `src/app/optional_dependency_probes.py`
+- `src/app_factory.py` (gui)
+- `src/cluster/worker_model.py`
+- `src/cluster/worker_registry.py`
+- `src/config/app_config.py`
+- `src/config/prompting_defaults.py`
+- `src/controller/__init__.py`
+- `src/controller/app_controller.py`
+- `src/controller/app_controller_services/gui_config_service.py`
+- `src/controller/app_controller_services/learning_completion_router.py`
+- `src/controller/app_controller_services/run_submission_service.py`
+- `src/controller/content_visibility_resolver.py`
+- `src/controller/core_pipeline_controller.py`
+- `src/controller/job_execution_controller.py`
+- `src/controller/job_history_service.py`
+- `src/controller/job_lifecycle_logger.py`
+- `src/controller/job_service.py`
+- `src/controller/pipeline_controller.py`
+- `src/controller/pipeline_controller_services/history_handoff_service.py`
+- `src/controller/pipeline_controller_services/queue_submission_service.py`
+- `src/controller/pipeline_submission_service.py`
+- `src/controller/ports/default_runtime_ports.py`
+- `src/controller/ports/runtime_ports.py`
+- `src/controller/process_auto_scanner_service.py`
+- `src/controller/runtime_state.py`
+- `src/controller/svd_controller.py`
+- `src/controller/video_workflow_controller.py`
+- `src/controller/webui_connection_controller.py`
+- `src/curation/curation_manifest.py`
+- `src/curation/curation_workflow_builder.py`
+- `src/curation/learning_bridge.py`
+- `src/curation/models.py`
+- `src/curation/workflow_summary.py`
+- `src/gui/__init__.py` (gui)
+- `src/gui/advanced_prompt_editor.py` (gui)
+- `src/gui/api_status_panel.py` (gui)
+- `src/gui/app_state_v2.py` (gui)
+- `src/gui/artifact_metadata_inspector_dialog.py` (gui)
+- `src/gui/base_generation_panel_v2.py` (gui)
+- `src/gui/config_adapter_v26.py` (gui)
+- `src/gui/content_visibility.py` (gui)
+- `src/gui/controllers/learning_controller.py` (gui)
+- `src/gui/controllers/review_workflow_adapter.py` (gui)
+- `src/gui/controllers/video_workspace_handoff.py` (gui)
+- `src/gui/design_system_v2.py` (gui)
+- `src/gui/dropdown_loader_v2.py` (gui)
+- `src/gui/engine_settings_dialog.py` (gui)
+- `src/gui/enhanced_slider.py` (gui)
+- `src/gui/gui_invoker.py` (gui)
+- `src/gui/help_text/stage_setting_help_v2.py` (gui)
+- `src/gui/help_text/workflow_guidance_v2.py` (gui)
+- `src/gui/job_history_panel_v2.py` (gui)
+- `src/gui/layout_v2.py` (gui)
+- `src/gui/learning_review_dialog_v2.py` (gui)
+- `src/gui/learning_state.py` (gui)
+- `src/gui/log_trace_panel_v2.py` (gui)
+- `src/gui/main_window_v2.py` (gui)
+- `src/gui/model_list_adapter_v2.py` (gui)
+- `src/gui/models/prompt_metadata.py` (gui)
+- `src/gui/models/prompt_pack_model.py` (gui)
+- `src/gui/output_settings_panel_v2.py` (gui)
+- `src/gui/panels_v2/api_failure_visualizer_v2.py` (gui)
+- `src/gui/panels_v2/debug_hub_panel_v2.py` (gui)
+- `src/gui/panels_v2/job_explanation_panel_v2.py` (gui)
+- `src/gui/panels_v2/layout_manager_v2.py` (gui)
+- `src/gui/panels_v2/queue_panel_v2.py` (gui)
+- `src/gui/panels_v2/reprocess_panel_v2.py` (gui)
+- `src/gui/panels_v2/running_job_panel_v2.py` (gui)
+- `src/gui/panels_v2/widgets/stage_timeline_widget.py` (gui)
+- `src/gui/preview_panel_v2.py` (gui)
+- `src/gui/prompt_pack_adapter_v2.py` (gui)
+- `src/gui/prompt_pack_list_manager.py` (gui)
+- `src/gui/prompt_workspace_state.py` (gui)
+- `src/gui/recipe_summary_v2.py` (gui)
+- `src/gui/scrolling.py` (gui)
+- `src/gui/sidebar_panel_v2.py` (gui)
+- `src/gui/stage_cards_v2/adetailer_stage_card_v2.py` (gui)
+- `src/gui/stage_cards_v2/advanced_img2img_stage_card_v2.py` (gui)
+- `src/gui/stage_cards_v2/advanced_txt2img_stage_card_v2.py` (gui)
+- `src/gui/stage_cards_v2/advanced_upscale_stage_card_v2.py` (gui)
+- `src/gui/stage_cards_v2/base_stage_card_v2.py` (gui)
+- `src/gui/stage_cards_v2/components.py` (gui)
+- `src/gui/stage_cards_v2/validation_result.py` (gui)
+- `src/gui/status_bar_v2.py` (gui)
+- `src/gui/theme.py` (gui)
+- `src/gui/theme_v2.py` (gui)
+- `src/gui/tooltip.py` (gui)
+- `src/gui/ui_dispatcher.py` (gui)
+- `src/gui/ui_tokens.py` (gui)
+- `src/gui/utils/display_helpers.py` (gui)
+- `src/gui/utils/lora_embedding_parser.py` (gui)
+- `src/gui/view_contracts/movie_clips_contract.py` (gui)
+- `src/gui/view_contracts/pipeline_layout_contract.py` (gui)
+- `src/gui/view_contracts/prompt_editor_contract.py` (gui)
+- `src/gui/view_contracts/queue_status_contract.py` (gui)
+- `src/gui/view_contracts/status_banner_contract.py` (gui)
+- `src/gui/view_contracts/video_workspace_contract.py` (gui)
+- `src/gui/views/diagnostics_dashboard_v2.py` (gui)
+- `src/gui/views/discovered_review_inbox_panel.py` (gui)
+- `src/gui/views/discovered_review_table.py` (gui)
+- `src/gui/views/error_modal_v2.py` (gui)
+- `src/gui/views/experiment_design_panel.py` (gui)
+- `src/gui/views/learning_analytics_panel.py` (gui)
+- `src/gui/views/learning_plan_table.py` (gui)
+- `src/gui/views/learning_review_panel.py` (gui)
+- `src/gui/views/learning_tab_frame_v2.py` (gui)
+- `src/gui/views/movie_clips_tab_frame_v2.py` (gui)
+- `src/gui/views/photo_optimize_tab_frame_v2.py` (gui)
+- `src/gui/views/pipeline_tab_frame_v2.py` (gui)
+- `src/gui/views/prompt_tab_frame_v2.py` (gui)
+- `src/gui/views/review_tab_frame_v2.py` (gui)
+- `src/gui/views/stage_cards_panel.py` (gui)
+- `src/gui/views/stage_cards_panel_v2.py` (gui)
+- `src/gui/views/svd_tab_frame_v2.py` (gui)
+- `src/gui/views/video_workflow_tab_frame_v2.py` (gui)
+- `src/gui/widgets/action_explainer_panel_v2.py` (gui)
+- `src/gui/widgets/embedding_picker_panel.py` (gui)
+- `src/gui/widgets/expander_v2.py` (gui)
+- `src/gui/widgets/image_thumbnail.py` (gui)
+- `src/gui/widgets/lora_keyword_dialog.py` (gui)
+- `src/gui/widgets/lora_picker_panel.py` (gui)
+- `src/gui/widgets/matrix_helper_widget.py` (gui)
+- `src/gui/widgets/matrix_slot_picker.py` (gui)
+- `src/gui/widgets/matrix_tab_panel.py` (gui)
+- `src/gui/widgets/scrollable_frame_v2.py` (gui)
+- `src/gui/widgets/tab_overview_panel_v2.py` (gui)
+- `src/gui/widgets/thumbnail_widget_v2.py` (gui)
+- `src/gui/zone_map_v2.py` (gui)
+- `src/gui_v2/adapters/learning_adapter_v2.py`
+- `src/history/history_record.py`
+- `src/history/history_schema_v26.py`
+- `src/learning/discovered_grouping.py`
+- `src/learning/discovered_review_models.py`
+- `src/learning/discovered_review_store.py`
+- `src/learning/execution_controller.py`
+- `src/learning/experiment_naming.py`
+- `src/learning/experiment_store.py`
+- `src/learning/learning_adapter.py`
+- `src/learning/learning_analytics.py`
+- `src/learning/learning_contract.py`
+- `src/learning/learning_controller_services/experiment_persistence.py`
+- `src/learning/learning_paths.py`
+- `src/learning/learning_plan.py`
+- `src/learning/learning_record.py`
+- `src/learning/learning_runner.py`
+- `src/learning/lora_variable_service.py`
+- `src/learning/model_defaults_resolver.py`
+- `src/learning/model_profiles.py`
+- `src/learning/output_scan_models.py`
+- `src/learning/output_scanner.py`
+- `src/learning/rating_schema.py`
+- `src/learning/recommendation_engine.py`
+- `src/learning/stage_capabilities.py`
+- `src/learning/variable_metadata.py`
+- `src/learning/variable_selection_contract.py`
+- `src/main.py` (gui)
+- `src/photo_optimize/__init__.py`
+- `src/pipeline/animatediff_models.py`
+- `src/pipeline/artifact_contract.py`
+- `src/pipeline/config_contract_v26.py`
+- `src/pipeline/config_merger_v2.py`
+- `src/pipeline/config_normalizer.py`
+- `src/pipeline/config_variant_plan_v2.py`
+- `src/pipeline/intent_artifact_contract.py`
+- `src/pipeline/job_builder_v2.py`
+- `src/pipeline/job_models_v2.py`
+- `src/pipeline/job_requests_v2.py`
+- `src/pipeline/last_run_store_v2_5.py`
+- `src/pipeline/pipeline_runner.py`
+- `src/pipeline/prompt_pack_job_builder.py`
+- `src/pipeline/prompt_pack_parser.py`
+- `src/pipeline/replay_engine.py`
+- `src/pipeline/reprocess_builder.py`
+- `src/pipeline/resolution_layer.py`
+- `src/pipeline/result_contract_v26.py`
+- `src/pipeline/run_config.py`
+- `src/pipeline/run_plan.py`
+- `src/pipeline/stage_models.py`
+- `src/pipeline/stage_sequencer.py`
+- `src/pipeline/video.py`
+- `src/prompting/prompt_bucket_rules.py`
+- `src/prompting/prompt_classifier.py`
+- `src/prompting/prompt_deduper.py`
+- `src/prompting/prompt_normalizer.py`
+- `src/prompting/prompt_optimizer_config.py`
+- `src/prompting/prompt_optimizer_errors.py`
+- `src/prompting/prompt_optimizer_service.py`
+- `src/prompting/prompt_splitter.py`
+- `src/prompting/prompt_types.py`
+- `src/prompting/sdxl_prompt_optimizer.py`
+- `src/queue/__init__.py`
+- `src/queue/job_history_store.py`
+- `src/queue/job_model.py`
+- `src/queue/job_queue.py`
+- `src/queue/single_node_runner.py`
+- `src/randomizer/__init__.py`
+- `src/review/artifact_metadata_inspector.py`
+- `src/review/review_metadata_service.py`
+- `src/services/diagnostics_service_v2.py`
+- `src/services/duration_stats_service.py`
+- `src/services/persistence_worker.py`
+- `src/services/queue_store_v2.py`
+- `src/services/ui_state_store.py`
+- `src/services/watchdog_system_v2.py`
+- `src/state/output_routing.py`
+- `src/state/workspace_paths.py`
+- `src/utils/__init__.py`
+- `src/utils/api_failure_store_v2.py`
+- `src/utils/cgroup_v2.py`
+- `src/utils/config.py`
+- `src/utils/debug_shutdown_inspector.py`
+- `src/utils/diagnostics_bundle_v2.py`
+- `src/utils/embedding_prompt_utils.py`
+- `src/utils/embedding_scanner.py`
+- `src/utils/error_envelope_v2.py`
+- `src/utils/exceptions_v2.py`
+- `src/utils/file_access_log_v2_5_2025_11_26.py`
+- `src/utils/file_io.py`
+- `src/utils/graceful_exit.py`
+- `src/utils/image_metadata.py`
+- `src/utils/image_utils.py`
+- `src/utils/jsonl_codec.py`
+- `src/utils/logger.py`
+- `src/utils/logging_helpers_v2.py`
+- `src/utils/lora_keyword_detector.py`
+- `src/utils/lora_scanner.py`
+- `src/utils/process_container_v2.py`
+- `src/utils/process_inspector_v2.py`
+- `src/utils/prompt_pack_utils.py`
+- `src/utils/prompt_packs.py`
+- `src/utils/prompt_txt_parser.py`
+- `src/utils/retry_policy_v2.py`
+- `src/utils/single_instance.py`
+- `src/utils/snapshot_builder_v2.py`
+- `src/utils/system_info_v2.py`
+- `src/utils/thread_registry.py`
+- `src/utils/watchdog_v2.py`
+- `src/utils/webui_discovery.py`
+- `src/utils/webui_resource_names.py`
+- `src/utils/win_jobobject.py`
+- `src/video/assembly_models.py`
+- `src/video/assembly_service.py`
+- `src/video/comfy_api_client.py`
+- `src/video/comfy_dependency_probe.py`
+- `src/video/comfy_healthcheck.py`
+- `src/video/comfy_process_manager.py`
+- `src/video/container_metadata.py`
+- `src/video/continuity_models.py`
+- `src/video/interpolation_contracts.py`
+- `src/video/motion/secondary_motion_engine.py`
+- `src/video/motion/secondary_motion_models.py`
+- `src/video/motion/secondary_motion_provenance.py`
+- `src/video/movie_clip_models.py`
+- `src/video/movie_clip_service.py`
+- `src/video/svd_capabilities.py`
+- `src/video/svd_config.py`
+- `src/video/svd_errors.py`
+- `src/video/svd_models.py`
+- `src/video/svd_postprocess.py`
+- `src/video/svd_preprocess.py`
+- `src/video/svd_service.py`
+- `src/video/video_artifact_helpers.py`
+- `src/video/video_backend_types.py`
+- `src/video/video_export.py`
+- `src/video/workflow_catalog.py`
+- `src/video/workflow_contracts.py`
+- `src/video/workflow_registry.py`

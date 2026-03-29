@@ -1,9 +1,9 @@
 {
   "repo_root": "C:\\Users\\rob\\projects\\StableNew",
-  "created_at": "2026-03-28T09:09:25",
-  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20260328-090915.zip",
-  "file_count": 2257,
-  "total_size_bytes": 20490113,
+  "created_at": "2026-03-29T10:16:30",
+  "snapshot_zip": "C:\\Users\\rob\\projects\\StableNew\\snapshots\\StableNew-snapshot-20260329-101620.zip",
+  "file_count": 2250,
+  "total_size_bytes": 20423811,
   "excludes": [
     ".DS_Store",
     ".git",
@@ -46,8 +46,8 @@
     },
     {
       "path": ".gitignore",
-      "size_bytes": 1349,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 1355,
+      "mtime_iso": "2026-03-28T19:47:34"
     },
     {
       "path": ".pre-commit-config.yaml",
@@ -77,7 +77,7 @@
     {
       "path": "img_a.png.review.json",
       "size_bytes": 957,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "mtime_iso": "2026-03-29T10:14:50"
     },
     {
       "path": "pyproject.toml",
@@ -176,8 +176,8 @@
     },
     {
       "path": ".github/instructions/gui.instructions.md",
-      "size_bytes": 699,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 714,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": ".github/instructions/learning.instructions.md",
@@ -276,13 +276,13 @@
     },
     {
       "path": ".github/ISSUE_TEMPLATE/14_s3_c_ci_pipeline.md",
-      "size_bytes": 866,
-      "mtime_iso": "2026-03-28T08:50:39"
+      "size_bytes": 1155,
+      "mtime_iso": "2026-03-29T01:34:18"
     },
     {
       "path": ".github/workflows/ci.yml",
-      "size_bytes": 2480,
-      "mtime_iso": "2026-03-28T08:50:29"
+      "size_bytes": 2585,
+      "mtime_iso": "2026-03-29T01:33:47"
     },
     {
       "path": ".github/workflows/codex-autofix.yml",
@@ -312,17 +312,12 @@
     {
       "path": "data/lora_cache.json",
       "size_bytes": 11826,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "mtime_iso": "2026-03-29T10:12:34"
     },
     {
       "path": "data/webui_cache.json",
-      "size_bytes": 233,
-      "mtime_iso": "2026-03-28T09:03:59"
-    },
-    {
-      "path": "docs/Adaptive Refinement and Smart Prompting System SPEC research.md",
-      "size_bytes": 23848,
-      "mtime_iso": "2026-03-20T07:18:59"
+      "size_bytes": 195,
+      "mtime_iso": "2026-03-29T10:12:44"
     },
     {
       "path": "docs/ARCHITECTURE_ENFORCEMENT_CHECKLIST_v2.6.md",
@@ -341,8 +336,8 @@
     },
     {
       "path": "docs/Canonical_Document_Ownership_v2.6.md",
-      "size_bytes": 3838,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 5678,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/DEBUG HUB v2.6.md",
@@ -350,69 +345,14 @@
       "mtime_iso": "2026-03-19T22:50:54"
     },
     {
-      "path": "docs/deep-research-report-prompt-optimization-world-class.md",
-      "size_bytes": 29996,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/deep-research-report-top-20-golden-recommendations.md",
-      "size_bytes": 35981,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
       "path": "docs/DOCS_INDEX_v2.6.md",
-      "size_bytes": 9607,
-      "mtime_iso": "2026-03-27T22:43:22"
-    },
-    {
-      "path": "docs/E2E_Golden_Path_Test_Matrix_v2.6.md",
-      "size_bytes": 12229,
-      "mtime_iso": "2026-03-18T20:08:48"
+      "size_bytes": 9745,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/GOVERNANCE_v2.6.md",
-      "size_bytes": 5627,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md",
-      "size_bytes": 14883,
-      "mtime_iso": "2026-03-25T18:10:39"
-    },
-    {
-      "path": "docs/GUI_CONSISTENCY_MAINTENANCE_CHECKLIST_v2.6.md",
-      "size_bytes": 4044,
-      "mtime_iso": "2026-03-26T21:54:45"
-    },
-    {
-      "path": "docs/GUI_Ownership_Map_v2.6.md",
-      "size_bytes": 5740,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/Image_Metadata_Contract_v2.6.md",
-      "size_bytes": 4010,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/KNOWN_PITFALLS_QUEUE_TESTING.md",
-      "size_bytes": 2440,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/Learning_System_Spec_v2.6.md",
-      "size_bytes": 7625,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/Movie_Clips_Workflow_v2.6.md",
-      "size_bytes": 3247,
-      "mtime_iso": "2026-03-20T06:39:28"
-    },
-    {
-      "path": "docs/Prompt_Optimizer_WorldClass_v3_Design.md",
-      "size_bytes": 2168,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 5752,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/PROMPT_PACK_LIFECYCLE_v2.6.md",
@@ -420,64 +360,24 @@
       "mtime_iso": "2026-03-19T22:50:54"
     },
     {
-      "path": "docs/Proposed - StableNew_Staged_Curation_Pipeline_Spec_v2.6.md",
-      "size_bytes": 16990,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/Proposed - StableNew_Staged_Curation_PR_Sequence_v2.6.md",
-      "size_bytes": 4361,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
       "path": "docs/PR_TEMPLATE_v2.6.md",
-      "size_bytes": 4041,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/Randomizer_Spec_v2.6.md",
-      "size_bytes": 5753,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/REFINEMENT_POLICY_SCHEMA_v1.md",
-      "size_bytes": 9999,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md",
-      "size_bytes": 12111,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 5119,
+      "mtime_iso": "2026-03-29T08:54:04"
     },
     {
       "path": "docs/StableNew Roadmap v2.6.md",
-      "size_bytes": 40268,
-      "mtime_iso": "2026-03-28T08:19:24"
-    },
-    {
-      "path": "docs/StableNew Secondary Motion Layer Design.md",
-      "size_bytes": 28467,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/StableNew2 Prompt Optimizer Deep Research_ World‑Class, Safe, Intent‑Aware, Policy‑Driven.pdf",
-      "size_bytes": 102743,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 38555,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/StableNew_Coding_and_Testing_v2.6.md",
-      "size_bytes": 22455,
-      "mtime_iso": "2026-03-28T08:51:01"
+      "size_bytes": 24995,
+      "mtime_iso": "2026-03-29T01:34:27"
     },
     {
-      "path": "docs/WebUI GPU Pressure and Stall Investigation 2026-03-21.md",
-      "size_bytes": 13950,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/WebUI Restart and Lost Connection Investigation 2026-03-20.md",
-      "size_bytes": 24412,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "path": "docs/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md",
+      "size_bytes": 847,
+      "mtime_iso": "2026-03-29T01:19:46"
     },
     {
       "path": "docs/agentic/USAGE_GUIDE.md",
@@ -486,8 +386,33 @@
     },
     {
       "path": "docs/Architecture/ARTIFACT_METADATA_CONTRACTS_v2.6.md",
-      "size_bytes": 11721,
+      "size_bytes": 11734,
+      "mtime_iso": "2026-03-29T10:15:25"
+    },
+    {
+      "path": "docs/Architecture/Image_Metadata_Contract_v2.6.md",
+      "size_bytes": 4010,
       "mtime_iso": "2026-03-24T18:55:54"
+    },
+    {
+      "path": "docs/Architecture/Prompt_Optimizer_WorldClass_v3_Design.md",
+      "size_bytes": 2206,
+      "mtime_iso": "2026-03-29T09:20:27"
+    },
+    {
+      "path": "docs/Architecture/REFINEMENT_POLICY_SCHEMA_v1.md",
+      "size_bytes": 9999,
+      "mtime_iso": "2026-03-21T00:36:55"
+    },
+    {
+      "path": "docs/Architecture/SECONDARY_MOTION_POLICY_SCHEMA_V1.md",
+      "size_bytes": 12111,
+      "mtime_iso": "2026-03-24T18:55:54"
+    },
+    {
+      "path": "docs/Architecture/StableNew Secondary Motion Layer Design.md",
+      "size_bytes": 28467,
+      "mtime_iso": "2026-03-21T00:36:55"
     },
     {
       "path": "docs/ChatGPT-VideoPlan/VideoPlan.md",
@@ -495,14 +420,64 @@
       "mtime_iso": "2026-03-14T19:37:49"
     },
     {
+      "path": "docs/CompletedPlans/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md",
+      "size_bytes": 9228,
+      "mtime_iso": "2026-03-21T00:36:55"
+    },
+    {
+      "path": "docs/CompletedPlans/GUI_DARK_MODE_AND_LAYOUT_CONSISTENCY_SWEEP_v2.6.md",
+      "size_bytes": 10597,
+      "mtime_iso": "2026-03-29T09:46:03"
+    },
+    {
+      "path": "docs/CompletedPlans/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md",
+      "size_bytes": 2910,
+      "mtime_iso": "2026-03-24T18:55:54"
+    },
+    {
+      "path": "docs/CompletedPlans/README.md",
+      "size_bytes": 405,
+      "mtime_iso": "2026-03-29T08:54:04"
+    },
+    {
+      "path": "docs/CompletedPlans/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md",
+      "size_bytes": 13190,
+      "mtime_iso": "2026-03-21T00:36:55"
+    },
+    {
+      "path": "docs/CompletedPR/PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition.md",
+      "size_bytes": 499,
+      "mtime_iso": "2026-03-29T01:37:16"
+    },
+    {
       "path": "docs/CompletedPR/PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset.md",
       "size_bytes": 2250,
       "mtime_iso": "2026-03-27T06:17:44"
     },
     {
+      "path": "docs/CompletedPR/PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation.md",
+      "size_bytes": 723,
+      "mtime_iso": "2026-03-29T01:19:46"
+    },
+    {
+      "path": "docs/CompletedPR/PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards.md",
+      "size_bytes": 561,
+      "mtime_iso": "2026-03-29T01:19:46"
+    },
+    {
+      "path": "docs/CompletedPR/PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract.md",
+      "size_bytes": 432,
+      "mtime_iso": "2026-03-29T01:19:46"
+    },
+    {
+      "path": "docs/CompletedPR/PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion.md",
+      "size_bytes": 484,
+      "mtime_iso": "2026-03-29T01:37:16"
+    },
+    {
       "path": "docs/CompletedPR/PR-CI-JOURNEY-001-CI-Journey-Tests-with-WebUI-Mocks.md",
-      "size_bytes": 38009,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 38057,
+      "mtime_iso": "2026-03-29T09:32:04"
     },
     {
       "path": "docs/CompletedPR/PR-COMFY-208-Workflow-Registry-and-Compiler.md",
@@ -530,6 +505,11 @@
       "mtime_iso": "2026-03-27T22:43:52"
     },
     {
+      "path": "docs/CompletedPR/PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure.md",
+      "size_bytes": 502,
+      "mtime_iso": "2026-03-29T01:37:16"
+    },
+    {
       "path": "docs/CompletedPR/PR-CTRL-205-Controller-Decomposition-and-Port-Boundaries.md",
       "size_bytes": 4616,
       "mtime_iso": "2026-03-18T23:32:58"
@@ -540,19 +520,24 @@
       "mtime_iso": "2026-03-20T06:39:28"
     },
     {
+      "path": "docs/CompletedPR/PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction.md",
+      "size_bytes": 780,
+      "mtime_iso": "2026-03-29T01:19:46"
+    },
+    {
       "path": "docs/CompletedPR/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md",
       "size_bytes": 2517,
       "mtime_iso": "2026-03-27T22:43:22"
     },
     {
       "path": "docs/CompletedPR/PR-DOCS-222-Active-Docs-Realignment-and-Archive-Cleanup.md",
-      "size_bytes": 2070,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 2154,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/CompletedPR/PR-DOCS-223-Randomizer-v26-Spec-and-Last-v25-Root-Spec-Removal.md",
-      "size_bytes": 1138,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 1160,
+      "mtime_iso": "2026-03-29T09:20:27"
     },
     {
       "path": "docs/CompletedPR/PR-GUI-213-GUI-Queue-Only-and-Video-Surface-Cleanup.md",
@@ -566,13 +551,13 @@
     },
     {
       "path": "docs/CompletedPR/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md",
-      "size_bytes": 1689,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 1600,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": "docs/CompletedPR/PR-GUI-234-Reprocess-Surface-Consolidation.md",
-      "size_bytes": 1427,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 1360,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": "docs/CompletedPR/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md",
@@ -590,59 +575,99 @@
       "mtime_iso": "2026-03-27T22:43:22"
     },
     {
+      "path": "docs/CompletedPR/PR-GUI-283-AppController-UI-Boundary-Closure-and-Operator-Log-Projection.md",
+      "size_bytes": 628,
+      "mtime_iso": "2026-03-29T00:08:35"
+    },
+    {
+      "path": "docs/CompletedPR/PR-GUI-284-AppState-Batched-Invalidation-and-Flush-Contract.md",
+      "size_bytes": 465,
+      "mtime_iso": "2026-03-29T00:08:35"
+    },
+    {
+      "path": "docs/CompletedPR/PR-GUI-285-Hot-Surface-Refresh-Scheduler-and-Subscription-Ownership.md",
+      "size_bytes": 692,
+      "mtime_iso": "2026-03-29T00:08:35"
+    },
+    {
+      "path": "docs/CompletedPR/PR-GUI-286-Incremental-Projection-Reconciliation-and-Visibility-Gating.md",
+      "size_bytes": 889,
+      "mtime_iso": "2026-03-29T01:03:49"
+    },
+    {
       "path": "docs/CompletedPR/PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation.md",
-      "size_bytes": 2908,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 2951,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/CompletedPR/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md",
-      "size_bytes": 2376,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 2419,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/CompletedPR/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md",
-      "size_bytes": 2580,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 2623,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/CompletedPR/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md",
-      "size_bytes": 2464,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 2494,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/CompletedPR/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md",
-      "size_bytes": 2739,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 2769,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/CompletedPR/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md",
-      "size_bytes": 2674,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 2711,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/CompletedPR/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md",
-      "size_bytes": 2430,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 2324,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": "docs/CompletedPR/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md",
-      "size_bytes": 1707,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 1612,
+      "mtime_iso": "2026-03-29T09:46:03"
+    },
+    {
+      "path": "docs/CompletedPR/PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes.md",
+      "size_bytes": 495,
+      "mtime_iso": "2026-03-29T01:37:16"
+    },
+    {
+      "path": "docs/CompletedPR/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md",
+      "size_bytes": 3981,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": "docs/CompletedPR/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md",
-      "size_bytes": 3647,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 3583,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": "docs/CompletedPR/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md",
-      "size_bytes": 1620,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 1547,
+      "mtime_iso": "2026-03-29T09:46:03"
+    },
+    {
+      "path": "docs/CompletedPR/PR-HARDEN-287-Runtime-Status-Backpressure-GUI-Perf-Journey-and-Architecture-Guards.md",
+      "size_bytes": 766,
+      "mtime_iso": "2026-03-29T01:03:49"
+    },
+    {
+      "path": "docs/CompletedPR/PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement.md",
+      "size_bytes": 521,
+      "mtime_iso": "2026-03-29T01:19:46"
     },
     {
       "path": "docs/CompletedPR/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md",
-      "size_bytes": 1286,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 1214,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": "docs/CompletedPR/PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events.md",
@@ -711,8 +736,8 @@
     },
     {
       "path": "docs/CompletedPR/PR-LEARN-264-Canonical-Metadata-Schemas-and-Contracts.md",
-      "size_bytes": 3003,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 3029,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/CompletedPR/PR-MIG-203-One-Time-History-Queue-Migration-Tool.md",
@@ -775,6 +800,11 @@
       "mtime_iso": "2026-03-19T22:50:54"
     },
     {
+      "path": "docs/CompletedPR/PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes.md",
+      "size_bytes": 756,
+      "mtime_iso": "2026-03-29T01:19:46"
+    },
+    {
       "path": "docs/CompletedPR/PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening.md",
       "size_bytes": 1918,
       "mtime_iso": "2026-03-24T18:55:54"
@@ -798,6 +828,11 @@
       "path": "docs/CompletedPR/PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding.md",
       "size_bytes": 2130,
       "mtime_iso": "2026-03-24T18:55:54"
+    },
+    {
+      "path": "docs/CompletedPR/PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation.md",
+      "size_bytes": 499,
+      "mtime_iso": "2026-03-29T01:37:16"
     },
     {
       "path": "docs/CompletedPR/PR-TEST-211-Test-Taxonomy-and-Suite-Normalization.md",
@@ -856,8 +891,8 @@
     },
     {
       "path": "docs/CompletedPR/PR-UX-272-GUI-Audit-and-Consistency-Inventory.md",
-      "size_bytes": 1304,
-      "mtime_iso": "2026-03-25T18:10:39"
+      "size_bytes": 1340,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": "docs/CompletedPR/PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline.md",
@@ -891,8 +926,8 @@
     },
     {
       "path": "docs/CompletedPR/PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist.md",
-      "size_bytes": 1446,
-      "mtime_iso": "2026-03-26T21:55:05"
+      "size_bytes": 1465,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": "docs/CompletedPR/PR-VIDEO-207-NJR-Video-Contract-Completion.md",
@@ -925,6 +960,11 @@
       "mtime_iso": "2026-03-20T06:03:07"
     },
     {
+      "path": "docs/CompletedPR/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md",
+      "size_bytes": 2468,
+      "mtime_iso": "2026-03-29T10:15:25"
+    },
+    {
       "path": "docs/CompletedPR/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md",
       "size_bytes": 1118,
       "mtime_iso": "2026-03-24T18:55:54"
@@ -948,6 +988,606 @@
       "path": "docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md",
       "size_bytes": 1851,
       "mtime_iso": "2026-03-24T18:55:54"
+    },
+    {
+      "path": "docs/CompletedPR/PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure.md",
+      "size_bytes": 486,
+      "mtime_iso": "2026-03-29T01:37:16"
+    },
+    {
+      "path": "docs/NeedsReview/Proposed - StableNew_Staged_Curation_Pipeline_Spec_v2.6.md",
+      "size_bytes": 16990,
+      "mtime_iso": "2026-03-24T18:55:54"
+    },
+    {
+      "path": "docs/NeedsReview/Proposed - StableNew_Staged_Curation_PR_Sequence_v2.6.md",
+      "size_bytes": 4361,
+      "mtime_iso": "2026-03-24T18:55:54"
+    },
+    {
+      "path": "docs/NeedsReview/README.md",
+      "size_bytes": 536,
+      "mtime_iso": "2026-03-29T09:32:04"
+    },
+    {
+      "path": "docs/NeedsReview/Video way of kings gaps - PR proposals.md",
+      "size_bytes": 17913,
+      "mtime_iso": "2026-03-28T15:11:53"
+    },
+    {
+      "path": "docs/NeedsReview/OpenSpec/PR-0114 – Pipeline Run Controls.md",
+      "size_bytes": 30148,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/OpenSpec/PR-AGENT-001-Agent-Governance-Consolidation.md",
+      "size_bytes": 2511,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/OpenSpec/PR-AGENT-002-Agent-Profile-Consolidation.md",
+      "size_bytes": 2425,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/OpenSpec/PR-AGENT-003-Instruction-Scoping-Normalization.md",
+      "size_bytes": 2701,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/OpenSpec/PR-AGENT-004-Operator-Guide-And-Setup.md",
+      "size_bytes": 2091,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md",
+      "size_bytes": 11922,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/OpenSpec/PR-CORE-VIDEO-005-SVD-Phase-1-Native-Tab.md",
+      "size_bytes": 18853,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/OpenSpec/PR-TEST-001 – Controller Archive Cleanup.md",
+      "size_bytes": 4128,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/OpenSpec/PR-TEST-002 – Legacy Archive Import Purge.md",
+      "size_bytes": 7630,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/OpenSpec/PR-TEST-003 – Journey Tests Modernization.md",
+      "size_bytes": 9697,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/pr_implementation/PR-CORE1-D11.md",
+      "size_bytes": 4192,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_implementation/PR-D_Implementation_Summary.md",
+      "size_bytes": 10988,
+      "mtime_iso": "2025-12-08T08:04:45"
+    },
+    {
+      "path": "docs/NeedsReview/pr_implementation/PR_IMPLEMENTATION_SUMMARY.md",
+      "size_bytes": 8243,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-ARCH-064-Architecture-Enforcement-Checks.md",
+      "size_bytes": 1648,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-ART-071-Canonical-Artifact-Manifest-and-Replay-Contract.md",
+      "size_bytes": 2797,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CI-053-Restore-Credible-CI-Gates.md",
+      "size_bytes": 5029,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CLEANUP-GUI-048-Retire-Legacy-MainWindow-Shim.md",
+      "size_bytes": 5062,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CLEANUP-LEARN-038-Tech-Debt-Removal-and-Contract-Cleanup.md",
+      "size_bytes": 1098,
+      "mtime_iso": "2026-03-29T09:20:27"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CLEANUP-LEARN-045-Runtime-Artifact-Version-Control-Hygiene.md",
+      "size_bytes": 7416,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CLOSE-057-Recommendation-1-Closeout-and-Duplicate-Txt2Img-Audit.md",
+      "size_bytes": 8593,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CORE-054-Workspace-Path-Abstraction-and-Runtime-Boundary.md",
+      "size_bytes": 5798,
+      "mtime_iso": "2026-03-29T09:20:27"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CORE-ARCH-047-Core-Seam-Extraction-and-Module-Caps.md",
+      "size_bytes": 5876,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CORE-ARCH-049-Explicit-Ports-Over-Reflection.md",
+      "size_bytes": 5437,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CORE-LEARN-040-Output-Scanner-and-Grouping-Engine.md",
+      "size_bytes": 5953,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CORE-LEARN-042-Discovered-Review-Evidence-Tiering-and-Analytics.md",
+      "size_bytes": 5581,
+      "mtime_iso": "2026-03-29T09:20:27"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CORE-LEARN-044-Recommendation-Evidence-Tiering-Regression-Fix.md",
+      "size_bytes": 8793,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CORE-LEARN-046-Rating-Detail-Analytics-Integration.md",
+      "size_bytes": 8959,
+      "mtime_iso": "2026-03-29T09:20:27"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CORE-LEARN-055-Learning-Analytics-Contract-Reconciliation.md",
+      "size_bytes": 6284,
+      "mtime_iso": "2026-03-29T09:20:27"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CORE-VIDEO-002-Clip-Build-Service-and-Controller.md",
+      "size_bytes": 5659,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CORE1-060-NJR-Only-Queue-History-Compatibility-Removal.md",
+      "size_bytes": 9054,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-CTRL-061-Controller-Legacy-Bridge-Retirement.md",
+      "size_bytes": 4653,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-DOCS-050-Canonical-Documentation-Reconciliation.md",
+      "size_bytes": 5536,
+      "mtime_iso": "2026-03-29T09:20:30"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-DOCS-065-Docs-Index-README-Current-State-Refresh.md",
+      "size_bytes": 1616,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-EDIT-077-Image-Edit-Foundation-via-Reprocess-and-Img2Img.md",
+      "size_bytes": 2150,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-056-GUI-Ownership-and-Migration-Boundary-Cleanup.md",
+      "size_bytes": 5318,
+      "mtime_iso": "2026-03-29T09:46:03"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-076-History-Panel-Artifact-Aware-Polish.md",
+      "size_bytes": 1555,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-LEARN-031-Learning-Workspace-Persistence-Foundation.md",
+      "size_bytes": 4929,
+      "mtime_iso": "2026-03-10T23:35:52"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-LEARN-032-Stage-Capability-Contract-and-Honest-Experiment-Model.md",
+      "size_bytes": 1886,
+      "mtime_iso": "2026-03-10T23:35:52"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-LEARN-033-Stage-Aware-Variable-System-and-Resource-Selectors.md",
+      "size_bytes": 1409,
+      "mtime_iso": "2026-03-10T23:35:52"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-LEARN-034-LoRA-Experimentation-Rebuild.md",
+      "size_bytes": 1080,
+      "mtime_iso": "2026-03-10T23:35:52"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-LEARN-035-Experiment-Form-and-Layout-Overhaul.md",
+      "size_bytes": 1319,
+      "mtime_iso": "2026-03-10T23:35:52"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-LEARN-036-Review-Pane-Redesign-and-Rating-Model-Upgrade.md",
+      "size_bytes": 1480,
+      "mtime_iso": "2026-03-10T23:35:52"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-LEARN-037-Analytics-and-Recommendation-Hardening.md",
+      "size_bytes": 1160,
+      "mtime_iso": "2026-03-10T23:35:52"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-LEARN-039-Discovered-Review-Experiment-Models-and-Store.md",
+      "size_bytes": 5440,
+      "mtime_iso": "2026-03-29T09:20:27"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-LEARN-041-Discovered-Review-Inbox-and-Workflow.md",
+      "size_bytes": 5934,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-PS6-001-PySide6-Governance-and-Gates.md",
+      "size_bytes": 4327,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-PS6-002-View-Contract-Extraction.md",
+      "size_bytes": 3328,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-PS6-003-UI-Dispatcher-Abstraction.md",
+      "size_bytes": 3048,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-PS6-004-PySide6-App-Spine.md",
+      "size_bytes": 909,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-PS6-005-Prompt-Pipeline-Port.md",
+      "size_bytes": 961,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-PS6-006-Review-Learning-Port.md",
+      "size_bytes": 960,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-PS6-007-Runtime-Panels-Port.md",
+      "size_bytes": 851,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-PS6-008-Dialogs-Settings-Shutdown.md",
+      "size_bytes": 859,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-PS6-009-Cutover.md",
+      "size_bytes": 787,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-PS6-010-Packaging-CI.md",
+      "size_bytes": 769,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-GUI-VIDEO-001-Movie-Clips-Tab-Spine-and-Selection.md",
+      "size_bytes": 5274,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-HB-067-Heartbeat-Watchdog-Wiring-Cleanup.md",
+      "size_bytes": 1584,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-IO-069-Deterministic-Output-Routing-and-Naming.md",
+      "size_bytes": 3815,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-LEARN-073-Modest-Learning-Loop-Canonical-Submission-and-Metadata.md",
+      "size_bytes": 4008,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-MAR26-001-Learning-Core-Wiring-Stabilization.md",
+      "size_bytes": 1883,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-MAR26-002-Learning-Data-Path-Consistency.md",
+      "size_bytes": 871,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-MAR26-003-Review-Learning-Feedback-Bridge.md",
+      "size_bytes": 635,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-MAR26-004-Contextual-Recommendation-Engine-v2.md",
+      "size_bytes": 582,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-MAR26-005-Controlled-Automation-Modes.md",
+      "size_bytes": 567,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-MAR26-UI-REFRESH-001-Migration-Accelerator.md",
+      "size_bytes": 6098,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-MAR26-UI-REFRESH-PYSIDE6-MIGRATION-CRITIQUE-AND-PLAN.md",
+      "size_bytes": 6049,
+      "mtime_iso": "2026-03-10T07:38:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-OBS-068-Unified-Diagnostics-Snapshot-and-Bundle-Contents.md",
+      "size_bytes": 3080,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-PIPE-062-Pipeline-Config-Boundary-Validation-and-Normalization.md",
+      "size_bytes": 4017,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-PIPE-063-Canonical-Stage-Contract-Preferred-Flow-Normalization.md",
+      "size_bytes": 1882,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-PROCESS-051-Agent-Instruction-Surface-Consolidation.md",
+      "size_bytes": 5011,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-QUEUE-067-Queue-Lifecycle-Semantics-and-Checkpoint-Recording.md",
+      "size_bytes": 5982,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-QUEUE-067A-Resume-From-Checkpoint-Execution.md",
+      "size_bytes": 3148,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-RECOV-066-WebUI-Recovery-Hardening.md",
+      "size_bytes": 11694,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-REPROC-072-Productized-Reprocess-Subsystem.md",
+      "size_bytes": 4999,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-RES-070-Model-Resource-Discovery-and-Refresh-Cleanup.md",
+      "size_bytes": 2174,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-TechDebt-08MAR26.md",
+      "size_bytes": 312,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-TEST-052-Test-Suite-Normalization-and-Collection-Audit.md",
+      "size_bytes": 5393,
+      "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-TEST-LEARN-043-Discovered-Review-Journeys-and-Documentation.md",
+      "size_bytes": 4767,
+      "mtime_iso": "2026-03-29T09:20:27"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-TEST-VIDEO-003-Movie-Clips-Journeys-and-Documentation.md",
+      "size_bytes": 4736,
+      "mtime_iso": "2026-03-29T10:15:25"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-VIDEO-074-SVD-Artifact-History-Contract-Completion.md",
+      "size_bytes": 2829,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/PR_MAR26/PR-VIDEO-075-AnimateDiff-Artifact-Contract-Gating.md",
+      "size_bytes": 1532,
+      "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/# PR-MULTISTAGE-002 — Fix Stage Enablement.md",
+      "size_bytes": 9077,
+      "mtime_iso": "2025-12-19T05:16:37"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/D-014 StableNew Memory Leak Investigation Plan.md",
+      "size_bytes": 9636,
+      "mtime_iso": "2025-12-19T05:16:37"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-API-0121-WebUI-Crash-Guard.md",
+      "size_bytes": 4574,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-API-D27 — HTTP Connection Lifecycle.md",
+      "size_bytes": 7593,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-0123 — WebUI Crash Mitigation.md",
+      "size_bytes": 7706,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-12-STATUS.md",
+      "size_bytes": 8603,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D11 – WebUI Crash Recovery + Stage Retry Gate.md",
+      "size_bytes": 8761,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D11A-WEBUI-FAILURE-DIAGNOSTICS.md",
+      "size_bytes": 4013,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D11B-WEBUI-CRASH-RECOVERY-RETRY.md",
+      "size_bytes": 3507,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D11C-TXT2IMG-PAYLOAD-SANITY-GUARDS.md",
+      "size_bytes": 2695,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D11E-COMPLETE.md",
+      "size_bytes": 8153,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D11F-COMPLETE.md",
+      "size_bytes": 9320,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D21A.md",
+      "size_bytes": 8697,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D21B.md",
+      "size_bytes": 7186,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D21C.md",
+      "size_bytes": 6429,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D22A.md",
+      "size_bytes": 11732,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D22B.md",
+      "size_bytes": 10609,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-CORE1-D22C.md",
+      "size_bytes": 12967,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-Discovry-D-015-PromptPack Execution Path Investigation.md",
+      "size_bytes": 25220,
+      "mtime_iso": "2025-12-19T05:16:37"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-GUI-003-C-COMPLETE.md",
+      "size_bytes": 12756,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-GUI-D25-WebUI-Resource-Hydration.md",
+      "size_bytes": 10735,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-GUI-D26 — Dropdown Normalization.md",
+      "size_bytes": 8225,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-GUI-D26A — Dropdown NormalizationV2.md",
+      "size_bytes": 4309,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-MULTISTAGE-001 — Multi-Stage Pipeline Execution.md",
+      "size_bytes": 62620,
+      "mtime_iso": "2025-12-19T05:16:37"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-MULTISTAGE-002-B.patch",
+      "size_bytes": 46432,
+      "mtime_iso": "2025-12-19T05:16:37"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-PREVIEW-001 — Fix PromptPack Preview Queue Job Count.md",
+      "size_bytes": 32604,
+      "mtime_iso": "2025-12-19T05:16:37"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-QUEUE-D26B — Queue Completion.md",
+      "size_bytes": 3950,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-RUFF-001.md",
+      "size_bytes": 28534,
+      "mtime_iso": "2025-12-25T15:23:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/PR-WEBUI-RECOVERY-001.md",
+      "size_bytes": 11391,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates/Work Summaries/PR-CORE1-D11E-COMPLETION-SUMMARY.md",
+      "size_bytes": 16252,
+      "mtime_iso": "2025-12-19T05:15:32"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates_pipeline_config/PR-GUI-DARKMODE-002.md",
+      "size_bytes": 18654,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates_pipeline_config/PR-GUI-FUNC-003.md",
+      "size_bytes": 15706,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates_pipeline_config/PR-GUI-LAYOUT-002.md",
+      "size_bytes": 14173,
+      "mtime_iso": "2026-03-08T18:59:28"
+    },
+    {
+      "path": "docs/NeedsReview/pr_templates_pipeline_config/PR-GUI-TOOLTIPS-001.md",
+      "size_bytes": 10786,
+      "mtime_iso": "2026-03-08T18:59:28"
     },
     {
       "path": "docs/older/ACTIVE_MODULES.md",
@@ -1016,8 +1656,8 @@
     },
     {
       "path": "docs/older/DOCS_INDEX_v2.5.md",
-      "size_bytes": 11532,
-      "mtime_iso": "2025-12-19T05:15:32"
+      "size_bytes": 11570,
+      "mtime_iso": "2026-03-29T09:32:04"
     },
     {
       "path": "docs/older/Future_Learning_Roadmap_2025-11-26_1115.md",
@@ -2541,8 +3181,8 @@
     },
     {
       "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-F3 — Queue Auto-Run, “Send Job”, Running Job(V2.5).md",
-      "size_bytes": 18028,
-      "mtime_iso": "2025-12-19T05:15:32"
+      "size_bytes": 18076,
+      "mtime_iso": "2026-03-29T09:32:04"
     },
     {
       "path": "docs/older/pr_templates_pipeline_config/PriorWork_complete/PR-GUI-H – Window Management & Layout Fixes (V2.5).md",
@@ -3150,56 +3790,6 @@
       "mtime_iso": "2025-12-19T05:15:32"
     },
     {
-      "path": "docs/OpenSpec/PR-0114 – Pipeline Run Controls.md",
-      "size_bytes": 30148,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/OpenSpec/PR-AGENT-001-Agent-Governance-Consolidation.md",
-      "size_bytes": 2511,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/OpenSpec/PR-AGENT-002-Agent-Profile-Consolidation.md",
-      "size_bytes": 2425,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/OpenSpec/PR-AGENT-003-Instruction-Scoping-Normalization.md",
-      "size_bytes": 2701,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/OpenSpec/PR-AGENT-004-Operator-Guide-And-Setup.md",
-      "size_bytes": 2091,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/OpenSpec/PR-CORE-VIDEO-004-AnimateDiff-Phase-1-Contract-Gated.md",
-      "size_bytes": 11922,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/OpenSpec/PR-CORE-VIDEO-005-SVD-Phase-1-Native-Tab.md",
-      "size_bytes": 18853,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/OpenSpec/PR-TEST-001 – Controller Archive Cleanup.md",
-      "size_bytes": 4128,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/OpenSpec/PR-TEST-002 – Legacy Archive Import Purge.md",
-      "size_bytes": 7630,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/OpenSpec/PR-TEST-003 – Journey Tests Modernization.md",
-      "size_bytes": 9697,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
       "path": "docs/PRs/LEARNING_PR_SERIES_INDEX.md",
       "size_bytes": 5386,
       "mtime_iso": "2026-03-08T18:59:28"
@@ -3305,19 +3895,9 @@
       "mtime_iso": "2026-03-08T18:59:28"
     },
     {
-      "path": "docs/PR_Backlog/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md",
-      "size_bytes": 9228,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
       "path": "docs/PR_Backlog/D-NSFW-SFW-001-Content-Visibility-Mode-Discovery.md",
       "size_bytes": 5510,
       "mtime_iso": "2026-03-27T18:16:11"
-    },
-    {
-      "path": "docs/PR_Backlog/GUI_DARK_MODE_AND_LAYOUT_CONSISTENCY_SWEEP_v2.6.md",
-      "size_bytes": 10539,
-      "mtime_iso": "2026-03-26T21:54:45"
     },
     {
       "path": "docs/PR_Backlog/HYBRID_STAGED_CURATION_REVIEW_HANDOFF_PR_SEQUENCE_v2.6.md",
@@ -3335,194 +3915,9 @@
       "mtime_iso": "2026-03-20T06:39:28"
     },
     {
-      "path": "docs/PR_Backlog/PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset.md",
-      "size_bytes": 10203,
-      "mtime_iso": "2026-03-26T22:06:18"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation.md",
-      "size_bytes": 7954,
-      "mtime_iso": "2026-03-27T06:19:46"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-CONFIG-271-Content-Visibility-Mode-Contract-and-Persistence.md",
-      "size_bytes": 5097,
-      "mtime_iso": "2026-03-27T22:43:22"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md",
-      "size_bytes": 8372,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md",
-      "size_bytes": 4984,
-      "mtime_iso": "2026-03-27T22:43:22"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md",
-      "size_bytes": 8216,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md",
-      "size_bytes": 2523,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-GUI-234-Reprocess-Surface-Consolidation.md",
-      "size_bytes": 2137,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md",
-      "size_bytes": 13531,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-GUI-235A-PresetNaming.md",
-      "size_bytes": 1134,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md",
-      "size_bytes": 5215,
-      "mtime_iso": "2026-03-27T22:43:22"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation.md",
-      "size_bytes": 12349,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md",
-      "size_bytes": 10080,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md",
-      "size_bytes": 9870,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md",
-      "size_bytes": 9029,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md",
-      "size_bytes": 9445,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md",
-      "size_bytes": 10162,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md",
-      "size_bytes": 7136,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md",
-      "size_bytes": 3663,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md",
-      "size_bytes": 13329,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md",
-      "size_bytes": 8375,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md",
-      "size_bytes": 2044,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
       "path": "docs/PR_Backlog/PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback.md",
-      "size_bytes": 9234,
-      "mtime_iso": "2026-03-26T06:11:53"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md",
-      "size_bytes": 2077,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events.md",
-      "size_bytes": 871,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-259B-Learning-Workspace-Staged-Curation-Mode.md",
-      "size_bytes": 920,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-259C-Review-History-Import-and-Large-Compare-Surface.md",
-      "size_bytes": 882,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing.md",
-      "size_bytes": 729,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics.md",
-      "size_bytes": 758,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries.md",
-      "size_bytes": 667,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-261-Portable-Review-Metadata-Stamping-v2.6.md",
-      "size_bytes": 9604,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-262-Portable-Review-Metadata-Rehydration-and-UI-Surfacing-v2.6.md",
-      "size_bytes": 9448,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-263-Artifact-Metadata-Inspector-and-Debug-UI-v2.6.md",
-      "size_bytes": 8204,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-LEARN-264-Canonical-Metadata-Schemas-and-Contracts-v2.6.md",
-      "size_bytes": 6973,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization.md",
-      "size_bytes": 1334,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters.md",
-      "size_bytes": 1055,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-OBS-249C-Repeated-Event-Collapse-and-WebUI-Outage-Dedup.md",
-      "size_bytes": 1021,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split.md",
-      "size_bytes": 916,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 9235,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": "docs/PR_Backlog/PR-POLISH-282-Canonical-Roadmap-Video-Status-Harmonization.md",
@@ -3530,104 +3925,9 @@
       "mtime_iso": "2026-03-26T06:11:53"
     },
     {
-      "path": "docs/PR_Backlog/PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening.md",
-      "size_bytes": 579,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only.md",
-      "size_bytes": 521,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing.md",
-      "size_bytes": 512,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract.md",
-      "size_bytes": 456,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding.md",
-      "size_bytes": 513,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md",
-      "size_bytes": 4533,
-      "mtime_iso": "2026-03-27T22:43:22"
-    },
-    {
       "path": "docs/PR_Backlog/PR-TEST-280-Full-Suite-Collection-Recovery-and-Test-Hygiene.md",
       "size_bytes": 6970,
       "mtime_iso": "2026-03-26T06:11:53"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability-v2.6.md",
-      "size_bytes": 8214,
-      "mtime_iso": "2026-03-24T19:18:00"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md",
-      "size_bytes": 9409,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md",
-      "size_bytes": 8798,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md",
-      "size_bytes": 8436,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-218-Continuity-Pack-Foundation.md",
-      "size_bytes": 6796,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md",
-      "size_bytes": 6420,
-      "mtime_iso": "2026-03-19T22:50:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md",
-      "size_bytes": 13953,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md",
-      "size_bytes": 12132,
-      "mtime_iso": "2026-03-24T18:55:54"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md",
-      "size_bytes": 10733,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md",
-      "size_bytes": 9498,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md",
-      "size_bytes": 9574,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md",
-      "size_bytes": 10066,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
-      "path": "docs/PR_Backlog/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md",
-      "size_bytes": 2910,
-      "mtime_iso": "2026-03-24T18:55:54"
     },
     {
       "path": "docs/PR_Backlog/REVISED_MINI_ROADMAP_PR_ORDER_v2.6.md",
@@ -3635,14 +3935,9 @@
       "mtime_iso": "2026-03-26T07:58:53"
     },
     {
-      "path": "docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md",
-      "size_bytes": 13190,
-      "mtime_iso": "2026-03-21T00:36:55"
-    },
-    {
       "path": "docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md",
-      "size_bytes": 11967,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 10703,
+      "mtime_iso": "2026-03-29T10:15:25"
     },
     {
       "path": "docs/PR_Backlog/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md",
@@ -3661,8 +3956,8 @@
     },
     {
       "path": "docs/PR_Backlog/VIDEO_AND_SECONDARY_MOTION_REMAINING_WORK_SEQUENCE_v2.6.md",
-      "size_bytes": 5535,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 5539,
+      "mtime_iso": "2026-03-29T09:20:27"
     },
     {
       "path": "docs/PR_Backlog/HistoricalRoot/PR-FILENAME-001.md",
@@ -3835,529 +4130,9 @@
       "mtime_iso": "2026-03-18T23:32:58"
     },
     {
-      "path": "docs/pr_implementation/PR-CORE1-D11.md",
-      "size_bytes": 4192,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_implementation/PR-D_Implementation_Summary.md",
-      "size_bytes": 10988,
-      "mtime_iso": "2025-12-08T08:04:45"
-    },
-    {
-      "path": "docs/pr_implementation/PR_IMPLEMENTATION_SUMMARY.md",
-      "size_bytes": 8243,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-ARCH-064-Architecture-Enforcement-Checks.md",
-      "size_bytes": 1648,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-ART-071-Canonical-Artifact-Manifest-and-Replay-Contract.md",
-      "size_bytes": 2797,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CI-053-Restore-Credible-CI-Gates.md",
-      "size_bytes": 5029,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CLEANUP-GUI-048-Retire-Legacy-MainWindow-Shim.md",
-      "size_bytes": 5062,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CLEANUP-LEARN-038-Tech-Debt-Removal-and-Contract-Cleanup.md",
-      "size_bytes": 1055,
-      "mtime_iso": "2026-03-10T23:35:52"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CLEANUP-LEARN-045-Runtime-Artifact-Version-Control-Hygiene.md",
-      "size_bytes": 7416,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CLOSE-057-Recommendation-1-Closeout-and-Duplicate-Txt2Img-Audit.md",
-      "size_bytes": 8593,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CORE-054-Workspace-Path-Abstraction-and-Runtime-Boundary.md",
-      "size_bytes": 5758,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CORE-ARCH-047-Core-Seam-Extraction-and-Module-Caps.md",
-      "size_bytes": 5876,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CORE-ARCH-049-Explicit-Ports-Over-Reflection.md",
-      "size_bytes": 5437,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CORE-LEARN-040-Output-Scanner-and-Grouping-Engine.md",
-      "size_bytes": 5953,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CORE-LEARN-042-Discovered-Review-Evidence-Tiering-and-Analytics.md",
-      "size_bytes": 5561,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CORE-LEARN-044-Recommendation-Evidence-Tiering-Regression-Fix.md",
-      "size_bytes": 8793,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CORE-LEARN-046-Rating-Detail-Analytics-Integration.md",
-      "size_bytes": 8919,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CORE-LEARN-055-Learning-Analytics-Contract-Reconciliation.md",
-      "size_bytes": 6244,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CORE-VIDEO-002-Clip-Build-Service-and-Controller.md",
-      "size_bytes": 5659,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CORE1-060-NJR-Only-Queue-History-Compatibility-Removal.md",
-      "size_bytes": 9054,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-CTRL-061-Controller-Legacy-Bridge-Retirement.md",
-      "size_bytes": 4653,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-DOCS-050-Canonical-Documentation-Reconciliation.md",
-      "size_bytes": 5476,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-DOCS-065-Docs-Index-README-Current-State-Refresh.md",
-      "size_bytes": 1616,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-EDIT-077-Image-Edit-Foundation-via-Reprocess-and-Img2Img.md",
-      "size_bytes": 2150,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-056-GUI-Ownership-and-Migration-Boundary-Cleanup.md",
-      "size_bytes": 5303,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-076-History-Panel-Artifact-Aware-Polish.md",
-      "size_bytes": 1555,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-LEARN-031-Learning-Workspace-Persistence-Foundation.md",
-      "size_bytes": 4929,
-      "mtime_iso": "2026-03-10T23:35:52"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-LEARN-032-Stage-Capability-Contract-and-Honest-Experiment-Model.md",
-      "size_bytes": 1886,
-      "mtime_iso": "2026-03-10T23:35:52"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-LEARN-033-Stage-Aware-Variable-System-and-Resource-Selectors.md",
-      "size_bytes": 1409,
-      "mtime_iso": "2026-03-10T23:35:52"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-LEARN-034-LoRA-Experimentation-Rebuild.md",
-      "size_bytes": 1080,
-      "mtime_iso": "2026-03-10T23:35:52"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-LEARN-035-Experiment-Form-and-Layout-Overhaul.md",
-      "size_bytes": 1319,
-      "mtime_iso": "2026-03-10T23:35:52"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-LEARN-036-Review-Pane-Redesign-and-Rating-Model-Upgrade.md",
-      "size_bytes": 1480,
-      "mtime_iso": "2026-03-10T23:35:52"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-LEARN-037-Analytics-and-Recommendation-Hardening.md",
-      "size_bytes": 1160,
-      "mtime_iso": "2026-03-10T23:35:52"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-LEARN-039-Discovered-Review-Experiment-Models-and-Store.md",
-      "size_bytes": 5400,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-LEARN-041-Discovered-Review-Inbox-and-Workflow.md",
-      "size_bytes": 5934,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-PS6-001-PySide6-Governance-and-Gates.md",
-      "size_bytes": 4327,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-PS6-002-View-Contract-Extraction.md",
-      "size_bytes": 3328,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-PS6-003-UI-Dispatcher-Abstraction.md",
-      "size_bytes": 3048,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-PS6-004-PySide6-App-Spine.md",
-      "size_bytes": 909,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-PS6-005-Prompt-Pipeline-Port.md",
-      "size_bytes": 961,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-PS6-006-Review-Learning-Port.md",
-      "size_bytes": 960,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-PS6-007-Runtime-Panels-Port.md",
-      "size_bytes": 851,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-PS6-008-Dialogs-Settings-Shutdown.md",
-      "size_bytes": 859,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-PS6-009-Cutover.md",
-      "size_bytes": 787,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-PS6-010-Packaging-CI.md",
-      "size_bytes": 769,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-GUI-VIDEO-001-Movie-Clips-Tab-Spine-and-Selection.md",
-      "size_bytes": 5274,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-HB-067-Heartbeat-Watchdog-Wiring-Cleanup.md",
-      "size_bytes": 1584,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-IO-069-Deterministic-Output-Routing-and-Naming.md",
-      "size_bytes": 3815,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-LEARN-073-Modest-Learning-Loop-Canonical-Submission-and-Metadata.md",
-      "size_bytes": 4008,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-MAR26-001-Learning-Core-Wiring-Stabilization.md",
-      "size_bytes": 1883,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-MAR26-002-Learning-Data-Path-Consistency.md",
-      "size_bytes": 871,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-MAR26-003-Review-Learning-Feedback-Bridge.md",
-      "size_bytes": 635,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-MAR26-004-Contextual-Recommendation-Engine-v2.md",
-      "size_bytes": 582,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-MAR26-005-Controlled-Automation-Modes.md",
-      "size_bytes": 567,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-MAR26-UI-REFRESH-001-Migration-Accelerator.md",
-      "size_bytes": 6098,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-MAR26-UI-REFRESH-PYSIDE6-MIGRATION-CRITIQUE-AND-PLAN.md",
-      "size_bytes": 6049,
-      "mtime_iso": "2026-03-10T07:38:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-OBS-068-Unified-Diagnostics-Snapshot-and-Bundle-Contents.md",
-      "size_bytes": 3080,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-PIPE-062-Pipeline-Config-Boundary-Validation-and-Normalization.md",
-      "size_bytes": 4017,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-PIPE-063-Canonical-Stage-Contract-Preferred-Flow-Normalization.md",
-      "size_bytes": 1882,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-PROCESS-051-Agent-Instruction-Surface-Consolidation.md",
-      "size_bytes": 5011,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-QUEUE-067-Queue-Lifecycle-Semantics-and-Checkpoint-Recording.md",
-      "size_bytes": 5982,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-QUEUE-067A-Resume-From-Checkpoint-Execution.md",
-      "size_bytes": 3148,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-RECOV-066-WebUI-Recovery-Hardening.md",
-      "size_bytes": 11694,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-REPROC-072-Productized-Reprocess-Subsystem.md",
-      "size_bytes": 4999,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-RES-070-Model-Resource-Discovery-and-Refresh-Cleanup.md",
-      "size_bytes": 2174,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-TechDebt-08MAR26.md",
-      "size_bytes": 312,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-TEST-052-Test-Suite-Normalization-and-Collection-Audit.md",
-      "size_bytes": 5393,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-TEST-LEARN-043-Discovered-Review-Journeys-and-Documentation.md",
-      "size_bytes": 4727,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-TEST-VIDEO-003-Movie-Clips-Journeys-and-Documentation.md",
-      "size_bytes": 4719,
-      "mtime_iso": "2026-03-14T19:37:49"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-VIDEO-074-SVD-Artifact-History-Contract-Completion.md",
-      "size_bytes": 2829,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/PR_MAR26/PR-VIDEO-075-AnimateDiff-Artifact-Contract-Gating.md",
-      "size_bytes": 1532,
-      "mtime_iso": "2026-03-18T18:49:47"
-    },
-    {
-      "path": "docs/pr_templates/# PR-MULTISTAGE-002 — Fix Stage Enablement.md",
-      "size_bytes": 9077,
-      "mtime_iso": "2025-12-19T05:16:37"
-    },
-    {
-      "path": "docs/pr_templates/D-014 StableNew Memory Leak Investigation Plan.md",
-      "size_bytes": 9636,
-      "mtime_iso": "2025-12-19T05:16:37"
-    },
-    {
-      "path": "docs/pr_templates/PR-API-0121-WebUI-Crash-Guard.md",
-      "size_bytes": 4574,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-API-D27 — HTTP Connection Lifecycle.md",
-      "size_bytes": 7593,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-0123 — WebUI Crash Mitigation.md",
-      "size_bytes": 7706,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-12-STATUS.md",
-      "size_bytes": 8603,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D11 – WebUI Crash Recovery + Stage Retry Gate.md",
-      "size_bytes": 8761,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D11A-WEBUI-FAILURE-DIAGNOSTICS.md",
-      "size_bytes": 4013,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D11B-WEBUI-CRASH-RECOVERY-RETRY.md",
-      "size_bytes": 3507,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D11C-TXT2IMG-PAYLOAD-SANITY-GUARDS.md",
-      "size_bytes": 2695,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D11E-COMPLETE.md",
-      "size_bytes": 8153,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D11F-COMPLETE.md",
-      "size_bytes": 9320,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D21A.md",
-      "size_bytes": 8697,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D21B.md",
-      "size_bytes": 7186,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D21C.md",
-      "size_bytes": 6429,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D22A.md",
-      "size_bytes": 11732,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D22B.md",
-      "size_bytes": 10609,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-CORE1-D22C.md",
-      "size_bytes": 12967,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-Discovry-D-015-PromptPack Execution Path Investigation.md",
-      "size_bytes": 25220,
-      "mtime_iso": "2025-12-19T05:16:37"
-    },
-    {
-      "path": "docs/pr_templates/PR-GUI-003-C-COMPLETE.md",
-      "size_bytes": 12756,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/pr_templates/PR-GUI-D25-WebUI-Resource-Hydration.md",
-      "size_bytes": 10735,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-GUI-D26 — Dropdown Normalization.md",
-      "size_bytes": 8225,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-GUI-D26A — Dropdown NormalizationV2.md",
-      "size_bytes": 4309,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-MULTISTAGE-001 — Multi-Stage Pipeline Execution.md",
-      "size_bytes": 62620,
-      "mtime_iso": "2025-12-19T05:16:37"
-    },
-    {
-      "path": "docs/pr_templates/PR-MULTISTAGE-002-B.patch",
-      "size_bytes": 46432,
-      "mtime_iso": "2025-12-19T05:16:37"
-    },
-    {
-      "path": "docs/pr_templates/PR-PREVIEW-001 — Fix PromptPack Preview Queue Job Count.md",
-      "size_bytes": 32604,
-      "mtime_iso": "2025-12-19T05:16:37"
-    },
-    {
-      "path": "docs/pr_templates/PR-QUEUE-D26B — Queue Completion.md",
-      "size_bytes": 3950,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-RUFF-001.md",
-      "size_bytes": 28534,
-      "mtime_iso": "2025-12-25T15:23:32"
-    },
-    {
-      "path": "docs/pr_templates/PR-WEBUI-RECOVERY-001.md",
-      "size_bytes": 11391,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/pr_templates/Work Summaries/PR-CORE1-D11E-COMPLETION-SUMMARY.md",
-      "size_bytes": 16252,
-      "mtime_iso": "2025-12-19T05:15:32"
-    },
-    {
-      "path": "docs/pr_templates_pipeline_config/PR-GUI-DARKMODE-002.md",
-      "size_bytes": 18654,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/pr_templates_pipeline_config/PR-GUI-FUNC-003.md",
-      "size_bytes": 15706,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/pr_templates_pipeline_config/PR-GUI-LAYOUT-002.md",
-      "size_bytes": 14173,
-      "mtime_iso": "2026-03-08T18:59:28"
-    },
-    {
-      "path": "docs/pr_templates_pipeline_config/PR-GUI-TOOLTIPS-001.md",
-      "size_bytes": 10786,
-      "mtime_iso": "2026-03-08T18:59:28"
+      "path": "docs/Research Reports/Adaptive Refinement and Smart Prompting System SPEC research.md",
+      "size_bytes": 23848,
+      "mtime_iso": "2026-03-20T07:18:59"
     },
     {
       "path": "docs/Research Reports/D-016-Branch-Review-Since-2026-03-22-2205.md",
@@ -4366,8 +4141,8 @@
     },
     {
       "path": "docs/Research Reports/deep-research-report-DEEP GPU memory and stall investigation - verdict.md",
-      "size_bytes": 6563,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 6581,
+      "mtime_iso": "2026-03-29T09:46:03"
     },
     {
       "path": "docs/Research Reports/deep-research-report-DEEP GPU memory and stall investigation.md",
@@ -4375,8 +4150,43 @@
       "mtime_iso": "2026-03-24T18:55:54"
     },
     {
+      "path": "docs/Research Reports/deep-research-report-prompt-optimization-world-class.md",
+      "size_bytes": 29996,
+      "mtime_iso": "2026-03-24T18:55:54"
+    },
+    {
+      "path": "docs/Research Reports/deep-research-report-top-20-golden-recommendations.md",
+      "size_bytes": 35993,
+      "mtime_iso": "2026-03-29T09:32:04"
+    },
+    {
+      "path": "docs/Research Reports/PR-CORE-001 — Model Update Matrix and Preset Map.docx",
+      "size_bytes": 20859,
+      "mtime_iso": "2026-03-28T18:36:44"
+    },
+    {
+      "path": "docs/Research Reports/Research Exsum for top 20 Priority Items - 28MAR2026 - 1230.md",
+      "size_bytes": 31121,
+      "mtime_iso": "2026-03-29T10:15:42"
+    },
+    {
+      "path": "docs/Research Reports/Research PR Proposals for top 20 Priority Items - 28MAR2026 - 1235.md",
+      "size_bytes": 17913,
+      "mtime_iso": "2026-03-29T09:37:52"
+    },
+    {
+      "path": "docs/Research Reports/StableNew - Video Way Of Kings Gaps - Exsum Research.md",
+      "size_bytes": 31121,
+      "mtime_iso": "2026-03-29T10:15:42"
+    },
+    {
       "path": "docs/Research Reports/StableNew-Adaptive_config_research_summary_and_proposal.md",
-      "size_bytes": 38116,
+      "size_bytes": 38129,
+      "mtime_iso": "2026-03-29T10:15:25"
+    },
+    {
+      "path": "docs/Research Reports/StableNew2 Prompt Optimizer Deep Research_ World‑Class, Safe, Intent‑Aware, Policy‑Driven.pdf",
+      "size_bytes": 102743,
       "mtime_iso": "2026-03-24T18:55:54"
     },
     {
@@ -4388,6 +4198,16 @@
       "path": "docs/Research Reports/STAGED_CURATION_EFFECTIVE_CONFIG_AND_PROMPT_BEHAVIOR_v2.6.md",
       "size_bytes": 8432,
       "mtime_iso": "2026-03-24T18:55:54"
+    },
+    {
+      "path": "docs/Research Reports/WebUI GPU Pressure and Stall Investigation 2026-03-21.md",
+      "size_bytes": 13951,
+      "mtime_iso": "2026-03-29T09:46:03"
+    },
+    {
+      "path": "docs/Research Reports/WebUI Restart and Lost Connection Investigation 2026-03-20.md",
+      "size_bytes": 24412,
+      "mtime_iso": "2026-03-21T00:36:55"
     },
     {
       "path": "docs/runbooks/ZOMBIE_PROCESS_RECOVERY.md",
@@ -4415,6 +4235,56 @@
       "mtime_iso": "2026-03-24T18:55:54"
     },
     {
+      "path": "docs/Subsystems/README.md",
+      "size_bytes": 414,
+      "mtime_iso": "2026-03-29T08:54:04"
+    },
+    {
+      "path": "docs/Subsystems/GUI/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md",
+      "size_bytes": 14883,
+      "mtime_iso": "2026-03-29T09:40:48"
+    },
+    {
+      "path": "docs/Subsystems/GUI/GUI_CONSISTENCY_MAINTENANCE_CHECKLIST_v2.6.md",
+      "size_bytes": 4187,
+      "mtime_iso": "2026-03-29T09:40:48"
+    },
+    {
+      "path": "docs/Subsystems/GUI/GUI_Ownership_Map_v2.6.md",
+      "size_bytes": 6526,
+      "mtime_iso": "2026-03-29T09:40:48"
+    },
+    {
+      "path": "docs/Subsystems/Learning/Learning_System_Spec_v2.6.md",
+      "size_bytes": 7645,
+      "mtime_iso": "2026-03-29T09:20:27"
+    },
+    {
+      "path": "docs/Subsystems/Randomizer/Randomizer_Spec_v2.6.md",
+      "size_bytes": 5753,
+      "mtime_iso": "2026-03-19T22:50:54"
+    },
+    {
+      "path": "docs/Subsystems/Testing/E2E_Golden_Path_Test_Matrix_v2.6.md",
+      "size_bytes": 12229,
+      "mtime_iso": "2026-03-18T20:08:48"
+    },
+    {
+      "path": "docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md",
+      "size_bytes": 2440,
+      "mtime_iso": "2026-03-19T22:50:54"
+    },
+    {
+      "path": "docs/Subsystems/Testing/README.md",
+      "size_bytes": 256,
+      "mtime_iso": "2026-03-29T09:32:04"
+    },
+    {
+      "path": "docs/Subsystems/Video/Movie_Clips_Workflow_v2.6.md",
+      "size_bytes": 3247,
+      "mtime_iso": "2026-03-20T06:39:28"
+    },
+    {
       "path": "lists/Full List.json",
       "size_bytes": 548,
       "mtime_iso": "2025-11-22T07:25:45"
@@ -4423,6 +4293,11 @@
       "path": "lists/RandomizerList.json",
       "size_bytes": 1057,
       "mtime_iso": "2025-11-13T16:22:05"
+    },
+    {
+      "path": "outdir/manifests/out.json",
+      "size_bytes": 1078,
+      "mtime_iso": "2026-03-29T10:15:05"
     },
     {
       "path": "packs/A A A.json",
@@ -4542,7 +4417,7 @@
     {
       "path": "packs/Beautiful_people_fullbody_PhotoMomentum_v26.json",
       "size_bytes": 14901,
-      "mtime_iso": "2026-03-28T09:03:41"
+      "mtime_iso": "2026-03-29T10:11:10"
     },
     {
       "path": "packs/Beautiful_people_fullbody_PhotoMomentum_v26.json.bak",
@@ -4956,8 +4831,8 @@
     },
     {
       "path": "packs/test_lora_embed_pack.json",
-      "size_bytes": 5317,
-      "mtime_iso": "2026-03-08T18:59:28"
+      "size_bytes": 787,
+      "mtime_iso": "2026-03-29T09:54:47"
     },
     {
       "path": "packs/test_lora_embed_pack.json.bak",
@@ -4967,7 +4842,7 @@
     {
       "path": "packs/test_lora_embed_pack.txt",
       "size_bytes": 257,
-      "mtime_iso": "2026-03-08T18:59:28"
+      "mtime_iso": "2026-03-29T09:54:47"
     },
     {
       "path": "packs/test_matrix_pack.json",
@@ -5091,8 +4966,8 @@
     },
     {
       "path": "presets/settings.json",
-      "size_bytes": 665,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 1589,
+      "mtime_iso": "2026-03-28T19:52:41"
     },
     {
       "path": "presets/Testing.json",
@@ -5751,18 +5626,18 @@
     },
     {
       "path": "src/app_factory.py",
-      "size_bytes": 3338,
-      "mtime_iso": "2026-03-10T07:38:47"
+      "size_bytes": 3692,
+      "mtime_iso": "2026-03-29T01:30:12"
     },
     {
       "path": "src/cli.py",
-      "size_bytes": 6807,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 6885,
+      "mtime_iso": "2026-03-29T01:26:00"
     },
     {
       "path": "src/main.py",
-      "size_bytes": 27868,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 28116,
+      "mtime_iso": "2026-03-28T22:56:46"
     },
     {
       "path": "src/__init__.py",
@@ -5786,8 +5661,8 @@
     },
     {
       "path": "src/api/client.py",
-      "size_bytes": 81851,
-      "mtime_iso": "2026-03-28T08:53:55"
+      "size_bytes": 83163,
+      "mtime_iso": "2026-03-28T11:10:36"
     },
     {
       "path": "src/api/healthcheck.py",
@@ -5806,8 +5681,8 @@
     },
     {
       "path": "src/api/webui_process_manager.py",
-      "size_bytes": 76335,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 78055,
+      "mtime_iso": "2026-03-29T09:49:03"
     },
     {
       "path": "src/api/webui_resources.py",
@@ -5823,6 +5698,21 @@
       "path": "src/api/__init__.py",
       "size_bytes": 106,
       "mtime_iso": "2025-11-12T15:17:05"
+    },
+    {
+      "path": "src/app/bootstrap.py",
+      "size_bytes": 3025,
+      "mtime_iso": "2026-03-29T01:26:00"
+    },
+    {
+      "path": "src/app/optional_dependency_probes.py",
+      "size_bytes": 3887,
+      "mtime_iso": "2026-03-29T01:26:00"
+    },
+    {
+      "path": "src/app/__init__.py",
+      "size_bytes": 487,
+      "mtime_iso": "2026-03-29T01:26:00"
     },
     {
       "path": "src/cluster/worker_model.py",
@@ -5851,8 +5741,8 @@
     },
     {
       "path": "src/controller/app_controller.py",
-      "size_bytes": 304188,
-      "mtime_iso": "2026-03-28T09:03:33"
+      "size_bytes": 309389,
+      "mtime_iso": "2026-03-29T01:40:06"
     },
     {
       "path": "src/controller/cluster_controller.py",
@@ -5896,8 +5786,8 @@
     },
     {
       "path": "src/controller/pipeline_controller.py",
-      "size_bytes": 73475,
-      "mtime_iso": "2026-03-27T06:11:37"
+      "size_bytes": 69854,
+      "mtime_iso": "2026-03-29T08:44:17"
     },
     {
       "path": "src/controller/pipeline_submission_service.py",
@@ -5926,8 +5816,8 @@
     },
     {
       "path": "src/controller/video_workflow_controller.py",
-      "size_bytes": 10267,
-      "mtime_iso": "2026-03-20T06:03:07"
+      "size_bytes": 10417,
+      "mtime_iso": "2026-03-29T01:31:57"
     },
     {
       "path": "src/controller/webui_connection_controller.py",
@@ -5965,14 +5855,24 @@
       "mtime_iso": "2026-03-20T06:39:28"
     },
     {
+      "path": "src/controller/pipeline_controller_services/queue_submission_service.py",
+      "size_bytes": 8292,
+      "mtime_iso": "2026-03-29T01:12:57"
+    },
+    {
+      "path": "src/controller/ports/default_runtime_ports.py",
+      "size_bytes": 1546,
+      "mtime_iso": "2026-03-29T01:12:57"
+    },
+    {
       "path": "src/controller/ports/runtime_ports.py",
-      "size_bytes": 2097,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 2081,
+      "mtime_iso": "2026-03-29T01:12:15"
     },
     {
       "path": "src/controller/ports/__init__.py",
-      "size_bytes": 160,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 232,
+      "mtime_iso": "2026-03-29T01:12:03"
     },
     {
       "path": "src/curation/curation_manifest.py",
@@ -6026,8 +5926,8 @@
     },
     {
       "path": "src/gui/app_state_v2.py",
-      "size_bytes": 22278,
-      "mtime_iso": "2026-03-27T18:16:11"
+      "size_bytes": 26126,
+      "mtime_iso": "2026-03-28T23:55:16"
     },
     {
       "path": "src/gui/artifact_metadata_inspector_dialog.py",
@@ -6076,8 +5976,8 @@
     },
     {
       "path": "src/gui/engine_settings_dialog.py",
-      "size_bytes": 12557,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 13936,
+      "mtime_iso": "2026-03-28T09:37:06"
     },
     {
       "path": "src/gui/enhanced_slider.py",
@@ -6086,13 +5986,13 @@
     },
     {
       "path": "src/gui/gui_invoker.py",
-      "size_bytes": 2866,
-      "mtime_iso": "2026-03-27T07:25:52"
+      "size_bytes": 3913,
+      "mtime_iso": "2026-03-28T23:52:17"
     },
     {
       "path": "src/gui/job_history_panel_v2.py",
-      "size_bytes": 38995,
-      "mtime_iso": "2026-03-27T20:09:37"
+      "size_bytes": 41621,
+      "mtime_iso": "2026-03-29T00:02:29"
     },
     {
       "path": "src/gui/layout_v2.py",
@@ -6126,8 +6026,8 @@
     },
     {
       "path": "src/gui/main_window_v2.py",
-      "size_bytes": 56991,
-      "mtime_iso": "2026-03-27T18:46:20"
+      "size_bytes": 57955,
+      "mtime_iso": "2026-03-28T23:52:31"
     },
     {
       "path": "src/gui/model_list_adapter_v2.py",
@@ -6166,8 +6066,8 @@
     },
     {
       "path": "src/gui/preview_panel_v2.py",
-      "size_bytes": 56418,
-      "mtime_iso": "2026-03-28T08:45:51"
+      "size_bytes": 59875,
+      "mtime_iso": "2026-03-29T00:04:12"
     },
     {
       "path": "src/gui/prompt_pack_adapter_v2.py",
@@ -6186,8 +6086,8 @@
     },
     {
       "path": "src/gui/prompt_pack_panel_v2.py",
-      "size_bytes": 6535,
-      "mtime_iso": "2026-03-27T18:54:35"
+      "size_bytes": 6454,
+      "mtime_iso": "2026-03-28T09:37:30"
     },
     {
       "path": "src/gui/prompt_workspace_state.py",
@@ -6216,8 +6116,8 @@
     },
     {
       "path": "src/gui/sidebar_panel_v2.py",
-      "size_bytes": 56066,
-      "mtime_iso": "2026-03-28T08:45:51"
+      "size_bytes": 60415,
+      "mtime_iso": "2026-03-28T20:01:49"
     },
     {
       "path": "src/gui/stage_chooser.py",
@@ -6326,8 +6226,8 @@
     },
     {
       "path": "src/gui/models/prompt_pack_model.py",
-      "size_bytes": 10186,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 10375,
+      "mtime_iso": "2026-03-28T10:24:50"
     },
     {
       "path": "src/gui/panels_v2/api_failure_visualizer_v2.py",
@@ -6336,8 +6236,8 @@
     },
     {
       "path": "src/gui/panels_v2/debug_hub_panel_v2.py",
-      "size_bytes": 18654,
-      "mtime_iso": "2026-03-24T18:55:54"
+      "size_bytes": 19270,
+      "mtime_iso": "2026-03-29T00:41:43"
     },
     {
       "path": "src/gui/panels_v2/debug_log_panel_v2.py",
@@ -6346,8 +6246,8 @@
     },
     {
       "path": "src/gui/panels_v2/history_panel_v2.py",
-      "size_bytes": 8771,
-      "mtime_iso": "2026-03-27T18:55:07"
+      "size_bytes": 8534,
+      "mtime_iso": "2026-03-28T09:38:43"
     },
     {
       "path": "src/gui/panels_v2/job_explanation_panel_v2.py",
@@ -6376,8 +6276,8 @@
     },
     {
       "path": "src/gui/panels_v2/queue_panel_v2.py",
-      "size_bytes": 44235,
-      "mtime_iso": "2026-03-27T20:09:22"
+      "size_bytes": 46206,
+      "mtime_iso": "2026-03-29T00:02:29"
     },
     {
       "path": "src/gui/panels_v2/randomizer_panel_v2.py",
@@ -6391,8 +6291,8 @@
     },
     {
       "path": "src/gui/panels_v2/running_job_panel_v2.py",
-      "size_bytes": 22477,
-      "mtime_iso": "2026-03-27T18:50:23"
+      "size_bytes": 22240,
+      "mtime_iso": "2026-03-28T09:38:43"
     },
     {
       "path": "src/gui/panels_v2/sidebar_panel_v2.py",
@@ -6516,8 +6416,8 @@
     },
     {
       "path": "src/gui/views/learning_review_panel_v2.py",
-      "size_bytes": 10008,
-      "mtime_iso": "2026-03-27T18:54:28"
+      "size_bytes": 9876,
+      "mtime_iso": "2026-03-28T09:38:43"
     },
     {
       "path": "src/gui/views/learning_tab_frame.py",
@@ -6526,18 +6426,18 @@
     },
     {
       "path": "src/gui/views/learning_tab_frame_v2.py",
-      "size_bytes": 78169,
-      "mtime_iso": "2026-03-27T18:57:31"
+      "size_bytes": 78563,
+      "mtime_iso": "2026-03-29T00:36:33"
     },
     {
       "path": "src/gui/views/movie_clips_tab_frame_v2.py",
-      "size_bytes": 27815,
-      "mtime_iso": "2026-03-27T18:54:07"
+      "size_bytes": 27986,
+      "mtime_iso": "2026-03-29T00:36:04"
     },
     {
       "path": "src/gui/views/photo_optimize_tab_frame_v2.py",
-      "size_bytes": 74509,
-      "mtime_iso": "2026-03-27T18:53:36"
+      "size_bytes": 75881,
+      "mtime_iso": "2026-03-29T00:36:53"
     },
     {
       "path": "src/gui/views/pipeline_tab_frame.py",
@@ -6546,8 +6446,8 @@
     },
     {
       "path": "src/gui/views/pipeline_tab_frame_v2.py",
-      "size_bytes": 26913,
-      "mtime_iso": "2026-03-27T22:35:57"
+      "size_bytes": 31327,
+      "mtime_iso": "2026-03-29T00:04:12"
     },
     {
       "path": "src/gui/views/prompt_tab_frame.py",
@@ -6556,13 +6456,13 @@
     },
     {
       "path": "src/gui/views/prompt_tab_frame_v2.py",
-      "size_bytes": 77374,
-      "mtime_iso": "2026-03-27T18:48:31"
+      "size_bytes": 77890,
+      "mtime_iso": "2026-03-29T00:35:56"
     },
     {
       "path": "src/gui/views/review_tab_frame_v2.py",
-      "size_bytes": 70288,
-      "mtime_iso": "2026-03-27T18:51:38"
+      "size_bytes": 70616,
+      "mtime_iso": "2026-03-29T00:36:21"
     },
     {
       "path": "src/gui/views/run_control_bar.py",
@@ -6586,13 +6486,13 @@
     },
     {
       "path": "src/gui/views/svd_tab_frame_v2.py",
-      "size_bytes": 58759,
-      "mtime_iso": "2026-03-26T07:58:53"
+      "size_bytes": 59731,
+      "mtime_iso": "2026-03-29T00:37:09"
     },
     {
       "path": "src/gui/views/video_workflow_tab_frame_v2.py",
-      "size_bytes": 22565,
-      "mtime_iso": "2026-03-27T18:54:22"
+      "size_bytes": 22732,
+      "mtime_iso": "2026-03-29T00:36:12"
     },
     {
       "path": "src/gui/views/__init__.py",
@@ -6681,8 +6581,8 @@
     },
     {
       "path": "src/gui/widgets/lora_picker_panel.py",
-      "size_bytes": 13913,
-      "mtime_iso": "2026-03-27T18:49:12"
+      "size_bytes": 13359,
+      "mtime_iso": "2026-03-28T09:37:30"
     },
     {
       "path": "src/gui/widgets/matrix_helper_widget.py",
@@ -6806,8 +6706,8 @@
     },
     {
       "path": "src/learning/execution_controller.py",
-      "size_bytes": 13119,
-      "mtime_iso": "2026-03-18T21:57:58"
+      "size_bytes": 13871,
+      "mtime_iso": "2026-03-28T23:33:43"
     },
     {
       "path": "src/learning/experiment_naming.py",
@@ -6986,8 +6886,8 @@
     },
     {
       "path": "src/pipeline/config_contract_v26.py",
-      "size_bytes": 9411,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 9992,
+      "mtime_iso": "2026-03-29T01:24:49"
     },
     {
       "path": "src/pipeline/config_merger_v2.py",
@@ -7008,6 +6908,11 @@
       "path": "src/pipeline/executor.py",
       "size_bytes": 269857,
       "mtime_iso": "2026-03-27T18:18:51"
+    },
+    {
+      "path": "src/pipeline/intent_artifact_contract.py",
+      "size_bytes": 3102,
+      "mtime_iso": "2026-03-29T01:28:01"
     },
     {
       "path": "src/pipeline/job_builder_v2.py",
@@ -7056,8 +6961,8 @@
     },
     {
       "path": "src/pipeline/replay_engine.py",
-      "size_bytes": 6721,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 8850,
+      "mtime_iso": "2026-03-29T01:35:41"
     },
     {
       "path": "src/pipeline/reprocess_builder.py",
@@ -7191,8 +7096,8 @@
     },
     {
       "path": "src/queue/job_history_store.py",
-      "size_bytes": 14067,
-      "mtime_iso": "2026-03-18T21:22:46"
+      "size_bytes": 14528,
+      "mtime_iso": "2026-03-28T18:45:09"
     },
     {
       "path": "src/queue/job_model.py",
@@ -7361,8 +7266,8 @@
     },
     {
       "path": "src/state/output_routing.py",
-      "size_bytes": 8725,
-      "mtime_iso": "2026-03-21T17:00:01"
+      "size_bytes": 9224,
+      "mtime_iso": "2026-03-28T20:04:59"
     },
     {
       "path": "src/state/workspace_paths.py",
@@ -7416,8 +7321,8 @@
     },
     {
       "path": "src/utils/diagnostics_bundle_v2.py",
-      "size_bytes": 20292,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 20372,
+      "mtime_iso": "2026-03-28T12:37:24"
     },
     {
       "path": "src/utils/embedding_prompt_utils.py",
@@ -7486,8 +7391,8 @@
     },
     {
       "path": "src/utils/lora_scanner.py",
-      "size_bytes": 6028,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 6219,
+      "mtime_iso": "2026-03-28T11:21:51"
     },
     {
       "path": "src/utils/memory_utils.py",
@@ -7511,8 +7416,8 @@
     },
     {
       "path": "src/utils/process_inspector_v2.py",
-      "size_bytes": 11377,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 11848,
+      "mtime_iso": "2026-03-29T09:41:28"
     },
     {
       "path": "src/utils/prompt_pack.py",
@@ -7551,8 +7456,8 @@
     },
     {
       "path": "src/utils/snapshot_builder_v2.py",
-      "size_bytes": 15721,
-      "mtime_iso": "2026-03-18T22:42:06"
+      "size_bytes": 15966,
+      "mtime_iso": "2026-03-29T01:24:49"
     },
     {
       "path": "src/utils/state.py",
@@ -7636,8 +7541,8 @@
     },
     {
       "path": "src/video/comfy_process_manager.py",
-      "size_bytes": 7146,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 7287,
+      "mtime_iso": "2026-03-28T20:01:49"
     },
     {
       "path": "src/video/comfy_workflow_backend.py",
@@ -7781,8 +7686,8 @@
     },
     {
       "path": "src/video/workflow_catalog.py",
-      "size_bytes": 5568,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 5808,
+      "mtime_iso": "2026-03-29T01:31:52"
     },
     {
       "path": "src/video/workflow_compiler.py",
@@ -7791,18 +7696,18 @@
     },
     {
       "path": "src/video/workflow_contracts.py",
-      "size_bytes": 9543,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 10960,
+      "mtime_iso": "2026-03-29T01:31:37"
     },
     {
       "path": "src/video/workflow_registry.py",
-      "size_bytes": 2645,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 3242,
+      "mtime_iso": "2026-03-29T01:31:48"
     },
     {
       "path": "src/video/__init__.py",
-      "size_bytes": 2941,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 3143,
+      "mtime_iso": "2026-03-29T01:32:48"
     },
     {
       "path": "src/video/motion/secondary_motion_engine.py",
@@ -7846,8 +7751,8 @@
     },
     {
       "path": "tests/conftest.py",
-      "size_bytes": 4662,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 4830,
+      "mtime_iso": "2026-03-28T18:33:54"
     },
     {
       "path": "tests/Journey Test Suite – Comprehensive Plan.md",
@@ -7866,8 +7771,8 @@
     },
     {
       "path": "tests/test_adetailer_card_render.py",
-      "size_bytes": 1077,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 603,
+      "mtime_iso": "2026-03-28T12:37:31"
     },
     {
       "path": "tests/test_api_client.py",
@@ -7891,23 +7796,23 @@
     },
     {
       "path": "tests/test_core_config_controller.py",
-      "size_bytes": 2807,
-      "mtime_iso": "2026-03-21T00:36:55"
+      "size_bytes": 2735,
+      "mtime_iso": "2026-03-28T18:34:49"
     },
     {
       "path": "tests/test_critical_bugfixes.py",
-      "size_bytes": 5207,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 5213,
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_empty_slot_removal.py",
       "size_bytes": 7352,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_filename_fix.py",
-      "size_bytes": 4945,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 4929,
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_full_flow.py",
@@ -7917,17 +7822,17 @@
     {
       "path": "tests/test_global_prompt_flags.py",
       "size_bytes": 3636,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_global_prompt_integration.py",
-      "size_bytes": 5486,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 7125,
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_history_writer.py",
-      "size_bytes": 2531,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 2049,
+      "mtime_iso": "2026-03-28T18:36:29"
     },
     {
       "path": "tests/test_img2img_bug.py",
@@ -7937,7 +7842,7 @@
     {
       "path": "tests/test_json_unification.py",
       "size_bytes": 6705,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_main_single_instance.py",
@@ -7946,13 +7851,13 @@
     },
     {
       "path": "tests/test_matrix_filenames.py",
-      "size_bytes": 6347,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 6811,
+      "mtime_iso": "2026-03-28T18:19:50"
     },
     {
       "path": "tests/test_multi_slot_load.py",
       "size_bytes": 2297,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_override_functionality.py",
@@ -7961,8 +7866,8 @@
     },
     {
       "path": "tests/test_pack_config_flags.py",
-      "size_bytes": 7465,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 6203,
+      "mtime_iso": "2026-03-28T11:19:20"
     },
     {
       "path": "tests/test_pr032.py",
@@ -7971,38 +7876,38 @@
     },
     {
       "path": "tests/test_pr_005_006.py",
-      "size_bytes": 8022,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 7948,
+      "mtime_iso": "2026-03-28T18:33:54"
     },
     {
       "path": "tests/test_pr_008.py",
-      "size_bytes": 1658,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 1557,
+      "mtime_iso": "2026-03-28T18:33:54"
     },
     {
       "path": "tests/test_pr_gui_003c_runtime.py",
       "size_bytes": 5378,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_pr_gui_004_phases_bce.py",
-      "size_bytes": 6410,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 6414,
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_pr_gui_004_phase_a.py",
-      "size_bytes": 4755,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 4757,
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_pr_gui_004_phase_d.py",
-      "size_bytes": 4516,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 4610,
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_pr_gui_matrix_integration.py",
-      "size_bytes": 12232,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 12567,
+      "mtime_iso": "2026-03-28T18:34:49"
     },
     {
       "path": "tests/test_pr_memory_001_bounded_collections.py",
@@ -8011,23 +7916,23 @@
     },
     {
       "path": "tests/test_pr_preview_001.py",
-      "size_bytes": 7463,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 7289,
+      "mtime_iso": "2026-03-28T18:33:54"
     },
     {
       "path": "tests/test_queue_persistence_pr_queue_001.py",
-      "size_bytes": 10920,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 10435,
+      "mtime_iso": "2026-03-28T11:28:31"
     },
     {
       "path": "tests/test_reprocess_batching.py",
       "size_bytes": 2829,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_shutdown_paths.py",
-      "size_bytes": 3220,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 3232,
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/test_stage_chain_fix.py",
@@ -8037,27 +7942,27 @@
     {
       "path": "tests/test_stage_flag_corruption.py",
       "size_bytes": 3724,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/TEST_SURFACE_MANIFEST.md",
-      "size_bytes": 5091,
-      "mtime_iso": "2026-03-28T08:51:01"
+      "size_bytes": 5259,
+      "mtime_iso": "2026-03-29T01:34:09"
     },
     {
       "path": "tests/test_thread_safety_pr_core1_d22a.py",
-      "size_bytes": 13041,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 13053,
+      "mtime_iso": "2026-03-28T12:38:14"
     },
     {
       "path": "tests/test_variant_numbering.py",
-      "size_bytes": 6445,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 6782,
+      "mtime_iso": "2026-03-28T10:20:54"
     },
     {
       "path": "tests/test_webui_timing.py",
-      "size_bytes": 1893,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 1901,
+      "mtime_iso": "2026-03-28T11:29:15"
     },
     {
       "path": "tests/validate_core_config.py",
@@ -8101,8 +8006,8 @@
     },
     {
       "path": "tests/api/test_client_generate_images.py",
-      "size_bytes": 5760,
-      "mtime_iso": "2026-03-27T07:07:19"
+      "size_bytes": 5845,
+      "mtime_iso": "2026-03-28T11:11:35"
     },
     {
       "path": "tests/api/test_client_interrogate.py",
@@ -8176,13 +8081,13 @@
     },
     {
       "path": "tests/api/test_webui_process_cleanup.py",
-      "size_bytes": 13430,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 14744,
+      "mtime_iso": "2026-03-29T09:41:28"
     },
     {
       "path": "tests/api/test_webui_process_manager.py",
-      "size_bytes": 5526,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 6034,
+      "mtime_iso": "2026-03-29T09:49:03"
     },
     {
       "path": "tests/api/test_webui_process_manager_restart_ready.py",
@@ -8225,14 +8130,24 @@
       "mtime_iso": "2025-12-19T05:16:38"
     },
     {
+      "path": "tests/app/test_application_kernel.py",
+      "size_bytes": 2138,
+      "mtime_iso": "2026-03-29T01:30:39"
+    },
+    {
       "path": "tests/app/test_bootstrap_comfy_autostart.py",
-      "size_bytes": 3213,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 4081,
+      "mtime_iso": "2026-03-28T22:56:46"
     },
     {
       "path": "tests/app/test_bootstrap_webui_autostart.py",
-      "size_bytes": 1661,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 4031,
+      "mtime_iso": "2026-03-28T22:56:46"
+    },
+    {
+      "path": "tests/app/test_optional_dependency_snapshot.py",
+      "size_bytes": 2839,
+      "mtime_iso": "2026-03-29T01:30:53"
     },
     {
       "path": "tests/app/test_webui_launch_opens_browser_v2.py",
@@ -8241,8 +8156,8 @@
     },
     {
       "path": "tests/cli/test_cli_njr_execution.py",
-      "size_bytes": 7026,
-      "mtime_iso": "2026-03-20T06:03:07"
+      "size_bytes": 7429,
+      "mtime_iso": "2026-03-29T01:31:05"
     },
     {
       "path": "tests/cluster/test_worker_model_and_registry.py",
@@ -8306,8 +8221,8 @@
     },
     {
       "path": "tests/controller/test_app_controller_add_to_queue_v2.py",
-      "size_bytes": 4264,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 8118,
+      "mtime_iso": "2026-03-28T23:21:43"
     },
     {
       "path": "tests/controller/test_app_controller_adetailer_override_bridge.py",
@@ -8321,8 +8236,8 @@
     },
     {
       "path": "tests/controller/test_app_controller_diagnostics.py",
-      "size_bytes": 3847,
-      "mtime_iso": "2026-03-27T22:36:34"
+      "size_bytes": 5017,
+      "mtime_iso": "2026-03-29T01:30:23"
     },
     {
       "path": "tests/controller/test_app_controller_job_failure_v2.py",
@@ -8331,13 +8246,13 @@
     },
     {
       "path": "tests/controller/test_app_controller_logging.py",
-      "size_bytes": 1222,
-      "mtime_iso": "2026-03-27T19:40:44"
+      "size_bytes": 924,
+      "mtime_iso": "2026-03-28T23:55:16"
     },
     {
       "path": "tests/controller/test_app_controller_lora_runtime.py",
-      "size_bytes": 3438,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 3665,
+      "mtime_iso": "2026-03-28T17:56:27"
     },
     {
       "path": "tests/controller/test_app_controller_njr_exec.py",
@@ -8346,8 +8261,8 @@
     },
     {
       "path": "tests/controller/test_app_controller_packs.py",
-      "size_bytes": 3227,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 3471,
+      "mtime_iso": "2026-03-28T23:57:46"
     },
     {
       "path": "tests/controller/test_app_controller_photo_optimize.py",
@@ -8451,8 +8366,8 @@
     },
     {
       "path": "tests/controller/test_content_visibility_resolver.py",
-      "size_bytes": 9726,
-      "mtime_iso": "2026-03-27T18:35:01"
+      "size_bytes": 10545,
+      "mtime_iso": "2026-03-28T20:03:16"
     },
     {
       "path": "tests/controller/test_controller_event_api_v2.py",
@@ -8477,7 +8392,7 @@
     {
       "path": "tests/controller/test_global_prompt_flags.py",
       "size_bytes": 3636,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:03:24"
     },
     {
       "path": "tests/controller/test_gui_config_service.py",
@@ -8491,8 +8406,8 @@
     },
     {
       "path": "tests/controller/test_heartbeat_stall_fix.py",
-      "size_bytes": 6222,
-      "mtime_iso": "2026-03-27T06:15:18"
+      "size_bytes": 6223,
+      "mtime_iso": "2026-03-28T18:05:44"
     },
     {
       "path": "tests/controller/test_history_handoff_service.py",
@@ -8531,8 +8446,8 @@
     },
     {
       "path": "tests/controller/test_job_queue_integration_v2.py",
-      "size_bytes": 6678,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 7063,
+      "mtime_iso": "2026-03-28T09:17:21"
     },
     {
       "path": "tests/controller/test_job_retry_metadata_v2.py",
@@ -8666,8 +8581,8 @@
     },
     {
       "path": "tests/controller/test_pipeline_controller_jobbuilder_integration_v2.py",
-      "size_bytes": 17670,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 17677,
+      "mtime_iso": "2026-03-28T10:04:39"
     },
     {
       "path": "tests/controller/test_pipeline_controller_job_specs_v2.py",
@@ -8676,8 +8591,8 @@
     },
     {
       "path": "tests/controller/test_pipeline_controller_learning_queue_cap.py",
-      "size_bytes": 4115,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 5535,
+      "mtime_iso": "2026-03-28T23:09:27"
     },
     {
       "path": "tests/controller/test_pipeline_controller_queue_mode.py",
@@ -8757,12 +8672,17 @@
     {
       "path": "tests/controller/test_queue_freeze_fix.py",
       "size_bytes": 1046,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:09:25"
     },
     {
       "path": "tests/controller/test_queue_operations_v2.py",
       "size_bytes": 9407,
       "mtime_iso": "2026-03-08T18:59:29"
+    },
+    {
+      "path": "tests/controller/test_queue_submission_service.py",
+      "size_bytes": 4840,
+      "mtime_iso": "2026-03-29T01:16:44"
     },
     {
       "path": "tests/controller/test_queue_worker_threading.py",
@@ -8775,9 +8695,14 @@
       "mtime_iso": "2026-03-18T18:49:47"
     },
     {
+      "path": "tests/controller/test_runtime_backend_port_wiring.py",
+      "size_bytes": 4610,
+      "mtime_iso": "2026-03-29T01:17:39"
+    },
+    {
       "path": "tests/controller/test_runtime_ports_contract.py",
-      "size_bytes": 2636,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 3847,
+      "mtime_iso": "2026-03-29T01:16:44"
     },
     {
       "path": "tests/controller/test_runtime_status_ui_throttle.py",
@@ -8811,8 +8736,8 @@
     },
     {
       "path": "tests/controller/test_video_workflow_controller.py",
-      "size_bytes": 2587,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 2950,
+      "mtime_iso": "2026-03-29T01:32:22"
     },
     {
       "path": "tests/controller/test_webui_connection_controller.py",
@@ -8985,6 +8910,11 @@
       "mtime_iso": "2025-12-19T05:16:38"
     },
     {
+      "path": "tests/gui_v2/test_app_state_notification_batching.py",
+      "size_bytes": 1998,
+      "mtime_iso": "2026-03-28T23:55:33"
+    },
+    {
       "path": "tests/gui_v2/test_app_state_subscribe_unsubscribe.py",
       "size_bytes": 533,
       "mtime_iso": "2026-03-10T07:38:47"
@@ -9011,13 +8941,13 @@
     },
     {
       "path": "tests/gui_v2/test_content_visibility_mode_persistence.py",
-      "size_bytes": 3474,
-      "mtime_iso": "2026-03-27T19:34:49"
+      "size_bytes": 4096,
+      "mtime_iso": "2026-03-28T09:39:37"
     },
     {
       "path": "tests/gui_v2/test_content_visibility_toggle_integration.py",
-      "size_bytes": 6368,
-      "mtime_iso": "2026-03-27T19:33:44"
+      "size_bytes": 7864,
+      "mtime_iso": "2026-03-28T19:18:17"
     },
     {
       "path": "tests/gui_v2/test_core_config_controller.py",
@@ -9061,8 +8991,8 @@
     },
     {
       "path": "tests/gui_v2/test_engine_settings_dialog_v2.py",
-      "size_bytes": 1672,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 2583,
+      "mtime_iso": "2026-03-28T09:39:37"
     },
     {
       "path": "tests/gui_v2/test_entrypoint_uses_v2_gui.py",
@@ -9131,8 +9061,8 @@
     },
     {
       "path": "tests/gui_v2/test_learning_tab_state_persistence.py",
-      "size_bytes": 32698,
-      "mtime_iso": "2026-03-24T22:59:36"
+      "size_bytes": 34216,
+      "mtime_iso": "2026-03-29T00:39:37"
     },
     {
       "path": "tests/gui_v2/test_learning_view_contracts.py",
@@ -9180,14 +9110,24 @@
       "mtime_iso": "2026-03-24T22:45:56"
     },
     {
+      "path": "tests/gui_v2/test_operator_log_projection_v2.py",
+      "size_bytes": 895,
+      "mtime_iso": "2026-03-28T23:55:16"
+    },
+    {
       "path": "tests/gui_v2/test_output_settings_panel_v2.py",
       "size_bytes": 571,
       "mtime_iso": "2026-03-18T18:49:47"
     },
     {
+      "path": "tests/gui_v2/test_panel_refresh_metrics_v2.py",
+      "size_bytes": 2208,
+      "mtime_iso": "2026-03-28T19:42:05"
+    },
+    {
       "path": "tests/gui_v2/test_photo_optimize_tab_v2.py",
-      "size_bytes": 8177,
-      "mtime_iso": "2026-03-10T23:35:52"
+      "size_bytes": 8936,
+      "mtime_iso": "2026-03-29T00:39:31"
     },
     {
       "path": "tests/gui_v2/test_pipeline_adetailer_toggle_v2.py",
@@ -9266,8 +9206,8 @@
     },
     {
       "path": "tests/gui_v2/test_pipeline_tab_callback_metrics_v2.py",
-      "size_bytes": 801,
-      "mtime_iso": "2026-03-27T22:36:25"
+      "size_bytes": 7680,
+      "mtime_iso": "2026-03-29T00:04:36"
     },
     {
       "path": "tests/gui_v2/test_pipeline_tab_layout_v2.py",
@@ -9316,8 +9256,8 @@
     },
     {
       "path": "tests/gui_v2/test_process_logging_v2.py",
-      "size_bytes": 3027,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 3711,
+      "mtime_iso": "2026-03-28T23:57:03"
     },
     {
       "path": "tests/gui_v2/test_prompt_optimizer_prompt_tab_v2.py",
@@ -9326,18 +9266,18 @@
     },
     {
       "path": "tests/gui_v2/test_prompt_pack_model_matrix.py",
-      "size_bytes": 10122,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 10196,
+      "mtime_iso": "2026-03-28T10:25:30"
     },
     {
       "path": "tests/gui_v2/test_prompt_pack_model_negative.py",
-      "size_bytes": 5482,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 5507,
+      "mtime_iso": "2026-03-28T10:25:30"
     },
     {
       "path": "tests/gui_v2/test_prompt_tab_layout_v2.py",
-      "size_bytes": 1069,
-      "mtime_iso": "2026-03-25T22:49:07"
+      "size_bytes": 1717,
+      "mtime_iso": "2026-03-29T00:39:19"
     },
     {
       "path": "tests/gui_v2/test_prompt_view_contracts.py",
@@ -9351,8 +9291,8 @@
     },
     {
       "path": "tests/gui_v2/test_pr_005_006.py",
-      "size_bytes": 8022,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 8021,
+      "mtime_iso": "2026-03-28T11:21:02"
     },
     {
       "path": "tests/gui_v2/test_pr_008.py",
@@ -9361,13 +9301,13 @@
     },
     {
       "path": "tests/gui_v2/test_pr_gui_004_phase_d.py",
-      "size_bytes": 4609,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 4620,
+      "mtime_iso": "2026-03-28T10:25:30"
     },
     {
       "path": "tests/gui_v2/test_queue_run_controls_restructure_v2.py",
-      "size_bytes": 13905,
-      "mtime_iso": "2026-03-27T20:10:52"
+      "size_bytes": 13900,
+      "mtime_iso": "2026-03-28T09:39:37"
     },
     {
       "path": "tests/gui_v2/test_queue_view_contracts.py",
@@ -9431,8 +9371,8 @@
     },
     {
       "path": "tests/gui_v2/test_sidebar_panel_v2_add_to_job.py",
-      "size_bytes": 1939,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 2842,
+      "mtime_iso": "2026-03-28T20:03:16"
     },
     {
       "path": "tests/gui_v2/test_sidebar_presets_v2.py",
@@ -9466,8 +9406,8 @@
     },
     {
       "path": "tests/gui_v2/test_svd_tab_frame_v2.py",
-      "size_bytes": 11300,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 12086,
+      "mtime_iso": "2026-03-29T00:39:25"
     },
     {
       "path": "tests/gui_v2/test_tab_overview_panels_v2.py",
@@ -9576,8 +9516,8 @@
     },
     {
       "path": "tests/helpers/pipeline_fakes.py",
-      "size_bytes": 3898,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 4320,
+      "mtime_iso": "2026-03-28T10:23:08"
     },
     {
       "path": "tests/helpers/pipeline_fixtures_v2.py",
@@ -9601,8 +9541,8 @@
     },
     {
       "path": "tests/history/test_history_cache_fix.py",
-      "size_bytes": 6438,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 7380,
+      "mtime_iso": "2026-03-28T18:45:30"
     },
     {
       "path": "tests/history/test_history_image_metadata_reconcile.py",
@@ -9646,8 +9586,8 @@
     },
     {
       "path": "tests/integration/test_global_prompt_integration.py",
-      "size_bytes": 5486,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 7154,
+      "mtime_iso": "2026-03-28T11:15:05"
     },
     {
       "path": "tests/integration/test_golden_path_suite_v2_6.py",
@@ -9681,8 +9621,8 @@
     },
     {
       "path": "tests/journey/test_content_visibility_mode_journey.py",
-      "size_bytes": 2996,
-      "mtime_iso": "2026-03-27T19:34:49"
+      "size_bytes": 3345,
+      "mtime_iso": "2026-03-28T09:39:37"
     },
     {
       "path": "tests/journey/test_phase1_pipeline_journey_v2.py",
@@ -9731,8 +9671,8 @@
     },
     {
       "path": "tests/journeys/test_jt07_large_batch_execution.py",
-      "size_bytes": 14356,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 12981,
+      "mtime_iso": "2026-03-29T01:01:55"
     },
     {
       "path": "tests/journeys/test_movie_clips_mvp.py",
@@ -9801,8 +9741,8 @@
     },
     {
       "path": "tests/learning/test_learning_hooks_pipeline_runner.py",
-      "size_bytes": 9309,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 9301,
+      "mtime_iso": "2026-03-28T10:22:17"
     },
     {
       "path": "tests/learning/test_learning_paths_contract.py",
@@ -10001,8 +9941,8 @@
     },
     {
       "path": "tests/learning_v2/test_run_metadata_and_feedback.py",
-      "size_bytes": 1108,
-      "mtime_iso": "2025-12-08T08:04:45"
+      "size_bytes": 1127,
+      "mtime_iso": "2026-03-28T10:11:18"
     },
     {
       "path": "tests/learning_v2/test_variable_selection_contract.py",
@@ -10121,13 +10061,13 @@
     },
     {
       "path": "tests/pipeline/test_executor_n_iter_filenames.py",
-      "size_bytes": 12434,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 13597,
+      "mtime_iso": "2026-03-29T08:52:10"
     },
     {
       "path": "tests/pipeline/test_executor_progress_polling.py",
-      "size_bytes": 22757,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 24215,
+      "mtime_iso": "2026-03-28T10:16:11"
     },
     {
       "path": "tests/pipeline/test_executor_prompt_optimizer.py",
@@ -10158,6 +10098,11 @@
       "path": "tests/pipeline/test_img2img_masked_edit_runtime.py",
       "size_bytes": 2959,
       "mtime_iso": "2026-03-18T18:49:47"
+    },
+    {
+      "path": "tests/pipeline/test_intent_artifact_contract.py",
+      "size_bytes": 1579,
+      "mtime_iso": "2026-03-29T01:25:14"
     },
     {
       "path": "tests/pipeline/test_job_builder_v2.py",
@@ -10196,13 +10141,13 @@
     },
     {
       "path": "tests/pipeline/test_matrix_filenames.py",
-      "size_bytes": 6347,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 6811,
+      "mtime_iso": "2026-03-28T18:13:04"
     },
     {
       "path": "tests/pipeline/test_njr_prompt_pack_invariants.py",
-      "size_bytes": 1498,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 1529,
+      "mtime_iso": "2026-03-28T10:17:43"
     },
     {
       "path": "tests/pipeline/test_output_folder_structure.py",
@@ -10211,8 +10156,8 @@
     },
     {
       "path": "tests/pipeline/test_payload_normalization_v2.py",
-      "size_bytes": 13793,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 13791,
+      "mtime_iso": "2026-03-28T10:19:21"
     },
     {
       "path": "tests/pipeline/test_payload_validation.py",
@@ -10231,8 +10176,8 @@
     },
     {
       "path": "tests/pipeline/test_pipeline_io_contracts.py",
-      "size_bytes": 2507,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 2497,
+      "mtime_iso": "2026-03-28T10:21:37"
     },
     {
       "path": "tests/pipeline/test_pipeline_learning_hooks.py",
@@ -10261,18 +10206,18 @@
     },
     {
       "path": "tests/pipeline/test_pipeline_runner_njr_diagnostics.py",
-      "size_bytes": 1735,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 1761,
+      "mtime_iso": "2026-03-28T10:18:35"
     },
     {
       "path": "tests/pipeline/test_pipeline_runner_sdxl_refiner_hires.py",
-      "size_bytes": 5075,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 5065,
+      "mtime_iso": "2026-03-28T10:22:17"
     },
     {
       "path": "tests/pipeline/test_pipeline_runner_variants.py",
-      "size_bytes": 1966,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 1958,
+      "mtime_iso": "2026-03-28T10:22:17"
     },
     {
       "path": "tests/pipeline/test_prompt_pack_job_builder.py",
@@ -10297,7 +10242,7 @@
     {
       "path": "tests/pipeline/test_pr_gui_003c_runtime.py",
       "size_bytes": 5378,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:13:12"
     },
     {
       "path": "tests/pipeline/test_refiner_control.py",
@@ -10315,6 +10260,11 @@
       "mtime_iso": "2026-03-18T18:49:47"
     },
     {
+      "path": "tests/pipeline/test_replay_validation_v2.py",
+      "size_bytes": 2955,
+      "mtime_iso": "2026-03-29T01:25:14"
+    },
+    {
       "path": "tests/pipeline/test_replay_vs_fresh_v2.py",
       "size_bytes": 2377,
       "mtime_iso": "2025-12-19T05:16:38"
@@ -10322,7 +10272,7 @@
     {
       "path": "tests/pipeline/test_reprocess_batching.py",
       "size_bytes": 2829,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:13:18"
     },
     {
       "path": "tests/pipeline/test_reprocess_builder_defaults.py",
@@ -10371,8 +10321,8 @@
     },
     {
       "path": "tests/pipeline/test_stage_sequencer_runner_integration.py",
-      "size_bytes": 2425,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 2417,
+      "mtime_iso": "2026-03-28T10:22:17"
     },
     {
       "path": "tests/pipeline/test_stage_sequencing.py",
@@ -10411,8 +10361,8 @@
     },
     {
       "path": "tests/pipeline/test_vae_empty_string.py",
-      "size_bytes": 2428,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 2389,
+      "mtime_iso": "2026-03-28T18:15:40"
     },
     {
       "path": "tests/pipeline/test_video.py",
@@ -10431,58 +10381,58 @@
     },
     {
       "path": "tests/quarantine/test_all_stage_cards.py",
-      "size_bytes": 1862,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 2088,
+      "mtime_iso": "2026-03-29T09:03:00"
     },
     {
       "path": "tests/quarantine/test_import.py",
-      "size_bytes": 705,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 908,
+      "mtime_iso": "2026-03-29T09:03:00"
     },
     {
       "path": "tests/quarantine/test_learning_fix.py",
-      "size_bytes": 4376,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 3912,
+      "mtime_iso": "2026-03-29T09:03:00"
     },
     {
       "path": "tests/quarantine/test_learning_stage_config.py",
-      "size_bytes": 6470,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 2519,
+      "mtime_iso": "2026-03-29T09:03:57"
     },
     {
       "path": "tests/quarantine/test_pipeline_final.py",
-      "size_bytes": 1958,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 1804,
+      "mtime_iso": "2026-03-29T09:03:00"
     },
     {
       "path": "tests/quarantine/test_pipeline_tab.py",
-      "size_bytes": 865,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 948,
+      "mtime_iso": "2026-03-29T09:03:00"
     },
     {
       "path": "tests/quarantine/test_pipeline_tab_render.py",
-      "size_bytes": 1162,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 1217,
+      "mtime_iso": "2026-03-29T09:03:00"
     },
     {
       "path": "tests/quarantine/test_pr_hb_001_002.py",
-      "size_bytes": 4796,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 4128,
+      "mtime_iso": "2026-03-29T09:03:00"
     },
     {
       "path": "tests/quarantine/test_queue_remove_bug.py",
-      "size_bytes": 3767,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 3819,
+      "mtime_iso": "2026-03-29T09:04:38"
     },
     {
       "path": "tests/quarantine/test_stage_cards_debug.py",
-      "size_bytes": 942,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 1029,
+      "mtime_iso": "2026-03-29T09:03:00"
     },
     {
       "path": "tests/quarantine/test_stage_cards_panel.py",
-      "size_bytes": 1156,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "size_bytes": 1212,
+      "mtime_iso": "2026-03-29T09:32:13"
     },
     {
       "path": "tests/queue/test_jobrunner_integration.py",
@@ -10516,13 +10466,13 @@
     },
     {
       "path": "tests/queue/test_queue_completion_to_history.py",
-      "size_bytes": 2182,
-      "mtime_iso": "2025-12-19T05:16:38"
+      "size_bytes": 2864,
+      "mtime_iso": "2026-03-28T12:29:56"
     },
     {
       "path": "tests/queue/test_queue_fix.py",
       "size_bytes": 3384,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "mtime_iso": "2026-03-28T18:15:40"
     },
     {
       "path": "tests/queue/test_queue_njr_path.py",
@@ -10532,7 +10482,7 @@
     {
       "path": "tests/queue/test_queue_persistence_fix.py",
       "size_bytes": 3182,
-      "mtime_iso": "2026-03-14T19:37:49"
+      "mtime_iso": "2026-03-28T18:15:40"
     },
     {
       "path": "tests/queue/test_queue_shutdown_lifecycle.py",
@@ -10546,8 +10496,8 @@
     },
     {
       "path": "tests/queue/test_single_node_runner_loopback.py",
-      "size_bytes": 1586,
-      "mtime_iso": "2026-03-18T18:49:47"
+      "size_bytes": 1875,
+      "mtime_iso": "2026-03-28T16:33:47"
     },
     {
       "path": "tests/queue/test_single_node_runner_webui_retry.py",
@@ -10671,8 +10621,8 @@
     },
     {
       "path": "tests/scripts/test_critical_bugfixes.py",
-      "size_bytes": 5207,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 5213,
+      "mtime_iso": "2026-03-28T18:15:40"
     },
     {
       "path": "tests/scripts/test_full_flow.py",
@@ -10686,8 +10636,8 @@
     },
     {
       "path": "tests/scripts/test_shutdown_paths.py",
-      "size_bytes": 3220,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 3232,
+      "mtime_iso": "2026-03-28T18:15:40"
     },
     {
       "path": "tests/scripts/test_upscale_memory_hygiene.py",
@@ -10727,17 +10677,17 @@
     {
       "path": "tests/state/test_multi_slot_load.py",
       "size_bytes": 2297,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:19:31"
     },
     {
       "path": "tests/state/test_output_routing.py",
-      "size_bytes": 3561,
-      "mtime_iso": "2026-03-21T16:59:50"
+      "size_bytes": 1454,
+      "mtime_iso": "2026-03-28T20:03:16"
     },
     {
       "path": "tests/state/test_prompt_workspace_state.py",
-      "size_bytes": 1356,
-      "mtime_iso": "2025-11-26T14:31:47"
+      "size_bytes": 1355,
+      "mtime_iso": "2026-03-28T10:25:30"
     },
     {
       "path": "tests/state/test_workspace_paths.py",
@@ -10746,13 +10696,13 @@
     },
     {
       "path": "tests/system/test_architecture_enforcement_v2.py",
-      "size_bytes": 4036,
-      "mtime_iso": "2026-03-28T08:41:54"
+      "size_bytes": 6350,
+      "mtime_iso": "2026-03-29T01:16:59"
     },
     {
       "path": "tests/system/test_ci_truth_sync_v2.py",
-      "size_bytes": 934,
-      "mtime_iso": "2026-03-28T08:51:01"
+      "size_bytes": 1081,
+      "mtime_iso": "2026-03-29T01:33:54"
     },
     {
       "path": "tests/system/test_test_taxonomy_enforcement_v26.py",
@@ -10763,6 +10713,11 @@
       "path": "tests/system/test_watchdog_ui_stall.py",
       "size_bytes": 1889,
       "mtime_iso": "2026-03-14T19:37:49"
+    },
+    {
+      "path": "tests/tools/test_memory_profile.py",
+      "size_bytes": 1604,
+      "mtime_iso": "2026-03-28T19:47:34"
     },
     {
       "path": "tests/tools/test_v2_classify_and_archive.py",
@@ -10841,13 +10796,13 @@
     },
     {
       "path": "tests/utils/test_diagnostics_bundle_v2.py",
-      "size_bytes": 3455,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 3944,
+      "mtime_iso": "2026-03-28T12:37:39"
     },
     {
       "path": "tests/utils/test_diagnostics_thread_dump.py",
-      "size_bytes": 5863,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 5783,
+      "mtime_iso": "2026-03-28T11:30:54"
     },
     {
       "path": "tests/utils/test_embedding_prompt_utils.py",
@@ -10861,8 +10816,8 @@
     },
     {
       "path": "tests/utils/test_filename_fix.py",
-      "size_bytes": 4945,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "size_bytes": 4927,
+      "mtime_iso": "2026-03-28T18:23:04"
     },
     {
       "path": "tests/utils/test_filename_generation.py",
@@ -10941,8 +10896,8 @@
     },
     {
       "path": "tests/utils/test_process_inspector_v2.py",
-      "size_bytes": 5643,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 5838,
+      "mtime_iso": "2026-03-29T09:41:28"
     },
     {
       "path": "tests/utils/test_prompt_packs.py",
@@ -10957,12 +10912,12 @@
     {
       "path": "tests/utils/test_pr_gui_004_phases_bce.py",
       "size_bytes": 6410,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:23:04"
     },
     {
       "path": "tests/utils/test_pr_gui_004_phase_a.py",
       "size_bytes": 4755,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:23:04"
     },
     {
       "path": "tests/utils/test_randomizer_import_isolation.py",
@@ -11002,7 +10957,7 @@
     {
       "path": "tests/utils/test_stage_flag_corruption.py",
       "size_bytes": 3724,
-      "mtime_iso": "2026-03-08T18:59:29"
+      "mtime_iso": "2026-03-28T18:23:04"
     },
     {
       "path": "tests/utils/test_structured_logger_lifecycle.py",
@@ -11046,13 +11001,13 @@
     },
     {
       "path": "tests/video/test_comfy_process_manager.py",
-      "size_bytes": 3097,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 3666,
+      "mtime_iso": "2026-03-28T20:03:16"
     },
     {
       "path": "tests/video/test_comfy_workflow_backend.py",
-      "size_bytes": 18061,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 18674,
+      "mtime_iso": "2026-03-28T11:34:19"
     },
     {
       "path": "tests/video/test_container_metadata.py",
@@ -11191,8 +11146,8 @@
     },
     {
       "path": "tests/video/test_video_backend_registry.py",
-      "size_bytes": 9398,
-      "mtime_iso": "2026-03-24T18:55:55"
+      "size_bytes": 9711,
+      "mtime_iso": "2026-03-28T18:24:58"
     },
     {
       "path": "tests/video/test_workflow_compiler.py",
@@ -11201,8 +11156,8 @@
     },
     {
       "path": "tests/video/test_workflow_registry.py",
-      "size_bytes": 3717,
-      "mtime_iso": "2026-03-19T22:50:54"
+      "size_bytes": 4739,
+      "mtime_iso": "2026-03-29T01:32:16"
     },
     {
       "path": "tests/video/__init__.py",
@@ -11300,6 +11255,11 @@
       "mtime_iso": "2026-03-28T08:39:05"
     },
     {
+      "path": "tools/ci/run_mypy_smoke.py",
+      "size_bytes": 894,
+      "mtime_iso": "2026-03-29T01:35:46"
+    },
+    {
       "path": "tools/ci/run_required_smoke.py",
       "size_bytes": 622,
       "mtime_iso": "2026-03-28T08:50:04"
@@ -11313,6 +11273,11 @@
       "path": "tools/test_helpers/journey_harness.py",
       "size_bytes": 2049,
       "mtime_iso": "2025-12-19T05:16:38"
+    },
+    {
+      "path": "tools/test_helpers/memory_profile.py",
+      "size_bytes": 1736,
+      "mtime_iso": "2026-03-28T19:47:34"
     },
     {
       "path": "tools/test_helpers/process_inspection.py",

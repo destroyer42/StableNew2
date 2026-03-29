@@ -49,8 +49,8 @@ Focused verification passed:
 
 Bookkeeping closure recorded in:
 
-- `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
-- `docs/Image_Metadata_Contract_v2.6.md`
+- `docs/Architecture/REFINEMENT_POLICY_SCHEMA_v1.md`
+- `docs/Architecture/Image_Metadata_Contract_v2.6.md`
 - `docs/StableNew Roadmap v2.6.md`
 - `docs/CompletedPlans/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
 

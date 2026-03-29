@@ -297,7 +297,6 @@ class Pipeline:
         self._current_stage_start_time: datetime | None = None
         self._current_actual_seed: int | None = None
         # PR-PIPE-004: Progress polling infrastructure
-        self._progress_poll_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="progress_poll")
         self._current_generation_progress: float = 0.0
         self._progress_lock = threading.Lock()
         self._run_started_at_monotonic: float | None = None
@@ -2443,10 +2442,12 @@ class Pipeline:
         stop_event = threading.Event()
         stall_detected_event = threading.Event()
         poll_future: Future | None = None
+        poll_executor: ThreadPoolExecutor | None = None
         
         try:
             # PR-HARDEN-004: ALWAYS start polling for stall detection
-            poll_future = self._progress_poll_executor.submit(
+            poll_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="progress_poll")
+            poll_future = poll_executor.submit(
                 self._poll_progress_loop,
                 stop_event,
                 poll_interval,
@@ -2475,6 +2476,8 @@ class Pipeline:
                     poll_future.result(timeout=1.0)
                 except Exception:
                     pass
+            if poll_executor is not None:
+                poll_executor.shutdown(wait=True, cancel_futures=True)
 
     def _log_pipeline_cancellation(self, phase: str, exc: Exception) -> None:
         """Emit a consistent INFO-level log for pipeline cancellations."""

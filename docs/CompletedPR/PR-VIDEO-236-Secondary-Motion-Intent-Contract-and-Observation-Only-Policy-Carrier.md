@@ -27,7 +27,7 @@ without overloading `motion_profile` or changing backend behavior.
   - `tests/video/test_secondary_motion_models.py`
   - `tests/video/test_secondary_motion_policy_service.py`
   - `tests/video/test_secondary_motion_layer_imports.py`
-- froze the v1 schema document in `docs/SECONDARY_MOTION_POLICY_SCHEMA_v1.md`
+- froze the v1 schema document in `docs/Architecture/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
 
 ## Key Files
 
@@ -41,7 +41,7 @@ without overloading `motion_profile` or changing backend behavior.
 - `tests/video/test_secondary_motion_models.py`
 - `tests/video/test_secondary_motion_policy_service.py`
 - `tests/video/test_secondary_motion_layer_imports.py`
-- `docs/SECONDARY_MOTION_POLICY_SCHEMA_v1.md`
+- `docs/Architecture/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
 
 ## Tests
 

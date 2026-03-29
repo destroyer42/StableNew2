@@ -501,15 +501,17 @@ class WebUIProcessManager:
             target=_read_stream,
             args=(process.stdout, self._stdout_log_file, self._stdout_tail, "stdout"),
             name="WebUI-stdout-reader",
-            daemon=False,
-            purpose="Read WebUI process stdout stream"
+            daemon=True,
+            purpose="Read WebUI process stdout stream",
+            suppress_daemon_warning=True,
         )
         self._stderr_thread = registry.spawn(
             target=_read_stream,
             args=(process.stderr, self._stderr_log_file, self._stderr_tail, "stderr"),
             name="WebUI-stderr-reader",
-            daemon=False,
-            purpose="Read WebUI process stderr stream"
+            daemon=True,
+            purpose="Read WebUI process stderr stream",
+            suppress_daemon_warning=True,
         )
         # Threads already started by ThreadRegistry.spawn()
         logger.debug(

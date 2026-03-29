@@ -40,7 +40,7 @@ Delivered outcomes:
 
 Current collection baseline:
 
-- `pytest --collect-only -q` -> `2606 collected / 0 skipped`
+- `pytest --collect-only -q` -> `2964 collected / 0 skipped`
 
 ## 2. Remaining Structural Debt
 
@@ -473,7 +473,7 @@ Delivered outcomes:
 
 Schema reference:
 
-- `docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
+- `docs/Architecture/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
 
 Guiding roadmap:
 
@@ -674,7 +674,7 @@ and before broader lower-leverage cleanup. The planned rollout is:
 
 The next Learning/Review product tranche is tracked in:
 
-- `docs/PR_Backlog/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/CompletedPlans/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`
 
 This tranche is accepted in direction, but it is intentionally shaped to fit
 the current product:
@@ -721,7 +721,8 @@ Priority note:
   30. treat `PR-UX-275` as completed
   31. treat `PR-UX-276` as completed
   32. treat `PR-UX-277` as completed
-  33. begin `PR-UX-278`
+  33. treat `PR-UX-278` as completed
+  34. treat `PR-UX-279` as completed
 
 Planned rollout:
 
@@ -762,6 +763,12 @@ Planned rollout:
   Completed 2026-03-26
 
 - `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
+  Completed 2026-03-26
+
+- `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep`
+  Completed 2026-03-26
+
+- `PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist`
   Completed 2026-03-26
 
 - `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
@@ -845,9 +852,9 @@ Sequencing note:
 
 ## 4AB. GUI Responsiveness Closure Tranche
 
-Status: In Progress 2026-03-28
+Status: Completed 2026-03-29
 
-This tranche closes the gap between runner/controller architectural separation
+This tranche closed the gap between runner/controller architectural separation
 and actual GUI repaint-cadence ownership.
 
 Repo-truth status:
@@ -863,7 +870,7 @@ Repo-truth status:
 - `PR-HARDEN-287-Runtime-Status-Backpressure-GUI-Perf-Journey-and-Architecture-Guards`
   Completed 2026-03-29
 
-Delivered outcomes so far:
+Delivered outcomes:
 
 - `AppController` no longer writes operator-log or bottom-status text directly
   into Tk widgets
@@ -882,12 +889,12 @@ Delivered outcomes so far:
 
 ## 4B. Post-`PR-VIDEO-241` Structural Queue
 
-The next major queue after the secondary motion tranche is tracked in:
+The structural queue that followed the secondary motion tranche was tracked in:
 
 - `docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md`
 
-That queue converts the 2026-03-21 deep-research audit into a repo-truth-based
-remediation sequence. The highest-priority follow-on items are:
+That queue converted the 2026-03-21 deep-research audit into a repo-truth-based
+remediation sequence. The highest-priority follow-on items were:
 
 - `PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset`
   Completed 2026-03-27
@@ -901,7 +908,7 @@ remediation sequence. The highest-priority follow-on items are:
   Completed 2026-03-29; runtime-state ownership is centralized through
   `src/state/workspace_paths.py`, tracked-state drift is guarded by
   `tests/safety/test_runtime_state_hygiene.py`, and the short canonical
-  contract now lives in `docs/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
+  contract now lives in `docs/runbooks/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
 - `PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract`
   Completed 2026-03-29; CI now runs the named required smoke gate
   `tools/ci/run_required_smoke.py`, and workflow/docs drift is enforced by
@@ -953,6 +960,76 @@ remediation sequence. The highest-priority follow-on items are:
 Recommendation L is now delivered through `PR-OBS-249A` through
 `PR-OBS-249D`. After `PR-OBS-249D`, the bottom log is the operator surface and
 the Debug Hub is the detailed trace surface.
+
+## 4C. Current Remaining Backlog Queue
+
+Status: Rebased 2026-03-29
+
+After validating the current backlog docs against `docs/CompletedPR/`,
+`docs/CompletedPlans/`, live source, and the current test suite baseline, the
+remaining active queue is narrower than several older backlog docs imply.
+
+Repo-truth corrections:
+
+- `PR-UX-278` is already completed; see
+  `docs/CompletedPR/PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep.md`.
+- `PR-UX-279` is already completed; see
+  `docs/CompletedPR/PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist.md`.
+- `PR-TEST-280` is no longer a live blocker: `pytest --collect-only -q` now
+  succeeds with `2964 collected / 0 skipped`, and the stale spec has been
+  retired to `docs/archive/reference/PR-TEST-280-Full-Suite-Collection-Recovery-and-Test-Hygiene.md`.
+- `PR-HARDEN-281` appears largely absorbed in current source and tests: default
+  ADetailer request-local pinning is off, request-local override remains opt-in,
+  structured `NansException` failures do not trigger restart recovery, and the
+  request-local ambient drift downgrade is covered.
+- `PR-POLISH-282` is satisfied by this roadmap rebaseline and should not remain
+  a separate near-term execution item unless fresh cross-doc drift appears; the
+  stale spec has been retired to
+  `docs/archive/reference/PR-POLISH-282-Canonical-Roadmap-Video-Status-Harmonization.md`.
+- older completed or superseded sequence snapshots have been removed from
+  `docs/PR_Backlog/`; completed rollout docs now live in `docs/CompletedPlans/`
+  and stale snapshots live in `docs/archive/reference/`.
+
+Current priority order:
+
+1. `PR-CORE-001 - Finalize Native SVD Integration`
+  Reason: the SVD runtime, controller, and GUI substrate already exists, but
+  the repo still lacks dedicated end-to-end SVD integration coverage and a
+  fully closed repo-truth execution spec for the active path.
+2. `PR-CORE-011 - End-to-End Pipeline Tests`
+  Reason: after `PR-CORE-001`, the highest-value follow-on is explicit golden-
+  path coverage for the integrated SVD/video path rather than broader suite
+  collection recovery.
+3. `PR-CORE-004 - Cinematic Prompt Template Library`
+  Reason: the prompt authoring layer is still missing and does not conflict
+  with shipped architecture.
+4. `PR-CORE-002 - Character Embedding Pipeline`
+  Reason: this is still missing and high value, but it is operationally larger
+  than the authoring-layer work above.
+5. `PR-CORE-014 - Multi-Character Support`
+  Reason: it should follow the character asset and training pipeline, not lead
+  it.
+6. merged `PR-CORE-005` / `PR-CORE-017` camera-control and ControlNet tranche
+  Reason: the two current specs overlap heavily and should not be executed as
+  separate parallel proposals.
+7. `PR-CORE-008 - Style Consistency LoRA`
+  Reason: style-control work is valuable, but it is cleaner once character and
+  training surfaces are established.
+8. `PR-CORE-018 - Documentation and Usage Examples`
+  Reason: this should explain shipped behavior rather than lead it.
+9. `PR-CORE-019 - Book Ingestion Tool`
+  Reason: it depends on the re-scoped story-planning productization path.
+10. `PR-CORE-020 - Research Spike: 3D and NeRF Exploration`
+   Reason: this remains intentionally exploratory and low priority.
+
+Execution note:
+
+- use `docs/PR_Backlog/CORE_TOP_20_EXECUTABLE_MINI_ROADMAP_v2.6.md` as the
+  active entry point for the split `PR-CORE-001` through `PR-CORE-020` specs
+  now that the old bundled file has been retired
+- do not execute `PR-CORE-003`, `PR-CORE-006`, `PR-CORE-007`, `PR-CORE-009`,
+  `PR-CORE-010`, `PR-CORE-012`, `PR-CORE-013`, `PR-CORE-015`, or
+  `PR-CORE-016` verbatim without re-scoping them against the shipped repo state
 
 ## 5. Missing Common Functionality to Fold Into the Queue
 

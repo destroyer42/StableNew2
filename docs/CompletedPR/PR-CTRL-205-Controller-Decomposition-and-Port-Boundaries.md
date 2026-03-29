@@ -101,4 +101,4 @@ This PR intentionally leaves several follow-on items for their proper owners:
 
 Those mappings are also recorded in the active migration backlog:
 
-- [MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md](/c:/Users/rob/projects/StableNew/docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md)
+- [MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md](/c:/Users/rob/projects/StableNew/docs/CompletedPlans/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md)

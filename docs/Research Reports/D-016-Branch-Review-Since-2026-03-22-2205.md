@@ -219,7 +219,7 @@ This is a real canonical-doc harmonization failure.
 
 The superseded mapping note correctly states current repo truth:
 
-- [docs/PR_Backlog/VIDEO_AND_SECONDARY_MOTION_REMAINING_WORK_SEQUENCE_v2.6.md](/c:/Users/rob/projects/StableNew/docs/PR_Backlog/VIDEO_AND_SECONDARY_MOTION_REMAINING_WORK_SEQUENCE_v2.6.md#L23)
+- [docs/archive/reference/VIDEO_AND_SECONDARY_MOTION_REMAINING_WORK_SEQUENCE_v2.6.md](/c:/Users/rob/projects/StableNew/docs/archive/reference/VIDEO_AND_SECONDARY_MOTION_REMAINING_WORK_SEQUENCE_v2.6.md#L23)
 
 That document is explicitly marked superseded and correctly points back to the
 canonical queue. The issue is not that this mapping doc exists. The issue is

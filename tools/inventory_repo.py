@@ -4,8 +4,8 @@ Lightweight repository inventory helper.
 Walks the tree, captures per-file metadata, builds a best-effort static import
 graph from src/main.py, and emits:
 - inventory/repo_inventory.json (machine-readable)
-- docs/ACTIVE_MODULES.md
-- docs/LEGACY_CANDIDATES.md
+- inventory/ACTIVE_MODULES.md
+- inventory/LEGACY_CANDIDATES.md
 
 Run from repo root:
     python -m tools.inventory_repo
@@ -22,11 +22,10 @@ from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCS_DIR = ROOT / "docs"
 INVENTORY_DIR = ROOT / "inventory"
 OUTPUT_JSON = INVENTORY_DIR / "repo_inventory.json"
-OUTPUT_ACTIVE_MD = DOCS_DIR / "ACTIVE_MODULES.md"
-OUTPUT_LEGACY_MD = DOCS_DIR / "LEGACY_CANDIDATES.md"
+OUTPUT_ACTIVE_MD = INVENTORY_DIR / "ACTIVE_MODULES.md"
+OUTPUT_LEGACY_MD = INVENTORY_DIR / "LEGACY_CANDIDATES.md"
 
 SCAN_DIRS = ["src", "tests", "docs"]
 
@@ -252,7 +251,7 @@ def write_legacy_md(records: dict[Path, FileRecord]) -> None:
         lines.append("")
 
     OUTPUT_LEGACY_MD.parent.mkdir(parents=True, exist_ok=True)
-    OUTPUT_LEGACY_MD.write_text("\n".join(lines), encoding="utf-8")
+    OUTPUT_LEGACY_MD.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
 def main() -> None:

@@ -31,8 +31,8 @@ This document defines:
 | `docs/Canonical_Document_Ownership_v2.6.md` | 2 | Planner | Ownership or precedence change |
 | `docs/Subsystems/Learning/Learning_System_Spec_v2.6.md` | 3 | Planner | Learning subsystem behavior change |
 | `docs/Subsystems/GUI/GUI_Ownership_Map_v2.6.md` | 3 | Planner | GUI placement or ownership change |
-| `docs/Movie_Clips_Workflow_v2.6.md` | 3 | Planner | Movie Clips workflow or ownership change |
-| `docs/Image_Metadata_Contract_v2.6.md` | 3 | Planner | Image metadata field or policy change |
+| `docs/Subsystems/Video/Movie_Clips_Workflow_v2.6.md` | 3 | Planner | Movie Clips workflow or ownership change |
+| `docs/Architecture/Image_Metadata_Contract_v2.6.md` | 3 | Planner | Image metadata field or policy change |
 | `docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md` | 3 | Planner | Queue-testing guidance change |
 | `docs/Subsystems/Testing/E2E_Golden_Path_Test_Matrix_v2.6.md` | 3 | Planner | Golden-path coverage change |
 | `docs/Subsystems/Randomizer/Randomizer_Spec_v2.6.md` | 3 | Planner | Randomizer subsystem behavior change |

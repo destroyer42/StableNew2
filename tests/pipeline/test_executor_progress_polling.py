@@ -387,6 +387,25 @@ class TestGenerateWithProgress(unittest.TestCase):
         # Count should not increase significantly after completion
         assert final_count - initial_count <= 1
 
+    def test_generate_with_progress_releases_executor_thread(self) -> None:
+        """Progress polling should not leave executor worker threads alive after completion."""
+        before = sum(1 for t in threading.enumerate() if t.name.startswith("progress_poll"))
+        self.pipeline._generate_images.return_value = {"images": ["test"], "info": {}}
+        self.client.get_progress.return_value = ProgressInfo(
+            0.5, 5.0, None, None, None, {}
+        )
+
+        self.pipeline._generate_images_with_progress(
+            "txt2img",
+            {"prompt": "test", "steps": 20},
+            poll_interval=0.05,
+            progress_callback=None,
+        )
+        time.sleep(0.1)
+        after = sum(1 for t in threading.enumerate() if t.name.startswith("progress_poll"))
+
+        assert after <= before
+
 
 class TestStallInterrupt(unittest.TestCase):
     """Test that _poll_progress_loop sends an interrupt after the hard stall threshold."""

@@ -92,7 +92,7 @@ Updated:
 
 - [README.md](/c:/Users/rob/projects/StableNew/README.md)
 - [StableNew Roadmap v2.6.md](/c:/Users/rob/projects/StableNew/docs/StableNew%20Roadmap%20v2.6.md)
-- [MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md](/c:/Users/rob/projects/StableNew/docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md)
+- [MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md](/c:/Users/rob/projects/StableNew/docs/CompletedPlans/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md)
 - [StableNew_ComfyAware_Backlog_v2.6.md](/c:/Users/rob/projects/StableNew/docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md)
 
 ## Outstanding Debt

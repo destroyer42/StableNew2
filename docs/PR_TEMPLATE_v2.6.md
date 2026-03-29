@@ -145,8 +145,8 @@ Every PR spec must explicitly call out:
 - which canonical docs change if the PR alters current truth
 - which active references need location or status updates
 - the final disposition for touched docs: remain active, move to
-	`CompletedPR`, move to `CompletedPlans`, move to `NeedsReview`, or move to
-	`archive`
+  `CompletedPR`, move to `CompletedPlans`, move to `NeedsReview`, or move to
+  `archive`
 
 If a Tier 1 or Tier 2 canonical doc changes, the PR must include explicit
 validation evidence for the new wording against implemented code, tests, or
@@ -183,7 +183,7 @@ All PR specs must respect the current canon:
 - `docs/ARCHITECTURE_v2.6.md`
 - `docs/GOVERNANCE_v2.6.md`
 - `docs/StableNew Roadmap v2.6.md`
-- `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
+- `docs/CompletedPlans/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
 - `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
 
 PR specs must not:
@@ -210,6 +210,6 @@ does all applicable bookkeeping:
 - update `docs/StableNew Roadmap v2.6.md` if roadmap truth changed
 - update `docs/DOCS_INDEX_v2.6.md` if active doc location or status changed
 - remove the duplicate execution spec from `docs/PR_Backlog/` once the final
-	`CompletedPR` file exists
+  `CompletedPR` file exists
 - move completed multi-PR sequence docs to `docs/CompletedPlans/`
 - move stale or uncertain docs to `docs/archive/` or `docs/NeedsReview/`

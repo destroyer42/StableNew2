@@ -34,7 +34,7 @@ Rewrote these active docs to current repo truth:
 - `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
 - `docs/Builder Pipeline Deep-Dive (v2.6).md`
 - `docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md`
-- `docs/Movie_Clips_Workflow_v2.6.md`
+- `docs/Subsystems/Video/Movie_Clips_Workflow_v2.6.md`
 - `docs/Canonical_Document_Ownership_v2.6.md`
 - `docs/DOCS_INDEX_v2.6.md`
 - `docs/DEBUG HUB v2.6.md`
@@ -48,7 +48,7 @@ Updated active supporting docs:
 - `.github/PULL_REQUEST_TEMPLATE.md`
 - `docs/agentic/USAGE_GUIDE.md`
 - `docs/Subsystems/Learning/Learning_System_Spec_v2.6.md`
-- `docs/Image_Metadata_Contract_v2.6.md`
+- `docs/Architecture/Image_Metadata_Contract_v2.6.md`
 
 ## Result
 

@@ -52,8 +52,8 @@ These explain how the constitutional runtime is applied:
 
 - `docs/Subsystems/Learning/Learning_System_Spec_v2.6.md`
 - `docs/Subsystems/GUI/GUI_Ownership_Map_v2.6.md`
-- `docs/Movie_Clips_Workflow_v2.6.md`
-- `docs/Image_Metadata_Contract_v2.6.md`
+- `docs/Subsystems/Video/Movie_Clips_Workflow_v2.6.md`
+- `docs/Architecture/Image_Metadata_Contract_v2.6.md`
 - `docs/Subsystems/Randomizer/Randomizer_Spec_v2.6.md`
 - `docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md`
 - `docs/Subsystems/Testing/E2E_Golden_Path_Test_Matrix_v2.6.md`

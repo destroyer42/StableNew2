@@ -1,6 +1,6 @@
 # UX Help and In-Product Guidance Executable Sequence v2.6
 
-Status: Proposed  
+Status: Completed 2026-03-25  
 Date: 2026-03-22  
 Branch baseline: `feature/video-secondary-motion-pr-236`  
 Applies to: tabs, stage cards, settings, tooltips, help surfaces, operator guidance, inspectability

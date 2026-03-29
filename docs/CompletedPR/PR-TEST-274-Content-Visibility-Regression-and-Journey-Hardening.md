@@ -45,7 +45,7 @@ Focused verification passed:
 ## Documentation Updates
 
 - `docs/StableNew Roadmap v2.6.md`
-- `docs/PR_Backlog/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/CompletedPlans/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/DOCS_INDEX_v2.6.md`
 - `docs/PR_Backlog/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
 

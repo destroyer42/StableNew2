@@ -40,7 +40,7 @@ Movie Clips MVP is intended to remain a post-processing UI/service feature, not 
 | File | Purpose | Lines (Est.) |
 |------|---------|--------------|
 | `tests/journeys/test_movie_clips_mvp.py` | End-to-end smoke for tab/service flow | 200 |
-| `docs/Movie_Clips_Workflow_v2.6.md` | Canonical user/developer workflow doc | 180 |
+| `docs/Subsystems/Video/Movie_Clips_Workflow_v2.6.md` | Canonical user/developer workflow doc | 180 |
 
 ### Files to Modify
 | File | Reason | Lines Changed (Est.) |

@@ -14,7 +14,7 @@ This report specifies a StableNew-owned, backend-agnostic feature set:
 - **Detector wrapper**: a pluggable interface that supports “no heavy dependency” installs while enabling higher fidelity when optional extras (e.g., OpenCV) are present. StableNew’s `svd` optional dependency group already includes OpenCV and other vision libs, so we can reuse that capability without forcing it into the minimal install path. fileciteturn45file0L1-L1 fileciteturn44file0L1-L1
 - **Replay + learning loop**: extend the existing learning record and recommendation engine so policies can be tuned using user ratings and derived quality metrics (e.g., face-crop sharpness), while staying within the v2.6 architecture invariants. fileciteturn14file0L1-L1 fileciteturn15file0L1-L1 fileciteturn25file0L1-L1
 
-Suggested doc outputs (as future repo docs): `docs/PRD_ADAPTIVE_REFINEMENT_v2.6.md`, `docs/REFINEMENT_POLICY_SCHEMA_v1.md`, and `docs/PR-REFINE-###-Adaptive-Refinement-Implementation.md`.
+Suggested doc outputs (as future repo docs): `docs/PRD_ADAPTIVE_REFINEMENT_v2.6.md`, `docs/Architecture/REFINEMENT_POLICY_SCHEMA_v1.md`, and `docs/PR-REFINE-###-Adaptive-Refinement-Implementation.md`.
 
 ## Current repo state analysis and existing seams
 

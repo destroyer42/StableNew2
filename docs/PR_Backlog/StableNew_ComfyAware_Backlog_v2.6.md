@@ -192,7 +192,7 @@ Delivered outcomes:
 
 Schema reference:
 
-- `docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
+- `docs/Architecture/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
 
 Guiding roadmap:
 

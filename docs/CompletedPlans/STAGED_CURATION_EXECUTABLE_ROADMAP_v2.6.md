@@ -1,6 +1,6 @@
 # Staged Curation Executable Roadmap v2.6
 
-Status: Proposed  
+Status: Completed 2026-03-27  
 Updated: 2026-03-27  
 Applies to: Learning, Review, discovered-review, queue-first staged advancement
 
