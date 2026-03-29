@@ -60,9 +60,18 @@ def _format_queue_job_summary(job: Any) -> str:
     prompt = _value("prompt") or ""
     seed = _value("seed") or getattr(job, "seed", None)
     status = getattr(job, "status", None)
-    prompt_preview = prompt.strip().splitlines()[0] if prompt.strip() else ""
-    if prompt_preview and len(prompt_preview) < len(prompt.strip()):
-        prompt_preview = prompt_preview[:40].rstrip() + "..."
+    prompt_stripped = prompt.strip()
+    if prompt_stripped:
+        first_line = prompt_stripped.splitlines()[0]
+        prompt_preview = first_line
+        needs_length_truncation = len(first_line) > 40
+        has_more_text = len(prompt_stripped) > len(first_line)
+        if needs_length_truncation:
+            prompt_preview = first_line[:40].rstrip()
+        if needs_length_truncation or has_more_text:
+            prompt_preview = prompt_preview.rstrip() + "..."
+    else:
+        prompt_preview = ""
     summary_parts: list[str] = [model]
     summary_parts.append(f"seed={seed or 'auto'}")
     if status:
