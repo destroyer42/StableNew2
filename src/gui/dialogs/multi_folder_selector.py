@@ -14,6 +14,8 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, ttk
 
+from src.gui.theme_v2 import apply_toplevel_theme, style_listbox_widget
+
 logger = logging.getLogger(__name__)
 
 
@@ -49,6 +51,7 @@ class MultiFolderSelector(tk.Toplevel):
         self.title(title)
         self.selected_folders: list[str] = []
         self.result_folders: list[str] | None = None  # None = cancelled
+        apply_toplevel_theme(self)
 
         # Configure window
         self.geometry("600x400")
@@ -112,6 +115,7 @@ class MultiFolderSelector(tk.Toplevel):
             relief="solid",
             borderwidth=1
         )
+        style_listbox_widget(self.folder_listbox)
         scrollbar.config(command=self.folder_listbox.yview)
         
         self.folder_listbox.pack(side="left", fill="both", expand=True)

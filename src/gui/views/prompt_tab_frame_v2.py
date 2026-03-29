@@ -13,8 +13,13 @@ from __future__ import annotations
 
 import tkinter as tk
 import tkinter.simpledialog
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from src.controller.content_visibility_resolver import (
+    REDACTED_TEXT,
+    ContentVisibilityResolver,
+)
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 from src.config.app_config import STABLENEW_WEBUI_ROOT
 from src.gui.app_state_v2 import AppStateV2
@@ -23,10 +28,14 @@ from src.gui.scrolling import enable_mousewheel
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.view_contracts.prompt_editor_contract import (
     build_editor_warning_text,
     build_slot_labels,
     find_undefined_slots,
+    get_prompt_tab_column_specs,
+    PROMPT_PICKER_COLUMN_MIN_WIDTH,
+    PROMPT_PICKER_ROW_MIN_HEIGHT,
 )
 from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
@@ -60,6 +69,8 @@ class PromptTabFrame(ttk.Frame):
         super().__init__(master, *args, **kwargs)
         self.workspace_state = PromptWorkspaceState()
         self.app_state = app_state
+        self._content_visibility_listener = None
+        self._pending_visibility_refresh = False
         self.workspace_state.new_pack("Untitled", slot_count=10)
         if self.app_state is not None:
             try:
@@ -70,6 +81,7 @@ class PromptTabFrame(ttk.Frame):
         self._suppress_editor_change = False
         self._prompt_optimizer_guard = False
         self._prompt_optimizer_vars = self._build_prompt_optimizer_vars()
+        self._content_visibility_mode = self._read_content_visibility_mode()
         
         # Autocomplete for [[slot]] insertion
         self._autocomplete_list: tk.Listbox | None = None
@@ -78,9 +90,7 @@ class PromptTabFrame(ttk.Frame):
         # Validation state
         self._undefined_slots: set[str] = set()
 
-        self.columnconfigure(0, weight=1, uniform="prompt_col")
-        self.columnconfigure(1, weight=2, uniform="prompt_col")
-        self.columnconfigure(2, weight=1, uniform="prompt_col")
+        configure_grid_columns(self, get_prompt_tab_column_specs())
         self.rowconfigure(0, weight=1)
 
         self.left_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
@@ -94,8 +104,71 @@ class PromptTabFrame(ttk.Frame):
         self._build_left_panel()
         self._build_center_panel()
         self._build_right_panel()
+        self.bind("<Map>", self._on_map, add="+")
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            self._content_visibility_listener = self._on_content_visibility_mode_subscription
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._content_visibility_listener,
+                )
+            except Exception:
+                self._content_visibility_listener = None
         self._refresh_editor()
         self._refresh_metadata()
+        self.on_content_visibility_mode_changed(self._content_visibility_mode)
+
+    def _read_content_visibility_mode(self) -> str:
+        return str(
+            getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+
+    def _visibility_resolver(self) -> ContentVisibilityResolver:
+        return ContentVisibilityResolver(self._content_visibility_mode)
+
+    def _current_slot_visibility_subject(self) -> dict[str, str]:
+        return {
+            "name": self.workspace_state.get_current_pack_name(),
+            "positive_prompt": self.workspace_state.get_current_prompt_text(),
+            "negative_prompt": self.workspace_state.get_current_negative_text(),
+        }
+
+    def _set_editor_widget_text(self, widget: tk.Text, value: str, *, readonly: bool) -> None:
+        widget.configure(state="normal")
+        widget.delete("1.0", "end")
+        if value:
+            widget.insert("1.0", value)
+        widget.edit_modified(False)
+        if readonly:
+            widget.configure(state="disabled")
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._content_visibility_mode = str(mode or self._read_content_visibility_mode() or "nsfw")
+        self._pending_visibility_refresh = False
+        if hasattr(self, "lora_picker"):
+            try:
+                self.lora_picker.set_content_visibility_mode(self._content_visibility_mode)
+            except Exception:
+                pass
+        self._refresh_pack_list()
+        self._refresh_editor()
+        self._refresh_metadata()
+
+    def _on_content_visibility_mode_subscription(self) -> None:
+        mode = self._read_content_visibility_mode()
+        self._content_visibility_mode = mode
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            return
+        self.on_content_visibility_mode_changed(mode)
+
+    def _on_map(self, _event=None) -> None:
+        if not self._pending_visibility_refresh:
+            return
+        try:
+            self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
+        except Exception:
+            self.on_content_visibility_mode_changed(self._content_visibility_mode)
 
     # Left column -------------------------------------------------------
     def _build_left_panel(self) -> None:
@@ -202,9 +275,9 @@ class PromptTabFrame(ttk.Frame):
         # Configure grid layout for split view
         self.prompts_tab.rowconfigure(1, weight=3)  # positive editor row
         self.prompts_tab.rowconfigure(3, weight=1)  # negative editor row
-        self.prompts_tab.rowconfigure(5, weight=1)  # LoRA/embedding panels row
-        self.prompts_tab.columnconfigure(0, weight=1)
-        self.prompts_tab.columnconfigure(1, weight=1)
+        self.prompts_tab.rowconfigure(5, weight=1, minsize=PROMPT_PICKER_ROW_MIN_HEIGHT)
+        self.prompts_tab.columnconfigure(0, weight=1, minsize=PROMPT_PICKER_COLUMN_MIN_WIDTH)
+        self.prompts_tab.columnconfigure(1, weight=1, minsize=PROMPT_PICKER_COLUMN_MIN_WIDTH)
 
         # Positive prompt header (row 0)
         positive_header = ttk.Frame(self.prompts_tab)
@@ -511,20 +584,24 @@ class PromptTabFrame(ttk.Frame):
 
     def _refresh_editor(self) -> None:
         slot = self.workspace_state.get_slot(self.workspace_state.get_current_slot_index())
+        mode = self._content_visibility_mode
+        positive_text = self.workspace_state.get_current_prompt_text_for_mode(mode)
+        negative_text = self.workspace_state.get_current_negative_text_for_mode(mode)
         self._suppress_editor_change = True
         try:
             # Update positive editor
-            self.editor.delete("1.0", "end")
-            if slot.text:
-                self.editor.insert("1.0", slot.text)
-            self.editor.edit_modified(False)
+            self._set_editor_widget_text(
+                self.editor,
+                positive_text or slot.text,
+                readonly=positive_text == REDACTED_TEXT,
+            )
 
             # Update negative editor
-            self.negative_editor.delete("1.0", "end")
-            negative = getattr(slot, "negative", "")
-            if negative:
-                self.negative_editor.insert("1.0", negative)
-            self.negative_editor.edit_modified(False)
+            self._set_editor_widget_text(
+                self.negative_editor,
+                negative_text or getattr(slot, "negative", ""),
+                readonly=negative_text == REDACTED_TEXT,
+            )
 
             # Update LoRA picker
             if hasattr(self, "lora_picker"):
@@ -643,6 +720,8 @@ class PromptTabFrame(ttk.Frame):
         """Refresh metadata/preview panel with full prompt preview."""
         pack = self.workspace_state.current_pack
         slot_index = self.workspace_state.get_current_slot_index()
+        resolver = self._visibility_resolver()
+        subject = self._current_slot_visibility_subject()
         
         # Get current slot data
         current_slot = self.workspace_state.get_current_slot() if pack else None
@@ -682,7 +761,7 @@ class PromptTabFrame(ttk.Frame):
                 preview_lines.append(render_embedding_reference(emb_name, emb_weight))
         
         # Positive prompt
-        positive_text = current_slot.text.strip()
+        positive_text = resolver.redact_text(current_slot.text.strip(), item=subject)
         if positive_text:
             preview_lines.append(positive_text)
         else:
@@ -692,7 +771,12 @@ class PromptTabFrame(ttk.Frame):
         if current_slot.loras:
             lora_line_parts = []
             for lora_name, lora_weight in current_slot.loras:
-                lora_line_parts.append(f"<lora:{lora_name}:{lora_weight}>")
+                if positive_text == REDACTED_TEXT and self._content_visibility_mode == "sfw":
+                    lora_line_parts.append(f"<lora:{REDACTED_TEXT}:{lora_weight}>")
+                elif resolver.is_visible({"name": lora_name}):
+                    lora_line_parts.append(f"<lora:{lora_name}:{lora_weight}>")
+                elif self._content_visibility_mode == "sfw":
+                    lora_line_parts.append(f"<lora:{REDACTED_TEXT}:{lora_weight}>")
             preview_lines.append(" ".join(lora_line_parts))
         
         preview_lines.append("")
@@ -703,7 +787,7 @@ class PromptTabFrame(ttk.Frame):
                 preview_lines.append(f"neg: {render_embedding_reference(emb_name, emb_weight)}")
         
         # Negative prompt
-        negative_text = current_slot.negative.strip()
+        negative_text = resolver.redact_text(current_slot.negative.strip(), item=subject)
         if negative_text:
             preview_lines.append(f"neg: {negative_text}")
         else:
@@ -784,19 +868,22 @@ class PromptTabFrame(ttk.Frame):
     
     def _refresh_pack_list(self) -> None:
         """Refresh the list of available packs from the packs directory."""
-        from pathlib import Path
-        
         self.pack_listbox.delete(0, "end")
-        
         packs_dir = Path("packs")
         if not packs_dir.exists():
             packs_dir.mkdir(parents=True, exist_ok=True)
             return
-        
-        # Find all TXT files in packs directory
+
+        resolver = self._visibility_resolver()
         txt_files = sorted(packs_dir.glob("*.txt"))
         for txt_file in txt_files:
-            self.pack_listbox.insert("end", txt_file.stem)
+            pack_text = ""
+            try:
+                pack_text = txt_file.read_text(encoding="utf-8")
+            except Exception:
+                pass
+            if resolver.is_visible({"name": txt_file.stem, "prompt": pack_text}):
+                self.pack_listbox.insert("end", txt_file.stem)
     
     def _on_load_selected_pack(self) -> None:
         """Load the selected pack from the pack list."""
@@ -1648,6 +1735,19 @@ class PromptTabFrame(ttk.Frame):
         self.pack_name_label.config(
             text=f"Editor - {self.workspace_state.current_pack.name if self.workspace_state.current_pack else 'None'} (modified)"
         )
+
+    def destroy(self) -> None:
+        if (
+            self.app_state is not None
+            and self._content_visibility_listener is not None
+            and hasattr(self.app_state, "unsubscribe")
+        ):
+            try:
+                self.app_state.unsubscribe("content_visibility_mode", self._content_visibility_listener)
+            except Exception:
+                pass
+            self._content_visibility_listener = None
+        super().destroy()
 
 
 PromptTabFrame = PromptTabFrame

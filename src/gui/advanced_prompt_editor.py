@@ -19,6 +19,9 @@ from .theme import (
     ASWF_LIGHT_GREY,
     ASWF_MED_GREY,
     ASWF_OK_GREEN,
+    apply_toplevel_theme,
+    style_listbox_widget,
+    style_text_widget,
 )
 from .tooltip import Tooltip
 
@@ -107,7 +110,6 @@ class AdvancedPromptEditor:
         self.window = tk.Toplevel(root)
         self.window.title("Advanced Prompt Pack Editor v2.6")
         self.window.geometry("1200x800")
-        self.window.configure(bg=ASWF_BLACK)
 
         # Apply dark theme
         self._apply_dark_theme()
@@ -133,30 +135,8 @@ class AdvancedPromptEditor:
 
     def _apply_dark_theme(self):
         """Apply consistent dark theme using ASWF colors"""
-        style = ttk.Style()
-
-        # Configure dark theme styles using ASWF colors
-        style.configure("Dark.TFrame", background=ASWF_DARK_GREY)
-        style.configure(
-            "Dark.TLabel", background=ASWF_DARK_GREY, foreground=ASWF_GOLD
-        )  # Gold text on dark background
-        style.configure(
-            "Dark.TButton", background=ASWF_MED_GREY, foreground="white"
-        )  # White text on gray background
-        style.configure(
-            "Dark.TEntry",
-            background=ASWF_MED_GREY,
-            fieldbackground=ASWF_MED_GREY,
-            foreground="white",  # White text on gray background
-            insertcolor=ASWF_GOLD,
-        )
-        style.configure(
-            "Dark.TCombobox", background=ASWF_MED_GREY, foreground="white"
-        )  # White text on gray background
-        style.configure("Dark.TNotebook", background=ASWF_DARK_GREY)
-        style.configure(
-            "Dark.TNotebook.Tab", background=ASWF_MED_GREY, foreground="white"
-        )  # White text on gray background
+        if self.window is not None:
+            apply_toplevel_theme(self.window)
 
     def _build_advanced_ui(self):
         """Build the advanced editor interface"""
@@ -359,6 +339,7 @@ class AdvancedPromptEditor:
             maxundo=50,
         )
         self.prompts_text.pack(fill=tk.BOTH, expand=True)
+        style_text_widget(self.prompts_text)
 
         # Configure scrollbars
         v_scrollbar.config(command=self.prompts_text.yview)
@@ -449,6 +430,7 @@ class AdvancedPromptEditor:
             height=15,
         )
         self.global_neg_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+        style_text_widget(self.global_neg_text)
 
         # Load current global negative
         self.global_neg_text.delete("1.0", tk.END)
@@ -523,6 +505,7 @@ class AdvancedPromptEditor:
             font=("Consolas", 9),
         )
         self.validation_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=(0, 10))
+        style_text_widget(self.validation_text)
 
         # Configure text tags for colored output
         self.validation_text.tag_configure("error", foreground=ASWF_ERROR_RED)
@@ -571,6 +554,7 @@ class AdvancedPromptEditor:
             font=("Consolas", 9),
         )
         self.embeddings_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        style_listbox_widget(self.embeddings_listbox)
         self.embeddings_listbox.bind("<Double-Button-1>", self._insert_embedding)
 
         # LoRAs panel
@@ -585,6 +569,7 @@ class AdvancedPromptEditor:
             font=("Consolas", 9),
         )
         self.loras_listbox.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        style_listbox_widget(self.loras_listbox)
         self.loras_listbox.bind("<Double-Button-1>", self._insert_lora)
 
         # Populate lists
@@ -619,6 +604,7 @@ class AdvancedPromptEditor:
             font=("Consolas", 10),
         )
         help_text.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        style_text_widget(help_text)
 
         help_content = """
 ADVANCED PROMPT PACK EDITOR - HELP

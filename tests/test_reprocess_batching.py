@@ -37,7 +37,7 @@ def test_batching():
                 config=config,
             )
             jobs_created += 1
-        print(f"   ✓ Created {jobs_created} jobs")
+        print(f"   [OK] Created {jobs_created} jobs")
         assert jobs_created == 160, f"Expected 160 jobs, got {jobs_created}"
         
         # Test batch_size=10 (16 jobs total)
@@ -52,7 +52,7 @@ def test_batching():
                 config=config,
             )
             jobs_created += 1
-        print(f"   ✓ Created {jobs_created} jobs")
+        print(f"   [OK] Created {jobs_created} jobs")
         assert jobs_created == 16, f"Expected 16 jobs, got {jobs_created}"
         
         # Test batch_size=100 (2 jobs total)
@@ -67,11 +67,11 @@ def test_batching():
                 config=config,
             )
             jobs_created += 1
-        print(f"   ✓ Created {jobs_created} jobs")
+        print(f"   [OK] Created {jobs_created} jobs")
         assert jobs_created == 2, f"Expected 2 jobs, got {jobs_created}"
         
         print("\n" + "=" * 60)
-        print("✅ All batching tests passed!")
+        print("[OK] All batching tests passed!")
         print("=" * 60)
 
 if __name__ == "__main__":

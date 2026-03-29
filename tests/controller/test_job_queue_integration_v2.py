@@ -18,6 +18,7 @@ class FakeJobService:
 
     def __init__(self) -> None:
         self._listeners: dict[str, list[Callable[..., Any]]] = {}
+        self._state_listeners: list[Callable[[], None]] = []
         self.enqueue_calls = 0
         self.run_now_calls = 0
         self.pause_calls = 0
@@ -34,10 +35,17 @@ class FakeJobService:
     def enqueue(self, job) -> None:
         self.enqueue_calls += 1
         self.last_job = job
+        for listener in self._state_listeners:
+            listener()
 
     def run_now(self, job) -> None:
         self.run_now_calls += 1
         self.last_job = job
+        for listener in self._state_listeners:
+            listener()
+
+    def register_state_listener(self, callback: Callable[[], None]) -> None:
+        self._state_listeners.append(callback)
 
     def pause(self) -> None:
         self.pause_calls += 1
@@ -59,6 +67,8 @@ class FakeJobService:
 
     def set_jobs(self, jobs: list[Job]) -> None:
         self._jobs = list(jobs)
+        for listener in self._state_listeners:
+            listener()
 
 
 def _build_controller() -> tuple[AppController, FakeJobService]:

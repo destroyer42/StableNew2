@@ -1,32 +1,40 @@
-"""Debug script to test stage cards creation."""
-import sys
-import traceback
+"""Manual debug script for StageCardsPanel creation.
+
+Import-safe under pytest collection.
+"""
+
+from __future__ import annotations
+
 import tkinter as tk
+import traceback
 
-print("Starting stage cards test...")
 
-try:
-    from src.gui.views.stage_cards_panel_v2 import StageCardsPanel
-    print("✓ Imported StageCardsPanel")
-    
-    root = tk.Tk()
-    print("✓ Created Tk root")
-    
-    panel = StageCardsPanel(root)
-    print(f"✓ Created StageCardsPanel")
-    print(f"  Stage cards: {list(panel._stage_cards.keys())}")
-    print(f"  Stage order: {panel.stage_order}")
-    
-    # Check if cards exist
-    for stage_name in ["txt2img", "img2img", "adetailer", "upscale"]:
-        card = getattr(panel, f"{stage_name}_card", None)
-        if card:
-            print(f"  ✓ {stage_name}_card exists")
-        else:
-            print(f"  ✗ {stage_name}_card missing")
-    
-except Exception as e:
-    print(f"✗ ERROR: {e}")
-    traceback.print_exc()
+def main() -> None:
+    print("Starting stage cards test...")
 
-print("\nTest complete.")
+    try:
+        from src.gui.views.stage_cards_panel_v2 import StageCardsPanel
+
+        print("[OK] Imported StageCardsPanel")
+
+        root = tk.Tk()
+        print("[OK] Created Tk root")
+
+        panel = StageCardsPanel(root)
+        print("[OK] Created StageCardsPanel")
+        print(f"  Stage cards: {list(panel._stage_cards.keys())}")
+        print(f"  Stage order: {panel.stage_order}")
+
+        for stage_name in ["txt2img", "img2img", "adetailer", "upscale"]:
+            card = getattr(panel, f"{stage_name}_card", None)
+            print(f"  {'[OK]' if card else '[ERR]'} {stage_name}_card")
+        root.destroy()
+    except Exception as exc:
+        print(f"[ERR] ERROR: {exc}")
+        traceback.print_exc()
+
+    print("\nTest complete.")
+
+
+if __name__ == "__main__":
+    main()

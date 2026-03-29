@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from src.controller.pipeline_controller import PipelineController
@@ -114,3 +115,39 @@ def test_submit_normalized_jobs_coalesces_queue_state_notifications() -> None:
     assert count == 2
     assert batch_entries == ["enter", "exit"]
     assert controller._job_service.submit_job_with_run_mode.call_count == 2
+
+
+def test_submit_normalized_jobs_stops_when_shutdown_starts_mid_batch() -> None:
+    controller = _build_controller_with_queue(depth=1)
+    controller._sort_jobs_by_model = lambda rows: rows
+    controller._log_add_to_queue_event = Mock()
+    controller._learning_enabled = False
+    controller._last_run_config = None
+    controller._job_service._emit_queue_updated = Mock()
+    controller._app_controller = SimpleNamespace(_is_shutting_down=False)
+
+    fake_jobs = [Mock(payload=None), Mock(payload=None), Mock(payload=None)]
+    controller._to_queue_job = Mock(side_effect=fake_jobs)
+
+    submitted_jobs: list[Mock] = []
+
+    def _submit(job, emit_queue_updated=False):
+        submitted_jobs.append(job)
+        controller._app_controller._is_shutting_down = True
+
+    controller._job_service.submit_job_with_run_mode.side_effect = _submit
+
+    count = controller._submit_normalized_jobs(
+        [
+            make_test_njr(prompt_source="manual", prompt_pack_id="pack-a"),
+            make_test_njr(prompt_source="manual", prompt_pack_id="pack-b"),
+            make_test_njr(prompt_source="manual", prompt_pack_id="pack-c"),
+        ],
+        source="gui",
+        prompt_source="manual",
+    )
+
+    assert count == 1
+    assert submitted_jobs == [fake_jobs[0]]
+    assert controller._to_queue_job.call_count == 1
+    controller._job_service._emit_queue_updated.assert_called_once_with()

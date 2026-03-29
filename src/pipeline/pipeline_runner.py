@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from src.api.client import SDWebUIClient
-from src.gui.state import CancellationError
+from src.controller.runtime_state import CancellationError
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata
@@ -129,6 +129,35 @@ class PipelineRunner:
             stage_name,
             base_model,
             f" (replaced hidden stage model {previous_model})" if previous_model and previous_model != base_model else "",
+        )
+
+    @staticmethod
+    def _pin_stage_vae_to_njr_base(
+        config_dict: dict[str, Any],
+        *,
+        njr: NormalizedJobRecord,
+        stage_name: str,
+    ) -> None:
+        """Pin downstream image stages to the NJR-selected VAE by default."""
+        if stage_name not in {"img2img", "adetailer", "upscale"}:
+            return
+        base_vae = str(getattr(njr, "vae", "") or "").strip()
+        if not base_vae:
+            return
+        previous_vae = str(
+            config_dict.get("vae")
+            or config_dict.get("sd_vae")
+            or config_dict.get("vae_name")
+            or ""
+        ).strip()
+        config_dict["vae"] = base_vae
+        config_dict["sd_vae"] = base_vae
+        config_dict["vae_name"] = base_vae
+        logger.info(
+            "[VAE_PIN] Pinned %s stage to NJR base VAE: %s%s",
+            stage_name,
+            base_vae,
+            f" (replaced hidden stage VAE {previous_vae})" if previous_vae and previous_vae != base_vae else "",
         )
 
     @staticmethod
@@ -1199,6 +1228,11 @@ class PipelineRunner:
                         njr=njr,
                         stage_name="img2img",
                     )
+                    self._pin_stage_vae_to_njr_base(
+                        config_dict,
+                        njr=njr,
+                        stage_name="img2img",
+                    )
                     
                     # Add scheduler from NJR if present
                     if njr.scheduler:
@@ -1278,6 +1312,11 @@ class PipelineRunner:
                     else:
                         config_dict = {}
                     self._pin_stage_model_to_njr_base(
+                        config_dict,
+                        njr=njr,
+                        stage_name="adetailer",
+                    )
+                    self._pin_stage_vae_to_njr_base(
                         config_dict,
                         njr=njr,
                         stage_name="adetailer",
@@ -1458,6 +1497,11 @@ class PipelineRunner:
                         logger.warning("[UPSCALE_CONFIG_DEBUG] No upscale stage config found in stage_chain")
 
                     self._pin_stage_model_to_njr_base(
+                        config_dict,
+                        njr=njr,
+                        stage_name="upscale",
+                    )
+                    self._pin_stage_vae_to_njr_base(
                         config_dict,
                         njr=njr,
                         stage_name="upscale",

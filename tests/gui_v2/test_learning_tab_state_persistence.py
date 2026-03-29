@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.learning_state import LearningExperiment, LearningVariant
@@ -259,6 +259,8 @@ def test_learning_tab_staged_curation_persists_selection_event(tmp_path) -> None
             assert "Replay chain:" in tab._staged_replay_summary_var.get()  # noqa: SLF001
             assert "source=txt2img / juggernautXL" in tab._staged_replay_summary_var.get()  # noqa: SLF001
             assert "Target stage: refine | Path: Queue Now" in tab._staged_plan_preview_var.get()  # noqa: SLF001
+            assert "Source: stage=txt2img" in tab._staged_effective_settings_var.get()  # noqa: SLF001
+            assert "target-stage preset" in tab._staged_effective_settings_var.get()  # noqa: SLF001
         finally:
             tab.destroy()
 
@@ -378,6 +380,7 @@ def test_learning_tab_staged_curation_affordances_distinguish_queue_vs_review(tm
             assert str(tab._staged_queue_buttons["face_triage"].cget("state")) == "disabled"  # noqa: SLF001
             assert str(tab._staged_review_buttons["face_triage"].cget("state")) == "disabled"  # noqa: SLF001
             assert "single-candidate" in tab._staged_review_guidance_var.get().lower()  # noqa: SLF001
+            assert "bulk staged-curation path" in tab._staged_queue_guidance_var.get().lower()  # noqa: SLF001
 
             tab._apply_staged_decision("advanced_to_face_triage")  # noqa: SLF001
 
@@ -767,5 +770,48 @@ def test_learning_tab_opens_staged_metadata_inspector(tmp_path) -> None:
 
             assert len(opened) == 1
             assert opened[0]["artifact_path"] == str(image_path)
+        finally:
+            tab.destroy()
+
+
+def test_learning_tab_defers_visibility_refresh_until_mapped(tmp_path) -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    state_path = tmp_path / "ui_state.json"
+    experiments_root = tmp_path / "experiments"
+    store = UIStateStore(state_path)
+    app_state = AppStateV2()
+
+    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+        return_value=experiments_root,
+    ):
+        tab = LearningTabFrame(
+            root,
+            app_state=app_state,
+            pipeline_controller=_StubPipelineController(),
+        )
+        try:
+            tab._refresh_discovered_inbox = Mock()
+            tab._refresh_staged_curation_inbox = Mock()
+            tab._update_staged_preview = Mock()
+
+            app_state.set_content_visibility_mode("sfw")
+            app_state.flush_now()
+
+            tab._refresh_discovered_inbox.assert_not_called()
+            tab._refresh_staged_curation_inbox.assert_not_called()
+            tab._update_staged_preview.assert_not_called()
+            assert tab._pending_visibility_refresh is True
+
+            tab._on_map()
+            root.update_idletasks()
+            root.update()
+
+            tab._refresh_discovered_inbox.assert_called_once()
+            tab._refresh_staged_curation_inbox.assert_called_once()
+            tab._update_staged_preview.assert_called_once()
         finally:
             tab.destroy()

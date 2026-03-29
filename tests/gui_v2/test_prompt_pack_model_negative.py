@@ -42,9 +42,9 @@ def test_save_includes_negative():
         # Read JSON and verify
         with open(path) as f:
             data = json.load(f)
-        
-        assert data["slots"][0]["negative"] == "ugly"
-        assert data["slots"][0]["text"] == "wizard"
+
+        assert data["pack_data"]["slots"][0]["negative"] == "ugly"
+        assert data["pack_data"]["slots"][0]["text"] == "wizard"
 
 
 def test_load_without_negative_field():
@@ -121,10 +121,10 @@ def test_empty_negative_saves_as_empty_string():
 
         with open(path) as f:
             data = json.load(f)
-        
+
         # Should be empty string, not null/None
-        assert data["slots"][0]["negative"] == ""
-        assert "negative" in data["slots"][0]
+        assert data["pack_data"]["slots"][0]["negative"] == ""
+        assert "negative" in data["pack_data"]["slots"][0]
 
 
 def test_load_padded_slots_include_negative():

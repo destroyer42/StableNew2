@@ -122,3 +122,54 @@ def test_log_trace_panel_renders_repeat_summary_and_filters_event_stage() -> Non
 
     logger.removeHandler(handler)
     root.destroy()
+
+
+def test_log_trace_panel_skips_heavy_refresh_when_collapsed() -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter not available: {exc}")
+    root.withdraw()
+    handler = InMemoryLogHandler(max_entries=20)
+    panel = LogTracePanelV2(root, log_handler=handler, audience="trace")
+    panel._set_expanded(False)
+
+    def _unexpected_entries():
+        raise AssertionError("collapsed refresh should not request log entries")
+
+    handler.get_entries = _unexpected_entries  # type: ignore[assignment]
+
+    panel.refresh()
+
+    root.destroy()
+
+
+def test_log_trace_panel_skips_rerender_when_log_version_is_unchanged() -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter not available: {exc}")
+    root.withdraw()
+    handler = InMemoryLogHandler(max_entries=20)
+    logger = get_logger(f"{__name__}.version")
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+
+    panel = LogTracePanelV2(root, log_handler=handler, audience="trace")
+    logger.info("Versioned log line")
+    panel.refresh(force=True)
+
+    calls = {"count": 0}
+    original_get_entries = handler.get_entries
+
+    def _tracked_entries():
+        calls["count"] += 1
+        return original_get_entries()
+
+    handler.get_entries = _tracked_entries  # type: ignore[assignment]
+    panel.refresh()
+
+    assert calls["count"] == 0
+
+    logger.removeHandler(handler)
+    root.destroy()

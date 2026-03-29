@@ -139,7 +139,9 @@ def _apply_prompt_optimizer(
     config: dict[str, Any],
     stage_type: StageType,
 ) -> None:
-    if "prompt" not in payload and "negative_prompt" not in payload:
+    positive_prompt = str(payload.get("prompt") or "").strip()
+    negative_prompt = str(payload.get("negative_prompt") or "").strip()
+    if not positive_prompt and not negative_prompt:
         return
     try:
         optimizer_config = PromptOptimizerConfig.from_dict(config.get("prompt_optimizer"))

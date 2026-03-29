@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -15,6 +16,7 @@ from src.pipeline.job_models_v2 import (
 from src.queue.job_history_store import JobHistoryEntry
 from src.api.webui_resource_service import build_empty_resource_map, normalize_resource_map
 from src.gui.config_adapter_v26 import GuiConfigAdapterV26
+from src.gui.content_visibility import ContentVisibilityMode, normalize_content_visibility_mode
 from src.utils.config import LoraRuntimeConfig
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -109,9 +111,25 @@ class CurrentConfig:
 class AppStateV2:
     """Central GUI-facing state container for the V2 application."""
 
+    HOT_RUNTIME_KEYS: frozenset[str] = frozenset(
+        {
+            "runtime_status",
+            "queue_status",
+            "queue_items",
+            "history_items",
+            "preview_jobs",
+            "operator_log",
+        }
+    )
+
     _listeners: dict[str, list[Listener]] = field(default_factory=dict)
     _invoker: GuiInvoker | None = None
     _notifications_enabled: bool = True
+    _notification_lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
+    _batched_dirty_keys: set[str] = field(default_factory=set, init=False, repr=False)
+    _batched_flush_scheduled: bool = field(default=False, init=False, repr=False)
+    _batched_flush_delay_ms: int = field(default=75, init=False, repr=False)
+    _batched_flush_callback: Callable[[], None] = field(init=False, repr=False)
 
     # Legacy prompt fields (deprecated - use PromptPack instead)
     prompt: str = ""  # DEPRECATED: Use selected_prompt_pack_id instead
@@ -149,12 +167,16 @@ class AppStateV2:
     preview_jobs: list[NormalizedJobRecord] = field(default_factory=list)
     log_events: list[JobLifecycleLogEvent] = field(default_factory=list)
     log_events_max: int = 500
+    operator_log: list[str] = field(default_factory=list)
+    operator_log_max: int = 500
     lora_strengths: list[LoraRuntimeConfig] = field(default_factory=list)
     adetailer_models: list[str] = field(default_factory=list)
     adetailer_detectors: list[str] = field(default_factory=list)
     adetailer_enabled: bool = True  # PR-DEFAULT-ADETAILER: Default to True for visibility
     adetailer_config: dict[str, Any] = field(default_factory=dict)
     collapse_states: dict[str, bool] = field(default_factory=dict)
+    help_mode_enabled: bool = False
+    content_visibility_mode: str = ContentVisibilityMode.NSFW.value
 
     # PR-111: Run Controls UX state flags
     is_run_in_progress: bool = False
@@ -176,6 +198,7 @@ class AppStateV2:
 
     def __post_init__(self) -> None:
         self._config_adapter = GuiConfigAdapterV26(self)
+        self._batched_flush_callback = self._flush_batched_notifications
 
     @property
     def config_adapter(self) -> GuiConfigAdapterV26:
@@ -188,6 +211,9 @@ class AppStateV2:
     def disable_notifications(self) -> None:
         """Stop delivering listener callbacks (used during teardown)."""
         self._notifications_enabled = False
+        with self._notification_lock:
+            self._batched_dirty_keys.clear()
+            self._batched_flush_scheduled = False
 
     def subscribe(self, key: str, listener: Listener) -> None:
         listeners = self._listeners.setdefault(key, [])
@@ -213,6 +239,10 @@ class AppStateV2:
         if not listeners:
             return
 
+        if key in self.HOT_RUNTIME_KEYS:
+            self._schedule_batched_notification(key)
+            return
+
         # If no invoker is set (e.g., unit tests), invoke inline.
         if self._invoker is None:
             for listener in listeners:
@@ -228,6 +258,76 @@ class AppStateV2:
             except Exception:
                 continue
 
+    def _schedule_batched_notification(self, key: str) -> None:
+        invoker = self._invoker
+        if invoker is None:
+            self._deliver_notification_key(key)
+            return
+
+        should_schedule = False
+        with self._notification_lock:
+            self._batched_dirty_keys.add(key)
+            if not self._batched_flush_scheduled:
+                self._batched_flush_scheduled = True
+                should_schedule = True
+
+        if not should_schedule:
+            return
+
+        invoke_later = getattr(invoker, "invoke_later", None)
+        try:
+            if callable(invoke_later):
+                invoke_later(self._batched_flush_delay_ms, self._batched_flush_callback)
+            else:
+                invoker.invoke(self._batched_flush_callback)
+        except Exception:
+            with self._notification_lock:
+                self._batched_flush_scheduled = False
+            self._flush_batched_notifications()
+
+    def _deliver_notification_key(self, key: str) -> None:
+        if not self._notifications_enabled:
+            return
+
+        listeners = list(self._listeners.get(key, []))
+        if not listeners:
+            return
+
+        if self._invoker is None:
+            for listener in listeners:
+                try:
+                    listener()
+                except Exception:
+                    continue
+            return
+
+        for listener in listeners:
+            try:
+                listener()
+            except Exception:
+                continue
+
+    def _flush_batched_notifications(self) -> None:
+        with self._notification_lock:
+            dirty_keys = list(self._batched_dirty_keys)
+            self._batched_dirty_keys.clear()
+            self._batched_flush_scheduled = False
+
+        for key in dirty_keys:
+            self._deliver_notification_key(key)
+
+    def flush_now(self) -> None:
+        if self._invoker is None or threading.current_thread() is threading.main_thread():
+            self._flush_batched_notifications()
+            return
+        try:
+            self._invoker.invoke(self._batched_flush_callback)
+        except Exception:
+            self._flush_batched_notifications()
+
+    def set_batched_flush_delay_for_tests(self, delay_ms: int) -> None:
+        self._batched_flush_delay_ms = max(0, int(delay_ms))
+
     def set_prompt(self, value: str) -> None:
         if self.prompt != value:
             self.prompt = value
@@ -237,6 +337,34 @@ class AppStateV2:
         if self.negative_prompt != value:
             self.negative_prompt = value
             self._notify("negative_prompt")
+
+    def set_help_mode_enabled(self, enabled: bool) -> None:
+        enabled = bool(enabled)
+        if self.help_mode_enabled != enabled:
+            self.help_mode_enabled = enabled
+            self._notify("help_mode")
+
+    def toggle_help_mode(self) -> bool:
+        enabled = not bool(self.help_mode_enabled)
+        self.set_help_mode_enabled(enabled)
+        return enabled
+
+    def set_content_visibility_mode(self, mode: str | ContentVisibilityMode) -> ContentVisibilityMode:
+        normalized = normalize_content_visibility_mode(mode)
+        value = normalized.value
+        if self.content_visibility_mode != value:
+            self.content_visibility_mode = value
+            self._notify("content_visibility_mode")
+        return normalized
+
+    def toggle_content_visibility_mode(self) -> ContentVisibilityMode:
+        current = normalize_content_visibility_mode(self.content_visibility_mode)
+        target = (
+            ContentVisibilityMode.SFW
+            if current == ContentVisibilityMode.NSFW
+            else ContentVisibilityMode.NSFW
+        )
+        return self.set_content_visibility_mode(target)
 
     def set_current_pack(self, value: str | None) -> None:
         """DEPRECATED: Use set_selected_prompt_pack instead."""
@@ -465,6 +593,19 @@ class AppStateV2:
         if len(self.log_events) > self.log_events_max:
             self.log_events = list(self.log_events[-self.log_events_max :])
         self._notify("log_events")
+
+    def append_operator_log_line(self, text: str) -> None:
+        line = str(text)
+        self.operator_log.append(line)
+        if len(self.operator_log) > self.operator_log_max:
+            self.operator_log = list(self.operator_log[-self.operator_log_max :])
+        self._notify("operator_log")
+
+    def clear_operator_log(self) -> None:
+        if not self.operator_log:
+            return
+        self.operator_log = []
+        self._notify("operator_log")
 
     # PR-111: Run Controls UX state setters
     def set_is_run_in_progress(self, value: bool) -> None:

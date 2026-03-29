@@ -476,6 +476,103 @@ def test_run_rife_stage_releases_input_frames_before_loading_output(tmp_path: Pa
     assert frames == []
 
 
+def test_run_rife_stage_falls_back_when_runtime_rejects_custom_framecount(
+    tmp_path: Path, monkeypatch
+) -> None:
+    executable = tmp_path / "rife-ncnn-vulkan.exe"
+    executable.write_bytes(b"exe")
+    config = SVDConfig.from_dict(
+        {
+            "postprocess": {
+                "interpolation": {
+                    "enabled": True,
+                    "executable_path": str(executable),
+                    "multiplier": 2,
+                }
+            }
+        }
+    )
+    command_log: list[list[str]] = []
+
+    def _fake_save_video_frames(*, frames, output_dir, prefix):
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        return []
+
+    def _fake_run(*, cmd, executable):
+        command_log.append(list(cmd))
+        if any(part == "-n" for part in cmd):
+            return SimpleNamespace(
+                returncode=1,
+                stdout="",
+                stderr="only rife-v4 model support custom numframe and timestep",
+            )
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    load_mock = Mock(
+        side_effect=[
+            [Image.new("RGB", (8, 8), "red"), Image.new("RGB", (8, 8), "blue"), Image.new("RGB", (8, 8), "green")]
+        ]
+    )
+    monkeypatch.setattr("src.video.svd_postprocess.save_video_frames", _fake_save_video_frames)
+    monkeypatch.setattr(SVDPostprocessRunner, "_run_rife_command", staticmethod(_fake_run))
+    runner = SVDPostprocessRunner(repo_root=tmp_path)
+    monkeypatch.setattr(runner, "_load_frame_sequence", load_mock)
+
+    frames = [Image.new("RGB", (8, 8), "white"), Image.new("RGB", (8, 8), "black")]
+    processed = runner._run_rife_stage(
+        frames=frames,
+        postprocess=config.postprocess,
+        work_dir=tmp_path,
+    )
+
+    assert len(processed) == 3
+    assert any("-n" in cmd for cmd in command_log)
+    assert any("-n" not in cmd for cmd in command_log)
+
+
+def test_run_rife_stage_compatibility_mode_rejects_non_power_of_two_multiplier(
+    tmp_path: Path, monkeypatch
+) -> None:
+    executable = tmp_path / "rife-ncnn-vulkan.exe"
+    executable.write_bytes(b"exe")
+    config = SVDConfig.from_dict(
+        {
+            "postprocess": {
+                "interpolation": {
+                    "enabled": True,
+                    "executable_path": str(executable),
+                    "multiplier": 3,
+                }
+            }
+        }
+    )
+
+    def _fake_save_video_frames(*, frames, output_dir, prefix):
+        Path(output_dir).mkdir(parents=True, exist_ok=True)
+        return []
+
+    def _fake_run(*, cmd, executable):
+        return SimpleNamespace(
+            returncode=1,
+            stdout="",
+            stderr="only rife-v4 model support custom numframe and timestep",
+        )
+
+    monkeypatch.setattr("src.video.svd_postprocess.save_video_frames", _fake_save_video_frames)
+    monkeypatch.setattr(SVDPostprocessRunner, "_run_rife_command", staticmethod(_fake_run))
+
+    frames = [Image.new("RGB", (8, 8), "white"), Image.new("RGB", (8, 8), "black")]
+    try:
+        SVDPostprocessRunner(repo_root=tmp_path)._run_rife_stage(
+            frames=frames,
+            postprocess=config.postprocess,
+            work_dir=tmp_path,
+        )
+        assert False, "expected compatibility fallback to reject multiplier 3"
+    except Exception as exc:
+        assert "multiplier 3" in str(exc)
+
+
 def test_process_frames_logs_stage_summary(tmp_path: Path, monkeypatch, caplog) -> None:
     frames = [Image.new("RGB", (16, 16), "white"), Image.new("RGB", (16, 16), "black")]
     executable = tmp_path / "rife-ncnn-vulkan.exe"

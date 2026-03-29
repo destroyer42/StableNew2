@@ -20,7 +20,7 @@ class DummyLogger:
 
 @pytest.fixture(autouse=True)
 def stub_pipeline(monkeypatch):
-    monkeypatch.setattr("src.pipeline.pipeline_runner.Pipeline", FakePipeline)
+    monkeypatch.setattr("src.pipeline.executor.Pipeline", FakePipeline)
 
 
 def _cancel_token():

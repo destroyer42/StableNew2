@@ -119,6 +119,8 @@ class _PipelineTab(ttk.Frame):
         self.app_state = app_state
         self._selected_job_id: str | None = None
         self._history_listener_registered = False
+        self._pending_history_refresh = False
+        self.bind("<Map>", self._on_map, add="+")
 
         action_bar = ttk.Frame(self)
         action_bar.pack(fill=tk.X, pady=(0, 4))
@@ -148,6 +150,10 @@ class _PipelineTab(ttk.Frame):
     def _on_history_updated(self, *_) -> None:
         if not self.winfo_exists():
             return
+        if not self.winfo_ismapped():
+            self._pending_history_refresh = True
+            return
+        self._pending_history_refresh = False
         combo = getattr(self, "_job_combo", None)
         explain_btn = getattr(self, "_explain_btn", None)
         job_var = getattr(self, "_job_var", None)
@@ -162,6 +168,11 @@ class _PipelineTab(ttk.Frame):
             explain_btn.configure(state=tk.DISABLED)
             job_var.set("")
             self._selected_job_id = None
+
+    def _on_map(self, _event: tk.Event | None = None) -> None:
+        if not self._pending_history_refresh:
+            return
+        self.after_idle(self._on_history_updated)
 
     def _on_job_selected(self) -> None:
         value = self._job_var.get()
@@ -235,13 +246,21 @@ class _PromptTab(ttk.Frame):
             self.tree.insert("", "end", values=(job.job_id, prompt, negative, packs))
         self._schedule_refresh()
 
+    def _refresh_on_timer(self) -> None:
+        if not self.winfo_exists():
+            return
+        if not self.winfo_ismapped():
+            self._schedule_refresh()
+            return
+        self.refresh()
+
     def _schedule_refresh(self) -> None:
         if self._refresh_id:
             try:
                 self.after_cancel(self._refresh_id)
             except Exception:
                 pass
-        self._refresh_id = self.after(self.REFRESH_INTERVAL_MS, self.refresh)
+        self._refresh_id = self.after(self.REFRESH_INTERVAL_MS, self._refresh_on_timer)
 
     def _get_jobs(self) -> list[NormalizedJobRecord]:
         getter = getattr(self._controller, "get_preview_jobs", None)

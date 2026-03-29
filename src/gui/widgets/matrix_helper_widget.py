@@ -4,6 +4,8 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
+from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
+
 
 class MatrixHelperDialog(tk.Toplevel):
     """Minimal dialog to build matrix expressions like {opt1|opt2|opt3}."""
@@ -14,9 +16,11 @@ class MatrixHelperDialog(tk.Toplevel):
         self.on_apply = on_apply
         self.result: str | None = None
         self.resizable(True, True)
+        apply_toplevel_theme(self)
 
         ttk.Label(self, text="Enter one option per line:").pack(anchor="w", padx=8, pady=(8, 4))
         self.text = tk.Text(self, height=8, width=40, wrap="word")
+        style_text_widget(self.text)
         self.text.pack(fill="both", expand=True, padx=8, pady=4)
 
         btn_frame = ttk.Frame(self)

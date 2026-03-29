@@ -41,7 +41,7 @@ def test_civitai_keyword_detection():
     assert len(metadata.keywords) == 3, f"Expected 3 keywords, got {len(metadata.keywords)}"
     assert "anime style" in metadata.keywords, "Missing 'anime style'"
     
-    print("✅ CivitAI keyword detection works!")
+    print("[OK] CivitAI keyword detection works!")
     print()
     
     # Cleanup
@@ -87,7 +87,7 @@ Use it with strength 0.6-0.8 for best results.
     assert metadata.source == "txt", f"Expected source 'txt', got '{metadata.source}'"
     assert len(metadata.keywords) >= 2, f"Expected at least 2 keywords, got {len(metadata.keywords)}"
     
-    print("✅ TXT keyword detection works!")
+    print("[OK] TXT keyword detection works!")
     print()
     
     # Cleanup
@@ -119,7 +119,7 @@ def test_no_keywords():
     assert metadata.source == "none", f"Expected source 'none', got '{metadata.source}'"
     assert len(metadata.keywords) == 0, f"Expected 0 keywords, got {len(metadata.keywords)}"
     
-    print("✅ No keywords case handled correctly!")
+    print("[OK] No keywords case handled correctly!")
     print()
     
     # Cleanup

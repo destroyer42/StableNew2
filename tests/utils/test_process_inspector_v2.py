@@ -67,6 +67,12 @@ def test_iter_python_processes_returns_py_only(monkeypatch) -> None:
     assert "run-1" in result.env_markers[0]
 
 
+def test_hold_process_scan_lock_is_reentrant() -> None:
+    with process_inspector_v2.hold_process_scan_lock():
+        with process_inspector_v2.hold_process_scan_lock():
+            assert True
+
+
 def test_iter_stablenew_like_processes_filters(monkeypatch) -> None:
     python_one = process_inspector_v2.ProcessInfo(
         pid=1,

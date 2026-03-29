@@ -132,9 +132,17 @@ def test_cli_main_uses_pipeline_runner(monkeypatch, tmp_path: Path) -> None:
                 variants=[{"stage": "txt2img", "all_paths": [str(tmp_path / "run" / "image.png")]}],
             )
 
+    fake_client = _FakeClient(base_url="http://127.0.0.1:7860", timeout=30)
     monkeypatch.setattr(cli, "ConfigManager", _FakeConfigManager)
-    monkeypatch.setattr(cli, "SDWebUIClient", _FakeClient)
-    monkeypatch.setattr(cli, "PipelineRunner", _FakeRunner)
+    monkeypatch.setattr(
+        cli,
+        "build_cli_kernel",
+        lambda **kwargs: SimpleNamespace(
+            api_client=fake_client,
+            pipeline_runner=_FakeRunner(fake_client, object()),
+            capabilities=None,
+        ),
+    )
     monkeypatch.setattr(cli, "setup_logging", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(cli, "find_webui_api_port", lambda: None)
     monkeypatch.setattr(
@@ -189,9 +197,17 @@ def test_cli_main_create_video_prefers_final_stage_artifacts(monkeypatch, tmp_pa
             captured["fps"] = fps
             return True
 
+    fake_client = _FakeClient(base_url="http://127.0.0.1:7860", timeout=30)
     monkeypatch.setattr(cli, "ConfigManager", _FakeConfigManager)
-    monkeypatch.setattr(cli, "SDWebUIClient", _FakeClient)
-    monkeypatch.setattr(cli, "PipelineRunner", _FakeRunner)
+    monkeypatch.setattr(
+        cli,
+        "build_cli_kernel",
+        lambda **kwargs: SimpleNamespace(
+            api_client=fake_client,
+            pipeline_runner=_FakeRunner(fake_client, object()),
+            capabilities=None,
+        ),
+    )
     monkeypatch.setattr(cli, "VideoCreator", _FakeVideoCreator)
     monkeypatch.setattr(cli, "setup_logging", lambda *_args, **_kwargs: None)
     monkeypatch.setattr(cli, "find_webui_api_port", lambda: None)

@@ -33,7 +33,7 @@ Rewrote these active docs to current repo truth:
 - `docs/GOVERNANCE_v2.6.md`
 - `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
 - `docs/Builder Pipeline Deep-Dive (v2.6).md`
-- `docs/KNOWN_PITFALLS_QUEUE_TESTING.md`
+- `docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md`
 - `docs/Movie_Clips_Workflow_v2.6.md`
 - `docs/Canonical_Document_Ownership_v2.6.md`
 - `docs/DOCS_INDEX_v2.6.md`
@@ -47,7 +47,7 @@ Updated active supporting docs:
 - `.github/copilot-instructions.md`
 - `.github/PULL_REQUEST_TEMPLATE.md`
 - `docs/agentic/USAGE_GUIDE.md`
-- `docs/Learning_System_Spec_v2.6.md`
+- `docs/Subsystems/Learning/Learning_System_Spec_v2.6.md`
 - `docs/Image_Metadata_Contract_v2.6.md`
 
 ## Result
@@ -60,5 +60,5 @@ or at stale root-level PR and test-analysis records.
 
 - replace `docs/Randomizer_Spec_v2.5.md` with a v2.6 rewrite in a later docs or
   subsystem PR
-- revisit whether `docs/GUI_Ownership_Map_v2.6.md` needs a broader refresh after
+- revisit whether `docs/Subsystems/GUI/GUI_Ownership_Map_v2.6.md` needs a broader refresh after
   `PR-GUI-220` and `PR-CTRL-221`

@@ -21,7 +21,7 @@ def test_vae_empty_string_not_defaulted():
     
     # Result: "" (CORRECT - preserves empty string)
     assert requested_vae == "", f"Expected empty string, got: {repr(requested_vae)}"
-    print("✅ Test passed: Empty VAE string is preserved, not defaulted to 'Automatic'")
+    print("[OK] Empty VAE string is preserved, not defaulted to 'Automatic'")
 
 
 def test_vae_missing_key_uses_none():
@@ -38,7 +38,7 @@ def test_vae_missing_key_uses_none():
     )
     
     assert requested_vae is None, f"Expected None, got: {repr(requested_vae)}"
-    print("✅ Test passed: Missing VAE key returns None")
+    print("[OK] Missing VAE key returns None")
 
 
 def test_vae_specified_is_preserved():
@@ -55,11 +55,11 @@ def test_vae_specified_is_preserved():
     )
     
     assert requested_vae == "sdxl_vae.safetensors", f"Expected specific VAE, got: {repr(requested_vae)}"
-    print("✅ Test passed: Specified VAE is preserved")
+    print("[OK] Specified VAE is preserved")
 
 
 if __name__ == "__main__":
     test_vae_empty_string_not_defaulted()
     test_vae_missing_key_uses_none()
     test_vae_specified_is_preserved()
-    print("\n✅ All VAE tests passed!")
+    print("\n[OK] All VAE tests passed!")

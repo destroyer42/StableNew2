@@ -17,6 +17,7 @@ from urllib.parse import urlparse
 
 from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
+from src.utils.process_inspector_v2 import hold_process_scan_lock
 from src.utils.process_container_v2 import (
     ProcessContainer,
     ProcessContainerConfig,
@@ -1195,6 +1196,12 @@ class WebUIProcessManager:
 
     def _start_orphan_monitor(self) -> None:
         """Start background thread to monitor if GUI is still running."""
+        if os.environ.get("STABLENEW_NO_WEBUI") == "1":
+            logger.debug(
+                "[Orphan Monitor] Skipping monitor startup because STABLENEW_NO_WEBUI=1"
+            )
+            return
+
         if self._orphan_monitor_thread and self._orphan_monitor_thread.is_alive():
             return
         
@@ -1302,55 +1309,56 @@ class WebUIProcessManager:
         orphans = []
         
         # Don't request 'cwd' upfront - get it separately with error handling
-        for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'ppid']):
-            try:
-                name = proc.info['name']
-                if not name or 'python' not in name.lower():
-                    continue
-                
-                cmdline = proc.info.get('cmdline', [])
-                ppid = proc.info.get('ppid')
-                
-                # Try to get cwd separately with error handling
-                cwd = ''
+        with hold_process_scan_lock():
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'ppid']):
                 try:
-                    cwd = proc.cwd()
-                except (psutil.AccessDenied, psutil.NoSuchProcess, OSError):
-                    # Process terminated, access denied, or cwd not available
-                    pass
-                
-                is_webui = bool(
-                    _get_webui_python_match_reasons(
-                        process_name=proc.info.get('name'),
-                        cmdline=cmdline,
-                        cwd=cwd,
-                        working_dir=webui_dir,
-                    )
-                )
-                
-                if is_webui and ppid:
-                    # Check if parent is system or nonexistent
+                    name = proc.info['name']
+                    if not name or 'python' not in name.lower():
+                        continue
+
+                    cmdline = proc.info.get('cmdline', [])
+                    ppid = proc.info.get('ppid')
+
+                    # Try to get cwd separately with error handling
+                    cwd = ''
                     try:
-                        parent = psutil.Process(ppid)
-                        # System PIDs: 0 (System Idle), 1 (init/systemd), 4 (System on Windows)
-                        if ppid in (0, 1, 4):
+                        cwd = proc.cwd()
+                    except (psutil.AccessDenied, psutil.NoSuchProcess, OSError):
+                        # Process terminated, access denied, or cwd not available
+                        pass
+
+                    is_webui = bool(
+                        _get_webui_python_match_reasons(
+                            process_name=proc.info.get('name'),
+                            cmdline=cmdline,
+                            cwd=cwd,
+                            working_dir=webui_dir,
+                        )
+                    )
+
+                    if is_webui and ppid:
+                        # Check if parent is system or nonexistent
+                        try:
+                            parent = psutil.Process(ppid)
+                            # System PIDs: 0 (System Idle), 1 (init/systemd), 4 (System on Windows)
+                            if ppid in (0, 1, 4):
+                                orphans.append(proc.pid)
+                                logger.debug(
+                                    "[Orphan Monitor] Found reparented WebUI process: PID=%s, parent=%s",
+                                    proc.pid, ppid
+                                )
+                        except psutil.NoSuchProcess:
+                            # Parent doesn't exist - process is orphaned
                             orphans.append(proc.pid)
                             logger.debug(
-                                "[Orphan Monitor] Found reparented WebUI process: PID=%s, parent=%s",
+                                "[Orphan Monitor] Found orphaned WebUI process: PID=%s, parent PID=%s (dead)",
                                 proc.pid, ppid
                             )
-                    except psutil.NoSuchProcess:
-                        # Parent doesn't exist - process is orphaned
-                        orphans.append(proc.pid)
-                        logger.debug(
-                            "[Orphan Monitor] Found orphaned WebUI process: PID=%s, parent PID=%s (dead)",
-                            proc.pid, ppid
-                        )
-                        
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-            except Exception as exc:
-                logger.debug("Error scanning for orphans: %s", exc)
+
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+                except Exception as exc:
+                    logger.debug("Error scanning for orphans: %s", exc)
         
         return orphans
 
@@ -1597,15 +1605,44 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
 
     try:
         from src.config import app_config
+        from src.utils.config import ConfigManager
     except Exception:
         return None
+
+    launch_profile = app_config.get_webui_launch_profile()
+
+    settings = ConfigManager().load_settings()
+    configured_workdir = str(settings.get("webui_workdir") or "").strip()
+    configured_base_url = str(settings.get("webui_base_url") or "").strip() or os.environ.get(
+        "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
+    )
+    configured_autostart = bool(settings.get("webui_autostart_enabled", app_config.is_webui_autostart_enabled()))
+    configured_timeout = float(
+        settings.get("webui_health_total_timeout_seconds")
+        or app_config.get_webui_health_total_timeout_seconds()
+    )
+    if configured_workdir:
+        workdir_path = Path(configured_workdir)
+        if workdir_path.exists() and workdir_path.is_dir():
+            command = list(app_config.resolve_webui_launch_command(launch_profile))
+            command_path = workdir_path / command[0]
+            if command_path.exists():
+                _save_webui_cache(
+                    {"workdir": configured_workdir, "command": command, "timestamp": time.time()}
+                )
+                return WebUIProcessConfig(
+                    command=command,
+                    working_dir=configured_workdir,
+                    launch_profile=launch_profile,
+                    startup_timeout_seconds=configured_timeout,
+                    autostart_enabled=configured_autostart,
+                    base_url=configured_base_url,
+                )
 
     # First try cached location
     cache = _load_webui_cache()
     cached_workdir = cache.get("workdir")
     cached_command = cache.get("command")
-
-    launch_profile = app_config.get_webui_launch_profile()
 
     if cached_workdir and cached_command:
         workdir_path = Path(cached_workdir)
@@ -1618,8 +1655,9 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                     command=cached_command,
                     working_dir=cached_workdir,
                     launch_profile=launch_profile,
-                    autostart_enabled=app_config.is_webui_autostart_enabled(),
-                    base_url=os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
+                    startup_timeout_seconds=configured_timeout,
+                    autostart_enabled=configured_autostart,
+                    base_url=configured_base_url,
                 )
                 return config
 
@@ -1635,8 +1673,9 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
             command=command,
             working_dir=workdir,
             launch_profile=launch_profile,
-            autostart_enabled=app_config.is_webui_autostart_enabled(),
-            base_url=os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
+            startup_timeout_seconds=configured_timeout,
+            autostart_enabled=configured_autostart,
+            base_url=configured_base_url,
         )
 
     # Last resort: detect automatically (expensive)
@@ -1660,8 +1699,9 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                 command=command,
                 working_dir=workdir,
                 launch_profile=launch_profile,
-                autostart_enabled=app_config.is_webui_autostart_enabled(),
-                base_url=os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
+                startup_timeout_seconds=configured_timeout,
+                autostart_enabled=configured_autostart,
+                base_url=configured_base_url,
             )
 
     return None

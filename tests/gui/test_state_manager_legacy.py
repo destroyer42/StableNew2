@@ -3,7 +3,7 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 from src.controller.pipeline_controller import PipelineController
-from src.gui.state import GUIState, StateManager
+from src.controller.runtime_state import GUIState, StateManager
 from src.queue.job_model import JobStatus
 
 

@@ -85,6 +85,7 @@ _tmp_*.py
 *.temp
 *.cache
 cache/
+memprof_*/
 
 # Report outputs (except documentation)
 reports/diagnostics/*.zip

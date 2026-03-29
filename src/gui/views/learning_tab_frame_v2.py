@@ -5,19 +5,33 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
 from src.gui.app_state_v2 import AppStateV2
+from src.gui.layout_v2 import configure_grid_columns
+from src.gui.help_text.workflow_guidance_v2 import (
+    build_discovered_review_guidance,
+    build_staged_queue_guidance,
+    build_staged_review_guidance,
+    get_staged_queue_runtime_guidance,
+    get_staged_review_runtime_guidance,
+)
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_review_dialog_v2 import LearningReviewDialogV2
 from src.gui.learning_state import LearningState
-from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
+from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE, style_text_widget
 from src.gui.tooltip import attach_tooltip
+from src.gui.ui_tokens import TOKENS
+from src.gui.view_contracts.pipeline_layout_contract import (
+    get_three_pane_workspace_column_specs,
+    get_two_pane_workspace_column_specs,
+)
 from src.gui.view_contracts.status_banner_contract import update_status_banner
 from src.gui.views.discovered_review_inbox_panel import DiscoveredReviewInboxPanel
 from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
-from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.widgets.image_thumbnail import ImageThumbnail
@@ -43,6 +57,10 @@ class LearningTabFrame(ttk.Frame):
     ) -> None:
         super().__init__(master, *args, **kwargs)
         self.app_state = app_state
+        self._content_visibility_mode = str(
+            getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        self._pending_visibility_refresh = False
         self.pipeline_controller = pipeline_controller
         self.app_controller = app_controller  # PR-LEARN-002: Store app_controller reference
         
@@ -94,8 +112,10 @@ class LearningTabFrame(ttk.Frame):
         self.overview_panel = TabOverviewPanel(
             self,
             content=get_tab_overview_content("learning"),
+            app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
+        self.bind("<Map>", self._on_map, add="+")
 
         # Header
         self.header_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
@@ -109,6 +129,12 @@ class LearningTabFrame(ttk.Frame):
             style=BODY_LABEL_STYLE,
         )
         header_label.grid(row=0, column=0, sticky="w")
+        self._visibility_banner = ttk.Label(
+            self.header_frame,
+            text="",
+            style=BODY_LABEL_STYLE,
+            foreground=TOKENS.colors.status_info,
+        )
         self._learning_enabled_var = tk.BooleanVar(
             value=self.app_state.learning_enabled if self.app_state else False
         )
@@ -139,6 +165,14 @@ class LearningTabFrame(ttk.Frame):
             command=self._show_automation_help,
         )
         help_btn.pack(side="left", padx=(4, 0))
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
         ttk.Button(
             self.header_frame,
             text="Review learning runs",
@@ -205,9 +239,7 @@ class LearningTabFrame(ttk.Frame):
         self._mode_notebook.add(self.body_frame, text="Designed Experiments")
 
         # Configure body layout
-        self.body_frame.columnconfigure(0, weight=1, uniform="learning_col")
-        self.body_frame.columnconfigure(1, weight=3, uniform="learning_col")
-        self.body_frame.columnconfigure(2, weight=2, uniform="learning_col")
+        configure_grid_columns(self.body_frame, get_three_pane_workspace_column_specs())
         self.body_frame.rowconfigure(0, weight=1)
         self.body_frame.rowconfigure(1, weight=3)
 
@@ -242,9 +274,16 @@ class LearningTabFrame(ttk.Frame):
         # ---- Tab 2: Discovered Review Inbox ----
         self._discovered_tab_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
         self._mode_notebook.add(self._discovered_tab_frame, text="Discovered Review Inbox")
-        self._discovered_tab_frame.columnconfigure(0, weight=1)
-        self._discovered_tab_frame.columnconfigure(1, weight=2)
-        self._discovered_tab_frame.rowconfigure(0, weight=1)
+        configure_grid_columns(self._discovered_tab_frame, get_two_pane_workspace_column_specs())
+        self._discovered_tab_frame.rowconfigure(1, weight=1)
+
+        self.discovered_help_panel = ActionExplainerPanel(
+            self._discovered_tab_frame,
+            content=build_discovered_review_guidance(),
+            app_state=self.app_state,
+            wraplength=980,
+        )
+        self.discovered_help_panel.grid(row=0, column=0, columnspan=2, sticky="ew", padx=2, pady=(4, 0))
 
         self.discovered_inbox_panel = DiscoveredReviewInboxPanel(
             self._discovered_tab_frame,
@@ -255,20 +294,18 @@ class LearningTabFrame(ttk.Frame):
             on_pick_scan_root=self._on_pick_discovered_scan_root,
             on_reset_scan_root=self._on_reset_discovered_scan_root,
         )
-        self.discovered_inbox_panel.grid(row=0, column=0, sticky="nsew", padx=(0, 2), pady=4)
+        self.discovered_inbox_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 2), pady=4)
 
         self.discovered_review_table = DiscoveredReviewTable(
             self._discovered_tab_frame,
             on_rate_item=self._on_discovered_rate_item,
         )
-        self.discovered_review_table.grid(row=0, column=1, sticky="nsew", padx=(2, 0), pady=4)
+        self.discovered_review_table.grid(row=1, column=1, sticky="nsew", padx=(2, 0), pady=4)
 
         # ---- Tab 3: Staged Curation ----
         self._staged_tab_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
         self._mode_notebook.add(self._staged_tab_frame, text="Staged Curation")
-        self._staged_tab_frame.columnconfigure(0, weight=1)
-        self._staged_tab_frame.columnconfigure(1, weight=2)
-        self._staged_tab_frame.columnconfigure(2, weight=2)
+        configure_grid_columns(self._staged_tab_frame, get_three_pane_workspace_column_specs())
         self._staged_tab_frame.rowconfigure(0, weight=1)
 
         self._staged_reason_tag_vars: dict[str, tk.BooleanVar] = {}
@@ -282,12 +319,13 @@ class LearningTabFrame(ttk.Frame):
         self._staged_workflow_summary_var = tk.StringVar(value="Workflow summary: n/a")
         self._staged_replay_summary_var = tk.StringVar(value="Replay chain: n/a")
         self._staged_plan_preview_var = tk.StringVar(value="Derived plan preview: n/a")
+        self._staged_effective_settings_var = tk.StringVar(value="Effective settings: select a candidate")
         self._staged_prior_review_var = tk.StringVar(value="Prior Review: none")
         self._staged_queue_guidance_var = tk.StringVar(
-            value="Queue Now submits every candidate currently marked for that derived stage, using the staged decisions already shown in this tab."
+            value=get_staged_queue_runtime_guidance(0, 0, 0)
         )
         self._staged_review_guidance_var = tk.StringVar(
-            value="Edit in Review stays single-candidate so you can make deliberate prompt or stage edits before anything is queued."
+            value=get_staged_review_runtime_guidance(None)
         )
         self._staged_queue_buttons: dict[str, ttk.Button] = {}
         self._staged_review_buttons: dict[str, ttk.Button] = {}
@@ -406,8 +444,19 @@ class LearningTabFrame(ttk.Frame):
             anchor="w",
         ).grid(row=0, column=0, sticky="ew")
 
+        effective_frame = ttk.LabelFrame(staged_right, text="Effective Settings", padding=(6, 4))
+        effective_frame.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        effective_frame.columnconfigure(0, weight=1)
+        ttk.Label(
+            effective_frame,
+            textvariable=self._staged_effective_settings_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+            anchor="w",
+        ).grid(row=0, column=0, sticky="ew")
+
         prompt_frame = ttk.LabelFrame(staged_right, text="Source Prompt", padding=(6, 4))
-        prompt_frame.grid(row=4, column=0, sticky="ew", pady=(6, 0))
+        prompt_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
         prompt_frame.columnconfigure(0, weight=1)
         self._staged_source_prompt_text = tk.Text(
             prompt_frame,
@@ -415,6 +464,7 @@ class LearningTabFrame(ttk.Frame):
             wrap="word",
             state="disabled",
         )
+        style_text_widget(self._staged_source_prompt_text, elevated=True)
         self._staged_source_prompt_text.grid(row=0, column=0, sticky="ew")
 
         negative_prompt_frame = ttk.LabelFrame(
@@ -422,7 +472,7 @@ class LearningTabFrame(ttk.Frame):
             text="Source Negative Prompt",
             padding=(6, 4),
         )
-        negative_prompt_frame.grid(row=5, column=0, sticky="ew", pady=(6, 0))
+        negative_prompt_frame.grid(row=6, column=0, sticky="ew", pady=(6, 0))
         negative_prompt_frame.columnconfigure(0, weight=1)
         self._staged_source_negative_prompt_text = tk.Text(
             negative_prompt_frame,
@@ -430,10 +480,11 @@ class LearningTabFrame(ttk.Frame):
             wrap="word",
             state="disabled",
         )
+        style_text_widget(self._staged_source_negative_prompt_text, elevated=True)
         self._staged_source_negative_prompt_text.grid(row=0, column=0, sticky="ew")
 
         prior_review_frame = ttk.LabelFrame(staged_right, text="Prior Review", padding=(6, 4))
-        prior_review_frame.grid(row=6, column=0, sticky="ew", pady=(6, 0))
+        prior_review_frame.grid(row=7, column=0, sticky="ew", pady=(6, 0))
         prior_review_frame.columnconfigure(0, weight=1)
         ttk.Label(
             prior_review_frame,
@@ -449,7 +500,7 @@ class LearningTabFrame(ttk.Frame):
         ).grid(row=1, column=0, sticky="w", pady=(6, 0))
 
         reason_frame = ttk.LabelFrame(staged_right, text="Reason Tags", padding=(6, 4))
-        reason_frame.grid(row=7, column=0, sticky="ew", pady=(6, 0))
+        reason_frame.grid(row=8, column=0, sticky="ew", pady=(6, 0))
         for index, tag in enumerate(self.learning_controller.get_staged_curation_reason_tag_options()):
             var = tk.BooleanVar(value=False)
             self._staged_reason_tag_vars[tag] = var
@@ -460,7 +511,7 @@ class LearningTabFrame(ttk.Frame):
             ).grid(row=index // 2, column=index % 2, sticky="w", padx=(0, 8), pady=1)
 
         tier_frame = ttk.LabelFrame(staged_right, text="Face Triage Tier", padding=(6, 4))
-        tier_frame.grid(row=8, column=0, sticky="ew", pady=(6, 0))
+        tier_frame.grid(row=9, column=0, sticky="ew", pady=(6, 0))
         tier_frame.columnconfigure(1, weight=1)
         ttk.Label(tier_frame, text="Tier", style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", pady=2
@@ -479,9 +530,10 @@ class LearningTabFrame(ttk.Frame):
         )
 
         notes_frame = ttk.LabelFrame(staged_right, text="Decision Notes", padding=(6, 4))
-        notes_frame.grid(row=9, column=0, sticky="ew", pady=(6, 0))
+        notes_frame.grid(row=10, column=0, sticky="ew", pady=(6, 0))
         notes_frame.columnconfigure(0, weight=1)
         self._staged_notes_text = tk.Text(notes_frame, height=4, wrap="word")
+        style_text_widget(self._staged_notes_text, elevated=True)
         self._staged_notes_text.grid(row=0, column=0, sticky="ew")
 
         self._staged_last_decision_var = tk.StringVar(value="Latest decision: none")
@@ -489,10 +541,11 @@ class LearningTabFrame(ttk.Frame):
             staged_right,
             textvariable=self._staged_last_decision_var,
             style=BODY_LABEL_STYLE,
-        ).grid(row=10, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=11, column=0, sticky="w", pady=(6, 0))
 
         action_frame = ttk.Frame(staged_right, style=SURFACE_FRAME_STYLE)
-        action_frame.grid(row=11, column=0, sticky="ew", pady=(6, 0))
+        action_frame.grid(row=12, column=0, sticky="ew", pady=(6, 0))
+        self._staged_action_frame = action_frame
         for label, decision in (
             ("Reject", "rejected_hard"),
             ("Hold", "not_advanced"),
@@ -508,19 +561,12 @@ class LearningTabFrame(ttk.Frame):
             ).pack(side="left", padx=(0, 4))
 
         derive_frame = ttk.LabelFrame(staged_right, text="Derived Jobs", padding=(6, 4))
-        derive_frame.grid(row=12, column=0, sticky="ew", pady=(6, 0))
+        derive_frame.grid(row=13, column=0, sticky="ew", pady=(6, 0))
+        self._staged_derive_frame = derive_frame
         self.staged_queue_help_panel = ActionExplainerPanel(
             derive_frame,
-            content=ActionExplainerContent(
-                title="Queue Now vs Review",
-                summary="Use Queue Now for bulk stage submission after you have already triaged a batch. Use Edit in Review when one candidate needs careful prompt or stage changes first.",
-                bullets=(
-                    "Queue Refine Now submits every candidate marked To Refine in one bulk pass.",
-                    "Queue Face Now submits every candidate marked To Face for face-triage work without opening them one by one.",
-                    "Queue Upscale Now submits every candidate marked To Upscale using the current staged decisions.",
-                    "If one candidate needs custom edits before queueing, open it in Review instead of using the bulk Queue Now path.",
-                ),
-            ),
+            content=build_staged_queue_guidance(),
+            app_state=self.app_state,
             wraplength=520,
         )
         self.staged_queue_help_panel.pack(fill="x", pady=(0, 6))
@@ -561,18 +607,12 @@ class LearningTabFrame(ttk.Frame):
             justify="left",
         ).pack(side="left", padx=(8, 0))
         review_frame = ttk.LabelFrame(staged_right, text="Edit in Review", padding=(6, 4))
-        review_frame.grid(row=13, column=0, sticky="ew", pady=(6, 0))
+        review_frame.grid(row=14, column=0, sticky="ew", pady=(6, 0))
+        self._staged_review_frame = review_frame
         self.staged_review_help_panel = ActionExplainerPanel(
             review_frame,
-            content=ActionExplainerContent(
-                title="Single-Candidate Review Edits",
-                summary="These buttons open one selected candidate in Review so you can inspect metadata, adjust prompts, and then queue a deliberate reprocess path.",
-                bullets=(
-                    "Choose this path when one candidate needs custom edits instead of the batch-wide Queue Now behavior.",
-                    "The selected candidate must already be marked for the matching derived stage.",
-                    "Compare Latest Derived helps you inspect the most recent derived result before deciding whether to queue again.",
-                ),
-            ),
+            content=build_staged_review_guidance(),
+            app_state=self.app_state,
             wraplength=520,
         )
         self.staged_review_help_panel.pack(fill="x", pady=(0, 6))
@@ -622,7 +662,7 @@ class LearningTabFrame(ttk.Frame):
             textvariable=self._staged_job_status_var,
             style=BODY_LABEL_STYLE,
             justify="left",
-        ).grid(row=14, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=15, column=0, sticky="w", pady=(6, 0))
 
         # Refresh inbox when its tab is activated
         self._mode_notebook.bind("<<NotebookTabChanged>>", self._on_notebook_tab_changed)
@@ -1079,6 +1119,7 @@ class LearningTabFrame(ttk.Frame):
             )
             self._staged_replay_summary_var.set("Replay chain: n/a")
             self._staged_plan_preview_var.set("Derived plan preview: n/a")
+            self._staged_effective_settings_var.set("Effective settings: select a candidate")
             self._staged_prior_review_var.set("Prior Review: none")
             self._staged_last_decision_var.set("Latest decision: none")
             self._staged_preview_thumbnail.clear()
@@ -1138,6 +1179,7 @@ class LearningTabFrame(ttk.Frame):
         if isinstance(source_context, dict):
             source_prompt = str(source_context.get("source_prompt") or "")
             source_negative_prompt = str(source_context.get("source_negative_prompt") or "")
+            effective_settings_summary = str(source_context.get("effective_settings_summary") or "").strip()
             target_stage = str(source_context.get("target_stage") or "").replace("_", " ")
             path_label = str(source_context.get("path_label") or "Queue Now")
             if target_stage:
@@ -1147,9 +1189,25 @@ class LearningTabFrame(ttk.Frame):
             else:
                 self._staged_plan_preview_var.set(f"Target stage: not queued yet | Path: {path_label}")
         else:
+            effective_settings_summary = ""
             self._staged_plan_preview_var.set("Derived plan preview: n/a")
-        self._set_readonly_text(self._staged_source_prompt_text, source_prompt)
-        self._set_readonly_text(self._staged_source_negative_prompt_text, source_negative_prompt)
+        self._staged_effective_settings_var.set(
+            effective_settings_summary or "Effective settings: not available for this candidate yet"
+        )
+        resolver = self._visibility_resolver()
+        visibility_subject = {
+            "positive_prompt": source_prompt,
+            "negative_prompt": source_negative_prompt,
+            "name": str(getattr(item, "artifact_path", "") or ""),
+        }
+        self._set_readonly_text(
+            self._staged_source_prompt_text,
+            resolver.redact_text(source_prompt, item=visibility_subject),
+        )
+        self._set_readonly_text(
+            self._staged_source_negative_prompt_text,
+            resolver.redact_text(source_negative_prompt, item=visibility_subject),
+        )
         self._staged_prior_review_var.set(self._format_prior_review_summary(prior_review_summary))
         if isinstance(replay_summary, dict):
             replay_bits = [
@@ -1300,27 +1358,20 @@ class LearningTabFrame(ttk.Frame):
         face_count = self._count_marked_candidates_for_stage("face_triage")
         upscale_count = self._count_marked_candidates_for_stage("upscale")
         self._staged_queue_guidance_var.set(
-            "Queue Now submits all marked candidates in bulk: "
-            f"refine={refine_count}, face={face_count}, upscale={upscale_count}."
+            get_staged_queue_runtime_guidance(refine_count, face_count, upscale_count)
         )
 
         if not candidate_id:
-            self._staged_review_guidance_var.set(
-                "Edit in Review opens the selected candidate only. Select one candidate marked for a derived stage."
-            )
+            self._staged_review_guidance_var.set(get_staged_review_runtime_guidance(None, None))
             return
 
         if selected_target is None:
-            self._staged_review_guidance_var.set(
-                "Edit in Review stays single-candidate. Mark the selected candidate To Refine, To Face, or To Upscale first."
-            )
+            self._staged_review_guidance_var.set(get_staged_review_runtime_guidance(None))
             return
 
         marked_count = self._count_marked_candidates_for_stage(selected_target)
-        target_label = selected_target.replace("_", " ")
         self._staged_review_guidance_var.set(
-            f"Edit in Review opens only the selected {target_label} candidate. "
-            f"Queue {target_label} now would enqueue {marked_count} marked candidate(s)."
+            get_staged_review_runtime_guidance(selected_target, marked_count)
         )
 
     def _apply_staged_decision(self, decision: str) -> None:
@@ -1378,6 +1429,45 @@ class LearningTabFrame(ttk.Frame):
         widget.delete("1.0", tk.END)
         widget.insert("1.0", value.strip() or "(not available)")
         widget.configure(state="disabled")
+
+    def _visibility_resolver(self) -> ContentVisibilityResolver:
+        return ContentVisibilityResolver(self._content_visibility_mode)
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._content_visibility_mode = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        self._pending_visibility_refresh = False
+        self._visibility_banner.configure(text="")
+        review_panel = getattr(self, "review_panel", None)
+        if review_panel is not None:
+            callback = getattr(review_panel, "on_content_visibility_mode_changed", None)
+            if callable(callback):
+                try:
+                    callback(self._content_visibility_mode)
+                except Exception:
+                    pass
+        self._refresh_discovered_inbox()
+        self._refresh_staged_curation_inbox()
+        self._update_staged_preview(
+            self.learning_state.selected_staged_curation_item_id
+            if getattr(self.learning_state, "selected_staged_curation_item_id", None)
+            else None
+        )
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            self._content_visibility_mode = str(
+                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            )
+            return
+        self.on_content_visibility_mode_changed()
+
+    def _on_map(self, _event: Any = None) -> None:
+        if not self._pending_visibility_refresh:
+            return
+        self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
 
     def _submit_staged_jobs(self, target_stage: str) -> None:
         if not self._staged_current_group_id:
@@ -1559,6 +1649,8 @@ class LearningTabFrame(ttk.Frame):
         self._staged_group_var.set("Open a discovered group to start staged curation")
         self._staged_workflow_summary_var.set("Workflow summary: n/a")
         self._staged_replay_summary_var.set("Replay chain: n/a")
+        self._staged_plan_preview_var.set("Derived plan preview: n/a")
+        self._staged_effective_settings_var.set("Effective settings: select a candidate")
         self._staged_job_status_var.set("No derived jobs submitted yet")
         self._update_staged_action_affordances(None)
         self._update_staged_preview(None)

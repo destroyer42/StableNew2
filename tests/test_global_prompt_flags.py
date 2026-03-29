@@ -32,7 +32,7 @@ def test_global_prompt_flag_wiring():
     assert "pipeline" in result_config, "Pipeline section missing from config"
     assert result_config["pipeline"]["apply_global_positive_txt2img"] == True, "Global positive should be enabled"
     assert result_config["pipeline"]["apply_global_negative_txt2img"] == True, "Global negative should be enabled"
-    print("✅ Both flags correctly set to True")
+    print("[OK] Both flags correctly set to True")
     
     # Test Case 2: Only positive disabled
     print("\n=== Test Case 2: Positive disabled, negative enabled ===")
@@ -43,7 +43,7 @@ def test_global_prompt_flag_wiring():
     
     assert result_config["pipeline"]["apply_global_positive_txt2img"] == False, "Global positive should be disabled"
     assert result_config["pipeline"]["apply_global_negative_txt2img"] == True, "Global negative should be enabled"
-    print("✅ Positive disabled, negative enabled")
+    print("[OK] Positive disabled, negative enabled")
     
     # Test Case 3: Both disabled
     print("\n=== Test Case 3: Both checkboxes disabled ===")
@@ -54,17 +54,17 @@ def test_global_prompt_flag_wiring():
     
     assert result_config["pipeline"]["apply_global_positive_txt2img"] == False, "Global positive should be disabled"
     assert result_config["pipeline"]["apply_global_negative_txt2img"] == False, "Global negative should be disabled"
-    print("✅ Both flags correctly set to False")
+    print("[OK] Both flags correctly set to False")
     
     # Test Case 4: No sidebar (defensive case)
     print("\n=== Test Case 4: No sidebar (defensive) ===")
     controller_no_sidebar = AppController(main_window=None, threaded=False)
     result_config = controller_no_sidebar._build_config_snapshot_with_override(pack_config)
     # Should not crash, should use defaults
-    print("✅ No crash with missing sidebar")
+    print("[OK] No crash with missing sidebar")
     
     print("\n" + "="*60)
-    print("✅ ALL TESTS PASSED - Global prompt flags correctly wired!")
+    print("[OK] ALL TESTS PASSED - Global prompt flags correctly wired!")
     print("="*60)
 
 if __name__ == "__main__":

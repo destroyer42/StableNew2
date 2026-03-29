@@ -28,7 +28,7 @@ def test_queue_filter_logic():
     assert filtered[0]["job_id"] == "j1"
     assert filtered[1]["job_id"] == "j5"
     
-    print("✓ Filter logic correctly excludes non-QUEUED jobs")
+    print("[OK] Filter logic correctly excludes non-QUEUED jobs")
 
 
 def test_shutdown_app_has_save_call():
@@ -42,7 +42,7 @@ def test_shutdown_app_has_save_call():
     assert "_save_queue_state" in source, "shutdown_app should call _save_queue_state"
     assert "Step 7.5" in source, "shutdown_app should have Step 7.5 for queue save"
     
-    print("✓ shutdown_app() includes _save_queue_state call")
+    print("[OK] shutdown_app() includes _save_queue_state call")
 
 
 def test_job_execution_controller_stop_has_save():
@@ -56,7 +56,7 @@ def test_job_execution_controller_stop_has_save():
     assert "_persist_queue_state" in source, "stop() should call _persist_queue_state"
     assert "PR-PERSIST-FIX" in source, "stop() should have PR-PERSIST-FIX comment"
     
-    print("✓ JobExecutionController.stop() includes _persist_queue_state call")
+    print("[OK] JobExecutionController.stop() includes _persist_queue_state call")
 
 
 def test_persist_queue_state_filters():
@@ -70,7 +70,7 @@ def test_persist_queue_state_filters():
     assert "JobStatus.QUEUED" in source, "should explicitly check for QUEUED status"
     assert "PR-PERSIST-FIX" in source or "Only save QUEUED jobs" in source, "should have filtering comment"
     
-    print("✓ _persist_queue_state has proper filtering logic")
+    print("[OK] _persist_queue_state has proper filtering logic")
 
 
 if __name__ == "__main__":
@@ -78,4 +78,4 @@ if __name__ == "__main__":
     test_shutdown_app_has_save_call()
     test_job_execution_controller_stop_has_save()
     test_persist_queue_state_filters()
-    print("\n✅ All queue persistence tests passed!")
+    print("\n[OK] All queue persistence tests passed!")

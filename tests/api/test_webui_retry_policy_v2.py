@@ -30,6 +30,23 @@ class _DummyResponse(requests.Response):
         return {}
 
 
+class _StructuredOomResponse(requests.Response):
+    """500 response stub carrying a structured CUDA OOM payload."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.status_code = 500
+        self._content = json.dumps(
+            {
+                "error": "RuntimeError",
+                "errors": "CUDA error: out of memory",
+            }
+        ).encode("utf-8")
+
+    def raise_for_status(self) -> None:
+        raise requests.HTTPError("500 Server Error", response=self)
+
+
 def _setup_retry_requests(failures: int) -> tuple[list[str], callable]:
     """Return a callable that fails the first `failures` attempts and succeeds thereafter."""
 
@@ -106,3 +123,28 @@ def test_timeout_retry_recycles_http_session(monkeypatch: pytest.MonkeyPatch) ->
     assert result is not None
     assert len(attempts) == 2
     assert resets == ["reset"]
+
+
+def test_txt2img_structured_cuda_oom_http_500_is_fail_fast(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempts: list[str] = []
+
+    def _fake_request(self, method: str, url: str, **kwargs: object) -> requests.Response:
+        attempts.append(method)
+        return _StructuredOomResponse()
+
+    monkeypatch.setattr("src.api.client.requests.Session.request", _fake_request)
+    client = SDWebUIClient()
+    client._sleep = lambda _: None
+
+    with pytest.raises(requests.HTTPError) as exc_info:
+        client._perform_request(
+            "post",
+            "/sdapi/v1/txt2img",
+            json={"prompt": "oom"},
+            stage="txt2img",
+        )
+
+    assert len(attempts) == 1
+    assert getattr(exc_info.value, "fail_fast_reason", None) == "cuda_oom"

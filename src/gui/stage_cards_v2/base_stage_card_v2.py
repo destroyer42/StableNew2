@@ -10,6 +10,7 @@ from src.gui.theme_v2 import (
     HEADING_LABEL_STYLE,
     MUTED_LABEL_STYLE,
 )
+from src.gui.tooltip import Tooltip, attach_tooltip
 from src.gui.widgets.expander_v2 import ExpanderV2
 
 
@@ -43,6 +44,9 @@ class BaseStageCardV2(ttk.Frame):
         self._default_open = default_open
         self._body_visible = True
         self._expander: ExpanderV2 | None = None
+        self._setting_tooltips: dict[str, Tooltip] = {}
+        self._setting_labels: dict[str, tk.Widget] = {}
+        self._setting_controls: dict[str, tk.Widget] = {}
 
         if self._show_header:
             self._build_header()
@@ -95,6 +99,30 @@ class BaseStageCardV2(ttk.Frame):
     def to_config_dict(self) -> dict[str, object]:
         """Optional config serializer for subclasses."""  # pragma: no cover
         return {}
+
+    def _attach_setting_help(
+        self,
+        key: str,
+        text: str | None,
+        *widgets: tk.Widget | None,
+    ) -> None:
+        if not text:
+            return
+        if not hasattr(self, "_setting_tooltips"):
+            self._setting_tooltips = {}
+        if not hasattr(self, "_setting_labels"):
+            self._setting_labels = {}
+        if not hasattr(self, "_setting_controls"):
+            self._setting_controls = {}
+        live_widgets = [widget for widget in widgets if widget is not None]
+        if not live_widgets:
+            return
+        primary = live_widgets[0]
+        self._setting_tooltips[key] = attach_tooltip(primary, text)
+        self._setting_labels[key] = primary
+        for widget in live_widgets[1:]:
+            self._setting_controls[key] = widget
+            attach_tooltip(widget, text)
 
     # --- Collapsible helpers --------------------------------------------------
     def _toggle_body(self) -> None:

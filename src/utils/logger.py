@@ -324,6 +324,7 @@ class InMemoryLogHandler(logging.Handler):
         self._max_entries = max_entries
         self._lock = RLock()
         self._entries: deque[dict[str, Any]] = deque(maxlen=max_entries)
+        self._version = 0
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
@@ -352,13 +353,20 @@ class InMemoryLogHandler(logging.Handler):
                 current = self._entries[-1]
                 current["repeat_count"] = int(current.get("repeat_count", 1)) + 1
                 current["last_created"] = record.created
+                self._version += 1
                 return
             self._entries.append(entry)
+            self._version += 1
 
     def get_entries(self) -> Iterable[dict[str, Any]]:
         """Return a snapshot of the current entries."""
         with self._lock:
             return list(self._entries)
+
+    def get_version(self) -> int:
+        """Return a monotonically increasing version for cheap change detection."""
+        with self._lock:
+            return self._version
 
     def _normalize_payload(self, payload: dict[str, Any]) -> dict[str, Any]:
         normalized = dict(payload)

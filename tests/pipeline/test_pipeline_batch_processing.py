@@ -317,6 +317,7 @@ class TestPipelineBatchProcessing:
             positive_prompt="A portrait",
             negative_prompt="bad quality",
             base_model="base-model.safetensors",
+            vae="base-vae.safetensors",
             sampler_name="Euler a",
             steps=20,
             cfg_scale=7.5,
@@ -325,17 +326,24 @@ class TestPipelineBatchProcessing:
             images_per_prompt=1,
             stage_chain=[
                 StageConfig(stage_type="txt2img", enabled=True),
-                StageConfig(stage_type="img2img", enabled=True, model="hidden-stage-model.safetensors"),
+                StageConfig(
+                    stage_type="img2img",
+                    enabled=True,
+                    model="hidden-stage-model.safetensors",
+                    vae="hidden-stage-vae.safetensors",
+                ),
                 StageConfig(
                     stage_type="adetailer",
                     enabled=True,
                     model="hidden-stage-model.safetensors",
+                    vae="hidden-stage-vae.safetensors",
                     extra={"adetailer_model": "face_yolov8n.pt"},
                 ),
                 StageConfig(
                     stage_type="upscale",
                     enabled=True,
                     model="hidden-stage-model.safetensors",
+                    vae="hidden-stage-vae.safetensors",
                     extra={"upscaler_name": "R-ESRGAN 4x+"},
                 ),
             ],
@@ -377,7 +385,16 @@ class TestPipelineBatchProcessing:
         assert result.success is True
         assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["model"] == "base-model.safetensors"
         assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["sd_model_checkpoint"] == "base-model.safetensors"
+        assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["vae"] == "base-vae.safetensors"
+        assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["sd_vae"] == "base-vae.safetensors"
+        assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["vae_name"] == "base-vae.safetensors"
         assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["model"] == "base-model.safetensors"
         assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["sd_model_checkpoint"] == "base-model.safetensors"
+        assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["vae"] == "base-vae.safetensors"
+        assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["sd_vae"] == "base-vae.safetensors"
+        assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["vae_name"] == "base-vae.safetensors"
         assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["model"] == "base-model.safetensors"
         assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["sd_model_checkpoint"] == "base-model.safetensors"
+        assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["vae"] == "base-vae.safetensors"
+        assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["sd_vae"] == "base-vae.safetensors"
+        assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["vae_name"] == "base-vae.safetensors"

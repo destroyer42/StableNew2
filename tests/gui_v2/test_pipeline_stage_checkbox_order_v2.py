@@ -4,8 +4,8 @@ import tkinter as tk
 
 import pytest
 
+from src.controller.runtime_state import PipelineState
 from src.gui.panels_v2.pipeline_panel_v2 import PipelinePanelV2
-from src.gui.state import PipelineState
 
 
 @pytest.mark.gui

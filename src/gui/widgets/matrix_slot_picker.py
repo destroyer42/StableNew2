@@ -9,6 +9,8 @@ import tkinter as tk
 from tkinter import ttk
 from collections.abc import Callable
 
+from src.gui.theme_v2 import apply_toplevel_theme, style_listbox_widget
+
 
 class MatrixSlotPickerDialog(tk.Toplevel):
     """Dialog for picking which matrix slot to insert as [[token]]."""
@@ -35,6 +37,7 @@ class MatrixSlotPickerDialog(tk.Toplevel):
         self.geometry("300x400")
         self.transient(parent)
         self.grab_set()
+        apply_toplevel_theme(self)
 
         self._build_ui()
 
@@ -57,6 +60,7 @@ class MatrixSlotPickerDialog(tk.Toplevel):
             yscrollcommand=scrollbar.set,
             selectmode="single",
         )
+        style_listbox_widget(self.listbox)
         scrollbar.config(command=self.listbox.yview)
 
         self.listbox.pack(side="left", fill="both", expand=True)

@@ -15,5 +15,30 @@
     "--disable-auto-launch"
   ],
   "comfy_autostart_enabled": true,
-  "comfy_health_total_timeout_seconds": 30.0
+  "comfy_health_total_timeout_seconds": 30.0,
+  "webui_base_url": "http://127.0.0.1:7860",
+  "webui_workdir": "C:\\Users\\rob\\stable-diffusion-webui",
+  "webui_autostart_enabled": true,
+  "webui_health_initial_timeout_seconds": 5.0,
+  "webui_health_retry_count": 10,
+  "webui_health_retry_interval_seconds": 1.0,
+  "webui_health_total_timeout_seconds": 60.0,
+  "output_dir": "output",
+  "model_dir": "models",
+  "prompt_optimizer": {
+    "enabled": true,
+    "optimize_positive": true,
+    "optimize_negative": true,
+    "dedupe_enabled": true,
+    "preserve_lora_relative_order": true,
+    "preserve_unknown_order": true,
+    "enable_score_based_classification": false,
+    "allow_subject_anchor_boost": false,
+    "log_before_after": true,
+    "log_bucket_assignments": false,
+    "large_chunk_warning_threshold": 18,
+    "subject_anchor_boost_min_chunk_count": 8,
+    "warn_on_large_chunk_count": true,
+    "opt_out_pipeline_names": []
+  }
 }

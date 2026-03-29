@@ -88,7 +88,7 @@ def test_lora_scanner_and_cache():
         cache_file.unlink()
     print("   Cleanup complete")
     
-    print("\n✅ LoRA Scanner tests passed!")
+    print("\n[OK] LoRA Scanner tests passed!")
 
 
 def test_autocomplete_data():
@@ -141,7 +141,7 @@ def test_autocomplete_data():
     if scanner._cache_file.exists():
         scanner._cache_file.unlink()
     
-    print("\n✅ Autocomplete tests passed!")
+    print("\n[OK] Autocomplete tests passed!")
 
 
 def test_keyword_dialog_filter():
@@ -173,7 +173,7 @@ def test_keyword_dialog_filter():
     print(f"Filter '{search}': {filtered}")
     assert len(filtered) == 1  # best quality
     
-    print("\n✅ Keyword dialog filter tests passed!")
+    print("\n[OK] Keyword dialog filter tests passed!")
 
 
 def main():
@@ -188,21 +188,21 @@ def main():
         test_keyword_dialog_filter()
         
         print("\n" + "=" * 60)
-        print("ALL TESTS PASSED ✅")
+        print("ALL TESTS PASSED [OK]")
         print("=" * 60)
         print()
         print("Summary:")
-        print("  ✅ Phase B: Keyword dialog with search/filter")
-        print("  ✅ Phase C: LoRA scanning and autocomplete")
-        print("  ✅ Phase E: Keyword caching and refresh")
+        print("  [OK] Phase B: Keyword dialog with search/filter")
+        print("  [OK] Phase C: LoRA scanning and autocomplete")
+        print("  [OK] Phase E: Keyword caching and refresh")
         print()
-        print("PR-GUI-004 Phases B, C, E: COMPLETE ✅")
+        print("PR-GUI-004 Phases B, C, E: COMPLETE [OK]")
         
     except AssertionError as e:
-        print(f"\n❌ TEST FAILED: {e}")
+        print(f"\n[FAIL] TEST FAILED: {e}")
         raise
     except Exception as e:
-        print(f"\n❌ ERROR: {e}")
+        print(f"\n[FAIL] ERROR: {e}")
         raise
 
 

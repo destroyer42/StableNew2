@@ -278,8 +278,6 @@ class JSONLJobHistoryStore(JobHistoryStore):
         # where GUI tries to load before write finishes, resulting in stale/empty data.
         with self._lock:
             self._pending_entries[entry.job_id] = entry
-            if self._cached_entries is not None:
-                self._cached_entries[entry.job_id] = entry
         
         # Always emit callback immediately (don't wait for write to complete)
         # This allows GUI to update immediately even though file write is async
@@ -298,6 +296,13 @@ class JSONLJobHistoryStore(JobHistoryStore):
             except Exception:
                 continue
 
+    def _with_pending_overlay(
+        self, entries: dict[str, JobHistoryEntry]
+    ) -> dict[str, JobHistoryEntry]:
+        merged = dict(entries)
+        merged.update(self._pending_entries)
+        return merged
+
     def _load_latest_by_job(self) -> dict[str, JobHistoryEntry]:
         """Load history entries with file mtime-based caching for performance."""
         with self._lock:
@@ -311,8 +316,8 @@ class JSONLJobHistoryStore(JobHistoryStore):
                 current_mtime = self._path.stat().st_mtime
                 
                 if self._cached_entries is not None and self._cache_mtime == current_mtime:
-                    # Cache is valid, return it
-                    return dict(self._cached_entries)
+                    # Cache is valid, but in-memory pending updates still win until disk catches up.
+                    return self._with_pending_overlay(self._cached_entries)
                 
                 # Cache miss or stale - reload from disk
                 lines = self._path.read_text(encoding="utf-8").splitlines()
@@ -323,12 +328,18 @@ class JSONLJobHistoryStore(JobHistoryStore):
                         latest[entry.job_id] = entry
                     except Exception:
                         continue
-                latest.update(self._pending_entries)
+                resolved_pending = [
+                    job_id
+                    for job_id, pending in self._pending_entries.items()
+                    if latest.get(job_id) == pending
+                ]
+                for job_id in resolved_pending:
+                    self._pending_entries.pop(job_id, None)
                 
                 # Update cache
                 self._cached_entries = latest
                 self._cache_mtime = current_mtime
-                return dict(latest)
+                return self._with_pending_overlay(latest)
                 
             except Exception:
                 # On error, invalidate cache and return empty

@@ -7,10 +7,18 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.app_state_v2 import CurrentConfig
+from src.gui.help_text.stage_setting_help_v2 import TXT2IMG_SETTING_HELP
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.components import LabeledSlider, SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
+from src.gui.view_contracts.pipeline_layout_contract import (
+    get_single_pair_form_column_specs,
+    get_stage_card_min_width,
+    get_two_pair_form_column_specs,
+)
+from src.utils.webui_resource_names import normalize_vae_config_value, vae_names_match
 
 
 class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
@@ -85,9 +93,8 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                     child.destroy()
             except Exception:
                 pass
-            ttk.Label(self.sampler_section, text="Sampler", style=BODY_LABEL_STYLE).grid(
-                row=0, column=0, sticky="w", padx=(0, 4)
-            )
+            sampler_label = ttk.Label(self.sampler_section, text="Sampler", style=BODY_LABEL_STYLE)
+            sampler_label.grid(row=0, column=0, sticky="w", padx=(0, 4))
             sampler_resources = (
                 self.controller.list_upscalers()
                 if self.controller and hasattr(self.controller, "list_upscalers")
@@ -109,10 +116,15 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 style="Dark.TCombobox",
             )
             self.sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-
-            ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE).grid(
-                row=0, column=2, sticky="w", padx=(0, 4)
+            self._attach_setting_help(
+                "sampler",
+                TXT2IMG_SETTING_HELP["sampler"],
+                sampler_label,
+                self.sampler_combo,
             )
+
+            steps_label = ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE)
+            steps_label.grid(row=0, column=2, sticky="w", padx=(0, 4))
             self.steps_spinbox = ttk.Spinbox(
                 self.sampler_section,
                 from_=1,
@@ -122,10 +134,15 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 style="Dark.TSpinbox",
             )
             self.steps_spinbox.grid(row=0, column=3, sticky="ew")
-
-            ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE).grid(
-                row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0)
+            self._attach_setting_help(
+                "steps",
+                TXT2IMG_SETTING_HELP["steps"],
+                steps_label,
+                self.steps_spinbox,
             )
+
+            cfg_label = ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE)
+            cfg_label.grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
             from src.gui.enhanced_slider import EnhancedSlider
 
             self.cfg_slider = EnhancedSlider(
@@ -138,8 +155,13 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 command=self._on_cfg_changed,
             )
             self.cfg_slider.grid(row=1, column=1, sticky="ew", pady=(6, 0), padx=(0, 8))
-            for col in range(4):
-                self.sampler_section.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+            self._attach_setting_help(
+                "cfg",
+                TXT2IMG_SETTING_HELP["cfg"],
+                cfg_label,
+                self.cfg_slider,
+            )
+            configure_grid_columns(self.sampler_section, get_two_pair_form_column_specs())
             next_row = 1
 
         meta = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
@@ -165,9 +187,8 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self._vae_name_map[self.NO_VAE_DISPLAY] = ""  # Empty string means no VAE selected
 
         if not self._shared_base_generation:
-            ttk.Label(meta, text="Model", style=BODY_LABEL_STYLE).grid(
-                row=0, column=0, sticky="w", padx=(0, 4)
-            )
+            model_label = ttk.Label(meta, text="Model", style=BODY_LABEL_STYLE)
+            model_label.grid(row=0, column=0, sticky="w", padx=(0, 4))
             self.model_combo = ttk.Combobox(
                 meta,
                 textvariable=self.model_var,
@@ -177,9 +198,14 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 style="Dark.TCombobox",
             )
             self.model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-            ttk.Label(meta, text="VAE", style=BODY_LABEL_STYLE).grid(
-                row=0, column=2, sticky="w", padx=(0, 4)
+            self._attach_setting_help(
+                "model",
+                TXT2IMG_SETTING_HELP["model"],
+                model_label,
+                self.model_combo,
             )
+            vae_label = ttk.Label(meta, text="VAE", style=BODY_LABEL_STYLE)
+            vae_label.grid(row=0, column=2, sticky="w", padx=(0, 4))
             self.vae_combo = ttk.Combobox(
                 meta,
                 textvariable=self.vae_var,
@@ -189,6 +215,12 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 style="Dark.TCombobox",
             )
             self.vae_combo.grid(row=0, column=3, sticky="ew")
+            self._attach_setting_help(
+                "vae",
+                TXT2IMG_SETTING_HELP["vae"],
+                vae_label,
+                self.vae_combo,
+            )
 
             def on_model_selected(*_: Any) -> None:
                 selected_display = self.model_var.get()
@@ -249,9 +281,8 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 if not self._shared_base_generation and hasattr(last_run, "height"):
                     self.height_var.set(getattr(last_run, "height", 512))
 
-        ttk.Label(meta, text="Clip skip", style=BODY_LABEL_STYLE).grid(
-            row=0, column=0, sticky="w", pady=(6, 2)
-        )
+        clip_skip_label = ttk.Label(meta, text="Clip skip", style=BODY_LABEL_STYLE)
+        clip_skip_label.grid(row=0, column=0, sticky="w", pady=(6, 2))
         self.clip_skip_spin = ttk.Spinbox(
             meta,
             from_=1,
@@ -262,18 +293,28 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TSpinbox",
         )
         self.clip_skip_spin.grid(row=0, column=1, sticky="ew")
+        self._attach_setting_help(
+            "clip_skip",
+            TXT2IMG_SETTING_HELP["clip_skip"],
+            clip_skip_label,
+            self.clip_skip_spin,
+        )
         
         # Final Size display (calculated from width x height x hires x upscale)
-        ttk.Label(meta, text="Final Size", style=BODY_LABEL_STYLE).grid(
-            row=1, column=0, sticky="w", pady=(6, 2)
-        )
+        final_size_label = ttk.Label(meta, text="Final Size", style=BODY_LABEL_STYLE)
+        final_size_label.grid(row=1, column=0, sticky="w", pady=(6, 2))
         self.final_size_label = ttk.Label(
             meta, text="512 x 512", style=BODY_LABEL_STYLE
         )
         self.final_size_label.grid(row=1, column=1, columnspan=3, sticky="w", pady=(6, 2))
+        self._attach_setting_help(
+            "final_size",
+            TXT2IMG_SETTING_HELP["final_size"],
+            final_size_label,
+            self.final_size_label,
+        )
         
-        for col in range(4):
-            meta.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+        configure_grid_columns(meta, get_two_pair_form_column_specs())
 
         # Seed/randomize
         self.seed_section = SeedSection(parent)
@@ -312,7 +353,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.width_var.trace_add("write", lambda *_: self._update_final_size())
         self.height_var.trace_add("write", lambda *_: self._update_final_size())
 
-        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
 
         # --- Refiner & Hires helpers --------------------------------------------
         self.refiner_enabled_var = tk.BooleanVar(value=False)
@@ -340,25 +381,34 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # --- Refiner Frame with collapsible options (PR-GUI-E) ---
         refiner_frame = ttk.LabelFrame(parent, text="SDXL Refiner", style="Dark.TLabelframe")
         refiner_frame.grid(row=3, column=0, sticky="ew", pady=(8, 4))
-        refiner_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(refiner_frame, get_single_pair_form_column_specs())
         self._refiner_frame = refiner_frame
 
-        ttk.Checkbutton(
+        refiner_toggle = ttk.Checkbutton(
             refiner_frame,
             text="Enable refiner",
             variable=self.refiner_enabled_var,
             command=self._on_refiner_toggle,
             style="Dark.TCheckbutton",
-        ).grid(row=0, column=0, columnspan=2, sticky="w")
+        )
+        refiner_toggle.grid(row=0, column=0, columnspan=2, sticky="w")
+        self._attach_setting_help(
+            "refiner_enabled",
+            TXT2IMG_SETTING_HELP["refiner_enabled"],
+            refiner_toggle,
+        )
 
         # PR-GUI-E: Container frame for refiner options (hidden when disabled)
         self._refiner_options_frame = ttk.Frame(refiner_frame, style=SURFACE_FRAME_STYLE)
         self._refiner_options_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
-        self._refiner_options_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(self._refiner_options_frame, get_single_pair_form_column_specs())
 
-        ttk.Label(self._refiner_options_frame, text="Refiner model", style="Dark.TLabel").grid(
-            row=0, column=0, sticky="w", pady=(4, 0)
+        refiner_model_label = ttk.Label(
+            self._refiner_options_frame,
+            text="Refiner model",
+            style="Dark.TLabel",
         )
+        refiner_model_label.grid(row=0, column=0, sticky="w", pady=(4, 0))
         self.refiner_model_combo = ttk.Combobox(
             self._refiner_options_frame,
             textvariable=self.refiner_model_var,
@@ -368,9 +418,18 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         )
         self.refiner_model_combo.grid(row=0, column=1, sticky="ew", pady=(4, 0))
         self._set_combo_values(self.refiner_model_combo, self.refiner_model_var, refiner_values)
-        ttk.Label(self._refiner_options_frame, text="Refiner start", style="Dark.TLabel").grid(
-            row=1, column=0, sticky="w", pady=(4, 0)
+        self._attach_setting_help(
+            "refiner_model",
+            TXT2IMG_SETTING_HELP["refiner_model"],
+            refiner_model_label,
+            self.refiner_model_combo,
         )
+        refiner_start_label = ttk.Label(
+            self._refiner_options_frame,
+            text="Refiner start",
+            style="Dark.TLabel",
+        )
+        refiner_start_label.grid(row=1, column=0, sticky="w", pady=(4, 0))
         self._refiner_slider = LabeledSlider(
             self._refiner_options_frame,
             variable=self.refiner_switch_var,
@@ -381,29 +440,44 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             command=lambda value: self._on_refiner_switch_changed(),
         )
         self._refiner_slider.grid(row=1, column=1, sticky="ew", pady=(4, 0))
+        self._attach_setting_help(
+            "refiner_start",
+            TXT2IMG_SETTING_HELP["refiner_start"],
+            refiner_start_label,
+            self._refiner_slider,
+        )
 
         # --- Hires Frame with collapsible options (PR-GUI-E) ---
         hires_frame = ttk.LabelFrame(parent, text="Hires fix", style="Dark.TLabelframe")
         hires_frame.grid(row=4, column=0, sticky="ew", pady=(0, 4))
-        hires_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(hires_frame, get_single_pair_form_column_specs())
         self._hires_frame = hires_frame
 
-        ttk.Checkbutton(
+        hires_toggle = ttk.Checkbutton(
             hires_frame,
             text="Enable Hires fix",
             variable=self.hires_enabled_var,
             command=self._on_hires_toggle,
             style="Dark.TCheckbutton",
-        ).grid(row=0, column=0, columnspan=2, sticky="w")
+        )
+        hires_toggle.grid(row=0, column=0, columnspan=2, sticky="w")
+        self._attach_setting_help(
+            "hires_enabled",
+            TXT2IMG_SETTING_HELP["hires_enabled"],
+            hires_toggle,
+        )
 
         # PR-GUI-E: Container frame for hires options (hidden when disabled)
         self._hires_options_frame = ttk.Frame(hires_frame, style=SURFACE_FRAME_STYLE)
         self._hires_options_frame.grid(row=1, column=0, columnspan=2, sticky="ew")
-        self._hires_options_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(self._hires_options_frame, get_single_pair_form_column_specs())
 
-        ttk.Label(self._hires_options_frame, text="Upscaler", style="Dark.TLabel").grid(
-            row=0, column=0, sticky="w", pady=(4, 0)
+        hires_upscaler_label = ttk.Label(
+            self._hires_options_frame,
+            text="Upscaler",
+            style="Dark.TLabel",
         )
+        hires_upscaler_label.grid(row=0, column=0, sticky="w", pady=(4, 0))
         upscaler_values = self._load_upscaler_options()
         self.hires_upscaler_combo = ttk.Combobox(
             self._hires_options_frame,
@@ -413,11 +487,20 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.hires_upscaler_combo.grid(row=0, column=1, sticky="ew", pady=(4, 0))
+        self._attach_setting_help(
+            "hires_upscaler",
+            TXT2IMG_SETTING_HELP["hires_upscaler"],
+            hires_upscaler_label,
+            self.hires_upscaler_combo,
+        )
 
         # PR-GUI-E: Hires model selector
-        ttk.Label(self._hires_options_frame, text="Hires model", style="Dark.TLabel").grid(
-            row=1, column=0, sticky="w", pady=(4, 0)
+        hires_model_label = ttk.Label(
+            self._hires_options_frame,
+            text="Hires model",
+            style="Dark.TLabel",
         )
+        hires_model_label.grid(row=1, column=0, sticky="w", pady=(4, 0))
         hires_model_values = self._build_hires_model_values()
         self._hires_model_combo = ttk.Combobox(
             self._hires_options_frame,
@@ -427,12 +510,21 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self._hires_model_combo.grid(row=1, column=1, sticky="ew", pady=(4, 0))
+        self._attach_setting_help(
+            "hires_model",
+            TXT2IMG_SETTING_HELP["hires_model"],
+            hires_model_label,
+            self._hires_model_combo,
+        )
         self.hires_model_var.trace_add("write", lambda *_: self._on_hires_model_changed())
 
-        ttk.Label(self._hires_options_frame, text="Upscale factor", style="Dark.TLabel").grid(
-            row=2, column=0, sticky="w", pady=(4, 0)
+        hires_factor_label = ttk.Label(
+            self._hires_options_frame,
+            text="Upscale factor",
+            style="Dark.TLabel",
         )
-        ttk.Spinbox(
+        hires_factor_label.grid(row=2, column=0, sticky="w", pady=(4, 0))
+        self.hires_factor_spin = ttk.Spinbox(
             self._hires_options_frame,
             from_=1.0,
             to=4.0,
@@ -440,11 +532,21 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             textvariable=self.hires_factor_var,
             width=8,
             style="Dark.TSpinbox",
-        ).grid(row=2, column=1, sticky="ew", pady=(4, 0))
-        ttk.Label(self._hires_options_frame, text="Hires steps", style="Dark.TLabel").grid(
-            row=3, column=0, sticky="w", pady=(4, 0)
         )
-        ttk.Spinbox(
+        self.hires_factor_spin.grid(row=2, column=1, sticky="ew", pady=(4, 0))
+        self._attach_setting_help(
+            "hires_factor",
+            TXT2IMG_SETTING_HELP["hires_factor"],
+            hires_factor_label,
+            self.hires_factor_spin,
+        )
+        hires_steps_label = ttk.Label(
+            self._hires_options_frame,
+            text="Hires steps",
+            style="Dark.TLabel",
+        )
+        hires_steps_label.grid(row=3, column=0, sticky="w", pady=(4, 0))
+        self.hires_steps_spin = ttk.Spinbox(
             self._hires_options_frame,
             from_=0,
             to=200,
@@ -453,10 +555,20 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             width=8,
             command=self._on_hires_steps_changed,
             style="Dark.TSpinbox",
-        ).grid(row=3, column=1, sticky="ew", pady=(4, 0))
-        ttk.Label(self._hires_options_frame, text="Denoise", style="Dark.TLabel").grid(
-            row=4, column=0, sticky="w", pady=(4, 0)
         )
+        self.hires_steps_spin.grid(row=3, column=1, sticky="ew", pady=(4, 0))
+        self._attach_setting_help(
+            "hires_steps",
+            TXT2IMG_SETTING_HELP["hires_steps"],
+            hires_steps_label,
+            self.hires_steps_spin,
+        )
+        hires_denoise_label = ttk.Label(
+            self._hires_options_frame,
+            text="Denoise",
+            style="Dark.TLabel",
+        )
+        hires_denoise_label.grid(row=4, column=0, sticky="w", pady=(4, 0))
         self._hires_denoise_slider = LabeledSlider(
             self._hires_options_frame,
             variable=self.hires_denoise_var,
@@ -467,13 +579,25 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             command=lambda value: self._on_hires_denoise_changed(),
         )
         self._hires_denoise_slider.grid(row=4, column=1, sticky="ew", pady=(4, 0))
-        ttk.Checkbutton(
+        self._attach_setting_help(
+            "hires_denoise",
+            TXT2IMG_SETTING_HELP["hires_denoise"],
+            hires_denoise_label,
+            self._hires_denoise_slider,
+        )
+        hires_use_base_model = ttk.Checkbutton(
             self._hires_options_frame,
             text="Use base model during hires",
             variable=self.hires_use_base_model_var,
             command=self._on_hires_use_base_model_changed,
             style="Dark.TCheckbutton",
-        ).grid(row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        )
+        hires_use_base_model.grid(row=5, column=0, columnspan=2, sticky="w", pady=(4, 0))
+        self._attach_setting_help(
+            "hires_use_base_model",
+            TXT2IMG_SETTING_HELP["hires_use_base_model"],
+            hires_use_base_model,
+        )
 
         self.hires_upscaler_combo.bind(
             "<<ComboboxSelected>>", lambda *_: self._on_hires_upscaler_changed()
@@ -721,7 +845,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # VAE: config has internal name, need to find matching display name
         vae_internal = data.get("vae") or data.get("vae_name", "")
         vae_display = next(
-            (d for d, n in self._vae_name_map.items() if n == vae_internal),
+            (d for d, n in self._vae_name_map.items() if vae_names_match(n, vae_internal)),
             vae_internal  # Fallback to internal name if no match
         )
         self.vae_var.set(vae_display)
@@ -779,7 +903,9 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # Use internal names for model/vae, and all selected values for payload correctness
         model_name = self._model_name_map.get(self.model_var.get(), self.model_var.get().strip())
         vae_display = self.vae_var.get()
-        vae_name = self._vae_name_map.get(vae_display, vae_display.strip() if vae_display else "")
+        vae_name = normalize_vae_config_value(
+            self._vae_name_map.get(vae_display, vae_display.strip() if vae_display else "")
+        )
         
         # Store use_refiner flag for conditional field writing
         use_refiner = bool(self.refiner_enabled_var.get())

@@ -159,8 +159,51 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
 
         self.panel._show_preview_var.set(True)
 
-        with patch.object(self.panel, "_find_latest_output_image", return_value=image_path):
+        with patch.object(self.panel, "_find_immediate_output_image", return_value=image_path):
             with patch.object(self.panel.thumbnail, "set_image_from_path") as mock_set_image:
                 self.panel.update_with_summary(summary)
+
+        mock_set_image.assert_called_once_with(image_path)
+
+    def test_update_thumbnail_schedules_background_lookup_for_scan_paths(self) -> None:
+        """Directory scans should be deferred off the UI thread."""
+        from unittest.mock import ANY
+
+        job = Mock()
+        job.job_id = "job-lookup"
+        self.panel._show_preview_var.set(True)
+        self.panel._current_preview_job = job
+        self.panel._current_pack_name = "pack-a"
+
+        with patch.object(self.panel, "_find_immediate_output_image", return_value=None):
+            with patch.object(self.panel, "_schedule_thumbnail_lookup") as mock_schedule:
+                with patch.object(self.panel.thumbnail, "set_loading") as mock_loading:
+                    self.panel._update_thumbnail(job, pack_name="pack-a", show_preview=True)
+
+        mock_loading.assert_called_once()
+        mock_schedule.assert_called_once_with(job, "pack-a", ANY)
+
+    def test_apply_thumbnail_lookup_result_updates_current_job_only(self) -> None:
+        """Async lookup results should only apply to the currently active preview job."""
+        from pathlib import Path
+
+        current_job = Mock()
+        current_job.job_id = "job-current"
+        old_job = Mock()
+        old_job.job_id = "job-old"
+        image_path = Path(self._temp_dir.name) / "thumb.png"
+        image_path.write_bytes(b"x")
+
+        self.panel._show_preview_var.set(True)
+        self.panel._current_preview_job = current_job
+        self.panel._current_pack_name = "pack-current"
+
+        stale_key = self.panel._make_thumbnail_lookup_key(old_job, "pack-old")
+        current_key = self.panel._make_thumbnail_lookup_key(current_job, "pack-current")
+
+        with patch.object(self.panel.thumbnail, "set_image_from_path") as mock_set_image:
+            self.panel._apply_thumbnail_lookup_result(stale_key, image_path)
+            mock_set_image.assert_not_called()
+            self.panel._apply_thumbnail_lookup_result(current_key, image_path)
 
         mock_set_image.assert_called_once_with(image_path)

@@ -259,6 +259,8 @@ class ReviewWorkflowAdapter:
                 negative_prompt_mode="append",
                 prompt_delta="",
                 negative_prompt_delta="",
+                source_baseline_label="staged curation source baseline",
+                fallback_source_label="staged curation queue baseline",
             )
         return ReviewWorkspaceHandoff(
             source="staged_curation",
@@ -291,12 +293,17 @@ class ReviewWorkflowAdapter:
 
     @staticmethod
     def _format_stage_preview(stage_preview: Any) -> str:
+        def _format_field(name: str, value: Any, source: Any) -> str:
+            value_text = "n/a" if value is None else str(value)
+            source_text = str(source or "active resolution")
+            return f"{name}={value_text} [{source_text}]"
+
         bits = [str(getattr(stage_preview, "stage", "") or "stage")]
-        bits.append(f"sampler={getattr(stage_preview, 'sampler', None) or 'n/a'}")
-        bits.append(f"scheduler={getattr(stage_preview, 'scheduler', None) or 'n/a'}")
-        bits.append(f"steps={getattr(stage_preview, 'steps', None) if getattr(stage_preview, 'steps', None) is not None else 'n/a'}")
-        bits.append(f"cfg={getattr(stage_preview, 'cfg_scale', None) if getattr(stage_preview, 'cfg_scale', None) is not None else 'n/a'}")
-        bits.append(f"denoise={getattr(stage_preview, 'denoise', None) if getattr(stage_preview, 'denoise', None) is not None else 'n/a'}")
+        bits.append(_format_field("sampler", getattr(stage_preview, "sampler", None), getattr(stage_preview, "sampler_source", None)))
+        bits.append(_format_field("scheduler", getattr(stage_preview, "scheduler", None), getattr(stage_preview, "scheduler_source", None)))
+        bits.append(_format_field("steps", getattr(stage_preview, "steps", None), getattr(stage_preview, "steps_source", None)))
+        bits.append(_format_field("cfg", getattr(stage_preview, "cfg_scale", None), getattr(stage_preview, "cfg_scale_source", None)))
+        bits.append(_format_field("denoise", getattr(stage_preview, "denoise", None), getattr(stage_preview, "denoise_source", None)))
         return " | ".join(bits)
 
     def format_effective_settings_summary(
@@ -311,8 +318,9 @@ class ReviewWorkflowAdapter:
         lines = [
             f"Source: stage={preview.source_stage} | model={preview.source_model or 'n/a'} | vae={preview.source_vae or 'n/a'}",
             f"Targets: {' -> '.join(preview.target_stages) or 'n/a'}",
-            f"Positive prompt: {preview.positive_prompt_behavior}",
-            f"Negative prompt: {preview.negative_prompt_behavior}",
+            f"Why these values are active: {preview.metadata_source_label} overrides {preview.fallback_source_label}; {preview.default_source_label} fill any remaining gaps.",
+            f"Positive prompt: {preview.positive_prompt_behavior} [{'explicit edit' if preview.positive_prompt_behavior != 'inherited' else preview.source_baseline_label}]",
+            f"Negative prompt: {preview.negative_prompt_behavior} [{'explicit edit' if preview.negative_prompt_behavior != 'inherited' else preview.source_baseline_label}]",
         ]
         for stage_preview in list(preview.stage_settings or []):
             lines.append(self._format_stage_preview(stage_preview))

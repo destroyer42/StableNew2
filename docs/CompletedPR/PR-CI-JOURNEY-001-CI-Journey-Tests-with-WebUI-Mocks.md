@@ -810,8 +810,8 @@ pytest tests/journeys/ -v  # requires WebUI at localhost:7860
 ```markdown
 ### Testing & Quality Assurance
 
-- [E2E Golden Path Test Matrix v2.6](E2E_Golden_Path_Test_Matrix_v2.6.md)
-- [Known Pitfalls: Queue Testing](KNOWN_PITFALLS_QUEUE_TESTING.md)
+- [E2E Golden Path Test Matrix v2.6](docs/Subsystems/Testing/E2E_Golden_Path_Test_Matrix_v2.6.md)
+- [Known Pitfalls: Queue Testing](docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md)
 - **[PR-CI-JOURNEY-001: CI Journey Tests](PR-CI-JOURNEY-001.md)** ← NEW
 ```
 

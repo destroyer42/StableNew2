@@ -3,6 +3,7 @@ from __future__ import annotations
 import tkinter as tk
 from dataclasses import dataclass
 from tkinter import ttk
+from typing import Any
 
 from src.gui.theme_v2 import BODY_LABEL_STYLE, HEADING_LABEL_STYLE, MUTED_LABEL_STYLE
 
@@ -39,7 +40,7 @@ TAB_OVERVIEW_CONTENTS: dict[str, TabOverviewContent] = {
             "Queue and history context from recent runs.",
         ),
         actions=(
-            "Queue or run new generation jobs.",
+            "Queue new generation jobs.",
             "Adjust effective stage settings before submission.",
             "Inspect previews, running jobs, and recent history in one place.",
         ),
@@ -52,7 +53,7 @@ TAB_OVERVIEW_CONTENTS: dict[str, TabOverviewContent] = {
     "review": TabOverviewContent(
         tab_id="review",
         tab_name="Review",
-        compact_summary="Use Review when you already have images and want to compare metadata, inspect effective settings, edit prompts, or queue deliberate reprocess jobs.",
+        compact_summary="Use Review when you already have images and want to compare metadata, inspect effective settings, edit prompts, or submit deliberate queue-backed reprocess jobs.",
         purpose="Review is the canonical advanced reprocess workspace for existing images and lineage-aware edits.",
         inputs=(
             "Existing images from disk or recent job history.",
@@ -61,7 +62,7 @@ TAB_OVERVIEW_CONTENTS: dict[str, TabOverviewContent] = {
         ),
         actions=(
             "Compare source and derived outputs.",
-            "Inspect metadata and effective settings before reprocessing.",
+            "Inspect metadata and effective settings before queue-backed reprocessing.",
             "Import selected items into Learning when they should become curation evidence.",
         ),
         connections=(
@@ -169,13 +170,16 @@ class TabOverviewPanel(ttk.Frame):
         master: tk.Misc,
         *,
         content: TabOverviewContent,
+        app_state: Any | None = None,
         expanded: bool = False,
         wraplength: int = 920,
         **kwargs: object,
     ) -> None:
         super().__init__(master, style="Panel.TFrame", padding=8, **kwargs)
         self.content = content
-        self._expanded = bool(expanded)
+        self._app_state = app_state
+        self._manual_expanded = bool(expanded)
+        self._help_mode_enabled = bool(getattr(app_state, "help_mode_enabled", False))
         self._wraplength = wraplength
 
         self.columnconfigure(0, weight=1)
@@ -196,7 +200,7 @@ class TabOverviewPanel(ttk.Frame):
             text="",
             style="Dark.TButton",
             command=self.toggle_details,
-            width=12,
+            width=14,
         )
         self.toggle_button.grid(row=0, column=1, sticky="e", padx=(8, 0))
 
@@ -219,19 +223,41 @@ class TabOverviewPanel(ttk.Frame):
         )
         self.details_label.grid(row=0, column=0, sticky="ew")
 
+        if self._app_state is not None and hasattr(self._app_state, "subscribe"):
+            try:
+                self._app_state.subscribe("help_mode", self._on_help_mode_changed)
+            except Exception:
+                pass
         self._sync_details()
 
     def toggle_details(self) -> None:
-        self._expanded = not self._expanded
+        if self._help_mode_enabled:
+            return
+        self._manual_expanded = not self._manual_expanded
         self._sync_details()
 
     def is_expanded(self) -> bool:
-        return self._expanded
+        return bool(self._help_mode_enabled or self._manual_expanded)
+
+    def destroy(self) -> None:
+        if self._app_state is not None and hasattr(self._app_state, "unsubscribe"):
+            try:
+                self._app_state.unsubscribe("help_mode", self._on_help_mode_changed)
+            except Exception:
+                pass
+        super().destroy()
+
+    def _on_help_mode_changed(self) -> None:
+        self._help_mode_enabled = bool(getattr(self._app_state, "help_mode_enabled", False))
+        self._sync_details()
 
     def _sync_details(self) -> None:
-        if self._expanded:
+        if self.is_expanded():
             self.details_frame.grid(row=2, column=0, sticky="ew", pady=(8, 0))
-            self.toggle_button.configure(text="Hide Details")
+            if self._help_mode_enabled:
+                self.toggle_button.configure(text="Help Mode On", state="disabled")
+            else:
+                self.toggle_button.configure(text="Hide Guidance", state="normal")
         else:
             self.details_frame.grid_remove()
-            self.toggle_button.configure(text="Show Details")
+            self.toggle_button.configure(text="Show Guidance", state="normal")

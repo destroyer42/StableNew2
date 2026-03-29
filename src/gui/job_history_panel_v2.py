@@ -6,6 +6,7 @@ import os
 import subprocess
 import sys
 import tkinter as tk
+import time
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,8 @@ from src.video.video_artifact_helpers import extract_source_image_for_handoff
 class JobHistoryPanelV2(ttk.Frame):
     """Show recent job history entries (completion timestamps, packs, duration, output)."""
 
+    SLOW_REFRESH_THRESHOLD_MS = 20.0
+
     def __init__(
         self,
         master: tk.Misc,
@@ -30,17 +33,21 @@ class JobHistoryPanelV2(ttk.Frame):
         app_state: Any | None = None,
         theme: Any | None = None,
         folder_opener: Callable[[str], None] | None = None,
+        manage_app_state_subscriptions: bool = True,
         **kwargs,
     ) -> None:
         style_name = theme_mod.SURFACE_FRAME_STYLE
         super().__init__(master, style=style_name, padding=theme_mod.PADDING_MD, **kwargs)
         self.controller = controller
         self.app_state = app_state
+        self._manage_app_state_subscriptions = bool(manage_app_state_subscriptions)
         self._folder_opener = folder_opener or self._default_open_folder
         self._entries: dict[str, JobHistoryEntry] = {}
         self._item_to_job: dict[str, str] = {}
         self._selected_job_id: str | None = None
         self._tooltip: tk.Toplevel | None = None
+        self._last_history_signature: tuple[tuple[str, tuple[str, ...]], ...] = ()
+        self._refresh_metrics: dict[str, dict[str, float | int]] = {}
 
         header_style = theme_mod.STATUS_STRONG_LABEL_STYLE
         ttk.Label(self, text="Job History", style=header_style).pack(anchor=tk.W, pady=(0, 4))
@@ -161,7 +168,7 @@ class JobHistoryPanelV2(ttk.Frame):
             anchor=tk.W, pady=(4, 0)
         )
 
-        if app_state and hasattr(app_state, "subscribe"):
+        if self._manage_app_state_subscriptions and app_state and hasattr(app_state, "subscribe"):
             app_state.subscribe("history_items", self._on_history_items_changed)
             try:
                 self._on_history_items_changed()
@@ -178,22 +185,62 @@ class JobHistoryPanelV2(ttk.Frame):
                 pass
         self._on_history_items_changed()
 
+    def update_from_app_state(self, app_state: Any | None = None) -> None:
+        if app_state is not None:
+            self.app_state = app_state
+        self._on_history_items_changed()
+
     def _on_history_items_changed(self) -> None:
+        start = time.perf_counter()
         items = []
         if self.app_state:
             items = list(self.app_state.history_items or [])
         self._populate_history(items)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("_on_history_items_changed", elapsed_ms)
 
     def _populate_history(self, entries: list[JobHistoryEntry]) -> None:
+        start = time.perf_counter()
+        selected_job_id = self._selected_job_id
+        rows = [
+            (entry, self._entry_values(entry))
+            for entry in entries
+        ]
+        signature = tuple((entry.job_id, values) for entry, values in rows)
+        if signature == self._last_history_signature:
+            self.empty_state_var.set(
+                "No recent jobs yet. Queue an image or video job to populate history."
+                if not entries
+                else ""
+            )
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_populate_history", elapsed_ms)
+            return
+
         for item in self.history_tree.get_children():
             self.history_tree.delete(item)
         self._entries.clear()
         self._item_to_job.clear()
-        for entry in entries:
-            values = self._entry_values(entry)
+        restored_item_id: str | None = None
+        for entry, values in rows:
             item_id = self.history_tree.insert("", "end", values=values)
             self._entries[entry.job_id] = entry
             self._item_to_job[item_id] = entry.job_id
+            if selected_job_id and entry.job_id == selected_job_id:
+                restored_item_id = item_id
+        self._last_history_signature = signature
+        self.empty_state_var.set(
+            "No recent jobs yet. Queue an image or video job to populate history."
+            if not entries
+            else ""
+        )
+        if restored_item_id and selected_job_id in self._entries:
+            self.history_tree.selection_set(restored_item_id)
+            self._selected_job_id = selected_job_id
+            self._update_action_buttons(self._entries[selected_job_id])
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_populate_history", elapsed_ms)
+            return
         self._selected_job_id = None
         self.open_btn.configure(state=tk.DISABLED)
         self.replay_btn.configure(state=tk.DISABLED)
@@ -201,11 +248,43 @@ class JobHistoryPanelV2(ttk.Frame):
         self.video_workflow_btn.configure(state=tk.DISABLED)
         self.movie_clips_btn.configure(state=tk.DISABLED)
         self.explain_btn.configure(state=tk.DISABLED)
-        self.empty_state_var.set(
-            "No recent jobs yet. Queue an image or video job to populate history."
-            if not entries
-            else ""
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("_populate_history", elapsed_ms)
+
+    def _record_refresh_metric(self, name: str, elapsed_ms: float) -> None:
+        metrics = self._refresh_metrics.setdefault(
+            name,
+            {
+                "count": 0,
+                "total_ms": 0.0,
+                "max_ms": 0.0,
+                "last_ms": 0.0,
+                "slow_count": 0,
+            },
         )
+        metrics["count"] = int(metrics["count"]) + 1
+        metrics["total_ms"] = float(metrics["total_ms"]) + float(elapsed_ms)
+        metrics["last_ms"] = float(elapsed_ms)
+        metrics["max_ms"] = max(float(metrics["max_ms"]), float(elapsed_ms))
+        if elapsed_ms >= float(self.SLOW_REFRESH_THRESHOLD_MS):
+            metrics["slow_count"] = int(metrics["slow_count"]) + 1
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        refresh_metrics: dict[str, dict[str, float | int]] = {}
+        for name, metrics in sorted(self._refresh_metrics.items()):
+            count = int(metrics.get("count", 0) or 0)
+            total_ms = float(metrics.get("total_ms", 0.0) or 0.0)
+            refresh_metrics[name] = {
+                "count": count,
+                "avg_ms": round(total_ms / count, 3) if count else 0.0,
+                "max_ms": round(float(metrics.get("max_ms", 0.0) or 0.0), 3),
+                "last_ms": round(float(metrics.get("last_ms", 0.0) or 0.0), 3),
+                "slow_count": int(metrics.get("slow_count", 0) or 0),
+            }
+        return {
+            "slow_threshold_ms": float(self.SLOW_REFRESH_THRESHOLD_MS),
+            "refresh_metrics": refresh_metrics,
+        }
 
     def _entry_values(self, entry: JobHistoryEntry) -> tuple[str, ...]:
         time_text = self._format_time(entry.completed_at or entry.started_at or entry.created_at)

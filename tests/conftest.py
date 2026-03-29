@@ -12,7 +12,15 @@ def tk_root():
         root = tk.Tk()
         root.withdraw()
         yield root
-        root.destroy()
+        try:
+            root.update_idletasks()
+            root.update()
+        except Exception:
+            pass
+        try:
+            root.destroy()
+        except Exception:
+            pass
     except tk.TclError:
         pytest.skip("No display available for Tkinter tests")
 

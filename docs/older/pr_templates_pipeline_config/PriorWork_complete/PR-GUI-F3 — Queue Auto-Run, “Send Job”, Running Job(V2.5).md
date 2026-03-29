@@ -495,7 +495,7 @@ This keeps UI semantics stable and allows later enhancement without schema chang
 
 9. Required Tests
 
-Follow patterns in KNOWN_PITFALLS_QUEUE_TESTING.md (no direct runner driving, no sleep-based timing, etc.).
+Follow patterns in docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md (no direct runner driving, no sleep-based timing, etc.).
 
 A. Pipeline / Service Tests
 
@@ -683,7 +683,7 @@ Don’t bypass JobService’s existing queue runner with ad-hoc “run_next_now�
 
 send_next_job() must go through the same path as auto-run dispatch; it should not invent a new runner path or directly call executor.
 
-Follow the guidance in KNOWN_PITFALLS_QUEUE_TESTING.md: drive via JobService, not runner.
+Follow the guidance in docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md: drive via JobService, not runner.
 
 Persisting the wrong structure
 

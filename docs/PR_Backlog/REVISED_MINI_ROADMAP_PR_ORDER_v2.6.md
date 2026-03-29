@@ -45,7 +45,30 @@ Reason:
 - this was explicitly called out as a sequencing requirement in the staged-curation
   roadmap
 
-#### 0.2 `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events` is verified
+#### 0.2 `PR-TEST-280-Full-Suite-Collection-Recovery-and-Test-Hygiene`
+
+Reason:
+
+- the branch needs full pytest collection back before later regressions can be
+  judged with confidence
+- this is a small, high-leverage trust-restoration PR
+
+#### 0.3 `PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback`
+
+Reason:
+
+- closes a real ADetailer runtime regression discovered on this branch
+- should land before stacking more workflow or UX changes on top of unstable
+  image refinement behavior
+
+#### 0.4 `PR-POLISH-282-Canonical-Roadmap-Video-Status-Harmonization`
+
+Reason:
+
+- the canonical roadmap currently contradicts itself about video rollout status
+- planning surfaces should be internally truthful before more sequencing churn
+
+#### 0.5 `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events` is verified
 
 Reason:
 
@@ -154,11 +177,19 @@ Follow-on note:
 
 #### 4.3 `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
 
+Status: Completed 2026-03-25
+
 #### 4.4 `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
+
+Status: Completed 2026-03-25
 
 #### 4.5 `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
 
+Status: Completed 2026-03-25
+
 #### 4.6 `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+
+Status: Completed 2026-03-25
 
 Why this tranche is last in the broad sequence:
 
@@ -172,10 +203,12 @@ Why this tranche is last in the broad sequence:
 If you want the highest practical value fastest, prioritize this shorter path:
 
 1. close output-route regression
-2. `PR-UX-265`
-3. `PR-UX-266`
-4. `PR-UX-267`
-5. `PR-UX-268`
+2. `PR-TEST-280`
+3. `PR-HARDEN-281`
+4. `PR-POLISH-282`
+5. `PR-UX-265`
+6. `PR-UX-266`
+7. `PR-UX-278`
 
 This path delivers:
 
@@ -188,12 +221,12 @@ This path delivers:
 ## 5. Full Ordered List
 
 1. close image output-route regression
+1. `PR-TEST-280-Full-Suite-Collection-Recovery-and-Test-Hygiene`
+1. `PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback`
+1. `PR-POLISH-282-Canonical-Roadmap-Video-Status-Harmonization`
 1. `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
 1. `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
-1. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
-1. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
-1. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
-1. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+1. `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep`
 
 ## 6. Recommendation
 

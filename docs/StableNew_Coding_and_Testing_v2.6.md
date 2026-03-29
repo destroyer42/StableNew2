@@ -258,6 +258,30 @@ mocking PromptPack incorrectly
 
 Integration tests verify:
 
+3.4 GUI Responsiveness Contract
+
+Hot GUI responsiveness is now a required test surface, not an ad hoc manual
+check.
+
+Required rules:
+
+- controller modules must not import Tk or mutate widgets directly; this is
+  enforced in `tests/system/test_architecture_enforcement_v2.py`
+- hot runtime GUI state must be tested through deterministic cadence/perf
+  harnesses rather than real WebUI availability
+- the canonical synthetic busy-run responsiveness journey is
+  `tests/journeys/test_jt07_large_batch_execution.py`
+
+Current acceptance thresholds for the synthetic busy-run journey:
+
+- p95 Tk timer lag must be `<= 35 ms`
+- max Tk timer lag must be `<= 100 ms`
+
+Any PR that materially changes hot queue/history/preview/runtime update paths
+must update or re-run this journey and the panel-metric tests in
+`tests/gui_v2/test_pipeline_tab_callback_metrics_v2.py` and
+`tests/gui_v2/test_panel_refresh_metrics_v2.py`.
+
 a pack → NJRs
 
 NJRs → queue
@@ -416,6 +440,8 @@ The following paths are permanently excluded via `.gitignore`:
 | `data/photo_optimize/assets/` | User-uploaded originals and generated outputs |
 | `state/` | All mutable UI/queue/preview runtime state files |
 
+See `docs/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md` for the short canonical runtime-state contract.
+
 ### Enforcement
 
 - Add new runtime-produced paths to `.gitignore` **before the first commit** that would touch them.
@@ -438,6 +464,31 @@ Only **static, hand-authored** JSON/JSONL fixtures representing well-formed mode
   enqueue NJRs
 
 Controllers do not:
+
+### 5.1 GUI Responsiveness Contract
+
+The GUI boundary is not only about ownership of execution logic; it is also
+about ownership of repaint cadence.
+
+Required rules:
+
+- Controllers must not mutate Tk widgets directly; they publish state and GUI
+  layers render that state.
+- Runtime-heavy GUI keys must batch via `AppStateV2` invalidation rather than
+  immediate listener fan-out.
+- User-edit and selection keys remain immediate; batching is reserved for hot
+  runtime keys such as queue/history/preview/runtime status and operator log.
+- Pipeline hot-surface refresh ownership belongs to `PipelineTabFrameV2`, which
+  coalesces queue/history/preview/running-panel refreshes into one flush tick.
+- Hidden or unmapped hot surfaces must defer work instead of consuming Tk time.
+
+Minimum required regression coverage for GUI responsiveness changes:
+
+- batched-vs-immediate notification tests
+- controller/UI boundary tests for log and status projection
+- hot-surface scheduler ownership/coalescing tests
+- architecture guard tests that block controller-side Tk imports and direct
+  widget mutation
 
 assemble payloads
 
@@ -496,6 +547,23 @@ Tests MUST NOT reference legacy configuration blobs or legacy job dicts in persi
 Tests covering history persistence/replay MUST exercise `HistoryMigrationEngine` (legacy → NJR) and assert `history_schema == "2.6"` with no deprecated/draft-bundle fields present in persisted snapshots. History JSONL writes must be deterministic (key ordering stable); tests SHOULD compare `json.dumps(entry, sort_keys=True)` across saves to enforce determinism.
 
 Tests MUST capture logs or use stub runners to verify whether `run_njr` vs `run(config)` was invoked.
+
+### CI Required Smoke Contract
+
+The canonical required CI smoke gate is `python tools/ci/run_required_smoke.py`.
+That script is the single source of truth for the deterministic required pytest
+subset used by `.github/workflows/ci.yml`.
+
+The canonical typed seam gate is `python tools/ci/run_mypy_smoke.py`. That
+script is the single source of truth for the bounded mypy whitelist that covers
+the stabilized architecture seams introduced by the controller ports,
+application kernel/bootstrap, replay contract, and workflow-governance layers.
+
+Do not duplicate the required-smoke pytest ignore list in docs, issue
+templates, or secondary scripts. If the required gate changes, update the
+script and the small set of docs that point to it in the same PR.
+Do not duplicate the mypy target whitelist in secondary scripts; update
+`tools/ci/run_mypy_smoke.py` and the linked docs in the same PR.
 
 ### Replay Testing (CORE1-D3)
 

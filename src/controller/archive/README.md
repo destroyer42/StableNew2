@@ -1,26 +1,19 @@
 # Controller Archive
 
-This directory contains legacy controller modules archived during PR-CORE1-12.
+This directory no longer contains importable Python modules.
 
 ## PR-CORE1-12: PipelineConfig Runtime Removal
 
 **Date:** 2025
 **Reason:** Enforcement of NJR-only execution path (v2.6 architecture)
 
-### Archived Files:
+The old archive Python modules were relocated by `PR-ARCH-243` to:
 
-#### `pipeline_config_assembler.py`
-- **Purpose:** Built `PipelineConfig` objects from GUI state and config manager
-- **Deprecated:** PR-CORE1-B2 (NJR-only execution)
-- **Reason:** All pipeline execution now uses `NormalizedJobRecord` (NJR) + PromptPack
-- **Replacement:** `JobBuilderV2` + `ConfigMergerV2` build NJR directly from state
-- **Classes:**
-  - `GuiOverrides` - GUI state overrides for config building
-  - `PlannedJob` - Single job in multi-job plan
-  - `RunPlan` - Plan for pipeline run with multiple jobs
-  - `PipelineConfigAssembler` - Main assembler class
+- `tools.archive_reference.controller.legacy_pipeline_config_types`
+- `tools.archive_reference.controller.legacy_pipeline_config_assembler`
 
-**Status:** ARCHIVED - Do not use for new code. Reference only for understanding legacy logic.
+Those modules are reference-only and may be imported only by compat/archive test
+surfaces. Active runtime code under `src/` must not import them.
 
 ---
 
@@ -39,8 +32,7 @@ GUI → Controller → JobBuilderV2 → NJR → Queue → Runner → History →
 - Learning system integration
 
 All runtime execution MUST use NJR. `PipelineConfig` may appear only in:
-1. Internal conversion methods (transitional, to be refactored)
-2. Compatibility fixtures in archived tests
-3. This archive directory
+1. compatibility fixtures in compat/archive tests
+2. `tools.archive_reference/` as reference-only code
 
 Do not reintroduce `PipelineConfig` as an execution payload.

@@ -15,12 +15,12 @@ class TestDiagnosticsThreadDump:
     
     def test_thread_dump_files_exist_in_bundle(self):
         """Test that thread dump files are included in diagnostic bundle."""
-        from src.utils.diagnostics_bundle_v2 import build_diagnostics_bundle
+        from src.utils.diagnostics_bundle_v2 import build_crash_bundle
         
         with tempfile.TemporaryDirectory() as tmpdir:
-            bundle_path = build_diagnostics_bundle(
+            bundle_path = build_crash_bundle(
                 reason="test",
-                crash_context={"test": "data"},
+                extra_context={"test": "data"},
                 output_dir=Path(tmpdir)
             )
             
@@ -34,12 +34,12 @@ class TestDiagnosticsThreadDump:
     
     def test_thread_dump_contains_mainthread_stack(self):
         """Test that thread dump includes MainThread with stack frames."""
-        from src.utils.diagnostics_bundle_v2 import build_diagnostics_bundle
+        from src.utils.diagnostics_bundle_v2 import build_crash_bundle
         
         with tempfile.TemporaryDirectory() as tmpdir:
-            bundle_path = build_diagnostics_bundle(
+            bundle_path = build_crash_bundle(
                 reason="test",
-                crash_context={"test": "data"},
+                extra_context={"test": "data"},
                 output_dir=Path(tmpdir)
             )
             
@@ -54,12 +54,12 @@ class TestDiagnosticsThreadDump:
     
     def test_thread_dump_json_structure(self):
         """Test that thread dump JSON has correct structure."""
-        from src.utils.diagnostics_bundle_v2 import build_diagnostics_bundle
+        from src.utils.diagnostics_bundle_v2 import build_crash_bundle
         
         with tempfile.TemporaryDirectory() as tmpdir:
-            bundle_path = build_diagnostics_bundle(
+            bundle_path = build_crash_bundle(
                 reason="test",
-                crash_context={"test": "data"},
+                extra_context={"test": "data"},
                 output_dir=Path(tmpdir)
             )
             
@@ -91,13 +91,13 @@ class TestDiagnosticsThreadDump:
     
     def test_thread_dump_failure_does_not_prevent_bundle(self):
         """Test that thread dump capture failure doesn't prevent bundle creation."""
-        from src.utils.diagnostics_bundle_v2 import build_diagnostics_bundle
+        from src.utils.diagnostics_bundle_v2 import build_crash_bundle
         
         with tempfile.TemporaryDirectory() as tmpdir:
             # Even if thread dump fails, bundle should still be created
-            bundle_path = build_diagnostics_bundle(
+            bundle_path = build_crash_bundle(
                 reason="test",
-                crash_context={"test": "data"},
+                extra_context={"test": "data"},
                 output_dir=Path(tmpdir)
             )
             

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
@@ -47,22 +48,30 @@ class QueuePanelV2(ttk.Frame):
     - Clear all queued jobs
     """
 
+    SLOW_REFRESH_THRESHOLD_MS = 20.0
+
     def __init__(
         self,
         master: tk.Misc,
         *,
         controller: Any | None = None,
         app_state: Any | None = None,
+        manage_app_state_subscriptions: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=(8, 8, 8, 8), **kwargs)
         self.controller = controller
         self.app_state = app_state
+        self._manage_app_state_subscriptions = bool(manage_app_state_subscriptions)
         self._jobs: list[UnifiedJobSummary] = []
         self._is_queue_paused = False
         self._auto_run_enabled = bool(getattr(app_state, "auto_run_queue", True))
         self._running_job_id: str | None = None  # PR-GUI-F2: Track running job for highlighting
         self._summaries: list[UnifiedJobSummary] = []
+        self._last_rendered_job_rows: tuple[str, ...] = ()
+        self._last_rendered_count_text: str = "(0 jobs)"
+        self._last_rendered_queue_eta_text: str = ""
+        self._refresh_metrics: dict[str, dict[str, float | int]] = {}
 
         # Title row
         title_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -119,6 +128,7 @@ class QueuePanelV2(ttk.Frame):
                     "Reorder, Remove, and Clear All change queue order or membership before execution, so use them before a job starts running.",
                 ),
             ),
+            app_state=self.app_state,
         )
         self.queue_action_help_panel.pack(fill="x", pady=(0, 4))
         attach_tooltip(
@@ -140,6 +150,12 @@ class QueuePanelV2(ttk.Frame):
             style=STATUS_LABEL_STYLE,
         )
         self.queue_status_label.pack(anchor="w", pady=(0, 2))
+        self.visibility_banner = ttk.Label(
+            self,
+            text="",
+            style=STATUS_LABEL_STYLE,
+            foreground=TOKENS.colors.status_info,
+        )
 
         # Queue ETA label (estimated total time)
         self.queue_eta_label = ttk.Label(
@@ -250,7 +266,7 @@ class QueuePanelV2(ttk.Frame):
         # PR-PIPE-003: Bind keyboard shortcuts
         self._bind_keyboard_shortcuts()
 
-        if self.app_state and hasattr(self.app_state, "subscribe"):
+        if self._manage_app_state_subscriptions and self.app_state and hasattr(self.app_state, "subscribe"):
             try:
                 self.app_state.subscribe("queue_job_summaries", self._on_queue_summaries_changed)
             except Exception:
@@ -259,7 +275,6 @@ class QueuePanelV2(ttk.Frame):
                 self.app_state.subscribe("running_job_summary", self._on_running_summary_changed)
             except Exception:
                 pass
-            # PR-CORE-D: Subscribe to lifecycle events for real-time updates
             try:
                 self.app_state.subscribe("log_events", self._on_lifecycle_event)
             except Exception:
@@ -268,8 +283,16 @@ class QueuePanelV2(ttk.Frame):
                 self.app_state.subscribe("queue_jobs", self._on_queue_jobs_changed)
             except Exception:
                 pass
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
             self._on_queue_summaries_changed()
             self._on_running_summary_changed()
+            self._on_content_visibility_mode_changed()
 
     def _dispatch_to_ui(self, fn: Callable[[], None]) -> bool:
         """Ensure widget mutations occur on the Tk main thread."""
@@ -677,6 +700,7 @@ class QueuePanelV2(ttk.Frame):
         """
         if self._dispatch_to_ui(lambda: self.update_jobs(jobs)):
             return
+        start = time.perf_counter()
         # Remember selection
         old_selection = self._get_selected_index()
         old_job_id = (
@@ -686,13 +710,13 @@ class QueuePanelV2(ttk.Frame):
         )
 
         self._jobs = list(jobs)
-        self.job_listbox.delete(0, tk.END)
 
         # PR-PIPE-002: Get stats service for per-job ETA
         stats_service = None
         if self.controller:
             stats_service = getattr(self.controller, "duration_stats_service", None)
 
+        rendered_rows: list[str] = []
         for i, job in enumerate(self._jobs):
             # PR-GUI-F2: Add 1-based order number prefix
             order_num = i + 1
@@ -719,22 +743,39 @@ class QueuePanelV2(ttk.Frame):
             else:
                 display_text = f"#{order_num}  {base_summary}{eta_str}"
 
-            self.job_listbox.insert(tk.END, display_text)
+            rendered_rows.append(display_text)
 
-        # Update count label
         count = len(self._jobs)
-        self.count_label.configure(text=f"({count} job{'s' if count != 1 else ''})")
+        count_text = f"({count} job{'s' if count != 1 else ''})"
 
-        # PR-PIPE-002: Update ETA label using duration stats
+        queue_eta_text = ""
         if count > 0:
             total_seconds, confidence = self._compute_queue_eta()
-            eta_text = self._format_queue_eta(total_seconds)
+            queue_eta_text = self._format_queue_eta(total_seconds)
             # Add confidence indicator
             if confidence:
-                eta_text = f"{eta_text} {confidence}"
-            self.queue_eta_label.configure(text=eta_text)
-        else:
-            self.queue_eta_label.configure(text="")
+                queue_eta_text = f"{queue_eta_text} {confidence}"
+
+        rendered_signature = tuple(rendered_rows)
+        if (
+            rendered_signature == self._last_rendered_job_rows
+            and count_text == self._last_rendered_count_text
+            and queue_eta_text == self._last_rendered_queue_eta_text
+        ):
+            self._update_button_states()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("update_jobs", elapsed_ms)
+            return
+
+        self.job_listbox.delete(0, tk.END)
+        for display_text in rendered_rows:
+            self.job_listbox.insert(tk.END, display_text)
+
+        self.count_label.configure(text=count_text)
+        self.queue_eta_label.configure(text=queue_eta_text)
+        self._last_rendered_job_rows = rendered_signature
+        self._last_rendered_count_text = count_text
+        self._last_rendered_queue_eta_text = queue_eta_text
 
         # Restore selection if possible
         if old_job_id:
@@ -749,6 +790,8 @@ class QueuePanelV2(ttk.Frame):
                     self._select_index(new_idx)
 
         self._update_button_states()
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("update_jobs", elapsed_ms)
 
     def set_normalized_jobs(self, jobs: list[NormalizedJobRecord]) -> None:
         """Update the job list from NormalizedJobRecord objects.
@@ -769,9 +812,12 @@ class QueuePanelV2(ttk.Frame):
 
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Update panel from app state."""
+        start = time.perf_counter()
         if app_state is None:
             app_state = self.app_state
         if app_state is None:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("update_from_app_state", elapsed_ms)
             return
 
         # Get queue items from app state
@@ -796,6 +842,43 @@ class QueuePanelV2(ttk.Frame):
 
         # Update status label
         self._update_queue_status_display(is_paused, running_job, queue_count)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("update_from_app_state", elapsed_ms)
+
+    def _record_refresh_metric(self, name: str, elapsed_ms: float) -> None:
+        metrics = self._refresh_metrics.setdefault(
+            name,
+            {
+                "count": 0,
+                "total_ms": 0.0,
+                "max_ms": 0.0,
+                "last_ms": 0.0,
+                "slow_count": 0,
+            },
+        )
+        metrics["count"] = int(metrics["count"]) + 1
+        metrics["total_ms"] = float(metrics["total_ms"]) + float(elapsed_ms)
+        metrics["last_ms"] = float(elapsed_ms)
+        metrics["max_ms"] = max(float(metrics["max_ms"]), float(elapsed_ms))
+        if elapsed_ms >= float(self.SLOW_REFRESH_THRESHOLD_MS):
+            metrics["slow_count"] = int(metrics["slow_count"]) + 1
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        refresh_metrics: dict[str, dict[str, float | int]] = {}
+        for name, metrics in sorted(self._refresh_metrics.items()):
+            count = int(metrics.get("count", 0) or 0)
+            total_ms = float(metrics.get("total_ms", 0.0) or 0.0)
+            refresh_metrics[name] = {
+                "count": count,
+                "avg_ms": round(total_ms / count, 3) if count else 0.0,
+                "max_ms": round(float(metrics.get("max_ms", 0.0) or 0.0), 3),
+                "last_ms": round(float(metrics.get("last_ms", 0.0) or 0.0), 3),
+                "slow_count": int(metrics.get("slow_count", 0) or 0),
+            }
+        return {
+            "slow_threshold_ms": float(self.SLOW_REFRESH_THRESHOLD_MS),
+            "refresh_metrics": refresh_metrics,
+        }
 
     # ------------------------------------------------------------------
     # Queue control callbacks (PR-GUI-F1: moved from PipelineRunControlsV2)
@@ -1005,6 +1088,12 @@ class QueuePanelV2(ttk.Frame):
         if running_job:
             self._running_job_id = getattr(running_job, "job_id", None)
             self._refresh_display()
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self.visibility_banner.configure(text="")
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()
 
     @staticmethod
     def _format_queue_item_with_pack_metadata(summary: UnifiedJobSummary) -> str:

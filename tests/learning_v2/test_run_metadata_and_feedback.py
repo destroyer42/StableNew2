@@ -17,6 +17,7 @@ def test_run_metadata_and_feedback_files(tmp_path: Path) -> None:
         one_click_action="none",
         stage_outputs=[{"stage": "txt2img", "path": "a/b.png"}],
         base_dir=base_dir,
+        async_write=False,
     )
     assert meta_path.exists()
     payload = json.loads(meta_path.read_text(encoding="utf-8"))

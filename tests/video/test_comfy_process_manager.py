@@ -94,3 +94,20 @@ def test_build_default_comfy_process_config_reads_settings(tmp_path: Path) -> No
     assert config.command == ["python", "main.py"]
     assert config.autostart_enabled is True
     assert config.startup_timeout_seconds == 45.0
+
+
+def test_build_default_comfy_process_config_autostarts_when_command_configured(tmp_path: Path) -> None:
+    manager = ConfigManager(presets_dir=tmp_path / "presets")
+    manager.save_settings(
+        {
+            "comfy_base_url": "http://127.0.0.1:9000",
+            "comfy_workdir": str(tmp_path / "ComfyUI"),
+            "comfy_command": ["python", "main.py"],
+            "comfy_health_total_timeout_seconds": 45.0,
+        }
+    )
+
+    config = build_default_comfy_process_config(manager)
+
+    assert config is not None
+    assert config.autostart_enabled is True

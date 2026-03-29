@@ -32,6 +32,14 @@ def _fake_packs_dir(tmp_path: Path) -> Path:
 
 
 def _get_log_text(controller: AppController) -> str:
+    app_state = getattr(controller, "app_state", None)
+    flush_now = getattr(app_state, "flush_now", None)
+    if callable(flush_now):
+        flush_now()
+    try:
+        controller.main_window.root.update()
+    except Exception:
+        pass
     return controller.main_window.bottom_zone.log_text.get("1.0", "end")
 
 

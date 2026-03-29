@@ -1,5 +1,6 @@
 """Test variant numbering for matrix-expanded prompt packs."""
 
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -63,6 +64,7 @@ class TestVariantNumbering:
         mock_load_metadata,
         mock_config_manager,
         mock_job_builder,
+        tmp_path,
     ):
         """Test that matrix combinations get sequential variant indices v01, v02, v03, etc."""
         
@@ -70,10 +72,11 @@ class TestVariantNumbering:
         mock_load_metadata.return_value = {
             "pack_data": {
                 "matrix": {
+                    "enabled": True,
                     "mode": "sequential",
-                    "slots": {
-                        "job": ["wizard", "knight", "archer"],
-                    }
+                    "slots": [
+                        {"name": "job", "values": ["wizard", "knight", "archer"]},
+                    ],
                 }
             }
         }
@@ -92,20 +95,23 @@ class TestVariantNumbering:
         builder = PromptPackNormalizedJobBuilder(
             config_manager=mock_config_manager,
             job_builder=mock_job_builder,
-            packs_dir="packs",
+            packs_dir=tmp_path,
         )
+        pack_path = tmp_path / "test_pack.txt"
+        pack_path.write_text("A {job} character", encoding="utf-8")
         
         # Create single pack entry
         entry = PackJobEntry(
             pack_id="test_pack",
             pack_name="Test Pack",
+            config_snapshot={},
             pack_row_index=0,
             prompt_text="A {job} character",
             negative_prompt_text="bad quality",
         )
         
         # Execute
-        with patch.object(builder, "_resolve_pack_text_path", return_value="packs/test_pack.txt"):
+        with patch.object(builder, "_resolve_pack_text_path", return_value=pack_path):
             jobs = builder.build_jobs([entry])
         
         # Verify: Should have 3 jobs (one per matrix combination)
@@ -132,6 +138,7 @@ class TestVariantNumbering:
         mock_load_metadata,
         mock_config_manager,
         mock_job_builder,
+        tmp_path,
     ):
         """Test that non-matrix packs preserve original variant numbering."""
         
@@ -152,19 +159,22 @@ class TestVariantNumbering:
         builder = PromptPackNormalizedJobBuilder(
             config_manager=mock_config_manager,
             job_builder=mock_job_builder,
-            packs_dir="packs",
+            packs_dir=tmp_path,
         )
+        pack_path = tmp_path / "test_pack.txt"
+        pack_path.write_text("A wizard character", encoding="utf-8")
         
         entry = PackJobEntry(
             pack_id="test_pack",
             pack_name="Test Pack",
+            config_snapshot={},
             pack_row_index=0,
             prompt_text="A wizard character",
             negative_prompt_text="bad quality",
         )
         
         # Execute
-        with patch.object(builder, "_resolve_pack_text_path", return_value="packs/test_pack.txt"):
+        with patch.object(builder, "_resolve_pack_text_path", return_value=pack_path):
             jobs = builder.build_jobs([entry])
         
         # Verify: Should have 1 job (no matrix expansion)

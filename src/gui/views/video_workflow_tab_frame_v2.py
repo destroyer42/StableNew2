@@ -5,14 +5,19 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, cast
 
+from src.gui.layout_v2 import configure_grid_columns
+from src.gui.help_text.workflow_guidance_v2 import build_video_workflow_guidance
+from src.gui.help_text.stage_setting_help_v2 import VIDEO_WORKFLOW_SETTING_HELP
+from src.gui.theme_v2 import style_text_widget
 from src.gui.tooltip import attach_tooltip
-from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.state.output_routing import (
     OUTPUT_ROUTE_MOVIE_CLIPS,
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_TESTING,
 )
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
+from src.gui.view_contracts.pipeline_layout_contract import build_form_column_specs
 from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
@@ -44,6 +49,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._workflow_map: dict[str, dict[str, Any]] = {}
         self._last_folder = ""
         self._source_bundle: dict[str, Any] | None = None
+        self._setting_tooltips: dict[str, Any] = {}
+        self._pending_visibility_refresh = False
 
         defaults = self._load_defaults()
         self.workflow_var = tk.StringVar(value=str(defaults.get("workflow_id") or ""))
@@ -55,6 +62,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.status_var = tk.StringVar(value="Ready to queue a workflow-driven video job.")
         self.workflow_detail_var = tk.StringVar(value="No workflow selected.")
         self.source_summary_var = tk.StringVar(value="Source: none selected")
+        self.effective_settings_var = tk.StringVar(value="Effective settings: defaults loaded")
+        self._defaults = dict(defaults)
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=0)
@@ -64,14 +73,24 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.overview_panel = TabOverviewPanel(
             self,
             content=get_tab_overview_content("video_workflow"),
+            app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
 
         self._build_header()
         self._build_body()
+        self.bind("<Map>", self._on_map, add="+")
         self._refresh_workflow_choices()
         self._set_text_value(self.prompt_text, str(defaults.get("prompt") or ""))
         self._set_text_value(self.negative_prompt_text, str(defaults.get("negative_prompt") or ""))
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
         for variable in (
             self.workflow_var,
             self.source_image_var,
@@ -81,6 +100,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         ):
             variable.trace_add("write", lambda *_args: self._refresh_workspace_summary())
         self._refresh_workspace_summary()
+        self.on_content_visibility_mode_changed()
 
     def _load_defaults(self) -> dict[str, Any]:
         controller = getattr(self, "app_controller", None)
@@ -130,15 +150,30 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         ttk.Label(header, textvariable=self.status_var, style="Dark.TLabel").grid(
             row=1, column=0, columnspan=4, sticky="w", pady=(6, 0)
         )
+        self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
         ttk.Label(header, textvariable=self.source_summary_var, style="Muted.TLabel").grid(
             row=2, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        )
+        ttk.Label(header, textvariable=self.effective_settings_var, style="Muted.TLabel").grid(
+            row=3, column=0, columnspan=4, sticky="w", pady=(2, 0)
         )
 
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame", padding=8)
         body.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
-        body.columnconfigure(1, weight=1)
-        body.columnconfigure(3, weight=1)
+        configure_grid_columns(
+            body,
+            build_form_column_specs(
+                label_columns=(0,),
+                primary_columns=(1,),
+                secondary_columns=(2, 3),
+                secondary_min_width=140,
+                secondary_weight=1,
+            ),
+        )
+        body.rowconfigure(6, weight=1)
+        body.rowconfigure(7, weight=1)
+        self._body_frame = body
 
         self.workflow_combo: ttk.Combobox = cast(
             ttk.Combobox,
@@ -148,12 +183,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             "Workflow",
             combo=True,
             variable=self.workflow_var,
+            help_key="workflow",
             ),
         )
         ttk.Label(body, textvariable=self.workflow_detail_var, style="Muted.TLabel", wraplength=640, justify="left").grid(
             row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6)
         )
-        self._add_labeled_entry(body, 1, "End Anchor", variable=self.end_anchor_var)
+        self._add_labeled_entry(
+            body,
+            1,
+            "End Anchor",
+            variable=self.end_anchor_var,
+            help_key="end_anchor",
+        )
         ttk.Button(body, text="Browse...", style="Dark.TButton", command=self._on_browse_end_anchor).grid(
             row=1, column=2, sticky="ew", padx=(6, 0)
         )
@@ -165,6 +207,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             variable=self.mid_anchors_var,
             width=60,
             helper="Optional, separated by ';'",
+            help_key="mid_anchors",
         )
         ttk.Button(body, text="Browse...", style="Dark.TButton", command=self._on_browse_mid_anchors).grid(
             row=2, column=2, sticky="ew", padx=(6, 0)
@@ -177,6 +220,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             combo=True,
             variable=self.motion_profile_var,
             values=_MOTION_PROFILES,
+            help_key="motion",
         )
         self._add_labeled_entry(
             body,
@@ -185,48 +229,47 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             combo=True,
             variable=self.output_route_var,
             values=_OUTPUT_ROUTES,
+            help_key="output_route",
         )
         self.workflow_help_panel = ActionExplainerPanel(
             body,
-            content=ActionExplainerContent(
-                title="When To Use Video Workflow",
-                summary="Choose Video Workflow when a named workflow and optional anchors should drive the motion plan. Use SVD for a quick single-image animation, and use Movie Clips when you already have a set of frames or outputs to assemble into a clip.",
-                bullets=(
-                    "Workflow picks the authored generation recipe and capability limits for this job.",
-                    "End Anchor and Mid Anchors are for workflows that need guide images across the sequence; leave them empty when the selected workflow does not require them.",
-                    "Motion changes the intended movement profile, not the workflow identity itself.",
-                    "Output Route decides whether the resulting artifacts should be easier to pick up in reprocess-oriented areas or in clip-assembly flows.",
-                ),
-            ),
+            content=build_video_workflow_guidance(),
+            app_state=self.app_state,
             wraplength=900,
         )
         self.workflow_help_panel.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(8, 6))
 
-        ttk.Label(body, text="Prompt", style="Dark.TLabel").grid(
-            row=6, column=0, sticky="nw", padx=(0, 8), pady=(8, 6)
-        )
+        prompt_label = ttk.Label(body, text="Prompt", style="Dark.TLabel")
+        prompt_label.grid(row=6, column=0, sticky="nw", padx=(0, 8), pady=(8, 6))
         self.prompt_text = tk.Text(
             body,
             height=5,
             wrap="word",
-            bg="#232323",
-            fg="#f2f2f2",
-            insertbackground="#f2f2f2",
         )
+        style_text_widget(self.prompt_text, elevated=True)
         self.prompt_text.grid(row=6, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
-
-        ttk.Label(body, text="Negative", style="Dark.TLabel").grid(
-            row=7, column=0, sticky="nw", padx=(0, 8), pady=(0, 6)
+        self._attach_setting_help(
+            "prompt",
+            VIDEO_WORKFLOW_SETTING_HELP["prompt"],
+            prompt_label,
+            self.prompt_text,
         )
+
+        negative_label = ttk.Label(body, text="Negative", style="Dark.TLabel")
+        negative_label.grid(row=7, column=0, sticky="nw", padx=(0, 8), pady=(0, 6))
         self.negative_prompt_text = tk.Text(
             body,
             height=4,
             wrap="word",
-            bg="#232323",
-            fg="#f2f2f2",
-            insertbackground="#f2f2f2",
         )
+        style_text_widget(self.negative_prompt_text, elevated=True)
         self.negative_prompt_text.grid(row=7, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
+        self._attach_setting_help(
+            "negative",
+            VIDEO_WORKFLOW_SETTING_HELP["negative"],
+            negative_label,
+            self.negative_prompt_text,
+        )
 
         submit_frame = ttk.Frame(body, style="Panel.TFrame")
         submit_frame.grid(row=8, column=0, columnspan=4, sticky="ew", pady=(10, 0))
@@ -253,10 +296,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         values: tuple[str, ...] | list[str] = (),
         width: int = 40,
         helper: str = "",
+        help_key: str | None = None,
     ) -> ttk.Combobox | ttk.Entry:
-        ttk.Label(parent, text=label, style="Dark.TLabel").grid(
-            row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
-        )
+        label_widget = ttk.Label(parent, text=label, style="Dark.TLabel")
+        label_widget.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
         widget: ttk.Combobox | ttk.Entry
         if combo:
             widget = ttk.Combobox(
@@ -270,11 +313,22 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         else:
             widget = ttk.Entry(parent, textvariable=variable, style="Dark.TEntry", width=width)
         widget.grid(row=row, column=1, sticky="ew", pady=(0, 6))
+        if help_key:
+            self._attach_setting_help(help_key, VIDEO_WORKFLOW_SETTING_HELP[help_key], label_widget, widget)
         if helper:
             ttk.Label(parent, text=helper, style="Muted.TLabel").grid(
                 row=row, column=3, sticky="w", padx=(8, 0), pady=(0, 6)
             )
         return widget
+
+    def _attach_setting_help(self, key: str, text: str, *widgets: tk.Widget | None) -> None:
+        live_widgets = [widget for widget in widgets if widget is not None]
+        if not live_widgets:
+            return
+        primary = live_widgets[0]
+        self._setting_tooltips[key] = attach_tooltip(primary, text)
+        for widget in live_widgets[1:]:
+            attach_tooltip(widget, text)
 
     def _refresh_workflow_choices(self) -> None:
         controller = getattr(self, "app_controller", None)
@@ -377,10 +431,47 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.source_summary_var.set(f"{summary.headline} | {detail}")
         else:
             self.source_summary_var.set(summary.headline or summary.empty_state)
+        workflow_value = self.workflow_var.get().strip() or "none"
+        workflow_source = (
+            "default"
+            if workflow_value == str(self._defaults.get("workflow_id") or "").strip()
+            else "selected here"
+        )
+        motion_value = self.motion_profile_var.get().strip() or "gentle"
+        motion_source = (
+            "default"
+            if motion_value == str(self._defaults.get("motion_profile") or "gentle").strip()
+            else "selected here"
+        )
+        output_value = self.output_route_var.get().strip() or OUTPUT_ROUTE_REPROCESS
+        output_source = (
+            "default"
+            if output_value == str(self._defaults.get("output_route") or OUTPUT_ROUTE_REPROCESS).strip()
+            else "selected here"
+        )
+        anchor_state = "explicit anchors" if (self.end_anchor_var.get().strip() or self.mid_anchors_var.get().strip()) else "source-only"
+        self.effective_settings_var.set(
+            f"Effective settings: workflow={workflow_value} [{workflow_source}] | motion={motion_value} [{motion_source}] | output={output_value} [{output_source}] | anchor plan={anchor_state}"
+        )
 
     def _set_text_value(self, widget: tk.Text, value: str) -> None:
         widget.delete("1.0", "end")
         widget.insert("1.0", value)
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._pending_visibility_refresh = False
+        self.visibility_banner.configure(text="")
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            return
+        self.on_content_visibility_mode_changed()
+
+    def _on_map(self, _event=None) -> None:
+        if not self._pending_visibility_refresh:
+            return
+        self.after_idle(self.on_content_visibility_mode_changed)
 
     def _on_browse_source(self) -> None:
         path = filedialog.askopenfilename(

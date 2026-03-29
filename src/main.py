@@ -269,6 +269,9 @@ def _load_webui_config() -> dict[str, Any]:
                 proc_config.startup_timeout_seconds = float(timeout_override)
             except Exception:
                 pass
+        cfg["webui_base_url"] = str(
+            proc_config.base_url or cfg.get("webui_base_url") or "http://127.0.0.1:7860"
+        )
         cfg["process_config"] = proc_config
     return cfg
 
@@ -295,6 +298,9 @@ def _load_comfy_config() -> dict[str, Any]:
                 proc_config.startup_timeout_seconds = float(timeout_override)
             except Exception:
                 pass
+        cfg["comfy_base_url"] = str(
+            proc_config.base_url or cfg.get("comfy_base_url") or "http://127.0.0.1:8188"
+        )
         cfg["process_config"] = proc_config
     return cfg
 

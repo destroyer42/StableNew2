@@ -17,8 +17,8 @@ import pytest
 
 from src.app_factory import build_v2_app
 from src.controller.app_controller import AppController
+from src.controller.runtime_state import PipelineState
 from src.gui.models.prompt_pack_model import PromptPackModel
-from src.gui.state import PipelineState
 from tests.journeys.journey_helpers_v2 import (
     get_stage_plan_for_job,
     start_run_and_wait,

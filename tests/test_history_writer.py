@@ -1,77 +1,62 @@
-"""Quick test of JobHistoryStore background writer."""
-import time
-from pathlib import Path
-import tempfile
-import sys
+"""Regression coverage for JobHistoryStore append/load behavior."""
 
-# Add project to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-from src.history.job_history_store import JobHistoryStore
 from src.history.history_record import HistoryRecord
+from src.history.job_history_store import JobHistoryStore
 
-def test_background_writer():
-    """Test that background writer works correctly."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        store_path = Path(tmpdir) / "test_history.jsonl"
-        
-        print("Creating JobHistoryStore...")
-        store = JobHistoryStore(store_path)
-        
-        # Verify writer thread is running
-        writer_thread = getattr(store, "_writer_thread", None)
-        if not writer_thread:
-            print("❌ Writer thread not created")
-            return False
-        
-        if not writer_thread.is_alive():
-            print("❌ Writer thread not alive")
-            return False
-        
-        print(f"✅ Writer thread running: {writer_thread.name}")
-        
-        # Append some records
-        print("Appending 10 test records...")
-        for i in range(10):
-            record = HistoryRecord(
-                id=f"test-job-{i}",
-                timestamp=time.time(),
-                status="completed"
-            )
-            store.append(record)
-        
-        # Give writer time to process
-        print("Waiting for writer to process...")
-        time.sleep(1.0)
-        
-        # Read back records
-        print("Reading records...")
-        records = store.list_jobs()
-        print(f"✅ Found {len(records)} records")
-        
-        if len(records) != 10:
-            print(f"❌ Expected 10 records, got {len(records)}")
-            return False
-        
-        # Test shutdown
-        print("Shutting down writer thread...")
-        store.shutdown()
-        
-        if writer_thread.is_alive():
-            print("❌ Writer thread did not terminate")
-            return False
-        
-        print("✅ Writer thread terminated cleanly")
-        
-        # Verify write queue is empty
-        write_queue = getattr(store, "_write_queue", None)
-        if write_queue and not write_queue.empty():
-            print("❌ Write queue not empty after shutdown")
-            return False
-        
-        print("✅ All tests passed!")
-        return True
 
-if __name__ == "__main__":
-    success = test_background_writer()
-    sys.exit(0 if success else 1)
+def _history_record(index: int) -> HistoryRecord:
+    return HistoryRecord(
+        id=f"test-job-{index}",
+        timestamp=f"2026-03-28T00:00:{index:02d}Z",
+        status="completed",
+        njr_snapshot={
+            "normalized_job": {
+                "job_id": f"test-job-{index}",
+                "path_output_dir": "out",
+                "filename_template": "{seed}",
+                "seed": index,
+                "variant_index": 0,
+                "variant_total": 1,
+                "batch_index": 0,
+                "batch_total": 1,
+                "created_ts": float(index),
+                "prompt_pack_id": "",
+                "prompt_pack_name": "",
+                "prompt_pack_row_index": 0,
+                "positive_prompt": f"prompt {index}",
+                "negative_prompt": "",
+                "steps": 25,
+                "cfg_scale": 7.0,
+                "width": 512,
+                "height": 512,
+                "sampler_name": "Euler",
+                "scheduler": "",
+                "stage_chain": [],
+                "loop_type": "pipeline",
+                "loop_count": 1,
+                "images_per_prompt": 1,
+                "variant_mode": "standard",
+                "run_mode": "QUEUE",
+                "queue_source": "ADD_TO_QUEUE",
+                "randomization_enabled": False,
+                "matrix_slot_values": {},
+                "lora_tags": [],
+                "output_paths": [],
+                "status": "completed",
+            }
+        },
+    )
+
+
+def test_append_and_load_roundtrip(tmp_path) -> None:
+    store_path = tmp_path / "test_history.jsonl"
+    store = JobHistoryStore(store_path)
+
+    for i in range(10):
+        store.append(_history_record(i))
+
+    records = store.load()
+
+    assert len(records) == 10
+    assert records[0].id == "test-job-0"
+    assert records[-1].id == "test-job-9"

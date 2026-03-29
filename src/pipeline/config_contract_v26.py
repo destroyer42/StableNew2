@@ -5,6 +5,12 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
+from src.pipeline.intent_artifact_contract import (
+    INTENT_ARTIFACT_SCHEMA_V1,
+    INTENT_ARTIFACT_VERSION_V1,
+    compute_intent_hash,
+)
+
 
 CONFIG_CONTRACT_SCHEMA_V26 = "stablenew.config.v2.6"
 
@@ -230,6 +236,9 @@ class CanonicalConfigLayers:
     execution_config: dict[str, Any] = field(default_factory=dict)
     backend_options: dict[str, Any] = field(default_factory=dict)
     schema: str = CONFIG_CONTRACT_SCHEMA_V26
+    intent_artifact_schema: str = INTENT_ARTIFACT_SCHEMA_V1
+    intent_artifact_version: str = INTENT_ARTIFACT_VERSION_V1
+    intent_hash: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -237,6 +246,9 @@ class CanonicalConfigLayers:
             "intent_config": _mapping_dict(self.intent_config),
             "execution_config": _mapping_dict(self.execution_config),
             "backend_options": _mapping_dict(self.backend_options),
+            "intent_artifact_schema": self.intent_artifact_schema,
+            "intent_artifact_version": self.intent_artifact_version,
+            "intent_hash": self.intent_hash or compute_intent_hash(self.intent_config),
         }
 
 
@@ -246,15 +258,17 @@ def build_config_layers(
     execution_config: Any = None,
     backend_options: Any = None,
 ) -> CanonicalConfigLayers:
+    normalized_intent = canonicalize_intent_config(intent_config)
     execution = extract_execution_config(execution_config)
     normalized_backend_options = canonicalize_backend_options(
         backend_options,
         execution_config=execution,
     )
     return CanonicalConfigLayers(
-        intent_config=canonicalize_intent_config(intent_config),
+        intent_config=normalized_intent,
         execution_config=execution,
         backend_options=normalized_backend_options,
+        intent_hash=compute_intent_hash(normalized_intent),
     )
 
 

@@ -90,25 +90,30 @@ class PromptPackModel:
             raw_slots = data.get("slots") or []
             matrix_data = data.get("matrix", {})
         
-        slots: list[PromptSlot] = []
+        indexed_slots: dict[int, PromptSlot] = {}
+        max_index = -1
         for idx, slot in enumerate(raw_slots):
             # Load LoRAs with backward compatibility
             loras_data = slot.get("loras", [])
             loras = [(l[0], float(l[1])) for l in loras_data if len(l) == 2]
-            
-            slots.append(
-                PromptSlot(
-                    index=int(slot.get("index", idx)),
-                    text=str(slot.get("text", "")),
-                    negative=str(slot.get("negative", "")),
-                    positive_embeddings=normalize_embedding_entries(slot.get("positive_embeddings", [])),
-                    negative_embeddings=normalize_embedding_entries(slot.get("negative_embeddings", [])),
-                    loras=loras
-                )
+
+            slot_index = int(slot.get("index", idx))
+            if slot_index < 0:
+                slot_index = idx
+            max_index = max(max_index, slot_index)
+            indexed_slots[slot_index] = PromptSlot(
+                index=slot_index,
+                text=str(slot.get("text", "")),
+                negative=str(slot.get("negative", "")),
+                positive_embeddings=normalize_embedding_entries(slot.get("positive_embeddings", [])),
+                negative_embeddings=normalize_embedding_entries(slot.get("negative_embeddings", [])),
+                loras=loras,
             )
-        # Pad to minimum slots
-        while len(slots) < min_slots:
-            slots.append(PromptSlot(index=len(slots), text="", negative=""))
+        slot_count = max(min_slots, max_index + 1, len(raw_slots))
+        slots = [
+            indexed_slots.get(index, PromptSlot(index=index, text="", negative=""))
+            for index in range(slot_count)
+        ]
         
         # Load matrix config (backward compatible)
         matrix_slots = []

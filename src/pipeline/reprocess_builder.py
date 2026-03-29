@@ -87,6 +87,11 @@ class ReprocessStageSettingsPreview:
     steps: int | None
     cfg_scale: float | None
     denoise: float | None
+    sampler_source: str | None = None
+    scheduler_source: str | None = None
+    steps_source: str | None = None
+    cfg_scale_source: str | None = None
+    denoise_source: str | None = None
 
 
 @dataclass(slots=True, frozen=True)
@@ -98,6 +103,10 @@ class ReprocessEffectiveSettingsPreview:
     positive_prompt_behavior: str
     negative_prompt_behavior: str
     stage_settings: list[ReprocessStageSettingsPreview]
+    source_baseline_label: str = "source artifact baseline"
+    metadata_source_label: str = "source artifact metadata"
+    fallback_source_label: str = "stage baseline"
+    default_source_label: str = "built-in defaults"
 
 
 class ReprocessJobBuilder:
@@ -288,6 +297,35 @@ class ReprocessJobBuilder:
         return default
 
     @staticmethod
+    def _first_present_with_source(
+        candidates: list[tuple[Any, str]],
+        *,
+        default: Any = None,
+        default_source: str,
+    ) -> tuple[Any, str]:
+        for value, source in candidates:
+            if value is None:
+                continue
+            if isinstance(value, str) and not value.strip():
+                continue
+            return value, source
+        return default, default_source
+
+    @staticmethod
+    def _source_candidates_for_key(
+        *,
+        metadata_container: dict[str, Any] | None,
+        fallback_container: dict[str, Any] | None,
+        key: str,
+        metadata_source_label: str,
+        fallback_source_label: str,
+    ) -> list[tuple[Any, str]]:
+        return [
+            ((metadata_container or {}).get(key), metadata_source_label),
+            ((fallback_container or {}).get(key), fallback_source_label),
+        ]
+
+    @staticmethod
     def _merge_nested_dicts(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
         merged = deepcopy(base)
         for key, value in (override or {}).items():
@@ -390,8 +428,14 @@ class ReprocessJobBuilder:
         prompt_delta: str,
         negative_prompt_delta: str,
         image_edit: ImageEditSpec | None = None,
+        source_baseline_label: str = "source artifact baseline",
+        metadata_source_label: str = "source artifact metadata",
+        fallback_source_label: str = "stage baseline",
+        default_source_label: str = "built-in defaults",
     ) -> ReprocessEffectiveSettingsPreview:
-        merged_config = self._merge_nested_dicts(fallback_config or {}, metadata_config or {})
+        fallback_config_dict = dict(fallback_config or {})
+        metadata_config_dict = dict(metadata_config or {})
+        merged_config = self._merge_nested_dicts(fallback_config_dict, metadata_config_dict)
         self.apply_model_vae_to_config(
             merged_config,
             model=source_model,
@@ -411,18 +455,79 @@ class ReprocessJobBuilder:
 
         stage_settings: list[ReprocessStageSettingsPreview] = []
         for stage_name in stages:
-            stage_extra = merged_config.get(stage_name, {})
-            if not isinstance(stage_extra, dict):
-                stage_extra = {}
+            metadata_stage = metadata_config_dict.get(stage_name, {})
+            if not isinstance(metadata_stage, dict):
+                metadata_stage = {}
+            fallback_stage = fallback_config_dict.get(stage_name, {})
+            if not isinstance(fallback_stage, dict):
+                fallback_stage = {}
             defaults = self.DEFAULT_STAGE_VALUES.get(stage_name, {})
+            sampler, sampler_source = self._resolve_stage_sampler_with_source(
+                stage_name,
+                metadata_config_dict,
+                fallback_config_dict,
+                metadata_stage,
+                fallback_stage,
+                defaults,
+                metadata_source_label=metadata_source_label,
+                fallback_source_label=fallback_source_label,
+                default_source_label=default_source_label,
+            )
+            scheduler, scheduler_source = self._resolve_stage_scheduler_with_source(
+                stage_name,
+                metadata_config_dict,
+                fallback_config_dict,
+                metadata_stage,
+                fallback_stage,
+                metadata_source_label=metadata_source_label,
+                fallback_source_label=fallback_source_label,
+            )
+            steps, steps_source = self._resolve_stage_steps_with_source(
+                stage_name,
+                metadata_config_dict,
+                fallback_config_dict,
+                metadata_stage,
+                fallback_stage,
+                defaults,
+                metadata_source_label=metadata_source_label,
+                fallback_source_label=fallback_source_label,
+                default_source_label=default_source_label,
+            )
+            cfg_scale, cfg_scale_source = self._resolve_stage_cfg_scale_with_source(
+                stage_name,
+                metadata_config_dict,
+                fallback_config_dict,
+                metadata_stage,
+                fallback_stage,
+                defaults,
+                metadata_source_label=metadata_source_label,
+                fallback_source_label=fallback_source_label,
+                default_source_label=default_source_label,
+            )
+            denoise, denoise_source = self._resolve_stage_denoise_with_source(
+                stage_name,
+                metadata_config_dict,
+                fallback_config_dict,
+                metadata_stage,
+                fallback_stage,
+                defaults,
+                metadata_source_label=metadata_source_label,
+                fallback_source_label=fallback_source_label,
+                default_source_label=default_source_label,
+            )
             stage_settings.append(
                 ReprocessStageSettingsPreview(
                     stage=stage_name,
-                    sampler=self._resolve_stage_sampler(stage_name, merged_config, stage_extra, defaults),
-                    scheduler=self._resolve_stage_scheduler(stage_name, merged_config, stage_extra),
-                    steps=self._resolve_stage_steps(stage_name, merged_config, stage_extra, defaults),
-                    cfg_scale=self._resolve_stage_cfg_scale(stage_name, merged_config, stage_extra, defaults),
-                    denoise=self._resolve_stage_denoise(stage_name, merged_config, stage_extra, defaults),
+                    sampler=sampler,
+                    scheduler=scheduler,
+                    steps=steps,
+                    cfg_scale=cfg_scale,
+                    denoise=denoise,
+                    sampler_source=sampler_source,
+                    scheduler_source=scheduler_source,
+                    steps_source=steps_source,
+                    cfg_scale_source=cfg_scale_source,
+                    denoise_source=denoise_source,
                 )
             )
 
@@ -434,7 +539,231 @@ class ReprocessJobBuilder:
             positive_prompt_behavior=self.describe_prompt_behavior(prompt_mode, prompt_delta),
             negative_prompt_behavior=self.describe_prompt_behavior(negative_prompt_mode, negative_prompt_delta),
             stage_settings=stage_settings,
+            source_baseline_label=source_baseline_label,
+            metadata_source_label=metadata_source_label,
+            fallback_source_label=fallback_source_label,
+            default_source_label=default_source_label,
         )
+
+    def _resolve_stage_steps_with_source(
+        self,
+        stage_name: str,
+        metadata_config: dict[str, Any],
+        fallback_config: dict[str, Any],
+        metadata_stage: dict[str, Any],
+        fallback_stage: dict[str, Any],
+        defaults: dict[str, Any],
+        *,
+        metadata_source_label: str,
+        fallback_source_label: str,
+        default_source_label: str,
+    ) -> tuple[int, str]:
+        candidates: list[tuple[Any, str]] = []
+        if stage_name == "adetailer":
+            candidate_specs = [
+                (metadata_config, fallback_config, "adetailer_steps"),
+                (metadata_stage, fallback_stage, "adetailer_steps"),
+                (metadata_stage, fallback_stage, "ad_steps"),
+                (metadata_config, fallback_config, "steps"),
+                (metadata_stage, fallback_stage, "steps"),
+            ]
+        else:
+            candidate_specs = [
+                (metadata_config, fallback_config, f"{stage_name}_steps"),
+                (metadata_stage, fallback_stage, "steps"),
+                (metadata_config, fallback_config, "steps"),
+            ]
+        for metadata_container, fallback_container, key in candidate_specs:
+            candidates.extend(
+                self._source_candidates_for_key(
+                    metadata_container=metadata_container,
+                    fallback_container=fallback_container,
+                    key=key,
+                    metadata_source_label=metadata_source_label,
+                    fallback_source_label=fallback_source_label,
+                )
+            )
+        value, source = self._first_present_with_source(
+            candidates,
+            default=defaults.get("steps", 1),
+            default_source=default_source_label,
+        )
+        return int(value), source
+
+    def _resolve_stage_cfg_scale_with_source(
+        self,
+        stage_name: str,
+        metadata_config: dict[str, Any],
+        fallback_config: dict[str, Any],
+        metadata_stage: dict[str, Any],
+        fallback_stage: dict[str, Any],
+        defaults: dict[str, Any],
+        *,
+        metadata_source_label: str,
+        fallback_source_label: str,
+        default_source_label: str,
+    ) -> tuple[float, str]:
+        candidates: list[tuple[Any, str]] = []
+        if stage_name == "adetailer":
+            candidate_specs = [
+                (metadata_config, fallback_config, "adetailer_cfg_scale"),
+                (metadata_stage, fallback_stage, "adetailer_cfg"),
+                (metadata_stage, fallback_stage, "ad_cfg_scale"),
+                (metadata_stage, fallback_stage, "cfg_scale"),
+                (metadata_config, fallback_config, "cfg_scale"),
+            ]
+        else:
+            candidate_specs = [
+                (metadata_config, fallback_config, f"{stage_name}_cfg_scale"),
+                (metadata_stage, fallback_stage, "cfg_scale"),
+                (metadata_config, fallback_config, "cfg_scale"),
+            ]
+        for metadata_container, fallback_container, key in candidate_specs:
+            candidates.extend(
+                self._source_candidates_for_key(
+                    metadata_container=metadata_container,
+                    fallback_container=fallback_container,
+                    key=key,
+                    metadata_source_label=metadata_source_label,
+                    fallback_source_label=fallback_source_label,
+                )
+            )
+        value, source = self._first_present_with_source(
+            candidates,
+            default=defaults.get("cfg_scale", 7.0),
+            default_source=default_source_label,
+        )
+        return float(value), source
+
+    def _resolve_stage_denoise_with_source(
+        self,
+        stage_name: str,
+        metadata_config: dict[str, Any],
+        fallback_config: dict[str, Any],
+        metadata_stage: dict[str, Any],
+        fallback_stage: dict[str, Any],
+        defaults: dict[str, Any],
+        *,
+        metadata_source_label: str,
+        fallback_source_label: str,
+        default_source_label: str,
+    ) -> tuple[float, str]:
+        candidates: list[tuple[Any, str]] = []
+        if stage_name == "adetailer":
+            candidate_specs = [
+                (metadata_config, fallback_config, "adetailer_denoising_strength"),
+                (metadata_stage, fallback_stage, "adetailer_denoise"),
+                (metadata_stage, fallback_stage, "ad_denoising_strength"),
+                (metadata_stage, fallback_stage, "denoising_strength"),
+                (metadata_config, fallback_config, "denoising_strength"),
+            ]
+        else:
+            candidate_specs = [
+                (metadata_config, fallback_config, f"{stage_name}_denoising_strength"),
+                (metadata_stage, fallback_stage, "denoising_strength"),
+                (metadata_config, fallback_config, "denoising_strength"),
+            ]
+        for metadata_container, fallback_container, key in candidate_specs:
+            candidates.extend(
+                self._source_candidates_for_key(
+                    metadata_container=metadata_container,
+                    fallback_container=fallback_container,
+                    key=key,
+                    metadata_source_label=metadata_source_label,
+                    fallback_source_label=fallback_source_label,
+                )
+            )
+        value, source = self._first_present_with_source(
+            candidates,
+            default=defaults.get("denoising_strength", 0.3),
+            default_source=default_source_label,
+        )
+        return float(value), source
+
+    def _resolve_stage_sampler_with_source(
+        self,
+        stage_name: str,
+        metadata_config: dict[str, Any],
+        fallback_config: dict[str, Any],
+        metadata_stage: dict[str, Any],
+        fallback_stage: dict[str, Any],
+        defaults: dict[str, Any],
+        *,
+        metadata_source_label: str,
+        fallback_source_label: str,
+        default_source_label: str,
+    ) -> tuple[str, str]:
+        candidates: list[tuple[Any, str]] = []
+        if stage_name == "adetailer":
+            candidate_specs = [
+                (metadata_config, fallback_config, "adetailer_sampler_name"),
+                (metadata_stage, fallback_stage, "adetailer_sampler"),
+                (metadata_stage, fallback_stage, "ad_sampler"),
+                (metadata_stage, fallback_stage, "sampler_name"),
+                (metadata_config, fallback_config, "sampler_name"),
+            ]
+        else:
+            candidate_specs = [
+                (metadata_config, fallback_config, f"{stage_name}_sampler_name"),
+                (metadata_stage, fallback_stage, "sampler_name"),
+                (metadata_config, fallback_config, "sampler_name"),
+            ]
+        for metadata_container, fallback_container, key in candidate_specs:
+            candidates.extend(
+                self._source_candidates_for_key(
+                    metadata_container=metadata_container,
+                    fallback_container=fallback_container,
+                    key=key,
+                    metadata_source_label=metadata_source_label,
+                    fallback_source_label=fallback_source_label,
+                )
+            )
+        value, source = self._first_present_with_source(
+            candidates,
+            default=defaults.get("sampler_name", "Euler a"),
+            default_source=default_source_label,
+        )
+        return str(value), source
+
+    def _resolve_stage_scheduler_with_source(
+        self,
+        stage_name: str,
+        metadata_config: dict[str, Any],
+        fallback_config: dict[str, Any],
+        metadata_stage: dict[str, Any],
+        fallback_stage: dict[str, Any],
+        *,
+        metadata_source_label: str,
+        fallback_source_label: str,
+    ) -> tuple[str | None, str | None]:
+        candidates: list[tuple[Any, str]] = []
+        if stage_name == "adetailer":
+            candidate_specs = [
+                (metadata_stage, fallback_stage, "scheduler"),
+                (metadata_stage, fallback_stage, "ad_scheduler"),
+                (metadata_config, fallback_config, "scheduler"),
+            ]
+        else:
+            candidate_specs = [
+                (metadata_stage, fallback_stage, "scheduler"),
+                (metadata_config, fallback_config, "scheduler"),
+            ]
+        for metadata_container, fallback_container, key in candidate_specs:
+            candidates.extend(
+                self._source_candidates_for_key(
+                    metadata_container=metadata_container,
+                    fallback_container=fallback_container,
+                    key=key,
+                    metadata_source_label=metadata_source_label,
+                    fallback_source_label=fallback_source_label,
+                )
+            )
+        value, source = self._first_present_with_source(
+            candidates,
+            default=None,
+            default_source=fallback_source_label,
+        )
+        return (str(value) if value is not None else None), (source if value is not None else None)
 
     def _resolve_stage_steps(
         self,

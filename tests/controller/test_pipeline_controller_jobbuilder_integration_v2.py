@@ -330,7 +330,7 @@ class TestDirectMode:
     """Test direct mode submission."""
 
     def test_direct_mode_sets_run_mode(self) -> None:
-        """Direct mode sets run_mode='direct' on jobs."""
+        """Direct mode requests are normalized to queue on submitted jobs."""
         # Arrange
         record = make_normalized_job()
         fake_builder = FakeJobBuilder(jobs_to_return=[record])
@@ -345,8 +345,8 @@ class TestDirectMode:
         assert result is True
         assert len(fake_service.submitted_jobs) == 1
         submitted_job, mode = fake_service.submitted_jobs[0]
-        assert mode == "direct"
-        assert submitted_job.run_mode == "direct"
+        assert mode == "queue"
+        assert submitted_job.run_mode == "queue"
 
 
 # ---------------------------------------------------------------------------

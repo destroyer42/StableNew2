@@ -8,6 +8,7 @@ from tkinter import messagebox, ttk
 from typing import Any
 
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
+from src.gui.content_visibility import normalize_content_visibility_mode
 from src.utils.config import ConfigManager
 
 
@@ -22,12 +23,15 @@ class EngineSettingsDialog(ttk.Frame):
         on_save: Callable[[dict[str, Any]], None] | None = None,
         on_cancel: Callable[[], None] | None = None,
         status_text: str | None = None,
+        content_visibility_mode: str = "nsfw",
+        on_content_visibility_mode_change: Callable[[str], None] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, **kwargs)
         self.config_manager = config_manager
         self._on_save = on_save
         self._on_cancel = on_cancel
+        self._on_content_visibility_mode_change = on_content_visibility_mode_change
 
         self._webui_base_url_var = tk.StringVar()
         self._webui_workdir_var = tk.StringVar()
@@ -38,6 +42,9 @@ class EngineSettingsDialog(ttk.Frame):
         self._webui_total_timeout_var = tk.DoubleVar()
         self._output_dir_var = tk.StringVar()
         self._model_dir_var = tk.StringVar()
+        self._content_visibility_mode_var = tk.StringVar(
+            value=normalize_content_visibility_mode(content_visibility_mode).value
+        )
         self._prompt_optimizer_vars: dict[str, tk.Variable] = {
             "enabled": tk.BooleanVar(),
             "optimize_positive": tk.BooleanVar(),
@@ -80,16 +87,19 @@ class EngineSettingsDialog(ttk.Frame):
     def _build_sections(self) -> None:
         webui_frame = ttk.LabelFrame(self, text="WebUI", padding=8)
         paths_frame = ttk.LabelFrame(self, text="Paths", padding=8)
+        visibility_frame = ttk.LabelFrame(self, text="Content Visibility", padding=8)
         health_frame = ttk.LabelFrame(self, text="Health Checks", padding=8)
         optimizer_frame = ttk.LabelFrame(self, text="Prompt Optimizer", padding=8)
 
         webui_frame.grid(row=1, column=0, sticky="ew", padx=8, pady=4)
         paths_frame.grid(row=2, column=0, sticky="ew", padx=8, pady=4)
-        health_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=4)
-        optimizer_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=4)
+        visibility_frame.grid(row=3, column=0, sticky="ew", padx=8, pady=4)
+        health_frame.grid(row=4, column=0, sticky="ew", padx=8, pady=4)
+        optimizer_frame.grid(row=5, column=0, sticky="ew", padx=8, pady=4)
 
         webui_frame.columnconfigure(1, weight=1)
         paths_frame.columnconfigure(1, weight=1)
+        visibility_frame.columnconfigure(0, weight=1)
         health_frame.columnconfigure(1, weight=1)
         optimizer_frame.columnconfigure(0, weight=1)
         optimizer_frame.columnconfigure(1, weight=1)
@@ -104,6 +114,19 @@ class EngineSettingsDialog(ttk.Frame):
 
         self._add_label_entry(paths_frame, "Output directory:", self._output_dir_var, row=0)
         self._add_label_entry(paths_frame, "Model directory:", self._model_dir_var, row=1)
+
+        ttk.Radiobutton(
+            visibility_frame,
+            text="NSFW: show all prompts and assets",
+            value="nsfw",
+            variable=self._content_visibility_mode_var,
+        ).grid(row=0, column=0, sticky="w", pady=(0, 2))
+        ttk.Radiobutton(
+            visibility_frame,
+            text="SFW: hide explicit prompts and assets",
+            value="sfw",
+            variable=self._content_visibility_mode_var,
+        ).grid(row=1, column=0, sticky="w")
 
         self._add_label_entry(
             health_frame,
@@ -168,7 +191,7 @@ class EngineSettingsDialog(ttk.Frame):
 
     def _build_actions(self) -> None:
         btn_frame = ttk.Frame(self)
-        btn_frame.grid(row=5, column=0, sticky="ew", padx=8, pady=(8, 8))
+        btn_frame.grid(row=6, column=0, sticky="ew", padx=8, pady=(8, 8))
         btn_frame.columnconfigure((0, 1, 2), weight=1)
 
         restore_btn = ttk.Button(btn_frame, text="Restore Defaults", command=self.restore_defaults)
@@ -278,6 +301,13 @@ class EngineSettingsDialog(ttk.Frame):
         if callable(self._on_save):
             try:
                 self._on_save(values)
+            except Exception:
+                pass
+        if callable(self._on_content_visibility_mode_change):
+            try:
+                self._on_content_visibility_mode_change(
+                    normalize_content_visibility_mode(self._content_visibility_mode_var.get()).value
+                )
             except Exception:
                 pass
         self.master.destroy()

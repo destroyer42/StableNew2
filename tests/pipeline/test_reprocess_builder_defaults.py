@@ -196,7 +196,12 @@ def test_reprocess_builder_effective_settings_preview_uses_merged_stage_values()
     stage = preview.stage_settings[0]
     assert stage.stage == "img2img"
     assert stage.steps == 28
+    assert stage.steps_source == "source artifact metadata"
     assert stage.cfg_scale == 6.5
+    assert stage.cfg_scale_source == "stage baseline"
     assert stage.sampler == "DPM++ 2M Karras"
+    assert stage.sampler_source == "stage baseline"
     assert stage.scheduler == "Karras"
+    assert stage.scheduler_source == "stage baseline"
     assert stage.denoise == 0.2
+    assert stage.denoise_source == "source artifact metadata"

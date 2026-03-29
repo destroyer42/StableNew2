@@ -83,6 +83,8 @@ def test_video_workflow_tab_handoff_and_state_roundtrip(tk_root) -> None:
     assert restored["negative_prompt"] == "new negative"
     assert "End anchor" in tab.source_summary_var.get()
     assert "LTX Multi-Frame Anchor v1" in tab.workflow_detail_var.get()
+    assert "Effective settings:" in tab.effective_settings_var.get()
+    assert "motion=dynamic [selected here]" in tab.effective_settings_var.get()
 
 
 # ---------------------------------------------------------------------------
@@ -139,3 +141,4 @@ def test_video_workflow_tab_set_source_bundle_empty_bundle_no_crash(tk_root) -> 
     tab = VideoWorkflowTabFrameV2(tk_root, app_controller=controller)
     tab.set_source_bundle({})  # should not raise
     assert tab.source_summary_var.get()
+    assert "Effective settings:" in tab.effective_settings_var.get()

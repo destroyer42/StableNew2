@@ -7,7 +7,7 @@ import json
 
 logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 
-def test_global_prompt_integration():
+def test_global_prompt_integration(tmp_path: Path):
     """Test that global prompt checkboxes correctly control prompt application in executor."""
     
     print("\n" + "="*80)
@@ -54,7 +54,37 @@ def test_global_prompt_integration():
         "info": json.dumps({"seed": 12345, "prompt": "test"})
     }
     
-    executor = Pipeline(api_client=mock_api)
+    executor = Pipeline(mock_api, MagicMock())
+    executor._apply_webui_defaults_once = MagicMock()
+    executor._ensure_model_and_vae = MagicMock()
+    executor._ensure_hypernetwork = MagicMock()
+    executor._run_prompt_optimizer = MagicMock(
+        return_value=(
+            MagicMock(
+                positive=MagicMock(optimized_prompt="a beautiful cat"),
+                negative=MagicMock(optimized_prompt="blurry"),
+            ),
+            MagicMock(log_before_after=False, log_bucket_assignments=False),
+            MagicMock(
+                context=MagicMock(warnings=[], source=MagicMock(to_dict=lambda: {})),
+                intent=MagicMock(to_dict=lambda: {}),
+                recommendations=[],
+                stage="txt2img",
+                mode="disabled",
+                stage_policy=None,
+                warnings=[],
+                errors=[],
+                to_dict=lambda: {},
+            ),
+        )
+    )
+    executor._apply_prompt_stage_policy = MagicMock(
+        side_effect=lambda **kwargs: (kwargs["current_config"], kwargs["prompt_optimizer_analysis"])
+    )
+    executor._generate_images_with_progress = MagicMock(
+        return_value={"images": ["base64image"], "info": json.dumps({"seed": 12345, "prompt": "test"})}
+    )
+    executor._extract_generation_info = MagicMock(return_value={"seed": 12345})
     
     # Mock the merge methods to track if they're called with apply=True
     original_merge_positive = executor._merge_stage_positive
@@ -95,7 +125,17 @@ def test_global_prompt_integration():
     # Run txt2img stage
     print("\n🔧 Executor processing txt2img stage...")
     try:
-        executor.run_txt2img_stage(txt2img_stage_config, seed=12345)
+        with (
+            patch("src.pipeline.executor.save_image_from_base64", return_value=tmp_path / "image.png"),
+            patch.object(executor, "_build_image_metadata_builder", return_value=None),
+        ):
+            executor.run_txt2img_stage(
+                "a beautiful cat",
+                "blurry",
+                txt2img_stage_config,
+                tmp_path,
+                "image",
+            )
         
         # Verify the apply flags were passed correctly
         assert len(positive_calls) > 0, "Positive merge should have been called"

@@ -19,10 +19,10 @@ def test_on_add_to_queue_runs_async():
     # Wait a bit for background thread to potentially complete
     time.sleep(0.5)
     
-    print(f"✓ on_add_to_queue returned in {elapsed*1000:.1f}ms (non-blocking)")
-    print("✓ Background thread dispatched successfully")
+    print(f"[OK] on_add_to_queue returned in {elapsed*1000:.1f}ms (non-blocking)")
+    print("[OK] Background thread dispatched successfully")
 
 
 if __name__ == "__main__":
     test_on_add_to_queue_runs_async()
-    print("\n✅ All tests passed - GUI freeze fix verified!")
+    print("\n[OK] All tests passed - GUI freeze fix verified!")

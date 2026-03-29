@@ -2,7 +2,7 @@
 # Active Test Surface for StableNew v2.6
 
 Status: Authoritative
-Updated: 2026-03-19
+Updated: 2026-03-29
 
 ---
 
@@ -59,13 +59,18 @@ The CI policy is intentionally tiered:
 
 | Surface | Coverage |
 |---|---|
-| Required canonical gate | fast deterministic canonical runtime tests |
+| Required canonical gate | `python tools/ci/run_required_smoke.py` |
+| Required typed seam gate | `python tools/ci/run_mypy_smoke.py` |
 | Optional/full-suite CI | `tests/gui_v2/`, `tests/integration/`, `tests/journey/`, `tests/journeys/`, and the broader suite under a GUI-capable environment |
 | Compat gate | `tests/compat/` and explicitly marked migration or legacy-compat checks |
 
 Canonical gates should prefer current queue-first, NJR-first runtime truth.
 Compat coverage exists to constrain temporary migration behavior and must shrink
 over time.
+The required smoke contract is the exact pytest subset encoded in
+`tools/ci/run_required_smoke.py`; CI and docs must point to that script rather
+than duplicating the ignore list ad hoc. The typed architecture seam contract is
+the exact target list encoded in `tools/ci/run_mypy_smoke.py`.
 
 ---
 
@@ -111,4 +116,4 @@ over time.
 ---
 
 Document Status: CANONICAL
-Last Updated: 2026-03-19
+Last Updated: 2026-03-29

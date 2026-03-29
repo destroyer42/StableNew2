@@ -85,7 +85,7 @@ class TestNJRPreferredExecution:
 
         result = mock_app_controller._execute_job(job)
 
-        assert result["success"] is None
+        assert result["success"] is False
         assert "NJR execution failed" in result["error"]
         assert result["metadata"]["execution_path"] == "njr"
         assert result["metadata"]["job_id"] == job.job_id

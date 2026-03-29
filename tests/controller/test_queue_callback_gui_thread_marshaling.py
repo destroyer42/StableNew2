@@ -16,6 +16,15 @@ class StubJobService:
         self.status_callbacks[name] = cb
 
 
+class DispatchingStubJobService(StubJobService):
+    def __init__(self):
+        super().__init__()
+        self.dispatcher = None
+
+    def set_event_dispatcher(self, dispatcher):
+        self.dispatcher = dispatcher
+
+
 def test_event_marshaling():
     scheduled = []
     main_thread_id = threading.get_ident()
@@ -85,6 +94,47 @@ def test_status_callback_marshaling():
 
     def invoke():
         cb("gui_queue_history", {"some": "status"})
+
+    t = threading.Thread(target=invoke)
+    t.start()
+    t.join()
+
+    assert not ran["flag"]
+    assert len(scheduled) == 1
+
+    scheduled[0]()
+
+    assert ran["flag"]
+    assert ran["thread"] == main_thread_id
+
+
+def test_event_dispatcher_avoids_extra_wrapper_scheduling():
+    scheduled = []
+    main_thread_id = threading.get_ident()
+    stub = DispatchingStubJobService()
+
+    ac = AppController(
+        main_window=None,
+        job_service=stub,
+        ui_scheduler=lambda fn: scheduled.append(fn),
+        threaded=False,
+    )
+
+    ran = {"flag": False, "thread": None}
+
+    def handler(job):
+        ran["flag"] = True
+        ran["thread"] = threading.get_ident()
+
+    ac._on_job_started = handler
+    ac._setup_queue_callbacks()
+
+    assert stub.dispatcher is not None
+    cb = stub.callbacks.get(JobService.EVENT_JOB_STARTED)
+    assert cb is handler
+
+    def invoke():
+        stub.dispatcher(lambda: cb("job-123"))
 
     t = threading.Thread(target=invoke)
     t.start()

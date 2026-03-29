@@ -82,3 +82,24 @@ def test_async_bootstrap_comfy_uses_daemon_thread(monkeypatch) -> None:
     assert recorded["name"] == "ComfyUI-Bootstrap"
     assert recorded["daemon"] is True
     assert recorded["suppress_daemon_warning"] is True
+
+
+def test_load_comfy_config_uses_process_config_base_url(monkeypatch) -> None:
+    proc_config = mock.Mock(
+        base_url="http://127.0.0.1:8000",
+        command=["python", "main.py"],
+        working_dir="C:/ComfyUI",
+        autostart_enabled=True,
+        startup_timeout_seconds=30.0,
+    )
+    monkeypatch.setattr(main, "build_default_comfy_process_config", lambda: proc_config)
+    monkeypatch.delenv("STABLENEW_COMFY_BASE_URL", raising=False)
+    monkeypatch.delenv("STABLENEW_COMFY_COMMAND", raising=False)
+    monkeypatch.delenv("STABLENEW_COMFY_WORKDIR", raising=False)
+    monkeypatch.delenv("STABLENEW_COMFY_AUTOSTART", raising=False)
+    monkeypatch.delenv("STABLENEW_COMFY_TIMEOUT", raising=False)
+
+    config = main._load_comfy_config()
+
+    assert config["comfy_base_url"] == "http://127.0.0.1:8000"
+    assert config["process_config"] is proc_config

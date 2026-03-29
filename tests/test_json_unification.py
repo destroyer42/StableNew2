@@ -39,7 +39,7 @@ def test_unified_json_no_collision():
         # Verify matrix data was saved
         with open(packs_dir / "test_pack.json", encoding="utf-8") as f:
             data = json.load(f)
-        print(f"\n✓ Saved pack JSON structure: {list(data.keys())}")
+        print(f"\n[OK] Saved pack JSON structure: {list(data.keys())}")
         assert "pack_data" in data, "Missing pack_data section"
         assert data["pack_data"]["matrix"]["enabled"] is True, "Matrix not enabled"
         assert len(data["pack_data"]["matrix"]["slots"]) == 2, "Matrix slots missing"
@@ -82,7 +82,7 @@ def test_unified_json_no_collision():
         with open(packs_dir / "test_pack.json", encoding="utf-8") as f:
             data = json.load(f)
         
-        print(f"✓ Unified JSON structure: {list(data.keys())}")
+        print(f"[OK] Unified JSON structure: {list(data.keys())}")
         
         # Verify pack_data (matrix) still exists
         assert "pack_data" in data, "pack_data section was overwritten!"
@@ -90,7 +90,7 @@ def test_unified_json_no_collision():
         assert len(data["pack_data"]["slots"]) == 2, "Slots were lost!"
         assert data["pack_data"]["matrix"]["enabled"] is True, "Matrix config was lost!"
         assert len(data["pack_data"]["matrix"]["slots"]) == 2, "Matrix slots were lost!"
-        print(f"  ✓ pack_data preserved: slots={len(data['pack_data']['slots'])}, matrix slots={len(data['pack_data']['matrix']['slots'])}")
+        print(f"  [OK] pack_data preserved: slots={len(data['pack_data']['slots'])}, matrix slots={len(data['pack_data']['matrix']['slots'])}")
         
         # Verify preset_data (pipeline) was added
         assert "preset_data" in data, "preset_data section missing!"
@@ -98,7 +98,7 @@ def test_unified_json_no_collision():
         assert data["preset_data"]["pipeline"]["txt2img_enabled"] is True, "Pipeline flags missing"
         assert "txt2img" in data["preset_data"], "txt2img section missing"
         assert data["preset_data"]["txt2img"]["width"] == 1024, "txt2img config missing"
-        print(f"  ✓ preset_data added: pipeline keys={list(data['preset_data'].keys())}")
+        print(f"  [OK] preset_data added: pipeline keys={list(data['preset_data'].keys())}")
         
         # Step 4: Load pack and verify matrix data is intact
         print("\nStep 4: Reloading pack from unified JSON...")
@@ -110,7 +110,7 @@ def test_unified_json_no_collision():
         assert len(loaded_pack.matrix.slots) == 2, "Matrix slots corrupted"
         assert loaded_pack.matrix.slots[0].name == "style", "Matrix slot names corrupted"
         assert len(loaded_pack.matrix.slots[0].values) == 3, "Matrix values corrupted"
-        print(f"  ✓ Loaded pack: name={loaded_pack.name}, slots={len(loaded_pack.slots)}, matrix enabled={loaded_pack.matrix.enabled}")
+        print(f"  [OK] Loaded pack: name={loaded_pack.name}, slots={len(loaded_pack.slots)}, matrix enabled={loaded_pack.matrix.enabled}")
         
         # Step 5: Verify config manager can still read pipeline config
         print("\nStep 5: Verifying config manager can read pipeline config...")
@@ -121,12 +121,12 @@ def test_unified_json_no_collision():
             assert "pipeline" in loaded_config, "Pipeline section missing from loaded config"
             assert loaded_config["pipeline"]["txt2img_enabled"] is True, "Pipeline config corrupted"
             assert "txt2img" in loaded_config, "txt2img section missing from loaded config"
-            print(f"  ✓ Config manager loaded: {list(loaded_config.keys())}")
+            print(f"  [OK] Config manager loaded: {list(loaded_config.keys())}")
         finally:
             os.chdir(original_cwd)
         
         print("\n" + "="*60)
-        print("✓ ALL TESTS PASSED!")
+        print("[OK] ALL TESTS PASSED!")
         print("="*60)
         print("\nUnified JSON format verified:")
         print("  - prompt pack saves matrix data to pack_data section")

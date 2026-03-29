@@ -1,4 +1,5 @@
-"""controller.ports — explicit Protocol definitions for runtime wiring.
+"""Controller-owned runtime port adapters and protocol definitions."""
 
-Import from ``src.controller.ports.runtime_ports`` for individual contracts.
-"""
+from .default_runtime_ports import DefaultImageRuntimePorts, DefaultWorkflowRegistryPort
+
+__all__ = ["DefaultImageRuntimePorts", "DefaultWorkflowRegistryPort"]

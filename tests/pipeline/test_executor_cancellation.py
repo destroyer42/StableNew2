@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.gui.state import CancellationError
+from src.controller.runtime_state import CancellationError
 from src.pipeline.executor import Pipeline
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner

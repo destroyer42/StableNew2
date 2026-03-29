@@ -1,8 +1,8 @@
-"""Test for heartbeat stall fix.
+"""Test for heartbeat stall behavior.
 
 Validates that:
-1. UI_STALL_S threshold is set to a realistic value (90s)
-2. Progress reporting updates the UI heartbeat timestamp
+1. `UI_STALL_S` is set to the current fast-fail threshold.
+2. Progress reporting updates the UI heartbeat timestamp.
 """
 
 from __future__ import annotations
@@ -13,7 +13,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from src.controller.app_controller import AppController
-from src.gui.controller import PipelineController
+from src.controller.core_pipeline_controller import CorePipelineController
 from src.services.watchdog_system_v2 import SystemWatchdogV2
 
 
@@ -24,7 +24,7 @@ def test_ui_stall_threshold_is_realistic():
     assert SystemWatchdogV2.UI_STALL_S == 10.0, \
         "UI_STALL_S should be 10.0 for fast failure detection while progress keeps heartbeat alive"
     
-    print(f"✓ UI_STALL_S correctly set to {SystemWatchdogV2.UI_STALL_S}s (fast failure detection)")
+    print(f"[OK] UI_STALL_S correctly set to {SystemWatchdogV2.UI_STALL_S}s (fast failure detection)")
 
 
 def test_progress_reporting_updates_heartbeat():
@@ -34,7 +34,7 @@ def test_progress_reporting_updates_heartbeat():
     mock_app_controller.last_ui_heartbeat_ts = 0.0
     
     # Create a pipeline controller
-    controller = PipelineController()
+    controller = CorePipelineController()
     
     # Patch AppController from the correct module
     with patch('src.controller.app_controller.AppController') as mock_app_class:
@@ -48,7 +48,7 @@ def test_progress_reporting_updates_heartbeat():
         # Heartbeat should have been updated
         # Note: It's updated with time.monotonic(), so we can't check exact value
         # But we can verify the code path doesn't crash
-        print("✓ Progress reporting executed without errors")
+        print("[OK] Progress reporting executed without errors")
 
 
 def test_app_controller_runner_activity_updates_timestamp():
@@ -99,7 +99,7 @@ def test_watchdog_doesnt_trigger_during_normal_generation():
         assert len(diagnostics) == 0, \
             f"Watchdog should not trigger during active generation, but found {len(diagnostics)} diagnostic(s)"
         
-        print("✓ Watchdog correctly did not trigger during simulated generation with heartbeat updates")
+        print("[OK] Watchdog correctly did not trigger during simulated generation with heartbeat updates")
 
 
 def test_watchdog_still_triggers_on_true_stall():
@@ -147,7 +147,7 @@ def test_watchdog_still_triggers_on_true_stall():
         assert len(diagnostics) >= 1, \
             "Watchdog should trigger on true stall (15s old heartbeat > 10s threshold)"
         
-        print(f"✓ Watchdog correctly triggered on true stall (created {len(diagnostics)} diagnostic(s))")
+        print(f"[OK] Watchdog correctly triggered on true stall (created {len(diagnostics)} diagnostic(s))")
 
 
 if __name__ == "__main__":
@@ -155,4 +155,4 @@ if __name__ == "__main__":
     test_progress_reporting_updates_heartbeat()
     test_watchdog_doesnt_trigger_during_normal_generation()
     test_watchdog_still_triggers_on_true_stall()
-    print("\n✅ All heartbeat stall fix tests passed!")
+    print("\n[OK] All heartbeat stall fix tests passed!")

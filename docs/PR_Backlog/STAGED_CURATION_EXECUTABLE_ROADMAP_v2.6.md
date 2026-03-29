@@ -1,7 +1,7 @@
 # Staged Curation Executable Roadmap v2.6
 
 Status: Proposed  
-Updated: 2026-03-21  
+Updated: 2026-03-27  
 Applies to: Learning, Review, discovered-review, queue-first staged advancement
 
 ## 0. Summary
@@ -16,6 +16,9 @@ It instead extends the existing surfaces:
 - `Learning` becomes the canonical evidence-and-advancement workspace
 - `Review` remains the canonical advanced reprocess workspace
 - discovered-review and history-imported runs become first-class learning inputs
+- visibility-sensitive learning, review, history, preview, and prompt surfaces
+  now share one global content-visibility mode and resolver path through
+  `PR-CONFIG-271` to `PR-TEST-274`
 
 ## 1. Guardrails
 
@@ -139,6 +142,38 @@ Primary outcomes:
 - lineage reconstruction
 - replay-safe transition provenance
 - diagnostics bundle summaries for staged workflows
+
+### Content Visibility Follow-On Tranche
+
+Status:
+
+- Completed 2026-03-27
+
+Purpose:
+
+- add one persisted `sfw` / `nsfw` mode plus shared filtering/redaction policy
+  across the staged-curation-adjacent prompt, history, preview, review,
+  learning, and discovered-review surfaces
+
+Completed PRs:
+
+- `PR-CONFIG-271-Content-Visibility-Mode-Contract-and-Persistence`
+  Completed 2026-03-27
+- `PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring`
+  Completed 2026-03-27
+- `PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering`
+  Completed 2026-03-27
+- `PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening`
+  Completed 2026-03-27
+
+Primary outcomes:
+
+- one canonical persisted visibility-mode contract in app state and UI state
+- one shared resolver path for prompt, LoRA, history, and discovered-review
+  selection/redaction decisions
+- live shell toggle with cross-tab refresh and user-facing SFW notices
+- deterministic regression and journey coverage for persistence, live updates,
+  and legacy metadata normalization
 
 ## 4. Recommended Order
 

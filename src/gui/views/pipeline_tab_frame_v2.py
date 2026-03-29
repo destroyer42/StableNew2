@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import time
 import tkinter as tk
 from tkinter import ttk
 from typing import Any
@@ -11,18 +12,19 @@ from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
-from src.gui.state import PipelineState
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.view_contracts.pipeline_layout_contract import (
+    get_stage_card_min_width,
     get_visible_stage_order,
     normalize_window_geometry,
 )
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.zone_map_v2 import get_pipeline_stage_order
+from src.controller.runtime_state import PipelineState
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
 
@@ -36,6 +38,8 @@ class PipelineTabFrame(ttk.Frame):
     MIN_COLUMN_WIDTH = design_system.Spacing.XL * 25  # ~400
     LOGGING_ROW_MIN_HEIGHT = design_system.Spacing.XL * 10
     LOGGING_ROW_WEIGHT = 1
+    SLOW_UPDATE_THRESHOLD_MS = 20.0
+    HOT_SURFACE_FLUSH_DELAY_MS = 1
 
     def __init__(
         self,
@@ -55,6 +59,16 @@ class PipelineTabFrame(ttk.Frame):
         self.pipeline_controller = pipeline_controller
         self.theme = theme
         self.state_manager = getattr(self.pipeline_controller, "state_manager", None)
+        self._callback_metrics: dict[str, dict[str, float | int]] = {}
+        self._hot_surface_dirty: set[str] = set()
+        self._hot_surface_flush_scheduled = False
+        self._hot_surface_flush_metrics: dict[str, float | int] = {
+            "count": 0,
+            "total_ms": 0.0,
+            "max_ms": 0.0,
+            "last_ms": 0.0,
+            "slow_count": 0,
+        }
 
         # Initialize pipeline state and enable variables for test compatibility
         self.pipeline_state = PipelineState()
@@ -67,11 +81,12 @@ class PipelineTabFrame(ttk.Frame):
         self.rowconfigure(0, weight=0)
         self.rowconfigure(1, weight=1)
         for idx in range(3):
-            self.columnconfigure(idx, weight=1, minsize=self.DEFAULT_COLUMN_WIDTH)
+            self.columnconfigure(idx, weight=1, minsize=self.MIN_COLUMN_WIDTH)
 
         self.overview_panel = TabOverviewPanel(
             self,
             content=get_tab_overview_content("pipeline"),
+            app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, columnspan=3, sticky="ew", padx=8, pady=(8, 0))
 
@@ -83,9 +98,11 @@ class PipelineTabFrame(ttk.Frame):
         self.left_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.left_column.grid(row=1, column=0, sticky="nsew")
         self.left_column.rowconfigure(0, weight=1)
-        self.left_column.columnconfigure(0, weight=1)
+        self.left_column.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 16)
         self.left_scroll = ScrollableFrame(self.left_column, style=CARD_FRAME_STYLE)
         self.left_scroll.grid(row=0, column=0, sticky="nsew")
+        self.left_scroll.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 32)
+        self.left_scroll.inner.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 32)
         self.left_inner = self.left_scroll.inner
 
         # PR-GUI-H: Remove redundant sidebar_card wrapper - SidebarPanelV2 directly in scroll inner
@@ -110,20 +127,23 @@ class PipelineTabFrame(ttk.Frame):
         self.center_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.center_column.grid(row=1, column=1, sticky="nsew")
         self.center_column.rowconfigure(0, weight=1)
-        self.center_column.columnconfigure(0, weight=1)
+        self.center_column.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 16)
         self.stage_scroll = ScrollableFrame(self.center_column, style=CARD_FRAME_STYLE)
         self.stage_scroll.grid(row=0, column=0, sticky="nsew")
+        self.stage_scroll.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
+        self.stage_scroll.inner.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
         self.stage_cards_frame = self.stage_scroll.inner
 
         self.right_column = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
         self.right_column.grid(row=1, column=2, sticky="nsew")
         self.right_column.rowconfigure(0, weight=1)
-        self.right_column.columnconfigure(0, weight=1)
+        self.right_column.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 16)
         queue_controller = self.app_controller or self.pipeline_controller
 
         self.right_scroll = ScrollableFrame(self.right_column, style=CARD_FRAME_STYLE)
         self.right_scroll.grid(row=0, column=0, sticky="nsew")
-        self.right_scroll.inner.columnconfigure(0, weight=1)
+        self.right_scroll.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 32)
+        self.right_scroll.inner.columnconfigure(0, weight=1, minsize=self.MIN_COLUMN_WIDTH - 32)
         self.right_scroll.inner.rowconfigure(0, weight=1)
         self.right_scroll.inner.rowconfigure(3, weight=1)  # History row gets weight
 
@@ -135,6 +155,7 @@ class PipelineTabFrame(ttk.Frame):
             controller=queue_controller,
             app_state=self.app_state,
             theme=self.theme,
+            manage_app_state_subscriptions=False,
         )
         self.preview_panel.grid(row=0, column=0, sticky="nsew")
 
@@ -146,6 +167,7 @@ class PipelineTabFrame(ttk.Frame):
             queue_card,
             controller=queue_controller,
             app_state=self.app_state,
+            manage_app_state_subscriptions=False,
         )
         self.queue_panel.grid(row=0, column=0, sticky="ew")
 
@@ -166,6 +188,7 @@ class PipelineTabFrame(ttk.Frame):
             controller=queue_controller,
             app_state=self.app_state,
             theme=self.theme,
+            manage_app_state_subscriptions=False,
         )
         self.history_panel.grid(row=0, column=0, sticky="nsew")
 
@@ -256,18 +279,22 @@ class PipelineTabFrame(ttk.Frame):
                 self.app_state.add_resource_listener(self._on_app_state_resources_changed)
                 self.app_state.subscribe("job_draft", self._on_job_draft_changed)
                 self.app_state.subscribe("queue_items", self._on_queue_items_changed)
+                self.app_state.subscribe("queue_jobs", self._on_queue_jobs_changed)
                 self.app_state.subscribe("running_job", self._on_running_job_changed)
-                self.app_state.subscribe("runtime_status", self._on_running_job_changed)
+                self.app_state.subscribe("runtime_status", self._on_runtime_status_changed)
                 self.app_state.subscribe("queue_status", self._on_queue_status_changed)
                 self.app_state.subscribe("history_items", self._on_history_items_changed)
+                self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
             except Exception:
                 pass
             self._on_app_state_resources_changed(self.app_state.resources)
             self._on_job_draft_changed()
             self._on_queue_items_changed()
+            self._on_queue_jobs_changed()
             self._on_running_job_changed()
             self._on_queue_status_changed()
             self._on_history_items_changed()
+            self._on_preview_jobs_changed()
             if hasattr(self, "run_controls"):
                 self.run_controls.update_from_app_state(self.app_state)
         controller = self.app_controller or self.pipeline_controller
@@ -296,9 +323,11 @@ class PipelineTabFrame(ttk.Frame):
     def _on_first_map(self, event: tk.Event | None = None) -> None:
         """Called when the Pipeline tab becomes visible for the first time."""
         if self._width_ensured:
+            self._schedule_hot_surface_flush_if_needed()
             return
         self._width_ensured = True
         self._ensure_minimum_window_width()
+        self._schedule_hot_surface_flush_if_needed()
 
     def _ensure_minimum_window_width(self) -> None:
         """Expand the window if it's narrower than the minimum for 3 columns."""
@@ -422,14 +451,17 @@ class PipelineTabFrame(ttk.Frame):
         logger.info(message)
 
     def _handle_sidebar_change(self) -> None:
-        self._apply_stage_visibility()
-        self._sync_state_overrides()
-        if hasattr(self, "preview_panel"):
-            try:
-                self.preview_panel.update_from_controls(self.sidebar)
-            except Exception:
-                pass
-        self._refresh_preview_from_pipeline_jobs()
+        def _run() -> None:
+            self._apply_stage_visibility()
+            self._sync_state_overrides()
+            if hasattr(self, "preview_panel"):
+                try:
+                    self.preview_panel.update_from_controls(self.sidebar)
+                except Exception:
+                    pass
+            self._refresh_preview_from_pipeline_jobs()
+
+        self._measure_callback("_handle_sidebar_change", _run)
 
     def _on_restore_last_run_clicked(self) -> None:
         controller = self.app_controller or self.pipeline_controller
@@ -443,33 +475,37 @@ class PipelineTabFrame(ttk.Frame):
     def _on_app_state_resources_changed(
         self, resources: dict[str, list[Any]] | None = None
     ) -> None:
-        panel = getattr(self, "stage_cards_panel", None)
-        if panel is not None and resources:
-            panel.apply_resource_update(resources)
+        def _run() -> None:
+            panel = getattr(self, "stage_cards_panel", None)
+            if panel is not None and resources:
+                panel.apply_resource_update(resources)
+
+        self._measure_callback("_on_app_state_resources_changed", _run)
 
     def _on_job_draft_changed(self) -> None:
-        if self.app_state is None:
-            return
-        try:
-            self._refresh_preview_from_pipeline_jobs()
-        except Exception:
-            pass
+        def _run() -> None:
+            if self.app_state is None:
+                return
+            try:
+                self._refresh_preview_from_pipeline_jobs()
+            except Exception:
+                pass
+            self._mark_hot_surface_dirty("preview")
+
+        self._measure_callback("_on_job_draft_changed", _run)
 
     def _refresh_preview_from_pipeline_jobs(self) -> bool:
         """Attempt to render JobUiSummary data before falling back to draft text."""
-        records = self._get_pipeline_preview_jobs()
-        has_records = bool(records)
-        if has_records and self.app_state and hasattr(self.app_state, "set_preview_jobs"):
-            try:
-                self.app_state.set_preview_jobs(records)
-            except Exception:
-                pass
-        try:
-            if hasattr(self, "preview_panel"):
-                self.preview_panel.update_from_app_state(self.app_state)
-        except Exception:
-            pass
-        return has_records
+        def _run() -> bool:
+            records = self._get_pipeline_preview_jobs()
+            if self.app_state and hasattr(self.app_state, "set_preview_jobs"):
+                try:
+                    self.app_state.set_preview_jobs(records)
+                except Exception:
+                    pass
+            return bool(records)
+
+        return bool(self._measure_callback("_refresh_preview_from_pipeline_jobs", _run))
 
     def _get_pipeline_preview_jobs(self) -> list[NormalizedJobRecord]:
         controller = self.pipeline_controller or getattr(
@@ -486,48 +522,191 @@ class PipelineTabFrame(ttk.Frame):
             return []
 
     def _on_queue_items_changed(self) -> None:
-        if self.app_state is None:
-            return
-        # PR-GUI-F1: Queue items are now displayed in QueuePanelV2
-        try:
-            if hasattr(self, "queue_panel"):
-                self.queue_panel.update_from_app_state(self.app_state)
-        except Exception:
-            pass
+        def _run() -> None:
+            self._mark_hot_surface_dirty("queue")
+
+        self._measure_callback("_on_queue_items_changed", _run)
+
+    def _on_queue_jobs_changed(self) -> None:
+        def _run() -> None:
+            self._mark_hot_surface_dirty("queue")
+
+        self._measure_callback("_on_queue_jobs_changed", _run)
 
     def _on_running_job_changed(self) -> None:
-        if self.app_state is None:
-            return
-        # PR-GUI-F1: Running job is now displayed in RunningJobPanelV2
-        try:
-            if hasattr(self, "running_job_panel"):
-                self.running_job_panel.update_from_app_state(self.app_state)
-        except Exception:
-            pass
-        # Also update queue panel for status
-        try:
-            if hasattr(self, "queue_panel"):
-                self.queue_panel.update_from_app_state(self.app_state)
-        except Exception:
-            pass
+        def _run() -> None:
+            self._mark_hot_surface_dirty("running", "queue")
+
+        self._measure_callback("_on_running_job_changed", _run)
+
+    def _on_runtime_status_changed(self) -> None:
+        def _run() -> None:
+            self._mark_hot_surface_dirty("running")
+
+        self._measure_callback("_on_runtime_status_changed", _run)
 
     def _on_queue_status_changed(self) -> None:
-        if self.app_state is None:
-            return
-        # PR-GUI-F1: Queue status is now displayed in QueuePanelV2
-        try:
-            if hasattr(self, "queue_panel"):
-                self.queue_panel.update_queue_status(self.app_state.queue_status)
-        except Exception:
-            pass
+        def _run() -> None:
+            self._mark_hot_surface_dirty("queue")
+
+        self._measure_callback("_on_queue_status_changed", _run)
 
     def _on_history_items_changed(self) -> None:
-        if self.app_state is None or not hasattr(self, "history_panel"):
+        def _run() -> None:
+            self._mark_hot_surface_dirty("history")
+
+        self._measure_callback("_on_history_items_changed", _run)
+
+    def _on_preview_jobs_changed(self) -> None:
+        def _run() -> None:
+            self._mark_hot_surface_dirty("preview")
+
+        self._measure_callback("_on_preview_jobs_changed", _run)
+
+    def _mark_hot_surface_dirty(self, *surfaces: str) -> None:
+        if not surfaces:
             return
+        self._hot_surface_dirty.update(surface for surface in surfaces if surface)
+        self._schedule_hot_surface_flush_if_needed()
+
+    def _schedule_hot_surface_flush_if_needed(self) -> None:
+        if self._hot_surface_flush_scheduled:
+            return
+        if not self._hot_surface_dirty:
+            return
+        self._hot_surface_flush_scheduled = True
         try:
-            self.history_panel._on_history_items_changed()
+            self.after(self.HOT_SURFACE_FLUSH_DELAY_MS, self._flush_hot_surfaces)
         except Exception:
-            pass
+            self._hot_surface_flush_scheduled = False
+            self._flush_hot_surfaces()
+
+    @staticmethod
+    def _surface_is_visible(widget: Any) -> bool:
+        try:
+            return bool(widget.winfo_ismapped())
+        except Exception:
+            return True
+
+    def _flush_hot_surfaces(self) -> None:
+        dirty = set(self._hot_surface_dirty)
+        self._hot_surface_dirty.clear()
+        self._hot_surface_flush_scheduled = False
+        if not dirty:
+            return
+
+        start = time.perf_counter()
+        app_state = self.app_state
+        deferred: set[str] = set()
+        if app_state is not None:
+            if "queue" in dirty and hasattr(self, "queue_panel"):
+                if self._surface_is_visible(self.queue_panel):
+                    try:
+                        self.queue_panel.update_from_app_state(app_state)
+                    except Exception:
+                        pass
+                else:
+                    deferred.add("queue")
+            if "running" in dirty and hasattr(self, "running_job_panel"):
+                if self._surface_is_visible(self.running_job_panel):
+                    try:
+                        self.running_job_panel.update_from_app_state(app_state)
+                    except Exception:
+                        pass
+                else:
+                    deferred.add("running")
+            if "history" in dirty and hasattr(self, "history_panel"):
+                if self._surface_is_visible(self.history_panel):
+                    try:
+                        self.history_panel.update_from_app_state(app_state)
+                    except Exception:
+                        pass
+                else:
+                    deferred.add("history")
+            if "preview" in dirty and hasattr(self, "preview_panel"):
+                if self._surface_is_visible(self.preview_panel):
+                    try:
+                        preview_jobs = list(getattr(app_state, "preview_jobs", None) or [])
+                        if preview_jobs:
+                            self.preview_panel.set_preview_jobs(preview_jobs)
+                        else:
+                            self.preview_panel.update_from_job_draft(getattr(app_state, "job_draft", None))
+                        self.preview_panel.update_from_app_state(app_state)
+                    except Exception:
+                        pass
+                else:
+                    deferred.add("preview")
+
+        if deferred:
+            self._hot_surface_dirty.update(deferred)
+
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        metrics = self._hot_surface_flush_metrics
+        metrics["count"] = int(metrics["count"]) + 1
+        metrics["total_ms"] = float(metrics["total_ms"]) + float(elapsed_ms)
+        metrics["last_ms"] = float(elapsed_ms)
+        metrics["max_ms"] = max(float(metrics["max_ms"]), float(elapsed_ms))
+        if elapsed_ms >= float(self.SLOW_UPDATE_THRESHOLD_MS):
+            metrics["slow_count"] = int(metrics["slow_count"]) + 1
+
+    def _measure_callback(self, name: str, fn: Any) -> Any:
+        start = time.perf_counter()
+        try:
+            return fn()
+        finally:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_callback_metric(name, elapsed_ms)
+
+    def _record_callback_metric(self, name: str, elapsed_ms: float) -> None:
+        metrics = self._callback_metrics.setdefault(
+            name,
+            {
+                "count": 0,
+                "total_ms": 0.0,
+                "max_ms": 0.0,
+                "last_ms": 0.0,
+                "slow_count": 0,
+            },
+        )
+        metrics["count"] = int(metrics["count"]) + 1
+        metrics["total_ms"] = float(metrics["total_ms"]) + float(elapsed_ms)
+        metrics["last_ms"] = float(elapsed_ms)
+        metrics["max_ms"] = max(float(metrics["max_ms"]), float(elapsed_ms))
+        if elapsed_ms >= float(self.SLOW_UPDATE_THRESHOLD_MS):
+            metrics["slow_count"] = int(metrics["slow_count"]) + 1
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        callback_metrics: dict[str, dict[str, float | int]] = {}
+        for name, metrics in sorted(self._callback_metrics.items()):
+            count = int(metrics.get("count", 0) or 0)
+            total_ms = float(metrics.get("total_ms", 0.0) or 0.0)
+            callback_metrics[name] = {
+                "count": count,
+                "avg_ms": round(total_ms / count, 3) if count else 0.0,
+                "max_ms": round(float(metrics.get("max_ms", 0.0) or 0.0), 3),
+                "last_ms": round(float(metrics.get("last_ms", 0.0) or 0.0), 3),
+                "slow_count": int(metrics.get("slow_count", 0) or 0),
+            }
+        hot_surface_flush_count = int(self._hot_surface_flush_metrics.get("count", 0) or 0)
+        hot_surface_flush_total = float(self._hot_surface_flush_metrics.get("total_ms", 0.0) or 0.0)
+        return {
+            "slow_threshold_ms": float(self.SLOW_UPDATE_THRESHOLD_MS),
+            "callback_metrics": callback_metrics,
+            "hot_surface_scheduler": {
+                "count": hot_surface_flush_count,
+                "avg_ms": round(hot_surface_flush_total / hot_surface_flush_count, 3)
+                if hot_surface_flush_count
+                else 0.0,
+                "max_ms": round(float(self._hot_surface_flush_metrics.get("max_ms", 0.0) or 0.0), 3),
+                "last_ms": round(float(self._hot_surface_flush_metrics.get("last_ms", 0.0) or 0.0), 3),
+                "slow_count": int(self._hot_surface_flush_metrics.get("slow_count", 0) or 0),
+                "dirty_pending": sorted(self._hot_surface_dirty),
+                "scheduled": bool(self._hot_surface_flush_scheduled),
+            },
+            "queue_panel": self.queue_panel.get_diagnostics_snapshot() if hasattr(self, "queue_panel") else {},
+            "history_panel": self.history_panel.get_diagnostics_snapshot() if hasattr(self, "history_panel") else {},
+            "preview_panel": self.preview_panel.get_diagnostics_snapshot() if hasattr(self, "preview_panel") else {},
+        }
 
 
 PipelineTabFrame = PipelineTabFrame

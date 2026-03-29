@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -261,6 +262,48 @@ def test_port_cleanup_skips_unrelated_child_processes(monkeypatch):
     assert 333 not in killed
     assert fake_proc.webui_child.killed is True
     assert fake_proc.unrelated_child.killed is False
+
+
+def test_scan_for_orphaned_webui_processes_uses_process_scan_lock(monkeypatch, tmp_path):
+    config = WebUIProcessConfig(
+        command=["python", "-c", "print('test')"],
+        working_dir=str(tmp_path),
+        autostart_enabled=False,
+    )
+    manager = WebUIProcessManager(config)
+
+    class _FakeProc:
+        def __init__(self) -> None:
+            self.pid = 123
+            self.info = {
+                "name": "python.exe",
+                "cmdline": [str(tmp_path / "launch.py")],
+                "ppid": 4,
+            }
+
+        def cwd(self):
+            return str(tmp_path)
+
+    calls: list[str] = []
+
+    @contextmanager
+    def _guard():
+        calls.append("entered")
+        yield
+        calls.append("exited")
+
+    fake_psutil = Mock()
+    fake_psutil.process_iter.return_value = [_FakeProc()]
+    fake_psutil.Process.side_effect = RuntimeError("should not be called for system parent")
+    fake_psutil.NoSuchProcess = RuntimeError
+    fake_psutil.AccessDenied = RuntimeError
+    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
+    monkeypatch.setattr("src.api.webui_process_manager.hold_process_scan_lock", _guard)
+
+    orphans = manager._scan_for_orphaned_webui_processes()
+
+    assert orphans == [123]
+    assert calls == ["entered", "exited"]
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows-specific test")

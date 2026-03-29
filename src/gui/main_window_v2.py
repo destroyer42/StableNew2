@@ -10,6 +10,7 @@ from typing import Any
 from src.api.webui_process_manager import WebUIProcessManager, build_default_webui_process_config
 from src.gui.advanced_prompt_editor import AdvancedPromptEditorV2
 from src.gui.app_state_v2 import AppStateV2
+from src.gui.content_visibility import ContentVisibilitySettings
 from src.gui.dropdown_loader_v2 import DropdownLoader as DropdownLoaderV2
 from src.gui.engine_settings_dialog import EngineSettingsDialog
 from src.gui.gui_invoker import GuiInvoker
@@ -43,7 +44,7 @@ class HeaderZone(ttk.Frame):
         self.preview_button = ttk.Button(self, text="Preview", style="Secondary.TButton")
         self.settings_button = ttk.Button(self, text="Settings", style="Secondary.TButton")
         self.refresh_button = ttk.Button(self, text="Refresh", style="Secondary.TButton")
-        self.help_button = ttk.Button(self, text="Help", style="Secondary.TButton")
+        self.help_button = ttk.Button(self, text="Help Mode: Off", style="Secondary.TButton")
         self.debug_button = ttk.Button(self, text="Debug", style="Secondary.TButton")
 
         for idx, btn in enumerate(
@@ -78,6 +79,8 @@ class LeftZone(ttk.Frame):
 class BottomZone(ttk.Frame):
     def __init__(self, master: tk.Misc, *, controller=None, app_state=None):
         super().__init__(master, style="StatusBar.TFrame")
+        self._app_state = app_state
+        self._rendered_operator_log_snapshot: tuple[str, ...] = ()
         self.status_bar_v2 = StatusBarV2(self, controller=controller, app_state=app_state)
         self.status_bar_v2.grid(row=1, column=0, sticky="ew")
 
@@ -104,6 +107,42 @@ class BottomZone(ttk.Frame):
         self.rowconfigure(1, weight=0)  # status bar
         self.columnconfigure(0, weight=1)
 
+        if app_state is not None:
+            try:
+                app_state.subscribe("operator_log", self._on_operator_log_changed)
+            except Exception:
+                pass
+            self._on_operator_log_changed()
+
+    def _on_operator_log_changed(self) -> None:
+        state = getattr(self, "_app_state", None)
+        if state is None:
+            return
+        current_snapshot = tuple(getattr(state, "operator_log", []) or [])
+        if current_snapshot == self._rendered_operator_log_snapshot:
+            return
+
+        try:
+            self.log_text.config(state=tk.NORMAL)
+            if (
+                self._rendered_operator_log_snapshot
+                and len(current_snapshot) >= len(self._rendered_operator_log_snapshot)
+                and current_snapshot[: len(self._rendered_operator_log_snapshot)]
+                == self._rendered_operator_log_snapshot
+            ):
+                for line in current_snapshot[len(self._rendered_operator_log_snapshot) :]:
+                    self.log_text.insert("end", line + "\n")
+            else:
+                self.log_text.delete("1.0", "end")
+                if current_snapshot:
+                    self.log_text.insert("1.0", "\n".join(current_snapshot) + "\n")
+            if current_snapshot:
+                self.log_text.see("end")
+            self.log_text.config(state=tk.DISABLED)
+            self._rendered_operator_log_snapshot = current_snapshot
+        except Exception:
+            pass
+
 
 DEFAULT_MAIN_WINDOW_WIDTH = int(PipelineTabFrame.DEFAULT_COLUMN_WIDTH * 3.1)
 DEFAULT_MAIN_WINDOW_HEIGHT = int(900 * 1.5)
@@ -128,6 +167,7 @@ class MainWindowV2:
         self._disposed = False
         self._close_in_progress = False
         self._graceful_exit_handler: Callable[[str], None] | None = None
+        self._last_visible_window_geometry: str | None = None
         self.app_state = app_state or AppStateV2()
         self.webui_process_manager = webui_manager
         self.app_controller = app_controller
@@ -341,6 +381,11 @@ class MainWindowV2:
             self.root.bind("<Destroy>", self._on_destroy, add="+")
         except Exception:
             pass
+        try:
+            self.root.bind("<Configure>", self._on_window_configure, add="+")
+            self.root.bind("<Map>", self._on_window_map, add="+")
+        except Exception:
+            pass
 
         # --- UI Heartbeat: Tk thread liveness signal ---
         self._install_ui_heartbeat()
@@ -532,6 +577,11 @@ class MainWindowV2:
                     self.app_state.set_learning_enabled(bool(learning_state.get("enabled", True)))
                 except Exception:
                     pass
+            try:
+                visibility = ContentVisibilitySettings.from_payload(state.get("content_visibility"))
+                self.app_state.set_content_visibility_mode(visibility.mode)
+            except Exception:
+                pass
             
             if saved_geometry:
                 try:
@@ -573,6 +623,7 @@ class MainWindowV2:
             self.root.deiconify()
         except Exception:
             pass
+        self._capture_visible_window_geometry()
 
     def _parse_window_geometry(self, geometry: str) -> tuple[int, int, int | None, int | None] | None:
         text = str(geometry or "").strip()
@@ -620,6 +671,68 @@ class MainWindowV2:
             and (x + width) > margin_x
             and (y + height) > margin_y
         )
+
+    def _capture_visible_window_geometry(self) -> None:
+        try:
+            state = str(self.root.state() or "").lower()
+        except Exception:
+            state = "normal"
+        if state not in {"normal", "zoomed"}:
+            return
+        try:
+            geometry = str(self.root.geometry() or "").strip()
+        except Exception:
+            return
+        if not geometry:
+            return
+        if state == "zoomed" or self._is_window_geometry_visible(geometry):
+            self._last_visible_window_geometry = geometry
+
+    def _ensure_window_visible_after_restore(self) -> None:
+        try:
+            state = str(self.root.state() or "").lower()
+        except Exception:
+            state = "normal"
+        if state == "iconic":
+            return
+        try:
+            geometry = str(self.root.geometry() or "").strip()
+        except Exception:
+            geometry = ""
+        if geometry and self._is_window_geometry_visible(geometry):
+            self._capture_visible_window_geometry()
+            return
+        fallback_geometry = self._last_visible_window_geometry
+        if fallback_geometry and not self._is_window_geometry_visible(fallback_geometry):
+            fallback_geometry = None
+        if not fallback_geometry:
+            fallback_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+        try:
+            self.root.deiconify()
+        except Exception:
+            pass
+        try:
+            self.root.geometry(fallback_geometry)
+        except Exception:
+            return
+        try:
+            self.root.lift()
+        except Exception:
+            pass
+        try:
+            self.root.focus_force()
+        except Exception:
+            pass
+        self._last_visible_window_geometry = fallback_geometry
+
+    def _on_window_configure(self, _event: Any | None = None) -> None:
+        self._capture_visible_window_geometry()
+
+    def _on_window_map(self, _event: Any | None = None) -> None:
+        try:
+            self.root.after_idle(self._ensure_window_visible_after_restore)
+        except Exception:
+            self._ensure_window_visible_after_restore()
 
     def update_pack_list(self, packs: list[str]) -> None:
         left = getattr(self, "left_zone", None)
@@ -671,6 +784,7 @@ class MainWindowV2:
                     header.run_button.configure(command=start_cb)
                 if callable(stop_cb):
                     header.stop_button.configure(command=stop_cb)
+            header.help_button.configure(command=self._toggle_help_mode)
 
         if getattr(self, "app_state", None) and hasattr(self.app_state, "subscribe"):
             try:
@@ -681,7 +795,19 @@ class MainWindowV2:
                 self.app_state.subscribe("current_pack", self._update_run_button_state)
             except Exception:
                 pass
+            try:
+                self.app_state.subscribe("help_mode", self._update_help_button_state)
+            except Exception:
+                pass
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
         self._update_run_button_state()
+        self._update_help_button_state()
 
     def _update_run_button_state(self, *_: Any) -> None:
         header = getattr(self, "header_zone", None)
@@ -700,6 +826,49 @@ class MainWindowV2:
             button.state(["!disabled"])
         else:
             button.state(["disabled"])
+
+    def _toggle_help_mode(self) -> None:
+        app_state = getattr(self, "app_state", None)
+        if app_state is None:
+            return
+        toggle = getattr(app_state, "toggle_help_mode", None)
+        if callable(toggle):
+            toggle()
+
+    def _on_content_visibility_mode_changed(self, *_: Any) -> None:
+        mode = str(getattr(self.app_state, "content_visibility_mode", "nsfw") or "nsfw")
+        self._notify_content_visibility_targets(mode)
+
+    def _notify_content_visibility_targets(self, mode: str) -> None:
+        targets = [
+            getattr(self, "prompt_tab", None),
+            getattr(self, "review_tab", None),
+            getattr(self, "learning_tab", None),
+            getattr(self, "photo_optimize_tab", None),
+            getattr(self, "movie_clips_tab", None),
+            getattr(self, "video_workflow_tab", None),
+        ]
+        pipeline_tab = getattr(self, "pipeline_tab", None)
+        if pipeline_tab is not None:
+            for attr in ("preview_panel", "queue_panel", "running_job_panel", "history_panel"):
+                targets.append(getattr(pipeline_tab, attr, None))
+        for target in targets:
+            callback = getattr(target, "on_content_visibility_mode_changed", None)
+            if callable(callback):
+                try:
+                    callback(mode)
+                except Exception:
+                    continue
+
+    def _update_help_button_state(self, *_: Any) -> None:
+        header = getattr(self, "header_zone", None)
+        if header is None:
+            return
+        button = getattr(header, "help_button", None)
+        if button is None:
+            return
+        enabled = bool(getattr(self.app_state, "help_mode_enabled", False))
+        button.configure(text=f"Help Mode: {'On' if enabled else 'Off'}")
 
     def set_graceful_exit_handler(self, handler: Callable[[str], None] | None) -> None:
         """Register the handler used for canonical shutdown."""
@@ -734,7 +903,7 @@ class MainWindowV2:
         if hasattr(left, "packs_list") and callable(getattr(ctrl, "on_pack_selected", None)):
             try:
                 left.packs_list.bind(
-                    "<<ListboxSelect>>", lambda _e: self._handle_pack_selection(ctrl)
+                    "<<ListboxSelect>>", lambda _e: self._handle_pack_selection(ctrl), add="+"
                 )
             except Exception:
                 pass
@@ -993,6 +1162,10 @@ class MainWindowV2:
             dialog,
             config_manager=config_manager,
             status_text=status,
+            content_visibility_mode=str(
+                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            ),
+            on_content_visibility_mode_change=self._apply_content_visibility_mode_from_settings,
             on_save=lambda values: self._handle_settings_saved(values, dialog),
             on_cancel=lambda: dialog.destroy(),
         )
@@ -1001,6 +1174,14 @@ class MainWindowV2:
             dialog.grab_set()
         except Exception:
             pass
+
+    def _apply_content_visibility_mode_from_settings(self, mode: str) -> None:
+        app_state = getattr(self, "app_state", None)
+        if app_state is None:
+            return
+        setter = getattr(app_state, "set_content_visibility_mode", None)
+        if callable(setter):
+            setter(mode)
 
     def _handle_settings_saved(self, values: dict[str, Any], dialog: tk.Toplevel) -> None:
         controller = getattr(self.app_state, "controller", None)
@@ -1060,6 +1241,9 @@ class MainWindowV2:
                 "tabs": {
                     "selected_index": selected_tab_index
                 },
+                "content_visibility": ContentVisibilitySettings.from_payload(
+                    {"mode": getattr(self.app_state, "content_visibility_mode", "nsfw")}
+                ).to_payload(),
             }
             try:
                 learning_tab = getattr(self, "learning_tab", None)

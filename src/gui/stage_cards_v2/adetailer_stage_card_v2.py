@@ -6,6 +6,8 @@ from collections.abc import Iterable
 from tkinter import ttk
 from typing import Any
 
+from src.gui.layout_v2 import configure_grid_columns
+from src.gui.help_text.stage_setting_help_v2 import ADETAILER_STAGE_HELP
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import (
     BODY_LABEL_STYLE,
@@ -14,6 +16,11 @@ from src.gui.theme_v2 import (
     DARK_ENTRY_STYLE,
     DARK_SPINBOX_STYLE,
     SURFACE_FRAME_STYLE,
+)
+from src.gui.view_contracts.pipeline_layout_contract import (
+    get_single_pair_form_column_specs,
+    get_stage_card_min_width,
+    get_two_pair_form_column_specs,
 )
 
 
@@ -138,7 +145,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
         )
 
     def _build_body(self, parent: ttk.Frame) -> None:
-        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
 
         helper = ttk.Label(
             parent,
@@ -151,49 +158,70 @@ class ADetailerStageCardV2(BaseStageCardV2):
 
         overall = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         overall.grid(row=1, column=0, sticky="ew", pady=(0, 8))
-        for column in range(4):
-            overall.columnconfigure(column, weight=1 if column % 2 == 1 else 0)
+        configure_grid_columns(overall, get_two_pair_form_column_specs())
+        self._overall_frame = overall
 
-        ttk.Label(overall, text="Stage Model Override", style=BODY_LABEL_STYLE).grid(
-            row=0, column=0, sticky="w", padx=(0, 4), pady=2
-        )
+        stage_model_label = ttk.Label(overall, text="Stage Model Override", style=BODY_LABEL_STYLE)
+        stage_model_label.grid(row=0, column=0, sticky="w", padx=(0, 4), pady=2)
         self._stage_model_combo = self._build_combo(
             overall,
             self.stage_model_override_var,
             [self.STAGE_MODEL_INHERIT],
         )
         self._stage_model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 12), pady=2)
-
-        ttk.Label(overall, text="Face Pass", style=BODY_LABEL_STYLE).grid(
-            row=1, column=0, sticky="w", padx=(0, 4), pady=2
+        self._attach_setting_help(
+            "stage_model_override",
+            ADETAILER_STAGE_HELP["stage_model_override"],
+            stage_model_label,
+            self._stage_model_combo,
         )
-        ttk.Checkbutton(
+
+        face_pass_label = ttk.Label(overall, text="Face Pass", style=BODY_LABEL_STYLE)
+        face_pass_label.grid(row=1, column=0, sticky="w", padx=(0, 4), pady=2)
+        face_pass_check = ttk.Checkbutton(
             overall,
             text="Enabled",
             variable=self.enable_face_pass_var,
             style=DARK_CHECKBUTTON_STYLE,
             command=self._sync_pass_states,
-        ).grid(row=1, column=1, sticky="w", pady=2)
-
-        ttk.Label(overall, text="Hand Pass", style=BODY_LABEL_STYLE).grid(
-            row=1, column=2, sticky="w", padx=(0, 4), pady=2
         )
-        ttk.Checkbutton(
+        face_pass_check.grid(row=1, column=1, sticky="w", pady=2)
+        self._attach_setting_help(
+            "face_pass_enabled",
+            ADETAILER_STAGE_HELP["face_pass_enabled"],
+            face_pass_label,
+            face_pass_check,
+        )
+
+        hand_pass_label = ttk.Label(overall, text="Hand Pass", style=BODY_LABEL_STYLE)
+        hand_pass_label.grid(row=1, column=2, sticky="w", padx=(0, 4), pady=2)
+        hand_pass_check = ttk.Checkbutton(
             overall,
             text="Enabled",
             variable=self.enable_hands_pass_var,
             style=DARK_CHECKBUTTON_STYLE,
             command=self._sync_pass_states,
-        ).grid(row=1, column=3, sticky="w", pady=2)
+        )
+        hand_pass_check.grid(row=1, column=3, sticky="w", pady=2)
+        self._attach_setting_help(
+            "hand_pass_enabled",
+            ADETAILER_STAGE_HELP["hand_pass_enabled"],
+            hand_pass_label,
+            hand_pass_check,
+        )
 
         notebook = ttk.Notebook(parent)
         notebook.grid(row=2, column=0, sticky="nsew")
+        self._notebook = notebook
 
         face_tab = ttk.Frame(notebook, style=SURFACE_FRAME_STYLE)
         hand_tab = ttk.Frame(notebook, style=SURFACE_FRAME_STYLE)
         prompt_tab = ttk.Frame(notebook, style=SURFACE_FRAME_STYLE)
         for tab in (face_tab, hand_tab, prompt_tab):
-            tab.columnconfigure(1, weight=1)
+            configure_grid_columns(tab, get_single_pair_form_column_specs())
+        self._face_tab = face_tab
+        self._hand_tab = hand_tab
+        self._prompt_tab = prompt_tab
 
         notebook.add(face_tab, text="Face Pass")
         notebook.add(hand_tab, text="Hand Pass")
@@ -207,41 +235,65 @@ class ADetailerStageCardV2(BaseStageCardV2):
     def _build_face_tab(self, parent: ttk.Frame) -> None:
         row = 0
         self._face_model_combo = self._add_combo_row(
-            parent, row, "Detector Model", self.face_model_var, self.MODEL_OPTIONS
+            parent,
+            row,
+            "Detector Model",
+            self.face_model_var,
+            self.MODEL_OPTIONS,
+            help_key="detector_model",
         )
         self._model_combo = self._face_model_combo
         self._detector_combo = self._face_model_combo
         self._face_widgets.append(self._face_model_combo)
         row += 1
         self._face_sampler_combo = self._add_combo_row(
-            parent, row, "Sampler", self.face_sampler_var, self.SAMPLER_OPTIONS
+            parent,
+            row,
+            "Sampler",
+            self.face_sampler_var,
+            self.SAMPLER_OPTIONS,
+            help_key="sampler",
         )
         self._sampler_combo = self._face_sampler_combo
         self._face_widgets.append(self._face_sampler_combo)
         row += 1
         self._scheduler_combo = self._add_combo_row(
-            parent, row, "Scheduler", self.face_scheduler_var, self.SCHEDULER_OPTIONS
+            parent,
+            row,
+            "Scheduler",
+            self.face_scheduler_var,
+            self.SCHEDULER_OPTIONS,
+            help_key="scheduler",
         )
         self._face_widgets.append(self._scheduler_combo)
         row += 1
 
-        for label, variable, start, end, increment in (
-            ("Confidence", self.face_confidence_var, 0.0, 1.0, 0.01),
-            ("Steps", self.face_steps_var, 1, 150, 1),
-            ("CFG", self.face_cfg_var, 1.0, 30.0, 0.1),
-            ("Denoising", self.face_denoise_var, 0.0, 1.0, 0.01),
-            ("Padding", self.face_padding_var, 0, 256, 1),
-            ("Mask Blur", self.face_mask_blur_var, 0, 64, 1),
-            ("Mask Feather", self.face_mask_feather_var, 0, 64, 1),
-            ("Dilate / Erode", self.face_dilate_erode_var, -64, 64, 1),
-            ("Max Detections", self.max_detections_var, 1, 32, 1),
-            ("Mask Max-K", self.face_mask_k_largest_var, 1, 16, 1),
-            ("Mask Min Ratio", self.face_mask_min_ratio_var, 0.0, 1.0, 0.001),
-            ("Mask Max Ratio", self.face_mask_max_ratio_var, 0.0, 1.0, 0.001),
-            ("Inpaint Width", self.face_inpaint_width_var, 64, 4096, 64),
-            ("Inpaint Height", self.face_inpaint_height_var, 64, 4096, 64),
+        for label, variable, start, end, increment, help_key in (
+            ("Confidence", self.face_confidence_var, 0.0, 1.0, 0.01, "confidence"),
+            ("Steps", self.face_steps_var, 1, 150, 1, "steps"),
+            ("CFG", self.face_cfg_var, 1.0, 30.0, 0.1, "cfg"),
+            ("Denoising", self.face_denoise_var, 0.0, 1.0, 0.01, "denoising"),
+            ("Padding", self.face_padding_var, 0, 256, 1, "padding"),
+            ("Mask Blur", self.face_mask_blur_var, 0, 64, 1, "mask_blur"),
+            ("Mask Feather", self.face_mask_feather_var, 0, 64, 1, "mask_feather"),
+            ("Dilate / Erode", self.face_dilate_erode_var, -64, 64, 1, "dilate_erode"),
+            ("Max Detections", self.max_detections_var, 1, 32, 1, "max_detections"),
+            ("Mask Max-K", self.face_mask_k_largest_var, 1, 16, 1, "mask_max_k"),
+            ("Mask Min Ratio", self.face_mask_min_ratio_var, 0.0, 1.0, 0.001, "mask_min_ratio"),
+            ("Mask Max Ratio", self.face_mask_max_ratio_var, 0.0, 1.0, 0.001, "mask_max_ratio"),
+            ("Inpaint Width", self.face_inpaint_width_var, 64, 4096, 64, "inpaint_width"),
+            ("Inpaint Height", self.face_inpaint_height_var, 64, 4096, 64, "inpaint_height"),
         ):
-            widget = self._add_spin_row(parent, row, label, variable, start, end, increment)
+            widget = self._add_spin_row(
+                parent,
+                row,
+                label,
+                variable,
+                start,
+                end,
+                increment,
+                help_key=help_key,
+            )
             self._face_widgets.append(widget)
             row += 1
 
@@ -251,11 +303,17 @@ class ADetailerStageCardV2(BaseStageCardV2):
             "Mask Filter",
             self.face_mask_filter_method_var,
             self.MASK_FILTER_OPTIONS,
+            help_key="mask_filter",
         )
         self._face_widgets.append(filter_combo)
         row += 1
         merge_combo = self._add_combo_row(
-            parent, row, "Mask Merge", self.face_merge_var, self.MASK_MERGE_OPTIONS
+            parent,
+            row,
+            "Mask Merge",
+            self.face_merge_var,
+            self.MASK_MERGE_OPTIONS,
+            help_key="mask_merge",
         )
         self._face_widgets.append(merge_combo)
         row += 1
@@ -269,6 +327,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
             style=DARK_CHECKBUTTON_STYLE,
         )
         masked.pack(side="left", padx=(0, 8))
+        self._attach_setting_help("only_masked", ADETAILER_STAGE_HELP["only_masked"], masked)
         inpaint_wh = ttk.Checkbutton(
             inpaint_frame,
             text="Use inpaint width/height",
@@ -277,42 +336,67 @@ class ADetailerStageCardV2(BaseStageCardV2):
             command=self._sync_pass_states,
         )
         inpaint_wh.pack(side="left")
+        self._attach_setting_help("use_inpaint_wh", ADETAILER_STAGE_HELP["use_inpaint_wh"], inpaint_wh)
         self._face_widgets.extend([masked, inpaint_wh])
 
     def _build_hand_tab(self, parent: ttk.Frame) -> None:
         row = 0
         self._hands_model_combo = self._add_combo_row(
-            parent, row, "Detector Model", self.hands_model_var, self.HAND_MODEL_OPTIONS
+            parent,
+            row,
+            "Detector Model",
+            self.hands_model_var,
+            self.HAND_MODEL_OPTIONS,
+            help_key="detector_model",
         )
         self._hand_widgets.append(self._hands_model_combo)
         row += 1
         self._hand_sampler_combo = self._add_combo_row(
-            parent, row, "Sampler", self.hands_sampler_var, self.SAMPLER_OPTIONS
+            parent,
+            row,
+            "Sampler",
+            self.hands_sampler_var,
+            self.SAMPLER_OPTIONS,
+            help_key="sampler",
         )
         self._hand_widgets.append(self._hand_sampler_combo)
         row += 1
         hand_scheduler = self._add_combo_row(
-            parent, row, "Scheduler", self.hands_scheduler_var, self.SCHEDULER_OPTIONS
+            parent,
+            row,
+            "Scheduler",
+            self.hands_scheduler_var,
+            self.SCHEDULER_OPTIONS,
+            help_key="scheduler",
         )
         self._hand_widgets.append(hand_scheduler)
         row += 1
 
-        for label, variable, start, end, increment in (
-            ("Confidence", self.hands_confidence_var, 0.0, 1.0, 0.01),
-            ("Steps", self.hands_steps_var, 1, 150, 1),
-            ("CFG", self.hands_cfg_var, 1.0, 30.0, 0.1),
-            ("Denoising", self.hands_denoise_var, 0.0, 1.0, 0.01),
-            ("Padding", self.hands_padding_var, 0, 256, 1),
-            ("Mask Blur", self.hands_mask_blur_var, 0, 64, 1),
-            ("Mask Feather", self.hands_mask_feather_var, 0, 64, 1),
-            ("Dilate / Erode", self.hands_dilate_erode_var, -64, 64, 1),
-            ("Mask Max-K", self.hands_mask_k_largest_var, 1, 16, 1),
-            ("Mask Min Ratio", self.hands_mask_min_ratio_var, 0.0, 1.0, 0.001),
-            ("Mask Max Ratio", self.hands_mask_max_ratio_var, 0.0, 1.0, 0.001),
-            ("Inpaint Width", self.hands_inpaint_width_var, 64, 4096, 64),
-            ("Inpaint Height", self.hands_inpaint_height_var, 64, 4096, 64),
+        for label, variable, start, end, increment, help_key in (
+            ("Confidence", self.hands_confidence_var, 0.0, 1.0, 0.01, "confidence"),
+            ("Steps", self.hands_steps_var, 1, 150, 1, "steps"),
+            ("CFG", self.hands_cfg_var, 1.0, 30.0, 0.1, "cfg"),
+            ("Denoising", self.hands_denoise_var, 0.0, 1.0, 0.01, "denoising"),
+            ("Padding", self.hands_padding_var, 0, 256, 1, "padding"),
+            ("Mask Blur", self.hands_mask_blur_var, 0, 64, 1, "mask_blur"),
+            ("Mask Feather", self.hands_mask_feather_var, 0, 64, 1, "mask_feather"),
+            ("Dilate / Erode", self.hands_dilate_erode_var, -64, 64, 1, "dilate_erode"),
+            ("Mask Max-K", self.hands_mask_k_largest_var, 1, 16, 1, "mask_max_k"),
+            ("Mask Min Ratio", self.hands_mask_min_ratio_var, 0.0, 1.0, 0.001, "mask_min_ratio"),
+            ("Mask Max Ratio", self.hands_mask_max_ratio_var, 0.0, 1.0, 0.001, "mask_max_ratio"),
+            ("Inpaint Width", self.hands_inpaint_width_var, 64, 4096, 64, "inpaint_width"),
+            ("Inpaint Height", self.hands_inpaint_height_var, 64, 4096, 64, "inpaint_height"),
         ):
-            widget = self._add_spin_row(parent, row, label, variable, start, end, increment)
+            widget = self._add_spin_row(
+                parent,
+                row,
+                label,
+                variable,
+                start,
+                end,
+                increment,
+                help_key=help_key,
+            )
             self._hand_widgets.append(widget)
             row += 1
 
@@ -322,11 +406,17 @@ class ADetailerStageCardV2(BaseStageCardV2):
             "Mask Filter",
             self.hands_mask_filter_method_var,
             self.MASK_FILTER_OPTIONS,
+            help_key="mask_filter",
         )
         self._hand_widgets.append(filter_combo)
         row += 1
         merge_combo = self._add_combo_row(
-            parent, row, "Mask Merge", self.hands_merge_var, self.MASK_MERGE_OPTIONS
+            parent,
+            row,
+            "Mask Merge",
+            self.hands_merge_var,
+            self.MASK_MERGE_OPTIONS,
+            help_key="mask_merge",
         )
         self._hand_widgets.append(merge_combo)
         row += 1
@@ -340,6 +430,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
             style=DARK_CHECKBUTTON_STYLE,
         )
         hand_masked.pack(side="left", padx=(0, 8))
+        self._attach_setting_help("only_masked", ADETAILER_STAGE_HELP["only_masked"], hand_masked)
         inpaint_wh = ttk.Checkbutton(
             inpaint_frame,
             text="Use inpaint width/height",
@@ -348,43 +439,56 @@ class ADetailerStageCardV2(BaseStageCardV2):
             command=self._sync_pass_states,
         )
         inpaint_wh.pack(side="left")
+        self._attach_setting_help("use_inpaint_wh", ADETAILER_STAGE_HELP["use_inpaint_wh"], inpaint_wh)
         self._hand_widgets.extend([hand_masked, inpaint_wh])
 
     def _build_prompt_tab(self, parent: ttk.Frame) -> None:
         face_frame = ttk.LabelFrame(parent, text="Face Pass Prompts", style="Dark.TLabelframe")
         face_frame.grid(row=0, column=0, sticky="ew", pady=(0, 8))
-        face_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(face_frame, get_single_pair_form_column_specs())
+        self._face_prompt_frame = face_frame
 
-        ttk.Label(face_frame, text="Prompt", style=BODY_LABEL_STYLE).grid(
-            row=0, column=0, sticky="w", pady=2
-        )
+        face_prompt_label = ttk.Label(face_frame, text="Prompt", style=BODY_LABEL_STYLE)
+        face_prompt_label.grid(row=0, column=0, sticky="w", pady=2)
         face_prompt = ttk.Entry(face_frame, textvariable=self.face_prompt_var, style=DARK_ENTRY_STYLE)
         face_prompt.grid(row=0, column=1, sticky="ew", pady=2, padx=(8, 0))
-        ttk.Label(face_frame, text="Negative", style=BODY_LABEL_STYLE).grid(
-            row=1, column=0, sticky="w", pady=2
-        )
+        self._attach_setting_help("prompt", ADETAILER_STAGE_HELP["prompt"], face_prompt_label, face_prompt)
+        face_negative_label = ttk.Label(face_frame, text="Negative", style=BODY_LABEL_STYLE)
+        face_negative_label.grid(row=1, column=0, sticky="w", pady=2)
         face_negative = ttk.Entry(
             face_frame, textvariable=self.face_negative_var, style=DARK_ENTRY_STYLE
         )
         face_negative.grid(row=1, column=1, sticky="ew", pady=2, padx=(8, 0))
+        self._attach_setting_help(
+            "negative",
+            ADETAILER_STAGE_HELP["negative"],
+            face_negative_label,
+            face_negative,
+        )
         self._face_prompt_widgets.extend([face_prompt, face_negative])
 
         hand_frame = ttk.LabelFrame(parent, text="Hand Pass Prompts", style="Dark.TLabelframe")
         hand_frame.grid(row=1, column=0, sticky="ew")
-        hand_frame.columnconfigure(1, weight=1)
+        configure_grid_columns(hand_frame, get_single_pair_form_column_specs())
+        self._hand_prompt_frame = hand_frame
 
-        ttk.Label(hand_frame, text="Prompt", style=BODY_LABEL_STYLE).grid(
-            row=0, column=0, sticky="w", pady=2
-        )
+        hand_prompt_label = ttk.Label(hand_frame, text="Prompt", style=BODY_LABEL_STYLE)
+        hand_prompt_label.grid(row=0, column=0, sticky="w", pady=2)
         hand_prompt = ttk.Entry(hand_frame, textvariable=self.hands_prompt_var, style=DARK_ENTRY_STYLE)
         hand_prompt.grid(row=0, column=1, sticky="ew", pady=2, padx=(8, 0))
-        ttk.Label(hand_frame, text="Negative", style=BODY_LABEL_STYLE).grid(
-            row=1, column=0, sticky="w", pady=2
-        )
+        self._attach_setting_help("prompt", ADETAILER_STAGE_HELP["prompt"], hand_prompt_label, hand_prompt)
+        hand_negative_label = ttk.Label(hand_frame, text="Negative", style=BODY_LABEL_STYLE)
+        hand_negative_label.grid(row=1, column=0, sticky="w", pady=2)
         hand_negative = ttk.Entry(
             hand_frame, textvariable=self.hands_negative_var, style=DARK_ENTRY_STYLE
         )
         hand_negative.grid(row=1, column=1, sticky="ew", pady=2, padx=(8, 0))
+        self._attach_setting_help(
+            "negative",
+            ADETAILER_STAGE_HELP["negative"],
+            hand_negative_label,
+            hand_negative,
+        )
         self._hand_prompt_widgets.extend([hand_prompt, hand_negative])
 
     def _add_combo_row(
@@ -394,12 +498,15 @@ class ADetailerStageCardV2(BaseStageCardV2):
         label: str,
         variable: tk.StringVar,
         options: Iterable[str],
+        *,
+        help_key: str | None = None,
     ) -> ttk.Combobox:
-        ttk.Label(parent, text=label, style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, sticky="w", pady=2
-        )
+        label_widget = ttk.Label(parent, text=label, style=BODY_LABEL_STYLE)
+        label_widget.grid(row=row, column=0, sticky="w", pady=2)
         combo = self._build_combo(parent, variable, options)
         combo.grid(row=row, column=1, sticky="ew", pady=2, padx=(8, 0))
+        if help_key:
+            self._attach_setting_help(help_key, ADETAILER_STAGE_HELP[help_key], label_widget, combo)
         return combo
 
     def _add_spin_row(
@@ -411,10 +518,11 @@ class ADetailerStageCardV2(BaseStageCardV2):
         minimum: float,
         maximum: float,
         increment: float,
+        *,
+        help_key: str | None = None,
     ) -> ttk.Spinbox:
-        ttk.Label(parent, text=label, style=BODY_LABEL_STYLE).grid(
-            row=row, column=0, sticky="w", pady=2
-        )
+        label_widget = ttk.Label(parent, text=label, style=BODY_LABEL_STYLE)
+        label_widget.grid(row=row, column=0, sticky="w", pady=2)
         spin = ttk.Spinbox(
             parent,
             from_=minimum,
@@ -424,7 +532,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
             width=10,
             style=DARK_SPINBOX_STYLE,
         )
-        spin.grid(row=row, column=1, sticky="w", pady=2, padx=(8, 0))
+        spin.grid(row=row, column=1, sticky="ew", pady=2, padx=(8, 0))
+        if help_key:
+            self._attach_setting_help(help_key, ADETAILER_STAGE_HELP[help_key], label_widget, spin)
         return spin
 
     def _build_combo(

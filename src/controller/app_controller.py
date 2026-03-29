@@ -35,7 +35,6 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Any, TypedDict
 
-from src.api.client import SDWebUIClient
 from src.api.webui_api import WebUIAPI
 from src.api.webui_process_manager import (
     WebUIProcessManager,
@@ -70,19 +69,33 @@ from src.pipeline.reprocess_builder import (
     ReprocessSourceItem,
     extract_reprocess_output_paths,
 )
-from src.pipeline.pipeline_runner import PipelineRunner, normalize_run_result
+from src.pipeline.pipeline_runner import normalize_run_result
 from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
 from src.controller.app_controller_services.learning_completion_router import (
     build_learning_completion_handler,
 )
+from src.controller.ports.default_runtime_ports import DefaultImageRuntimePorts
+from src.controller.ports.runtime_ports import ImageRuntimePorts
+from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.controller.app_controller_services.gui_config_service import GuiConfigService
 from src.controller.app_controller_services.run_submission_service import (
     QueueRunSubmissionService,
 )
+from src.app.optional_dependency_probes import OptionalDependencySnapshot
 import logging
 import uuid
 
-from src.config.app_config import get_jsonl_log_config, is_debug_shutdown_inspector_enabled
+from src.config.app_config import (
+    get_jsonl_log_config,
+    is_debug_shutdown_inspector_enabled,
+    set_webui_autostart_enabled,
+    set_webui_health_initial_timeout_seconds,
+    set_webui_health_retry_count,
+    set_webui_health_retry_interval_seconds,
+    set_webui_health_total_timeout_seconds,
+    set_webui_workdir,
+    set_job_history_path,
+)
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service import JobService
@@ -327,10 +340,10 @@ class AppController:
     def __init__(
         self,
         main_window: MainWindow | None,
-        pipeline_runner: PipelineRunner | None = None,
+        pipeline_runner: Any | None = None,
         threaded: bool = True,
         packs_dir: Path | str | None = None,
-        api_client: SDWebUIClient | None = None,
+        api_client: Any | None = None,
         structured_logger: StructuredLogger | None = None,
         webui_process_manager: WebUIProcessManager | None = None,
         config_manager: ConfigManager | None = None,
@@ -338,12 +351,16 @@ class AppController:
         job_service: JobService | None = None,
         pipeline_controller: PipelineController | None = None,
         ui_scheduler: Callable[[Callable[[], None]], None] = None,
+        runtime_ports: ImageRuntimePorts | None = None,
+        optional_dependency_snapshot: OptionalDependencySnapshot | None = None,
     ) -> None:
         import threading
         import time
 
         self._ui_thread_id = threading.get_ident()
         self._ui_scheduler = ui_scheduler
+        self._runtime_ports = runtime_ports or DefaultImageRuntimePorts()
+        self._optional_dependency_snapshot = optional_dependency_snapshot
         # --- BEGIN PR-CORE1-D21A: Watchdog/Diagnostics wiring ---
         # Watchdog is attached by app_factory after the GUI is constructed.
         # (Avoids triggering diagnostics during import/startup and allows tests to opt-out.)
@@ -366,9 +383,15 @@ class AppController:
         self._ui_preview_dirty = False
         self._ui_job_list_dirty = False
         self._ui_history_dirty = False
+        self._ui_queue_dirty = False
         self._ui_debounce_pending = False
         self._ui_debounce_delay_ms = 150  # Coalesce updates within 150ms window
         self._preview_refresh_request_id = 0
+        self._runtime_status_lock = threading.Lock()
+        self._runtime_status_flush_scheduled = False
+        self._pending_runtime_status = None
+        self._last_runtime_status_flush_ts = 0.0
+        self._runtime_status_min_interval_ms = 250
         
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
@@ -400,16 +423,23 @@ class AppController:
         # Pipeline runner and controller setup
         # Don't do port discovery on startup - too slow (50+ seconds if WebUI not running)
         # Use default port and discover later if connection fails
-        default_url = os.getenv("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
+        load_settings = getattr(self._config_manager, "load_settings", None)
+        settings = load_settings() if callable(load_settings) else {}
+        default_url = str(settings.get("webui_base_url") or "").strip() or os.getenv(
+            "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
+        )
         
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
-            self._api_client = api_client or SDWebUIClient(base_url=default_url)
+            self._api_client = api_client or self._runtime_ports.create_client(base_url=default_url)
             self._structured_logger = structured_logger or StructuredLogger()
         else:
-            self._api_client = api_client or SDWebUIClient(base_url=default_url)
+            self._api_client = api_client or self._runtime_ports.create_client(base_url=default_url)
             self._structured_logger = structured_logger or StructuredLogger()
-            self.pipeline_runner = PipelineRunner(self._api_client, self._structured_logger)
+            self.pipeline_runner = self._runtime_ports.create_runner(
+                api_client=self._api_client,
+                structured_logger=self._structured_logger,
+            )
         self._apply_initial_resource_probe_grace()
         self._webui_api: WebUIAPI | None = None
         client = getattr(self, "_api_client", None)
@@ -421,11 +451,16 @@ class AppController:
         self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
         history_path = Path("runs") / "job_history.json"
         if os.environ.get("PYTEST_CURRENT_TEST"):
-            history_path = Path(tempfile.gettempdir()) / f"job_history_{os.getpid()}.json"
+            history_path = (
+                Path(tempfile.gettempdir())
+                / f"job_history_{os.getpid()}_{uuid.uuid4().hex}.json"
+            )
+            set_job_history_path(str(history_path))
         self._job_history_path = history_path
         self._duration_stats_service = None
         self._last_diagnostics_bundle: Path | None = None
         self._last_diagnostics_bundle_reason: str | None = None
+        self._app_state_visibility_listener = None
 
         self._diagnostics_lock = threading.Lock()
         self._last_error_envelope: UnifiedErrorEnvelope | None = None
@@ -449,8 +484,13 @@ class AppController:
                 pipeline_runner=self.pipeline_runner,
                 job_lifecycle_logger=self._job_lifecycle_logger,
                 app_state=self.app_state,
+                runtime_ports=self._runtime_ports,
                 app_controller=self,  # PR-HEARTBEAT-FIX: Pass self for heartbeat updates
             )
+        try:
+            setattr(self.pipeline_controller, "_app_state_queue_updates_managed_externally", True)
+        except Exception:
+            pass
 
         pipeline_job_service = None
         get_job_service = getattr(self.pipeline_controller, "get_job_service", None)
@@ -574,6 +614,7 @@ class AppController:
             self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
         # Let the GUI wire its callbacks to us
         if self.main_window is not None:
+            self._bind_app_state_visibility_listener()
             self._attach_to_gui()
             if hasattr(self.main_window, "connect_controller"):
                 self.main_window.connect_controller(self)
@@ -647,6 +688,16 @@ class AppController:
 
     def _run_in_gui_thread(self, fn: Callable[[], None]) -> None:
         """Schedule the callable on the Tk main thread, safe from any thread."""
+        import threading
+
+        ui_thread_id = getattr(self, "_ui_thread_id", threading.get_ident())
+        if threading.get_ident() == ui_thread_id:
+            fn()
+            return
+        scheduler = getattr(self, "_ui_scheduler", None)
+        if callable(scheduler):
+            scheduler(fn)
+            return
         mw = getattr(self, "main_window", None)
         if mw is not None:
             dispatcher = getattr(mw, "run_in_main_thread", None)
@@ -685,7 +736,13 @@ class AppController:
             return
         fn()
     
-    def _mark_ui_dirty(self, preview: bool = False, jobs: bool = False, history: bool = False) -> None:
+    def _mark_ui_dirty(
+        self,
+        preview: bool = False,
+        jobs: bool = False,
+        history: bool = False,
+        queue: bool = False,
+    ) -> None:
         """Mark UI components as needing refresh and schedule debounced update.
         
         PR-HB-003: Coalesces multiple rapid update requests into a single
@@ -697,6 +754,8 @@ class AppController:
             self._ui_job_list_dirty = False
         if not hasattr(self, "_ui_history_dirty"):
             self._ui_history_dirty = False
+        if not hasattr(self, "_ui_queue_dirty"):
+            self._ui_queue_dirty = False
         if not hasattr(self, "_ui_debounce_pending"):
             self._ui_debounce_pending = False
         if not hasattr(self, "_ui_debounce_delay_ms"):
@@ -707,6 +766,8 @@ class AppController:
             self._ui_job_list_dirty = True
         if history:
             self._ui_history_dirty = True
+        if queue:
+            self._ui_queue_dirty = True
         
         # Schedule debounced update if not already pending
         if not self._ui_debounce_pending:
@@ -757,6 +818,13 @@ class AppController:
                         self.main_window.refresh_history()
                 except Exception as exc:
                     logger.exception(f"[AppController] Error refreshing history: {exc}")
+
+            if getattr(self, "_ui_queue_dirty", False):
+                self._ui_queue_dirty = False
+                try:
+                    self._refresh_app_state_queue()
+                except Exception as exc:
+                    logger.exception(f"[AppController] Error refreshing queue state: {exc}")
         
         except Exception as exc:
             logger.exception(f"[AppController] Error in _apply_pending_ui_updates: {exc}")
@@ -803,17 +871,58 @@ class AppController:
                     current_step=status_data.get("current_step", 0),
                     total_steps=status_data.get("total_steps", 0),
                 )
-                
-                # Update app_state on GUI thread
-                def _update_state() -> None:
-                    if hasattr(self.app_state, "set_runtime_status"):
-                        self.app_state.set_runtime_status(runtime_status)
-                
-                self._ui_dispatch(_update_state)
+                self._queue_runtime_status_update(runtime_status)
             except Exception as exc:
                 logger.warning(f"Failed to process runtime status update: {exc}")
         
         return _status_callback
+
+    def _queue_runtime_status_update(self, runtime_status: Any) -> None:
+        import time
+        import threading
+
+        if not hasattr(self, "_runtime_status_lock"):
+            self._runtime_status_lock = threading.Lock()
+        if not hasattr(self, "_pending_runtime_status"):
+            self._pending_runtime_status = None
+        if not hasattr(self, "_runtime_status_flush_scheduled"):
+            self._runtime_status_flush_scheduled = False
+        if not hasattr(self, "_last_runtime_status_flush_ts"):
+            self._last_runtime_status_flush_ts = 0.0
+        if not hasattr(self, "_runtime_status_min_interval_ms"):
+            self._runtime_status_min_interval_ms = 250
+
+        delay_ms = 0
+        should_schedule = False
+        with self._runtime_status_lock:
+            self._pending_runtime_status = runtime_status
+            if self._runtime_status_flush_scheduled:
+                return
+            elapsed_ms = (time.monotonic() - self._last_runtime_status_flush_ts) * 1000.0
+            if elapsed_ms >= float(self._runtime_status_min_interval_ms):
+                delay_ms = 0
+            else:
+                delay_ms = max(1, int(self._runtime_status_min_interval_ms - elapsed_ms))
+            self._runtime_status_flush_scheduled = True
+            should_schedule = True
+
+        if should_schedule:
+            self._ui_dispatch_later(delay_ms, self._flush_runtime_status_update)
+
+    def _flush_runtime_status_update(self) -> None:
+        import time
+
+        runtime_status = None
+        with self._runtime_status_lock:
+            runtime_status = self._pending_runtime_status
+            self._pending_runtime_status = None
+            self._runtime_status_flush_scheduled = False
+            self._last_runtime_status_flush_ts = time.monotonic()
+
+        if runtime_status is None:
+            return
+        if hasattr(self.app_state, "set_runtime_status"):
+            self.app_state.set_runtime_status(runtime_status)
 
     def _apply_initial_resource_probe_grace(self) -> None:
         setter = getattr(self._api_client, "set_startup_probe_grace", None)
@@ -939,7 +1048,7 @@ class AppController:
         except Exception:
             logger.exception("Failed to start system watchdog")
 
-    def _create_api_client_with_discovery(self) -> SDWebUIClient:
+    def _create_api_client_with_discovery(self) -> Any:
         """
         Create API client with automatic port discovery.
         
@@ -963,13 +1072,13 @@ class AppController:
         
         if discovered_url:
             logger.info(f"[controller] Discovered WebUI at {discovered_url}")
-            return SDWebUIClient(base_url=discovered_url)
+            return self._runtime_ports.create_client(base_url=discovered_url)
         else:
             # Fall back to default or environment variable
             import os
             default_url = os.getenv("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
             logger.warning(f"[controller] WebUI discovery failed, using {default_url}")
-            return SDWebUIClient(base_url=default_url)
+            return self._runtime_ports.create_client(base_url=default_url)
 
     def notify_queue_activity(self) -> None:
         import time
@@ -1004,14 +1113,8 @@ class AppController:
         return self._start_run_v2(RunMode.QUEUE, RunSource.RUN_NOW_BUTTON)
 
     def on_add_to_queue(self) -> None:
-        """Explicit event API: enqueue preview-built jobs."""
-        run_config = self._prepare_queue_run_config()
-        controller = self.pipeline_controller
-        if controller is None:
-            return
-        count = controller.enqueue_draft_jobs(run_config=run_config)
-        if count:
-            self._append_log(f"[controller] Submitted {count} job(s) from preview to queue")
+        """Legacy compatibility shim for preview-backed Add to Queue."""
+        self.on_add_job_to_queue_v2()
 
     def on_clear_draft(self) -> None:
         """Explicit event API: clear the current job draft state."""
@@ -1255,6 +1358,13 @@ class AppController:
         thread_name = threading.current_thread().name
         self._append_log(f"[D21] on_add_job_to_queue_v2 ENTRY (thread={thread_name})")
         self._ensure_run_mode_default("add_to_queue")
+        if self._is_preview_queue_submission_blocked():
+            self._append_log(
+                f"[controller] Ignoring add-to-queue request because shutdown is in progress "
+                f"(thread={thread_name})"
+            )
+            self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
+            return
         controller = getattr(self, "pipeline_controller", None)
         run_config = self._prepare_queue_run_config()
         if getattr(self, "_queue_submit_in_progress", False):
@@ -1302,6 +1412,21 @@ class AppController:
             )
         self._append_log(f"[D21] on_add_job_to_queue_v2 EXIT (thread={thread_name})")
 
+    def _is_preview_queue_submission_blocked(self) -> bool:
+        return bool(getattr(self, "_is_shutting_down", False))
+
+    def _should_dispatch_preview_queue_finish_to_ui(self) -> bool:
+        return not self._is_preview_queue_submission_blocked()
+
+    def _log_preview_queue_finish(self, message: str, *, error: bool = False) -> None:
+        if self._is_preview_queue_submission_blocked():
+            if error:
+                logger.warning(message)
+            else:
+                logger.info(message)
+            return
+        self._append_log(message)
+
     def _submit_preview_jobs_to_queue_async(
         self,
         controller: Any,
@@ -1312,8 +1437,11 @@ class AppController:
         submitted = 0
         error: Exception | None = None
         clear_preview_on_success = bool(preview_records)
+        blocked_by_shutdown = False
         try:
-            if preview_records:
+            if self._is_preview_queue_submission_blocked():
+                blocked_by_shutdown = True
+            elif preview_records:
                 submitted = int(
                     controller.submit_preview_jobs_to_queue(
                         records=preview_records,
@@ -1329,12 +1457,19 @@ class AppController:
         def _finish() -> None:
             self._queue_submit_in_progress = False
             if error is not None:
-                self._append_log(
+                self._log_preview_queue_finish(
                     f"[controller] enqueue_draft_jobs error: {error!r} "
+                    f"(thread={origin_thread_name})",
+                    error=True,
+                )
+                return
+            if blocked_by_shutdown:
+                self._log_preview_queue_finish(
+                    f"[controller] Skipped preview queue submission because shutdown is in progress "
                     f"(thread={origin_thread_name})"
                 )
                 return
-            if submitted > 0 and clear_preview_on_success:
+            if submitted > 0 and clear_preview_on_success and submitted >= len(preview_records):
                 app_state = getattr(self, "app_state", None)
                 if app_state is not None:
                     clear_fn = getattr(app_state, "clear_job_draft", None)
@@ -1349,19 +1484,25 @@ class AppController:
                             preview_setter([])
                         except Exception:
                             pass
-                self._append_log(
+                self._log_preview_queue_finish(
                     f"[controller] Submitted {submitted} job(s) from preview to queue "
                     f"(thread={origin_thread_name})"
                 )
                 return
+            if submitted > 0 and clear_preview_on_success:
+                self._log_preview_queue_finish(
+                    f"[controller] Preview queue submission stopped early after {submitted} job(s); "
+                    f"draft preview was preserved (thread={origin_thread_name})"
+                )
+                return
             if submitted > 0:
-                self._append_log(
+                self._log_preview_queue_finish(
                     f"[controller] Submitted {submitted} job(s) from preview to queue "
                     f"(thread={origin_thread_name})"
                 )
 
         dispatch = getattr(self, "_ui_dispatch", None)
-        if callable(dispatch):
+        if callable(dispatch) and self._should_dispatch_preview_queue_finish_to_ui():
             dispatch(_finish)
         else:
             _finish()
@@ -1602,6 +1743,8 @@ class AppController:
             negative_prompt_mode=negative_prompt_mode,
             prompt_delta=prompt_delta,
             negative_prompt_delta=negative_prompt_delta,
+            source_baseline_label="selected artifact baseline",
+            fallback_source_label="current Review stage baseline",
         )
 
     def on_submit_image_edits(
@@ -2155,8 +2298,20 @@ class AppController:
 
     def set_main_window(self, main_window: MainWindow) -> None:
         """Set the main window and wire GUI callbacks."""
+        previous_state = getattr(self, "app_state", None)
+        previous_listener = getattr(self, "_app_state_visibility_listener", None)
+        if (
+            previous_state is not None
+            and previous_listener is not None
+            and hasattr(previous_state, "unsubscribe")
+        ):
+            try:
+                previous_state.unsubscribe("content_visibility_mode", previous_listener)
+            except Exception:
+                pass
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
+        self._bind_app_state_visibility_listener()
         self._attach_to_gui()
         if hasattr(self.main_window, "connect_controller"):
             self.main_window.connect_controller(self)
@@ -2164,6 +2319,26 @@ class AppController:
         # Initial status
         self._update_status("Idle")
         self.load_packs()
+
+    def _bind_app_state_visibility_listener(self) -> None:
+        app_state = getattr(self, "app_state", None)
+        if app_state is None or not hasattr(app_state, "subscribe"):
+            self._app_state_visibility_listener = None
+            return
+        listener = getattr(self, "_app_state_visibility_listener", None)
+        if listener is None:
+            listener = self._on_content_visibility_mode_changed
+            self._app_state_visibility_listener = listener
+        try:
+            app_state.subscribe("content_visibility_mode", listener)
+        except Exception:
+            self._app_state_visibility_listener = None
+
+    def _on_content_visibility_mode_changed(self, *_: Any) -> None:
+        try:
+            self.load_packs()
+        except Exception as exc:
+            logger.debug("Failed to reload packs after visibility mode change: %s", exc)
 
     # ------------------------------------------------------------------
     # GUI Wiring
@@ -2208,9 +2383,7 @@ class AppController:
             if hasattr(left, "preset_combo"):
                 left.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_combo_select)
 
-        # Initial API status (placeholder)
-        if bottom is not None and hasattr(bottom, "api_status_label"):
-            bottom.api_status_label.configure(text="API: Unknown")
+        self._update_webui_state("disconnected")
 
         # Flush deferred status if any
         if getattr(self, "_pending_status_text", None):
@@ -2251,9 +2424,11 @@ class AppController:
     def _setup_queue_callbacks(self) -> None:
         if not self.job_service:
             return
+        use_event_dispatcher = False
         if hasattr(self.job_service, "set_event_dispatcher"):
             try:
                 self.job_service.set_event_dispatcher(self._run_in_gui_thread)
+                use_event_dispatcher = True
             except Exception:
                 pass
 
@@ -2274,23 +2449,26 @@ class AppController:
 
             return _wrapped
 
+        def _queue_callback(handler: Callable[..., None]) -> Callable[..., None]:
+            return handler if use_event_dispatcher else _wrap_ui_callback(handler)
+
         self.job_service.register_callback(
-            JobService.EVENT_QUEUE_UPDATED, _wrap_ui_callback(self._on_queue_updated)
+            JobService.EVENT_QUEUE_UPDATED, _queue_callback(self._on_queue_updated)
         )
         self.job_service.register_callback(
-            JobService.EVENT_QUEUE_STATUS, _wrap_ui_callback(self._on_queue_status_changed)
+            JobService.EVENT_QUEUE_STATUS, _queue_callback(self._on_queue_status_changed)
         )
         self.job_service.register_callback(
-            JobService.EVENT_JOB_STARTED, _wrap_ui_callback(self._on_job_started)
+            JobService.EVENT_JOB_STARTED, _queue_callback(self._on_job_started)
         )
         self.job_service.register_callback(
-            JobService.EVENT_JOB_FINISHED, _wrap_ui_callback(self._on_job_finished)
+            JobService.EVENT_JOB_FINISHED, _queue_callback(self._on_job_finished)
         )
         self.job_service.register_callback(
-            JobService.EVENT_JOB_FAILED, _wrap_ui_callback(self._on_job_failed)
+            JobService.EVENT_JOB_FAILED, _queue_callback(self._on_job_failed)
         )
         self.job_service.register_callback(
-            JobService.EVENT_QUEUE_EMPTY, _wrap_ui_callback(self._on_queue_empty)
+            JobService.EVENT_QUEUE_EMPTY, _queue_callback(self._on_queue_empty)
         )
         self._refresh_job_history()
         # PR-GUI-F3: Load persisted queue state on startup
@@ -2299,7 +2477,7 @@ class AppController:
         if hasattr(self.job_service, "set_status_callback"):
             try:
                 self.job_service.set_status_callback(
-                    "gui_queue_history", _wrap_ui_callback(self._on_job_status_for_panels)
+                    "gui_queue_history", _queue_callback(self._on_job_status_for_panels)
                 )
             except Exception:
                 pass
@@ -2492,12 +2670,9 @@ class AppController:
         self._run_in_gui_thread(_apply_panel_updates)
 
     def _on_queue_updated(self, summaries: list[str]) -> None:
-        def _apply() -> None:
-            if not self.app_state:
-                return
-            self._refresh_app_state_queue()
-
-        self._run_in_gui_thread(_apply)
+        if not self.app_state:
+            return
+        self._mark_ui_dirty(queue=True)
 
     def _on_queue_status_changed(self, status: str) -> None:
         def _apply() -> None:
@@ -2925,6 +3100,24 @@ class AppController:
             return
         self._config_manager.update_settings(new_values)
         self._config_manager.save_settings()
+        if "webui_workdir" in new_values:
+            set_webui_workdir(str(new_values.get("webui_workdir") or "").strip() or None)
+        if "webui_autostart_enabled" in new_values:
+            set_webui_autostart_enabled(bool(new_values.get("webui_autostart_enabled")))
+        if "webui_health_initial_timeout_seconds" in new_values:
+            set_webui_health_initial_timeout_seconds(
+                float(new_values.get("webui_health_initial_timeout_seconds") or 0.0)
+            )
+        if "webui_health_retry_count" in new_values:
+            set_webui_health_retry_count(int(new_values.get("webui_health_retry_count") or 0))
+        if "webui_health_retry_interval_seconds" in new_values:
+            set_webui_health_retry_interval_seconds(
+                float(new_values.get("webui_health_retry_interval_seconds") or 0.0)
+            )
+        if "webui_health_total_timeout_seconds" in new_values:
+            set_webui_health_total_timeout_seconds(
+                float(new_values.get("webui_health_total_timeout_seconds") or 0.0)
+            )
         prompt_optimizer = new_values.get("prompt_optimizer")
         if isinstance(prompt_optimizer, dict):
             self._apply_prompt_optimizer_ui_config(prompt_optimizer)
@@ -3011,6 +3204,13 @@ class AppController:
         import threading
 
         self._pending_status_text = text
+        app_state = getattr(self, "app_state", None)
+        status_setter = getattr(app_state, "set_status_text", None)
+        if callable(status_setter):
+            try:
+                status_setter(text)
+            except Exception:
+                pass
         thread_name = threading.current_thread().name
         status_bar = getattr(self.main_window, "status_bar_v2", None)
 
@@ -3020,21 +3220,6 @@ class AppController:
                     status_bar.update_status(text=text)
                 except Exception:
                     pass
-            bottom_zone = getattr(self.main_window, "bottom_zone", None)
-            if bottom_zone is None:
-                logger.debug(
-                    "AppController._update_status(%s) called before bottom_zone exists; deferring",
-                    text,
-                )
-                return
-            status_label = getattr(bottom_zone, "status_label", None)
-            if status_label is None:
-                logger.debug(
-                    "AppController._update_status(%s) called before status_label exists on bottom_zone; deferring",
-                    text,
-                )
-                return
-            status_label.configure(text=f"Status: {text}")
 
         # Only update UI on main thread; otherwise, dispatch via controller scheduler
         if thread_name != "MainThread":
@@ -3093,32 +3278,19 @@ class AppController:
                 pass
 
     def _append_log(self, text: str) -> None:
-        bottom_zone = getattr(self.main_window, "bottom_zone", None)
-        if bottom_zone is None:
-            logger.debug(
-                "AppController._append_log(%s) called before bottom_zone exists; deferring",
-                text,
-            )
-            return
-
-        log_widget = getattr(bottom_zone, "log_text", None)
-        if log_widget is None:
-            logger.debug(
-                "AppController._append_log(%s) called before log_text exists on bottom_zone; deferring",
-                text,
-            )
-            return
-
-        try:
-            log_widget.insert("end", text + "\n")
-            log_widget.see("end")
-        except Exception:
-            return
+        app_state = getattr(self, "app_state", None)
+        append_operator_log_line = getattr(app_state, "append_operator_log_line", None)
+        if callable(append_operator_log_line):
+            try:
+                append_operator_log_line(text)
+            except Exception:
+                logger.debug("AppController._append_log(%s) failed to append operator log", text)
 
         trace_panel = getattr(self.main_window, "log_trace_panel_v2", None)
-        if trace_panel and hasattr(trace_panel, "refresh"):
+        schedule_refresh = getattr(trace_panel, "schedule_refresh_soon", None)
+        if callable(schedule_refresh):
             try:
-                trace_panel.refresh()
+                schedule_refresh()
             except Exception:
                 pass
 
@@ -3310,6 +3482,19 @@ class AppController:
             "last_ui_heartbeat_ts": getattr(self, "last_ui_heartbeat_ts", None),
             "last_runner_activity_ts": getattr(self, "last_runner_activity_ts", None),
         }
+        snapshot = getattr(self, "_optional_dependency_snapshot", None)
+        if snapshot is not None and hasattr(snapshot, "to_dict"):
+            try:
+                data["optional_dependencies"] = snapshot.to_dict()
+            except Exception:
+                data["optional_dependencies"] = None
+        pipeline_tab = getattr(getattr(self, "main_window", None), "pipeline_tab", None)
+        getter = getattr(pipeline_tab, "get_diagnostics_snapshot", None)
+        if callable(getter):
+            try:
+                data["pipeline_tab"] = getter()
+            except Exception:
+                data["pipeline_tab"] = None
         data["last_bundle"] = (
             str(self._last_diagnostics_bundle) if self._last_diagnostics_bundle else None
         )
@@ -3835,8 +4020,13 @@ class AppController:
     # ------------------------------------------------------------------
 
     def on_help_clicked(self) -> None:
-        self._append_log("[controller] Help clicked (stub).")
-        # TODO: open docs/README in browser or show help overlay.
+        app_state = getattr(self, "app_state", None)
+        toggle = getattr(app_state, "toggle_help_mode", None) if app_state is not None else None
+        if callable(toggle):
+            enabled = bool(toggle())
+            self._append_log(f"[controller] Help mode {'enabled' if enabled else 'disabled'}.")
+            return
+        self._append_log("[controller] Help clicked, but no app state help-mode toggle is available.")
 
     def on_refresh_clicked(self) -> None:
         self._append_log("[controller] Refresh clicked.")
@@ -4236,7 +4426,36 @@ class AppController:
 
     def load_packs(self) -> None:
         """Discover packs and push them to the GUI."""
-        self.packs = discover_packs(self._packs_dir)
+        discovered = discover_packs(self._packs_dir)
+        resolver = ContentVisibilityResolver(
+            getattr(self.app_state, "content_visibility_mode", "nsfw")
+        )
+        visible_packs: list[PromptPackInfo] = []
+        for pack in discovered:
+            prompts = []
+            try:
+                prompts = read_prompt_pack(pack.path)
+            except Exception:
+                prompts = []
+            if resolver.is_visible(
+                {
+                    "name": pack.name,
+                    "description": " ".join(
+                        " ".join(
+                            part
+                            for part in (
+                                str(prompt.get("positive") or "").strip(),
+                                str(prompt.get("negative") or "").strip(),
+                            )
+                            if part
+                        )
+                        for prompt in prompts
+                        if isinstance(prompt, Mapping)
+                    ),
+                }
+            ):
+                visible_packs.append(pack)
+        self.packs = visible_packs
         pack_names = [pack.name for pack in self.packs]
         if self.main_window is not None and hasattr(self.main_window, "update_pack_list"):
             self.main_window.update_pack_list(pack_names)
@@ -4719,10 +4938,10 @@ class AppController:
         return getattr(pipeline_tab, "stage_cards_panel", None)
 
     def _get_sidebar_panel(self) -> Any:
-        return getattr(self.main_window, "sidebar_panel_v2", None)
+        return getattr(getattr(self, "main_window", None), "sidebar_panel_v2", None)
 
     def _get_prompt_tab(self) -> Any:
-        return getattr(self.main_window, "prompt_tab", None)
+        return getattr(getattr(self, "main_window", None), "prompt_tab", None)
 
     def _read_prompt_optimizer_ui_config(self) -> dict[str, Any] | None:
         prompt_tab = self._get_prompt_tab()
@@ -5286,10 +5505,11 @@ class AppController:
             config: Configuration dict to modify (modifies in-place)
         """
         # Get sidebar reference from main window
-        if not self.main_window:
+        main_window = getattr(self, "main_window", None)
+        if not main_window:
             return
         
-        sidebar = getattr(self.main_window, "sidebar_panel_v2", None)
+        sidebar = getattr(main_window, "sidebar_panel_v2", None)
         if not sidebar:
             return
         
@@ -5377,6 +5597,12 @@ class AppController:
             HiresOverrides,
             ADetailerOverrides,
         )
+
+        def _first_defined(*values: Any) -> Any:
+            for value in values:
+                if value is not None:
+                    return value
+            return None
         
         # Extract txt2img settings (stage cards export under "txt2img")
         txt2img_overrides = None
@@ -5441,27 +5667,132 @@ class AppController:
         adetailer_config = current_config.get("adetailer", {})
         if adetailer_config:
             adetailer_overrides = ADetailerOverrides(  # Note: class name is "ADetailerOverrides"
-                enabled=adetailer_config.get("adetailer_enabled", False),
-                model=adetailer_config.get("model") or adetailer_config.get("adetailer_model"),
-                confidence=adetailer_config.get("confidence") or adetailer_config.get("adetailer_confidence"),
-                denoise_strength=adetailer_config.get("denoising_strength") or adetailer_config.get("adetailer_denoise"),
+                enabled=_first_defined(
+                    adetailer_config.get("adetailer_enabled"),
+                    adetailer_config.get("enabled"),
+                    False,
+                ),
+                checkpoint_model=_first_defined(
+                    adetailer_config.get("adetailer_checkpoint_model"),
+                    adetailer_config.get("sd_model_checkpoint"),
+                ),
+                model=_first_defined(
+                    adetailer_config.get("model"),
+                    adetailer_config.get("adetailer_model"),
+                ),
+                confidence=_first_defined(
+                    adetailer_config.get("confidence"),
+                    adetailer_config.get("ad_confidence"),
+                    adetailer_config.get("adetailer_confidence"),
+                ),
+                max_detections=adetailer_config.get("max_detections"),
+                denoise_strength=_first_defined(
+                    adetailer_config.get("denoising_strength"),
+                    adetailer_config.get("ad_denoising_strength"),
+                    adetailer_config.get("adetailer_denoise"),
+                ),
                 # Additional settings from GUI
-                sampler=adetailer_config.get("sampler_name") or adetailer_config.get("adetailer_sampler"),
-                scheduler=adetailer_config.get("scheduler") or adetailer_config.get("adetailer_scheduler"),
-                steps=adetailer_config.get("steps") or adetailer_config.get("adetailer_steps"),
-                cfg_scale=adetailer_config.get("cfg_scale") or adetailer_config.get("adetailer_cfg"),
+                sampler=_first_defined(
+                    adetailer_config.get("sampler_name"),
+                    adetailer_config.get("ad_sampler"),
+                    adetailer_config.get("adetailer_sampler"),
+                ),
+                scheduler=_first_defined(
+                    adetailer_config.get("scheduler"),
+                    adetailer_config.get("ad_scheduler"),
+                    adetailer_config.get("adetailer_scheduler"),
+                ),
+                steps=_first_defined(
+                    adetailer_config.get("steps"),
+                    adetailer_config.get("ad_steps"),
+                    adetailer_config.get("adetailer_steps"),
+                ),
+                cfg_scale=_first_defined(
+                    adetailer_config.get("cfg_scale"),
+                    adetailer_config.get("ad_cfg_scale"),
+                    adetailer_config.get("adetailer_cfg"),
+                ),
                 prompt=adetailer_config.get("adetailer_prompt"),
                 negative_prompt=adetailer_config.get("adetailer_negative_prompt"),
                 # Mask processing
-                mask_blur=adetailer_config.get("mask_blur") or adetailer_config.get("ad_mask_blur"),
-                mask_feather=adetailer_config.get("mask_feather") or adetailer_config.get("ad_mask_feather"),
-                dilate_erode=adetailer_config.get("mask_dilate_erode") or adetailer_config.get("ad_dilate_erode"),
-                inpaint_padding=adetailer_config.get("ad_inpaint_only_masked_padding") or adetailer_config.get("inpaint_padding"),
+                mask_blur=_first_defined(
+                    adetailer_config.get("mask_blur"),
+                    adetailer_config.get("ad_mask_blur"),
+                ),
+                mask_feather=_first_defined(
+                    adetailer_config.get("mask_feather"),
+                    adetailer_config.get("ad_mask_feather"),
+                    adetailer_config.get("adetailer_mask_feather"),
+                ),
+                dilate_erode=_first_defined(
+                    adetailer_config.get("mask_dilate_erode"),
+                    adetailer_config.get("ad_dilate_erode"),
+                ),
+                inpaint_padding=_first_defined(
+                    adetailer_config.get("ad_inpaint_only_masked_padding"),
+                    adetailer_config.get("adetailer_padding"),
+                    adetailer_config.get("inpaint_padding"),
+                ),
+                inpaint_only_masked=adetailer_config.get("ad_inpaint_only_masked"),
+                use_inpaint_width_height=adetailer_config.get("ad_use_inpaint_width_height"),
+                inpaint_width=adetailer_config.get("ad_inpaint_width"),
+                inpaint_height=adetailer_config.get("ad_inpaint_height"),
+                mask_merge_invert=_first_defined(
+                    adetailer_config.get("ad_mask_merge_invert"),
+                    adetailer_config.get("mask_merge_mode"),
+                ),
+                enable_face_pass=adetailer_config.get("enable_face_pass"),
                 # Mask filtering
-                mask_filter_method=adetailer_config.get("mask_filter_method") or adetailer_config.get("ad_mask_filter_method"),
-                mask_k_largest=adetailer_config.get("mask_k_largest") or adetailer_config.get("ad_mask_k_largest"),
-                mask_min_ratio=adetailer_config.get("mask_min_ratio") or adetailer_config.get("ad_mask_min_ratio"),
-                mask_max_ratio=adetailer_config.get("mask_max_ratio") or adetailer_config.get("ad_mask_max_ratio"),
+                mask_filter_method=_first_defined(
+                    adetailer_config.get("mask_filter_method"),
+                    adetailer_config.get("ad_mask_filter_method"),
+                ),
+                mask_k_largest=_first_defined(
+                    adetailer_config.get("mask_k_largest"),
+                    adetailer_config.get("ad_mask_k_largest"),
+                ),
+                mask_min_ratio=_first_defined(
+                    adetailer_config.get("mask_min_ratio"),
+                    adetailer_config.get("ad_mask_min_ratio"),
+                ),
+                mask_max_ratio=_first_defined(
+                    adetailer_config.get("mask_max_ratio"),
+                    adetailer_config.get("ad_mask_max_ratio"),
+                ),
+                hands_model=_first_defined(
+                    adetailer_config.get("adetailer_hands_model"),
+                    adetailer_config.get("hands_model"),
+                ),
+                enable_hands_pass=_first_defined(
+                    adetailer_config.get("enable_hands_pass"),
+                    adetailer_config.get("ad_hands_enabled"),
+                ),
+                hands_confidence=adetailer_config.get("adetailer_hands_confidence"),
+                hands_steps=adetailer_config.get("adetailer_hands_steps"),
+                hands_cfg_scale=adetailer_config.get("adetailer_hands_cfg"),
+                hands_denoise_strength=adetailer_config.get("adetailer_hands_denoise"),
+                hands_sampler=adetailer_config.get("adetailer_hands_sampler"),
+                hands_scheduler=adetailer_config.get("adetailer_hands_scheduler"),
+                hands_prompt=adetailer_config.get("adetailer_hands_prompt"),
+                hands_negative_prompt=adetailer_config.get("adetailer_hands_negative_prompt"),
+                hands_inpaint_only_masked=adetailer_config.get("ad_hands_inpaint_only_masked"),
+                hands_padding=_first_defined(
+                    adetailer_config.get("ad_hands_padding"),
+                    adetailer_config.get("hands_padding"),
+                ),
+                hands_use_inpaint_width_height=adetailer_config.get(
+                    "ad_hands_use_inpaint_width_height"
+                ),
+                hands_inpaint_width=adetailer_config.get("ad_hands_inpaint_width"),
+                hands_inpaint_height=adetailer_config.get("ad_hands_inpaint_height"),
+                hands_mask_filter_method=adetailer_config.get("ad_hands_mask_filter_method"),
+                hands_mask_k_largest=adetailer_config.get("ad_hands_mask_k"),
+                hands_mask_min_ratio=adetailer_config.get("ad_hands_mask_min_ratio"),
+                hands_mask_max_ratio=adetailer_config.get("ad_hands_mask_max_ratio"),
+                hands_dilate_erode=adetailer_config.get("ad_hands_dilate_erode"),
+                hands_mask_blur=adetailer_config.get("ad_hands_mask_blur"),
+                hands_mask_feather=adetailer_config.get("ad_hands_mask_feather"),
+                hands_mask_merge_invert=adetailer_config.get("ad_hands_mask_merge_invert"),
             )
         
         return StageOverridesBundle(
@@ -5593,6 +5924,14 @@ class AppController:
                 self.current_operation_label = None
                 self.last_ui_action = None
         
+        can_schedule_back_to_ui = bool(
+            getattr(self, "main_window", None)
+            and callable(getattr(self.main_window, "run_in_main_thread", None))
+        )
+        if not self.threaded or not can_schedule_back_to_ui:
+            _worker()
+            return
+
         # PR-HB-002: Use tracked thread for clean shutdown
         self._spawn_tracked_thread(
             target=_worker,

@@ -47,7 +47,30 @@ Why here:
   discovered/imported review quality
 - staged-curation imports and output classification depend on it
 
-#### 0.2 Staged-curation contract baseline (`PR-LEARN-259A`) is verified
+#### 0.2 `PR-TEST-280-Full-Suite-Collection-Recovery-and-Test-Hygiene`
+
+Why here:
+
+- the branch cannot claim trustworthy regression status while full pytest
+  collection is broken
+- this restores confidence in every later runtime, UX, and video change
+
+#### 0.3 `PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback`
+
+Why here:
+
+- this closes a real production runtime regression discovered on this branch
+- ADetailer stability needs to be restored before stacking more workflow work on
+  top
+
+#### 0.4 `PR-POLISH-282-Canonical-Roadmap-Video-Status-Harmonization`
+
+Why here:
+
+- the canonical roadmap currently contradicts itself on video rollout status
+- planning surfaces should be harmonized before more queue sequencing is added
+
+#### 0.5 Staged-curation contract baseline (`PR-LEARN-259A`) is verified
 
 Why here:
 
@@ -161,6 +184,7 @@ Why first:
 
 Status: Completed 2026-03-24
 
+Status: Completed 2026-03-26
 Why second:
 
 - introduces the StableNew-owned orchestrator and typed prompt-intent bundle
@@ -218,6 +242,8 @@ Why second:
 
 #### 5.3 `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
 
+Status: Completed 2026-03-25
+
 Why third:
 
 - this is a real usability blocker, not cosmetic polish
@@ -225,11 +251,19 @@ Why third:
 
 #### 5.4 `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
 
+Status: Completed 2026-03-25
+
 #### 5.5 `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
+
+Status: Completed 2026-03-25
 
 #### 5.6 `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
 
+Status: Completed 2026-03-25
+
 #### 5.7 `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+
+Status: Completed 2026-03-25
 
 Why this order:
 
@@ -246,10 +280,20 @@ This is broader than individual UX help PRs and should be handled as a structure
 sweep.
 
 #### 6.1 `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
+
+Status: Completed 2026-03-25
 #### 6.2 `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
+
+Status: Completed 2026-03-25
 #### 6.3 `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
+
+Status: Completed 2026-03-26
 #### 6.4 `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
+
+Status: Completed 2026-03-26
 #### 6.5 `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
+
+Status: Completed 2026-03-26
 #### 6.6 `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
 #### 6.7 `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep`
 #### 6.8 `PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist`
@@ -295,10 +339,10 @@ If the goal is the best real-world improvement with the fewest PRs first,
 execute this shorter path:
 
 1. close image output-route regression
-1. `PR-UX-271`
-1. `PR-UX-267`
-1. `PR-UX-268`
-1. `PR-UX-269`
+1. `PR-TEST-280-Full-Suite-Collection-Recovery-and-Test-Hygiene`
+1. `PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback`
+1. `PR-POLISH-282-Canonical-Roadmap-Video-Status-Harmonization`
+1. `PR-UX-278`
 
 Why this fast-track works:
 
@@ -312,17 +356,9 @@ Why this fast-track works:
 ## 5. Master Ordered List
 
 1. close image output-route regression
-1. `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
-1. `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
-1. `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
-1. `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
-1. `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
-1. `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
-1. `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
-1. `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
-1. `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
-1. `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
-1. `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
+1. `PR-TEST-280-Full-Suite-Collection-Recovery-and-Test-Hygiene`
+1. `PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback`
+1. `PR-POLISH-282-Canonical-Roadmap-Video-Status-Harmonization`
 1. `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep`
 1. `PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist`
 1. `PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset`

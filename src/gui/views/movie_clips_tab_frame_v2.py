@@ -12,8 +12,16 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
 
+from src.gui.layout_v2 import configure_grid_columns
+from src.gui.help_text.workflow_guidance_v2 import build_movie_clips_guidance
+from src.gui.help_text.stage_setting_help_v2 import MOVIE_CLIPS_SETTING_HELP
+from src.gui.theme_v2 import style_listbox_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
+from src.gui.view_contracts.pipeline_layout_contract import (
+    PRIMARY_CONTROL_MIN_WIDTH,
+    get_two_pane_workspace_column_specs,
+)
 from src.gui.view_contracts.movie_clips_contract import (
     DEFAULT_CODEC,
     DEFAULT_FPS,
@@ -31,7 +39,7 @@ from src.gui.view_contracts.movie_clips_contract import (
     format_source_mode_label,
     sort_image_names,
 )
-from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.view_contracts.video_workspace_contract import summarize_movie_clips_source
 
@@ -66,6 +74,8 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._image_paths: list[Path] = []
         self._source_bundle: dict[str, Any] | None = None
         self._build_status: str = ""
+        self._setting_tooltips: dict[str, Any] = {}
+        self._pending_visibility_refresh = False
 
         # Tk variables
         self.source_mode_var = tk.StringVar(value=SOURCE_MODE_FOLDER)
@@ -75,6 +85,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self.quality_var = tk.StringVar(value=DEFAULT_QUALITY)
         self.mode_var = tk.StringVar(value=DEFAULT_MODE)
         self.source_summary_var = tk.StringVar(value=summarize_movie_clips_source().empty_state)
+        self.effective_settings_var = tk.StringVar(value="Effective settings: defaults loaded")
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=0)
@@ -84,11 +95,25 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self.overview_panel = TabOverviewPanel(
             self,
             content=get_tab_overview_content("movie_clips"),
+            app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
 
         self._build_header()
         self._build_body()
+        self.bind("<Map>", self._on_map, add="+")
+        for variable in (self.fps_var, self.codec_var, self.quality_var, self.mode_var):
+            variable.trace_add("write", lambda *_: self._update_effective_settings_summary())
+        self._update_effective_settings_summary()
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
+        self.on_content_visibility_mode_changed()
 
         # Trace source mode toggle
         self.source_mode_var.trace_add("write", lambda *_: self._on_source_mode_changed())
@@ -161,18 +186,32 @@ class MovieClipsTabFrameV2(ttk.Frame):
             style="Dark.TLabel",
         )
         self.status_label.grid(row=0, column=7, sticky="e", padx=(8, 0))
+        self.visibility_banner = ttk.Label(header, text="", style="Muted.TLabel")
         ttk.Label(
             header,
             textvariable=self.source_summary_var,
             style="Muted.TLabel",
         ).grid(row=1, column=0, columnspan=8, sticky="w", pady=(6, 0))
+        ttk.Label(
+            header,
+            textvariable=self.effective_settings_var,
+            style="Muted.TLabel",
+        ).grid(row=2, column=0, columnspan=8, sticky="w", pady=(2, 0))
 
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
         body.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
-        body.columnconfigure(0, weight=1)
-        body.columnconfigure(1, weight=0)
+        configure_grid_columns(
+            body,
+            get_two_pane_workspace_column_specs(
+                left_weight=3,
+                right_weight=2,
+                left_min_width=420,
+                right_min_width=320,
+            ),
+        )
         body.rowconfigure(0, weight=1)
+        self._body_frame = body
 
         # Left: ordered image list
         list_frame = ttk.LabelFrame(
@@ -197,6 +236,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
             highlightbackground=TOKENS.colors.border_subtle,
             exportselection=False,
         )
+        style_listbox_widget(self.image_list)
         self.image_list.grid(row=0, column=0, sticky="nsew")
         _sb = ttk.Scrollbar(list_frame, orient="vertical", command=self.image_list.yview)
         _sb.grid(row=0, column=1, sticky="ns")
@@ -245,28 +285,20 @@ class MovieClipsTabFrameV2(ttk.Frame):
             padding=8,
         )
         settings_frame.grid(row=0, column=1, sticky="ns")
-        settings_frame.columnconfigure(1, weight=1)
+        settings_frame.columnconfigure(1, weight=1, minsize=PRIMARY_CONTROL_MIN_WIDTH)
+        self._settings_frame = settings_frame
 
         self.workflow_help_panel = ActionExplainerPanel(
             settings_frame,
-            content=ActionExplainerContent(
-                title="When To Use Movie Clips",
-                summary="Choose Movie Clips when you already have an ordered image sequence or a compatible workflow/SVD output bundle and want explicit clip assembly control.",
-                bullets=(
-                    "FPS controls playback speed. Higher values make the clip play faster and smoother if enough frames exist.",
-                    "Codec and Quality affect export compatibility and file size rather than generation semantics.",
-                    "Mode controls how the clip is assembled for output, so confirm it before building if the destination matters.",
-                    "Use Latest Video Output is the fastest handoff when another video tab already produced frames you want to package into a clip.",
-                ),
-            ),
+            content=build_movie_clips_guidance(),
+            app_state=self.app_state,
             wraplength=240,
         )
         self.workflow_help_panel.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
 
-        ttk.Label(settings_frame, text="FPS", style="Dark.TLabel", anchor="w").grid(
-            row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
-        )
-        ttk.Spinbox(
+        fps_label = ttk.Label(settings_frame, text="FPS", style="Dark.TLabel", anchor="w")
+        fps_label.grid(row=1, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.fps_spin = ttk.Spinbox(
             settings_frame,
             from_=1,
             to=120,
@@ -274,43 +306,63 @@ class MovieClipsTabFrameV2(ttk.Frame):
             textvariable=self.fps_var,
             width=6,
             style="Dark.TSpinbox",
-        ).grid(row=1, column=1, sticky="ew", pady=(0, 6))
-
-        ttk.Label(settings_frame, text="Codec", style="Dark.TLabel", anchor="w").grid(
-            row=2, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
         )
-        ttk.Combobox(
+        self.fps_spin.grid(row=1, column=1, sticky="ew", pady=(0, 6))
+        self._attach_setting_help("fps", MOVIE_CLIPS_SETTING_HELP["fps"], fps_label, self.fps_spin)
+
+        codec_label = ttk.Label(settings_frame, text="Codec", style="Dark.TLabel", anchor="w")
+        codec_label.grid(row=2, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.codec_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.codec_var,
             values=CODEC_OPTIONS,
             state="readonly",
             style="Dark.TCombobox",
             width=14,
-        ).grid(row=2, column=1, sticky="ew", pady=(0, 6))
-
-        ttk.Label(settings_frame, text="Quality", style="Dark.TLabel", anchor="w").grid(
-            row=3, column=0, sticky="w", padx=(0, 8), pady=(0, 6)
         )
-        ttk.Combobox(
+        self.codec_combo.grid(row=2, column=1, sticky="ew", pady=(0, 6))
+        self._attach_setting_help(
+            "codec",
+            MOVIE_CLIPS_SETTING_HELP["codec"],
+            codec_label,
+            self.codec_combo,
+        )
+
+        quality_label = ttk.Label(settings_frame, text="Quality", style="Dark.TLabel", anchor="w")
+        quality_label.grid(row=3, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.quality_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.quality_var,
             values=QUALITY_OPTIONS,
             state="readonly",
             style="Dark.TCombobox",
             width=14,
-        ).grid(row=3, column=1, sticky="ew", pady=(0, 6))
-
-        ttk.Label(settings_frame, text="Mode", style="Dark.TLabel", anchor="w").grid(
-            row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 12)
         )
-        ttk.Combobox(
+        self.quality_combo.grid(row=3, column=1, sticky="ew", pady=(0, 6))
+        self._attach_setting_help(
+            "quality",
+            MOVIE_CLIPS_SETTING_HELP["quality"],
+            quality_label,
+            self.quality_combo,
+        )
+
+        mode_label = ttk.Label(settings_frame, text="Mode", style="Dark.TLabel", anchor="w")
+        mode_label.grid(row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 12))
+        self.mode_combo = ttk.Combobox(
             settings_frame,
             textvariable=self.mode_var,
             values=MODE_OPTIONS,
             state="readonly",
             style="Dark.TCombobox",
             width=14,
-        ).grid(row=4, column=1, sticky="ew", pady=(0, 12))
+        )
+        self.mode_combo.grid(row=4, column=1, sticky="ew", pady=(0, 12))
+        self._attach_setting_help(
+            "mode",
+            MOVIE_CLIPS_SETTING_HELP["mode"],
+            mode_label,
+            self.mode_combo,
+        )
 
         ttk.Separator(settings_frame, orient="horizontal").grid(
             row=5, column=0, columnspan=2, sticky="ew", pady=(0, 10)
@@ -336,6 +388,15 @@ class MovieClipsTabFrameV2(ttk.Frame):
             justify="center",
         )
         self.build_status_label.grid(row=7, column=0, columnspan=2, sticky="ew")
+
+    def _attach_setting_help(self, key: str, text: str, *widgets: tk.Widget | None) -> None:
+        live_widgets = [widget for widget in widgets if widget is not None]
+        if not live_widgets:
+            return
+        primary = live_widgets[0]
+        self._setting_tooltips[key] = attach_tooltip(primary, text)
+        for widget in live_widgets[1:]:
+            attach_tooltip(widget, text)
 
     # ------------------------------------------------------------------
     # Event handlers
@@ -526,12 +587,42 @@ class MovieClipsTabFrameV2(ttk.Frame):
             text = summary.empty_state
         self.source_summary_var.set(text)
 
+    def _update_effective_settings_summary(self) -> None:
+        summary = build_clip_settings_summary(
+            self.fps_var.get(),
+            self.codec_var.get(),
+            self.quality_var.get(),
+            self.mode_var.get(),
+        )
+        bits = [
+            f"fps={summary.fps} [{'default' if summary.fps == DEFAULT_FPS else 'selected here'}]",
+            f"codec={summary.codec} [{'default' if summary.codec == DEFAULT_CODEC else 'selected here'}]",
+            f"quality={summary.quality} [{'default' if summary.quality == DEFAULT_QUALITY else 'selected here'}]",
+            f"mode={summary.mode} [{'default' if summary.mode == DEFAULT_MODE else 'selected here'}]",
+        ]
+        self.effective_settings_var.set("Effective settings: " + " | ".join(bits))
+
     def _set_build_status(self, msg: str) -> None:
         self._build_status = msg
         try:
             self.build_status_label.configure(text=msg)
         except Exception:
             pass
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._pending_visibility_refresh = False
+        self.visibility_banner.configure(text="")
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            return
+        self.on_content_visibility_mode_changed()
+
+    def _on_map(self, _event=None) -> None:
+        if not self._pending_visibility_refresh:
+            return
+        self.after_idle(self.on_content_visibility_mode_changed)
 
     def _collect_settings(self) -> dict[str, Any]:
         return {

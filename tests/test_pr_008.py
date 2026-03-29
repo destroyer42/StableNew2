@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import tkinter as tk
-
 from src.gui.stage_cards_v2.adetailer_stage_card_v2 import ADetailerStageCardV2
 
 
-def test_pr_008_adetailer_card_defaults() -> None:
-    root = tk.Tk()
-    root.withdraw()
+def test_pr_008_adetailer_card_defaults(tk_root) -> None:
     try:
-        card = ADetailerStageCardV2(root)
+        card = ADetailerStageCardV2(tk_root)
 
         assert card.enable_face_pass_var.get() is True
         assert card.enable_hands_pass_var.get() is False
@@ -20,14 +16,12 @@ def test_pr_008_adetailer_card_defaults() -> None:
         assert card.mask_filter_method_var.get() == "Area"
         assert card.scheduler_var.get() == "inherit"
     finally:
-        root.destroy()
+        card.destroy()
 
 
-def test_pr_008_adetailer_card_exports_two_pass_config() -> None:
-    root = tk.Tk()
-    root.withdraw()
+def test_pr_008_adetailer_card_exports_two_pass_config(tk_root) -> None:
     try:
-        card = ADetailerStageCardV2(root)
+        card = ADetailerStageCardV2(tk_root)
         card.enable_hands_pass_var.set(True)
         card.hands_model_var.set("hand_yolov8s.pt")
         card.hands_inpaint_masked_var.set(False)
@@ -42,4 +36,4 @@ def test_pr_008_adetailer_card_exports_two_pass_config() -> None:
         assert config["adetailer_hands_scheduler"] == "Karras"
         assert config["adetailer_checkpoint_model"] == "juggernautXL_ragnarokBy.safetensors"
     finally:
-        root.destroy()
+        card.destroy()

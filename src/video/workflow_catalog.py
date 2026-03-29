@@ -104,6 +104,11 @@ def _build_ltx_multiframe_anchor_v1() -> WorkflowSpec:
                 description="StableNew LTX bridge nodes required to execute the pinned workflow.",
             ),
         ),
+        governance_state="approved",
+        pinned_revision="catalog:ltx_multiframe_anchor_v1@1.0.0",
+        governance_notes=(
+            "StableNew-managed pinned builtin workflow. Changes require catalog and registry review."
+        ),
         backend_defaults={
             "workflow_family": "ltx",
             "transport": "managed_local_comfy",

@@ -38,6 +38,10 @@ class LogTracePanelV2(ttk.Frame):
         self._auto_scroll = tk.BooleanVar(value=True)
         self._last_body_height = 0
         self._last_rendered_lines: tuple[tuple[str, str], ...] = ()
+        self._last_log_version = -1
+        self._last_filter_signature: tuple[str, str, str, str, str] | None = None
+        self._render_entry_limit = 150 if audience == "operator" else 300
+        self._deferred_refresh_id: str | None = None
 
         header = ttk.Frame(self)
         header.pack(side=tk.TOP, fill=tk.X)
@@ -65,7 +69,7 @@ class LogTracePanelV2(ttk.Frame):
             width=8,
         )
         self._level_combo.pack(side=tk.LEFT)
-        self._level_combo.bind("<<ComboboxSelected>>", lambda *_: self.refresh())
+        self._level_combo.bind("<<ComboboxSelected>>", lambda *_: self.refresh(force=True))
 
         if audience == "trace":
             ttk.Label(header, text="Subsystem:").pack(side=tk.LEFT, padx=(8, 2))
@@ -96,10 +100,10 @@ class LogTracePanelV2(ttk.Frame):
                 width=14,
             )
             self._job_entry.pack(side=tk.LEFT)
-            self._subsystem_filter.trace_add("write", lambda *_: self.refresh())
-            self._stage_filter.trace_add("write", lambda *_: self.refresh())
-            self._event_filter.trace_add("write", lambda *_: self.refresh())
-            self._job_filter.trace_add("write", lambda *_: self.refresh())
+            self._subsystem_filter.trace_add("write", lambda *_: self.refresh(force=True))
+            self._stage_filter.trace_add("write", lambda *_: self.refresh(force=True))
+            self._event_filter.trace_add("write", lambda *_: self.refresh(force=True))
+            self._job_filter.trace_add("write", lambda *_: self.refresh(force=True))
 
         self._scroll_check = ttk.Checkbutton(
             header,
@@ -161,7 +165,7 @@ class LogTracePanelV2(ttk.Frame):
             if not initial and body_height:
                 self._adjust_window_height(body_height)
             if not initial:
-                self.refresh()
+                self.refresh(force=True)
         else:
             self._body.pack_forget()
             self._toggle_btn.config(text="Details v")
@@ -199,9 +203,30 @@ class LogTracePanelV2(ttk.Frame):
     def _on_toggle(self) -> None:
         self._set_expanded(not self._expanded.get())
 
-    def refresh(self) -> None:
+    def _current_filter_signature(self) -> tuple[str, str, str, str, str]:
+        return (
+            self._level_filter.get(),
+            self._subsystem_filter.get(),
+            self._job_filter.get(),
+            self._event_filter.get(),
+            self._stage_filter.get(),
+        )
+
+    def refresh(self, *, force: bool = False) -> None:
+        if not force and not self._expanded.get():
+            return
+        filter_signature = self._current_filter_signature()
+        log_version = self._log_handler.get_version()
+        if (
+            not force
+            and log_version == self._last_log_version
+            and filter_signature == self._last_filter_signature
+        ):
+            return
         entries = list(self._log_handler.get_entries())
         filtered = self._apply_filter(entries)
+        if self._render_entry_limit > 0 and len(filtered) > self._render_entry_limit:
+            filtered = filtered[-self._render_entry_limit :]
 
         lines: list[tuple[str, str]] = []
         for entry in filtered:
@@ -213,8 +238,12 @@ class LogTracePanelV2(ttk.Frame):
 
         rendered_lines = tuple(lines)
         if rendered_lines == self._last_rendered_lines:
+            self._last_log_version = log_version
+            self._last_filter_signature = filter_signature
             return
         self._last_rendered_lines = rendered_lines
+        self._last_log_version = log_version
+        self._last_filter_signature = filter_signature
 
         current_yview = self._log_text.yview()
         self._log_text.config(state=tk.NORMAL)
@@ -228,6 +257,17 @@ class LogTracePanelV2(ttk.Frame):
             self._log_text.see(tk.END)
         else:
             self._log_text.yview_moveto(current_yview[0])
+
+    def schedule_refresh_soon(self, delay_ms: int = 125) -> None:
+        """Coalesce bursty refresh requests into a single near-term repaint."""
+        if self._deferred_refresh_id is not None:
+            return
+
+        def _run() -> None:
+            self._deferred_refresh_id = None
+            self.refresh()
+
+        self._deferred_refresh_id = self.after(max(0, int(delay_ms)), _run)
 
     def _get_payload(self, entry: dict[str, object]) -> dict[str, Any] | None:
         payload = entry.get("payload")

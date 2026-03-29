@@ -6,6 +6,7 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
+from src.gui.theme_v2 import apply_toplevel_theme, style_canvas_widget, style_text_widget
 from src.utils.lora_keyword_detector import LoRAMetadata
 
 
@@ -27,6 +28,7 @@ class LoRAKeywordDialog(tk.Toplevel):
         self.title(f"Keywords: {metadata.name}")
         self.geometry("500x450")
         self.transient(parent)
+        apply_toplevel_theme(self)
         
         self._build_ui()
         
@@ -81,6 +83,7 @@ class LoRAKeywordDialog(tk.Toplevel):
             list_frame.pack(fill="both", expand=True)
             
             canvas = tk.Canvas(list_frame, bg="#2b2b2b", highlightthickness=0)
+            style_canvas_widget(canvas, elevated=True)
             scrollbar = ttk.Scrollbar(list_frame, orient="vertical", command=canvas.yview)
             self.scroll_frame = ttk.Frame(canvas)
             
@@ -126,6 +129,7 @@ class LoRAKeywordDialog(tk.Toplevel):
                 font=("Segoe UI", 9, "bold")
             ).pack(anchor="w")
             desc_text = tk.Text(content_frame, height=4, wrap="word", bg="#2b2b2b", fg="white")
+            style_text_widget(desc_text, elevated=True)
             desc_text.insert("1.0", self.metadata.description)
             desc_text.config(state="disabled")
             desc_text.pack(fill="x", pady=(2, 0))

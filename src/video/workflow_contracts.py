@@ -9,6 +9,14 @@ WORKFLOW_CAP_SINGLE_IMAGE_TO_VIDEO = "single_image_to_video"
 WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO = "multi_frame_anchor_video"
 WORKFLOW_CAP_SEGMENT_STITCHABLE = "segment_stitchable"
 WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED = "local_process_required"
+WORKFLOW_GOVERNANCE_APPROVED = "approved"
+WORKFLOW_GOVERNANCE_EXPERIMENTAL = "experimental"
+WORKFLOW_GOVERNANCE_DISABLED = "disabled"
+KNOWN_WORKFLOW_GOVERNANCE_STATES = {
+    WORKFLOW_GOVERNANCE_APPROVED,
+    WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+    WORKFLOW_GOVERNANCE_DISABLED,
+}
 
 KNOWN_WORKFLOW_CAPABILITY_TAGS = {
     WORKFLOW_CAP_SINGLE_IMAGE_TO_VIDEO,
@@ -120,6 +128,9 @@ class WorkflowSpec:
     output_bindings: tuple[WorkflowOutputBinding, ...] = ()
     dependency_specs: tuple[WorkflowDependencySpec, ...] = ()
     backend_defaults: dict[str, Any] = field(default_factory=dict)
+    governance_state: str = WORKFLOW_GOVERNANCE_APPROVED
+    pinned_revision: str = ""
+    governance_notes: str = ""
 
     def __post_init__(self) -> None:
         if not _normalized_text(self.workflow_id):
@@ -136,6 +147,11 @@ class WorkflowSpec:
             raise ValueError("Workflow specs must declare at least one output binding")
         if not self.dependency_specs:
             raise ValueError("Workflow specs must declare at least one dependency spec")
+        governance_state = _normalized_text(self.governance_state).lower()
+        if governance_state not in KNOWN_WORKFLOW_GOVERNANCE_STATES:
+            raise ValueError(
+                f"Workflow '{self.workflow_id}' declares unknown governance_state '{self.governance_state}'"
+            )
 
         unknown_capabilities = sorted(set(self.capability_tags) - KNOWN_WORKFLOW_CAPABILITY_TAGS)
         if unknown_capabilities:
@@ -171,6 +187,19 @@ class WorkflowSpec:
             tuple(sorted({_normalized_text(tag) for tag in self.capability_tags if _normalized_text(tag)})),
         )
         object.__setattr__(self, "backend_defaults", _mapping_dict(self.backend_defaults))
+        object.__setattr__(self, "governance_state", governance_state)
+        object.__setattr__(
+            self,
+            "pinned_revision",
+            _normalized_text(self.pinned_revision) or self.workflow_version,
+        )
+
+    @property
+    def is_runnable(self) -> bool:
+        return (
+            self.governance_state == WORKFLOW_GOVERNANCE_APPROVED
+            and bool(_normalized_text(self.pinned_revision))
+        )
 
     @property
     def registry_key(self) -> tuple[str, str]:
@@ -188,6 +217,9 @@ class WorkflowSpec:
             "output_bindings": [binding.to_dict() for binding in self.output_bindings],
             "dependency_specs": [dependency.to_dict() for dependency in self.dependency_specs],
             "backend_defaults": _mapping_dict(self.backend_defaults),
+            "governance_state": self.governance_state,
+            "pinned_revision": self.pinned_revision,
+            "governance_notes": self.governance_notes,
         }
 
 
@@ -219,7 +251,11 @@ class CompiledWorkflowRequest:
 
 __all__ = [
     "CompiledWorkflowRequest",
+    "KNOWN_WORKFLOW_GOVERNANCE_STATES",
     "KNOWN_WORKFLOW_CAPABILITY_TAGS",
+    "WORKFLOW_GOVERNANCE_APPROVED",
+    "WORKFLOW_GOVERNANCE_DISABLED",
+    "WORKFLOW_GOVERNANCE_EXPERIMENTAL",
     "WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED",
     "WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO",
     "WORKFLOW_CAP_SEGMENT_STITCHABLE",

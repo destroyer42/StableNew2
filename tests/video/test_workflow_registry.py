@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.video import (
+    WORKFLOW_GOVERNANCE_DISABLED,
     WORKFLOW_CAP_SINGLE_IMAGE_TO_VIDEO,
     WorkflowDependencySpec,
     WorkflowInputBinding,
@@ -18,6 +19,8 @@ def test_default_workflow_registry_registers_builtin_ltx_workflow() -> None:
     spec = registry.get("ltx_multiframe_anchor_v1")
     assert spec.backend_id == "comfy"
     assert spec.workflow_version == "1.0.0"
+    assert spec.governance_state == "approved"
+    assert spec.pinned_revision == "catalog:ltx_multiframe_anchor_v1@1.0.0"
     assert "multi_frame_anchor_video" in spec.capability_tags
     assert any(binding.binding_name == "end_anchor" for binding in spec.input_bindings)
 
@@ -95,3 +98,26 @@ def test_workflow_registry_requires_version_when_multiple_versions_exist() -> No
         assert "multiple versions" in str(exc)
     else:
         raise AssertionError("Expected ambiguous workflow lookup to require an explicit version")
+
+
+def test_workflow_registry_rejects_disabled_workflow_at_lookup_time() -> None:
+    registry = WorkflowRegistry()
+    registry.register(
+        WorkflowSpec(
+            workflow_id="workflow-disabled",
+            workflow_version="1.0.0",
+            backend_id="comfy",
+            display_name="Workflow Disabled",
+            governance_state=WORKFLOW_GOVERNANCE_DISABLED,
+            input_bindings=(WorkflowInputBinding("source", "input_image_path"),),
+            output_bindings=(WorkflowOutputBinding("output_dir", "output_dir", required=True),),
+            dependency_specs=(WorkflowDependencySpec("dep-1", "custom_node", "NodeA"),),
+        )
+    )
+
+    try:
+        registry.get("workflow-disabled", "1.0.0")
+    except KeyError as exc:
+        assert "not approved" in str(exc)
+    else:
+        raise AssertionError("Expected disabled workflow lookup to fail")

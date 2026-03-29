@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import threading
+import time
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
@@ -16,6 +18,7 @@ from tkinter import ttk
 from types import SimpleNamespace
 from typing import Any
 
+from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
 from src.gui.design_system_v2 import DANGER_BUTTON
 from src.gui.theme_v2 import (
     BACKGROUND_ELEVATED,
@@ -32,15 +35,20 @@ from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 from src.controller.ports.runtime_ports import NJRSummaryPort, NJRUISummaryPort
 from src.state.output_routing import get_output_root, iter_output_run_dirs
+from src.state.workspace_paths import workspace_paths
 
 logger = logging.getLogger(__name__)
 
 # PR-PERSIST-001: Preview panel state persistence
-PREVIEW_STATE_PATH = Path("state") / "preview_panel_state.json"
+PREVIEW_STATE_PATH = workspace_paths.preview_panel_state()
+_THUMBNAIL_CACHE_MISS = object()
 
 
 class PreviewPanelV2(ttk.Frame):
     """Container for preview/inspector content (structure only)."""
+    NEGATIVE_THUMBNAIL_CACHE_TTL_S = 1.0
+    POSITIVE_THUMBNAIL_CACHE_TTL_S = 15.0
+    SLOW_REFRESH_THRESHOLD_MS = 20.0
 
     def __init__(
         self,
@@ -49,13 +57,21 @@ class PreviewPanelV2(ttk.Frame):
         controller: Any | None = None,
         app_state: Any | None = None,
         theme: Any | None = None,
+        manage_app_state_subscriptions: bool = True,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=PADDING_MD, **kwargs)
         self.controller = controller
         self.app_state = app_state
         self.theme = theme
+        self._manage_app_state_subscriptions = bool(manage_app_state_subscriptions)
         self._job_summaries: list[JobUiSummary] = []
+        self._content_visibility_mode = str(
+            getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        self._refresh_metrics: dict[str, dict[str, float | int]] = {}
+        self._thumbnail_lookup_cache: dict[tuple[str, ...], tuple[float, str | None]] = {}
+        self._thumbnail_lookup_pending: set[tuple[str, ...]] = set()
 
         header_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         header_frame.pack(fill="x", pady=(0, 4))
@@ -110,6 +126,12 @@ class PreviewPanelV2(ttk.Frame):
             left_frame, text="No job selected", style=STATUS_LABEL_STYLE
         )
         self.job_count_label.pack(anchor=tk.W, pady=(0, 4))
+        self.visibility_banner = ttk.Label(
+            left_frame,
+            text="",
+            style=STATUS_LABEL_STYLE,
+            foreground="#7aa2d6",
+        )
 
         self.prompt_label = ttk.Label(left_frame, text="Prompt (+)", style=STATUS_LABEL_STYLE)
         self.prompt_label.pack(anchor=tk.W)
@@ -274,9 +296,12 @@ class PreviewPanelV2(ttk.Frame):
         """Render one or more JobUiSummary entries."""
         if self._dispatch_to_ui(lambda: self.set_job_summaries(summaries)):
             return
+        start = time.perf_counter()
         self._job_summaries = list(summaries)
         last_summary = summaries[-1] if summaries else None
         self._render_summary(last_summary, len(summaries))
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("set_job_summaries", elapsed_ms)
 
     def update_from_job_draft(self, job_draft: Any | None) -> None:
         """Render preview directly from a JobDraft pack list."""
@@ -489,25 +514,44 @@ class PreviewPanelV2(ttk.Frame):
 
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Update action button availability based on app_state."""
+        start = time.perf_counter()
         if app_state is None:
             app_state = self.app_state
         job_draft = getattr(app_state, "job_draft", None)
         preview_jobs = getattr(app_state, "preview_jobs", None)
         self._update_action_states(job_draft, preview_jobs)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("update_from_app_state", elapsed_ms)
 
     def _bind_app_state_previews(self) -> None:
         logger.debug(f"[PreviewPanel] _bind_app_state_previews called, app_state={self.app_state}")
         if not self.app_state or not hasattr(self.app_state, "subscribe"):
             logger.debug(f"[PreviewPanel] Cannot subscribe - app_state={self.app_state}, has_subscribe={hasattr(self.app_state, 'subscribe') if self.app_state else False}")
             return
+        if self._manage_app_state_subscriptions:
+            try:
+                logger.debug("[PreviewPanel] Subscribing to preview_jobs changes")
+                self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
+                logger.debug("[PreviewPanel] Successfully subscribed to preview_jobs")
+            except Exception as e:
+                logger.debug(f"[PreviewPanel] Failed to subscribe: {e}")
+                pass
         try:
-            logger.debug("[PreviewPanel] Subscribing to preview_jobs changes")
-            self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
-            logger.debug("[PreviewPanel] Successfully subscribed to preview_jobs")
-        except Exception as e:
-            logger.debug(f"[PreviewPanel] Failed to subscribe: {e}")
+            self.app_state.subscribe("content_visibility_mode", self._on_content_visibility_mode_changed)
+        except Exception:
             pass
-        self._on_preview_jobs_changed()
+        if self._manage_app_state_subscriptions:
+            self._on_preview_jobs_changed()
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._content_visibility_mode = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        last_summary = self._job_summaries[-1] if self._job_summaries else None
+        self._render_summary(last_summary, len(self._job_summaries))
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()
 
     def _on_preview_jobs_changed(self) -> None:
         logger.debug("[PreviewPanel] _on_preview_jobs_changed called")
@@ -519,11 +563,13 @@ class PreviewPanelV2(ttk.Frame):
         self.set_preview_jobs(records)
 
     def _render_summary(self, summary: Any | None, total: int) -> None:
+        start = time.perf_counter()
         logger.debug(f"[PreviewPanel] _render_summary called: summary={bool(summary)}, total={total}")
 
         if summary is None:
             logger.debug("[PreviewPanel] Rendering empty state")
             self.job_count_label.config(text="No job selected")
+            self.visibility_banner.configure(text="")
             self._set_text_widget(self.prompt_text, "")
             self._set_text_widget(self.negative_prompt_text, "")
             self.model_label.config(text="Model: -")
@@ -543,13 +589,18 @@ class PreviewPanelV2(ttk.Frame):
             # PR-PREVIEW-001: Preserve checkbox state, don't reset to True
             self._current_show_preview = self._show_preview_var.get()
             self._update_thumbnail()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_render_summary", elapsed_ms)
             return
 
         summary_obj = self._normalize_summary(summary)
         if summary_obj is None:
             logger.debug("[PreviewPanel] _normalize_summary returned None")
             self.job_count_label.config(text="No job selected")
+            self.visibility_banner.configure(text="")
             self._update_thumbnail()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_render_summary", elapsed_ms)
             return
 
         job_text = f"Job: {total}" if total == 1 else f"Jobs: {total}"
@@ -558,6 +609,24 @@ class PreviewPanelV2(ttk.Frame):
 
         positive = getattr(summary_obj, "positive_preview", "") or ""
         negative = getattr(summary_obj, "negative_preview", "") or ""
+        resolver = ContentVisibilityResolver(self._content_visibility_mode)
+        positive = resolver.redact_text(
+            positive,
+            item={
+                "positive_preview": positive,
+                "negative_preview": negative,
+                "name": getattr(summary_obj, "prompt_pack_name", ""),
+            },
+        )
+        negative = resolver.redact_text(
+            negative,
+            item={
+                "positive_preview": getattr(summary_obj, "positive_preview", "") or "",
+                "negative_preview": getattr(summary_obj, "negative_preview", "") or "",
+                "name": getattr(summary_obj, "prompt_pack_name", ""),
+            },
+        )
+        self.visibility_banner.configure(text="")
         logger.debug(f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}")
         self._set_text_widget(self.prompt_text, positive)
         self._set_text_widget(self.negative_prompt_text, negative)
@@ -618,6 +687,8 @@ class PreviewPanelV2(ttk.Frame):
 
         # Load thumbnail
         self._update_thumbnail(summary, pack_name, self._show_preview_var.get())
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("_render_summary", elapsed_ms)
 
     def _normalize_summary(self, summary: Any) -> Any | None:
         if summary is None:
@@ -658,7 +729,11 @@ class PreviewPanelV2(ttk.Frame):
         if not self.controller:
             return
         try:
-            self.controller.on_add_to_queue()
+            add_to_queue_v2 = getattr(self.controller, "on_add_job_to_queue_v2", None)
+            if callable(add_to_queue_v2):
+                add_to_queue_v2()
+            else:
+                self.controller.on_add_to_queue()
         except ValueError as exc:
             logger.debug(f"[PreviewPanel] _on_add_to_queue validation error: {exc}")
         except Exception as exc:
@@ -963,19 +1038,26 @@ class PreviewPanelV2(ttk.Frame):
 
         return None
 
-    def _find_latest_output_image(self, summary: UnifiedJobSummary | Any | None) -> Path | None:
-        """Inspect a summary/result object to find the latest output image."""
+    def _find_immediate_output_image(
+        self,
+        summary: UnifiedJobSummary | Any | None,
+        *,
+        _depth: int = 0,
+    ) -> Path | None:
+        """Return explicit output paths without scanning output directories."""
         if summary is None:
+            return None
+        if _depth >= 8:
             return None
 
         source_job = getattr(summary, "source_job", None)
         if source_job is not None and source_job is not summary:
-            source_image = self._find_latest_output_image(source_job)
+            source_image = self._find_immediate_output_image(source_job, _depth=_depth + 1)
             if source_image and source_image.exists():
                 return source_image
 
         thumbnail_path = getattr(summary, "thumbnail_path", None)
-        if thumbnail_path:
+        if isinstance(thumbnail_path, (str, os.PathLike)):
             thumbnail = Path(thumbnail_path)
             if thumbnail.exists():
                 return thumbnail
@@ -983,25 +1065,32 @@ class PreviewPanelV2(ttk.Frame):
         output_paths = getattr(summary, "output_paths", None)
         if isinstance(output_paths, list):
             for candidate in reversed(output_paths):
-                if candidate:
+                if isinstance(candidate, (str, os.PathLike)):
                     image_path = Path(candidate)
                     if image_path.exists():
                         return image_path
 
-        # If summary carries a result dict with metadata paths, use that first
         result = getattr(summary, "result", None)
         if isinstance(result, dict):
             metadata = result.get("metadata")
             if isinstance(metadata, dict):
                 candidate = metadata.get("path") or metadata.get("output_path")
-                if candidate and Path(candidate).exists():
+                if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
                     return Path(candidate)
             if isinstance(metadata, list):
                 for entry in reversed(metadata):
                     if isinstance(entry, dict):
                         candidate = entry.get("path") or entry.get("output_path")
-                        if candidate and Path(candidate).exists():
+                        if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
                             return Path(candidate)
+
+        return None
+
+    def _find_latest_output_image(self, summary: UnifiedJobSummary | Any | None) -> Path | None:
+        """Inspect a summary/result object to find the latest output image."""
+        immediate = self._find_immediate_output_image(summary)
+        if immediate is not None:
+            return immediate
 
         # If the summary has a job_id, look for a run folder named with it
         job_id = getattr(summary, "job_id", None)
@@ -1019,30 +1108,197 @@ class PreviewPanelV2(ttk.Frame):
 
         return None
 
+    def _make_thumbnail_lookup_key(self, job: Any | None, pack_name: str | None) -> tuple[str, ...]:
+        summary = job
+        output_paths = getattr(summary, "output_paths", None)
+        output_values: tuple[str, ...] = ()
+        if isinstance(output_paths, (list, tuple)):
+            output_values = tuple(str(path) for path in output_paths if path)
+        thumbnail_path = str(getattr(summary, "thumbnail_path", "") or "")
+        result = getattr(summary, "result", None)
+        metadata_paths: list[str] = []
+        if isinstance(result, dict):
+            metadata = result.get("metadata")
+            if isinstance(metadata, dict):
+                candidate = metadata.get("path") or metadata.get("output_path")
+                if candidate:
+                    metadata_paths.append(str(candidate))
+            elif isinstance(metadata, list):
+                for entry in metadata:
+                    if isinstance(entry, dict):
+                        candidate = entry.get("path") or entry.get("output_path")
+                        if candidate:
+                            metadata_paths.append(str(candidate))
+        return (
+            str(getattr(summary, "job_id", "") or ""),
+            str(pack_name or getattr(summary, "prompt_pack_name", "") or ""),
+            str(getattr(summary, "label", "") or getattr(summary, "base_model", "") or ""),
+            thumbnail_path,
+            *output_values,
+            *metadata_paths,
+        )
+
+    def _get_cached_thumbnail_lookup(self, request_key: tuple[str, ...]) -> Path | None | object:
+        cached = self._thumbnail_lookup_cache.get(request_key)
+        if cached is None:
+            return _THUMBNAIL_CACHE_MISS
+        cached_at, cached_path = cached
+        ttl = (
+            self.POSITIVE_THUMBNAIL_CACHE_TTL_S
+            if cached_path
+            else self.NEGATIVE_THUMBNAIL_CACHE_TTL_S
+        )
+        if (time.monotonic() - cached_at) > ttl:
+            self._thumbnail_lookup_cache.pop(request_key, None)
+            return _THUMBNAIL_CACHE_MISS
+        if not cached_path:
+            return None
+        candidate = Path(cached_path)
+        if not candidate.exists():
+            self._thumbnail_lookup_cache.pop(request_key, None)
+            return _THUMBNAIL_CACHE_MISS
+        return candidate
+
+    def _schedule_thumbnail_lookup(
+        self,
+        job: Any,
+        pack_name: str | None,
+        request_key: tuple[str, ...],
+    ) -> None:
+        if request_key in self._thumbnail_lookup_pending:
+            return
+        self._thumbnail_lookup_pending.add(request_key)
+
+        def _lookup() -> None:
+            resolved: Path | None = None
+            try:
+                resolved = self._find_latest_output_image(job)
+                if resolved is None:
+                    recent = self._find_recent_thumbnail(job, pack_name)
+                    resolved = Path(recent) if recent else None
+            except Exception:
+                resolved = None
+
+            def _apply() -> None:
+                self._apply_thumbnail_lookup_result(request_key, resolved)
+
+            try:
+                self.after(0, _apply)
+            except Exception:
+                self._thumbnail_lookup_pending.discard(request_key)
+
+        from src.utils.thread_registry import get_thread_registry
+
+        registry = get_thread_registry()
+        registry.spawn(
+            target=_lookup,
+            name=f"Preview-ThumbLookup-{id(self)}",
+            daemon=False,
+            purpose="Resolve preview thumbnail candidates without blocking Tk",
+        )
+
+    def _apply_thumbnail_lookup_result(
+        self,
+        request_key: tuple[str, ...],
+        resolved_path: Path | None,
+    ) -> None:
+        self._thumbnail_lookup_pending.discard(request_key)
+        self._thumbnail_lookup_cache[request_key] = (
+            time.monotonic(),
+            str(resolved_path) if resolved_path else None,
+        )
+
+        current_key = self._make_thumbnail_lookup_key(
+            getattr(self, "_current_preview_job", None),
+            getattr(self, "_current_pack_name", None),
+        )
+        if request_key != current_key or not self._show_preview_var.get():
+            return
+        try:
+            if not self.winfo_ismapped():
+                return
+        except Exception:
+            pass
+
+        if resolved_path and resolved_path.exists():
+            self.thumbnail.set_image_from_path(resolved_path)
+        else:
+            self.thumbnail.clear()
+
     def _update_thumbnail(self, job: Any | None = None, pack_name: str | None = None, show_preview: bool = True) -> None:
         """Update the thumbnail display for the current preview job."""
+        start = time.perf_counter()
         # Check if preview is disabled
         if not show_preview or not self._show_preview_var.get():
             self.thumbnail.clear()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_update_thumbnail", elapsed_ms)
             return
 
         if job is None:
             self.thumbnail.clear()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_update_thumbnail", elapsed_ms)
             return
 
-        # Prefer explicit output path from summary/result if available
-        explicit_path = self._find_latest_output_image(job)
+        # Prefer explicit output path from summary/result if available.
+        explicit_path = self._find_immediate_output_image(job)
         if explicit_path:
             self.thumbnail.set_image_from_path(explicit_path)
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_update_thumbnail", elapsed_ms)
             return
 
-        # Try to find a matching image
-        thumb_path = self._find_recent_thumbnail(job, pack_name)
+        request_key = self._make_thumbnail_lookup_key(job, pack_name)
+        cached_path = self._get_cached_thumbnail_lookup(request_key)
+        if cached_path is not _THUMBNAIL_CACHE_MISS:
+            if cached_path is None:
+                self.thumbnail.clear()
+            else:
+                self.thumbnail.set_image_from_path(cached_path)
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_update_thumbnail", elapsed_ms)
+            return
 
-        if thumb_path:
-            self.thumbnail.set_image_from_path(thumb_path)
-        else:
-            self.thumbnail.clear()
+        self.thumbnail.set_loading()
+        self._schedule_thumbnail_lookup(job, pack_name, request_key)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("_update_thumbnail", elapsed_ms)
+
+    def _record_refresh_metric(self, name: str, elapsed_ms: float) -> None:
+        metrics = self._refresh_metrics.setdefault(
+            name,
+            {
+                "count": 0,
+                "total_ms": 0.0,
+                "max_ms": 0.0,
+                "last_ms": 0.0,
+                "slow_count": 0,
+            },
+        )
+        metrics["count"] = int(metrics["count"]) + 1
+        metrics["total_ms"] = float(metrics["total_ms"]) + float(elapsed_ms)
+        metrics["last_ms"] = float(elapsed_ms)
+        metrics["max_ms"] = max(float(metrics["max_ms"]), float(elapsed_ms))
+        if elapsed_ms >= float(self.SLOW_REFRESH_THRESHOLD_MS):
+            metrics["slow_count"] = int(metrics["slow_count"]) + 1
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        refresh_metrics: dict[str, dict[str, float | int]] = {}
+        for name, metrics in sorted(self._refresh_metrics.items()):
+            count = int(metrics.get("count", 0) or 0)
+            total_ms = float(metrics.get("total_ms", 0.0) or 0.0)
+            refresh_metrics[name] = {
+                "count": count,
+                "avg_ms": round(total_ms / count, 3) if count else 0.0,
+                "max_ms": round(float(metrics.get("max_ms", 0.0) or 0.0), 3),
+                "last_ms": round(float(metrics.get("last_ms", 0.0) or 0.0), 3),
+                "slow_count": int(metrics.get("slow_count", 0) or 0),
+            }
+        return {
+            "slow_threshold_ms": float(self.SLOW_REFRESH_THRESHOLD_MS),
+            "refresh_metrics": refresh_metrics,
+        }
 
     def _on_preview_checkbox_changed(self) -> None:
         """Handle preview checkbox state change."""

@@ -11,6 +11,7 @@ from collections.abc import Callable
 from pathlib import Path
 from tkinter import ttk
 
+from src.gui.theme_v2 import apply_toplevel_theme, style_text_widget
 from src.utils.diagnostics_bundle_v2 import DEFAULT_BUNDLE_DIR
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
 
@@ -38,6 +39,7 @@ class ErrorModalV2(tk.Toplevel):
         self.transient(parent)
         self.grab_set()
         self.protocol("WM_DELETE_WINDOW", self._handle_close)
+        apply_toplevel_theme(self)
 
         header = ttk.Label(
             self,
@@ -78,6 +80,7 @@ class ErrorModalV2(tk.Toplevel):
             state=tk.DISABLED,
             font=("TkDefaultFont", 9),
         )
+        style_text_widget(context_widget, elevated=True)
         context_widget.pack(fill="both", expand=True)
         context_payload = self._format_context()
         if context_payload:
@@ -100,6 +103,7 @@ class ErrorModalV2(tk.Toplevel):
             state=tk.NORMAL,
             font=("TkFixedFont", 9),
         )
+        style_text_widget(stack_widget, elevated=True)
         stack_widget.insert(tk.END, envelope.stack)
         stack_widget.config(state=tk.DISABLED)
         stack_widget.pack(fill="both", expand=True)

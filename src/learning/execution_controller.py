@@ -78,6 +78,24 @@ class LearningExecutionController:
         _logger.info(f"[LearningExecutionController]   job_service is None: {self.job_service is None}")
         if self.job_service:
             _logger.info(f"[LearningExecutionController]   hasattr register_callback: {hasattr(self.job_service, 'register_callback')}")
+
+        can_register_callbacks = bool(
+            self.job_service and hasattr(self.job_service, 'register_callback')
+        )
+        if not can_register_callbacks:
+            _logger.warning(
+                "[LearningExecutionController] Could not register callbacks: "
+                "job_service unavailable or missing method"
+            )
+            return
+
+        _logger.info("[LearningExecutionController] Registering callbacks...")
+        self.job_service.register_callback('job_finished', self._handle_job_finished)
+        self.job_service.register_callback('job_failed', self._handle_job_failed)
+        _logger.info(
+            "[LearningExecutionController] Registered job completion callbacks with JobService"
+        )
+        return
         
         if self.job_service and hasattr(self.job_service, 'register_callback'):
             _logger.info("[LearningExecutionController] Registering callbacks...")

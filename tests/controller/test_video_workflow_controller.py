@@ -15,6 +15,18 @@ class _JobServiceStub:
         return ["job-video-queued"]
 
 
+def test_list_workflow_specs_surfaces_governance_metadata() -> None:
+    controller = VideoWorkflowController(
+        app_controller=SimpleNamespace(job_service=_JobServiceStub(), output_dir="output")
+    )
+
+    specs = controller.list_workflow_specs()
+
+    assert specs
+    assert specs[0]["governance_state"] == "approved"
+    assert specs[0]["pinned_revision"]
+
+
 def test_submit_video_workflow_job_builds_queue_backed_reprocess_njr(tmp_path: Path) -> None:
     source = tmp_path / "source.png"
     end = tmp_path / "end.png"

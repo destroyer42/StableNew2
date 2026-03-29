@@ -2,12 +2,17 @@ DOCS_INDEX_v2.6.md
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-21
+Updated: 2026-03-29
 
 ## 0. Purpose
 
 This index defines the active document set for StableNew v2.6 and identifies
-which files are canonical, operational, backlog-driving, or archived.
+which files are canonical, operational, backlog-driving, completed, under
+review, or archived.
+
+It also defines the target folder taxonomy for the active doc set so root-level
+canonical truth stays separate from subsystem references, research material,
+completed implementation records, and historical planning notes.
 
 ## 1. Canonical Document Hierarchy
 
@@ -32,8 +37,10 @@ which files are canonical, operational, backlog-driving, or archived.
 ### 1.3 Tier 3 - Active subsystem references
 
 - `docs/Architecture/ARTIFACT_METADATA_CONTRACTS_v2.6.md`
-- `docs/Learning_System_Spec_v2.6.md`
-- `docs/GUI_Ownership_Map_v2.6.md`
+- `docs/Subsystems/Learning/Learning_System_Spec_v2.6.md`
+- `docs/Subsystems/GUI/GUI_Ownership_Map_v2.6.md`
+- `docs/Subsystems/GUI/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md`
+- `docs/Subsystems/GUI/GUI_CONSISTENCY_MAINTENANCE_CHECKLIST_v2.6.md`
 - `docs/Movie_Clips_Workflow_v2.6.md`
 - `docs/Image_Metadata_Contract_v2.6.md`
 - `docs/schemas/stablenew.image-metadata.v2.6.json`
@@ -41,84 +48,72 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/schemas/portable_review_summary.v2.6.json`
 - `docs/schemas/artifact_metadata_inspection.v2.6.json`
 - `docs/StableNew Secondary Motion Layer Design.md`
-- `docs/Prompt_Optimizer_WorldClass_v3_Design.md`
+- `docs/Architecture/Prompt_Optimizer_WorldClass_v3_Design.md`
 - `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
 - `docs/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
-- `docs/KNOWN_PITFALLS_QUEUE_TESTING.md`
-- `docs/WebUI Restart and Lost Connection Investigation 2026-03-20.md`
-- `docs/WebUI GPU Pressure and Stall Investigation 2026-03-21.md`
+- `docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md`
+- `docs/Research Reports/WebUI Restart and Lost Connection Investigation 2026-03-20.md`
+- `docs/Research Reports/WebUI GPU Pressure and Stall Investigation 2026-03-21.md`
 - `docs/Research Reports/deep-research-report-DEEP GPU memory and stall investigation - verdict.md`
 - `docs/Research Reports/staged-curation-learning-verdict-2026-03-21.md`
-- `docs/E2E_Golden_Path_Test_Matrix_v2.6.md`
-- `docs/Randomizer_Spec_v2.6.md`
+- `docs/Subsystems/Testing/E2E_Golden_Path_Test_Matrix_v2.6.md`
+- `docs/Subsystems/Randomizer/Randomizer_Spec_v2.6.md`
 
 ### 1.4 Tier 4 - Active backlog and planning queue
 
 - `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
 - `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
-- `docs/PR_Backlog/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
-- `docs/PR_Backlog/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`
-- `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md`
-- `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
-- `docs/PR_Backlog/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
-- `docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
-- `docs/PR_Backlog/PR-VIDEO-218-Continuity-Pack-Foundation.md`
-- `docs/PR_Backlog/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
-- `docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
-- `docs/PR_Backlog/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
-- `docs/PR_Backlog/PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation.md`
-- `docs/PR_Backlog/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
-- `docs/PR_Backlog/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
-- `docs/PR_Backlog/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
-- `docs/PR_Backlog/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
-- `docs/PR_Backlog/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
-- `docs/PR_Backlog/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
-- `docs/PR_Backlog/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
-- `docs/PR_Backlog/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
-- `docs/PR_Backlog/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md`
-- `docs/PR_Backlog/PR-GUI-234-Reprocess-Surface-Consolidation.md`
-- `docs/PR_Backlog/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
-- `docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
-- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
-- `docs/PR_Backlog/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
-- `docs/PR_Backlog/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
-- `docs/PR_Backlog/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md`
-- `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
-- `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
-- `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
-- `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
-- `docs/PR_Backlog/PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening.md`
-- `docs/PR_Backlog/PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only.md`
-- `docs/PR_Backlog/PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing.md`
-- `docs/PR_Backlog/PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract.md`
-- `docs/PR_Backlog/PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding.md`
-- `docs/PR_Backlog/PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization.md`
-- `docs/PR_Backlog/PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters.md`
-- `docs/PR_Backlog/PR-OBS-249C-Repeated-Event-Collapse-and-WebUI-Outage-Dedup.md`
-- `docs/PR_Backlog/PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split.md`
-- `docs/PR_Backlog/PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events.md`
-- `docs/PR_Backlog/PR-LEARN-259B-Learning-Workspace-Staged-Curation-Mode.md`
-- `docs/PR_Backlog/PR-LEARN-259C-Review-History-Import-and-Large-Compare-Surface.md`
-- `docs/PR_Backlog/PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing.md`
-- `docs/PR_Backlog/PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics.md`
-- `docs/PR_Backlog/PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries.md`
+- `docs/PR_Backlog/D-NSFW-SFW-001-Content-Visibility-Mode-Discovery.md`
 
 ### 1.5 Reference and history
 
 - `docs/CompletedPR/` contains completed PR records
+- `docs/CompletedPlans/` contains completed executable roadmaps, sweeps, and
+  multi-PR sequence records
+- `docs/NeedsReview/` contains ambiguous or recently superseded material that
+  still needs an explicit disposition
+- `docs/CompletedPlans/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/CompletedPlans/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/CompletedPlans/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
 - `docs/CompletedPR/PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events.md`
 - `docs/CompletedPR/PR-LEARN-259B-Learning-Workspace-Staged-Curation-Mode.md`
 - `docs/CompletedPR/PR-LEARN-259C-Review-History-Import-and-Large-Compare-Surface.md`
 - `docs/CompletedPR/PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing.md`
 - `docs/CompletedPR/PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics.md`
 - `docs/CompletedPR/PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries.md`
+- `docs/CompletedPR/PR-CONFIG-271-Content-Visibility-Mode-Contract-and-Persistence.md`
+- `docs/CompletedPR/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md`
+- `docs/CompletedPR/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md`
+- `docs/CompletedPR/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
+- `docs/CompletedPR/PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation.md`
+- `docs/CompletedPR/PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement.md`
+- `docs/CompletedPR/PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract.md`
+- `docs/CompletedPR/PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards.md`
+- `docs/CompletedPR/PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction.md`
+- `docs/CompletedPR/PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes.md`
+- `docs/CompletedPR/PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation.md`
+- `docs/CompletedPR/PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition.md`
+- `docs/CompletedPR/PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes.md`
+- `docs/CompletedPR/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
+- `docs/CompletedPR/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
+- `docs/CompletedPR/PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion.md`
+- `docs/CompletedPR/PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure.md`
+- `docs/CompletedPR/PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure.md`
+- `docs/CompletedPR/PR-GUI-283-AppController-UI-Boundary-Closure-and-Operator-Log-Projection.md`
+- `docs/CompletedPR/PR-GUI-284-AppState-Batched-Invalidation-and-Flush-Contract.md`
+- `docs/CompletedPR/PR-GUI-285-Hot-Surface-Refresh-Scheduler-and-Subscription-Ownership.md`
+- `docs/CompletedPR/PR-GUI-286-Incremental-Projection-Reconciliation-and-Visibility-Gating.md`
+- `docs/CompletedPR/PR-HARDEN-287-Runtime-Status-Backpressure-GUI-Perf-Journey-and-Architecture-Guards.md`
+- `docs/CompletedPR/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
+- `docs/CompletedPR/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
 - `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 - `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 - `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 - `docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 - `docs/archive/` contains historical, superseded, and reference-only material
+- `docs/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
 
 ## 2. Canonical Reading Order
 
@@ -133,14 +128,28 @@ Read in this order:
 7. subsystem docs relevant to the work
 8. active PR backlog specs if planning or executing roadmap work
 
-## 3. Root Folder Rule
+## 3. Folder Taxonomy
 
-- `docs/` root is reserved for active docs only
-- `docs/Architecture/` is for active architecture and contract references
-- `docs/PR_Backlog/` is for active and historical planning docs
-- `docs/CompletedPR/` is for completed PR records
+- `docs/` root is reserved for Tier 1 and Tier 2 canonical docs only
+- `docs/Architecture/` is for active architecture contracts, policy schemas,
+  and design references
+- `docs/Subsystems/` is for active Tier 3 subsystem and operational references
+  that are not canonical root docs
+- `docs/Research Reports/` is for discovery reports, investigations, deep
+  dives, verdicts, and implementation-guidance notes
+- `docs/PR_Backlog/` is for open PR specs and still-active unfinished planning
+  docs only
+- `docs/CompletedPR/` is for one final closeout file per completed PR
+- `docs/CompletedPlans/` is for completed multi-PR sequences, executable
+  roadmaps, and finished sweep plans
+- `docs/NeedsReview/` is for ambiguous or recently superseded material awaiting
+  explicit disposition
+- `docs/runbooks/` is for active operator runbooks
 - `docs/schemas/` is for active machine-readable contract companions
 - `docs/archive/` is reference-only and not active canon
+- during the reorganization transition, some Tier 3 files still remain in the
+  root; treat those placements as migration debt and do not add new Tier 3
+  docs to the root
 
 ## 4. Explicit Non-Active Documents
 
@@ -159,7 +168,17 @@ No v2.5 docs remain in the active root set.
 ## 6. Maintenance Rules
 
 - If active file locations change, update this index in the same PR.
-- If a doc stops being active, move it to `CompletedPR` or `archive`, do not
-  leave it in the root folder.
+- If a PR changes runtime, product, or process truth, update the affected
+  canonical docs in the same PR or explicitly retire the stale docs.
+- If a PR completes, create or update one final `docs/CompletedPR/PR-...md`
+  record, update roadmap and index references as needed, and remove the
+  duplicate execution spec from `docs/PR_Backlog/`.
+- If a whole executable roadmap or sweep becomes complete, move it to
+  `docs/CompletedPlans/` instead of leaving it in `docs/PR_Backlog/`.
+- If a document's status or applicability is uncertain, move it to
+  `docs/NeedsReview/` instead of leaving it active by default.
+- If a doc stops being active, move it to `CompletedPR`, `CompletedPlans`,
+  `NeedsReview`, or `archive` as appropriate; do not leave it in the root
+  folder.
 - If a retained v2.5 doc is superseded, remove it from the active hierarchy in
   the same PR that introduces the replacement.

@@ -14,6 +14,10 @@ class _StubRoot:
     def __init__(self, geometry: str = "1200x800+100+50") -> None:
         self._geometry = geometry
         self.deiconified = 0
+        self._state = "normal"
+        self.lifted = 0
+        self.focused = 0
+        self.bound_events: list[str] = []
 
     def geometry(self, value: str | None = None) -> str:
         if value is not None:
@@ -21,7 +25,10 @@ class _StubRoot:
         return self._geometry
 
     def state(self) -> str:
-        return "normal"
+        return self._state
+
+    def set_state(self, value: str) -> None:
+        self._state = value
 
     def winfo_screenwidth(self) -> int:
         return 1920
@@ -33,7 +40,20 @@ class _StubRoot:
         return None
 
     def deiconify(self) -> None:
+        self._state = "normal"
         self.deiconified += 1
+
+    def lift(self) -> None:
+        self.lifted += 1
+
+    def focus_force(self) -> None:
+        self.focused += 1
+
+    def after_idle(self, callback) -> None:
+        callback()
+
+    def bind(self, sequence: str, callback, add=None) -> None:
+        self.bound_events.append(sequence)
 
 
 class _StubNotebook:
@@ -113,6 +133,14 @@ class _StubWebUIManager:
         self.called += 1
 
 
+class _StubAppState:
+    def __init__(self, *, content_visibility_mode: str = "nsfw") -> None:
+        self.content_visibility_mode = content_visibility_mode
+
+    def set_learning_enabled(self, _value: bool) -> None:
+        return None
+
+
 def test_save_ui_state_preserves_existing_learning_payload_when_tab_returns_none(tmp_path: Path) -> None:
     store = UIStateStore(tmp_path / "ui_state.json")
     store.save_state(
@@ -129,6 +157,7 @@ def test_save_ui_state_preserves_existing_learning_payload_when_tab_returns_none
     window.root = _StubRoot()
     window.center_notebook = _StubNotebook()
     window.learning_tab = _StubLearningTab(None)
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -149,6 +178,7 @@ def test_save_ui_state_persists_photo_optimize_selection(tmp_path: Path) -> None
     window.center_notebook = _StubNotebook()
     window.learning_tab = _StubLearningTab({})
     window.photo_optimize_tab = _StubPhotoOptimizeTab({"selected_asset_id": "photo_123"})
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -168,6 +198,7 @@ def test_save_ui_state_persists_svd_selection(tmp_path: Path) -> None:
     window.center_notebook = _StubNotebook()
     window.learning_tab = _StubLearningTab({})
     window.svd_tab = _StubSVDTab({"source_image_path": "C:/tmp/source.png", "num_frames": 25})
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -193,6 +224,7 @@ def test_save_ui_state_persists_video_workflow_selection(tmp_path: Path) -> None
             "end_anchor_path": "C:/tmp/end.png",
         }
     )
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -202,6 +234,25 @@ def test_save_ui_state_persists_video_workflow_selection(tmp_path: Path) -> None
     saved = store.load_state()
     assert saved is not None
     assert saved["video_workflow"]["workflow_id"] == "ltx_multiframe_anchor_v1"
+
+
+def test_save_ui_state_persists_content_visibility_mode(tmp_path: Path) -> None:
+    store = UIStateStore(tmp_path / "ui_state.json")
+
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot()
+    window.center_notebook = _StubNotebook()
+    window.learning_tab = _StubLearningTab({})
+    window.app_state = _StubAppState(content_visibility_mode="sfw")
+
+    from unittest.mock import patch
+
+    with patch("src.gui.main_window_v2.get_ui_state_store", return_value=store):
+        window._save_ui_state()
+
+    saved = store.load_state()
+    assert saved is not None
+    assert saved["content_visibility"] == {"mode": "sfw"}
 
 
 def test_trigger_deferred_queue_autostart_calls_job_controller() -> None:
@@ -255,11 +306,7 @@ def test_ensure_window_geometry_ignores_offscreen_saved_geometry(tmp_path: Path)
 
     window = MainWindowV2.__new__(MainWindowV2)
     window.root = _StubRoot("1x1+0+0")
-    window.app_state = type(
-        "State",
-        (),
-        {"set_learning_enabled": lambda self, value: None},
-    )()
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -277,6 +324,7 @@ def test_save_ui_state_replaces_offscreen_geometry(tmp_path: Path) -> None:
     window.root = _StubRoot("1984x1110+-32000+-32000")
     window.center_notebook = _StubNotebook()
     window.learning_tab = _StubLearningTab({})
+    window.app_state = _StubAppState()
 
     from unittest.mock import patch
 
@@ -286,3 +334,44 @@ def test_save_ui_state_replaces_offscreen_geometry(tmp_path: Path) -> None:
     saved = store.load_state()
     assert saved is not None
     assert saved["window"]["geometry"] == f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+
+
+def test_capture_visible_window_geometry_ignores_iconic_offscreen_geometry() -> None:
+    window = MainWindowV2.__new__(MainWindowV2)
+    visible_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}+200+120"
+    window.root = _StubRoot(visible_geometry)
+    window._last_visible_window_geometry = None
+
+    window._capture_visible_window_geometry()
+    assert window._last_visible_window_geometry == visible_geometry
+
+    window.root.geometry("1984x1110+-32000+-32000")
+    window.root.set_state("iconic")
+    window._capture_visible_window_geometry()
+
+    assert window._last_visible_window_geometry == visible_geometry
+
+
+def test_ensure_window_visible_after_restore_uses_last_visible_geometry() -> None:
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot("1984x1110+-32000+-32000")
+    visible_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}+200+120"
+    window._last_visible_window_geometry = visible_geometry
+
+    window._ensure_window_visible_after_restore()
+
+    assert window.root.geometry() == visible_geometry
+    assert window.root.deiconified == 1
+    assert window.root.lifted == 1
+    assert window.root.focused == 1
+
+
+def test_on_window_map_restores_visible_geometry_after_minimize() -> None:
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot("1984x1110+-32000+-32000")
+    visible_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}+140+90"
+    window._last_visible_window_geometry = visible_geometry
+
+    window._on_window_map()
+
+    assert window.root.geometry() == visible_geometry

@@ -7,10 +7,17 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.enhanced_slider import EnhancedSlider
+from src.gui.help_text.stage_setting_help_v2 import IMG2IMG_SETTING_HELP
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.stage_cards_v2.components import SamplerSection, SeedSection
 from src.gui.stage_cards_v2.validation_result import ValidationResult
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
+from src.gui.view_contracts.pipeline_layout_contract import (
+    get_stage_card_min_width,
+    get_two_pair_form_column_specs,
+)
+from src.utils.webui_resource_names import normalize_vae_config_value
 
 
 class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
@@ -43,9 +50,8 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
                 child.destroy()
         except Exception:
             pass
-        ttk.Label(self.sampler_section, text="Sampler", style=BODY_LABEL_STYLE).grid(
-            row=0, column=0, sticky="w", padx=(0, 4)
-        )
+        sampler_label = ttk.Label(self.sampler_section, text="Sampler", style=BODY_LABEL_STYLE)
+        sampler_label.grid(row=0, column=0, sticky="w", padx=(0, 4))
         self.sampler_combo = ttk.Combobox(
             self.sampler_section,
             textvariable=self.sampler_var,
@@ -56,10 +62,15 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-
-        ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE).grid(
-            row=0, column=2, sticky="w", padx=(0, 4)
+        self._attach_setting_help(
+            "sampler",
+            IMG2IMG_SETTING_HELP["sampler"],
+            sampler_label,
+            self.sampler_combo,
         )
+
+        steps_label = ttk.Label(self.sampler_section, text="Steps", style=BODY_LABEL_STYLE)
+        steps_label.grid(row=0, column=2, sticky="w", padx=(0, 4))
         # Steps combobox with common values
         steps_values = ["10", "15", "20", "25", "30", "40", "50", "75", "100"]
         self.steps_combo = ttk.Combobox(
@@ -71,10 +82,15 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.steps_combo.grid(row=0, column=3, sticky="ew")
-
-        ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE).grid(
-            row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0)
+        self._attach_setting_help(
+            "steps",
+            IMG2IMG_SETTING_HELP["steps"],
+            steps_label,
+            self.steps_combo,
         )
+
+        cfg_label = ttk.Label(self.sampler_section, text="CFG", style=BODY_LABEL_STYLE)
+        cfg_label.grid(row=1, column=0, sticky="w", padx=(0, 4), pady=(6, 0))
         # CFG slider with fixed range 1.0-30.0
         self.cfg_slider = EnhancedSlider(
             self.sampler_section,
@@ -87,41 +103,57 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             command=self._on_cfg_changed,
         )
         self.cfg_slider.grid(row=1, column=1, sticky="ew", pady=(6, 0), padx=(0, 8))
-        for col in range(4):
-            self.sampler_section.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+        self._attach_setting_help(
+            "cfg",
+            IMG2IMG_SETTING_HELP["cfg"],
+            cfg_label,
+            self.cfg_slider,
+        )
+        configure_grid_columns(self.sampler_section, get_two_pair_form_column_specs())
 
         meta = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         meta.grid(row=1, column=0, sticky="ew", pady=(0, 8))
 
-        ttk.Label(meta, text="Denoise", style=BODY_LABEL_STYLE).grid(
-            row=0, column=0, sticky="w", padx=(0, 4)
-        )
+        denoise_label = ttk.Label(meta, text="Denoise", style=BODY_LABEL_STYLE)
+        denoise_label.grid(row=0, column=0, sticky="w", padx=(0, 4))
         slider_frame = ttk.Frame(meta, style=SURFACE_FRAME_STYLE)
         slider_frame.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-        EnhancedSlider(
+        self.denoise_slider = EnhancedSlider(
             slider_frame,
             variable=self.denoise_var,
             from_=0.0,
             to=1.0,
             resolution=0.01,
             label="",
-        ).pack(fill="x", expand=True)
-
-        ttk.Label(meta, text="Mask mode", style=BODY_LABEL_STYLE).grid(
-            row=0, column=2, sticky="w", padx=(0, 4)
         )
-        ttk.Combobox(
+        self.denoise_slider.pack(fill="x", expand=True)
+        self._attach_setting_help(
+            "denoise",
+            IMG2IMG_SETTING_HELP["denoise"],
+            denoise_label,
+            self.denoise_slider,
+        )
+
+        mask_mode_label = ttk.Label(meta, text="Mask mode", style=BODY_LABEL_STYLE)
+        mask_mode_label.grid(row=0, column=2, sticky="w", padx=(0, 4))
+        self.mask_mode_combo = ttk.Combobox(
             meta,
             textvariable=self.mask_mode_var,
             values=["none", "keep", "discard", "auto"],
             state="readonly",
             width=12,
             style="Dark.TCombobox",
-        ).grid(row=0, column=3, sticky="ew")
-
-        ttk.Label(meta, text="Width", style=BODY_LABEL_STYLE).grid(
-            row=1, column=0, sticky="w", pady=(6, 2)
         )
+        self.mask_mode_combo.grid(row=0, column=3, sticky="ew")
+        self._attach_setting_help(
+            "mask_mode",
+            IMG2IMG_SETTING_HELP["mask_mode"],
+            mask_mode_label,
+            self.mask_mode_combo,
+        )
+
+        width_label = ttk.Label(meta, text="Width", style=BODY_LABEL_STYLE)
+        width_label.grid(row=1, column=0, sticky="w", pady=(6, 2))
         # Width combobox with multiples of 128 only
         width_values = [str(i) for i in range(256, 2049, 128)]  # 256 to 2048 in steps of 128
         self.width_combo = ttk.Combobox(
@@ -133,10 +165,15 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.width_combo.grid(row=1, column=1, sticky="ew", padx=(0, 8))
-
-        ttk.Label(meta, text="Height", style=BODY_LABEL_STYLE).grid(
-            row=1, column=2, sticky="w", pady=(6, 2)
+        self._attach_setting_help(
+            "width",
+            IMG2IMG_SETTING_HELP["width"],
+            width_label,
+            self.width_combo,
         )
+
+        height_label = ttk.Label(meta, text="Height", style=BODY_LABEL_STYLE)
+        height_label.grid(row=1, column=2, sticky="w", pady=(6, 2))
         # Height combobox with multiples of 128 only
         height_values = [str(i) for i in range(256, 2049, 128)]  # 256 to 2048 in steps of 128
         self.height_combo = ttk.Combobox(
@@ -148,8 +185,13 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             style="Dark.TCombobox",
         )
         self.height_combo.grid(row=1, column=3, sticky="ew")
-        for col in range(4):
-            meta.columnconfigure(col, weight=1 if col in (1, 3) else 0)
+        self._attach_setting_help(
+            "height",
+            IMG2IMG_SETTING_HELP["height"],
+            height_label,
+            self.height_combo,
+        )
+        configure_grid_columns(meta, get_two_pair_form_column_specs())
 
         self.seed_section = SeedSection(parent)
         self.seed_section.grid(row=2, column=0, sticky="ew")
@@ -161,7 +203,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
             except Exception:
                 pass
 
-        parent.columnconfigure(0, weight=1)
+        parent.columnconfigure(0, weight=1, minsize=get_stage_card_min_width())
 
     def _notify_change(self) -> None:
         if self._on_change:
@@ -181,7 +223,7 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
     def load_from_section(self, section: dict[str, Any] | None) -> None:
         data = section or {}
         self.model_var.set(data.get("model") or data.get("model_name", ""))
-        self.vae_var.set(data.get("vae") or data.get("vae_name", ""))
+        self.vae_var.set(normalize_vae_config_value(data.get("vae") or data.get("vae_name", "")))
         self.sampler_var.set(data.get("sampler_name", ""))
         self.steps_var.set(int(self._safe_int(data.get("steps", 20), 20)))
         self.cfg_var.set(float(self._safe_float(data.get("cfg_scale", 7.0), 7.0)))
@@ -195,11 +237,12 @@ class AdvancedImg2ImgStageCardV2(BaseStageCardV2):
         self.load_from_section(section)
 
     def to_config_dict(self) -> dict[str, Any]:
+        normalized_vae = normalize_vae_config_value(self.vae_var.get())
         payload: dict[str, Any] = {
             "model": self.model_var.get().strip(),
             "model_name": self.model_var.get().strip(),
-            "vae": self.vae_var.get().strip(),
-            "vae_name": self.vae_var.get().strip(),
+            "vae": normalized_vae,
+            "vae_name": normalized_vae,
             "sampler_name": self.sampler_var.get().strip(),
             "steps": int(self.steps_var.get() or 20),
             "cfg_scale": float(self.cfg_var.get() or 7.0),

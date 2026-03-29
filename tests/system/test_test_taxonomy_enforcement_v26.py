@@ -18,6 +18,12 @@ ARCHIVE_IMPORT_PATTERNS = (
     re.compile(r"\bfrom\s+src\.controller\.archive\.pipeline_config_assembler\s+import\b"),
     re.compile(r"\bimport\s+src\.controller\.archive\.pipeline_config_types\b"),
     re.compile(r"\bimport\s+src\.controller\.archive\.pipeline_config_assembler\b"),
+    re.compile(
+        r"\bfrom\s+tools\.archive_reference(?:\.[A-Za-z_][A-Za-z0-9_]*)+\s+import\b"
+    ),
+    re.compile(
+        r"\bimport\s+tools\.archive_reference(?:\.[A-Za-z_][A-Za-z0-9_]*)+\b"
+    ),
 )
 
 
@@ -44,6 +50,6 @@ def test_archive_pipeline_config_imports_are_isolated_to_compat_surfaces() -> No
         violations.append(str(path.relative_to(ROOT)))
 
     assert violations == [], (
-        "Archive PipelineConfig imports must stay in compat-only test surfaces:\n"
+        "Archive/reference imports must stay in compat-only test surfaces:\n"
         + "\n".join(sorted(violations))
     )

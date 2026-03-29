@@ -1,21 +1,18 @@
 # GUI Views Archive
 
-This directory contains legacy GUI view modules archived during PR-CORE1-12.
+This directory no longer contains importable Python modules.
 
 ## PR-CORE1-12: PipelineConfig Runtime Removal
 
 **Date:** 2025
 **Reason:** Enforcement of NJR-only execution path (v2.6 architecture)
 
-### Archived Files:
+The old reference-only GUI module was relocated by `PR-ARCH-243` to:
 
-#### `pipeline_config_panel.py`
-- **Purpose:** GUI V1 panel for pipeline configuration
-- **Deprecated:** GUI V2 migration (replaced by panels_v2/)
-- **Reason:** Legacy GUI V1 component, superseded by V2 architecture
-- **Status:** ARCHIVED - GUI V1 is fully deprecated
+- `tools.archive_reference.gui.pipeline_config_panel`
 
-**Replacement:** `src/gui/panels_v2/` components (which are themselves evolving)
+It remains available only for explicit archival/reference use outside runtime
+package paths.
 
 ---
 

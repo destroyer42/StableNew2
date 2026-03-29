@@ -5,12 +5,25 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
+from src.gui.layout_v2 import configure_grid_columns
 from src.queue.job_history_store import JobHistoryEntry
+from src.gui.help_text.workflow_guidance_v2 import (
+    REVIEW_DEFAULT_WORKFLOW_HINT,
+    build_review_action_guidance,
+    get_review_handoff_hint,
+)
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
+from src.gui.theme_v2 import apply_toplevel_theme, style_canvas_widget, style_listbox_widget, style_text_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
-from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent, ActionExplainerPanel
+from src.gui.view_contracts.pipeline_layout_contract import (
+    PRIMARY_CONTROL_MIN_WIDTH,
+    get_single_pair_form_column_specs,
+    get_two_pane_workspace_column_specs,
+)
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.utils.image_metadata import (
@@ -42,7 +55,7 @@ class ReviewTabFrame(ttk.Frame):
         self.app_controller = app_controller
         self.app_state = app_state
         self._workflow_adapter = ReviewWorkflowAdapter()
-        self._default_workflow_hint = "Review is the canonical advanced reprocess workspace."
+        self._default_workflow_hint = REVIEW_DEFAULT_WORKFLOW_HINT
 
         self.selected_images: list[Path] = []
         self._image_index_by_row: list[Path] = []
@@ -82,15 +95,21 @@ class ReviewTabFrame(ttk.Frame):
         self._compare_mode = "single"
         self._history_import_window: tk.Toplevel | None = None
         self._active_handoff: ReviewWorkspaceHandoff | None = None
+        self._content_visibility_mode = str(
+            getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        self._pending_visibility_refresh = False
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=0)
         self.rowconfigure(1, weight=0)
         self.rowconfigure(2, weight=1)
+        self.rowconfigure(3, weight=0)
 
         self.overview_panel = TabOverviewPanel(
             self,
             content=get_tab_overview_content("review"),
+            app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
 
@@ -109,7 +128,17 @@ class ReviewTabFrame(ttk.Frame):
         self._set_readonly_text(self.current_negative_text, "")
         self._sync_edit_box_to_mode("prompt")
         self._sync_edit_box_to_mode("negative")
+        self.bind("<Map>", self._on_map, add="+")
         self._refresh_prompt_diff()
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
+        self.on_content_visibility_mode_changed(self._content_visibility_mode)
 
     def _build_header(self) -> None:
         header = ttk.Frame(self, style="Panel.TFrame", padding=8)
@@ -159,25 +188,18 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TLabel",
         )
         self.selection_label.grid(row=0, column=5, sticky="e")
+        self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
 
         self.workflow_hint_label = ttk.Label(
             header,
             text=self._default_workflow_hint,
             style="Dark.TLabel",
         )
-        self.workflow_hint_label.grid(row=1, column=0, columnspan=6, sticky="w", pady=(6, 0))
+        self.workflow_hint_label.grid(row=1, column=0, columnspan=5, sticky="w", pady=(6, 0))
         self.action_help_panel = ActionExplainerPanel(
             header,
-            content=ActionExplainerContent(
-                title="Review Actions",
-                summary="Use Review when you need deliberate, metadata-aware decisions about existing images instead of sending everything straight back into generation.",
-                bullets=(
-                    "Import Selected to Learning copies the chosen review items into staged curation evidence so they can drive later decisions without reprocessing immediately.",
-                    "Import Recent Job opens a picker for a recent run when you want to start from history instead of the current folder selection.",
-                    "Reprocess Selected queues only the selected images with the stage toggles and prompt edits shown here.",
-                    "Reprocess All uses the current Review settings across the full loaded set, so confirm the effective settings box before clicking it.",
-                ),
-            ),
+            content=build_review_action_guidance(),
+            app_state=self.app_state,
             wraplength=980,
         )
         self.action_help_panel.grid(row=2, column=0, columnspan=6, sticky="ew", pady=(8, 0))
@@ -193,9 +215,9 @@ class ReviewTabFrame(ttk.Frame):
     def _build_body(self) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
         body.grid(row=2, column=0, sticky="nsew", padx=6, pady=4)
-        body.columnconfigure(0, weight=1, uniform="review")
-        body.columnconfigure(1, weight=1, uniform="review")
+        configure_grid_columns(body, get_two_pane_workspace_column_specs())
         body.rowconfigure(0, weight=1)
+        self._body_frame = body
 
         left = ttk.LabelFrame(body, text="Images", style="Dark.TLabelframe", padding=8)
         left.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
@@ -214,6 +236,7 @@ class ReviewTabFrame(ttk.Frame):
             highlightbackground=TOKENS.colors.border_subtle,
             exportselection=False,
         )
+        style_listbox_widget(self.images_list)
         self.images_list.grid(row=0, column=0, sticky="nsew")
         self.images_list.bind("<<ListboxSelect>>", self._on_image_select)
 
@@ -289,9 +312,15 @@ class ReviewTabFrame(ttk.Frame):
 
     def _build_controls(self) -> None:
         controls = ttk.Frame(self, style="Panel.TFrame")
-        controls.grid(row=2, column=0, sticky="ew", padx=6, pady=(4, 6))
-        controls.columnconfigure(0, weight=1)
-        controls.columnconfigure(1, weight=1)
+        controls.grid(row=3, column=0, sticky="ew", padx=6, pady=(4, 6))
+        configure_grid_columns(
+            controls,
+            get_two_pane_workspace_column_specs(
+                left_min_width=420,
+                right_min_width=360,
+            ),
+        )
+        self._controls_frame = controls
 
         prompt_box = ttk.LabelFrame(
             controls,
@@ -300,7 +329,7 @@ class ReviewTabFrame(ttk.Frame):
             padding=8,
         )
         prompt_box.grid(row=0, column=0, sticky="nsew", padx=(0, 6))
-        prompt_box.columnconfigure(1, weight=1)
+        configure_grid_columns(prompt_box, get_single_pair_form_column_specs())
         prompt_box.rowconfigure(1, weight=0)
         prompt_box.rowconfigure(3, weight=0)
 
@@ -316,6 +345,11 @@ class ReviewTabFrame(ttk.Frame):
             wrap="word",
             borderwidth=1,
             relief="solid",
+        )
+        style_text_widget(self.current_prompt_text, elevated=True)
+        self.current_prompt_text.configure(
+            fg=TOKENS.colors.text_muted,
+            insertbackground=TOKENS.colors.text_muted,
         )
         self.current_prompt_text.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
@@ -341,6 +375,7 @@ class ReviewTabFrame(ttk.Frame):
             borderwidth=1,
             relief="solid",
         )
+        style_text_widget(self.prompt_text, elevated=True)
         self.prompt_text.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
         ttk.Label(prompt_box, text="Current - prompt", style="Dark.TLabel").grid(
@@ -355,6 +390,11 @@ class ReviewTabFrame(ttk.Frame):
             wrap="word",
             borderwidth=1,
             relief="solid",
+        )
+        style_text_widget(self.current_negative_text, elevated=True)
+        self.current_negative_text.configure(
+            fg=TOKENS.colors.text_muted,
+            insertbackground=TOKENS.colors.text_muted,
         )
         self.current_negative_text.grid(row=5, column=0, columnspan=2, sticky="ew", pady=(0, 8))
 
@@ -380,6 +420,7 @@ class ReviewTabFrame(ttk.Frame):
             borderwidth=1,
             relief="solid",
         )
+        style_text_widget(self.negative_text, elevated=True)
         self.negative_text.grid(row=7, column=0, columnspan=2, sticky="ew")
 
         diff_box = ttk.LabelFrame(
@@ -513,7 +554,7 @@ class ReviewTabFrame(ttk.Frame):
             padding=8,
         )
         feedback_box.grid(row=7, column=0, sticky="ew", pady=(8, 0))
-        feedback_box.columnconfigure(1, weight=1)
+        configure_grid_columns(feedback_box, get_single_pair_form_column_specs())
         ttk.Label(feedback_box, text="Rating", style="Dark.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
         )
@@ -550,6 +591,7 @@ class ReviewTabFrame(ttk.Frame):
             borderwidth=1,
             relief="solid",
         )
+        style_text_widget(self.feedback_notes, elevated=True)
         self.feedback_notes.grid(row=2, column=1, sticky="ew")
         feedback_btn = ttk.Button(
             feedback_box,
@@ -579,6 +621,9 @@ class ReviewTabFrame(ttk.Frame):
         )
         subscores = ttk.Frame(feedback_box, style="Panel.TFrame")
         subscores.grid(row=6, column=1, sticky="w", pady=(8, 4))
+        subscores.columnconfigure(1, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
+        subscores.columnconfigure(3, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
+        subscores.columnconfigure(5, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
         ttk.Label(subscores, text="Anatomy", style="Dark.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Spinbox(
             subscores,
@@ -656,8 +701,7 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_negative_prompt = ""
         self._selected_image_path = None
         self._reset_mode_edits_for_current_image()
-        self._set_readonly_text(self.current_prompt_text, "")
-        self._set_readonly_text(self.current_negative_text, "")
+        self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
         self.preview.clear()
         self._active_handoff = None
@@ -673,20 +717,7 @@ class ReviewTabFrame(ttk.Frame):
 
         self._active_handoff = handoff
         self._set_selected_images(image_paths)
-        if len(image_paths) == 1:
-            self.workflow_hint_label.config(
-                text=(
-                    "Staged Curation handoff: deliberate single-candidate edit in Review. "
-                    "Use Queue Now in Learning for bulk throughput."
-                )
-            )
-        else:
-            self.workflow_hint_label.config(
-                text=(
-                    "Staged Curation handoff loaded in Review. Use Queue Now in Learning "
-                    "for bulk throughput."
-                )
-            )
+        self.workflow_hint_label.config(text=get_review_handoff_hint(len(image_paths)))
 
         self.stage_img2img_var.set(bool(handoff.stage_img2img))
         self.stage_adetailer_var.set(bool(handoff.stage_adetailer))
@@ -696,8 +727,7 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_negative_prompt = str(
             handoff.base_negative_prompt or self._selected_base_negative_prompt or ""
         )
-        self._set_readonly_text(self.current_prompt_text, self._selected_base_prompt)
-        self._set_readonly_text(self.current_negative_text, self._selected_base_negative_prompt)
+        self._apply_content_visibility_mode()
 
         prompt_mode = str(handoff.prompt_mode or "append")
         negative_mode = str(handoff.negative_prompt_mode or "append")
@@ -763,8 +793,7 @@ class ReviewTabFrame(ttk.Frame):
             self._selected_base_prompt = ""
             self._selected_base_negative_prompt = ""
             self._reset_mode_edits_for_current_image()
-            self._set_readonly_text(self.current_prompt_text, "")
-            self._set_readonly_text(self.current_negative_text, "")
+            self._apply_content_visibility_mode()
             self._refresh_prompt_diff()
             return
 
@@ -782,13 +811,13 @@ class ReviewTabFrame(ttk.Frame):
         self._selected_base_prompt = resolved_prompt
         self._selected_base_negative_prompt = resolved_negative_prompt
         self._reset_mode_edits_for_current_image()
-        self._set_readonly_text(self.current_prompt_text, self._selected_base_prompt)
-        self._set_readonly_text(self.current_negative_text, self._selected_base_negative_prompt)
+        self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
+        resolver = self._visibility_resolver()
         self.meta_label.config(
             text=(
                 f"Metadata: ok | model={model or 'n/a'} | vae={vae or 'n/a'}\n"
-                f"Prompt: {preview_prompt or '(empty)'}"
+                f"Prompt: {resolver.redact_text(preview_prompt, item=self._current_visibility_subject()) or '(empty)'}"
             )
         )
 
@@ -1019,6 +1048,7 @@ class ReviewTabFrame(ttk.Frame):
         else:
             viewer = tk.Toplevel(self)
             self._compare_window = viewer
+            apply_toplevel_theme(viewer)
             viewer.bind("<Left>", lambda _event: self._show_previous_image_and_refresh_viewer())
             viewer.bind("<Right>", lambda _event: self._show_next_image_and_refresh_viewer())
             viewer.bind("<Escape>", lambda _event: viewer.destroy())
@@ -1026,6 +1056,7 @@ class ReviewTabFrame(ttk.Frame):
         viewer.title(f"{title_prefix} - {image_path.name}")
         viewer.transient(self.winfo_toplevel())
         viewer.resizable(True, True)
+        viewer.minsize(720, 520)
 
         frame = ttk.Frame(viewer, padding=6)
         frame.pack(fill=tk.BOTH, expand=True)
@@ -1053,6 +1084,7 @@ class ReviewTabFrame(ttk.Frame):
         ).grid(row=1, column=0, sticky="w", pady=(0, 6))
 
         canvas = tk.Canvas(frame, bg=TOKENS.colors.surface_secondary, highlightthickness=0)
+        style_canvas_widget(canvas, elevated=True)
         canvas.grid(row=2, column=0, sticky="nsew")
         v_scroll = ttk.Scrollbar(frame, orient=tk.VERTICAL, command=canvas.yview)
         h_scroll = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
@@ -1117,7 +1149,9 @@ class ReviewTabFrame(ttk.Frame):
         self._history_import_window = window
         window.title("Import Recent Job To Staged Curation")
         window.transient(self.winfo_toplevel())
+        apply_toplevel_theme(window)
         window.geometry("900x420")
+        window.minsize(720, 320)
 
         frame = ttk.Frame(window, padding=8)
         frame.pack(fill="both", expand=True)
@@ -1163,6 +1197,12 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TButton",
             command=lambda: self._import_selected_history_job(tree),
         ).pack(side="left")
+        ttk.Button(
+            action_bar,
+            text="Close",
+            style="Dark.TButton",
+            command=window.destroy,
+        ).pack(side="right")
 
     def _import_selected_history_job(self, tree: ttk.Treeview) -> None:
         selection = tree.selection()
@@ -1219,6 +1259,49 @@ class ReviewTabFrame(ttk.Frame):
             return f"Review Import - {paths[0].stem}"
         return f"Review Import - {len(paths)} images"
 
+    def _visibility_resolver(self) -> ContentVisibilityResolver:
+        return ContentVisibilityResolver(self._content_visibility_mode)
+
+    def _current_visibility_subject(self) -> dict[str, str]:
+        return {
+            "positive_prompt": self._selected_base_prompt,
+            "negative_prompt": self._selected_base_negative_prompt,
+            "name": self._selected_image_path.name if self._selected_image_path is not None else "",
+        }
+
+    def _apply_content_visibility_mode(self) -> None:
+        resolver = self._visibility_resolver()
+        prompt_value = resolver.redact_text(self._selected_base_prompt, item=self._current_visibility_subject())
+        negative_value = resolver.redact_text(
+            self._selected_base_negative_prompt,
+            item=self._current_visibility_subject(),
+        )
+        self._set_readonly_text(self.current_prompt_text, prompt_value)
+        self._set_readonly_text(self.current_negative_text, negative_value)
+        self.visibility_banner.config(text="")
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._content_visibility_mode = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        self._pending_visibility_refresh = False
+        self._apply_content_visibility_mode()
+        self._refresh_prompt_diff()
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            self._content_visibility_mode = str(
+                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            )
+            return
+        self.on_content_visibility_mode_changed()
+
+    def _on_map(self, _event=None) -> None:
+        if not self._pending_visibility_refresh:
+            return
+        self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
+
     def _set_readonly_text(self, widget: tk.Text, value: str) -> None:
         widget.configure(state="normal")
         widget.delete("1.0", tk.END)
@@ -1239,8 +1322,13 @@ class ReviewTabFrame(ttk.Frame):
             prompt_mode=self.prompt_mode_var.get(),
             negative_prompt_mode=self.negative_mode_var.get(),
         )
-        self.diff_before_label.config(text=diff.before_text)
-        self.diff_after_label.config(text=diff.after_text)
+        resolver = self._visibility_resolver()
+        self.diff_before_label.config(
+            text=resolver.redact_text(diff.before_text, item=self._current_visibility_subject())
+        )
+        self.diff_after_label.config(
+            text=resolver.redact_text(diff.after_text, item=self._current_visibility_subject())
+        )
         self._refresh_effective_settings()
 
     def _refresh_effective_settings(self) -> None:

@@ -2,7 +2,7 @@ StableNew Roadmap v2.6.md
 (Canonical Edition)
 
 Status: Authoritative  
-Updated: 2026-03-24  
+Updated: 2026-03-29  
 Applies To: Codex, Copilot, ChatGPT Planner, Human Contributors
 
 ## 0. Strategic Objective
@@ -57,9 +57,11 @@ The biggest remaining cross-cutting debt is now narrower and more product-facing
   cleanup rather than missing refinement foundations
 - Pipeline sidebar and review/reprocess UX still carry product-level cleanup
   debt around pack discovery, scan roots, and duplicated surfaces
-- StableNew-owned secondary motion now has a shared engine/provenance layer and
-  an active SVD-native backend path with canonical manifest, replay, and
-  container summaries; AnimateDiff and workflow-video rollout remain queued
+- StableNew-owned secondary motion now has a shared engine/provenance layer
+  across SVD native, AnimateDiff, and workflow-video, with canonical manifest,
+  replay, and container-summary coverage already landed through
+  `PR-VIDEO-241`; remaining video work is now follow-on UX, metadata
+  inspection, and structural cleanup rather than missing backend rollout
 
 ## 3. Status of the Older Revised Video Queue
 
@@ -100,10 +102,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
-
 ### 2. `PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning`
 
 Status: Completed 2026-03-19
@@ -121,10 +119,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
 
 ### 3. `PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification`
 
@@ -144,10 +138,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
-
 ### 4. `PR-VIDEO-218-Continuity-Pack-Foundation`
 
 Status: Completed 2026-03-20
@@ -164,10 +154,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-218-Continuity-Pack-Foundation.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-218-Continuity-Pack-Foundation.md`
 
 ### 5. `PR-VIDEO-219-Story-and-Shot-Planning-Foundation`
 
@@ -187,10 +173,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
-
 ### 6. `PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter`
 
 Status: Completed 2026-03-20
@@ -207,10 +189,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
 
 ### 7. `PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink`
 
@@ -237,10 +215,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
-
 ### 8. `PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation`
 
 Status: Completed 2026-03-20
@@ -260,11 +234,7 @@ Completion record:
 
 Guiding roadmap:
 
-- `docs/PR_Backlog/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation.md`
+- `docs/CompletedPlans/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
 
 ### 9. `PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture`
 
@@ -282,10 +252,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
-
 ### 10. `PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment`
 
 Status: Completed 2026-03-20
@@ -302,10 +268,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
-
 ### 11. `PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application`
 
 Status: Completed 2026-03-20
@@ -321,10 +283,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
 
 ### 12. `PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration`
 
@@ -343,10 +301,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
-
 ### 13. `PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback`
 
 Status: Completed 2026-03-20
@@ -363,10 +317,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
 
 ### 14. `PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup`
 
@@ -386,10 +336,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
 
 ### 15. `PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit`
 
@@ -411,10 +357,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
-
 ### 16. `PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery`
 
 Status: Completed 2026-03-20
@@ -431,10 +373,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
 
 ### 17. `PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix`
 
@@ -453,10 +391,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md`
-
 ### 18. `PR-GUI-234-Reprocess-Surface-Consolidation`
 
 Status: Completed 2026-03-20
@@ -473,10 +407,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-GUI-234-Reprocess-Surface-Consolidation.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-GUI-234-Reprocess-Surface-Consolidation.md`
 
 ### 19. `PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX`
 
@@ -497,10 +427,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
-
 ### 19A. `PR-GUI-235A-PresetNaming`
 
 Status: Completed
@@ -520,10 +446,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-GUI-235A-PresetNaming.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-GUI-235A-PresetNaming.md`
 
 ### 20. `PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
 
@@ -555,11 +477,7 @@ Schema reference:
 
 Guiding roadmap:
 
-- `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
+- `docs/CompletedPlans/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
 
 ### 21. `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
 
@@ -578,13 +496,9 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
-
 ### 21A. `PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping`
 
-Status: Implemented
+Status: Completed 2026-03-21
 
 Interleaved critical hardening gate before the next runtime-heavy backend
 rollout.
@@ -605,9 +519,9 @@ Reason for slotting here:
   backend-runtime rollout first would reduce confidence in later video PR
   validation
 
-Detailed execution spec:
+Completion record:
 
-- `docs/PR_Backlog/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
+- `docs/CompletedPR/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
 
 Validation note:
 
@@ -635,15 +549,15 @@ Primary outcomes:
 - surface duplicate-process risk and stale-process pressure in logs and
   diagnostics
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
+
 Reason for slotting here:
 
 - `PR-HARDEN-256` reduced blind spots but did not reduce failures enough on its
   own, so runtime admission and guarded restart behavior had to land before the
   next runtime-heavy video PR
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
 
 Validation note:
 
@@ -668,9 +582,9 @@ Primary outcomes:
 - uses the managed restart/recovery path instead of ad hoc profile switching
 - treats `low_memory` as an already-guarded profile
 
-Detailed execution spec:
+Completion record:
 
-- `docs/PR_Backlog/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md`
+- `docs/CompletedPR/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md`
 
 ### 22. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 
@@ -689,10 +603,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
-
 ### 23. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
 
 Status: Completed 2026-03-24
@@ -708,10 +618,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 
 ### 24. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
 
@@ -731,10 +637,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
-
 ### 25. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 
 Status: Completed 2026-03-24
@@ -753,15 +655,11 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
-
 ## 4A. Post-`PR-VIDEO-241` Prompt Optimizer Tranche
 
 The next product-facing image/prompt tranche is tracked in:
 
-- `docs/PR_Backlog/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/CompletedPlans/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
 
 It is intentionally queued after the current secondary-motion video sequence
 and before broader lower-leverage cleanup. The planned rollout is:
@@ -787,9 +685,9 @@ the current product:
 
 Priority note:
 
-- this tranche is now explicitly prioritized ahead of the remaining
-  `PR-VIDEO-238` through `PR-VIDEO-241` sequence after the active image
-  output-route regression is closed
+- this tranche is now explicitly prioritized after the image output-route
+  regression is closed and after recognizing `PR-VIDEO-238` through
+  `PR-VIDEO-241` as completed backend/runtime work
 - immediate order:
   1. close the image output-route regression
   2. treat `PR-LEARN-259A` as verified baseline
@@ -812,7 +710,18 @@ Priority note:
   19. treat `PR-PROMPT-241E` as completed
   20. treat `PR-UX-265` as completed
   21. treat `PR-UX-266` as completed
-  22. begin `PR-UX-271`
+  22. treat `PR-UX-271` as completed
+  23. treat `PR-UX-267` as completed
+  24. treat `PR-UX-268` as completed
+  25. treat `PR-UX-269` as completed
+  26. treat `PR-UX-270` as completed
+  27. treat `PR-UX-272` as completed
+  28. treat `PR-UX-273` as completed
+  29. treat `PR-UX-274` as completed
+  30. treat `PR-UX-275` as completed
+  31. treat `PR-UX-276` as completed
+  32. treat `PR-UX-277` as completed
+  33. begin `PR-UX-278`
 
 Planned rollout:
 
@@ -828,6 +737,33 @@ Planned rollout:
 - `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
   Completed 2026-03-24
 
+- `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
+  Completed 2026-03-25
+
+- `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
+  Completed 2026-03-25
+
+- `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
+  Completed 2026-03-25
+
+- `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
+  Completed 2026-03-25
+
+- `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
+  Completed 2026-03-25
+
+- `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
+  Completed 2026-03-26
+
+- `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
+  Completed 2026-03-26
+
+- `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
+  Completed 2026-03-26
+
+- `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
+  Completed 2026-03-26
+
 - `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
   Completed 2026-03-24
 
@@ -836,6 +772,12 @@ Planned rollout:
 
 - `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
   Completed 2026-03-24
+
+- `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
+  Completed 2026-03-25
+
+- `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
+  Completed 2026-03-25
 
 - `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`
   Completed 2026-03-21
@@ -870,11 +812,73 @@ Planned rollout:
 - `PR-LEARN-264-Canonical-Metadata-Schemas-and-Contracts`
   Completed 2026-03-23
 
+### Completed follow-on: Content Visibility Safety Tranche
+
+Status: Completed 2026-03-27
+
+This follow-on tranche is now complete for the active prompt, preview, queue,
+history, learning, review, and video-facing GUI surfaces.
+
+Delivered outcomes:
+
+- `PR-CONFIG-271` added the canonical persisted `sfw` / `nsfw` mode contract
+  and app-state notification path
+- `PR-CTRL-272` added the shared resolver and wired filtering/redaction through
+  prompt-pack, LoRA, history, and discovered-review selector paths
+- `PR-GUI-273` added the global shell toggle plus live cross-tab filtering,
+  redaction notices, and refresh wiring across mounted v2 surfaces
+- `PR-TEST-274` added deterministic regression, journey, and learning-path
+  hardening for persistence, live updates, and legacy metadata fallback
+
+Completion records:
+
+- `docs/CompletedPR/PR-CONFIG-271-Content-Visibility-Mode-Contract-and-Persistence.md`
+- `docs/CompletedPR/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md`
+- `docs/CompletedPR/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md`
+- `docs/CompletedPR/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
+
 Sequencing note:
 
 - close the current image output-route regression before beginning this tranche,
   because discovered/imported review quality depends on correct output
   classification
+
+## 4AB. GUI Responsiveness Closure Tranche
+
+Status: In Progress 2026-03-28
+
+This tranche closes the gap between runner/controller architectural separation
+and actual GUI repaint-cadence ownership.
+
+Repo-truth status:
+
+- `PR-GUI-283-AppController-UI-Boundary-Closure-and-Operator-Log-Projection`
+  Completed 2026-03-28
+- `PR-GUI-284-AppState-Batched-Invalidation-and-Flush-Contract`
+  Completed 2026-03-28
+- `PR-GUI-285-Hot-Surface-Refresh-Scheduler-and-Subscription-Ownership`
+  Completed 2026-03-28
+- `PR-GUI-286-Incremental-Projection-Reconciliation-and-Visibility-Gating`
+  Completed 2026-03-29
+- `PR-HARDEN-287-Runtime-Status-Backpressure-GUI-Perf-Journey-and-Architecture-Guards`
+  Completed 2026-03-29
+
+Delivered outcomes so far:
+
+- `AppController` no longer writes operator-log or bottom-status text directly
+  into Tk widgets
+- `AppStateV2` now batches hot runtime keys and exposes an explicit operator-log
+  buffer plus `flush_now()`
+- `PipelineTabFrameV2` owns hot queue/history/preview refresh scheduling for
+  the pipeline shell
+- hidden pipeline hot surfaces now defer work instead of burning Tk time while
+  unmapped
+- the same visibility-gated deferral now reaches prompt/review/learning/photo-optimize/
+  SVD/movie/video/Debug Hub hot refresh surfaces
+- architecture enforcement now blocks controller-side Tk imports and direct
+  widget mutation patterns
+- the deterministic synthetic busy-run perf journey is now the canonical GUI
+  responsiveness proof, with `p95 <= 35 ms` and `max <= 100 ms`
 
 ## 4B. Post-`PR-VIDEO-241` Structural Queue
 
@@ -886,12 +890,37 @@ That queue converts the 2026-03-21 deep-research audit into a repo-truth-based
 remediation sequence. The highest-priority follow-on items are:
 
 - `PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset`
+  Completed 2026-03-27
 - `PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation`
+  Completed 2026-03-29; live archive Python modules were removed from
+  `src/**/archive/**`, relocated reference-only code now lives under
+  `tools/archive_reference/`, and archive import regressions are fenced by
+  `tests/safety/test_no_archive_python_modules_under_src.py` plus the
+  architecture/taxonomy enforcement suite
 - `PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement`
+  Completed 2026-03-29; runtime-state ownership is centralized through
+  `src/state/workspace_paths.py`, tracked-state drift is guarded by
+  `tests/safety/test_runtime_state_hygiene.py`, and the short canonical
+  contract now lives in `docs/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
 - `PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract`
+  Completed 2026-03-29; CI now runs the named required smoke gate
+  `tools/ci/run_required_smoke.py`, and workflow/docs drift is enforced by
+  `tests/system/test_ci_truth_sync_v2.py`
 - `PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards`
+  Completed 2026-03-29; the enforcement suite now covers controller-side Tk
+  import bans, direct widget-mutation bans, archive/reference fencing, and
+  backend-runtime imports constrained to the controller port layer
 - `PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction`
+  Completed 2026-03-29; queue-submission orchestration now lives in
+  `src/controller/pipeline_controller_services/queue_submission_service.py`,
+  reducing `PipelineController` to a thinner facade over bounded submission and
+  history-handoff services
 - `PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes`
+  Completed 2026-03-29; controller-owned image-runtime and workflow-registry
+  ports now live in `src/controller/ports/runtime_ports.py`, default concrete
+  adapters are isolated to `src/controller/ports/default_runtime_ports.py`, and
+  `AppController`, `PipelineController`, and `VideoWorkflowController` are
+  wired through that boundary
 - `PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization`
   Completed 2026-03-21
 - `PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters`
@@ -901,11 +930,25 @@ remediation sequence. The highest-priority follow-on items are:
 - `PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split`
   Completed 2026-03-21
 - `PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation`
+  Completed 2026-03-29; replay now validates versioned intent contracts and
+  hash closure before hydrating NJR snapshots, with compat coverage for legacy
+  snapshots that lack the new contract
 - `PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition`
+  Completed 2026-03-29; GUI and CLI now compose through the shared
+  `src/app/bootstrap.py` `ApplicationKernel`
 - `PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes`
+  Completed 2026-03-29; optional dependency readiness is now published through
+  the shared snapshot contract in `src/app/optional_dependency_probes.py` and
+  surfaced via application diagnostics
 - `PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion`
+  Completed 2026-03-29; CI now runs the bounded typed-seam gate in
+  `tools/ci/run_mypy_smoke.py`
 - `PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure`
+  Completed 2026-03-29; intent artifacts now carry explicit schema/version/hash
+  metadata in config layers and job snapshots
 - `PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure`
+  Completed 2026-03-29; workflow specs now encode governance state and pinned
+  revision, and the canonical registry returns only approved pinned workflows
 
 Recommendation L is now delivered through `PR-OBS-249A` through
 `PR-OBS-249D`. After `PR-OBS-249D`, the bottom log is the operator surface and
@@ -915,16 +958,25 @@ the Debug Hub is the detailed trace surface.
 
 These are the important missing capabilities that are not just "nice to have":
 
-- adaptive refinement still needs prompt-patch, upscale-policy, and learning
-  closure after the new ADetailer-safe slice
-- replay and learning still need fuller canonical refinement-decision
-  provenance beyond the current runner/manifest/image-metadata path
-- secondary motion is still missing as a StableNew-owned, replayable video
-  layer across AnimateDiff, SVD native, and workflow-video backends
-- manifests, replay fragments, container metadata, and learning still need a
-  canonical secondary-motion provenance path distinct from `motion_profile`
-- image/runtime stability still needs GPU-pressure-aware guardrails and better
-  failure damping before more runtime-heavy backend rollout
+- adaptive refinement rollout is complete through prompt-patch,
+  upscale-policy, and learning-aware feedback; remaining work is inspection
+  ergonomics, presentation clarity, and follow-on tuning rather than missing
+  execution slices
+- replay and learning still need clearer operator-facing inspection and
+  summarization of canonical refinement-decision provenance
+- secondary motion backend/runtime rollout is complete through `PR-VIDEO-241`;
+  remaining video debt is now mainly operator UX exposure, inspection clarity,
+  and longer-tail structural cleanup
+- manifests, replay fragments, container metadata, and learning now carry
+  canonical secondary-motion provenance; remaining work is chiefly presentation,
+  inspection ergonomics, and broader contract cleanup rather than missing core
+  provenance paths
+- image/runtime stability now has pressure guardrails, runtime admission
+  control, and workload-aware guarded-launch policy; remaining work is
+  follow-on validation, diagnostics clarity, and longer-tail runtime cleanup
+- content visibility now has a canonical persisted mode, shared resolver, live
+  cross-tab filtering, and regression coverage; remaining work is optional
+  policy strictness tuning rather than missing foundation behavior
 - continuity and story-planning still need richer UX exposure on top of the now-coherent video workspace
 - further controller reduction is still desirable, but no longer blocked on the GUI config adapter seam
 

@@ -49,6 +49,9 @@ def test_job_explanation_panel_shows_manifest(tmp_path, tk_root):
     run_dir = tmp_path / "runs" / "job-123"
     manifest = _build_run_snapshot(run_dir)
     panel = JobExplanationPanelV2("job-123", master=tk_root, base_runs_dir=tmp_path / "runs")
+    assert panel._stage_scrollbar.winfo_exists()  # noqa: SLF001
+    assert panel._metadata_y_scrollbar.winfo_exists()  # noqa: SLF001
+    assert panel._metadata_x_scrollbar.winfo_exists()  # noqa: SLF001
     children = panel.stage_tree.get_children()
     assert children
     values = panel.stage_tree.item(children[0], "values")

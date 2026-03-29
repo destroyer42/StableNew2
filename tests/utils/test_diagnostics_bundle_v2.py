@@ -94,3 +94,21 @@ def test_build_crash_bundle_includes_runtime_artifacts(tmp_path: Path, monkeypat
         assert "runtime/queue_state.json" in names
         assert "runtime/webui_tail.json" in names
         assert "metadata/process_inspector.txt" in names
+
+
+def test_build_crash_bundle_skips_default_image_tree_scan_under_pytest(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        "src.utils.diagnostics_bundle_v2._collect_image_paths",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not scan default roots")),
+    )
+
+    bundle = build_crash_bundle(
+        reason="pytest-thread-exception",
+        output_dir=tmp_path,
+    )
+
+    assert bundle is not None
+    assert bundle.exists()

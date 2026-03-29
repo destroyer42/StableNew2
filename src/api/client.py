@@ -82,6 +82,12 @@ _STARTUP_GRACE_ENDPOINTS = {
     "/sdapi/v1/scripts",
 }
 
+_NONRETRYABLE_HTTP_500_MARKERS = (
+    "cuda error: out of memory",
+    "cuda out of memory",
+    "outofmemoryerror",
+)
+
 # PR-HARDEN-001: Reduced generation timeout for faster failure detection
 DEFAULT_GENERATION_TIMEOUT = 120.0  # Down from 300s for better UX
 PROGRESS_STALL_THRESHOLD_SEC = 60.0  # If no progress update for this long, consider stalled
@@ -131,6 +137,24 @@ def _log_stage_failure(stage: str, error: str | Exception) -> None:
         ctx=LogContext(subsystem="api", stage=stage),
         extra_fields={"error": str(error)},
     )
+
+
+def _extract_http_500_application_signature(response_snippet: str | None) -> str:
+    if not isinstance(response_snippet, str) or not response_snippet.strip():
+        return ""
+    try:
+        parsed = json.loads(response_snippet)
+    except Exception:
+        return response_snippet.lower()
+    if not isinstance(parsed, dict):
+        return response_snippet.lower()
+    parts = [
+        str(parsed.get("error") or "").strip(),
+        str(parsed.get("errors") or "").strip(),
+        str(parsed.get("detail") or "").strip(),
+        str(parsed.get("body") or "").strip(),
+    ]
+    return " | ".join(part for part in parts if part).lower()
 
 
 class SDWebUIClient:
@@ -408,6 +432,19 @@ class SDWebUIClient:
             context["error_message"] = error_message
         exc.diagnostics_context = context
 
+    def _classify_fail_fast_http_500(
+        self,
+        *,
+        status_code: int | None,
+        response_snippet: str | None,
+    ) -> str | None:
+        if status_code != 500:
+            return None
+        signature = _extract_http_500_application_signature(response_snippet)
+        if any(marker in signature for marker in _NONRETRYABLE_HTTP_500_MARKERS):
+            return "cuda_oom"
+        return None
+
     def _perform_request(
         self,
         method: str,
@@ -441,6 +478,7 @@ class SDWebUIClient:
         jitter_frac = selected_policy.jitter_frac if selected_policy else self.jitter
         url = f"{self.base_url}{endpoint}"
         last_exception: Exception | None = None
+        attempts_made = 0
 
         context = ctx or LogContext(subsystem="api")
         if stage_key and not context.stage:
@@ -488,6 +526,7 @@ class SDWebUIClient:
         for attempt in range(retries):
             response: requests.Response | None = None
             try:
+                attempts_made = attempt + 1
                 response = self._session.request(
                     method.upper(),
                     url,
@@ -517,6 +556,12 @@ class SDWebUIClient:
                         webui_unavailable=False,
                         crash_suspected=False,
                     )
+                    fail_fast_reason = self._classify_fail_fast_http_500(
+                        status_code=status_code,
+                        response_snippet=truncated_text,
+                    )
+                    if fail_fast_reason is not None:
+                        http_exc.fail_fast_reason = fail_fast_reason
                     if (
                         status_code == 500
                         and method.upper() == "POST"
@@ -581,6 +626,7 @@ class SDWebUIClient:
                 attempt_index = attempt + 1
                 will_retry = attempt < retries - 1
                 session_recycled = False
+                fail_fast_reason = getattr(exc, "fail_fast_reason", None)
                 if will_retry and isinstance(exc, (requests.ConnectionError, requests.Timeout)):
                     self._reset_http_session()
                     session_recycled = True
@@ -598,12 +644,30 @@ class SDWebUIClient:
                         "session_id": failed_session_id,
                         "reuse_session": not session_recycled,
                         "replacement_session_id": self._session_id if session_recycled else None,
+                        "fail_fast_reason": fail_fast_reason,
                     },
                 )
                 _log_api_failure(
                     error_text=str(exc),
                     response_text=str(getattr(exc, "response", "") or getattr(exc, "text", None)),
                 )
+                if fail_fast_reason is not None:
+                    log_with_ctx(
+                        logger,
+                        logging.WARNING,
+                        (
+                            f"Request {method.upper()} {url} received structured HTTP 500 "
+                            f"({fail_fast_reason}); skipping retries"
+                        ),
+                        ctx=context,
+                        extra_fields={
+                            "stage": stage_key,
+                            "attempt": attempt_index,
+                            "max_attempts": retries,
+                            "session_id": failed_session_id,
+                        },
+                    )
+                    break
                 if self._retry_callback:
                     try:
                         self._retry_callback(
@@ -635,7 +699,7 @@ class SDWebUIClient:
                 extra_fields={
                     "error": str(last_exception),
                     "stage": stage_key,
-                    "attempts": retries,
+                    "attempts": attempts_made or retries,
                 },
             )
             if (
@@ -650,6 +714,7 @@ class SDWebUIClient:
                     reason=str(last_exception),
                     original_exception=last_exception,
                 )
+            raise last_exception
 
         return None
 
@@ -999,22 +1064,25 @@ class SDWebUIClient:
         Returns:
             True if API is ready, False otherwise
         """
+        try:
+            with self._request_context(
+                "get",
+                "/sdapi/v1/sd-models",
+                timeout=10,
+                max_retries=max_retries,
+                backoff_factor=retry_delay,
+            ) as response:
+                if response is None:
+                    logger.error("SD WebUI API is not ready after max retries")
+                    return False
 
-        with self._request_context(
-            "get",
-            "/sdapi/v1/sd-models",
-            timeout=10,
-            max_retries=max_retries,
-            backoff_factor=retry_delay,
-        ) as response:
-            if response is None:
-                logger.error("SD WebUI API is not ready after max retries")
-                return False
+                logger.info("SD WebUI API is ready")
+                return True
+        except requests.RequestException as exc:
+            logger.warning("SD WebUI API readiness check failed: %s", exc)
+            return False
 
-            logger.info("SD WebUI API is ready")
-            return True
-
-    def txt2img(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+    def txt2img(self, payload: dict[str, Any], *, raise_on_error: bool = False) -> dict[str, Any] | None:
         """
         Generate image from text prompt.
 
@@ -1035,27 +1103,33 @@ class SDWebUIClient:
                 "n_iter": payload.get("n_iter"),
             },
         )
-        with self._request_context(
-            "post",
-            "/sdapi/v1/txt2img",
-            json=payload,
-            stage="txt2img",
-            policy=TXT2IMG_RETRY_POLICY,
-        ) as response:
-            if response is None:
-                return None
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/txt2img",
+                json=payload,
+                stage="txt2img",
+                policy=TXT2IMG_RETRY_POLICY,
+            ) as response:
+                if response is None:
+                    return None
 
-            try:
-                data = response.json()
-                # Log response size for diagnostics
-                response_size_mb = len(response.content) / (1024 * 1024)
-                if response_size_mb > 10.0:
-                    logger.warning(f"Large txt2img response: {response_size_mb:.1f}MB")
-                else:
-                    logger.debug(f"txt2img response size: {response_size_mb:.1f}MB")
-            except ValueError as exc:
-                logger.error(f"txt2img response parsing failed: {exc}")
-                return None
+                try:
+                    data = response.json()
+                    # Log response size for diagnostics
+                    response_size_mb = len(response.content) / (1024 * 1024)
+                    if response_size_mb > 10.0:
+                        logger.warning(f"Large txt2img response: {response_size_mb:.1f}MB")
+                    else:
+                        logger.debug(f"txt2img response size: {response_size_mb:.1f}MB")
+                except ValueError as exc:
+                    logger.error(f"txt2img response parsing failed: {exc}")
+                    return None
+        except Exception as exc:
+            if raise_on_error:
+                raise
+            _log_stage_failure("txt2img", exc)
+            return None
 
         # Log parameters returned by the API for correlation
         try:
@@ -1089,7 +1163,13 @@ class SDWebUIClient:
         )
         return data
 
-    def img2img(self, payload: dict[str, Any], *, policy: RetryPolicy | None = None) -> dict[str, Any] | None:
+    def img2img(
+        self,
+        payload: dict[str, Any],
+        *,
+        policy: RetryPolicy | None = None,
+        raise_on_error: bool = False,
+    ) -> dict[str, Any] | None:
         """
         Refine image using img2img.
 
@@ -1101,27 +1181,33 @@ class SDWebUIClient:
             Response data including base64 encoded images
         """
         effective_policy = policy if policy is not None else IMG2IMG_RETRY_POLICY
-        with self._request_context(
-            "post",
-            "/sdapi/v1/img2img",
-            json=payload,
-            stage="img2img",
-            policy=effective_policy,
-        ) as response:
-            if response is None:
-                return None
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/img2img",
+                json=payload,
+                stage="img2img",
+                policy=effective_policy,
+            ) as response:
+                if response is None:
+                    return None
 
-            try:
-                data = response.json()
-                # Log response size for diagnostics
-                response_size_mb = len(response.content) / (1024 * 1024)
-                if response_size_mb > 10.0:
-                    logger.warning(f"Large img2img response: {response_size_mb:.1f}MB")
-                else:
-                    logger.debug(f"img2img response size: {response_size_mb:.1f}MB")
-            except ValueError as exc:
-                logger.error(f"img2img response parsing failed: {exc}")
-                return None
+                try:
+                    data = response.json()
+                    # Log response size for diagnostics
+                    response_size_mb = len(response.content) / (1024 * 1024)
+                    if response_size_mb > 10.0:
+                        logger.warning(f"Large img2img response: {response_size_mb:.1f}MB")
+                    else:
+                        logger.debug(f"img2img response size: {response_size_mb:.1f}MB")
+                except ValueError as exc:
+                    logger.error(f"img2img response parsing failed: {exc}")
+                    return None
+        except Exception as exc:
+            if raise_on_error:
+                raise
+            _log_stage_failure("img2img", exc)
+            return None
 
         # Log parameters returned by the API for correlation
         try:
@@ -1166,21 +1252,25 @@ class SDWebUIClient:
             "image": _format_as_data_url(image_base64),
             "model": model or "clip",
         }
-        with self._request_context(
-            "post",
-            "/sdapi/v1/interrogate",
-            json=payload,
-            stage="interrogate",
-            timeout=30,
-        ) as response:
-            if response is None:
-                return None
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/interrogate",
+                json=payload,
+                stage="interrogate",
+                timeout=30,
+            ) as response:
+                if response is None:
+                    return None
 
-            try:
-                data = response.json()
-            except ValueError as exc:
-                logger.error("interrogate response parsing failed: %s", exc)
-                return None
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    logger.error("interrogate response parsing failed: %s", exc)
+                    return None
+        except Exception as exc:
+            _log_stage_failure("interrogate", exc)
+            return None
 
         caption = ""
         if isinstance(data, dict):
@@ -1192,7 +1282,7 @@ class SDWebUIClient:
         logger.info("interrogate completed successfully")
         return caption
 
-    def upscale(self, payload: dict[str, Any]) -> dict[str, Any] | None:
+    def upscale(self, payload: dict[str, Any], *, raise_on_error: bool = False) -> dict[str, Any] | None:
         """
         Upscale image using extra-single-image endpoint.
 
@@ -1202,21 +1292,27 @@ class SDWebUIClient:
         Returns:
             Response data including base64 encoded upscaled image
         """
-        with self._request_context(
-            "post",
-            "/sdapi/v1/extra-single-image",
-            json=payload,
-            stage="upscale",
-            policy=UPSCALE_RETRY_POLICY,
-        ) as response:
-            if response is None:
-                return None
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/extra-single-image",
+                json=payload,
+                stage="upscale",
+                policy=UPSCALE_RETRY_POLICY,
+            ) as response:
+                if response is None:
+                    return None
 
-            try:
-                data = response.json()
-            except ValueError as exc:
-                logger.error(f"Upscale response parsing failed: {exc}")
-                return None
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    logger.error(f"Upscale response parsing failed: {exc}")
+                    return None
+        except Exception as exc:
+            if raise_on_error:
+                raise
+            _log_stage_failure("upscale", exc)
+            return None
 
         logger.info("Upscaling completed successfully")
         return data
@@ -1272,23 +1368,27 @@ class SDWebUIClient:
                 "scale": upscaling_resize,
             },
         )
-        with self._request_context(
-            "post",
-            "/sdapi/v1/extra-single-image",
-            json=payload,
-            stage="upscale",
-            policy=UPSCALE_RETRY_POLICY,
-            timeout=timeout or UPSCALE_SINGLE_IMAGE_TIMEOUT,
-        ) as response:
-            if response is None:
-                _log_stage_failure("upscale", "No response from extra-single-image")
-                return None
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/extra-single-image",
+                json=payload,
+                stage="upscale",
+                policy=UPSCALE_RETRY_POLICY,
+                timeout=timeout or UPSCALE_SINGLE_IMAGE_TIMEOUT,
+            ) as response:
+                if response is None:
+                    _log_stage_failure("upscale", "No response from extra-single-image")
+                    return None
 
-            try:
-                data = response.json()
-            except ValueError as exc:
-                _log_stage_failure("upscale", exc)
-                return None
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    _log_stage_failure("upscale", exc)
+                    return None
+        except Exception as exc:
+            _log_stage_failure("upscale", exc)
+            return None
 
         # Log face restoration usage
         face_restoration_used = []
@@ -1330,6 +1430,31 @@ class SDWebUIClient:
             error=GenerateError(code=code, message=message, stage=stage, details=details),
         )
 
+    def _describe_http_error(
+        self,
+        exc: requests.HTTPError,
+        diagnostics: dict[str, Any] | None,
+    ) -> str:
+        summary = diagnostics.get("request_summary") if isinstance(diagnostics, dict) else None
+        response_snippet = summary.get("response_snippet") if isinstance(summary, dict) else None
+        if isinstance(response_snippet, str) and response_snippet:
+            try:
+                parsed = json.loads(response_snippet)
+            except Exception:
+                parsed = None
+            if isinstance(parsed, dict):
+                error_name = str(parsed.get("error") or "").strip()
+                error_detail = str(
+                    parsed.get("errors") or parsed.get("detail") or parsed.get("body") or ""
+                ).strip()
+                if error_name and error_detail:
+                    return f"{error_name}: {error_detail}"
+                if error_name:
+                    return error_name
+                if error_detail:
+                    return error_detail
+        return str(exc)
+
     def generate_images(
         self,
         *,
@@ -1340,15 +1465,19 @@ class SDWebUIClient:
         stage_normalized = (stage or "txt2img").lower()
         try:
             if stage_normalized == "txt2img":
-                response = self.txt2img(payload)
+                response = self.txt2img(payload, raise_on_error=True)
             elif stage_normalized == "img2img":
-                response = self.img2img(payload)
+                response = self.img2img(payload, raise_on_error=True)
             elif stage_normalized == "adetailer":
                 # ADetailer uses the img2img endpoint but with a fail-fast retry policy:
                 # GPU OOM loops never recover without a restart, so retrying is wasteful.
-                response = self.img2img(payload, policy=ADETAILER_RETRY_POLICY)
+                response = self.img2img(
+                    payload,
+                    policy=ADETAILER_RETRY_POLICY,
+                    raise_on_error=True,
+                )
             elif stage_normalized in {"upscale", "upscale_image"}:
-                response = self.upscale(payload)
+                response = self.upscale(payload, raise_on_error=True)
             else:
                 raise ValueError(f"Unsupported stage: {stage}")
 
@@ -1370,6 +1499,15 @@ class SDWebUIClient:
                 stage_normalized,
                 str(exc),
                 GenerateErrorCode.CONNECTION,
+                details=details,
+            )
+        except requests.HTTPError as exc:
+            diag = getattr(exc, "diagnostics_context", None)
+            details = {"diagnostics": diag} if diag else None
+            return self._generate_error_outcome(
+                stage_normalized,
+                self._describe_http_error(exc, diag if isinstance(diag, dict) else None),
+                GenerateErrorCode.UNKNOWN,
                 details=details,
             )
         except requests.RequestException as exc:
@@ -1672,16 +1810,20 @@ class SDWebUIClient:
 
         if self._resource_endpoint_startup_grace_active("/sdapi/v1/scripts"):
             return {}
-        with self._request_context("get", "/sdapi/v1/scripts", timeout=10) as response:
-            if response is None:
-                logger.warning("Failed to get scripts from API")
-                return {}
+        try:
+            with self._request_context("get", "/sdapi/v1/scripts", timeout=10) as response:
+                if response is None:
+                    logger.warning("Failed to get scripts from API")
+                    return {}
 
-            try:
-                data = response.json()
-            except ValueError as exc:
-                logger.warning("Failed to parse scripts response: %s", exc)
-                return {}
+                try:
+                    data = response.json()
+                except ValueError as exc:
+                    logger.warning("Failed to parse scripts response: %s", exc)
+                    return {}
+        except Exception as exc:
+            logger.warning("Failed to get scripts from API: %s", exc)
+            return {}
 
         if isinstance(data, dict):
             return data

@@ -8,6 +8,13 @@ from unittest.mock import Mock, patch
 
 from src.api.client import ProgressInfo, SDWebUIClient, STALL_INTERRUPT_THRESHOLD_SEC
 from src.pipeline.executor import Pipeline, STALL_INTERRUPT_THRESHOLD_BY_STAGE
+from src.prompting.contracts import (
+    PromptContext,
+    PromptIntentBundle,
+    PromptOptimizerAnalysisBundle,
+)
+from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
+from src.prompting.prompt_types import PromptOptimizationPairResult, PromptOptimizationResult
 from src.utils import StructuredLogger
 
 
@@ -235,16 +242,48 @@ class TestGenerateWithProgress(unittest.TestCase):
 
     def test_run_txt2img_stage_uses_progress_wrapper(self) -> None:
         """txt2img should use the same progress-aware wrapper as other generation stages."""
+        prompt_optimizer_result = PromptOptimizationPairResult(
+            positive=PromptOptimizationResult(
+                original_prompt="prompt",
+                optimized_prompt="prompt",
+                polarity="positive",
+            ),
+            negative=PromptOptimizationResult(
+                original_prompt="negative",
+                optimized_prompt="negative",
+                polarity="negative",
+            ),
+        )
+        prompt_optimizer_analysis = PromptOptimizerAnalysisBundle(
+            stage="txt2img",
+            mode="disabled",
+            context=PromptContext(
+                stage="txt2img",
+                pipeline_name="txt2img",
+                positive_chunk_count=1,
+                negative_chunk_count=1,
+            ),
+            intent=PromptIntentBundle(
+                intent_band="general",
+                shot_type="unknown",
+                style_mode="unknown",
+                requested_pose="",
+                wants_face_detail=False,
+                wants_full_body=False,
+                wants_portrait=False,
+                has_people_tokens=False,
+                has_lora_tokens=False,
+                sensitive=False,
+            ),
+        )
         self.pipeline._apply_webui_defaults_once = Mock()
         self.pipeline._ensure_model_and_vae = Mock()
         self.pipeline._ensure_hypernetwork = Mock()
         self.pipeline._run_prompt_optimizer = Mock(
             return_value=(
-                Mock(
-                    positive=Mock(optimized_prompt="prompt"),
-                    negative=Mock(optimized_prompt="negative"),
-                ),
-                {},
+                prompt_optimizer_result,
+                PromptOptimizerConfig(enabled=False, log_before_after=False),
+                prompt_optimizer_analysis,
             )
         )
         self.pipeline._apply_aesthetic_to_payload = Mock(return_value=("prompt", "negative"))

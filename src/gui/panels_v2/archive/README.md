@@ -1,32 +1,18 @@
 # GUI Panels V2 Archive
 
-This directory contains legacy GUI panel modules archived during PR-CORE1-12.
+This directory no longer contains importable Python modules.
 
 ## PR-CORE1-12: PipelineConfig Runtime Removal
 
 **Date:** 2025
 **Reason:** Enforcement of NJR-only execution path (v2.6 architecture)
 
-### Archived Files:
+The old reference-only GUI module was relocated by `PR-ARCH-243` to:
 
-#### `pipeline_config_panel_v2.py`
-- **Purpose:** GUI V2 panel for configuring pipeline execution settings
-- **Deprecated:** PR-CORE1-B2 (NJR-only execution)
-- **Reason:** Panel was wired to `PipelineConfig`-based execution, which is removed
-- **Features:**
-  - Run mode selection (direct vs queue)
-  - Batch size configuration
-  - Randomizer controls (enabled/disabled, max variants)
-  - Stage configuration UI
-  - LoRA controls
-- **Status:** No longer wired in main GUI as of PR-CORE1-12
+- `tools.archive_reference.gui.pipeline_config_panel_v2`
 
-**Replacement:**
-- Configuration now managed via:
-  - `CoreConfigPanel` - Core generation settings (model, sampler, steps, etc.)
-  - `RandomizerPanelV2` - Randomization settings
-  - `PipelinePanelV2` - Stage enable/disable
-  - `PreviewPanel` - Job preview before queue submission
+It remains available only for explicit archival/reference use outside runtime
+package paths.
 
 **Architecture Change:**
 GUI V2 no longer assembles `PipelineConfig` objects. Instead:

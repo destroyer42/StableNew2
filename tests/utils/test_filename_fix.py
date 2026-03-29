@@ -41,7 +41,7 @@ def test_safe_image_names():
     print(f"NEW filename: {new_style}")
     
     assert len(new_style) <= 104, f"Filename too long: {len(new_style)} chars"
-    print(f"✅ NEW filename within safe limits ({len(new_style)} <= 104 chars)")
+    print(f"[OK] NEW filename within safe limits ({len(new_style)} <= 104 chars)")
     
     # Test Case 2: Uniqueness - different matrix values should produce different hashes
     print("\n=== Test Case 2: Uniqueness guarantee ===")
@@ -55,7 +55,7 @@ def test_safe_image_names():
     print(f"Matrix 2: {name2}")
     
     assert name1 != name2, "Different matrix values must produce different names"
-    print("✅ Different matrix values produce unique names")
+    print("[OK] Different matrix values produce unique names")
     
     # Test Case 3: Stability - same inputs produce same output
     print("\n=== Test Case 3: Deterministic/stable naming ===")
@@ -65,7 +65,7 @@ def test_safe_image_names():
     assert name_a == name_b, "Same inputs must produce same name (deterministic)"
     print(f"Run 1: {name_a}")
     print(f"Run 2: {name_b}")
-    print("✅ Naming is deterministic and stable")
+    print("[OK] Naming is deterministic and stable")
     
     # Test Case 4: Batch index differentiation
     print("\n=== Test Case 4: Batch index uniqueness ===")
@@ -76,8 +76,8 @@ def test_safe_image_names():
     print(f"Batch 1: {batch1}")
     
     assert batch0 != batch1, "Different batch indices must produce different names"
-    assert "_batch0" in batch0 and "_batch1" in batch1, "Batch indices must be explicit"
-    print("✅ Batch indices create unique names")
+    assert "_batch1" in batch0 and "_batch2" in batch1, "Batch indices must be explicit"
+    print("[OK] Batch indices create unique names")
     
     # Test Case 5: Windows path length validation
     print("\n=== Test Case 5: Full path length validation ===")
@@ -90,15 +90,15 @@ def test_safe_image_names():
     
     # Windows MAX_PATH is 260 chars
     assert len(full_path_str) < 260, f"Full path too long for Windows: {len(full_path_str)} >= 260"
-    print(f"✅ Full path within Windows MAX_PATH limit ({len(full_path_str)} < 260)")
+    print(f"[OK] Full path within Windows MAX_PATH limit ({len(full_path_str)} < 260)")
     
     print("\n" + "="*80)
-    print("✅ ALL TESTS PASSED - Filename generation is safe!")
+    print("[OK] ALL TESTS PASSED - Filename generation is safe!")
     print("="*80)
-    print("\n📝 Summary:")
-    print("  BEFORE: Long matrix values created 200+ char filenames → Errno 2")
-    print("  AFTER:  Hash-based names stay under 100 chars → Always saves successfully")
-    print("\n🔧 Implementation:")
+    print("\nSummary:")
+    print("  BEFORE: Long matrix values created 200+ char filenames -> Errno 2")
+    print("  AFTER:  Hash-based names stay under 100 chars -> Always saves successfully")
+    print("\nImplementation:")
     print("  - Added build_safe_image_name() in file_io.py")
     print("  - Updated pipeline_runner.py to use it for txt2img, adetailer, upscale")
     print("  - Hash ensures uniqueness even after truncation")

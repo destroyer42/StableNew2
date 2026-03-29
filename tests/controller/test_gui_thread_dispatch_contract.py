@@ -37,6 +37,7 @@ def _new_controller_with_main_window(main_window):
     controller.main_window = main_window
     controller._append_log = lambda *_, **__: None
     controller._ui_dispatch = lambda fn: fn()
+    controller._ui_thread_id = -1
     return controller
 
 

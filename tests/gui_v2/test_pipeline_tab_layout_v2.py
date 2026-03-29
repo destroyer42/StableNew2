@@ -43,7 +43,7 @@ def test_pipeline_tab_three_column_layout_v2() -> None:
         for idx in range(3):
             column_info = pipeline_tab.columnconfigure(idx)
             assert column_info["weight"] == 1
-            assert column_info["minsize"] == pipeline_tab.DEFAULT_COLUMN_WIDTH
+            assert column_info["minsize"] == pipeline_tab.MIN_COLUMN_WIDTH
     finally:
         try:
             root.destroy()

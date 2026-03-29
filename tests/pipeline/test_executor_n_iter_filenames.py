@@ -17,6 +17,13 @@ from src.api.client import SDWebUIClient
 from src.pipeline.executor import Pipeline
 from src.utils import StructuredLogger
 
+_HEALTHY_RUNTIME_ADMISSION = {
+    "schema": "stablenew.runtime-admission.v1",
+    "status": "healthy",
+    "reasons": [],
+    "cause_codes": [],
+}
+
 
 class TestNIterFilenames:
     """Test suite for n_iter and batch_size filename generation."""
@@ -25,13 +32,16 @@ class TestNIterFilenames:
         """Setup for each test."""
         self.client = SDWebUIClient(base_url="http://127.0.0.1:7860")
         self.pipeline = Pipeline(self.client, StructuredLogger())
+        self.pipeline.client.get_current_model = lambda: "mock-model"
+        self.pipeline.client.get_current_vae = lambda: "Automatic"
 
     @patch("src.pipeline.executor.save_image_from_base64")
     @patch.object(Pipeline, "_generate_images")
     @patch.object(Pipeline, "_ensure_webui_true_ready")
+    @patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
     @patch.object(Pipeline, "_apply_webui_defaults_once")
     def test_n_iter_creates_unique_filenames(
-        self, mock_defaults, mock_ready, mock_generate, mock_save
+        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save
     ):
         """
         Test that n_iter > 1 with batch_size = 1 creates unique filenames.
@@ -82,9 +92,10 @@ class TestNIterFilenames:
     @patch("src.pipeline.executor.save_image_from_base64")
     @patch.object(Pipeline, "_generate_images")
     @patch.object(Pipeline, "_ensure_webui_true_ready")
+    @patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
     @patch.object(Pipeline, "_apply_webui_defaults_once")
     def test_batch_size_creates_unique_filenames(
-        self, mock_defaults, mock_ready, mock_generate, mock_save
+        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save
     ):
         """Test that batch_size > 1 creates unique filenames."""
         # Setup: batch_size=3, n_iter=1 → WebUI returns 3 images
@@ -130,9 +141,10 @@ class TestNIterFilenames:
     @patch("src.pipeline.executor.save_image_from_base64")
     @patch.object(Pipeline, "_generate_images")
     @patch.object(Pipeline, "_ensure_webui_true_ready")
+    @patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
     @patch.object(Pipeline, "_apply_webui_defaults_once")
     def test_single_image_no_suffix(
-        self, mock_defaults, mock_ready, mock_generate, mock_save
+        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save
     ):
         """Test that single image doesn't add _batch suffix."""
         # Setup: batch_size=1, n_iter=1 → WebUI returns 1 image
@@ -170,9 +182,10 @@ class TestNIterFilenames:
     @patch("src.pipeline.executor.save_image_from_base64")
     @patch.object(Pipeline, "_generate_images")
     @patch.object(Pipeline, "_ensure_webui_true_ready")
+    @patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
     @patch.object(Pipeline, "_apply_webui_defaults_once")
     def test_n_iter_and_batch_size_combined(
-        self, mock_defaults, mock_ready, mock_generate, mock_save
+        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save
     ):
         """Test combined n_iter and batch_size creates unique filenames."""
         # Setup: batch_size=2, n_iter=2 → WebUI returns 4 images
@@ -218,13 +231,16 @@ class TestNIterRegression:
         """Setup for each test."""
         self.client = SDWebUIClient(base_url="http://127.0.0.1:7860")
         self.pipeline = Pipeline(self.client, StructuredLogger())
+        self.pipeline.client.get_current_model = lambda: "mock-model"
+        self.pipeline.client.get_current_vae = lambda: "Automatic"
 
     @patch("src.pipeline.executor.save_image_from_base64")
     @patch.object(Pipeline, "_generate_images")
     @patch.object(Pipeline, "_ensure_webui_true_ready")
+    @patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
     @patch.object(Pipeline, "_apply_webui_defaults_once")
     def test_regression_n_iter_file_clobbering_prevented(
-        self, mock_defaults, mock_ready, mock_generate, mock_save
+        self, mock_defaults, _mock_runtime, mock_ready, mock_generate, mock_save
     ):
         """
         REGRESSION TEST: Prevent file clobbering when n_iter > 1.
@@ -294,9 +310,11 @@ class TestNIterRegression:
 @patch("src.pipeline.executor.save_image_from_base64")
 @patch.object(Pipeline, "_generate_images")
 @patch.object(Pipeline, "_ensure_webui_true_ready")
+@patch.object(Pipeline, "_ensure_runtime_admissible", return_value=_HEALTHY_RUNTIME_ADMISSION)
 @patch.object(Pipeline, "_apply_webui_defaults_once")
 def test_partial_image_response_marks_degraded_metadata(
     mock_defaults,
+    _mock_runtime,
     mock_ready,
     mock_generate,
     mock_save,
@@ -304,6 +322,8 @@ def test_partial_image_response_marks_degraded_metadata(
 ):
     client = SDWebUIClient(base_url="http://127.0.0.1:7860")
     pipeline = Pipeline(client, StructuredLogger())
+    pipeline.client.get_current_model = lambda: "mock-model"
+    pipeline.client.get_current_vae = lambda: "Automatic"
 
     mock_generate.return_value = {
         "images": ["base64_img0", "base64_img1"],

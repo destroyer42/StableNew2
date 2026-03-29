@@ -12,6 +12,7 @@ from typing import Any
 
 from src.gui.theme_v2 import (
     SECONDARY_BUTTON_STYLE,
+    STATUS_LABEL_STYLE,
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
@@ -56,6 +57,12 @@ class HistoryPanelV2(ttk.Frame):
             title_frame, text="(0 completed)", style=STATUS_STRONG_LABEL_STYLE
         )
         self.count_label.pack(side="left", padx=(8, 0))
+        self.visibility_banner = ttk.Label(
+            title_frame,
+            text="",
+            style=STATUS_LABEL_STYLE,
+            foreground=TOKENS.colors.status_info,
+        )
 
         # History listbox
         list_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -93,6 +100,15 @@ class HistoryPanelV2(ttk.Frame):
             command=self._on_clear,
         )
         self.clear_button.pack(side="right")
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._on_content_visibility_mode_changed,
+                )
+            except Exception:
+                pass
+        self.on_content_visibility_mode_changed()
 
     def append_history_item(self, dto: JobHistoryItemDTO) -> None:
         """Add a completed job to the history.
@@ -199,6 +215,12 @@ class HistoryPanelV2(ttk.Frame):
     def get_history_items(self) -> list[JobHistoryItemDTO]:
         """Get all history items."""
         return list(self._history_items)
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self.visibility_banner.configure(text="")
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()
 
 
 __all__ = ["HistoryPanelV2"]

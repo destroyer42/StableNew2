@@ -17,6 +17,7 @@ from src.pipeline.job_models_v2 import (
     StageConfig,
 )
 from src.pipeline.config_contract_v26 import build_config_layers
+from src.pipeline.intent_artifact_contract import build_intent_artifact_contract
 from src.queue.job_model import Job
 
 SCHEMA_VERSION = "1.0"
@@ -350,6 +351,9 @@ def build_job_snapshot(
         "recorded_at": timestamp,
         "job_id": job.job_id,
         "run_config": _normalize_run_config(run_config),
+        "intent_contract": build_intent_artifact_contract(
+            {**dict(normalized_job.intent_config or {}), **_normalize_run_config(run_config)}
+        ),
         "config_layers": build_config_layers(
             intent_config={**dict(normalized_job.intent_config or {}), **_normalize_run_config(run_config)},
             execution_config=config,

@@ -11,6 +11,7 @@ from tkinter import ttk
 from src.pipeline.reprocess_builder import ReprocessEffectiveSettingsPreview, ReprocessStageSettingsPreview
 from src.gui.controllers.review_workflow_adapter import ReviewWorkspaceHandoff
 from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
+from src.gui.theme_v2 import BACKGROUND_DARK
 from src.gui.panels_v2.reprocess_panel_v2 import ReprocessPanelV2
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.queue.job_history_store import JobHistoryEntry
@@ -78,6 +79,7 @@ def test_review_tab_marks_itself_as_canonical_reprocess_workspace(tk_root: tk.Tk
     tab = ReviewTabFrame(tk_root)
 
     assert "canonical advanced reprocess" in tab.workflow_hint_label.cget("text").lower()
+    assert "use learning" in tab.workflow_hint_label.cget("text").lower()
 
     tab.destroy()
 
@@ -208,6 +210,7 @@ def test_review_tab_loads_staged_curation_handoff(tk_root: tk.Tk, tmp_path: Path
         assert tab.current_negative_text.get("1.0", "end-1c") == "source negative"
         assert tab.prompt_text.get("1.0", "end-1c") == ""
         assert tab.negative_text.get("1.0", "end-1c") == ""
+        assert "bulk throughput for the marked set" in tab.workflow_hint_label.cget("text").lower()
     finally:
         tab.destroy()
 
@@ -285,11 +288,12 @@ def test_review_tab_shows_effective_reprocess_settings_summary(tk_root: tk.Tk, t
         summary = tab._effective_settings_var.get()  # noqa: SLF001
         assert "Source: stage=txt2img | model=juggernautXL | vae=Automatic" in summary
         assert "Targets: adetailer" in summary
-        assert "Positive prompt: append" in summary
-        assert "Negative prompt: inherited" in summary
-        assert "adetailer | sampler=DPM++ 2M Karras | scheduler=Karras | steps=12 | cfg=5.7 | denoise=0.25" in summary
+        assert "Why these values are active:" in summary
+        assert "Positive prompt: append [explicit edit]" in summary
+        assert "Negative prompt: inherited [source artifact baseline]" in summary
+        assert "adetailer | sampler=DPM++ 2M Karras [active resolution] | scheduler=Karras [active resolution] | steps=12 [active resolution] | cfg=5.7 [active resolution] | denoise=0.25 [active resolution]" in summary
         assert "Direct Queue Now baseline:" in summary
-        assert "adetailer | sampler=DPM++ 2M Karras | scheduler=Karras | steps=8 | cfg=5.7 | denoise=0.34" in summary
+        assert "adetailer | sampler=DPM++ 2M Karras [active resolution] | scheduler=Karras [active resolution] | steps=8 [active resolution] | cfg=5.7 [active resolution] | denoise=0.34 [active resolution]" in summary
     finally:
         tab.destroy()
 
@@ -428,3 +432,22 @@ def test_review_tab_can_open_latest_derived_compare_from_staged_candidate(
     assert rendered == [
         (str(source_image), str(derived_image), "Source vs Latest Derived (face triage)")
     ]
+
+
+@pytest.mark.gui
+def test_review_tab_history_import_picker_uses_themed_popup(tk_root: tk.Tk) -> None:
+    entry = SimpleNamespace(
+        job_id="job-1",
+        status=SimpleNamespace(value="completed"),
+        prompt_pack_id="Pack A",
+        payload_summary="",
+    )
+    tab = ReviewTabFrame(tk_root, app_state=SimpleNamespace(history_items=[entry]))
+    try:
+        tab._on_open_history_import_picker()  # noqa: SLF001
+        assert tab._history_import_window is not None  # noqa: SLF001
+        assert tab._history_import_window.cget("bg") == BACKGROUND_DARK  # noqa: SLF001
+    finally:
+        if tab._history_import_window is not None and tab._history_import_window.winfo_exists():  # noqa: SLF001
+            tab._history_import_window.destroy()  # noqa: SLF001
+        tab.destroy()
