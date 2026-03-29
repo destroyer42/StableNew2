@@ -184,7 +184,7 @@ All PR specs must respect the current canon:
 - `docs/GOVERNANCE_v2.6.md`
 - `docs/StableNew Roadmap v2.6.md`
 - `docs/CompletedPlans/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
-- `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
+- `docs/CompletedPlans/StableNew_ComfyAware_Backlog_v2.6.md`
 
 PR specs must not:
 

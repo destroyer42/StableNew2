@@ -63,8 +63,6 @@ completed implementation records, and historical planning notes.
 
 - `docs/PR_Backlog/CORE_TOP_20_EXECUTABLE_MINI_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/PR-CORE-001 - Finalize Native SVD Integration.md`
-- `docs/PR_Backlog/PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback.md`
-- `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
 - `docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md`
 
 ### 1.5 Reference and history
@@ -78,7 +76,8 @@ completed implementation records, and historical planning notes.
   in `docs/CompletedPlans/`, including
   `MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`,
   `STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`, and
-  `UX_HELP_AND_IN-PRODUCT_GUIDANCE_EXECUTABLE_SEQUENCE_v2.6.md`
+  `UX_HELP_AND_IN-PRODUCT_GUIDANCE_EXECUTABLE_SEQUENCE_v2.6.md`, and
+  `StableNew_ComfyAware_Backlog_v2.6.md`
 - superseded queue snapshots and retired backlog specs now live in
   `docs/archive/reference/`, including
   `MASTER_PR_SEQUENCE_FROM_CURRENT_REPO_STATE_v2.6.md`,
@@ -114,6 +113,7 @@ completed implementation records, and historical planning notes.
 - `docs/CompletedPR/PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes.md`
 - `docs/CompletedPR/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
 - `docs/CompletedPR/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
+- `docs/CompletedPR/PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback.md`
 - `docs/CompletedPR/PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion.md`
 - `docs/CompletedPR/PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure.md`
 - `docs/CompletedPR/PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure.md`

@@ -78,7 +78,7 @@ After this PR:
 The next queue now lives in:
 
 - [StableNew Roadmap v2.6.md](/c:/Users/rob/projects/StableNew/docs/StableNew%20Roadmap%20v2.6.md)
-- [StableNew_ComfyAware_Backlog_v2.6.md](/c:/Users/rob/projects/StableNew/docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md)
+- [StableNew_ComfyAware_Backlog_v2.6.md](/c:/Users/rob/projects/StableNew/docs/CompletedPlans/StableNew_ComfyAware_Backlog_v2.6.md)
 
 Immediate post-unification priorities:
 

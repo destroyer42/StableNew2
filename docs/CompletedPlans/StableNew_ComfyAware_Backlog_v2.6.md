@@ -1,15 +1,17 @@
 # StableNew Comfy-Aware Backlog v2.6
 
-Status: Active subordinate backlog  
-Updated: 2026-03-24
+Status: Completed historical backlog 2026-03-29  
+Updated: 2026-03-29
 
 ## Purpose
 
 Extend StableNew's existing video architecture so ComfyUI can act as a managed
 execution backend without becoming a second orchestration system.
 
-This backlog now reflects current repo truth after the v2.6 unification and
-Comfy foundation work, not the earlier idealized pre-migration plan.
+This document is now retained as the historical closeout of the Comfy-aware
+video backlog. The numbered rollout captured here is complete in substance, and
+remaining follow-on product work is now tracked by the canonical roadmap and
+later backlog docs.
 
 ## Current Repo Truth
 
@@ -51,9 +53,11 @@ The earlier `PR-VIDEO-078` through `PR-VIDEO-088` plan maps to current repo stat
 - `PR-VIDEO-087` completed in substance via `PR-VIDEO-218` continuity pack foundation
 - `PR-VIDEO-088` completed in substance via `PR-VIDEO-219` story and shot planning foundation
 
-## Common Missing Functionality
+## Historical Missing Functionality Snapshot
 
-Beyond the old numbered plan, the current repo still lacks a few important product layers:
+At the time this backlog was active, the repo still lacked a few important
+product layers. Those gaps have since either been delivered or been re-tracked
+in later roadmap/backlog documents:
 
 - the GUI still needs the dedicated config adapter/final controller shrink pass
 - continuity and story planning still need richer first-class UX on top of the new workspace flow

@@ -978,10 +978,11 @@ Repo-truth corrections:
 - `PR-TEST-280` is no longer a live blocker: `pytest --collect-only -q` now
   succeeds with `2964 collected / 0 skipped`, and the stale spec has been
   retired to `docs/archive/reference/PR-TEST-280-Full-Suite-Collection-Recovery-and-Test-Hygiene.md`.
-- `PR-HARDEN-281` appears largely absorbed in current source and tests: default
-  ADetailer request-local pinning is off, request-local override remains opt-in,
-  structured `NansException` failures do not trigger restart recovery, and the
-  request-local ambient drift downgrade is covered.
+- `PR-HARDEN-281` is now closed in substance; see
+  `docs/CompletedPR/PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback.md`.
+  Default ADetailer request-local pinning is off, request-local override
+  remains opt-in, structured `NansException` failures do not trigger restart
+  recovery, and focused closeout validation passed.
 - `PR-POLISH-282` is satisfied by this roadmap rebaseline and should not remain
   a separate near-term execution item unless fresh cross-doc drift appears; the
   stale spec has been retired to
