@@ -667,10 +667,7 @@ class SidebarPanelV2(ttk.Frame):
                 if pn in summary_by_name
             ]
             if not packs:
-                packs = [
-                    PromptPackSummary(name=pn, description="", prompt_count=1, path=Path(""))
-                    for pn in self._manual_pack_names
-                ]
+                packs = summaries
         self._current_pack_names = [summary.name for summary in packs]
         self.pack_listbox.delete(0, "end")
         for name in self._current_pack_names:
@@ -994,6 +991,9 @@ class SidebarPanelV2(ttk.Frame):
         self._content_visibility_mode = str(
             mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )
+        # Visibility changes should rebuild from canonical discovered summaries, not stale
+        # controller-pushed name snapshots captured under a different mode.
+        self._manual_pack_names = None
         self._populate_packs_for_selected_list()
 
     def _on_content_visibility_mode_changed(self) -> None:
@@ -1012,7 +1012,15 @@ class SidebarPanelV2(ttk.Frame):
                 }
             except Exception:
                 selected_names = set()
-        self._manual_pack_names = list(names)
+        summaries = self._load_prompt_summaries() or self._prompt_summaries
+        if summaries:
+            available_names = {summary.name for summary in summaries}
+            matched_names = [name for name in names if name in available_names]
+            # If the controller pushes a stale or partial name list, prefer the sidebar's
+            # canonical discovered summaries so visible packs remain selectable.
+            self._manual_pack_names = matched_names if len(matched_names) == len(names) else None
+        else:
+            self._manual_pack_names = list(names)
         self._populate_packs_for_selected_list()
         if selected_names and self.pack_listbox:
             for index, name in enumerate(self._current_pack_names):

@@ -2,7 +2,7 @@ ARCHITECTURE_v2.6.md
 (Canonical)
 
 StableNew Core Architecture Specification (v2.6)
-Last Updated: 2026-03-18
+Last Updated: 2026-03-29
 Status: Canonical, Binding
 
 0. Purpose
@@ -103,6 +103,7 @@ not get separate execution architectures.
 Supported surfaces:
 
 - PromptPack image generation
+- character training submissions
 - reprocess
 - image edit / masked edit
 - history replay / restore
@@ -137,6 +138,10 @@ must all rely on NJR snapshots or NJR-derived records rather than raw
 Image and video jobs are both NJR-driven. Video-specific execution details may
 be compiled into internal video requests, but that does not create a second
 outer job model.
+
+Standalone training jobs are also NJR-driven. A `train_lora` NJR remains queue
+submitted and runner executed; external trainer CLIs are subprocess
+dependencies, not alternate outer job contracts.
 
 5. Queue-Only Submission Model
 
@@ -175,6 +180,9 @@ Preferred still-image chain:
 
 `txt2img -> optional img2img -> optional adetailer -> optional final upscale`
 
+The `train_lora` stage is a valid standalone NJR stage. It must not be mixed
+with still-image or video stages inside the same execution chain.
+
 Refiner and hires remain supported as advanced `txt2img` metadata, not as a
 parallel job architecture.
 
@@ -210,6 +218,10 @@ Backends may not own:
 - history schemas
 - artifact governance
 - replay architecture
+
+External training scripts follow the same rule. They may execute as
+runner-owned subprocesses, but they do not define public StableNew job models,
+controller contracts, or artifact governance.
 
 7.4 Comfy-specific rule
 

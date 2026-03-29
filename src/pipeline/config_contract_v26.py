@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from src.pipeline.intent_artifact_contract import (
@@ -35,6 +36,7 @@ _EXECUTION_HINT_KEYS = {
     "animatediff",
     "svd_native",
     "video_workflow",
+    "train_lora",
     "hires_fix",
     "refiner",
     "randomization",
@@ -51,6 +53,8 @@ _INTENT_TOP_LEVEL_KEYS = (
     "source",
     "prompt_source",
     "prompt_pack_id",
+    "plan_origin",
+    "story_plan",
     "adaptive_refinement",
     "secondary_motion",
     "config_snapshot_id",
@@ -61,6 +65,8 @@ _INTENT_TOP_LEVEL_KEYS = (
 )
 
 _KNOWN_VIDEO_BACKEND_STAGES = ("animatediff", "svd_native", "video_workflow")
+_VALID_SVD_RESIZE_MODES = {"letterbox", "center_crop", "contain_then_crop"}
+_VALID_SVD_OUTPUT_FORMATS = {"mp4", "gif", "frames"}
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -146,6 +152,233 @@ def derive_backend_options(execution_config: Mapping[str, Any] | None) -> dict[s
     if video_options:
         return {"video": video_options}
     return {}
+
+
+def _coerce_svd_int(
+    value: Any,
+    *,
+    field_name: str,
+    minimum: int | None = None,
+    maximum: int | None = None,
+) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be an integer") from exc
+    if minimum is not None and parsed < minimum:
+        raise ValueError(f"{field_name} must be >= {minimum}")
+    if maximum is not None and parsed > maximum:
+        raise ValueError(f"{field_name} must be <= {maximum}")
+    return parsed
+
+
+def _coerce_svd_float(
+    value: Any,
+    *,
+    field_name: str,
+    minimum: float | None = None,
+    maximum: float | None = None,
+) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field_name} must be a number") from exc
+    if minimum is not None and parsed < minimum:
+        raise ValueError(f"{field_name} must be >= {minimum}")
+    if maximum is not None and parsed > maximum:
+        raise ValueError(f"{field_name} must be <= {maximum}")
+    return parsed
+
+
+def _validate_choice(value: Any, *, field_name: str, allowed_values: set[str]) -> None:
+    text = str(value or "").strip()
+    if text and text not in allowed_values:
+        allowed = ", ".join(sorted(allowed_values))
+        raise ValueError(f"{field_name} must be one of: {allowed}")
+
+
+def validate_svd_native_execution_config(value: Any) -> dict[str, Any]:
+    data = _mapping_dict(value)
+    payload = _mapping_dict(data.get("svd_native")) if isinstance(data.get("svd_native"), Mapping) else data
+
+    preprocess = _mapping_dict(payload.get("preprocess"))
+    inference = _mapping_dict(payload.get("inference"))
+    output = _mapping_dict(payload.get("output"))
+    postprocess = _mapping_dict(payload.get("postprocess"))
+
+    if preprocess:
+        if "target_width" in preprocess:
+            _coerce_svd_int(preprocess.get("target_width"), field_name="preprocess.target_width", minimum=1)
+        if "target_height" in preprocess:
+            _coerce_svd_int(preprocess.get("target_height"), field_name="preprocess.target_height", minimum=1)
+        if "resize_mode" in preprocess:
+            _validate_choice(
+                preprocess.get("resize_mode"),
+                field_name="preprocess.resize_mode",
+                allowed_values=_VALID_SVD_RESIZE_MODES,
+            )
+
+    if inference:
+        if "num_frames" in inference:
+            _coerce_svd_int(inference.get("num_frames"), field_name="inference.num_frames", minimum=1)
+        if "fps" in inference:
+            _coerce_svd_int(inference.get("fps"), field_name="inference.fps", minimum=1)
+        if "motion_bucket_id" in inference:
+            _coerce_svd_int(
+                inference.get("motion_bucket_id"),
+                field_name="inference.motion_bucket_id",
+                minimum=0,
+                maximum=255,
+            )
+        if "noise_aug_strength" in inference:
+            _coerce_svd_float(
+                inference.get("noise_aug_strength"),
+                field_name="inference.noise_aug_strength",
+                minimum=0.0,
+                maximum=1.0,
+            )
+        if "decode_chunk_size" in inference:
+            _coerce_svd_int(
+                inference.get("decode_chunk_size"),
+                field_name="inference.decode_chunk_size",
+                minimum=1,
+            )
+        if "num_inference_steps" in inference:
+            _coerce_svd_int(
+                inference.get("num_inference_steps"),
+                field_name="inference.num_inference_steps",
+                minimum=1,
+            )
+
+    if output and "output_format" in output:
+        _validate_choice(
+            output.get("output_format"),
+            field_name="output.output_format",
+            allowed_values=_VALID_SVD_OUTPUT_FORMATS,
+        )
+
+    face_restore = _mapping_dict(postprocess.get("face_restore"))
+    if face_restore and "fidelity_weight" in face_restore:
+        _coerce_svd_float(
+            face_restore.get("fidelity_weight"),
+            field_name="postprocess.face_restore.fidelity_weight",
+            minimum=0.0,
+            maximum=1.0,
+        )
+
+    interpolation = _mapping_dict(postprocess.get("interpolation"))
+    if interpolation and "multiplier" in interpolation:
+        _coerce_svd_int(
+            interpolation.get("multiplier"),
+            field_name="postprocess.interpolation.multiplier",
+            minimum=2,
+        )
+
+    upscale = _mapping_dict(postprocess.get("upscale"))
+    if upscale and "scale" in upscale:
+        _coerce_svd_float(
+            upscale.get("scale"),
+            field_name="postprocess.upscale.scale",
+            minimum=1.0,
+        )
+
+    return data
+
+
+def validate_train_lora_execution_config(value: Any) -> dict[str, Any]:
+    data = _mapping_dict(value)
+    nested = isinstance(data.get("train_lora"), Mapping)
+    payload = _mapping_dict(data.get("train_lora")) if nested else data
+
+    character_name = str(payload.get("character_name") or "").strip()
+    if not character_name:
+        raise ValueError("character_name is required")
+    image_dir = str(Path(str(payload.get("image_dir") or "")).expanduser()).strip()
+    if not image_dir:
+        raise ValueError("image_dir is required")
+    output_dir = str(Path(str(payload.get("output_dir") or "")).expanduser()).strip()
+    if not output_dir:
+        raise ValueError("output_dir is required")
+
+    epochs = _coerce_svd_int(payload.get("epochs"), field_name="epochs", minimum=1)
+    learning_rate_value = payload.get("learning_rate", payload.get("lr"))
+    if learning_rate_value in (None, ""):
+        raise ValueError("learning_rate is required")
+    learning_rate = _coerce_svd_float(
+        learning_rate_value,
+        field_name="learning_rate",
+        minimum=0.0,
+    )
+    if learning_rate <= 0:
+        raise ValueError("learning_rate must be > 0")
+
+    normalized_payload: dict[str, Any] = dict(payload)
+    normalized_payload["enabled"] = bool(payload.get("enabled", True))
+    normalized_payload["character_name"] = character_name
+    normalized_payload["image_dir"] = image_dir
+    normalized_payload["output_dir"] = output_dir
+    normalized_payload["epochs"] = epochs
+    normalized_payload["learning_rate"] = learning_rate
+    normalized_payload["lr"] = learning_rate
+
+    for field_name in (
+        "base_model",
+        "trigger_phrase",
+        "output_name",
+        "produced_weight_path",
+        "trainer_working_dir",
+    ):
+        if normalized_payload.get(field_name) not in (None, ""):
+            normalized_payload[field_name] = str(normalized_payload[field_name]).strip()
+
+    for field_name in ("rank", "network_alpha"):
+        if normalized_payload.get(field_name) in (None, ""):
+            normalized_payload.pop(field_name, None)
+            continue
+        normalized_payload[field_name] = _coerce_svd_int(
+            normalized_payload[field_name],
+            field_name=field_name,
+            minimum=1,
+        )
+
+    trainer_command = normalized_payload.get("trainer_command")
+    if trainer_command in (None, "", []):
+        normalized_payload.pop("trainer_command", None)
+    elif isinstance(trainer_command, str):
+        normalized_payload["trainer_command"] = trainer_command.strip()
+    elif isinstance(trainer_command, (list, tuple)):
+        normalized_payload["trainer_command"] = [
+            str(item).strip() for item in trainer_command if str(item).strip()
+        ]
+        if not normalized_payload["trainer_command"]:
+            normalized_payload.pop("trainer_command", None)
+    else:
+        raise ValueError("trainer_command must be a string or list of strings")
+
+    trainer_args = normalized_payload.get("trainer_args", normalized_payload.get("trainer_extra_args"))
+    if trainer_args in (None, "", []):
+        normalized_payload.pop("trainer_args", None)
+        normalized_payload.pop("trainer_extra_args", None)
+    elif isinstance(trainer_args, str):
+        normalized_payload["trainer_args"] = trainer_args.strip()
+    elif isinstance(trainer_args, (list, tuple)):
+        normalized_payload["trainer_args"] = [
+            str(item).strip() for item in trainer_args if str(item).strip()
+        ]
+    else:
+        raise ValueError("trainer_args must be a string or list of strings")
+
+    if not nested:
+        return normalized_payload
+
+    normalized = dict(data)
+    normalized["train_lora"] = normalized_payload
+    pipeline = _mapping_dict(data.get("pipeline"))
+    pipeline["train_lora_enabled"] = bool(
+        pipeline.get("train_lora_enabled", normalized_payload.get("enabled", True))
+    )
+    normalized["pipeline"] = pipeline
+    return normalized
 
 
 def extract_continuity_linkage(value: Any) -> dict[str, Any]:
@@ -304,4 +537,6 @@ __all__ = [
     "extract_plan_origin_linkage",
     "extract_execution_config",
     "is_layered_config",
+    "validate_train_lora_execution_config",
+    "validate_svd_native_execution_config",
 ]

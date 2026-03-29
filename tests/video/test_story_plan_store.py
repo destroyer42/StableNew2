@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.video.story_plan_models import ScenePlan, ShotPlan, StoryPlan
+from src.video.story_plan_models import Actor, ScenePlan, ShotPlan, StoryPlan
 from src.video.story_plan_store import StoryPlanStore
 
 
@@ -16,11 +16,27 @@ def _make_plan(plan_id: str, display_name: str) -> StoryPlan:
             ScenePlan(
                 scene_id="scene-001",
                 display_name="Scene",
+                actors=[
+                    Actor(
+                        name="Ada",
+                        character_name="ada",
+                        trigger_phrase="ada person",
+                        lora_name="ada",
+                    )
+                ],
                 shots=[
                     ShotPlan(
                         shot_id="shot-001",
                         display_name="Shot",
                         prompt="prompt",
+                        actors=[
+                            Actor(
+                                name="Bran",
+                                character_name="bran",
+                                trigger_phrase="bran ranger",
+                                lora_name="bran",
+                            )
+                        ],
                         workflow_id="ltx_multiframe_anchor_v1",
                     )
                 ],
@@ -39,6 +55,8 @@ def test_save_and_load_plan_round_trip(tmp_path: Path) -> None:
     assert path.exists()
     assert loaded is not None
     assert loaded.to_dict() == plan.to_dict()
+    assert loaded.scenes[0].actors[0].trigger_phrase == "ada person"
+    assert loaded.scenes[0].shots[0].actors[0].lora_name == "bran"
 
 
 def test_list_plan_summaries_sorted(tmp_path: Path) -> None:

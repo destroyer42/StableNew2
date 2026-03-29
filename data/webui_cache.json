@@ -3,8 +3,7 @@
   "command": [
     "webui-user.bat",
     "--api",
-    "--xformers",
-    "--medvram-sdxl"
+    "--xformers"
   ],
-  "timestamp": 1774800579.5723827
+  "timestamp": 1774818711.0001915
 }

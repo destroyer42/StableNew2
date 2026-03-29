@@ -56,7 +56,7 @@ from src.learning.learning_controller_services.experiment_persistence import (
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
 from src.pipeline.artifact_contract import extract_artifact_paths
-from src.state.output_routing import get_output_root
+from src.state.output_routing import get_output_root, resolve_output_artifact_path
 from src.utils.image_metadata import (
     extract_embedded_metadata,
     resolve_model_vae_fields,
@@ -2633,7 +2633,9 @@ class LearningController:
             if item is not None and (
                 not source_prompt or not source_negative_prompt or not source_model
             ):
-                image_path = Path(str(getattr(item, "artifact_path", "") or "").strip())
+                image_path = Path(
+                    resolve_output_artifact_path(str(getattr(item, "artifact_path", "") or "").strip())
+                )
                 if image_path.exists():
                     baseline = self._extract_reprocess_baseline_from_image(image_path)
                     source_prompt = source_prompt or str(baseline.get("prompt") or "")
@@ -2642,7 +2644,9 @@ class LearningController:
                     )
                     source_model = source_model or str(baseline.get("model") or "")
             elif item is not None:
-                image_path = Path(str(getattr(item, "artifact_path", "") or "").strip())
+                image_path = Path(
+                    resolve_output_artifact_path(str(getattr(item, "artifact_path", "") or "").strip())
+                )
                 if image_path.exists():
                     baseline = self._extract_reprocess_baseline_from_image(image_path)
 
@@ -2973,7 +2977,9 @@ class LearningController:
         self,
         item: DiscoveredReviewItem,
     ) -> ReprocessSourceItem | None:
-        image_path = Path(str(getattr(item, "artifact_path", "") or "").strip())
+        image_path = Path(
+            resolve_output_artifact_path(str(getattr(item, "artifact_path", "") or "").strip())
+        )
         if not image_path.exists():
             return None
         baseline = self._extract_reprocess_baseline_from_image(image_path)

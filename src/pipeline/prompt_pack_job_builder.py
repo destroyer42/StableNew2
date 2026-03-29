@@ -7,7 +7,7 @@ import itertools
 import json
 import logging
 import random
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +30,7 @@ from src.pipeline.job_models_v2 import (
 from src.pipeline.prompt_pack_parser import PackRow, parse_prompt_pack_text
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
+from src.training.lora_manager import LoRAManager
 from src.utils.config import ConfigManager
 from src.utils.embedding_prompt_utils import render_embedding_reference
 from src.utils.prompt_pack_utils import get_matrix_slots_dict, load_pack_metadata
@@ -46,6 +47,12 @@ _TXT2IMG_INACTIVE_HIRES_KEYS = (
     "hr_resize_y",
 )
 _DEFAULT_MATRIX_EXPANSION_LIMIT = 8
+
+
+def _mapping_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {}
 
 
 def _txt2img_hires_enabled(config: dict[str, Any]) -> bool:
@@ -71,12 +78,14 @@ class PromptPackNormalizedJobBuilder:
         prompt_resolver: UnifiedPromptResolver | None = None,
         config_resolver: UnifiedConfigResolver | None = None,
         packs_dir: Path | str = "packs",
+        lora_manager: LoRAManager | None = None,
     ) -> None:
         self._config_manager = config_manager
         self._job_builder = job_builder
         self._prompt_resolver = prompt_resolver or UnifiedPromptResolver()
         self._config_resolver = config_resolver or UnifiedConfigResolver()
         self._packs_dir = Path(packs_dir)
+        self._lora_manager = lora_manager
         self._pack_rows_cache: dict[tuple[Any, ...], list[PackRow]] = {}
         self._pack_metadata_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._pack_config_cache: dict[tuple[Any, ...], dict[str, Any] | None] = {}
@@ -361,9 +370,11 @@ class PromptPackNormalizedJobBuilder:
         randomizer_metadata = entry.randomizer_metadata or {}
 
         stage_chain = self._build_stage_chain(merged_config, stage_flags)
-        prompt_resolution = self._resolve_prompt(entry, merged_config)
+        resolved_actors = self._resolve_entry_actors(entry, merged_config)
+        record_metadata = self._build_record_metadata(merged_config, resolved_actors)
+        prompt_resolution = self._resolve_prompt(entry, merged_config, resolved_actors)
         config_for_builder = self._build_config_payload(
-            entry, merged_config, prompt_resolution, stage_chain
+            entry, merged_config, prompt_resolution, stage_chain, record_metadata
         )
 
         randomizer_plan = self._build_randomizer_plan(entry, merged_config)
@@ -431,24 +442,29 @@ class PromptPackNormalizedJobBuilder:
             record.aesthetic_weight = aesthetic_section.get("weight")
             record.aesthetic_text = aesthetic_section.get("text")
             record.aesthetic_embedding = aesthetic_section.get("embedding")
-            record.extra_metadata = dict(merged_config.get("metadata") or {})
-            record.intent_config = canonicalize_intent_config(
-                {
-                    "run_mode": record.run_mode.lower(),
-                    "source": str(entry.learning_metadata.get("submission_source"))
-                    if isinstance(entry.learning_metadata, dict)
-                    and entry.learning_metadata.get("submission_source")
-                    else "add_to_queue",
-                    "prompt_source": "pack",
-                    "prompt_pack_id": entry.pack_id,
-                    "adaptive_refinement": extract_adaptive_refinement_intent(
-                        entry.config_snapshot or merged_config
-                    ),
-                    "secondary_motion": extract_secondary_motion_intent(
-                        entry.config_snapshot or merged_config
-                    ),
-                }
-            )
+            record.extra_metadata = copy.deepcopy(record_metadata)
+            intent_payload = {
+                "run_mode": record.run_mode.lower(),
+                "source": str(entry.learning_metadata.get("submission_source"))
+                if isinstance(entry.learning_metadata, dict)
+                and entry.learning_metadata.get("submission_source")
+                else "add_to_queue",
+                "prompt_source": "pack",
+                "prompt_pack_id": entry.pack_id,
+                "adaptive_refinement": extract_adaptive_refinement_intent(
+                    entry.config_snapshot or merged_config
+                ),
+                "secondary_motion": extract_secondary_motion_intent(
+                    entry.config_snapshot or merged_config
+                ),
+            }
+            plan_origin = _mapping_dict(record_metadata.get("plan_origin"))
+            story_plan = _mapping_dict(record_metadata.get("story_plan"))
+            if plan_origin:
+                intent_payload["plan_origin"] = copy.deepcopy(plan_origin)
+            if story_plan:
+                intent_payload["story_plan"] = copy.deepcopy(story_plan)
+            record.intent_config = canonicalize_intent_config(intent_payload)
             record.backend_options = derive_backend_options(record.config)
             record.pack_usage = [
                 PackUsageInfo(
@@ -465,7 +481,12 @@ class PromptPackNormalizedJobBuilder:
             }
         return jobs
 
-    def _resolve_prompt(self, entry: PackJobEntry, config: dict[str, Any]) -> Any:
+    def _resolve_prompt(
+        self,
+        entry: PackJobEntry,
+        config: dict[str, Any],
+        resolved_actors: list[dict[str, Any]] | None = None,
+    ) -> Any:
         pack_rows = self._load_pack_rows(entry.pack_id)
         row_index = entry.pack_row_index or 0
         pack_row = None
@@ -489,10 +510,67 @@ class PromptPackNormalizedJobBuilder:
         return self._prompt_resolver.resolve_from_pack(
             pack_row=pack_row,
             matrix_slot_values=matrix_values,
+            actor_resolutions=resolved_actors,
             pack_negative=negative_prompt,
             global_negative=self._config_manager.get_global_negative_prompt(),
             apply_global_negative=bool(apply_global),
         )
+
+    @staticmethod
+    def _extract_actor_groups(payload: Any) -> list[Any]:
+        data = _mapping_dict(payload)
+        if not data:
+            return []
+        metadata = _mapping_dict(data.get("metadata"))
+        groups: list[Any] = []
+        for story_plan in (data.get("story_plan"), metadata.get("story_plan")):
+            story_plan_payload = _mapping_dict(story_plan)
+            if story_plan_payload.get("actors"):
+                groups.append(story_plan_payload.get("actors"))
+        for plan_origin in (data.get("plan_origin"), metadata.get("plan_origin")):
+            plan_origin_payload = _mapping_dict(plan_origin)
+            if plan_origin_payload.get("actors"):
+                groups.append(plan_origin_payload.get("actors"))
+        for actors in (data.get("actors"), metadata.get("actors")):
+            if actors:
+                groups.append(actors)
+        return groups
+
+    def _resolve_entry_actors(
+        self,
+        entry: PackJobEntry,
+        merged_config: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        actor_items: list[Any] = []
+        for payload in (entry.config_snapshot, merged_config):
+            for group in self._extract_actor_groups(payload):
+                actor_items.extend(list(group or []))
+        if not actor_items:
+            return []
+        if self._lora_manager is None:
+            self._lora_manager = LoRAManager()
+        return self._lora_manager.resolve_actors(actor_items)
+
+    def _build_record_metadata(
+        self,
+        merged_config: dict[str, Any],
+        resolved_actors: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        data = _mapping_dict(merged_config)
+        metadata = copy.deepcopy(_mapping_dict(data.get("metadata")))
+        plan_origin = _mapping_dict(data.get("plan_origin")) or _mapping_dict(metadata.get("plan_origin"))
+        story_plan = _mapping_dict(data.get("story_plan")) or _mapping_dict(metadata.get("story_plan"))
+
+        if resolved_actors:
+            metadata["actors"] = copy.deepcopy(resolved_actors)
+        if plan_origin:
+            if resolved_actors and not plan_origin.get("actors"):
+                plan_origin = dict(plan_origin)
+                plan_origin["actors"] = copy.deepcopy(resolved_actors)
+            metadata["plan_origin"] = copy.deepcopy(plan_origin)
+        if story_plan:
+            metadata["story_plan"] = copy.deepcopy(story_plan)
+        return metadata
 
     def _build_config_payload(
         self,
@@ -500,6 +578,7 @@ class PromptPackNormalizedJobBuilder:
         merged_config: dict[str, Any],
         prompt_resolution: Any,
         stage_chain: list[StageConfig],
+        record_metadata: dict[str, Any],
     ) -> dict[str, Any]:
         txt2img = _effective_txt2img_stage_config(merged_config.get("txt2img", {}))
         pipeline_section = merged_config.get("pipeline", {})
@@ -551,7 +630,17 @@ class PromptPackNormalizedJobBuilder:
             "animatediff": merged_config.get("animatediff"),
             "video_workflow": merged_config.get("video_workflow"),
             "aesthetic": merged_config.get("aesthetic"),
+            "metadata": copy.deepcopy(record_metadata),
         }
+        actors = record_metadata.get("actors") or []
+        if actors:
+            payload["actors"] = copy.deepcopy(actors)
+        plan_origin = _mapping_dict(record_metadata.get("plan_origin"))
+        if plan_origin:
+            payload["plan_origin"] = copy.deepcopy(plan_origin)
+        story_plan = _mapping_dict(record_metadata.get("story_plan"))
+        if story_plan:
+            payload["story_plan"] = copy.deepcopy(story_plan)
         payload["pack_name"] = entry.pack_name or entry.pack_id
         payload["pack_path"] = (
             str(self._resolve_pack_text_path(entry.pack_id))

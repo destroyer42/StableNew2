@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -20,11 +21,13 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
 ) -> None:
     start_anchor = tmp_path / "start.png"
     end_anchor = tmp_path / "end.png"
+    mid_anchor = tmp_path / "mid.png"
     output_video = tmp_path / "clip.mp4"
     preview_frame = tmp_path / "preview.png"
     for path, payload in (
         (start_anchor, b"png"),
         (end_anchor, b"png"),
+        (mid_anchor, b"png"),
         (output_video, b"mp4"),
         (preview_frame, b"png"),
     ):
@@ -32,9 +35,46 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
 
     client = Mock()
     client.get_object_info.return_value = {
-        "StableNewLTXAnchorBridge": {"input": {}},
+        "StableNewLTXAnchorBridge": {
+            "input": {
+                "required": {
+                    "start_anchor": ["IMAGE"],
+                    "end_anchor": ["IMAGE"],
+                },
+                "optional": {
+                    "mid_anchors": ["STRING", {"default": "[]", "multiline": False}],
+                    "prompt": ["STRING", {"default": "", "multiline": True}],
+                    "negative_prompt": ["STRING", {"default": "", "multiline": True}],
+                    "motion_profile": ["STRING", {"default": "gentle", "multiline": False}],
+                },
+            }
+        },
+        "StableNewSaveVideo": {
+            "input": {
+                "required": {
+                    "images": ["IMAGE"],
+                    "output_dir": ["STRING", {"default": "", "multiline": False}],
+                    "filename_prefix": ["STRING", {"default": "clip", "multiline": False}],
+                },
+                "optional": {
+                    "fps": ["FLOAT", {"default": 8.0}],
+                    "format": [["mp4", "gif"], {"default": "mp4"}],
+                },
+            }
+        },
+        "LoadImage": {
+            "input": {
+                "required": {
+                    "image": [["start.png", "end.png"], {"image_upload": True}],
+                }
+            }
+        },
         "models": {"checkpoints": ["ltx_video.safetensors"]},
     }
+    client.upload_image.side_effect = [
+        {"name": "uploaded_start.png", "subfolder": "", "type": "input"},
+        {"name": "uploaded_end.png", "subfolder": "", "type": "input"},
+    ]
     client.queue_prompt.return_value = {"prompt_id": "prompt-123"}
     client.get_history.side_effect = [
         {},
@@ -80,6 +120,7 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
             output_dir=tmp_path,
             input_image_path=start_anchor,
             end_anchor_path=end_anchor,
+            mid_anchor_paths=[mid_anchor],
             image_name="clip",
             prompt="cinematic dolly shot",
             negative_prompt="blurry",
@@ -96,6 +137,9 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
     assert result.backend_metadata["prompt_id"] == "prompt-123"
     queue_payload = client.queue_prompt.call_args.args[0]
     assert queue_payload["extra_data"]["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert queue_payload["prompt"]["1"]["inputs"]["image"] == "uploaded_start.png"
+    assert queue_payload["prompt"]["2"]["inputs"]["image"] == "uploaded_end.png"
+    assert queue_payload["prompt"]["3"]["inputs"]["mid_anchors"] == json.dumps([str(mid_anchor)])
     assert queue_payload["prompt"]["4"]["inputs"]["output_dir"] == str(tmp_path)
     variant_payload = result.to_variant_payload()
     assert variant_payload["video_backend_id"] == "comfy"
@@ -172,9 +216,46 @@ def test_comfy_workflow_backend_execute_segment_stamps_provenance(
 
     client = Mock()
     client.get_object_info.return_value = {
-        "StableNewLTXAnchorBridge": {"input": {}},
+        "StableNewLTXAnchorBridge": {
+            "input": {
+                "required": {
+                    "start_anchor": ["IMAGE"],
+                    "end_anchor": ["IMAGE"],
+                },
+                "optional": {
+                    "mid_anchors": ["STRING", {"default": "[]", "multiline": False}],
+                    "prompt": ["STRING", {"default": "", "multiline": True}],
+                    "negative_prompt": ["STRING", {"default": "", "multiline": True}],
+                    "motion_profile": ["STRING", {"default": "gentle", "multiline": False}],
+                },
+            }
+        },
+        "StableNewSaveVideo": {
+            "input": {
+                "required": {
+                    "images": ["IMAGE"],
+                    "output_dir": ["STRING", {"default": "", "multiline": False}],
+                    "filename_prefix": ["STRING", {"default": "clip", "multiline": False}],
+                },
+                "optional": {
+                    "fps": ["FLOAT", {"default": 8.0}],
+                    "format": [["mp4", "gif"], {"default": "mp4"}],
+                },
+            }
+        },
+        "LoadImage": {
+            "input": {
+                "required": {
+                    "image": [["start.png", "end.png"], {"image_upload": True}],
+                }
+            }
+        },
         "models": {"checkpoints": ["ltx_video.safetensors"]},
     }
+    client.upload_image.side_effect = [
+        {"name": "uploaded_start.png", "subfolder": "", "type": "input"},
+        {"name": "uploaded_end.png", "subfolder": "", "type": "input"},
+    ]
     client.queue_prompt.return_value = {"prompt_id": "seg-prompt-001"}
     client.get_history.side_effect = [
         {},

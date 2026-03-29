@@ -12,8 +12,8 @@ def _build_frame(*, config_manager: object | None = None) -> LearningTabFrame:
     frame.pipeline_controller = SimpleNamespace(_config_manager=config_manager)
     frame.app_state = SimpleNamespace(output_dir="wrong/output/animatediff")
     frame.learning_controller = SimpleNamespace(trigger_background_scan=MagicMock())
-    frame.discovered_inbox_panel = SimpleNamespace(set_scanning=MagicMock())
-    frame.staged_inbox_panel = SimpleNamespace(set_scanning=MagicMock())
+    frame.discovered_inbox_panel = SimpleNamespace(set_scanning=MagicMock(), set_scan_root=MagicMock())
+    frame.staged_inbox_panel = SimpleNamespace(set_scanning=MagicMock(), set_scan_root=MagicMock())
     frame._custom_discovered_scan_root = None
     frame._on_discovered_scan_complete = MagicMock()
     frame._on_staged_scan_complete = MagicMock()
@@ -91,3 +91,32 @@ def test_on_staged_rescan_prefers_custom_scan_root(tmp_path) -> None:
         output_root=str(custom_root),
         on_complete=frame._on_staged_scan_complete,
     )
+
+
+def test_on_reset_discovered_scan_root_restores_auto_root(tmp_path) -> None:
+    configured = tmp_path / "output" / "animatediff"
+    config_manager = SimpleNamespace(get_setting=lambda key, default=None: str(configured))
+    frame = _build_frame(config_manager=config_manager)
+    custom_root = tmp_path / "manual-scan"
+    custom_root.mkdir(parents=True)
+
+    frame._set_discovered_scan_root(str(custom_root))
+    frame._on_reset_discovered_scan_root()
+    frame._on_discovered_rescan()
+
+    assert frame._custom_discovered_scan_root is None
+    frame.learning_controller.trigger_background_scan.assert_called_once_with(
+        output_root=str(tmp_path / "output"),
+        on_complete=frame._on_discovered_scan_complete,
+    )
+
+
+def test_set_discovered_scan_root_updates_both_inbox_panels(tmp_path) -> None:
+    frame = _build_frame(config_manager=None)
+    custom_root = tmp_path / "manual-scan"
+    custom_root.mkdir(parents=True)
+
+    frame._set_discovered_scan_root(str(custom_root))
+
+    frame.discovered_inbox_panel.set_scan_root.assert_called_once_with(str(custom_root))
+    frame.staged_inbox_panel.set_scan_root.assert_called_once_with(str(custom_root))

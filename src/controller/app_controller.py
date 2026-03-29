@@ -62,6 +62,16 @@ from src.pipeline.last_run_store_v2_5 import (
     current_config_to_last_run,
     update_current_config_from_last_run,
 )
+from src.pipeline.config_contract_v26 import (
+    validate_svd_native_execution_config,
+    validate_train_lora_execution_config,
+)
+from src.pipeline.job_builder_v2 import JobBuilderV2
+from src.pipeline.job_requests_v2 import (
+    PipelineRunMode,
+    PipelineRunRequest,
+    PipelineRunSource,
+)
 from src.pipeline.reprocess_builder import (
     ImageEditSpec,
     ReprocessEffectiveSettingsPreview,
@@ -4427,6 +4437,7 @@ class AppController:
     def load_packs(self) -> None:
         """Discover packs and push them to the GUI."""
         discovered = discover_packs(self._packs_dir)
+        self._all_packs_by_name = {pack.name: pack for pack in discovered}
         resolver = ContentVisibilityResolver(
             getattr(self.app_state, "content_visibility_mode", "nsfw")
         )
@@ -4473,6 +4484,18 @@ class AppController:
     def _find_pack_by_id(self, pack_id: str) -> PromptPackInfo | None:
         """Find a pack by its ID (name)."""
         for pack in self.packs:
+            if pack.name == pack_id:
+                return pack
+        all_packs = getattr(self, "_all_packs_by_name", None)
+        if isinstance(all_packs, dict):
+            pack = all_packs.get(pack_id)
+            if isinstance(pack, PromptPackInfo):
+                return pack
+        try:
+            discovered = discover_packs(self._packs_dir)
+        except Exception:
+            discovered = []
+        for pack in discovered:
             if pack.name == pack_id:
                 return pack
         return None
@@ -6292,21 +6315,98 @@ class AppController:
     def build_svd_defaults(self) -> dict[str, Any]:
         return self._get_svd_controller().build_default_config().to_dict()
 
+    def build_character_training_defaults(self) -> dict[str, Any]:
+        current_config = getattr(getattr(self, "app_state", None), "current_config", None)
+        base_model = str(getattr(current_config, "model_name", "") or "").strip()
+        return {
+            "character_name": "",
+            "image_dir": "",
+            "output_dir": str(Path("data") / "embeddings"),
+            "epochs": 100,
+            "learning_rate": 0.0001,
+            "base_model": base_model,
+            "trigger_phrase": "",
+            "rank": 16,
+            "network_alpha": 16,
+            "trainer_command": os.environ.get("STABLENEW_TRAIN_LORA_COMMAND", ""),
+        }
+
+    def submit_character_training_job(self, form_data: dict[str, Any]) -> str:
+        if not self.job_service:
+            raise RuntimeError("Job service not available")
+
+        train_lora_config = validate_train_lora_execution_config(form_data)
+        character_name = str(train_lora_config.get("character_name") or "").strip()
+        character_key = "".join(
+            ch.lower() if ch.isalnum() else "-" for ch in character_name
+        ).strip("-") or "character"
+        prompt_text = f"Train LoRA for {character_name}"
+        prompt_pack_id = f"character-training:{character_key}"
+        execution_config = {
+            "train_lora": dict(train_lora_config),
+            "pipeline": {
+                "train_lora_enabled": bool(train_lora_config.get("enabled", True)),
+            },
+            "metadata": {
+                "job_type": "train_lora",
+                "character_name": character_name,
+            },
+        }
+        entry = PackJobEntry(
+            pack_id=prompt_pack_id,
+            pack_name=f"Character Training: {character_name}",
+            config_snapshot=execution_config,
+            prompt_text=prompt_text,
+            negative_prompt_text="",
+            stage_flags={"train_lora": True},
+            pack_row_index=0,
+        )
+        request = PipelineRunRequest(
+            prompt_pack_id=prompt_pack_id,
+            selected_row_ids=[character_key],
+            config_snapshot_id=f"train-lora-{uuid.uuid4().hex}",
+            run_mode=PipelineRunMode.QUEUE,
+            source=PipelineRunSource.ADD_TO_QUEUE,
+            explicit_output_dir=str(train_lora_config.get("output_dir") or "output"),
+            tags=["train_lora", "character_training", character_key],
+            requested_job_label="Character Training",
+            max_njr_count=1,
+            pack_entries=[entry],
+        )
+        builder = JobBuilderV2()
+        njrs = builder.build_from_run_request(request)
+        if not njrs:
+            raise RuntimeError("Character training request did not produce an NJR.")
+        job_ids = self.job_service.enqueue_njrs(njrs, request)
+        if not job_ids:
+            raise RuntimeError("Character training job was not enqueued.")
+        job_id = job_ids[0]
+        self._append_log(
+            f"[train_lora] Queued character training job {job_id} for {character_name}"
+        )
+        return job_id
+
     def validate_svd_source_image(self, path: str | Path) -> tuple[bool, str | None]:
         return self._get_svd_controller().validate_source_image(path)
 
     def get_svd_postprocess_capabilities(self, form_data: dict[str, Any] | None = None) -> dict[str, dict[str, object]]:
         controller = self._get_svd_controller()
-        config = controller.build_svd_config(form_data) if isinstance(form_data, dict) else None
+        validated_form_data = (
+            validate_svd_native_execution_config(form_data)
+            if isinstance(form_data, dict)
+            else None
+        )
+        config = controller.build_svd_config(validated_form_data) if isinstance(validated_form_data, dict) else None
         return controller.get_postprocess_capabilities(config)
 
     def submit_svd_job(self, *, source_image_path: str | Path, form_data: dict[str, Any]) -> str:
         controller = self._get_svd_controller()
-        config = controller.build_svd_config(form_data)
+        validated_form_data = validate_svd_native_execution_config(form_data)
+        config = controller.build_svd_config(validated_form_data)
         valid, reason = controller.validate_source_image(source_image_path)
         if not valid:
             raise ValueError(reason or "SVD source image is invalid")
-        pipeline_payload = form_data.get("pipeline") if isinstance(form_data, dict) else None
+        pipeline_payload = validated_form_data.get("pipeline") if isinstance(validated_form_data, dict) else None
         output_route = None
         if isinstance(pipeline_payload, dict):
             output_route = pipeline_payload.get("output_route")
@@ -6315,8 +6415,23 @@ class AppController:
             config=config,
             output_route=str(output_route) if output_route else None,
         )
+        self._sync_queue_state_after_direct_submission()
         self._append_log(f"[svd] Queued SVD Img2Vid job {job_id} for {Path(source_image_path).name}")
         return job_id
+
+    def _sync_queue_state_after_direct_submission(self) -> None:
+        try:
+            self._refresh_app_state_queue()
+        except Exception as exc:
+            logger.debug("Direct submission queue refresh failed: %s", exc)
+
+        app_state = getattr(self, "app_state", None)
+        flush_now = getattr(app_state, "flush_now", None)
+        if callable(flush_now):
+            try:
+                flush_now()
+            except Exception as exc:
+                logger.debug("Direct submission app_state flush failed: %s", exc)
 
     def get_latest_output_image_path(self) -> str | None:
         app_state = getattr(self, "app_state", None)
@@ -6387,6 +6502,7 @@ class AppController:
             source_image_path=source_image_path,
             form_data=form_data,
         )
+        self._sync_queue_state_after_direct_submission()
         self._append_log(
             f"[video_workflow] Queued workflow '{form_data.get('workflow_id', '')}' job {job_id} "
             f"for {Path(source_image_path).name}"

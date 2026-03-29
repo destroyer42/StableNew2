@@ -1,7 +1,7 @@
 BUILDER PIPELINE DEEP-DIVE (v2.6).md
 
 StableNew - PromptPack Builder and NJR Construction Deep-Dive
-Last Updated: 2026-03-19
+Last Updated: 2026-03-29
 Status: Canonical
 
 ## 0. Scope
@@ -81,9 +81,17 @@ Prompt resolution combines:
 - selected row text
 - matrix substitutions
 - applicable global negative behavior
+- carried actor provenance from linked intent surfaces when present
 - allowed PromptPack-side metadata
 
-The builder produces final prompt text stored on the NJR-backed job.
+For PromptPack work derived from `story_plan` intent, scene-level and shot-
+level actor metadata may arrive pre-merged on `plan_origin` before NJR
+construction. Prompt resolution may use that carried provenance to inject actor
+trigger phrases into the positive prompt and prepend resolved actor LoRA tags
+ahead of pack-authored LoRAs with stable de-duplication.
+
+The builder produces final prompt text and final LoRA prompt ordering stored on
+the NJR-backed job.
 
 ### 4.4 Config normalization
 
@@ -126,7 +134,8 @@ Once PromptPack-derived NJRs are built:
 - `PipelineRunner` consumes NJR-backed normalized config
 - history stores NJR-backed provenance and canonical result summaries
 
-The builder does not own execution or result recording.
+Any actor-aware prompt or LoRA augmentation is complete before queue
+submission. The builder does not own execution or result recording.
 
 ## 7. Invariants
 
@@ -134,6 +143,8 @@ The PromptPack builder path must preserve:
 
 - immutable NJR output
 - deterministic expansion
+- carried actor provenance through canonical intent/config layering when
+  present
 - no GUI prompt construction
 - no runtime randomization
 - no direct runner invocation for fresh execution

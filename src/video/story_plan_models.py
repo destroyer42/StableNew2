@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 from src.video.continuity_models import normalize_continuity_link
@@ -23,6 +24,124 @@ def _mapping_dict(value: Any) -> dict[str, Any]:
 
 def _normalize_link(value: Any) -> dict[str, Any] | None:
     return normalize_continuity_link(value)
+
+
+def _normalize_optional_text(value: Any) -> str | None:
+    text = str(value or "").strip()
+    return text or None
+
+
+def _normalize_actor_weight(value: Any) -> float | None:
+    if value in (None, ""):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _actor_name_fallback(payload: Mapping[str, Any]) -> str:
+    lora_path = _normalize_optional_text(payload.get("lora_path"))
+    fallback_values = (
+        payload.get("name"),
+        payload.get("character_name"),
+        payload.get("lora_name"),
+        Path(lora_path).stem if lora_path else None,
+    )
+    for raw_value in fallback_values:
+        text = str(raw_value or "").strip()
+        if text:
+            return text
+    return ""
+
+
+@dataclass
+class Actor:
+    name: str
+    character_name: str | None = None
+    trigger_phrase: str | None = None
+    lora_name: str | None = None
+    lora_path: str | None = None
+    weight: float | None = None
+
+    def identity_key(self) -> str:
+        fallback_values = (
+            self.character_name,
+            self.name,
+            self.lora_name,
+            Path(self.lora_path).stem if self.lora_path else None,
+        )
+        for raw_value in fallback_values:
+            text = str(raw_value or "").strip().lower()
+            if text:
+                return text
+        return "actor"
+
+    def merged_with(self, override: Actor) -> Actor:
+        return Actor(
+            name=override.name or self.name,
+            character_name=override.character_name or self.character_name,
+            trigger_phrase=override.trigger_phrase or self.trigger_phrase,
+            lora_name=override.lora_name or self.lora_name,
+            lora_path=override.lora_path or self.lora_path,
+            weight=override.weight if override.weight is not None else self.weight,
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "character_name": self.character_name,
+            "trigger_phrase": self.trigger_phrase,
+            "lora_name": self.lora_name,
+            "lora_path": self.lora_path,
+            "weight": self.weight,
+        }
+
+    @classmethod
+    def from_dict(cls, data: Mapping[str, Any] | None) -> Actor:
+        payload = _mapping_dict(data)
+        return cls(
+            name=_actor_name_fallback(payload),
+            character_name=_normalize_optional_text(payload.get("character_name")),
+            trigger_phrase=_normalize_optional_text(payload.get("trigger_phrase")),
+            lora_name=_normalize_optional_text(payload.get("lora_name")),
+            lora_path=_normalize_optional_text(payload.get("lora_path")),
+            weight=_normalize_actor_weight(payload.get("weight")),
+        )
+
+
+def normalize_actor_list(values: Any) -> list[Actor]:
+    normalized: list[Actor] = []
+    for item in list(values or []):
+        if isinstance(item, Actor):
+            actor = item
+        elif isinstance(item, Mapping):
+            actor = Actor.from_dict(item)
+        else:
+            text = str(item or "").strip()
+            actor = Actor(name=text) if text else Actor(name="")
+        if actor.name:
+            normalized.append(actor)
+    return normalized
+
+
+def merge_actor_lists(*actor_groups: Any) -> list[Actor]:
+    merged: list[Actor] = []
+    indexes_by_key: dict[str, int] = {}
+    for group in actor_groups:
+        for actor in normalize_actor_list(group):
+            identity_key = actor.identity_key()
+            existing_index = indexes_by_key.get(identity_key)
+            if existing_index is None:
+                indexes_by_key[identity_key] = len(merged)
+                merged.append(actor)
+                continue
+            merged[existing_index] = merged[existing_index].merged_with(actor)
+    return merged
+
+
+def actors_to_dicts(values: Any) -> list[dict[str, Any]]:
+    return [actor.to_dict() for actor in normalize_actor_list(values)]
 
 
 @dataclass
@@ -76,6 +195,7 @@ class ShotPlan:
     display_name: str
     prompt: str
     negative_prompt: str = ""
+    actors: list[Actor] = field(default_factory=list)
     workflow_id: str | None = None
     total_segments: int = 1
     segment_length_frames: int = 0
@@ -91,6 +211,7 @@ class ShotPlan:
             "display_name": self.display_name,
             "prompt": self.prompt,
             "negative_prompt": self.negative_prompt,
+            "actors": [actor.to_dict() for actor in self.actors],
             "workflow_id": self.workflow_id,
             "total_segments": self.total_segments,
             "segment_length_frames": self.segment_length_frames,
@@ -109,6 +230,7 @@ class ShotPlan:
             display_name=str(payload.get("display_name") or payload.get("shot_id") or ""),
             prompt=str(payload.get("prompt") or ""),
             negative_prompt=str(payload.get("negative_prompt") or ""),
+            actors=normalize_actor_list(payload.get("actors")),
             workflow_id=str(payload.get("workflow_id") or "").strip() or None,
             total_segments=int(payload.get("total_segments") or 1),
             segment_length_frames=int(payload.get("segment_length_frames") or 0),
@@ -126,6 +248,7 @@ class ScenePlan:
     display_name: str
     shots: list[ShotPlan] = field(default_factory=list)
     description: str = ""
+    actors: list[Actor] = field(default_factory=list)
     continuity_link: dict[str, Any] | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -135,6 +258,7 @@ class ScenePlan:
             "display_name": self.display_name,
             "shots": [shot.to_dict() for shot in self.shots],
             "description": self.description,
+            "actors": [actor.to_dict() for actor in self.actors],
             "continuity_link": dict(self.continuity_link) if self.continuity_link else None,
             "metadata": dict(self.metadata),
         }
@@ -147,6 +271,7 @@ class ScenePlan:
             display_name=str(payload.get("display_name") or payload.get("scene_id") or ""),
             shots=[ShotPlan.from_dict(item) for item in list(payload.get("shots") or [])],
             description=str(payload.get("description") or ""),
+            actors=normalize_actor_list(payload.get("actors")),
             continuity_link=_normalize_link(payload.get("continuity_link")),
             metadata=_mapping_dict(payload.get("metadata")),
         )
@@ -239,10 +364,14 @@ class StoryPlan:
 
 
 __all__ = [
+    "Actor",
     "AnchorPlan",
     "ScenePlan",
     "ShotPlan",
     "StoryPlan",
     "StoryPlanSummary",
     "STORY_PLAN_SCHEMA_V26",
+    "actors_to_dicts",
+    "merge_actor_lists",
+    "normalize_actor_list",
 ]

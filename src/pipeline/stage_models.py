@@ -9,6 +9,9 @@ must use these types.
 
 Canonical ordering: txt2img -> img2img -> adetailer -> upscale -> animatediff -> video_workflow
 
+The train_lora stage is a standalone non-image path. It must never mix with the
+image or video stage chain.
+
 Preferred still-image flow: txt2img -> optional img2img -> optional adetailer
 -> optional final upscale
 
@@ -29,6 +32,8 @@ class StageType(str, Enum):
 
     Ordering: TXT2IMG -> IMG2IMG -> ADETAILER -> UPSCALE -> ANIMATEDIFF -> VIDEO_WORKFLOW
 
+    TRAIN_LORA is standalone and must not be combined with any other stage.
+
     Note: Refiner and Hires are advanced txt2img metadata, not separate stage
     types.
     """
@@ -40,6 +45,7 @@ class StageType(str, Enum):
     ANIMATEDIFF = "animatediff"
     SVD_NATIVE = "svd_native"
     VIDEO_WORKFLOW = "video_workflow"
+    TRAIN_LORA = "train_lora"
 
     def is_generation_stage(self) -> bool:
         """Return True if this is a generation stage (txt2img or img2img)."""

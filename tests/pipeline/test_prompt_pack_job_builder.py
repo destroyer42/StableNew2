@@ -9,6 +9,7 @@ from src.gui.app_state_v2 import PackJobEntry
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.prompt_pack_parser import parse_prompt_pack_text
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
+from src.training.lora_manager import LoRAManager
 from src.utils.config import ConfigManager
 from src.utils.prompt_pack_utils import load_pack_metadata
 
@@ -478,3 +479,69 @@ def test_prompt_pack_job_builder_preserves_extended_adetailer_stage_contract(
     assert adetailer_stage.extra["ad_hands_inpaint_only_masked"] is False
     assert adetailer_stage.extra["ad_hands_inpaint_width"] == 640
     assert adetailer_stage.extra["ad_hands_inpaint_height"] == 896
+
+
+def test_prompt_pack_job_builder_injects_actor_tokens_and_actor_loras_from_plan_origin(
+    tmp_path: Path,
+) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    pack_txt = config_manager.packs_dir / "actor-pack.txt"
+    pack_txt.write_text(
+        "cinematic quality\nportrait on a [[environment]]\n<lora:pack_style:0.45>",
+        encoding="utf-8",
+    )
+
+    weights_dir = tmp_path / "weights"
+    weights_dir.mkdir()
+    ada_weight = weights_dir / "ada.safetensors"
+    bran_weight = weights_dir / "bran.safetensors"
+    ada_weight.write_bytes(b"ada")
+    bran_weight.write_bytes(b"bran")
+    lora_manager = LoRAManager(base_dir=tmp_path / "manifest")
+    lora_manager.register(
+        character_name="Ada",
+        weight_path=ada_weight,
+        metadata={"trigger_phrase": "ada person"},
+    )
+    lora_manager.register(
+        character_name="Bran",
+        weight_path=bran_weight,
+        metadata={"trigger_phrase": "bran ranger"},
+    )
+
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=config_manager,
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+        packs_dir=config_manager.packs_dir,
+        lora_manager=lora_manager,
+    )
+    entry = PackJobEntry(
+        pack_id=pack_txt.name,
+        pack_name="Actor Pack",
+        config_snapshot={
+            "plan_origin": {
+                "plan_id": "story-001",
+                "scene_id": "scene-001",
+                "shot_id": "shot-001",
+                "actors": [
+                    {"name": "Ada", "character_name": "Ada", "weight": 0.8},
+                    {"name": "Bran", "character_name": "Bran"},
+                ],
+            }
+        },
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+        matrix_slot_values={"environment": "rooftop"},
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert records
+    record = records[0]
+    assert "ada person, bran ranger" in record.positive_prompt
+    assert [tag.name for tag in record.lora_tags] == ["ada", "bran", "pack_style"]
+    assert [tag.weight for tag in record.lora_tags] == [0.8, 1.0, 0.45]
+    assert record.extra_metadata["actors"][0]["trigger_phrase"] == "ada person"
+    assert record.extra_metadata["plan_origin"]["shot_id"] == "shot-001"
+    assert record.intent_config["plan_origin"]["actors"][0]["character_name"] == "Ada"

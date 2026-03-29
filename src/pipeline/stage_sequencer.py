@@ -22,6 +22,10 @@ import logging
 from dataclasses import dataclass, field, replace
 from typing import Any
 
+from src.pipeline.config_contract_v26 import (
+    extract_execution_config,
+    validate_train_lora_execution_config,
+)
 from src.pipeline.config_normalizer import normalize_pipeline_config
 from src.pipeline.stage_models import (
     InvalidStagePlanError,
@@ -116,6 +120,51 @@ def _stage_payload(config: dict[str, Any], section: str) -> dict[str, Any]:
 
 def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
     """Build an ordered stage execution plan from a pipeline config dict."""
+
+    raw_config = extract_execution_config(config) or dict(config or {})
+    train_lora_payload = raw_config.get("train_lora") if isinstance(raw_config, dict) else None
+    if isinstance(train_lora_payload, dict) and bool(train_lora_payload.get("enabled", True)):
+        other_enabled_stages: list[str] = []
+        raw_pipeline_flags = raw_config.get("pipeline", {}) if isinstance(raw_config, dict) else {}
+        if not isinstance(raw_pipeline_flags, dict):
+            raw_pipeline_flags = {}
+        for stage_name in (
+            "txt2img",
+            "img2img",
+            "adetailer",
+            "upscale",
+            "animatediff",
+            "svd_native",
+            "video_workflow",
+        ):
+            section_present = stage_name in raw_config if isinstance(raw_config, dict) else False
+            section_enabled = section_present and _extract_enabled(raw_config, stage_name, False)
+            pipeline_enabled = bool(raw_pipeline_flags.get(f"{stage_name}_enabled", False))
+            if section_enabled or pipeline_enabled:
+                other_enabled_stages.append(stage_name)
+        if other_enabled_stages:
+            raise InvalidStagePlanError(
+                "train_lora must be the only enabled stage; found additional stages: "
+                + ", ".join(other_enabled_stages)
+            )
+
+        validated_train_config = validate_train_lora_execution_config(raw_config)
+        payload = _stage_payload(validated_train_config, "train_lora")
+        metadata = _build_stage_metadata(validated_train_config, payload, stage="train_lora")
+        return StageExecutionPlan(
+            stages=[
+                StageExecution(
+                    stage_type="train_lora",
+                    config=StageConfig(enabled=True, payload=payload, metadata=metadata),
+                    order_index=0,
+                    requires_input_image=False,
+                    produces_output_image=False,
+                )
+            ],
+            run_id=(validated_train_config.get("metadata", {}) or {}).get("run_id")
+            or validated_train_config.get("run_id"),
+            one_click_action=(validated_train_config.get("metadata", {}) or {}).get("one_click_action"),
+        )
 
     config = normalize_pipeline_config(config)
     stages: list[StageExecution] = []
@@ -290,6 +339,7 @@ def _normalize_stage_order(stages: list[StageExecution]) -> list[StageExecution]
         raise InvalidStagePlanError("Video workflow stage requires a preceding image-producing stage.")
 
     order_map = {
+        "train_lora": -1,
         "txt2img": 0,
         "img2img": 1,
         "adetailer": 2,
@@ -343,6 +393,7 @@ def _build_stage_metadata(
         ),
         hires_steps=hires_fix.get("steps") if is_txt2img_stage else None,
         stage_flags={
+            "train_lora_enabled": pipeline_flags.get("train_lora_enabled", False),
             "txt2img_enabled": pipeline_flags.get("txt2img_enabled", False),
             "img2img_enabled": img2img_enabled,
             "upscale_enabled": pipeline_flags.get("upscale_enabled", False),

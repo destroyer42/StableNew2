@@ -110,11 +110,46 @@ def test_prompt_tab_filters_pack_list_live_on_mode_change(
         assert "explicit_pack" in visible_before
 
         app_state.set_content_visibility_mode("sfw")
+        tab.on_content_visibility_mode_changed("sfw")
         tk_root.update()
 
         visible_after = list(tab.pack_listbox.get(0, tk.END))
         assert "safe_pack" in visible_after
         assert "explicit_pack" not in visible_after
+    finally:
+        tab.destroy()
+
+
+@pytest.mark.gui
+def test_prompt_tab_loads_json_backed_pack_without_collapsing_to_txt_only(
+    tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    packs_dir = tmp_path / "packs"
+    packs_dir.mkdir(parents=True, exist_ok=True)
+    (packs_dir / "story_pack.json").write_text(
+        (
+            '{"pack_data":{"slots":['
+            '{"index":0,"text":"scene one","negative":"bad anatomy"},'
+            '{"index":1,"text":"scene two","negative":"bad hands"}'
+            "]}}"
+        ),
+        encoding="utf-8",
+    )
+
+    app_state = AppStateV2()
+    tab = PromptTabFrame(tk_root, app_state=app_state)
+    try:
+        visible = list(tab.pack_listbox.get(0, tk.END))
+        assert visible == ["story_pack"]
+
+        tab.pack_listbox.selection_set(0)
+        tab._on_load_selected_pack()
+
+        assert tab.workspace_state.current_pack is not None
+        assert len(tab.workspace_state.current_pack.slots) >= 2
+        assert tab.workspace_state.get_slot(0).text == "scene one"
+        assert tab.workspace_state.get_slot(1).text == "scene two"
     finally:
         tab.destroy()
 
@@ -140,6 +175,7 @@ def test_pipeline_sidebar_filters_pack_list_live_on_mode_change(
         assert "explicit_pack" in visible_before
 
         harness.controller.app_state.set_content_visibility_mode("sfw")
+        sidebar.on_content_visibility_mode_changed("sfw")
         tk_root.update()
 
         visible_after = list(sidebar.pack_listbox.get(0, tk.END))
@@ -158,6 +194,7 @@ def test_preview_panel_redacts_explicit_preview_text_live(tk_root: tk.Tk) -> Non
         assert "nude portrait" in _read_text(panel.prompt_text)
 
         app_state.set_content_visibility_mode("sfw")
+        panel.on_content_visibility_mode_changed("sfw")
         tk_root.update()
 
         assert _read_text(panel.prompt_text) == REDACTED_TEXT
@@ -189,6 +226,7 @@ def test_review_tab_redacts_source_prompts_live(
         assert "nude portrait" in _read_text(tab.current_prompt_text)
 
         app_state.set_content_visibility_mode("sfw")
+        tab.on_content_visibility_mode_changed("sfw")
         tk_root.update()
 
         assert _read_text(tab.current_prompt_text) == REDACTED_TEXT
@@ -212,6 +250,7 @@ def test_photo_optimize_tab_redacts_baseline_prompts_live(
         assert "nude portrait" in _read_text(tab.current_prompt_text)
 
         app_state.set_content_visibility_mode("sfw")
+        tab.on_content_visibility_mode_changed("sfw")
         tk_root.update()
 
         assert _read_text(tab.current_prompt_text) == REDACTED_TEXT

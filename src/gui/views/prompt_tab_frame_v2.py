@@ -43,7 +43,10 @@ from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.utils.config import ConfigManager
+from src.utils.file_io import read_prompt_pack
+from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
+from src.utils.prompt_templates import compose_prompt_text, list_prompt_templates
 from src.utils.prompt_txt_parser import parse_prompt_txt_to_components, parse_multi_slot_txt
 
 
@@ -71,6 +74,7 @@ class PromptTabFrame(ttk.Frame):
         self.app_state = app_state
         self._content_visibility_listener = None
         self._pending_visibility_refresh = False
+        self._visible_pack_infos: list[PromptPackInfo] = []
         self.workspace_state.new_pack("Untitled", slot_count=10)
         if self.app_state is not None:
             try:
@@ -89,6 +93,12 @@ class PromptTabFrame(ttk.Frame):
         
         # Validation state
         self._undefined_slots: set[str] = set()
+        self._template_guard = False
+        self._template_field_vars: dict[str, tk.StringVar] = {}
+        self._prompt_templates = list_prompt_templates()
+        self._prompt_template_lookup = {
+            definition.id: definition for definition in self._prompt_templates
+        }
 
         configure_grid_columns(self, get_prompt_tab_column_specs())
         self.rowconfigure(0, weight=1)
@@ -274,7 +284,7 @@ class PromptTabFrame(ttk.Frame):
         """Build positive and negative prompt editors in Prompts tab."""
         # Configure grid layout for split view
         self.prompts_tab.rowconfigure(1, weight=3)  # positive editor row
-        self.prompts_tab.rowconfigure(3, weight=1)  # negative editor row
+        self.prompts_tab.rowconfigure(4, weight=1)  # negative editor row
         self.prompts_tab.rowconfigure(5, weight=1, minsize=PROMPT_PICKER_ROW_MIN_HEIGHT)
         self.prompts_tab.columnconfigure(0, weight=1, minsize=PROMPT_PICKER_COLUMN_MIN_WIDTH)
         self.prompts_tab.columnconfigure(1, weight=1, minsize=PROMPT_PICKER_COLUMN_MIN_WIDTH)
@@ -282,7 +292,7 @@ class PromptTabFrame(ttk.Frame):
         # Positive prompt header (row 0)
         positive_header = ttk.Frame(self.prompts_tab)
         positive_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 2))
-        ttk.Label(positive_header, text="Positive Prompt", style=BODY_LABEL_STYLE).pack(
+        ttk.Label(positive_header, text="Prompt Details", style=BODY_LABEL_STYLE).pack(
             side="left"
         )
         
@@ -316,7 +326,10 @@ class PromptTabFrame(ttk.Frame):
         self.editor.bind("<Escape>", lambda e: self._hide_autocomplete())
         self.editor.bind("<FocusOut>", lambda e: self._hide_autocomplete())
         enable_mousewheel(self.editor)
-        attach_tooltip(self.editor, "Main prompt text for txt2img/img2img runs. Type [[ for slot autocomplete.")
+        attach_tooltip(
+            self.editor,
+            "Freeform prompt text. When a template is selected, this text is appended after the rendered template. Type [[ for slot autocomplete.",
+        )
         
         # Configure tag for matrix token highlighting (darker yellow for dark mode)
         self.editor.tag_config(
@@ -325,9 +338,11 @@ class PromptTabFrame(ttk.Frame):
             foreground=TOKENS.colors.accent_primary,
         )
 
-        # Negative prompt header (row 2)
+        self._build_template_panel()
+
+        # Negative prompt header (row 3)
         negative_header = ttk.Frame(self.prompts_tab)
-        negative_header.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 2))
+        negative_header.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 2))
         ttk.Label(negative_header, text="Negative Prompt", style=BODY_LABEL_STYLE).pack(
             side="left"
         )
@@ -342,7 +357,7 @@ class PromptTabFrame(ttk.Frame):
             command=self._insert_slot_into_negative,
         ).pack(side="right")
 
-        # Negative prompt editor (row 3)
+        # Negative prompt editor (row 4)
         self.negative_editor = tk.Text(
             self.prompts_tab, 
             height=4, 
@@ -356,7 +371,7 @@ class PromptTabFrame(ttk.Frame):
             borderwidth=1,
             relief="solid"
         )
-        self.negative_editor.grid(row=3, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
+        self.negative_editor.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
         self.negative_editor.bind("<<Modified>>", self._on_negative_modified)
         self.negative_editor.bind("<KeyRelease>", self._on_negative_key_release)
         self.negative_editor.bind("<Escape>", lambda e: self._hide_autocomplete())
@@ -369,11 +384,6 @@ class PromptTabFrame(ttk.Frame):
             "matrix_token",
             background=TOKENS.colors.surface_tertiary,
             foreground=TOKENS.colors.accent_primary,
-        )
-
-        # Separator (row 4)
-        ttk.Separator(self.prompts_tab, orient="horizontal").grid(
-            row=4, column=0, columnspan=2, sticky="ew", pady=6
         )
 
         # LoRA picker panel (row 5, column 0)
@@ -394,6 +404,211 @@ class PromptTabFrame(ttk.Frame):
             webui_root=STABLENEW_WEBUI_ROOT or None
         )
         self.embedding_picker.grid(row=5, column=1, sticky="nsew", padx=(3, 0))
+
+    def _build_template_panel(self) -> None:
+        self.template_panel = ttk.LabelFrame(self.prompts_tab, text="Cinematic Template", padding=6)
+        self.template_panel.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(0, 6))
+        self.template_panel.columnconfigure(1, weight=1)
+
+        ttk.Label(self.template_panel, text="Template", style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, sticky="w", pady=(0, 4)
+        )
+        self.template_selector_var = tk.StringVar(value="")
+        self.template_selector = ttk.Combobox(
+            self.template_panel,
+            textvariable=self.template_selector_var,
+            values=[""] + [definition.id for definition in self._prompt_templates],
+            state="readonly",
+        )
+        self.template_selector.grid(row=0, column=1, sticky="ew", padx=(6, 6), pady=(0, 4))
+        self.template_selector.bind("<<ComboboxSelected>>", self._on_template_selection_changed)
+        attach_tooltip(
+            self.template_selector,
+            "Choose a cinematic template. The rendered template is combined with the prompt details editor above.",
+        )
+
+        ttk.Button(
+            self.template_panel,
+            text="Clear",
+            command=self._clear_template_selection,
+        ).grid(row=0, column=2, sticky="e", pady=(0, 4))
+
+        self.template_description_var = tk.StringVar(
+            value="No template selected. Use the editor above for full freeform prompts."
+        )
+        ttk.Label(
+            self.template_panel,
+            textvariable=self.template_description_var,
+            wraplength=460,
+            justify="left",
+        ).grid(row=1, column=0, columnspan=3, sticky="ew", pady=(0, 6))
+
+        self.template_fields_frame = ttk.Frame(self.template_panel)
+        self.template_fields_frame.grid(row=2, column=0, columnspan=3, sticky="ew")
+        self.template_fields_frame.columnconfigure(1, weight=1)
+
+        ttk.Label(self.template_panel, text="Rendered Preview", style=BODY_LABEL_STYLE).grid(
+            row=3, column=0, columnspan=3, sticky="w", pady=(6, 2)
+        )
+        self.template_preview = tk.Text(
+            self.template_panel,
+            height=3,
+            wrap="word",
+            state="disabled",
+            bg=TOKENS.colors.surface_secondary,
+            fg=TOKENS.colors.text_primary,
+            highlightthickness=0,
+            borderwidth=1,
+            relief="solid",
+        )
+        self.template_preview.grid(row=4, column=0, columnspan=3, sticky="ew")
+
+    def _mark_pack_modified(self) -> None:
+        pack_name = self.workspace_state.current_pack.name if self.workspace_state.current_pack else "None"
+        self.pack_name_label.config(text=f"Editor - {pack_name} (modified)")
+
+    def _template_preview_text(self) -> str:
+        template_id = self.template_selector_var.get().strip()
+        if not template_id:
+            return self.workspace_state.get_current_raw_prompt_text() or "(freeform prompt only)"
+        return compose_prompt_text(
+            template_id,
+            self._current_template_values_from_controls(),
+            self.workspace_state.get_current_raw_prompt_text(),
+        ) or "(template selected, fill variables to preview)"
+
+    def _refresh_template_preview(self) -> None:
+        self._set_editor_widget_text(
+            self.template_preview,
+            self._template_preview_text(),
+            readonly=True,
+        )
+
+    def _current_template_values_from_controls(self) -> dict[str, str]:
+        return {
+            name: variable.get().strip()
+            for name, variable in self._template_field_vars.items()
+            if name
+        }
+
+    def _render_template_variable_fields(
+        self, template_id: str, template_values: dict[str, str] | None = None
+    ) -> None:
+        for child in self.template_fields_frame.winfo_children():
+            child.destroy()
+        self.template_fields_frame.columnconfigure(1, weight=1)
+        self._template_field_vars = {}
+
+        if not template_id:
+            self.template_description_var.set(
+                "No template selected. Use the editor above for full freeform prompts."
+            )
+            ttk.Label(
+                self.template_fields_frame,
+                text="Template variables will appear here when you pick a cinematic template.",
+            ).grid(row=0, column=0, sticky="w")
+            return
+
+        definition = self._prompt_template_lookup.get(template_id)
+        if definition is None:
+            self.template_description_var.set(f"Unknown template '{template_id}'.")
+            ttk.Label(
+                self.template_fields_frame,
+                text="The selected template was not found in the template catalog.",
+            ).grid(row=0, column=0, sticky="w")
+            return
+
+        description = f"{definition.label} [{definition.category}]"
+        if definition.description:
+            description += f". {definition.description}"
+        self.template_description_var.set(description)
+
+        values = dict(template_values or {})
+        placeholders = definition.placeholders
+        if not placeholders:
+            ttk.Label(
+                self.template_fields_frame,
+                text="This template does not require any variables.",
+            ).grid(row=0, column=0, sticky="w")
+            return
+
+        for row_index, placeholder in enumerate(placeholders):
+            ttk.Label(
+                self.template_fields_frame,
+                text=placeholder.replace("_", " ").title(),
+            ).grid(row=row_index, column=0, sticky="w", padx=(0, 6), pady=2)
+            variable = tk.StringVar(value=values.get(placeholder, ""))
+            variable.trace_add("write", lambda *_args: self._on_template_fields_changed())
+            self._template_field_vars[placeholder] = variable
+            ttk.Entry(
+                self.template_fields_frame,
+                textvariable=variable,
+            ).grid(row=row_index, column=1, sticky="ew", pady=2)
+
+    def _sync_template_controls(self) -> None:
+        slot = self.workspace_state.get_current_slot()
+        template_id = str(getattr(slot, "template_id", "") or "") if slot else ""
+        template_values = dict(getattr(slot, "template_variables", {}) or {}) if slot else {}
+        self._template_guard = True
+        try:
+            self.template_selector_var.set(template_id)
+            self._render_template_variable_fields(template_id, template_values)
+            self._refresh_template_preview()
+        finally:
+            self._template_guard = False
+
+    def _on_template_selection_changed(self, _event=None) -> None:
+        if self._template_guard:
+            return
+        template_id = self.template_selector_var.get().strip()
+        definition = self._prompt_template_lookup.get(template_id)
+        current_values = self._current_template_values_from_controls()
+        template_values = {
+            placeholder: current_values.get(placeholder, "")
+            for placeholder in (definition.placeholders if definition is not None else ())
+        }
+        self.workspace_state.set_slot_template(
+            self.workspace_state.get_current_slot_index(),
+            template_id,
+            template_values,
+        )
+        self._template_guard = True
+        try:
+            self._render_template_variable_fields(template_id, template_values)
+            self._refresh_template_preview()
+        finally:
+            self._template_guard = False
+        self._mark_pack_modified()
+        self._refresh_metadata()
+
+    def _on_template_fields_changed(self) -> None:
+        if self._template_guard:
+            return
+        template_id = self.template_selector_var.get().strip()
+        self.workspace_state.set_slot_template(
+            self.workspace_state.get_current_slot_index(),
+            template_id,
+            self._current_template_values_from_controls(),
+        )
+        self._refresh_template_preview()
+        self._mark_pack_modified()
+        self._refresh_metadata()
+
+    def _clear_template_selection(self) -> None:
+        self.workspace_state.set_slot_template(
+            self.workspace_state.get_current_slot_index(),
+            "",
+            {},
+        )
+        self._template_guard = True
+        try:
+            self.template_selector_var.set("")
+            self._render_template_variable_fields("", {})
+            self._refresh_template_preview()
+        finally:
+            self._template_guard = False
+        self._mark_pack_modified()
+        self._refresh_metadata()
 
     # Right column ------------------------------------------------------
     def _build_right_panel(self) -> None:
@@ -585,7 +800,10 @@ class PromptTabFrame(ttk.Frame):
     def _refresh_editor(self) -> None:
         slot = self.workspace_state.get_slot(self.workspace_state.get_current_slot_index())
         mode = self._content_visibility_mode
-        positive_text = self.workspace_state.get_current_prompt_text_for_mode(mode)
+        positive_text = self._visibility_resolver().redact_text(
+            slot.text,
+            item=self._current_slot_visibility_subject(),
+        )
         negative_text = self.workspace_state.get_current_negative_text_for_mode(mode)
         self._suppress_editor_change = True
         try:
@@ -618,6 +836,8 @@ class PromptTabFrame(ttk.Frame):
             # Refresh matrix tab if it exists
             if hasattr(self, "matrix_tab_panel"):
                 self.matrix_tab_panel.refresh()
+
+            self._sync_template_controls()
             
             # Apply highlighting and update quick insert buttons
             self._highlight_matrix_tokens()
@@ -636,14 +856,13 @@ class PromptTabFrame(ttk.Frame):
         try:
             self.workspace_state.set_slot_text(self.workspace_state.get_current_slot_index(), text)
             # keep UI indicator in sync
-            self.pack_name_label.config(
-                text=f"Editor - {self.workspace_state.current_pack.name if self.workspace_state.current_pack else 'None'} (modified)"
-            )
+            self._mark_pack_modified()
         except Exception:
             pass
         self.editor.edit_modified(False)
         self._highlight_matrix_tokens()
         self._validate_matrix_slots()
+        self._refresh_template_preview()
         self._refresh_metadata()
 
     def _on_negative_modified(self, _event=None) -> None:
@@ -660,9 +879,7 @@ class PromptTabFrame(ttk.Frame):
                 negative_text
             )
             # Update UI indicator
-            self.pack_name_label.config(
-                text=f"Editor - {self.workspace_state.current_pack.name if self.workspace_state.current_pack else 'None'} (modified)"
-            )
+            self._mark_pack_modified()
         except Exception:
             pass
         self.negative_editor.edit_modified(False)
@@ -681,9 +898,7 @@ class PromptTabFrame(ttk.Frame):
                 loras
             )
             # Mark dirty
-            self.pack_name_label.config(
-                text=f"Editor - {self.workspace_state.current_pack.name if self.workspace_state.current_pack else 'None'} (modified)"
-            )
+            self._mark_pack_modified()
         except Exception:
             pass
         self._refresh_metadata()
@@ -701,9 +916,7 @@ class PromptTabFrame(ttk.Frame):
                 neg_embeds
             )
             # Mark dirty
-            self.pack_name_label.config(
-                text=f"Editor - {self.workspace_state.current_pack.name if self.workspace_state.current_pack else 'None'} (modified)"
-            )
+            self._mark_pack_modified()
         except Exception:
             pass
         self._refresh_metadata()
@@ -760,8 +973,20 @@ class PromptTabFrame(ttk.Frame):
             for emb_name, emb_weight in normalize_embedding_entries(current_slot.positive_embeddings):
                 preview_lines.append(render_embedding_reference(emb_name, emb_weight))
         
+        template_id = str(getattr(current_slot, "template_id", "") or "")
+        if template_id:
+            preview_lines.append(f"Template: {template_id}")
+            template_values = dict(getattr(current_slot, "template_variables", {}) or {})
+            if template_values:
+                for key, value in sorted(template_values.items()):
+                    preview_lines.append(f"  {key}: {value or '(empty)'}")
+            preview_lines.append("")
+
         # Positive prompt
-        positive_text = resolver.redact_text(current_slot.text.strip(), item=subject)
+        positive_text = resolver.redact_text(
+            self.workspace_state.get_current_prompt_text().strip(),
+            item=subject,
+        )
         if positive_text:
             preview_lines.append(positive_text)
         else:
@@ -872,18 +1097,30 @@ class PromptTabFrame(ttk.Frame):
         packs_dir = Path("packs")
         if not packs_dir.exists():
             packs_dir.mkdir(parents=True, exist_ok=True)
+            self._visible_pack_infos = []
             return
 
         resolver = self._visibility_resolver()
-        txt_files = sorted(packs_dir.glob("*.txt"))
-        for txt_file in txt_files:
-            pack_text = ""
+        visible_infos: list[PromptPackInfo] = []
+        for pack_info in discover_packs(packs_dir):
+            prompt_lines: list[str] = []
             try:
-                pack_text = txt_file.read_text(encoding="utf-8")
+                prompts = read_prompt_pack(pack_info.path)
             except Exception:
-                pass
-            if resolver.is_visible({"name": txt_file.stem, "prompt": pack_text}):
-                self.pack_listbox.insert("end", txt_file.stem)
+                prompts = []
+            for prompt in prompts:
+                if not isinstance(prompt, dict):
+                    continue
+                positive = str(prompt.get("positive") or "").strip()
+                negative = str(prompt.get("negative") or "").strip()
+                if positive:
+                    prompt_lines.append(positive)
+                if negative:
+                    prompt_lines.append(negative)
+            if resolver.is_visible({"name": pack_info.name, "prompt": "\n".join(prompt_lines)}):
+                visible_infos.append(pack_info)
+                self.pack_listbox.insert("end", pack_info.name)
+        self._visible_pack_infos = visible_infos
     
     def _on_load_selected_pack(self) -> None:
         """Load the selected pack from the pack list."""
@@ -891,44 +1128,40 @@ class PromptTabFrame(ttk.Frame):
         if not selection:
             messagebox.showinfo("Load Pack", "Please select a pack to load.")
             return
-        
-        pack_name = self.pack_listbox.get(selection[0])
-        from pathlib import Path
-        
-        txt_path = Path("packs") / f"{pack_name}.txt"
-        if not txt_path.exists():
-            messagebox.showerror("Load Pack", f"Pack file not found: {txt_path}")
+
+        index = int(selection[0])
+        if index < 0 or index >= len(self._visible_pack_infos):
+            messagebox.showerror("Load Pack", "Selected pack could not be resolved.")
             return
-        
-        # Use the same logic as _on_open_pack
+        pack_info = self._visible_pack_infos[index]
+        pack_name = pack_info.name
+        pack_path = pack_info.path
+
         try:
-            # Read TXT file
-            with open(txt_path, "r", encoding="utf-8") as f:
-                txt_content = f.read()
-
-            # Parse into multiple slots
-            all_components = parse_multi_slot_txt(txt_content)
-
-            if not all_components:
-                messagebox.showwarning("Load Pack", "No valid prompts found in file.")
-                return
-
-            # Check for companion JSON
-            json_path = txt_path.with_suffix(".json")
-            if json_path.exists():
-                self.workspace_state.load_pack(str(json_path))
+            if pack_path.suffix.lower() == ".json":
+                self.workspace_state.load_pack(str(pack_path))
             else:
-                self.workspace_state.new_pack(pack_name, slot_count=len(all_components))
+                with open(pack_path, "r", encoding="utf-8") as f:
+                    txt_content = f.read()
 
-            # Populate slots from TXT
-            for index, components in enumerate(all_components):
-                if index < len(self.workspace_state.current_pack.slots):
-                    slot = self.workspace_state.get_slot(index)
-                    slot.text = components.positive_text
-                    slot.negative = components.negative_text
-                    slot.positive_embeddings = components.positive_embeddings
-                    slot.negative_embeddings = components.negative_embeddings
-                    slot.loras = components.loras
+                all_components = parse_multi_slot_txt(txt_content)
+                if not all_components:
+                    messagebox.showwarning("Load Pack", "No valid prompts found in file.")
+                    return
+
+                json_path = pack_path.with_suffix(".json")
+                if json_path.exists():
+                    self.workspace_state.load_pack(str(json_path))
+                else:
+                    self.workspace_state.new_pack(pack_name, slot_count=len(all_components))
+                    for index, components in enumerate(all_components):
+                        if index < len(self.workspace_state.current_pack.slots):
+                            slot = self.workspace_state.get_slot(index)
+                            slot.text = components.positive_text
+                            slot.negative = components.negative_text
+                            slot.positive_embeddings = components.positive_embeddings
+                            slot.negative_embeddings = components.negative_embeddings
+                            slot.loras = components.loras
 
             self._refresh_slot_list()
             self.workspace_state.set_current_slot_index(0)

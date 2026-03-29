@@ -69,3 +69,44 @@ def test_resolve_from_pack_row_accepts_hyphenated_slot_aliases() -> None:
     assert "[[" not in result.positive
     assert "auburn haired" in result.positive
     assert "green eyed" in result.positive
+
+
+def test_resolve_from_pack_row_prepends_actor_tokens_and_actor_loras() -> None:
+    row = PackRow(
+        embeddings=(),
+        quality_line="cinematic quality",
+        subject_template="portrait on a rooftop",
+        lora_tags=(("shared_style", 0.4), ("pack_style", 0.7)),
+        negative_embeddings=(),
+        negative_phrases=(),
+    )
+    resolver = UnifiedPromptResolver(max_preview_length=200)
+    result = resolver.resolve_from_pack(
+        pack_row=row,
+        actor_resolutions=[
+            {
+                "name": "Ada",
+                "trigger_phrase": "ada person",
+                "lora_name": "shared_style",
+                "weight": 0.9,
+            },
+            {
+                "name": "Bran",
+                "trigger_phrase": "bran ranger",
+                "lora_name": "bran_lora",
+                "weight": 0.8,
+            },
+        ],
+        pack_negative="",
+        global_negative="",
+    )
+
+    assert "ada person, bran ranger" in result.positive
+    assert result.lora_tags == (
+        ("shared_style", 0.9),
+        ("bran_lora", 0.8),
+        ("pack_style", 0.7),
+    )
+    assert result.positive.endswith(
+        "<lora:shared_style:0.9> <lora:bran_lora:0.8> <lora:pack_style:0.7>"
+    )

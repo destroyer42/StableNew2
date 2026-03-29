@@ -987,41 +987,45 @@ Repo-truth corrections:
   a separate near-term execution item unless fresh cross-doc drift appears; the
   stale spec has been retired to
   `docs/archive/reference/PR-POLISH-282-Canonical-Roadmap-Video-Status-Harmonization.md`.
+- `PR-CORE-001` is now complete; the shipped SVD controller/runner/GUI path has
+  dedicated repo-truth closeout coverage via
+  `tests/video/test_svd_integration.py`, focused config/controller/GUI tests,
+  and `docs/CompletedPR/PR-CORE-001-Finalize-Native-SVD-Integration.md`.
+- `PR-CORE-011` is now complete in repo-truth form; the existing golden-path
+  suite already covered broad integration, and the missing native SVD plus
+  workflow-video video-path coverage now lives in
+  `tests/integration/test_video_golden_paths_v26.py` alongside the existing
+  AnimateDiff GP6 coverage.
+- `PR-CORE-004` is now complete; PromptPack authoring ships a curated
+  cinematic template catalog in `data/prompt_templates.json`, template-aware
+  prompt-pack serialization/export, and a thin Prompt tab selector/preview
+  surface without changing the canonical NJR execution path.
+- `PR-CORE-002` is now complete; StableNew ships a canonical queue-backed
+  `train_lora` path through the config contract, stage models, job builder,
+  runner, `src/training/character_embedder.py`, `src/training/lora_manager.py`,
+  and the Character Training tab, while keeping external trainer CLIs behind a
+  runner-owned subprocess seam.
 - older completed or superseded sequence snapshots have been removed from
   `docs/PR_Backlog/`; completed rollout docs now live in `docs/CompletedPlans/`
   and stale snapshots live in `docs/archive/reference/`.
 
 Current priority order:
 
-1. `PR-CORE-001 - Finalize Native SVD Integration`
-  Reason: the SVD runtime, controller, and GUI substrate already exists, but
-  the repo still lacks dedicated end-to-end SVD integration coverage and a
-  fully closed repo-truth execution spec for the active path.
-2. `PR-CORE-011 - End-to-End Pipeline Tests`
-  Reason: after `PR-CORE-001`, the highest-value follow-on is explicit golden-
-  path coverage for the integrated SVD/video path rather than broader suite
-  collection recovery.
-3. `PR-CORE-004 - Cinematic Prompt Template Library`
-  Reason: the prompt authoring layer is still missing and does not conflict
-  with shipped architecture.
-4. `PR-CORE-002 - Character Embedding Pipeline`
-  Reason: this is still missing and high value, but it is operationally larger
-  than the authoring-layer work above.
-5. `PR-CORE-014 - Multi-Character Support`
-  Reason: it should follow the character asset and training pipeline, not lead
-  it.
-6. merged `PR-CORE-005` / `PR-CORE-017` camera-control and ControlNet tranche
+1. `PR-CORE-014 - Multi-Character Support`
+  Reason: the character asset and training pipeline now exists, so the next
+  highest-value follow-on is multi-character orchestration.
+2. merged `PR-CORE-005` / `PR-CORE-017` camera-control and ControlNet tranche
   Reason: the two current specs overlap heavily and should not be executed as
   separate parallel proposals.
-7. `PR-CORE-008 - Style Consistency LoRA`
-  Reason: style-control work is valuable, but it is cleaner once character and
-  training surfaces are established.
-8. `PR-CORE-018 - Documentation and Usage Examples`
+3. `PR-CORE-008 - Style Consistency LoRA`
+  Reason: style-control work is valuable, and it is now cleaner once the
+  character training and manifest surfaces are established.
+4. `PR-CORE-018 - Documentation and Usage Examples`
   Reason: this should explain shipped behavior rather than lead it.
-9. `PR-CORE-019 - Book Ingestion Tool`
+5. `PR-CORE-019 - Book Ingestion Tool`
   Reason: it depends on the re-scoped story-planning productization path.
-10. `PR-CORE-020 - Research Spike: 3D and NeRF Exploration`
-   Reason: this remains intentionally exploratory and low priority.
+6. `PR-CORE-020 - Research Spike: 3D and NeRF Exploration`
+  Reason: this remains intentionally exploratory and low priority.
 
 Execution note:
 

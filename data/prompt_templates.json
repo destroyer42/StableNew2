@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "templates": {
+    "establishing_wide": {
+      "label": "Establishing Wide Shot",
+      "category": "shot",
+      "template": "cinematic wide establishing shot of {scene}, {environment}, {lighting}, {style}",
+      "description": "Use for scene-setting openers and location reveals."
+    },
+    "character_close_up": {
+      "label": "Character Close-Up",
+      "category": "portrait",
+      "template": "intimate close-up of {subject}, {expression}, {lighting}, {style}",
+      "description": "Use for emotional beats and performance-driven framing."
+    },
+    "over_the_shoulder": {
+      "label": "Over-The-Shoulder",
+      "category": "coverage",
+      "template": "over-the-shoulder shot of {subject} facing {focus}, {environment}, {lighting}",
+      "description": "Use for dialogue, reveals, and guided audience focus."
+    },
+    "tracking_action": {
+      "label": "Tracking Action Shot",
+      "category": "action",
+      "template": "tracking shot of {subject} {action}, {environment}, {camera}, {style}",
+      "description": "Use for motion-heavy beats with cinematic camera language."
+    },
+    "moody_portrait": {
+      "label": "Moody Portrait",
+      "category": "portrait",
+      "template": "moody portrait of {subject}, {environment}, {lighting}, {mood}, {style}",
+      "description": "Use for stylized character portraiture with strong atmosphere."
+    },
+    "aerial_reveal": {
+      "label": "Aerial Reveal",
+      "category": "shot",
+      "template": "dramatic aerial reveal of {scene}, {environment}, {lighting}, {mood}",
+      "description": "Use for scale, geography, and cinematic reveal moments."
+    }
+  }
+}

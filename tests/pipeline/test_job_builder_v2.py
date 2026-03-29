@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.gui.app_state_v2 import PackJobEntry
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, PipelineRunSource
@@ -166,3 +168,49 @@ def test_build_from_run_request_preserves_secondary_motion_intent() -> None:
     assert len(jobs) == 1
     assert jobs[0].intent_config["secondary_motion"]["enabled"] is True
     assert jobs[0].intent_config["secondary_motion"]["mode"] == "observe"
+
+
+def test_build_from_run_request_train_lora_produces_standalone_njr() -> None:
+    builder = JobBuilderV2(id_fn=lambda: "job-train", time_fn=lambda: 123.0)
+    entry = PackJobEntry(
+        pack_id="character-training:ada",
+        pack_name="Character Training: Ada",
+        config_snapshot={
+            "train_lora": {
+                "enabled": True,
+                "character_name": "Ada",
+                "image_dir": "C:/images/ada",
+                "output_dir": "C:/weights",
+                "epochs": 100,
+                "learning_rate": 0.0001,
+                "base_model": "sdxl",
+            },
+            "pipeline": {
+                "train_lora_enabled": True,
+            },
+        },
+        prompt_text="",
+        negative_prompt_text="",
+        pack_row_index=0,
+    )
+    request = PipelineRunRequest(
+        prompt_pack_id=entry.pack_id,
+        selected_row_ids=["ada"],
+        config_snapshot_id="cfg-train",
+        run_mode=PipelineRunMode.QUEUE,
+        source=PipelineRunSource.ADD_TO_QUEUE,
+        explicit_output_dir="C:/weights",
+        pack_entries=[entry],
+        max_njr_count=1,
+    )
+
+    jobs = builder.build_from_run_request(request)
+
+    assert len(jobs) == 1
+    record = jobs[0]
+    assert Path(record.path_output_dir) == Path("C:/weights")
+    assert record.stage_chain[0].stage_type == "train_lora"
+    assert record.stage_chain[0].extra["character_name"] == "Ada"
+    assert record.base_model == "sdxl"
+    assert record.positive_prompt == "Train LoRA for Ada"
+    assert record.config["pipeline"]["train_lora_enabled"] is True

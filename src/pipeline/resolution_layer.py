@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from src.utils.prompt_pack_utils import resolve_matrix_slot_value
@@ -22,6 +23,57 @@ def _truncate(value: str, limit: int) -> str:
     if not value:
         return ""
     return value if len(value) <= limit else value[:limit] + "..."
+
+
+def _dedupe_lora_tags(tags: Iterable[tuple[str, float]]) -> tuple[tuple[str, float], ...]:
+    deduped: list[tuple[str, float]] = []
+    seen: set[str] = set()
+    for raw_name, raw_weight in tags:
+        name = str(raw_name or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        try:
+            weight = float(raw_weight)
+        except (TypeError, ValueError):
+            weight = 1.0
+        deduped.append((name, weight))
+    return tuple(deduped)
+
+
+def _actor_trigger_phrases(actor_resolutions: Iterable[Mapping[str, Any]] | None) -> tuple[str, ...]:
+    phrases: list[str] = []
+    seen: set[str] = set()
+    for actor in list(actor_resolutions or []):
+        phrase = str(actor.get("trigger_phrase") or "").strip()
+        if not phrase:
+            continue
+        key = phrase.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        phrases.append(phrase)
+    return tuple(phrases)
+
+
+def _actor_lora_tags(actor_resolutions: Iterable[Mapping[str, Any]] | None) -> tuple[tuple[str, float], ...]:
+    tags: list[tuple[str, float]] = []
+    for actor in list(actor_resolutions or []):
+        lora_name = str(actor.get("lora_name") or "").strip()
+        if not lora_name:
+            lora_path = str(actor.get("lora_path") or "").strip()
+            lora_name = Path(lora_path).stem if lora_path else ""
+        if not lora_name:
+            continue
+        try:
+            weight = float(actor.get("weight") or 1.0)
+        except (TypeError, ValueError):
+            weight = 1.0
+        tags.append((lora_name, weight))
+    return _dedupe_lora_tags(tags)
 
 
 @dataclass(frozen=True)
@@ -63,7 +115,7 @@ class StageResolution:
 
     name: str
     enabled: bool
-    details: dict[str, Any] = None
+    details: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -130,7 +182,7 @@ class UnifiedPromptResolver:
         pack_negative: str | None = None,
         preset_negative: str | None = None,
     ) -> ResolvedPrompt:
-        positives = []
+        positives: list[str] = []
         for part in (prepend_text, gui_prompt, pack_prompt):
             if part:
                 cleaned = part.strip()
@@ -181,6 +233,7 @@ class UnifiedPromptResolver:
         *,
         pack_row: PackRow,
         matrix_slot_values: Mapping[str, str] | None = None,
+        actor_resolutions: Iterable[Mapping[str, Any]] | None = None,
         pack_negative: str | None = None,
         global_negative: str = "",
         apply_global_negative: bool = True,
@@ -189,11 +242,17 @@ class UnifiedPromptResolver:
         subject = self._substitute_matrix_tokens(pack_row.subject_template, matrix_slot_values)
         quality = self._substitute_matrix_tokens(pack_row.quality_line, matrix_slot_values)
         
-        lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in pack_row.lora_tags)
-        positive_parts = []
+        actor_trigger_phrases = _actor_trigger_phrases(actor_resolutions)
+        merged_lora_tags = _dedupe_lora_tags(
+            list(_actor_lora_tags(actor_resolutions)) + list(pack_row.lora_tags)
+        )
+        lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in merged_lora_tags)
+        positive_parts: list[str] = []
         # Render embeddings with weights
         if pack_row.embeddings:
             positive_parts.extend(render_embedding_reference(name, weight) for name, weight in pack_row.embeddings)
+        if actor_trigger_phrases:
+            positive_parts.append(", ".join(actor_trigger_phrases))
         if quality:  # Use substituted quality_line
             positive_parts.append(quality)
         if subject:
@@ -234,7 +293,7 @@ class UnifiedPromptResolver:
             negative_preview=negative_preview,
             positive_embeddings=pack_row.embeddings,
             negative_embeddings=pack_row.negative_embeddings,
-            lora_tags=pack_row.lora_tags,
+            lora_tags=merged_lora_tags,
             global_negative_applied=global_applied,
         )
 

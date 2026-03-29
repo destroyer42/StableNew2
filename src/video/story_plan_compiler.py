@@ -4,8 +4,17 @@ from collections.abc import Iterable
 from typing import Any
 
 from src.video.continuity_models import prefer_continuity_link
-from src.video.sequence_models import VideoSequenceJob
-from src.video.story_plan_models import AnchorPlan, ScenePlan, ShotPlan, StoryPlan
+from src.video.sequence_models import CarryForwardPolicy, VideoSequenceJob
+from src.video.story_plan_models import (
+    AnchorPlan,
+    ScenePlan,
+    ShotPlan,
+    StoryPlan,
+    actors_to_dicts,
+    merge_actor_lists,
+)
+
+_VALID_CARRY_FORWARD_POLICIES = {"first_frame", "last_frame", "provided", "none"}
 
 
 def _safe_id(value: str) -> str:
@@ -25,6 +34,7 @@ def _build_plan_origin(
     scene_index: int,
     shot_index: int,
 ) -> dict[str, Any]:
+    actors = merge_actor_lists(scene.actors, shot.actors)
     return {
         "plan_id": plan.plan_id,
         "plan_display_name": plan.display_name,
@@ -34,7 +44,21 @@ def _build_plan_origin(
         "shot_id": shot.shot_id,
         "shot_display_name": shot.display_name,
         "shot_index": shot_index,
+        "actors": actors_to_dicts(actors),
     }
+
+
+def _normalize_carry_forward_policy(value: Any) -> CarryForwardPolicy:
+    policy = str(value or "none").strip().lower() or "none"
+    if policy == "first_frame":
+        return "first_frame"
+    if policy == "last_frame":
+        return "last_frame"
+    if policy == "provided":
+        return "provided"
+    if policy not in _VALID_CARRY_FORWARD_POLICIES:
+        return "none"
+    return "none"
 
 
 class StoryPlanCompiler:
@@ -99,7 +123,7 @@ class StoryPlanCompiler:
             total_segments=total_segments,
             segment_length_frames=int(shot.segment_length_frames or 0),
             overlap_frames=int(shot.overlap_frames or 0),
-            carry_forward_policy=str(shot.carry_forward_policy or "none"),
+            carry_forward_policy=_normalize_carry_forward_policy(shot.carry_forward_policy),
             base_source_image_path=base_source_image_path,
             base_prompt=shot.prompt,
             base_negative_prompt=shot.negative_prompt,

@@ -92,6 +92,38 @@ def test_read_prompt_pack_renders_json_slot_content(tmp_path):
     assert prompts[0]["negative"] == "<embedding:bad_quality> blurry"
 
 
+def test_read_prompt_pack_renders_template_backed_json_slots(tmp_path):
+        pack_path = tmp_path / "templated.json"
+        pack_path.write_text(
+                """
+                {
+                    "pack_data": {
+                        "slots": [
+                            {
+                                "index": 0,
+                                "text": "mist in the valley",
+                                "template_id": "aerial_reveal",
+                                "template_variables": {
+                                    "scene": "the hidden citadel",
+                                    "environment": "snowy mountain ridges",
+                                    "lighting": "sunrise haze",
+                                    "mood": "quiet awe"
+                                }
+                            }
+                        ]
+                    }
+                }
+                """.strip(),
+                encoding="utf-8",
+        )
+
+        prompts = read_prompt_pack(pack_path)
+
+        assert len(prompts) == 1
+        assert "dramatic aerial reveal of the hidden citadel" in prompts[0]["positive"]
+        assert "mist in the valley" in prompts[0]["positive"]
+
+
 # ---------------------------------------------------------------------------
 # PR-112: RunConfig builder tests
 # ---------------------------------------------------------------------------

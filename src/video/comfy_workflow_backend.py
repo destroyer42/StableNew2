@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import time
 import uuid
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -161,7 +162,12 @@ class ComfyWorkflowVideoBackend:
             raise RuntimeError(_format_missing_dependency_message(spec, dependency_result))
 
         compiled = self._compiler.compile(spec, request)
-        queue_payload = self._build_queue_payload(compiled, request)
+        queue_payload = self._build_queue_payload(
+            compiled,
+            request,
+            client=client,
+            object_info=object_info,
+        )
         queue_response = client.queue_prompt(queue_payload)
         prompt_id = str(queue_response.get("prompt_id") or "").strip()
         if not prompt_id:
@@ -403,6 +409,9 @@ class ComfyWorkflowVideoBackend:
         self,
         compiled: Any,
         request: VideoExecutionRequest,
+        *,
+        client: ComfyApiClient,
+        object_info: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         backend_payload = dict(compiled.backend_payload or {})
         prompt_payload = backend_payload.get("prompt")
@@ -410,6 +419,11 @@ class ComfyWorkflowVideoBackend:
             raise RuntimeError(
                 f"Workflow '{compiled.workflow_id}' compiled without a queueable Comfy prompt payload"
             )
+        prompt_payload = self._normalize_prompt_payload_for_comfy(
+            prompt_payload,
+            client=client,
+            object_info=object_info,
+        )
         extra_data = {
             "workflow_id": compiled.workflow_id,
             "workflow_version": compiled.workflow_version,
@@ -423,6 +437,111 @@ class ComfyWorkflowVideoBackend:
             "client_id": str(request.job_id or f"stablenew-{uuid.uuid4().hex}"),
             "extra_data": extra_data,
         }
+
+    def _normalize_prompt_payload_for_comfy(
+        self,
+        prompt_payload: Mapping[str, Any],
+        *,
+        client: ComfyApiClient,
+        object_info: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        prompt = deepcopy(dict(prompt_payload))
+        info = dict(object_info or {})
+        uploaded_cache: dict[str, str] = {}
+
+        for node_id, node_payload in prompt.items():
+            if not isinstance(node_payload, Mapping):
+                continue
+            class_type = str(node_payload.get("class_type") or "").strip()
+            inputs = node_payload.get("inputs")
+            if not class_type or not isinstance(inputs, Mapping):
+                continue
+
+            schema = info.get(class_type) or {}
+            schema_input = schema.get("input") if isinstance(schema, Mapping) else {}
+            required = schema_input.get("required") if isinstance(schema_input, Mapping) else {}
+            optional = schema_input.get("optional") if isinstance(schema_input, Mapping) else {}
+            hidden = schema_input.get("hidden") if isinstance(schema_input, Mapping) else {}
+            input_specs: dict[str, Any] = {}
+            if isinstance(required, Mapping):
+                input_specs.update(required)
+            if isinstance(optional, Mapping):
+                input_specs.update(optional)
+            if isinstance(hidden, Mapping):
+                input_specs.update(hidden)
+
+            normalized_inputs = dict(inputs)
+            for input_name, raw_value in inputs.items():
+                if self._is_comfy_link_value(raw_value):
+                    continue
+                if class_type == "LoadImage" and input_name == "image":
+                    normalized_inputs[input_name] = self._upload_image_for_load_image(
+                        client,
+                        raw_value,
+                        uploaded_cache,
+                    )
+                    continue
+                declared_type = self._extract_declared_input_type(input_specs.get(input_name))
+                normalized_inputs[input_name] = self._coerce_comfy_input_value(raw_value, declared_type)
+            prompt[node_id] = {
+                **dict(node_payload),
+                "inputs": normalized_inputs,
+            }
+
+        return prompt
+
+    @staticmethod
+    def _is_comfy_link_value(value: Any) -> bool:
+        return (
+            isinstance(value, list)
+            and len(value) == 2
+            and isinstance(value[0], str)
+            and isinstance(value[1], int)
+        )
+
+    @staticmethod
+    def _extract_declared_input_type(spec: Any) -> str:
+        if isinstance(spec, list) and spec:
+            first = spec[0]
+            if isinstance(first, str):
+                return first
+            if isinstance(first, list):
+                return "ENUM"
+        if isinstance(spec, str):
+            return spec
+        return ""
+
+    @staticmethod
+    def _coerce_comfy_input_value(value: Any, declared_type: str) -> Any:
+        if declared_type == "STRING":
+            if isinstance(value, str):
+                return value
+            if isinstance(value, (list, dict)):
+                return json.dumps(value)
+            return "" if value is None else str(value)
+        return value
+
+    @staticmethod
+    def _upload_image_for_load_image(
+        client: ComfyApiClient,
+        raw_value: Any,
+        uploaded_cache: dict[str, str],
+    ) -> Any:
+        path_text = str(raw_value or "").strip()
+        if not path_text:
+            return raw_value
+        path = Path(path_text).expanduser()
+        if not path.is_absolute():
+            return path_text
+        cache_key = str(path.resolve()) if path.exists() else str(path)
+        if cache_key in uploaded_cache:
+            return uploaded_cache[cache_key]
+        uploaded = client.upload_image(path)
+        name = str(uploaded.get("name") or path.name).strip()
+        subfolder = str(uploaded.get("subfolder") or "").strip().strip("/\\")
+        relative_name = f"{subfolder}/{name}" if subfolder else name
+        uploaded_cache[cache_key] = relative_name
+        return relative_name
 
     def _wait_for_history_entry(
         self,

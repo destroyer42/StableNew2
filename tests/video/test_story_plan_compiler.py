@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 
 from src.video.story_plan_compiler import StoryPlanCompiler
-from src.video.story_plan_models import AnchorPlan, ScenePlan, ShotPlan, StoryPlan
+from src.video.story_plan_models import Actor, AnchorPlan, ScenePlan, ShotPlan, StoryPlan
 
 
 def _make_plan() -> StoryPlan:
@@ -18,12 +18,35 @@ def _make_plan() -> StoryPlan:
             ScenePlan(
                 scene_id="scene-001",
                 display_name="Rooftop",
+                actors=[
+                    Actor(
+                        name="Ada",
+                        character_name="ada",
+                        trigger_phrase="ada person",
+                        lora_name="ada",
+                        weight=0.7,
+                    )
+                ],
                 shots=[
                     ShotPlan(
                         shot_id="shot-001",
                         display_name="Intro Pan",
                         prompt="hero on rooftop",
                         negative_prompt="blurry",
+                        actors=[
+                            Actor(
+                                name="Ada",
+                                character_name="ada",
+                                trigger_phrase="ada heroic close-up",
+                                weight=0.9,
+                            ),
+                            Actor(
+                                name="Bran",
+                                character_name="bran",
+                                trigger_phrase="bran ranger",
+                                lora_name="bran",
+                            ),
+                        ],
                         workflow_id="ltx_multiframe_anchor_v1",
                         total_segments=2,
                         segment_length_frames=24,
@@ -62,6 +85,13 @@ def test_compile_story_plan_returns_sequence_jobs() -> None:
     assert sequence_job.plan_origin["plan_id"] == "story-001"
     assert sequence_job.plan_origin["scene_id"] == "scene-001"
     assert sequence_job.plan_origin["shot_id"] == "shot-001"
+    assert [actor["character_name"] for actor in sequence_job.plan_origin["actors"]] == [
+        "ada",
+        "bran",
+    ]
+    assert sequence_job.plan_origin["actors"][0]["trigger_phrase"] == "ada heroic close-up"
+    assert sequence_job.plan_origin["actors"][0]["lora_name"] == "ada"
+    assert sequence_job.plan_origin["actors"][0]["weight"] == 0.9
     assert sequence_job.continuity_link is not None
     assert sequence_job.continuity_link["pack_id"] == "cont-001"
 

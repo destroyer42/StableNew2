@@ -14,6 +14,8 @@ from src.state.output_routing import OUTPUT_ROUTE_ANIMATEDIFF, OUTPUT_ROUTE_PIPE
 class TestOutputFolderStructure:
     """Test that output folders use datetime/pack_name structure with manifests/ subfolder."""
 
+    PIPELINE_CONFIG = {"pipeline": {"output_route": OUTPUT_ROUTE_PIPELINE}}
+
     @staticmethod
     def _pipeline_route_root(temp_output_dir):
         return temp_output_dir / OUTPUT_ROUTE_PIPELINE
@@ -55,7 +57,7 @@ class TestOutputFolderStructure:
         """
         njr = NormalizedJobRecord(
             job_id="test_job",
-            config={},
+            config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
             filename_template="image_{index:04d}",
             prompt_pack_name="MyFantasyPack",  # This should be in the folder path
@@ -117,7 +119,7 @@ class TestOutputFolderStructure:
         """
         njr = NormalizedJobRecord(
             job_id="test_manifests",
-            config={},
+            config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
             filename_template="image_{index:04d}",
             prompt_pack_name="TestPack",
@@ -179,7 +181,7 @@ class TestOutputFolderStructure:
         """
         njr = NormalizedJobRecord(
             job_id="test_sanitize",
-            config={},
+            config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
             filename_template="image_{index:04d}",
             prompt_pack_name="My/Pack:Name*With?Special<>Chars",  # Should be sanitized
@@ -236,7 +238,7 @@ class TestOutputFolderStructure:
         """
         njr = NormalizedJobRecord(
             job_id="my_unique_job_123",
-            config={},
+            config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
             filename_template="image_{index:04d}",
             prompt_pack_name="",  # Empty - should fallback to job_id
@@ -291,7 +293,7 @@ class TestOutputFolderStructure:
         for i in range(3):
             njr = NormalizedJobRecord(
                 job_id=f"test_job_{i}",
-                config={},
+                config=dict(self.PIPELINE_CONFIG),
                 path_output_dir=str(temp_output_dir),
                 filename_template="image_{index:04d}",
                 prompt_pack_name="SharedPack",  # Same pack name for all
@@ -351,7 +353,7 @@ class TestOutputFolderStructure:
         # Create 2 NJRs with different pack names
         njr1 = NormalizedJobRecord(
             job_id="test_job_1",
-            config={},
+            config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
             filename_template="image_{index:04d}",
             prompt_pack_name="PackA",
@@ -371,7 +373,7 @@ class TestOutputFolderStructure:
 
         njr2 = NormalizedJobRecord(
             job_id="test_job_2",
-            config={},
+            config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
             filename_template="image_{index:04d}",
             prompt_pack_name="PackB",  # Different pack
@@ -446,7 +448,7 @@ class TestOutputFolderStructure:
 
         njr = NormalizedJobRecord(
             job_id="restart_reuse",
-            config={},
+            config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
             filename_template="image_{index:04d}",
             prompt_pack_name="RestartPack",
@@ -493,7 +495,7 @@ class TestOutputFolderStructure:
 
         njr = NormalizedJobRecord(
             job_id="explicit_dir_job",
-            config={},
+            config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(explicit_output_dir),
             filename_template="image_{index:04d}",
             prompt_pack_name="ExplicitPack",
@@ -539,7 +541,7 @@ class TestOutputFolderStructure:
 
         njr = NormalizedJobRecord(
             job_id="normalized_output_root_job",
-            config={},
+            config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(misconfigured_output_root),
             filename_template="image_{index:04d}",
             prompt_pack_name="NormalizedPack",

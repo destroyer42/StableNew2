@@ -256,3 +256,26 @@ def test_scanner_deterministic_order(tmp_path):
     records2 = scanner2.scan_incremental()
     
     assert [r.artifact_path for r in records1] == [r.artifact_path for r in records2]
+
+
+def test_scanner_scan_full_finds_artifacts_across_output_routes(tmp_path):
+    _make_scan_fixture(tmp_path / "Pipeline", "pipe001")
+    _make_scan_fixture(tmp_path / "Testing", "test001")
+    _make_scan_fixture(tmp_path / "SVD", "svd001")
+
+    scanner = OutputScanner(tmp_path)
+    records = scanner.scan_full()
+
+    artifact_names = {Path(record.artifact_path).name for record in records}
+    assert artifact_names == {"pipe001.png", "test001.png", "svd001.png"}
+
+
+def test_scanner_scan_incremental_finds_artifacts_across_output_routes(tmp_path):
+    _make_scan_fixture(tmp_path / "Pipeline", "pipe001")
+    _make_scan_fixture(tmp_path / "Testing", "test001")
+
+    scanner = OutputScanner(tmp_path)
+    records = scanner.scan_incremental()
+
+    artifact_names = {Path(record.artifact_path).name for record in records}
+    assert artifact_names == {"pipe001.png", "test001.png"}

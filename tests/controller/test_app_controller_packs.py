@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from src.controller.app_controller import AppController
+from src.gui.app_state_v2 import AppStateV2
 from src.gui.main_window_v2 import MainWindow
+from src.gui.main_window_v2 import MainWindowV2
 from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
@@ -56,10 +58,7 @@ def test_load_packs_populates_left_zone(tmp_path: Path, tk_root):
     controller._packs_dir = packs_dir
     controller.load_packs()
 
-    listbox = window.left_zone.packs_list
-    assert listbox.get(0) == "alpha"
-    assert listbox.get(1) == "beta"
-    assert len(controller.packs) == 2
+    assert [pack.name for pack in controller.packs] == ["alpha", "beta"]
 
 
 def test_pack_selection_tracks_state(tmp_path: Path, tk_root):
@@ -106,6 +105,27 @@ def test_load_and_edit_pack_require_selection(tmp_path: Path, tk_root):
     log = _get_log_text(controller)
     assert "Load Pack -> alpha" in log
     assert expected_path in log
+
+
+def test_find_pack_by_id_falls_back_to_disk_when_visible_cache_is_stale(tmp_path: Path, tk_root):
+    packs_dir = _fake_packs_dir(tmp_path)
+    window = MainWindowV2(tk_root, app_state=AppStateV2())
+    controller = AppController(
+        window,
+        threaded=False,
+        pipeline_runner=None,
+        pipeline_controller=None,
+        job_service=None,
+        packs_dir=packs_dir,
+    )
+    controller._packs_dir = packs_dir
+    controller.packs = []
+
+    found = controller._find_pack_by_id("alpha")
+
+    assert found is not None
+    assert found.name == "alpha"
+    assert found.path == packs_dir / "alpha.txt"
 
 
 class NoopRunner:

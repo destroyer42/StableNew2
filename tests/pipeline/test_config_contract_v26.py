@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from src.pipeline.config_contract_v26 import (
     CONFIG_CONTRACT_SCHEMA_V26,
     attach_config_layers,
@@ -8,6 +10,8 @@ from src.pipeline.config_contract_v26 import (
     extract_secondary_motion_intent,
     extract_continuity_linkage,
     extract_execution_config,
+    extract_plan_origin_linkage,
+    validate_svd_native_execution_config,
 )
 
 
@@ -64,6 +68,32 @@ def test_build_config_layers_derives_video_workflow_backend_options_from_executi
     assert layers.backend_options["video"]["workflow"]["backend_id"] == "comfy"
 
 
+def test_build_config_layers_derives_svd_native_backend_options_from_execution_config() -> None:
+    execution_config = {
+        "svd_native": {
+            "inference": {
+                "model_id": "stabilityai/stable-video-diffusion-img2vid-xt",
+                "fps": 7,
+                "motion_bucket_id": 48,
+            },
+            "output": {"output_format": "mp4"},
+        }
+    }
+
+    layers = build_config_layers(
+        intent_config={"run_mode": "queue", "source": "add_to_queue"},
+        execution_config=execution_config,
+    )
+
+    assert layers.backend_options["video"]["svd_native"]["inference"]["fps"] == 7
+    assert layers.backend_options["video"]["svd_native"]["output"]["output_format"] == "mp4"
+
+
+def test_validate_svd_native_execution_config_rejects_motion_bucket_out_of_range() -> None:
+    with pytest.raises(ValueError, match="inference.motion_bucket_id"):
+        validate_svd_native_execution_config({"inference": {"motion_bucket_id": 256}})
+
+
 def test_extract_execution_config_reads_layered_payloads() -> None:
     layered = {
         "config_layers": {
@@ -104,6 +134,35 @@ def test_extract_continuity_linkage_reads_metadata_block() -> None:
 
     assert continuity["pack_id"] == "cont-001"
     assert continuity["pack_summary"]["display_name"] == "Hero Pack"
+
+
+def test_build_config_layers_preserves_plan_origin_actors_in_intent_config() -> None:
+    layers = build_config_layers(
+        intent_config={
+            "run_mode": "queue",
+            "source": "add_to_queue",
+            "plan_origin": {
+                "plan_id": "story-001",
+                "scene_id": "scene-001",
+                "shot_id": "shot-001",
+                "actors": [
+                    {
+                        "name": "Ada",
+                        "character_name": "ada",
+                        "trigger_phrase": "ada person",
+                        "lora_name": "ada",
+                        "weight": 0.8,
+                    }
+                ],
+            },
+        },
+        execution_config={},
+    )
+
+    layered = {"config_layers": layers.to_dict()}
+
+    assert layers.intent_config["plan_origin"]["actors"][0]["trigger_phrase"] == "ada person"
+    assert extract_plan_origin_linkage(layered)["actors"][0]["lora_name"] == "ada"
 
 
 def test_canonicalize_intent_config_preserves_nested_adaptive_refinement() -> None:

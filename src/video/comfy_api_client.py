@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 import requests
@@ -50,11 +51,56 @@ class ComfyApiClient:
             json=dict(payload or {}),
             timeout=timeout,
         )
-        response.raise_for_status()
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = ""
+            try:
+                body = response.text.strip()
+            except Exception:
+                body = ""
+            if body:
+                raise requests.HTTPError(f"{exc} | response_body={body[:2000]}", response=response) from exc
+            raise
         data = response.json()
         if not isinstance(data, dict):
             raise RuntimeError("Comfy /prompt returned a non-dict payload")
         return data
+
+    def upload_image(
+        self,
+        image_path: str | Path,
+        *,
+        image_type: str = "input",
+        overwrite: bool = True,
+        timeout: float = 30.0,
+    ) -> dict[str, Any]:
+        path = Path(image_path).expanduser()
+        with path.open("rb") as handle:
+            response = self._session.post(
+                f"{self.base_url}/upload/image",
+                files={"image": (path.name, handle, "application/octet-stream")},
+                data={
+                    "type": str(image_type or "input"),
+                    "overwrite": "true" if overwrite else "false",
+                },
+                timeout=timeout,
+            )
+        try:
+            response.raise_for_status()
+        except requests.HTTPError as exc:
+            body = ""
+            try:
+                body = response.text.strip()
+            except Exception:
+                body = ""
+            if body:
+                raise requests.HTTPError(f"{exc} | response_body={body[:2000]}", response=response) from exc
+            raise
+        payload = response.json()
+        if not isinstance(payload, dict):
+            raise RuntimeError("Comfy /upload/image returned a non-dict payload")
+        return payload
 
     def _get_json(self, path: str, *, timeout: float) -> dict[str, Any]:
         response = self._session.get(f"{self.base_url}{path}", timeout=timeout)

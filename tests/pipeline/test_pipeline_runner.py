@@ -242,6 +242,134 @@ def test_collect_refinement_assessments_times_out_to_null_fallback(tmp_path: Pat
     assert assessments[0]["notes"] == ["detector_timeout_fell_back_to_null"]
 
 
+def test_run_njr_executes_train_lora_and_returns_weight_artifact(tmp_path: Path) -> None:
+    weight_path = tmp_path / "ada.safetensors"
+    weight_path.write_bytes(b"weights")
+    embedder = Mock()
+    embedder.run_to_completion.return_value = {
+        "success": True,
+        "running": False,
+        "cancelled": False,
+        "error": None,
+        "weight_path": str(weight_path),
+        "command": ["trainer.exe", "--flag"],
+        "log_tail": ["done"],
+        "duration_seconds": 1.25,
+    }
+    lora_manager = Mock()
+    lora_manager.register.return_value = {
+        "character_name": "Ada",
+        "weight_path": str(weight_path),
+        "manifest_path": str(tmp_path / "manifest.json"),
+    }
+    runner = PipelineRunner(
+        Mock(),
+        Mock(),
+        character_embedder=embedder,
+        lora_manager=lora_manager,
+    )
+    pipeline = Mock()
+    pipeline.client = Mock()
+    runner._pipeline = pipeline
+    record = NormalizedJobRecord(
+        job_id="train-job",
+        config={
+            "train_lora": {
+                "enabled": True,
+                "character_name": "Ada",
+                "image_dir": str(tmp_path / "images"),
+                "output_dir": str(tmp_path),
+                "epochs": 10,
+                "learning_rate": 0.0001,
+                "base_model": "sdxl",
+                "trigger_phrase": "ada person",
+            },
+            "pipeline": {"train_lora_enabled": True},
+        },
+        path_output_dir=str(tmp_path),
+        filename_template="{seed}",
+        created_ts=0.0,
+        prompt_pack_id="character-training:ada",
+        prompt_pack_name="Character Training: Ada",
+        positive_prompt="Train LoRA for Ada",
+        base_model="sdxl",
+        stage_chain=[StageConfig(stage_type="train_lora", enabled=True, model="sdxl")],
+    )
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    embedder.run_to_completion.assert_called_once()
+    lora_manager.register.assert_called_once()
+    assert lora_manager.register.call_args.kwargs["metadata"]["trigger_phrase"] == "ada person"
+    assert result.success is True
+    assert result.variants[0]["artifact"]["artifact_type"] == "weights"
+    assert result.variants[0]["artifact"]["primary_path"] == str(weight_path)
+    assert result.metadata["replay_descriptor"]["artifact_type"] == "weights"
+    assert result.metadata["diagnostics_descriptor"]["primary_stage"] == "train_lora"
+
+
+def test_run_njr_rejects_mixed_train_lora_stage_plan(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    pipeline = Mock()
+    pipeline.client = Mock()
+    runner._pipeline = pipeline
+    record = NormalizedJobRecord(
+        job_id="train-mixed",
+        config={
+            "train_lora": {
+                "enabled": True,
+                "character_name": "Ada",
+                "image_dir": str(tmp_path / "images"),
+                "output_dir": str(tmp_path),
+                "epochs": 10,
+                "learning_rate": 0.0001,
+            },
+            "pipeline": {
+                "train_lora_enabled": True,
+                "txt2img_enabled": True,
+            },
+            "txt2img": {
+                "enabled": True,
+                "model": "sdxl",
+                "sampler_name": "Euler",
+                "steps": 20,
+                "cfg_scale": 7.0,
+            },
+        },
+        path_output_dir=str(tmp_path),
+        filename_template="{seed}",
+        created_ts=0.0,
+        prompt_pack_id="character-training:ada",
+        positive_prompt="Train LoRA for Ada",
+        stage_chain=[
+            StageConfig(stage_type="txt2img", enabled=True, model="sdxl"),
+            StageConfig(stage_type="train_lora", enabled=True),
+        ],
+    )
+
+    try:
+        runner.run_njr(record, cancel_token=None)
+    except ValueError as exc:
+        assert "train_lora must be the only enabled stage" in str(exc)
+    else:
+        raise AssertionError("Expected train_lora mixed plan to be rejected")
+
+
+def test_pipeline_runner_keeps_character_embedder_lazy(monkeypatch) -> None:
+    created: list[object] = []
+
+    class _FakeEmbedder:
+        def __init__(self) -> None:
+            created.append(object())
+
+    monkeypatch.setattr("src.pipeline.pipeline_runner.CharacterEmbedder", _FakeEmbedder)
+
+    runner = PipelineRunner(Mock(), Mock())
+
+    assert created == []
+    assert runner._character_embedder is None
+
+
 def test_run_njr_applies_per_image_adetailer_refinement_without_leakage(tmp_path: Path) -> None:
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
     input_a = tmp_path / "input_a.png"

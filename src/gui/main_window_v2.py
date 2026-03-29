@@ -24,6 +24,7 @@ from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
+from src.gui.views.character_training_frame import CharacterTrainingFrame
 from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.gui.zone_map_v2 import get_root_zone_config
@@ -287,6 +288,19 @@ class MainWindowV2:
         self.movie_clips_tab = self.add_tab("movie_clips", "Movie Clips", _make_movie_clips)
         self._restore_movie_clips_tab_state()
 
+        def _make_character_training(parent):
+            return CharacterTrainingFrame(
+                parent,
+                app_controller=self.app_controller,
+                app_state=self.app_state,
+            )
+
+        self.character_training_tab = self.add_tab(
+            "character_training",
+            "Character Training",
+            _make_character_training,
+        )
+
         def _make_svd(parent):
             return SVDTabFrameV2(
                 parent,
@@ -545,6 +559,15 @@ class MainWindowV2:
                     bind_app_state(self.app_state)
                 else:
                     self.photo_optimize_tab.app_state = self.app_state
+            except Exception:
+                pass
+        if hasattr(self, "character_training_tab"):
+            try:
+                self.character_training_tab.app_controller = controller
+                self.character_training_tab.app_state = self.app_state
+                apply_defaults = getattr(self.character_training_tab, "apply_controller_defaults", None)
+                if callable(apply_defaults):
+                    apply_defaults()
             except Exception:
                 pass
         if hasattr(self, "video_workflow_tab"):

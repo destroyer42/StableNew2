@@ -331,3 +331,42 @@ def test_plan_builder_accepts_flat_alias_config() -> None:
     assert payload["model"] == "alias-model"
     assert payload["sampler_name"] == "DPM++ 2M"
     assert payload["scheduler"] == "Karras"
+
+
+def test_plan_builder_train_lora_standalone() -> None:
+    cfg = {
+        "train_lora": {
+            "enabled": True,
+            "character_name": "Ada",
+            "image_dir": "C:/data/ada",
+            "output_dir": "C:/weights",
+            "epochs": 100,
+            "learning_rate": 0.0001,
+        },
+        "pipeline": {
+            "train_lora_enabled": True,
+        },
+    }
+
+    plan = build_stage_execution_plan(cfg)
+
+    assert [stage.stage_type for stage in plan.stages] == ["train_lora"]
+    assert plan.stages[0].requires_input_image is False
+    assert plan.stages[0].produces_output_image is False
+    assert plan.stages[0].config.payload["character_name"] == "Ada"
+
+
+def test_plan_builder_train_lora_rejects_mixed_plan() -> None:
+    cfg = _base_config()
+    cfg["train_lora"] = {
+        "enabled": True,
+        "character_name": "Ada",
+        "image_dir": "C:/data/ada",
+        "output_dir": "C:/weights",
+        "epochs": 100,
+        "learning_rate": 0.0001,
+    }
+    cfg["pipeline"]["train_lora_enabled"] = True
+
+    with pytest.raises(ValueError, match="train_lora must be the only enabled stage"):
+        build_stage_execution_plan(cfg)

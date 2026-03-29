@@ -1,7 +1,7 @@
 # Movie Clips Workflow v2.6
 
 Status: Active subsystem reference
-Updated: 2026-03-20
+Updated: 2026-03-29
 
 ## 1. Purpose
 
@@ -58,6 +58,31 @@ Current output behavior:
 - writes a stable manifest alongside each built clip
 - surfaces success or failure without crashing the app
 
+### 3.1 Native SVD Quickstart
+
+Use `SVD Img2Vid` when you already have one strong still image and want a
+short clip through the native SVD backend instead of a WebUI or workflow-video
+path.
+
+Quickstart:
+
+- open the `SVD Img2Vid` tab
+- choose a source image directly or use `Use Latest Output` from recent history
+- start with `Recommended Quality / Enhanced`
+- keep the `SVD` output route unless you are intentionally validating under
+      `Testing`
+- queue the job and review the resulting preview, manifest, and clip from
+      history or the route-specific output folder
+
+### 3.2 When To Use Each Video Surface
+
+- use `SVD Img2Vid` to animate one still image into a short clip through the
+      native SVD backend
+- use `Movie Clips` to assemble or export existing still-image and video
+      artifacts after they are already generated
+- use `Video Workflow` when you need backend-governed multi-anchor or workflow
+      execution rather than a single-image animation path
+
 ## 4. Current Code Ownership
 
 | Layer | Location | Responsibility |
@@ -82,12 +107,16 @@ The recent convergence work delivered:
 - richer workflow-video output routing into Movie Clips
 - sequence-aware and assembled-video input handling
 - tighter UX convergence with the rest of the video workspace
+- explicit repo-truth closure for the shipped `SVD Img2Vid` path, including
+      dedicated controller-to-runner integration coverage and canonical docs
+      alignment
 
 Those were delivered in:
 
 - `docs/CompletedPR/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
 - `docs/CompletedPR/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
 - `docs/CompletedPR/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
+- `docs/CompletedPR/PR-CORE-001-Finalize-Native-SVD-Integration.md`
 
 ## 6. Testing Surface
 

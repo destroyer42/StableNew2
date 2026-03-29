@@ -1050,3 +1050,94 @@ def test_controller_build_staged_curation_review_handoff_can_filter_single_candi
     assert handoff.base_prompt == "prompt b"
     assert handoff.base_negative_prompt == "negative b"
     assert job_service.enqueue_njrs.called is False
+
+
+def test_controller_build_staged_curation_review_handoff_repairs_stale_absolute_output_route(tmp_path) -> None:
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+    from src.utils.image_metadata import ReadPayloadResult
+
+    pipeline_controller = MagicMock()
+    job_service = MagicMock()
+    job_service.enqueue_njrs = MagicMock(return_value=["job-queued-1"])
+    pipeline_controller._job_service = job_service
+    pipeline_controller._config_manager = None
+    ctrl = LearningController(
+        learning_state=LearningState(),
+        pipeline_controller=pipeline_controller,
+    )
+    store = DiscoveredReviewStore(tmp_path / "discovered")
+    ctrl._discovered_review_store = store
+
+    output_root = tmp_path / "output"
+    actual_image = output_root / "Testing" / "20260329_120000_case" / "candidate-review.png"
+    actual_image.parent.mkdir(parents=True, exist_ok=True)
+    actual_image.write_text("placeholder", encoding="utf-8")
+    stale_image = output_root / "Pipeline" / "20260329_120000_case" / "candidate-review.png"
+
+    exp = DiscoveredReviewExperiment(
+        group_id="disc-review-stale",
+        display_name="Review Group",
+        stage="txt2img",
+        prompt_hash="hash-1",
+        items=[
+            DiscoveredReviewItem(
+                item_id="cand-1",
+                artifact_path=str(stale_image),
+                stage="txt2img",
+                model="juggernautXL",
+                sampler="DPM++ 2M",
+                scheduler="Karras",
+                steps=30,
+                cfg_scale=6.5,
+                positive_prompt="prompt text",
+                negative_prompt="negative text",
+                extra_fields={"face_triage_tier": "heavy"},
+            )
+        ],
+        varying_fields=["cfg_scale"],
+    )
+    store.save_group(exp)
+    ctrl.record_staged_curation_selection(
+        "disc-review-stale",
+        "cand-1",
+        "advanced_to_face_triage",
+        reason_tags=["bad_face"],
+        notes="needs rescue",
+    )
+
+    payload = {
+        "stage_manifest": {
+            "stage": "txt2img",
+            "config": {
+                "steps": 30,
+                "cfg_scale": 6.5,
+                "sampler_name": "DPM++ 2M",
+                "scheduler": "Karras",
+            },
+        }
+    }
+
+    with patch(
+        "src.gui.controllers.learning_controller.extract_embedded_metadata",
+        return_value=ReadPayloadResult(payload=payload, status="ok"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_prompt_fields",
+        return_value=("prompt text", "negative text"),
+    ), patch(
+        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+        return_value=("juggernautXL", "Automatic"),
+    ), patch(
+        "src.learning.discovered_review_store.REPO_ROOT",
+        tmp_path,
+    ), patch(
+        "src.learning.discovered_review_store.OUTPUT_ROOT",
+        output_root,
+    ), patch(
+        "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+        return_value=str(output_root),
+    ):
+        handoff = ctrl.build_staged_curation_review_handoff("disc-review-stale", "face_triage")
+
+    assert handoff is not None
+    assert [str(path) for path in handoff.image_paths] == [str(actual_image.resolve())]
+    assert job_service.enqueue_njrs.called is False

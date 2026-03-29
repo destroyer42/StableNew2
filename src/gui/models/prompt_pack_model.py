@@ -3,12 +3,36 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from src.utils.embedding_prompt_utils import (
     normalize_embedding_entries,
     render_embedding_reference,
     serialize_embedding_entries,
 )
+from src.utils.prompt_templates import compose_prompt_text
+
+
+def _normalize_template_variables(raw: object) -> dict[str, str]:
+    if not isinstance(raw, dict):
+        return {}
+
+    normalized: dict[str, str] = {}
+    for raw_key, raw_value in raw.items():
+        key = str(raw_key or "").strip()
+        if not key:
+            continue
+        normalized[key] = "" if raw_value is None else str(raw_value).strip()
+    return normalized
+
+
+def render_prompt_slot_text(slot: object, *, strict: bool = False) -> str:
+    return compose_prompt_text(
+        getattr(slot, "template_id", ""),
+        getattr(slot, "template_variables", {}),
+        getattr(slot, "text", ""),
+        strict=strict,
+    )
 
 
 @dataclass
@@ -16,8 +40,10 @@ class PromptSlot:
     index: int
     text: str = ""  # Pure prompt text (no LoRA/embedding syntax)
     negative: str = ""  # Pure negative text
-    positive_embeddings: list[tuple[str, float] | str] = field(default_factory=list)
-    negative_embeddings: list[tuple[str, float] | str] = field(default_factory=list)
+    template_id: str = ""
+    template_variables: dict[str, str] = field(default_factory=dict)
+    positive_embeddings: list[tuple[str, float]] = field(default_factory=list)
+    negative_embeddings: list[tuple[str, float]] = field(default_factory=list)
     loras: list[tuple[str, float]] = field(default_factory=list)  # [(name, strength), ...]
 
 
@@ -57,7 +83,8 @@ class PromptPackModel:
     path: str | None = None
     slots: list[PromptSlot] = field(default_factory=list)
     matrix: MatrixConfig = field(default_factory=MatrixConfig)
-    preset_data: dict = field(default_factory=dict)  # Pipeline configuration
+    preset_data: dict[str, Any] = field(default_factory=dict)  # Pipeline configuration
+    show_preview: bool = True
 
     @classmethod
     def new(cls, name: str, slot_count: int = 10) -> PromptPackModel:
@@ -105,6 +132,8 @@ class PromptPackModel:
                 index=slot_index,
                 text=str(slot.get("text", "")),
                 negative=str(slot.get("negative", "")),
+                template_id=str(slot.get("template_id", "") or "").strip(),
+                template_variables=_normalize_template_variables(slot.get("template_variables", {})),
                 positive_embeddings=normalize_embedding_entries(slot.get("positive_embeddings", [])),
                 negative_embeddings=normalize_embedding_entries(slot.get("negative_embeddings", [])),
                 loras=loras,
@@ -142,7 +171,12 @@ class PromptPackModel:
         # Filter out empty padding slots (keep only slots with content)
         non_empty_slots = [
             slot for slot in self.slots
-            if slot.text.strip() or slot.negative.strip() or slot.positive_embeddings or slot.negative_embeddings or slot.loras
+            if render_prompt_slot_text(slot).strip()
+            or slot.negative.strip()
+            or slot.positive_embeddings
+            or slot.negative_embeddings
+            or slot.loras
+            or bool(slot.template_id)
         ]
         
         # Build pack data section (matrix, slots, etc.)
@@ -153,6 +187,10 @@ class PromptPackModel:
                     "index": slot.index,
                     "text": slot.text,
                     "negative": getattr(slot, "negative", ""),
+                    "template_id": getattr(slot, "template_id", ""),
+                    "template_variables": _normalize_template_variables(
+                        getattr(slot, "template_variables", {})
+                    ),
                     "positive_embeddings": serialize_embedding_entries(getattr(slot, "positive_embeddings", [])),
                     "negative_embeddings": serialize_embedding_entries(getattr(slot, "negative_embeddings", [])),
                     "loras": [[name, weight] for name, weight in getattr(slot, "loras", [])]
@@ -205,8 +243,9 @@ class PromptPackModel:
                 slot_lines.append(embed_line)
             
             # Positive text (with [[tokens]] preserved)
-            if slot.text.strip():
-                slot_lines.append(slot.text.strip())
+            positive_text = render_prompt_slot_text(slot)
+            if positive_text:
+                slot_lines.append(positive_text)
             
             # LoRAs
             loras = getattr(slot, "loras", [])
@@ -252,3 +291,10 @@ class PromptPackModel:
     def set_slot_text(self, index: int, text: str) -> None:
         slot = self.get_slot(index)
         slot.text = text or ""
+
+    def set_slot_template(
+        self, index: int, template_id: str, template_variables: dict[str, str] | None = None
+    ) -> None:
+        slot = self.get_slot(index)
+        slot.template_id = str(template_id or "").strip()
+        slot.template_variables = _normalize_template_variables(template_variables or {})

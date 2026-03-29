@@ -83,3 +83,44 @@ def test_main_window_pack_selection_keeps_sidebar_actions_live(
         assert str(sidebar.add_to_job_button.cget("state")) == "normal"
     finally:
         harness.cleanup()
+
+
+@pytest.mark.gui
+def test_add_to_job_resolves_visible_pack_after_visibility_toggle_with_stale_controller_cache(
+    tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    packs_dir = tmp_path / "packs"
+    packs_dir.mkdir(parents=True, exist_ok=True)
+    (packs_dir / "safe_pack.txt").write_text(
+        "safe prompt one\n\nsafe prompt two\nneg: avoid blur",
+        encoding="utf-8",
+    )
+    (packs_dir / "explicit_pack.txt").write_text(
+        "nude prompt one\n\nnude prompt two",
+        encoding="utf-8",
+    )
+
+    harness = GuiV2Harness(tk_root)
+    try:
+        harness.controller.set_main_window(harness.window)
+        sidebar = harness.pipeline_tab.sidebar
+        tk_root.update()
+
+        harness.controller.app_state.set_content_visibility_mode("sfw")
+        sidebar.on_content_visibility_mode_changed("sfw")
+        tk_root.update()
+
+        visible_after_sfw = list(sidebar.pack_listbox.get(0, tk.END))
+        assert visible_after_sfw == ["safe_pack"]
+
+        harness.controller.packs = []
+        sidebar.pack_listbox.selection_clear(0, "end")
+        sidebar.pack_listbox.selection_set(0)
+        sidebar._on_add_to_job()
+        tk_root.update()
+
+        draft_prompts = [entry.prompt_text for entry in harness.controller.app_state.job_draft.packs]
+        assert draft_prompts == ["safe prompt one", "safe prompt two"]
+    finally:
+        harness.cleanup()

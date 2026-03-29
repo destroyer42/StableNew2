@@ -3,7 +3,7 @@ PROMPT_PACK_LIFECYCLE_v2.6.md
 (Canonical)
 
 StableNew - PromptPack Lifecycle Specification (v2.6)
-Last Updated: 2026-03-19
+Last Updated: 2026-03-29
 Status: Canonical, Binding
 
 ## 0. Scope
@@ -32,6 +32,14 @@ A PromptPack is defined by exactly two files with the same basename:
 
 No PromptPack exists without both.
 
+PromptPack JSON may also carry optional template authoring metadata per slot:
+
+- `template_id` to reference a curated cinematic prompt template
+- `template_variables` to hold placeholder values used during prompt expansion
+
+Template metadata is authoring-time input only. The TXT companion remains the
+resolved prompt surface used by the builder path.
+
 ## 2. PromptPack Lifecycle
 
 The PromptPack lifecycle is:
@@ -52,6 +60,8 @@ Required rules:
 - rows must be UTF-8 text
 - comments may exist, but executable rows must not be empty
 - JSON must be schema-valid
+- template references must resolve against the prompt template catalog when
+  present
 - matrix slots and placeholders must reconcile cleanly
 - defaults must map to valid PromptPack-side image configuration
 
@@ -92,12 +102,27 @@ Invalid PromptPacks may not be used to build new NJR-backed work.
 For PromptPack-authored jobs, the builder path performs:
 
 - row selection
+- template expansion
 - matrix substitution
 - randomization expansion
 - config sweep expansion
+- actor provenance carry-through from linked intent surfaces when present
 - prompt-layer resolution
 - stage-ready config normalization
 - final NJR construction
+
+When PromptPack image intent is derived from `story_plan`, scene-level and
+shot-level actor metadata may already be deterministically merged onto
+`plan_origin` before NJR construction. That actor metadata remains canonical
+builder input rather than a separate runtime path.
+
+Prompt resolution may use carried actor provenance to:
+
+- preserve `story_plan` and `plan_origin` metadata through canonical
+  intent/config layering
+- inject resolved actor trigger phrases into the positive prompt
+- prepend resolved actor LoRA tags ahead of pack-authored LoRA tags with stable
+  de-duplication
 
 All PromptPack expansion is complete before queue submission.
 
@@ -110,12 +135,15 @@ The PromptPack builder path stores PromptPack provenance in the NJR, including:
 - resolved prompt text
 - resolved matrix values
 - normalized execution config
+- carried actor provenance from `plan_origin` when present
 - variant metadata
 
 After NJR creation:
 
 - PromptPack files are no longer consulted during execution
 - execution uses NJR-backed normalized config only
+- carried actor provenance remains part of NJR-backed build output, not
+  runner-side reconstruction
 - the PromptPack remains provenance, not a live runtime dependency
 
 ## 8. Queue, Runner, History, and Learning

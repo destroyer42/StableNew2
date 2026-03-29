@@ -8,6 +8,7 @@ from typing import Any
 
 from src.curation.curation_manifest import build_serialized_curation_source_metadata
 from src.pipeline.reprocess_builder import ReprocessEffectiveSettingsPreview, ReprocessJobBuilder
+from src.state.output_routing import resolve_output_artifact_path
 from src.utils.image_metadata import resolve_model_vae_fields, resolve_prompt_fields
 
 
@@ -201,7 +202,7 @@ class ReviewWorkflowAdapter:
             source_item = getattr(selection, "source_item", None)
             artifact_path = str(getattr(source_item, "artifact_path", "") or "").strip()
             if artifact_path:
-                path_obj = Path(artifact_path)
+                path_obj = Path(resolve_output_artifact_path(artifact_path))
                 dedupe_key = str(path_obj)
                 if dedupe_key not in seen_paths:
                     seen_paths.add(dedupe_key)
@@ -209,7 +210,7 @@ class ReviewWorkflowAdapter:
 
             event = getattr(selection, "selection_event", None)
             if candidate is not None and event is not None and artifact_path:
-                source_metadata_by_path[str(Path(artifact_path))] = build_serialized_curation_source_metadata(
+                source_metadata_by_path[str(Path(resolve_output_artifact_path(artifact_path)))] = build_serialized_curation_source_metadata(
                     candidate,
                     event,
                     source_stage=str(getattr(source_item, "stage", "") or getattr(candidate, "stage", "") or ""),

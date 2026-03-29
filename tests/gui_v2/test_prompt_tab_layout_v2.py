@@ -46,3 +46,31 @@ def test_prompt_tab_defers_visibility_pack_refresh_until_mapped(tk_root) -> None
         frame._refresh_pack_list.assert_called_once()
     finally:
         frame.destroy()
+
+
+def test_prompt_tab_template_preview_updates_current_prompt(tk_root) -> None:
+    frame = PromptTabFrame(tk_root)
+    try:
+        frame.workspace_state.set_slot_text(0, "rain drifting through the alley")
+        frame._refresh_editor()
+
+        frame.template_selector_var.set("establishing_wide")
+        frame._on_template_selection_changed()
+
+        frame._template_field_vars["scene"].set("the hero arrival")
+        frame._template_field_vars["environment"].set("neon storefronts")
+        frame._template_field_vars["lighting"].set("wet reflections")
+        frame._template_field_vars["style"].set("cinematic realism")
+        tk_root.update_idletasks()
+
+        preview = frame.template_preview.get("1.0", "end").strip()
+        editor_text = frame.editor.get("1.0", "end").strip()
+        current_prompt = frame.workspace_state.get_current_prompt_text()
+
+        assert "cinematic wide establishing shot of the hero arrival" in preview
+        assert "rain drifting through the alley" in preview
+        assert editor_text == "rain drifting through the alley"
+        assert current_prompt == preview
+        assert frame.workspace_state.get_current_template_id() == "establishing_wide"
+    finally:
+        frame.destroy()

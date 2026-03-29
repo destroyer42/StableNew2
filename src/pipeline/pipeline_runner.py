@@ -20,8 +20,9 @@ from src.learning.run_metadata import write_run_metadata
 from src.pipeline.config_contract_v26 import (
     extract_adaptive_refinement_intent,
     extract_secondary_motion_intent,
+    validate_train_lora_execution_config,
 )
-from src.pipeline.artifact_contract import canonicalize_variant_entries
+from src.pipeline.artifact_contract import build_artifact_record, canonicalize_variant_entries
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.payload_builder import build_sdxl_payload
 from src.pipeline.result_contract_v26 import (
@@ -39,6 +40,8 @@ from src.refinement.quality_metrics import build_refinement_learning_context
 from src.refinement.prompt_intent_analyzer import PromptIntentAnalyzer
 from src.refinement.subject_scale_policy_service import SubjectScalePolicyService
 from src.state.output_routing import classify_njr_output_route, get_output_route_root
+from src.training.character_embedder import CharacterEmbedder
+from src.training.lora_manager import LoRAManager
 from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
 from src.video.motion.secondary_motion_policy_service import SecondaryMotionPolicyService
@@ -845,6 +848,163 @@ class PipelineRunner:
                 f"(elapsed: {elapsed:.1f}s) before stage '{stage_name}'"
             )
 
+    def _run_train_lora_njr(
+        self,
+        *,
+        njr: NormalizedJobRecord,
+        plan: Any,
+        cancel_token: CancelToken | None,
+    ) -> PipelineRunResult:
+        validated_config = validate_train_lora_execution_config(getattr(njr, "config", {}) or {})
+        train_lora_payload = dict(validated_config.get("train_lora") or validated_config)
+        output_dir = str(
+            train_lora_payload.get("output_dir")
+            or getattr(njr, "path_output_dir", None)
+            or self._runs_base_dir
+        )
+        stage_events = [
+            {
+                "stage": StageTypeEnum.TRAIN_LORA.value,
+                "phase": "start",
+                "image_index": 1,
+                "total_images": 1,
+            }
+        ]
+        metadata: dict[str, Any] = {
+            "output_dir": output_dir,
+        }
+        status: dict[str, Any] = {}
+        variants: list[dict[str, Any]] = []
+        success = False
+        error: str | None = None
+        started_at = time.monotonic()
+
+        try:
+            self._ensure_not_cancelled(cancel_token, "train_lora setup")
+            character_embedder = self._character_embedder
+            if character_embedder is None:
+                character_embedder = CharacterEmbedder()
+                self._character_embedder = character_embedder
+            status = character_embedder.run_to_completion(
+                train_lora_payload,
+                cancel_token=cancel_token,
+            )
+            metadata["duration_ms"] = int((time.monotonic() - started_at) * 1000)
+            metadata["train_lora"] = {
+                "character_name": str(train_lora_payload.get("character_name") or ""),
+                "output_dir": output_dir,
+                "command": list(status.get("command") or []),
+                "duration_seconds": float(status.get("duration_seconds") or 0.0),
+                "log_tail": list(status.get("log_tail") or []),
+                "cancelled": bool(status.get("cancelled", False)),
+            }
+            if not status.get("success"):
+                raise RuntimeError(status.get("error") or "Character training failed.")
+
+            weight_path = str(status.get("weight_path") or "").strip()
+            if not weight_path:
+                raise RuntimeError("Character training completed without a produced weight file.")
+
+            lora_manager = self._lora_manager or LoRAManager()
+            self._lora_manager = lora_manager
+            manifest_entry = lora_manager.register(
+                character_name=str(train_lora_payload.get("character_name") or ""),
+                weight_path=weight_path,
+                metadata={
+                    "job_id": njr.job_id,
+                    "prompt_pack_id": getattr(njr, "prompt_pack_id", ""),
+                    "prompt_pack_name": getattr(njr, "prompt_pack_name", ""),
+                    "run_mode": getattr(njr, "run_mode", ""),
+                    "queue_source": getattr(njr, "queue_source", ""),
+                    "trigger_phrase": train_lora_payload.get("trigger_phrase"),
+                    "lora_name": Path(weight_path).stem,
+                },
+            )
+            artifact = build_artifact_record(
+                stage=StageTypeEnum.TRAIN_LORA.value,
+                artifact_type="weights",
+                primary_path=weight_path,
+                output_paths=[weight_path],
+                manifest_path=manifest_entry.get("manifest_path"),
+            )
+            metadata["train_lora"]["manifest_entry"] = dict(manifest_entry)
+            metadata["train_lora_artifact"] = dict(artifact)
+            variants = canonicalize_variant_entries(
+                [
+                    {
+                        "stage": StageTypeEnum.TRAIN_LORA.value,
+                        "path": weight_path,
+                        "output_path": weight_path,
+                        "output_paths": [weight_path],
+                        "artifact": artifact,
+                    }
+                ]
+            )
+            success = True
+            njr.output_paths = [weight_path]
+            njr.thumbnail_path = None
+            stage_events.append(
+                {
+                    "stage": StageTypeEnum.TRAIN_LORA.value,
+                    "phase": "completed",
+                    "image_index": 1,
+                    "total_images": 1,
+                    "output_paths": [weight_path],
+                }
+            )
+        except Exception as exc:
+            error = str(exc)
+            metadata.setdefault("duration_ms", int((time.monotonic() - started_at) * 1000))
+            metadata.setdefault(
+                "train_lora",
+                {
+                    "character_name": str(train_lora_payload.get("character_name") or ""),
+                    "output_dir": output_dir,
+                    "command": list(status.get("command") or []),
+                    "duration_seconds": float(status.get("duration_seconds") or 0.0),
+                    "log_tail": list(status.get("log_tail") or []),
+                    "cancelled": bool(status.get("cancelled", False)),
+                },
+            )
+            njr.output_paths = []
+            njr.thumbnail_path = None
+            stage_events.append(
+                {
+                    "stage": StageTypeEnum.TRAIN_LORA.value,
+                    "phase": "error",
+                    "image_index": 1,
+                    "total_images": 1,
+                    "cancelled": bool(status.get("cancelled", False)),
+                    "error_message": error,
+                }
+            )
+
+        result = PipelineRunResult(
+            run_id=njr.job_id,
+            success=success,
+            error=error,
+            variants=variants,
+            learning_records=[],
+            randomizer_mode="",
+            randomizer_plan_size=getattr(njr, "variant_total", 1),
+            metadata=metadata,
+            stage_plan=plan,
+            stage_events=stage_events,
+        )
+        try:
+            njr_snapshot = njr.to_queue_snapshot()
+        except Exception:
+            njr_snapshot = {"normalized_job": {"job_id": njr.job_id}}
+        result.metadata["replay_descriptor"] = build_replay_descriptor(
+            result.to_dict(),
+            njr_snapshot=njr_snapshot,
+        )
+        result.metadata["diagnostics_descriptor"] = build_diagnostics_descriptor(
+            result.to_dict(),
+            njr_snapshot=njr_snapshot,
+        )
+        return result
+
     def run_njr(
         self,
         njr: NormalizedJobRecord,
@@ -871,8 +1031,17 @@ class PipelineRunner:
         # Build run plan directly from NJR
         from src.pipeline.run_plan import build_run_plan_from_njr
 
-        self._log_job_pressure_outlook(njr)
         plan = build_run_plan_from_njr(njr)
+        if any(job.stage_name == StageTypeEnum.TRAIN_LORA.value for job in plan.jobs):
+            if len(plan.jobs) != 1 or plan.jobs[0].stage_name != StageTypeEnum.TRAIN_LORA.value:
+                raise ValueError("train_lora must be the only enabled stage in an NJR run plan.")
+            return self._run_train_lora_njr(
+                njr=njr,
+                plan=plan,
+                cancel_token=cancel_token,
+            )
+
+        self._log_job_pressure_outlook(njr)
         
         # Prepare output dir with pack-model-vae naming structure
         # Format: output/{pack_12chars}-{model_10+5chars}-{vae_12chars}/
@@ -1897,6 +2066,8 @@ class PipelineRunner:
         sequencer: StageSequencer | None = None,
         status_callback: Callable[[dict[str, Any]], None] | None = None,
         video_backend_registry: VideoBackendRegistry | None = None,
+        character_embedder: CharacterEmbedder | None = None,
+        lora_manager: LoRAManager | None = None,
     ) -> None:
         from src.pipeline.executor import Pipeline
 
@@ -1914,6 +2085,8 @@ class PipelineRunner:
         self._prompt_intent_analyzer = PromptIntentAnalyzer()
         self._refinement_policy_service = SubjectScalePolicyService()
         self._secondary_motion_policy_service = SecondaryMotionPolicyService()
+        self._character_embedder = character_embedder
+        self._lora_manager = lora_manager
 
     def _resolve_refinement_policy_service(
         self,
@@ -2042,6 +2215,9 @@ class PipelineRunner:
         stages = plan.stages or []
         if not stages:
             raise ValueError("Pipeline plan contains no enabled stages.")
+        train_lora = [
+            stage for stage in stages if stage.stage_type == StageTypeEnum.TRAIN_LORA.value
+        ]
         adetailers = [
             stage for stage in stages if stage.stage_type == StageTypeEnum.ADETAILER.value
         ]
@@ -2062,6 +2238,12 @@ class PipelineRunner:
             raise ValueError("Multiple SVD Native stages are not supported.")
         if len(video_workflows) > 1:
             raise ValueError("Multiple video workflow stages are not supported.")
+        if len(train_lora) > 1:
+            raise ValueError("Multiple train_lora stages are not supported.")
+        if train_lora and len(stages) > 1:
+            raise ValueError("train_lora must be the only enabled stage.")
+        if train_lora:
+            return
         if sum(bool(group) for group in (animatediffs, svd_native, video_workflows)) > 1:
             raise ValueError("Only one terminal video stage may be enabled at a time.")
         if animatediffs and stages[-1].stage_type != StageTypeEnum.ANIMATEDIFF.value:

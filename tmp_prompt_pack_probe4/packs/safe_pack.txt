@@ -1,0 +1,4 @@
+safe one
+
+safe two
+neg: none

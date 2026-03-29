@@ -246,6 +246,47 @@ def test_export_txt_multi_line_negative(tmp_path):
     assert "neg: distorted" in content
 
 
+def test_save_includes_template_metadata(tmp_path):
+    """Template category and variables should persist in pack JSON."""
+    pack = PromptPackModel.new("templated_pack", slot_count=1)
+    pack.slots[0].template_id = "character_close_up"
+    pack.slots[0].template_variables = {
+        "subject": "the pilot",
+        "expression": "determined gaze",
+        "lighting": "warm cockpit glow",
+        "style": "cinematic realism",
+    }
+    pack.slots[0].text = "subtle lens flare"
+
+    json_path = tmp_path / "templated_pack.json"
+    pack.save_to_file(json_path)
+
+    payload = json.loads(json_path.read_text(encoding="utf-8"))
+
+    assert payload["pack_data"]["slots"][0]["template_id"] == "character_close_up"
+    assert payload["pack_data"]["slots"][0]["template_variables"]["subject"] == "the pilot"
+
+
+def test_export_txt_renders_template_backed_prompt(tmp_path):
+    """TXT export should render template-backed slots into final prompt text."""
+    pack = PromptPackModel.new("templated_export", slot_count=1)
+    pack.slots[0].template_id = "establishing_wide"
+    pack.slots[0].template_variables = {
+        "scene": "the final battleground",
+        "environment": "storm clouds over ruined towers",
+        "lighting": "lightning flashes",
+        "style": "epic matte painting",
+    }
+
+    txt_path = tmp_path / "templated_export.txt"
+    pack._export_txt(txt_path)
+
+    content = txt_path.read_text(encoding="utf-8")
+
+    assert "cinematic wide establishing shot of the final battleground" in content
+    assert "storm clouds over ruined towers" in content
+
+
 def test_export_txt_skips_empty_slots(tmp_path):
     """_export_txt() should skip slots with no text."""
     pack = PromptPackModel.new("txt_skip_empty", slot_count=10)

@@ -35,6 +35,7 @@ from src.learning.discovered_review_models import (
     OutputScanIndexEntry,
     _utc_now_iso,
 )
+from src.state.output_routing import resolve_output_artifact_path
 
 logger = logging.getLogger(__name__)
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -341,54 +342,18 @@ class DiscoveredReviewStore:
         raw = str(raw_path or "").strip()
         if not raw:
             return raw
-        candidate = Path(raw)
-        if candidate.exists():
-            try:
-                return str(candidate.resolve())
-            except Exception:
-                return str(candidate)
 
+        resolved = resolve_output_artifact_path(raw, base_output_dir=OUTPUT_ROOT)
+        if resolved != raw:
+            return resolved
+
+        candidate = Path(raw)
         repo_candidate = REPO_ROOT / candidate
         if repo_candidate.exists():
             try:
                 return str(repo_candidate.resolve())
             except Exception:
                 return str(repo_candidate)
-
-        parts = list(candidate.parts)
-        if parts and parts[0].lower() == "output":
-            relative_parts = parts[1:]
-        else:
-            relative_parts = parts
-        if not relative_parts:
-            return raw
-
-        possible: list[Path] = []
-        possible.append(OUTPUT_ROOT.joinpath(*relative_parts))
-        if len(relative_parts) > 1:
-            possible.append(OUTPUT_ROOT.joinpath(*relative_parts[1:]))
-        for route_dir in OUTPUT_ROOT.iterdir() if OUTPUT_ROOT.exists() else []:
-            if not route_dir.is_dir():
-                continue
-            possible.append(route_dir.joinpath(*relative_parts))
-            if len(relative_parts) > 1:
-                possible.append(route_dir.joinpath(*relative_parts[1:]))
-            if len(relative_parts) >= 2:
-                possible.append(route_dir.joinpath(*relative_parts[-2:]))
-            if len(relative_parts) >= 3:
-                possible.append(route_dir.joinpath(*relative_parts[-3:]))
-
-        seen: set[str] = set()
-        for path_obj in possible:
-            key = str(path_obj)
-            if key in seen:
-                continue
-            seen.add(key)
-            if path_obj.exists():
-                try:
-                    return str(path_obj.resolve())
-                except Exception:
-                    return str(path_obj)
         return raw
 
     @staticmethod

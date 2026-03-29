@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from src.controller.content_visibility_resolver import (
     ContentVisibilityResolver,
     build_content_visibility_payload,
 )
 from src.gui.models.prompt_metadata import PromptMetadata, build_prompt_metadata
-from src.gui.models.prompt_pack_model import PromptPackModel
+from src.gui.models.prompt_pack_model import PromptPackModel, render_prompt_slot_text
+
+if TYPE_CHECKING:
+    from src.gui.models.prompt_pack_model import MatrixConfig, PromptSlot
 
 
 class PromptWorkspaceState:
@@ -46,7 +50,7 @@ class PromptWorkspaceState:
         self.dirty = False
         return saved_path
 
-    def get_slot(self, index: int):
+    def get_slot(self, index: int) -> PromptSlot:
         if not self.current_pack:
             raise RuntimeError("No prompt pack loaded")
         return self.current_pack.get_slot(index)
@@ -82,6 +86,12 @@ class PromptWorkspaceState:
         return self.current_pack.path
 
     def get_current_prompt_text(self) -> str:
+        if not self.current_pack:
+            return ""
+        slot = self.current_pack.get_slot(self._current_slot_index)
+        return render_prompt_slot_text(slot)
+
+    def get_current_raw_prompt_text(self) -> str:
         if not self.current_pack:
             return ""
         slot = self.current_pack.get_slot(self._current_slot_index)
@@ -133,7 +143,7 @@ class PromptWorkspaceState:
         combined_text = f"{positive}\n{negative}"
         return build_prompt_metadata(combined_text)
 
-    def get_matrix_config(self):
+    def get_matrix_config(self) -> MatrixConfig:
         """Get current pack's matrix configuration."""
         from src.gui.models.prompt_pack_model import MatrixConfig
 
@@ -141,17 +151,29 @@ class PromptWorkspaceState:
             return self.current_pack.matrix
         return MatrixConfig()  # Default empty
 
-    def set_matrix_config(self, matrix) -> None:
+    def set_matrix_config(self, matrix: MatrixConfig) -> None:
         """Update current pack's matrix configuration."""
         if self.current_pack:
             self.current_pack.matrix = matrix
             self.dirty = True
 
-    def get_current_slot(self):
+    def get_current_slot(self) -> PromptSlot | None:
         """Get the current slot object."""
         if not self.current_pack:
             return None
         return self.current_pack.get_slot(self._current_slot_index)
+
+    def get_current_template_id(self) -> str:
+        slot = self.get_current_slot()
+        if slot is None:
+            return ""
+        return str(getattr(slot, "template_id", "") or "")
+
+    def get_current_template_variables(self) -> dict[str, str]:
+        slot = self.get_current_slot()
+        if slot is None:
+            return {}
+        return dict(getattr(slot, "template_variables", {}) or {})
 
     def mark_dirty(self) -> None:
         """Mark workspace as dirty (unsaved changes)."""
@@ -174,6 +196,14 @@ class PromptWorkspaceState:
         slot = self.current_pack.get_slot(index)
         slot.positive_embeddings = positive.copy()
         slot.negative_embeddings = negative.copy()
+        self.dirty = True
+
+    def set_slot_template(
+        self, index: int, template_id: str, template_variables: dict[str, str] | None = None
+    ) -> None:
+        if not self.current_pack:
+            raise RuntimeError("No prompt pack loaded")
+        self.current_pack.set_slot_template(index, template_id, template_variables)
         self.dirty = True
 
     def add_slot(self) -> None:
@@ -210,6 +240,8 @@ class PromptWorkspaceState:
                 original,
                 text=original.text,
                 negative=getattr(original, "negative", ""),
+                template_id=getattr(original, "template_id", ""),
+                template_variables=dict(getattr(original, "template_variables", {}) or {}),
                 positive_embeddings=getattr(original, "positive_embeddings", []).copy(),
                 negative_embeddings=getattr(original, "negative_embeddings", []).copy(),
                 loras=getattr(original, "loras", []).copy()

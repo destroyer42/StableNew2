@@ -16,6 +16,7 @@ from src.utils.embedding_prompt_utils import (
     normalize_embedding_entries,
     render_embedding_reference,
 )
+from src.utils.prompt_templates import compose_prompt_text
 
 logger = logging.getLogger(__name__)
 
@@ -168,7 +169,11 @@ def _render_prompt_pack_slot(slot: dict[str, Any]) -> dict[str, str]:
             render_embedding_reference(name, weight) for name, weight in positive_embeddings
         )
 
-    positive_text = str(slot.get("text", "") or "").strip()
+    positive_text = compose_prompt_text(
+        str(slot.get("template_id", "") or "").strip(),
+        slot.get("template_variables", {}),
+        str(slot.get("text", "") or "").strip(),
+    )
     if positive_text:
         positive_parts.append(positive_text)
 

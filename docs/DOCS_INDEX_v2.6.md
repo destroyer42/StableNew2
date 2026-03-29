@@ -38,6 +38,7 @@ completed implementation records, and historical planning notes.
 
 - `docs/Architecture/ARTIFACT_METADATA_CONTRACTS_v2.6.md`
 - `docs/Subsystems/Learning/Learning_System_Spec_v2.6.md`
+- `docs/Subsystems/Training/Character_Embedding_Workflow_v2.6.md`
 - `docs/Subsystems/GUI/GUI_Ownership_Map_v2.6.md`
 - `docs/Subsystems/GUI/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md`
 - `docs/Subsystems/GUI/GUI_CONSISTENCY_MAINTENANCE_CHECKLIST_v2.6.md`
@@ -62,7 +63,7 @@ completed implementation records, and historical planning notes.
 ### 1.4 Tier 4 - Active backlog and planning queue
 
 - `docs/PR_Backlog/CORE_TOP_20_EXECUTABLE_MINI_ROADMAP_v2.6.md`
-- `docs/PR_Backlog/PR-CORE-001 - Finalize Native SVD Integration.md`
+- `docs/PR_Backlog/PR-CORE-014 - Multi-Character Support.md`
 - `docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md`
 
 ### 1.5 Reference and history
@@ -114,6 +115,10 @@ completed implementation records, and historical planning notes.
 - `docs/CompletedPR/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
 - `docs/CompletedPR/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
 - `docs/CompletedPR/PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback.md`
+- `docs/CompletedPR/PR-CORE-001-Finalize-Native-SVD-Integration.md`
+- `docs/CompletedPR/PR-CORE-002-Character-Embedding-Pipeline.md`
+- `docs/CompletedPR/PR-CORE-004-Cinematic-Prompt-Template-Library.md`
+- `docs/CompletedPR/PR-CORE-011-End-to-End-Pipeline-Tests.md`
 - `docs/CompletedPR/PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion.md`
 - `docs/CompletedPR/PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure.md`
 - `docs/CompletedPR/PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure.md`

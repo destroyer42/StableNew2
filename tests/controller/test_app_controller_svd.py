@@ -5,6 +5,8 @@ import json
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from src.controller.app_controller import AppController
 from src.video.svd_config import SVDConfig
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
@@ -85,6 +87,23 @@ def test_build_svd_defaults_uses_controller_default_config() -> None:
     assert defaults["postprocess"]["face_restore"]["enabled"] is True
     assert defaults["postprocess"]["interpolation"]["enabled"] is True
     assert defaults["postprocess"]["upscale"]["enabled"] is True
+
+
+def test_submit_svd_job_rejects_invalid_motion_bucket_before_controller_dispatch() -> None:
+    controller = AppController.__new__(AppController)
+    controller._svd_controller = Mock()
+    controller._append_log = lambda *_args, **_kwargs: None
+
+    with pytest.raises(ValueError, match="inference.motion_bucket_id"):
+        controller.submit_svd_job(
+            source_image_path="C:/tmp/source.png",
+            form_data={
+                "inference": {"motion_bucket_id": 256},
+                "pipeline": {"output_route": "SVD"},
+            },
+        )
+
+    controller._svd_controller.build_svd_config.assert_not_called()
 
 
 def test_runtime_status_callback_preserves_stage_detail() -> None:
@@ -180,6 +199,48 @@ def test_send_history_job_image_to_video_workflow_selects_workflow_tab(tmp_path)
     assert routed == str(source_path)
     notebook.select.assert_called_once_with(workflow_tab)
     workflow_tab.set_source_image_path.assert_called_once()
+
+
+def test_submit_video_workflow_job_syncs_queue_state_after_direct_enqueue() -> None:
+    controller = AppController.__new__(AppController)
+    workflow_controller = Mock()
+    workflow_controller.submit_video_workflow_job.return_value = "job-video-123"
+    controller._get_video_workflow_controller = Mock(return_value=workflow_controller)
+    controller._refresh_app_state_queue = Mock()
+    flush_now = Mock()
+    controller.app_state = SimpleNamespace(flush_now=flush_now)
+    controller._append_log = lambda *_args, **_kwargs: None
+
+    job_id = controller.submit_video_workflow_job(
+        source_image_path="C:/tmp/source.png",
+        form_data={"workflow_id": "ltx_multiframe_anchor_v1"},
+    )
+
+    assert job_id == "job-video-123"
+    controller._refresh_app_state_queue.assert_called_once()
+    flush_now.assert_called_once()
+
+
+def test_submit_svd_job_syncs_queue_state_after_direct_enqueue() -> None:
+    controller = AppController.__new__(AppController)
+    svd_controller = Mock()
+    svd_controller.build_svd_config.return_value = "cfg"
+    svd_controller.validate_source_image.return_value = (True, None)
+    svd_controller.submit_svd_job.return_value = "job-svd-123"
+    controller._get_svd_controller = Mock(return_value=svd_controller)
+    controller._refresh_app_state_queue = Mock()
+    flush_now = Mock()
+    controller.app_state = SimpleNamespace(flush_now=flush_now)
+    controller._append_log = lambda *_args, **_kwargs: None
+
+    job_id = controller.submit_svd_job(
+        source_image_path="C:/tmp/source.png",
+        form_data={"inference": {"motion_bucket_id": 64}, "pipeline": {"output_route": "SVD"}},
+    )
+
+    assert job_id == "job-svd-123"
+    controller._refresh_app_state_queue.assert_called_once()
+    flush_now.assert_called_once()
 
 
 def test_send_history_video_bundle_to_video_workflow_uses_bundle_handoff(tmp_path) -> None:
