@@ -60,6 +60,7 @@ class LearningTabFrame(ttk.Frame):
         self._content_visibility_mode = str(
             getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )
+        self._pending_visibility_refresh = False
         self.pipeline_controller = pipeline_controller
         self.app_controller = app_controller  # PR-LEARN-002: Store app_controller reference
         
@@ -114,6 +115,7 @@ class LearningTabFrame(ttk.Frame):
             app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, sticky="ew", padx=4, pady=(4, 2))
+        self.bind("<Map>", self._on_map, add="+")
 
         # Header
         self.header_frame = ttk.Frame(self, padding=8, style=SURFACE_FRAME_STYLE)
@@ -1435,6 +1437,7 @@ class LearningTabFrame(ttk.Frame):
         self._content_visibility_mode = str(
             mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )
+        self._pending_visibility_refresh = False
         self._visibility_banner.configure(text="")
         review_panel = getattr(self, "review_panel", None)
         if review_panel is not None:
@@ -1453,7 +1456,18 @@ class LearningTabFrame(ttk.Frame):
         )
 
     def _on_content_visibility_mode_changed(self) -> None:
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            self._content_visibility_mode = str(
+                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            )
+            return
         self.on_content_visibility_mode_changed()
+
+    def _on_map(self, _event: Any = None) -> None:
+        if not self._pending_visibility_refresh:
+            return
+        self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
 
     def _submit_staged_jobs(self, target_stage: str) -> None:
         if not self._staged_current_group_id:

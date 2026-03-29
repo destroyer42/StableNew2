@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.learning_state import LearningExperiment, LearningVariant
@@ -770,5 +770,48 @@ def test_learning_tab_opens_staged_metadata_inspector(tmp_path) -> None:
 
             assert len(opened) == 1
             assert opened[0]["artifact_path"] == str(image_path)
+        finally:
+            tab.destroy()
+
+
+def test_learning_tab_defers_visibility_refresh_until_mapped(tmp_path) -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    state_path = tmp_path / "ui_state.json"
+    experiments_root = tmp_path / "experiments"
+    store = UIStateStore(state_path)
+    app_state = AppStateV2()
+
+    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
+        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+        return_value=experiments_root,
+    ):
+        tab = LearningTabFrame(
+            root,
+            app_state=app_state,
+            pipeline_controller=_StubPipelineController(),
+        )
+        try:
+            tab._refresh_discovered_inbox = Mock()
+            tab._refresh_staged_curation_inbox = Mock()
+            tab._update_staged_preview = Mock()
+
+            app_state.set_content_visibility_mode("sfw")
+            app_state.flush_now()
+
+            tab._refresh_discovered_inbox.assert_not_called()
+            tab._refresh_staged_curation_inbox.assert_not_called()
+            tab._update_staged_preview.assert_not_called()
+            assert tab._pending_visibility_refresh is True
+
+            tab._on_map()
+            root.update_idletasks()
+            root.update()
+
+            tab._refresh_discovered_inbox.assert_called_once()
+            tab._refresh_staged_curation_inbox.assert_called_once()
+            tab._update_staged_preview.assert_called_once()
         finally:
             tab.destroy()

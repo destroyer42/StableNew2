@@ -4,6 +4,8 @@ from pathlib import Path
 from collections.abc import Mapping
 from typing import Any
 
+from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
+from src.controller.ports.runtime_ports import WorkflowRegistryPort
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, PipelineRunSource
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import (
@@ -12,7 +14,6 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_TESTING,
 )
 from src.video.continuity_models import normalize_continuity_link
-from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
 _DEFAULT_OUTPUT_ROUTES = (
     OUTPUT_ROUTE_REPROCESS,
@@ -28,10 +29,10 @@ class VideoWorkflowController:
         self,
         *,
         app_controller,
-        workflow_registry: WorkflowRegistry | None = None,
+        workflow_registry: WorkflowRegistryPort | None = None,
     ) -> None:
         self._app_controller = app_controller
-        self._workflow_registry = workflow_registry or build_default_workflow_registry()
+        self._workflow_registry = workflow_registry or DefaultWorkflowRegistryPort()
 
     def list_workflow_specs(self) -> list[dict[str, Any]]:
         specs = self._workflow_registry.list_specs_for_backend("comfy")
@@ -44,6 +45,8 @@ class VideoWorkflowController:
                     "backend_id": spec.backend_id,
                     "display_name": spec.display_name,
                     "description": spec.description,
+                    "governance_state": spec.governance_state,
+                    "pinned_revision": spec.pinned_revision,
                     "capability_tags": list(spec.capability_tags),
                     "dependency_specs": [dependency.to_dict() for dependency in spec.dependency_specs],
                 }

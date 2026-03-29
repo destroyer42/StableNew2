@@ -9,10 +9,52 @@ from typing import Any
 from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.intent_artifact_contract import (
+    INTENT_ARTIFACT_SCHEMA_V1,
+    INTENT_ARTIFACT_VERSION_V1,
+    compute_intent_hash,
+    validate_intent_artifact_contract,
+)
 from src.pipeline.run_plan import build_run_plan_from_njr
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 logger = logging.getLogger(__name__)
+
+
+class ReplayValidationError(InvalidHistoryRecord):
+    """Raised when replay metadata is present but invalid."""
+
+
+def validate_replay_snapshot(snapshot: Mapping[str, Any]) -> tuple[bool, list[str]]:
+    if not isinstance(snapshot, Mapping):
+        return False, ["snapshot is not a mapping"]
+
+    errors: list[str] = []
+    config_layers = snapshot.get("config_layers")
+    if isinstance(config_layers, Mapping):
+        schema = str(config_layers.get("intent_artifact_schema") or "")
+        version = str(config_layers.get("intent_artifact_version") or "")
+        intent_config = config_layers.get("intent_config")
+        intent_hash = str(config_layers.get("intent_hash") or "")
+        if schema != INTENT_ARTIFACT_SCHEMA_V1:
+            errors.append(f"config_layers.intent_artifact_schema must be {INTENT_ARTIFACT_SCHEMA_V1}")
+        if version != INTENT_ARTIFACT_VERSION_V1:
+            errors.append(f"config_layers.intent_artifact_version must be {INTENT_ARTIFACT_VERSION_V1}")
+        if not isinstance(intent_config, Mapping):
+            errors.append("config_layers.intent_config must be a mapping")
+        else:
+            expected_hash = compute_intent_hash(intent_config)
+            if not intent_hash:
+                errors.append("config_layers.intent_hash is required")
+            elif intent_hash != expected_hash:
+                errors.append("config_layers.intent_hash does not match config_layers.intent_config")
+
+    contract = snapshot.get("intent_contract")
+    if contract is None and config_layers is None:
+        return True, []
+    if contract is not None:
+        errors.extend(validate_intent_artifact_contract(contract))
+    return len(errors) == 0, errors
 
 
 def _record_stage_sequence(njr: NormalizedJobRecord) -> list[str]:
@@ -141,6 +183,9 @@ class ReplayEngine:
         if not ok:
             raise InvalidHistoryRecord(errors)
         snapshot = data.get("njr_snapshot") or {}
+        valid_snapshot, snapshot_errors = validate_replay_snapshot(snapshot)
+        if not valid_snapshot:
+            raise ReplayValidationError(snapshot_errors)
         njr = self._hydrate_njr(snapshot)
         if njr is None:
             raise InvalidHistoryRecord(["njr_snapshot could not be hydrated"])
@@ -152,7 +197,9 @@ class ReplayEngine:
         constructor = getattr(NormalizedJobRecord, "from_snapshot", None)
         if callable(constructor):
             try:
-                return constructor(snapshot)
+                hydrated = constructor(snapshot)
+                if isinstance(hydrated, NormalizedJobRecord):
+                    return hydrated
             except Exception:
                 pass
         normalized = snapshot if "normalized_job" in snapshot else {"normalized_job": snapshot}

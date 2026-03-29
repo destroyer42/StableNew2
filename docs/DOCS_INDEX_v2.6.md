@@ -2,7 +2,7 @@ DOCS_INDEX_v2.6.md
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-28
+Updated: 2026-03-29
 
 ## 0. Purpose
 
@@ -111,6 +111,17 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/PR_Backlog/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md`
 - `docs/PR_Backlog/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md`
 - `docs/PR_Backlog/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
+- `docs/PR_Backlog/PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement.md`
+- `docs/PR_Backlog/PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract.md`
+- `docs/PR_Backlog/PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards.md`
+- `docs/PR_Backlog/PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction.md`
+- `docs/PR_Backlog/PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes.md`
+- `docs/PR_Backlog/PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation.md`
+- `docs/PR_Backlog/PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition.md`
+- `docs/PR_Backlog/PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes.md`
+- `docs/PR_Backlog/PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion.md`
+- `docs/PR_Backlog/PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure.md`
+- `docs/PR_Backlog/PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure.md`
 - `docs/PR_Backlog/PR-GUI-283-AppController-UI-Boundary-Closure-and-Operator-Log-Projection.md`
 - `docs/PR_Backlog/PR-GUI-284-AppState-Batched-Invalidation-and-Flush-Contract.md`
 - `docs/PR_Backlog/PR-GUI-285-Hot-Surface-Refresh-Scheduler-and-Subscription-Ownership.md`
@@ -130,14 +141,29 @@ which files are canonical, operational, backlog-driving, or archived.
 - `docs/CompletedPR/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md`
 - `docs/CompletedPR/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md`
 - `docs/CompletedPR/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
+- `docs/CompletedPR/PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation.md`
+- `docs/CompletedPR/PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement.md`
+- `docs/CompletedPR/PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract.md`
+- `docs/CompletedPR/PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards.md`
+- `docs/CompletedPR/PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction.md`
+- `docs/CompletedPR/PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes.md`
+- `docs/CompletedPR/PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation.md`
+- `docs/CompletedPR/PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition.md`
+- `docs/CompletedPR/PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes.md`
+- `docs/CompletedPR/PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion.md`
+- `docs/CompletedPR/PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure.md`
+- `docs/CompletedPR/PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure.md`
 - `docs/CompletedPR/PR-GUI-283-AppController-UI-Boundary-Closure-and-Operator-Log-Projection.md`
 - `docs/CompletedPR/PR-GUI-284-AppState-Batched-Invalidation-and-Flush-Contract.md`
 - `docs/CompletedPR/PR-GUI-285-Hot-Surface-Refresh-Scheduler-and-Subscription-Ownership.md`
+- `docs/CompletedPR/PR-GUI-286-Incremental-Projection-Reconciliation-and-Visibility-Gating.md`
+- `docs/CompletedPR/PR-HARDEN-287-Runtime-Status-Backpressure-GUI-Perf-Journey-and-Architecture-Guards.md`
 - `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 - `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 - `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 - `docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 - `docs/archive/` contains historical, superseded, and reference-only material
+- `docs/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
 
 ## 2. Canonical Reading Order
 

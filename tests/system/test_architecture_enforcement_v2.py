@@ -8,6 +8,9 @@ ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = ROOT / "src"
 
 ALLOWED_ARCHIVE_IMPORT_PATHS: set[Path] = set()
+ALLOWED_CONTROLLER_BACKEND_IMPORT_PATHS: set[Path] = {
+    ROOT / "src" / "controller" / "ports" / "default_runtime_ports.py",
+}
 
 ARCHIVE_IMPORT_PATTERNS = (
     re.compile(r"\bfrom\s+src\.controller\.archive\.pipeline_config_types\s+import\b"),
@@ -46,6 +49,15 @@ CONTROLLER_DIRECT_WIDGET_MUTATION_PATTERNS = (
 LEGACY_ADAPTER_PATTERNS = (
     re.compile(r"\blegacy_njr_adapter\b"),
     re.compile(r"\bbuild_njr_from_legacy_pipeline_config\s*\("),
+)
+
+CONTROLLER_BACKEND_IMPORT_PATTERNS = (
+    re.compile(r"\bfrom\s+src\.api\.client\s+import\s+SDWebUIClient\b"),
+    re.compile(r"\bfrom\s+src\.pipeline\.pipeline_runner\s+import\s+PipelineRunner\b"),
+    re.compile(
+        r"\bfrom\s+src\.video\.workflow_registry\s+import\s+(?:WorkflowRegistry,\s*)?build_default_workflow_registry\b"
+    ),
+    re.compile(r"\bfrom\s+src\.video\.workflow_registry\s+import\s+WorkflowRegistry\b"),
 )
 
 
@@ -118,6 +130,23 @@ def test_controller_modules_do_not_mutate_widgets_directly() -> None:
     violations = _find_pattern_hits(controller_files, CONTROLLER_DIRECT_WIDGET_MUTATION_PATTERNS)
     assert violations == [], (
         "Controller modules must not mutate Tk widgets directly:\n"
+        + "\n".join(sorted(violations))
+    )
+
+
+def test_controller_modules_only_use_backend_runtime_imports_via_ports_layer() -> None:
+    controller_files = _iter_python_files(SRC_ROOT / "controller")
+    violations: list[str] = []
+    for path in controller_files:
+        text = path.read_text(encoding="utf-8")
+        if not any(pattern.search(text) for pattern in CONTROLLER_BACKEND_IMPORT_PATTERNS):
+            continue
+        if path in ALLOWED_CONTROLLER_BACKEND_IMPORT_PATHS:
+            continue
+        violations.append(str(path.relative_to(ROOT)))
+
+    assert violations == [], (
+        "Controller backend/runtime imports must stay behind controller ports:\n"
         + "\n".join(sorted(violations))
     )
 

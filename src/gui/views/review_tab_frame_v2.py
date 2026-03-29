@@ -98,6 +98,7 @@ class ReviewTabFrame(ttk.Frame):
         self._content_visibility_mode = str(
             getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )
+        self._pending_visibility_refresh = False
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=0)
@@ -127,6 +128,7 @@ class ReviewTabFrame(ttk.Frame):
         self._set_readonly_text(self.current_negative_text, "")
         self._sync_edit_box_to_mode("prompt")
         self._sync_edit_box_to_mode("negative")
+        self.bind("<Map>", self._on_map, add="+")
         self._refresh_prompt_diff()
         if self.app_state is not None and hasattr(self.app_state, "subscribe"):
             try:
@@ -1282,11 +1284,23 @@ class ReviewTabFrame(ttk.Frame):
         self._content_visibility_mode = str(
             mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )
+        self._pending_visibility_refresh = False
         self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
 
     def _on_content_visibility_mode_changed(self) -> None:
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            self._content_visibility_mode = str(
+                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            )
+            return
         self.on_content_visibility_mode_changed()
+
+    def _on_map(self, _event=None) -> None:
+        if not self._pending_visibility_refresh:
+            return
+        self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
 
     def _set_readonly_text(self, widget: tk.Text, value: str) -> None:
         widget.configure(state="normal")

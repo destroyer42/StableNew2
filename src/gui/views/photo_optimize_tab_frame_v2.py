@@ -41,6 +41,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self._model_name_map: dict[str, str] = {}
         self._vae_name_map: dict[str, str] = {"Automatic": ""}
         self._content_visibility_mode = "nsfw"
+        self._pending_asset_refresh_target: str | None = None
+        self._pending_resources_payload: dict[str, list[Any]] | None = None
+        self._pending_visibility_refresh = False
 
         self.prompt_mode_var = tk.StringVar(value="append")
         self.negative_mode_var = tk.StringVar(value="append")
@@ -84,6 +87,7 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
 
         self._build_header()
         self._build_body()
+        self.bind("<Map>", self._on_map, add="+")
 
         self.prompt_mode_var.trace_add("write", lambda *_: self._on_prompt_mode_changed())
         self.negative_mode_var.trace_add("write", lambda *_: self._on_negative_mode_changed())
@@ -1265,11 +1269,19 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self._content_visibility_mode = str(
             mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )
+        self._pending_visibility_refresh = False
         self._apply_content_visibility_mode()
         self._refresh_prompt_diff()
 
     def _on_content_visibility_mode_changed(self) -> None:
-        self.on_content_visibility_mode_changed()
+        mode = str(
+            getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        self._content_visibility_mode = mode
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            return
+        self.on_content_visibility_mode_changed(mode)
 
     def _set_text(self, widget: tk.Text, value: str) -> None:
         widget.delete("1.0", tk.END)
@@ -1615,7 +1627,12 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         }
 
     def _on_app_state_resources_changed(self, resources: dict[str, list[Any]] | None = None) -> None:
-        self._refresh_resource_options(resources)
+        resource_map = resources if isinstance(resources, dict) else None
+        if not bool(self.winfo_ismapped()):
+            self._pending_resources_payload = resource_map
+            return
+        self._pending_resources_payload = None
+        self._refresh_resource_options(resource_map)
 
     def bind_app_state(self, app_state: Any) -> None:
         if self.app_state is app_state:
@@ -1671,7 +1688,23 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         target = self._current_asset_id
         if asset_ids and target not in set(asset_ids):
             target = asset_ids[0]
+        if not bool(self.winfo_ismapped()):
+            self._pending_asset_refresh_target = target
+            return
+        self._pending_asset_refresh_target = None
         self._refresh_assets(select_asset_id=target)
+
+    def _on_map(self, _event: Any = None) -> None:
+        if self._pending_resources_payload is not None:
+            resources = self._pending_resources_payload
+            self._pending_resources_payload = None
+            self.after_idle(lambda resources=resources: self._refresh_resource_options(resources))
+        if self._pending_asset_refresh_target is not None:
+            target = self._pending_asset_refresh_target
+            self._pending_asset_refresh_target = None
+            self.after_idle(lambda target=target: self._refresh_assets(select_asset_id=target))
+        if self._pending_visibility_refresh:
+            self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
 
     def destroy(self) -> None:
         if self.app_state is not None and self._app_state_resource_listener is not None and hasattr(

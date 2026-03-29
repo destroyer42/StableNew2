@@ -141,6 +141,8 @@ class SVDTabFrameV2(ttk.Frame):
         self._recent_selected_item: str | None = None
         self._applied_runtime_defaults = False
         self._setting_tooltips: dict[str, Any] = {}
+        self._history_listener_registered = False
+        self._pending_recent_runs_refresh = False
 
         model_options = self._get_model_options()
         preferred_model = get_default_svd_model_id()
@@ -189,6 +191,7 @@ class SVDTabFrameV2(ttk.Frame):
             app_state=self.app_state,
         )
         self.overview_panel.grid(row=0, column=0, sticky="ew", padx=6, pady=(6, 0))
+        self.bind("<Map>", self._on_map, add="+")
 
         self._build_header()
         self._build_body(model_options)
@@ -201,6 +204,7 @@ class SVDTabFrameV2(ttk.Frame):
         if app_state and hasattr(app_state, "subscribe"):
             try:
                 app_state.subscribe("history_items", self._on_history_items_changed)
+                self._history_listener_registered = True
             except Exception:
                 pass
 
@@ -1086,7 +1090,16 @@ class SVDTabFrameV2(ttk.Frame):
             messagebox.showerror("Clear cache failed", str(exc))
 
     def _on_history_items_changed(self) -> None:
+        if not bool(self.winfo_ismapped()):
+            self._pending_recent_runs_refresh = True
+            return
         self._refresh_recent_runs()
+
+    def _on_map(self, _event: tk.Event | None = None) -> None:
+        if not self._pending_recent_runs_refresh:
+            return
+        self._pending_recent_runs_refresh = False
+        self.after_idle(self._refresh_recent_runs)
 
     def _refresh_recent_runs(self) -> None:
         controller = self.app_controller
@@ -1360,3 +1373,16 @@ class SVDTabFrameV2(ttk.Frame):
         if len(text) <= 36:
             return text
         return f"{text[:33]}..."
+
+    def destroy(self) -> None:
+        if (
+            self._history_listener_registered
+            and self.app_state is not None
+            and hasattr(self.app_state, "unsubscribe")
+        ):
+            try:
+                self.app_state.unsubscribe("history_items", self._on_history_items_changed)
+            except Exception:
+                pass
+            self._history_listener_registered = False
+        super().destroy()

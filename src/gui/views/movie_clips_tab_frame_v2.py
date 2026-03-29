@@ -75,6 +75,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._source_bundle: dict[str, Any] | None = None
         self._build_status: str = ""
         self._setting_tooltips: dict[str, Any] = {}
+        self._pending_visibility_refresh = False
 
         # Tk variables
         self.source_mode_var = tk.StringVar(value=SOURCE_MODE_FOLDER)
@@ -100,6 +101,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
 
         self._build_header()
         self._build_body()
+        self.bind("<Map>", self._on_map, add="+")
         for variable in (self.fps_var, self.codec_var, self.quality_var, self.mode_var):
             variable.trace_add("write", lambda *_: self._update_effective_settings_summary())
         self._update_effective_settings_summary()
@@ -608,10 +610,19 @@ class MovieClipsTabFrameV2(ttk.Frame):
             pass
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._pending_visibility_refresh = False
         self.visibility_banner.configure(text="")
 
     def _on_content_visibility_mode_changed(self) -> None:
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            return
         self.on_content_visibility_mode_changed()
+
+    def _on_map(self, _event=None) -> None:
+        if not self._pending_visibility_refresh:
+            return
+        self.after_idle(self.on_content_visibility_mode_changed)
 
     def _collect_settings(self) -> dict[str, Any]:
         return {

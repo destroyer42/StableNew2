@@ -4,6 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from src.app.optional_dependency_probes import (
+    OPTIONAL_DEPENDENCY_SCHEMA_V1,
+    OptionalDependencyCapability,
+    OptionalDependencySnapshot,
+)
 from src.controller.app_controller import AppController
 from src.utils.error_envelope_v2 import wrap_exception
 from src.utils.exceptions_v2 import WatchdogViolationError
@@ -113,3 +118,27 @@ def test_diagnostics_snapshot_includes_pipeline_tab_metrics() -> None:
 
     assert snapshot["pipeline_tab"]["callback_metrics"]["_on_runtime_status_changed"]["count"] == 3
     assert snapshot["pipeline_tab"]["hot_surface_scheduler"]["count"] == 2
+
+
+def test_diagnostics_snapshot_includes_optional_dependency_snapshot() -> None:
+    controller = AppController(
+        None,
+        pipeline_runner=DummyPipelineRunner(),
+        job_service=DummyJobService(),
+        optional_dependency_snapshot=OptionalDependencySnapshot(
+            capabilities={
+                "workflow:demo@1.0.0": OptionalDependencyCapability(
+                    capability_id="workflow:demo@1.0.0",
+                    available=True,
+                    status="ready",
+                    detail="ok",
+                    source="comfy",
+                )
+            }
+        ),
+    )
+
+    snapshot = controller.get_diagnostics_snapshot()
+
+    assert snapshot["optional_dependencies"]["schema"] == OPTIONAL_DEPENDENCY_SCHEMA_V1
+    assert snapshot["optional_dependencies"]["capabilities"]["workflow:demo@1.0.0"]["status"] == "ready"

@@ -289,3 +289,29 @@ def test_svd_tab_recent_history_populates_and_reuses_source(tk_root: tk.Tk, tmp_
         assert "size 2048x1152" in tab.recent_meta_label.cget("text")
     finally:
         tab.destroy()
+
+
+def test_svd_tab_defers_recent_history_refresh_until_mapped(tk_root: tk.Tk) -> None:
+    state = AppStateV2()
+    controller = Mock()
+    controller.get_supported_svd_models.return_value = [
+        "stabilityai/stable-video-diffusion-img2vid-xt"
+    ]
+    controller.get_recent_svd_history.return_value = []
+    tab = SVDTabFrameV2(tk_root, app_controller=controller, app_state=state)
+    try:
+        tab._refresh_recent_runs = Mock()
+
+        state.set_history_items([object()])
+        state.flush_now()
+
+        tab._refresh_recent_runs.assert_not_called()
+        assert tab._pending_recent_runs_refresh is True
+
+        tab._on_map()
+        tk_root.update_idletasks()
+        tk_root.update()
+
+        tab._refresh_recent_runs.assert_called_once()
+    finally:
+        tab.destroy()

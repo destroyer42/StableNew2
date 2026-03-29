@@ -4,6 +4,7 @@ import tkinter as tk
 from typing import TYPE_CHECKING
 
 from src.api.webui_process_manager import WebUIProcessManager
+from src.app.bootstrap import build_gui_kernel
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.main_window_v2 import MainWindowV2
@@ -53,14 +54,22 @@ def build_v2_app(
 
     # Create controller first to get gui_log_handler
     config_manager = config_manager or ConfigManager()
+    kernel = build_gui_kernel(
+        config_manager=config_manager,
+        structured_logger=None,
+    )
     app_controller = AppController(
         None,  # main_window=None for now
-        pipeline_runner=pipeline_runner,
+        pipeline_runner=pipeline_runner or kernel.pipeline_runner,
         threaded=threaded,
         ui_scheduler=ui_dispatcher.invoke,
         webui_process_manager=webui_manager,
-        config_manager=config_manager,
+        config_manager=kernel.config_manager,
         job_service=job_service,  # PR-0114C-Ty: DI for tests
+        api_client=kernel.api_client,
+        structured_logger=kernel.structured_logger,
+        runtime_ports=kernel.runtime_ports,
+        optional_dependency_snapshot=kernel.capabilities,
     )
     # --- BEGIN PR-CORE1-D21A: Diagnostics/Watchdog wiring ---
     # DiagnosticsServiceV2 and SystemWatchdogV2 are now initialized in AppController

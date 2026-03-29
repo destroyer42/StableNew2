@@ -4,7 +4,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from .api import SDWebUIClient
+from .app.bootstrap import build_cli_kernel
 from .pipeline import PipelineRunner, VideoCreator
 from .pipeline.cli_njr_builder import build_cli_njr
 from .utils import ConfigManager, StructuredLogger, find_webui_api_port, setup_logging
@@ -129,7 +129,12 @@ def main():
         else:
             logger.info(f"Using configured URL: {api_url}")
 
-    client = SDWebUIClient(base_url=api_url, timeout=config["api"]["timeout"])
+    kernel = build_cli_kernel(
+        api_url=api_url,
+        config_manager=config_manager,
+        structured_logger=structured_logger,
+    )
+    client = kernel.api_client
 
     # Check API readiness
     logger.info("Checking API readiness...")
@@ -138,7 +143,7 @@ def main():
         logger.info("Common ports to check: 7860, 7861, 7862, 7863, 7864")
         return 1
 
-    runner = PipelineRunner(client, structured_logger)
+    runner = kernel.pipeline_runner
 
     # Run pipeline
     try:

@@ -50,6 +50,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._last_folder = ""
         self._source_bundle: dict[str, Any] | None = None
         self._setting_tooltips: dict[str, Any] = {}
+        self._pending_visibility_refresh = False
 
         defaults = self._load_defaults()
         self.workflow_var = tk.StringVar(value=str(defaults.get("workflow_id") or ""))
@@ -78,6 +79,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
 
         self._build_header()
         self._build_body()
+        self.bind("<Map>", self._on_map, add="+")
         self._refresh_workflow_choices()
         self._set_text_value(self.prompt_text, str(defaults.get("prompt") or ""))
         self._set_text_value(self.negative_prompt_text, str(defaults.get("negative_prompt") or ""))
@@ -457,10 +459,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         widget.insert("1.0", value)
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._pending_visibility_refresh = False
         self.visibility_banner.configure(text="")
 
     def _on_content_visibility_mode_changed(self) -> None:
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            return
         self.on_content_visibility_mode_changed()
+
+    def _on_map(self, _event=None) -> None:
+        if not self._pending_visibility_refresh:
+            return
+        self.after_idle(self.on_content_visibility_mode_changed)
 
     def _on_browse_source(self) -> None:
         path = filedialog.askopenfilename(

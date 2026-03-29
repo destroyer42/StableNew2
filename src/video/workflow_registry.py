@@ -20,6 +20,18 @@ class WorkflowRegistry:
         versions.append(spec.workflow_version)
         versions.sort()
 
+    @staticmethod
+    def _require_runnable(spec: WorkflowSpec) -> WorkflowSpec:
+        if spec.governance_state != "approved":
+            raise KeyError(
+                f"Workflow '{spec.workflow_id}' version '{spec.workflow_version}' is not approved for execution"
+            )
+        if not spec.pinned_revision:
+            raise KeyError(
+                f"Workflow '{spec.workflow_id}' version '{spec.workflow_version}' is missing a pinned revision"
+            )
+        return spec
+
     def get(self, workflow_id: str, workflow_version: str | None = None) -> WorkflowSpec:
         workflow_key = str(workflow_id or "").strip()
         if not workflow_key:
@@ -30,7 +42,7 @@ class WorkflowRegistry:
                 raise KeyError(
                     f"Workflow '{workflow_key}' version '{workflow_version}' is not registered"
                 )
-            return self._specs[key]
+            return self._require_runnable(self._specs[key])
 
         versions = self._versions_by_id.get(workflow_key) or []
         if not versions:
@@ -39,7 +51,7 @@ class WorkflowRegistry:
             raise KeyError(
                 f"Workflow '{workflow_key}' has multiple versions registered; version is required"
             )
-        return self._specs[(workflow_key, versions[0])]
+        return self._require_runnable(self._specs[(workflow_key, versions[0])])
 
     def list_workflow_ids(self) -> list[str]:
         return sorted(self._versions_by_id.keys())
@@ -50,7 +62,11 @@ class WorkflowRegistry:
     def list_specs_for_backend(self, backend_id: str) -> list[WorkflowSpec]:
         backend_key = str(backend_id or "").strip()
         return sorted(
-            [spec for spec in self._specs.values() if spec.backend_id == backend_key],
+            [
+                spec
+                for spec in self._specs.values()
+                if spec.backend_id == backend_key and spec.is_runnable
+            ],
             key=lambda spec: (spec.workflow_id, spec.workflow_version),
         )
 

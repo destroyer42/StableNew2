@@ -205,3 +205,29 @@ def test_photo_optimize_resources_populate_model_and_vae_dropdowns(
         assert reloaded.baseline.vae == "vae-ft-mse-840000-ema-pruned"
     finally:
         tab.destroy()
+
+
+def test_photo_optimize_defers_asset_refresh_until_mapped(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
+    store = PhotoOptimizeStore(tmp_path / "photo_optimize")
+    image_path = tmp_path / "source" / "portrait.png"
+    _write_image(image_path)
+    asset = store.import_photo(image_path)
+
+    tab = PhotoOptimizeTabFrameV2(tk_root, store=store)
+    try:
+        tab._refresh_assets = Mock()
+
+        tab.on_assets_updated([asset.asset_id])
+
+        tab._refresh_assets.assert_not_called()
+        assert tab._pending_asset_refresh_target == asset.asset_id
+
+        tab._on_map()
+        tk_root.update_idletasks()
+        tk_root.update()
+
+        tab._refresh_assets.assert_called_once_with(select_asset_id=asset.asset_id)
+    finally:
+        tab.destroy()

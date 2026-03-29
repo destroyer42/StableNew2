@@ -57,6 +57,7 @@ All new Tk widgets, panels, dialogs, and views go here.
 6. Controllers in `controllers/` orchestrate; they do not own prompt construction or job submission logic.
 7. Controllers must not mutate Tk widgets directly. GUI-visible operator logs, queue/history/preview surfaces, and status indicators must flow through `AppStateV2` plus GUI-owned projection code.
 8. Hot runtime surfaces in the pipeline shell are owned by `PipelineTabFrameV2`; child panels may render standalone, but when mounted in the pipeline shell they must not independently subscribe to hot runtime state.
+9. Hidden or unmapped hot surfaces must defer expensive reconciliation until visible again, and filesystem/artifact lookup work must run through background query services with latest-request-wins semantics rather than on the Tk thread.
 
 ---
 

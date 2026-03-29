@@ -69,19 +69,12 @@ class PromptTabFrame(ttk.Frame):
         super().__init__(master, *args, **kwargs)
         self.workspace_state = PromptWorkspaceState()
         self.app_state = app_state
+        self._content_visibility_listener = None
+        self._pending_visibility_refresh = False
         self.workspace_state.new_pack("Untitled", slot_count=10)
         if self.app_state is not None:
             try:
                 self.app_state.prompt_workspace_state = self.workspace_state
-            except Exception:
-                pass
-            try:
-                self.app_state.subscribe(
-                    "content_visibility_mode",
-                    lambda: self.on_content_visibility_mode_changed(
-                        getattr(self.app_state, "content_visibility_mode", "nsfw")
-                    ),
-                )
             except Exception:
                 pass
         self.workspace_state.set_current_slot_index(0)
@@ -111,6 +104,16 @@ class PromptTabFrame(ttk.Frame):
         self._build_left_panel()
         self._build_center_panel()
         self._build_right_panel()
+        self.bind("<Map>", self._on_map, add="+")
+        if self.app_state is not None and hasattr(self.app_state, "subscribe"):
+            self._content_visibility_listener = self._on_content_visibility_mode_subscription
+            try:
+                self.app_state.subscribe(
+                    "content_visibility_mode",
+                    self._content_visibility_listener,
+                )
+            except Exception:
+                self._content_visibility_listener = None
         self._refresh_editor()
         self._refresh_metadata()
         self.on_content_visibility_mode_changed(self._content_visibility_mode)
@@ -141,6 +144,7 @@ class PromptTabFrame(ttk.Frame):
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(mode or self._read_content_visibility_mode() or "nsfw")
+        self._pending_visibility_refresh = False
         if hasattr(self, "lora_picker"):
             try:
                 self.lora_picker.set_content_visibility_mode(self._content_visibility_mode)
@@ -149,6 +153,22 @@ class PromptTabFrame(ttk.Frame):
         self._refresh_pack_list()
         self._refresh_editor()
         self._refresh_metadata()
+
+    def _on_content_visibility_mode_subscription(self) -> None:
+        mode = self._read_content_visibility_mode()
+        self._content_visibility_mode = mode
+        if not bool(self.winfo_ismapped()):
+            self._pending_visibility_refresh = True
+            return
+        self.on_content_visibility_mode_changed(mode)
+
+    def _on_map(self, _event=None) -> None:
+        if not self._pending_visibility_refresh:
+            return
+        try:
+            self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
+        except Exception:
+            self.on_content_visibility_mode_changed(self._content_visibility_mode)
 
     # Left column -------------------------------------------------------
     def _build_left_panel(self) -> None:
@@ -1715,6 +1735,19 @@ class PromptTabFrame(ttk.Frame):
         self.pack_name_label.config(
             text=f"Editor - {self.workspace_state.current_pack.name if self.workspace_state.current_pack else 'None'} (modified)"
         )
+
+    def destroy(self) -> None:
+        if (
+            self.app_state is not None
+            and self._content_visibility_listener is not None
+            and hasattr(self.app_state, "unsubscribe")
+        ):
+            try:
+                self.app_state.unsubscribe("content_visibility_mode", self._content_visibility_listener)
+            except Exception:
+                pass
+            self._content_visibility_listener = None
+        super().destroy()
 
 
 PromptTabFrame = PromptTabFrame

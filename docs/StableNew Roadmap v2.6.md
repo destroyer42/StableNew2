@@ -2,7 +2,7 @@ StableNew Roadmap v2.6.md
 (Canonical Edition)
 
 Status: Authoritative  
-Updated: 2026-03-28  
+Updated: 2026-03-29  
 Applies To: Codex, Copilot, ChatGPT Planner, Human Contributors
 
 ## 0. Strategic Objective
@@ -963,14 +963,9 @@ Repo-truth status:
 - `PR-GUI-285-Hot-Surface-Refresh-Scheduler-and-Subscription-Ownership`
   Completed 2026-03-28
 - `PR-GUI-286-Incremental-Projection-Reconciliation-and-Visibility-Gating`
-  In progress as of 2026-03-28; pipeline-shell hot surfaces now defer hidden
-  queue/history/preview work and preview thumbnail async apply skips hidden
-  widget mutation, but the broader non-pipeline visibility-gating sweep remains
-  open
+  Completed 2026-03-29
 - `PR-HARDEN-287-Runtime-Status-Backpressure-GUI-Perf-Journey-and-Architecture-Guards`
-  In progress as of 2026-03-28; runtime-status throttling and controller-side
-  Tk/direct-widget enforcement are now landed, but the final perf-threshold
-  closeout and explicit tranche completion record are still open
+  Completed 2026-03-29
 
 Delivered outcomes so far:
 
@@ -982,8 +977,12 @@ Delivered outcomes so far:
   the pipeline shell
 - hidden pipeline hot surfaces now defer work instead of burning Tk time while
   unmapped
+- the same visibility-gated deferral now reaches prompt/review/learning/photo-optimize/
+  SVD/movie/video/Debug Hub hot refresh surfaces
 - architecture enforcement now blocks controller-side Tk imports and direct
   widget mutation patterns
+- the deterministic synthetic busy-run perf journey is now the canonical GUI
+  responsiveness proof, with `p95 <= 35 ms` and `max <= 100 ms`
 
 ## 4B. Post-`PR-VIDEO-241` Structural Queue
 
@@ -997,33 +996,35 @@ remediation sequence. The highest-priority follow-on items are:
 - `PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset`
   Completed 2026-03-27
 - `PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation`
-  Not completed as of 2026-03-28; archive Python modules still remain under
-  `src/**/archive/**`, including
-  `src/controller/archive/pipeline_config_assembler.py`,
-  `src/controller/archive/pipeline_config_types.py`,
-  `src/gui/views/archive/pipeline_config_panel.py`, and
-  `src/gui/panels_v2/archive/pipeline_config_panel_v2.py`
+  Completed 2026-03-29; live archive Python modules were removed from
+  `src/**/archive/**`, relocated reference-only code now lives under
+  `tools/archive_reference/`, and archive import regressions are fenced by
+  `tests/safety/test_no_archive_python_modules_under_src.py` plus the
+  architecture/taxonomy enforcement suite
 - `PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement`
-  Not completed as of 2026-03-28; no canonical completion record or active PR
-  spec is present under `docs/CompletedPR/` or `docs/PR_Backlog/`
+  Completed 2026-03-29; runtime-state ownership is centralized through
+  `src/state/workspace_paths.py`, tracked-state drift is guarded by
+  `tests/safety/test_runtime_state_hygiene.py`, and the short canonical
+  contract now lives in `docs/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
 - `PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract`
-  Not completed as of 2026-03-28; no canonical completion record or active PR
-  spec is present under `docs/CompletedPR/` or `docs/PR_Backlog/`
+  Completed 2026-03-29; CI now runs the named required smoke gate
+  `tools/ci/run_required_smoke.py`, and workflow/docs drift is enforced by
+  `tests/system/test_ci_truth_sync_v2.py`
 - `PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards`
-  Not completed as of 2026-03-28; existing enforcement coverage such as
-  `tests/system/test_architecture_enforcement_v2.py` and
-  `tests/safety/test_controller_core_no_gui_imports.py` provides partial
-  groundwork, but there is no canonical completion record or active PR spec for
-  the broader queue item
+  Completed 2026-03-29; the enforcement suite now covers controller-side Tk
+  import bans, direct widget-mutation bans, archive/reference fencing, and
+  backend-runtime imports constrained to the controller port layer
 - `PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction`
-  Not completed as of 2026-03-28; earlier work from `PR-CTRL-205` and
-  `PR-CTRL-221` extracted bounded services, but the dedicated follow-on PR is
-  not documented as complete and `PipelineController` remains a large facade
+  Completed 2026-03-29; queue-submission orchestration now lives in
+  `src/controller/pipeline_controller_services/queue_submission_service.py`,
+  reducing `PipelineController` to a thinner facade over bounded submission and
+  history-handoff services
 - `PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes`
-  Not completed as of 2026-03-28; `src/controller/ports/runtime_ports.py` and
-  `tests/controller/test_runtime_ports_contract.py` exist as narrow groundwork,
-  but there is no canonical completion record or active PR spec for the larger
-  backend-port-boundary rollout
+  Completed 2026-03-29; controller-owned image-runtime and workflow-registry
+  ports now live in `src/controller/ports/runtime_ports.py`, default concrete
+  adapters are isolated to `src/controller/ports/default_runtime_ports.py`, and
+  `AppController`, `PipelineController`, and `VideoWorkflowController` are
+  wired through that boundary
 - `PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization`
   Completed 2026-03-21
 - `PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters`
@@ -1033,32 +1034,25 @@ remediation sequence. The highest-priority follow-on items are:
 - `PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split`
   Completed 2026-03-21
 - `PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation`
-  Not completed as of 2026-03-28; replay groundwork exists in
-  `src/pipeline/replay_engine.py` plus replay tests such as
-  `tests/pipeline/test_replay_vs_fresh_v2.py`, but there is no canonical
-  completion record or active PR spec for the formal fidelity-contract rollout
+  Completed 2026-03-29; replay now validates versioned intent contracts and
+  hash closure before hydrating NJR snapshots, with compat coverage for legacy
+  snapshots that lack the new contract
 - `PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition`
-  Not completed as of 2026-03-28; GUI and CLI still do not share one explicit
-  `ApplicationKernel` / bootstrap composition layer, and there is no canonical
-  completion record or active PR spec for this queue item
+  Completed 2026-03-29; GUI and CLI now compose through the shared
+  `src/app/bootstrap.py` `ApplicationKernel`
 - `PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes`
-  Not completed as of 2026-03-28; partial capability/probe groundwork exists,
-  including `src/video/comfy_dependency_probe.py`,
-  `src/video/svd_capabilities.py`, and related tests, but the broader
-  cross-product optional-dependency contract is not documented as complete
+  Completed 2026-03-29; optional dependency readiness is now published through
+  the shared snapshot contract in `src/app/optional_dependency_probes.py` and
+  surfaced via application diagnostics
 - `PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion`
-  Not completed as of 2026-03-28; mypy is configured in `pyproject.toml`, but
-  `.github/workflows/ci.yml` does not currently run a mypy smoke job and there
-  is no canonical completion record or active PR spec for this gate
+  Completed 2026-03-29; CI now runs the bounded typed-seam gate in
+  `tools/ci/run_mypy_smoke.py`
 - `PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure`
-  Not completed as of 2026-03-28; intent-related contract groundwork exists in
-  current NJR/config surfaces, but there is no canonical completion record or
-  active PR spec for the explicit version/hash-closure rollout
+  Completed 2026-03-29; intent artifacts now carry explicit schema/version/hash
+  metadata in config layers and job snapshots
 - `PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure`
-  Not completed as of 2026-03-28; workflow-registry groundwork exists in
-  `src/video/workflow_registry.py` and `tests/video/test_workflow_registry.py`,
-  but the dedicated governance-and-pinning closeout PR is not documented as
-  complete
+  Completed 2026-03-29; workflow specs now encode governance state and pinned
+  revision, and the canonical registry returns only approved pinned workflows
 
 Recommendation L is now delivered through `PR-OBS-249A` through
 `PR-OBS-249D`. After `PR-OBS-249D`, the bottom log is the operator surface and

@@ -35,7 +35,6 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Any, TypedDict
 
-from src.api.client import SDWebUIClient
 from src.api.webui_api import WebUIAPI
 from src.api.webui_process_manager import (
     WebUIProcessManager,
@@ -70,16 +69,19 @@ from src.pipeline.reprocess_builder import (
     ReprocessSourceItem,
     extract_reprocess_output_paths,
 )
-from src.pipeline.pipeline_runner import PipelineRunner, normalize_run_result
+from src.pipeline.pipeline_runner import normalize_run_result
 from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
 from src.controller.app_controller_services.learning_completion_router import (
     build_learning_completion_handler,
 )
+from src.controller.ports.default_runtime_ports import DefaultImageRuntimePorts
+from src.controller.ports.runtime_ports import ImageRuntimePorts
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.controller.app_controller_services.gui_config_service import GuiConfigService
 from src.controller.app_controller_services.run_submission_service import (
     QueueRunSubmissionService,
 )
+from src.app.optional_dependency_probes import OptionalDependencySnapshot
 import logging
 import uuid
 
@@ -338,10 +340,10 @@ class AppController:
     def __init__(
         self,
         main_window: MainWindow | None,
-        pipeline_runner: PipelineRunner | None = None,
+        pipeline_runner: Any | None = None,
         threaded: bool = True,
         packs_dir: Path | str | None = None,
-        api_client: SDWebUIClient | None = None,
+        api_client: Any | None = None,
         structured_logger: StructuredLogger | None = None,
         webui_process_manager: WebUIProcessManager | None = None,
         config_manager: ConfigManager | None = None,
@@ -349,12 +351,16 @@ class AppController:
         job_service: JobService | None = None,
         pipeline_controller: PipelineController | None = None,
         ui_scheduler: Callable[[Callable[[], None]], None] = None,
+        runtime_ports: ImageRuntimePorts | None = None,
+        optional_dependency_snapshot: OptionalDependencySnapshot | None = None,
     ) -> None:
         import threading
         import time
 
         self._ui_thread_id = threading.get_ident()
         self._ui_scheduler = ui_scheduler
+        self._runtime_ports = runtime_ports or DefaultImageRuntimePorts()
+        self._optional_dependency_snapshot = optional_dependency_snapshot
         # --- BEGIN PR-CORE1-D21A: Watchdog/Diagnostics wiring ---
         # Watchdog is attached by app_factory after the GUI is constructed.
         # (Avoids triggering diagnostics during import/startup and allows tests to opt-out.)
@@ -417,19 +423,23 @@ class AppController:
         # Pipeline runner and controller setup
         # Don't do port discovery on startup - too slow (50+ seconds if WebUI not running)
         # Use default port and discover later if connection fails
-        settings = self._config_manager.load_settings()
+        load_settings = getattr(self._config_manager, "load_settings", None)
+        settings = load_settings() if callable(load_settings) else {}
         default_url = str(settings.get("webui_base_url") or "").strip() or os.getenv(
             "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
         )
         
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
-            self._api_client = api_client or SDWebUIClient(base_url=default_url)
+            self._api_client = api_client or self._runtime_ports.create_client(base_url=default_url)
             self._structured_logger = structured_logger or StructuredLogger()
         else:
-            self._api_client = api_client or SDWebUIClient(base_url=default_url)
+            self._api_client = api_client or self._runtime_ports.create_client(base_url=default_url)
             self._structured_logger = structured_logger or StructuredLogger()
-            self.pipeline_runner = PipelineRunner(self._api_client, self._structured_logger)
+            self.pipeline_runner = self._runtime_ports.create_runner(
+                api_client=self._api_client,
+                structured_logger=self._structured_logger,
+            )
         self._apply_initial_resource_probe_grace()
         self._webui_api: WebUIAPI | None = None
         client = getattr(self, "_api_client", None)
@@ -474,6 +484,7 @@ class AppController:
                 pipeline_runner=self.pipeline_runner,
                 job_lifecycle_logger=self._job_lifecycle_logger,
                 app_state=self.app_state,
+                runtime_ports=self._runtime_ports,
                 app_controller=self,  # PR-HEARTBEAT-FIX: Pass self for heartbeat updates
             )
         try:
@@ -1037,7 +1048,7 @@ class AppController:
         except Exception:
             logger.exception("Failed to start system watchdog")
 
-    def _create_api_client_with_discovery(self) -> SDWebUIClient:
+    def _create_api_client_with_discovery(self) -> Any:
         """
         Create API client with automatic port discovery.
         
@@ -1061,13 +1072,13 @@ class AppController:
         
         if discovered_url:
             logger.info(f"[controller] Discovered WebUI at {discovered_url}")
-            return SDWebUIClient(base_url=discovered_url)
+            return self._runtime_ports.create_client(base_url=discovered_url)
         else:
             # Fall back to default or environment variable
             import os
             default_url = os.getenv("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
             logger.warning(f"[controller] WebUI discovery failed, using {default_url}")
-            return SDWebUIClient(base_url=default_url)
+            return self._runtime_ports.create_client(base_url=default_url)
 
     def notify_queue_activity(self) -> None:
         import time
@@ -3471,6 +3482,12 @@ class AppController:
             "last_ui_heartbeat_ts": getattr(self, "last_ui_heartbeat_ts", None),
             "last_runner_activity_ts": getattr(self, "last_runner_activity_ts", None),
         }
+        snapshot = getattr(self, "_optional_dependency_snapshot", None)
+        if snapshot is not None and hasattr(snapshot, "to_dict"):
+            try:
+                data["optional_dependencies"] = snapshot.to_dict()
+            except Exception:
+                data["optional_dependencies"] = None
         pipeline_tab = getattr(getattr(self, "main_window", None), "pipeline_tab", None)
         getter = getattr(pipeline_tab, "get_diagnostics_snapshot", None)
         if callable(getter):

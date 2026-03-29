@@ -10,9 +10,11 @@ from __future__ import annotations
 import pytest
 
 from src.controller.ports.runtime_ports import (
+    ImageRuntimePorts,
     NJRSummaryPort,
     NJRUISummaryPort,
     JobCompletionCallbackPort,
+    WorkflowRegistryPort,
 )
 
 
@@ -57,6 +59,26 @@ class _NotAController:
     pass
 
 
+class _RuntimePorts:
+    def create_client(self, *, base_url: str):
+        return {"base_url": base_url}
+
+    def create_runner(self, *, api_client, structured_logger, status_callback=None):
+        return {
+            "client": api_client,
+            "logger": structured_logger,
+            "status_callback": status_callback,
+        }
+
+
+class _WorkflowRegistry:
+    def list_specs_for_backend(self, backend_id: str):
+        return [{"backend_id": backend_id}]
+
+    def get(self, workflow_id: str, workflow_version: str | None = None):
+        return {"workflow_id": workflow_id, "workflow_version": workflow_version}
+
+
 class TestNJRSummaryPort:
     def test_full_njr_satisfies(self):
         assert isinstance(_FullNJR(), NJRSummaryPort)
@@ -96,3 +118,19 @@ class TestJobCompletionCallbackPort:
         # A bare lambda has no on_job_completed_callback attribute.
         f = lambda job, result: None
         assert not isinstance(f, JobCompletionCallbackPort)
+
+
+class TestImageRuntimePorts:
+    def test_runtime_port_bundle_satisfies(self):
+        assert isinstance(_RuntimePorts(), ImageRuntimePorts)
+
+    def test_missing_runtime_port_methods_do_not_satisfy(self):
+        assert not isinstance(_NoSummary(), ImageRuntimePorts)
+
+
+class TestWorkflowRegistryPort:
+    def test_workflow_registry_port_satisfies(self):
+        assert isinstance(_WorkflowRegistry(), WorkflowRegistryPort)
+
+    def test_non_registry_object_does_not_satisfy(self):
+        assert not isinstance(_NoSummary(), WorkflowRegistryPort)

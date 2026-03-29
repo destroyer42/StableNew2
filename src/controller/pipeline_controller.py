@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 import uuid
 from collections.abc import Callable, Mapping
-from contextlib import nullcontext
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -20,12 +19,16 @@ from src.controller.core_pipeline_controller import CorePipelineController
 from src.controller.job_execution_controller import JobExecutionController
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service import JobService
+from src.controller.pipeline_controller_services.queue_submission_service import (
+    QueueSubmissionService,
+)
+from src.controller.ports.default_runtime_ports import DefaultImageRuntimePorts
+from src.controller.ports.runtime_ports import ImageRuntimePorts
 from src.controller.runtime_state import GUIState, PipelineState
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
-from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult
+from src.pipeline.pipeline_runner import PipelineRunResult
 from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
 from src.queue.job_model import Job, JobPriority, JobStatus
-from src.api.client import SDWebUIClient
 from src.config.app_config import is_queue_execution_enabled
 from src.controller.job_history_service import JobHistoryService
 from src.controller.pipeline_controller_services.history_handoff_service import (
@@ -552,6 +555,7 @@ class PipelineController(CorePipelineController):
         job_lifecycle_logger: JobLifecycleLogger | None = None,
         config_manager: ConfigManager | None = None,
         gui_defaults_resolver: GuiDefaultsResolver | None = None,
+        runtime_ports: ImageRuntimePorts | None = None,
         **kwargs,
     ):
         # Pop parameters that are not for the parent class
@@ -594,10 +598,12 @@ class PipelineController(CorePipelineController):
         self._model_defaults_resolver = ModelDefaultsResolver(config_manager=self._config_manager)
         self._config_assembler = config_assembler
         self._job_builder = job_builder if job_builder is not None else JobBuilderV2()
+        self._runtime_ports = runtime_ports or DefaultImageRuntimePorts()
         self._webui_connection = (
             webui_conn if webui_conn is not None else WebUIConnectionController()
         )
         self._pipeline_runner = pipeline_runner
+        self._queue_submission_service: QueueSubmissionService | None = None
         try:
             self._job_controller.set_status_callback("pipeline_ctrl", self._on_queue_status)
         except Exception:
@@ -701,6 +707,13 @@ class PipelineController(CorePipelineController):
 
             self._learning_runner = LearningRunner()
         return self._learning_runner
+
+    def _get_queue_submission_service(self) -> QueueSubmissionService:
+        current = getattr(self, "_queue_submission_service", None)
+        if current is None or getattr(current, "_job_service", None) is not self._job_service:
+            current = QueueSubmissionService(job_service=self._job_service, logger=_logger)
+            self._queue_submission_service = current
+        return current
 
     def get_gui_model_defaults(
         self, model_name: str | None, preset_name: str | None = None
@@ -1419,12 +1432,14 @@ class PipelineController(CorePipelineController):
             return app_controller._get_runtime_status_callback()
         return None
 
-    def _create_runtime_pipeline_runner(self) -> PipelineRunner:
+    def _create_runtime_pipeline_runner(self) -> Any:
         if self._pipeline_runner is not None:
             return self._pipeline_runner
-        return PipelineRunner(
-            SDWebUIClient(base_url="http://127.0.0.1:7860"),
-            StructuredLogger(),
+        runtime_ports = getattr(self, "_runtime_ports", None) or DefaultImageRuntimePorts()
+        api_client = runtime_ports.create_client(base_url="http://127.0.0.1:7860")
+        return runtime_ports.create_runner(
+            api_client=api_client,
+            structured_logger=StructuredLogger(),
             status_callback=self._get_runtime_status_callback(),
         )
 
@@ -1523,19 +1538,7 @@ class PipelineController(CorePipelineController):
         self,
         records: list[NormalizedJobRecord],
     ) -> tuple[list[NormalizedJobRecord], list[NormalizedJobRecord]]:
-        queueable: list[NormalizedJobRecord] = []
-        non_queueable: list[NormalizedJobRecord] = []
-        for record in records:
-            config = record.config or {}
-            prompt_pack_id = record.prompt_pack_id or (
-                config.get("prompt_pack_id") if isinstance(config, dict) else None
-            )
-            prompt_source = str(getattr(record, "prompt_source", "") or "").lower()
-            if prompt_pack_id or prompt_source != "pack":
-                queueable.append(record)
-            else:
-                non_queueable.append(record)
-        return queueable, non_queueable
+        return self._get_queue_submission_service().split_queueable_records(records)
 
     def _ensure_record_prompt_pack_metadata(
         self,
@@ -1543,63 +1546,15 @@ class PipelineController(CorePipelineController):
         prompt_pack_id: str | None,
         prompt_pack_name: str | None,
     ) -> None:
-        if not prompt_pack_id:
-            return
-        record.prompt_source = "pack"
-        if not getattr(record, "prompt_pack_id", None):
-            record.prompt_pack_id = prompt_pack_id
-        if prompt_pack_name and not getattr(record, "prompt_pack_name", None):
-            record.prompt_pack_name = prompt_pack_name
+        self._get_queue_submission_service().ensure_record_prompt_pack_metadata(
+            record,
+            prompt_pack_id,
+            prompt_pack_name,
+        )
 
     def _sort_jobs_by_model(self, records: list[NormalizedJobRecord]) -> list[NormalizedJobRecord]:
         """Sort jobs by model+VAE to minimize expensive WebUI state switches."""
-
-        def _extract_model_vae_key(record: NormalizedJobRecord) -> tuple[str, str]:
-            config = record.config or {}
-            if not isinstance(config, dict):
-                return ("", "")
-
-            # Model: try top-level, then txt2img section.
-            model = config.get("model_name") or config.get("model") or ""
-            if not model:
-                txt2img = config.get("txt2img", {})
-                if isinstance(txt2img, dict):
-                    model = txt2img.get("model_name") or txt2img.get("model") or ""
-
-            # VAE: treat empty/automatic/none as default to preserve grouping semantics.
-            vae = config.get("vae") or config.get("sd_vae") or ""
-            if not vae:
-                txt2img = config.get("txt2img", {})
-                if isinstance(txt2img, dict):
-                    vae = txt2img.get("vae") or txt2img.get("sd_vae") or ""
-            model_key = str(model).strip().lower()
-            vae_key = str(vae).strip().lower()
-            if vae_key in {"", "automatic", "none"}:
-                vae_key = "automatic"
-            return model_key, vae_key
-
-        # Keep unspecified models at the end, then sort by model and VAE.
-        sorted_records = sorted(
-            records,
-            key=lambda r: (
-                _extract_model_vae_key(r)[0] == "",
-                _extract_model_vae_key(r)[0],
-                _extract_model_vae_key(r)[1],
-            ),
-        )
-
-        if len(sorted_records) > 1:
-            model_groups: dict[str, int] = {}
-            for record in sorted_records:
-                model, vae = _extract_model_vae_key(record)
-                group_key = f"{model or '(none)'}|vae={vae}"
-                model_groups[group_key] = model_groups.get(group_key, 0) + 1
-            _logger.info(
-                "[PipelineController] Job grouping by model+vae: %s",
-                ", ".join(f"{group}: {count}" for group, count in model_groups.items()),
-            )
-
-        return sorted_records
+        return self._get_queue_submission_service().sort_jobs_by_model(records)
 
     def _is_queue_submission_blocked(self) -> bool:
         app_controller = getattr(self, "_app_controller", None)
@@ -1624,94 +1579,25 @@ class PipelineController(CorePipelineController):
         source: str = "gui",
         prompt_source: str = "pack",
     ) -> int:
-        if not records or not self._job_service:
-            return 0
-        if str(source).startswith("learning_"):
-            allowed, reason = self.can_enqueue_learning_jobs(len(records))
-            if not allowed:
-                _logger.warning("[PipelineController] Learning enqueue blocked: %s", reason)
-                return 0
-        if self._is_queue_submission_blocked():
-            _logger.info(
-                "[PipelineController] Skipping queue submission because shutdown is in progress"
-            )
-            return 0
-        
-        _logger.info(f"[PipelineController] _submit_normalized_jobs called with {len(records)} NormalizedJobRecord(s)")
-        
-        # Sort jobs by model+VAE to minimize switch churn and crash risk
-        records = self._sort_jobs_by_model(records)
         _logger.info(
-            f"[PipelineController] Sorted {len(records)} jobs by model+vae to minimize WebUI switches"
+            "[PipelineController] _submit_normalized_jobs called with %d NormalizedJobRecord(s)",
+            len(records),
         )
-
-        submit_job = getattr(self._job_service, "submit_job_with_run_mode", None)
-        emit_queue_updated = getattr(self._job_service, "_emit_queue_updated", None)
-        queue = getattr(self._job_service, "job_queue", None)
-        coalesce_queue_state = getattr(queue, "coalesce_state_notifications", None)
-        submitted = 0
-        run_config_to_use = run_config or getattr(self, "_last_run_config", None)
-        batch_context = nullcontext()
-        if callable(coalesce_queue_state):
-            candidate_context = coalesce_queue_state()
-            if hasattr(candidate_context, "__enter__") and hasattr(candidate_context, "__exit__"):
-                batch_context = candidate_context
-        with batch_context:
-            for idx, record in enumerate(records):
-                if self._is_queue_submission_blocked():
-                    _logger.info(
-                        "[PipelineController] Stopping queue submission after %d/%d jobs because shutdown is in progress",
-                        submitted,
-                        len(records),
-                    )
-                    break
-                _logger.info(f"[PipelineController] Submitting NJR {idx+1}/{len(records)}: pack={record.prompt_pack_id}, row={record.prompt_pack_row_index}")
-                prompt_pack_id = None
-                cfg = record.config
-                if isinstance(cfg, dict):
-                    prompt_pack_id = cfg.get("prompt_pack_id")
-                if prompt_pack_id and not getattr(record, "prompt_pack_id", None):
-                    try:
-                        record.prompt_pack_id = prompt_pack_id  # type: ignore[attr-defined]
-                    except Exception:
-                        record.prompt_pack_id = prompt_pack_id
-                prompt_pack_name = None
-                if isinstance(cfg, dict):
-                    prompt_pack_name = cfg.get("prompt_pack_name") or cfg.get("pack_name")
-                self._ensure_record_prompt_pack_metadata(record, prompt_pack_id, prompt_pack_name)
-                job = self._to_queue_job(
-                    record,
-                    run_mode="queue",
-                    source=source,
-                    prompt_source=prompt_source,
-                    prompt_pack_id=prompt_pack_id,
-                    run_config=run_config_to_use,
-                )
-                job.payload = lambda j=job: self._run_job(j)
-                if not hasattr(job, "_normalized_record") or job._normalized_record is None:
-                    _logger.warning(
-                        "PR-CORE1-B2: Job submitted without normalized_record in NJR-only mode. "
-                        f"Job ID: {job.job_id}, Source: {source}"
-                    )
-
-                if callable(submit_job):
-                    try:
-                        submit_job(job, emit_queue_updated=False)
-                    except TypeError:
-                        submit_job(job)
-                self._log_add_to_queue_event(job.job_id)
-                submitted += 1
-
-        if submitted > 0 and callable(emit_queue_updated):
-            try:
-                emit_queue_updated()
-            except Exception:
-                _logger.exception(
-                    "[PipelineController] Failed to emit coalesced queue update after batch submission",
-                    exc_info=True,
-                )
-
-        _logger.info(f"[PipelineController] Successfully submitted {submitted} jobs to queue")
+        submitted = self._get_queue_submission_service().submit_normalized_jobs(
+            records,
+            run_config=run_config,
+            source=source,
+            prompt_source=prompt_source,
+            last_run_config=getattr(self, "_last_run_config", None),
+            can_enqueue_learning_jobs=self.can_enqueue_learning_jobs,
+            is_queue_submission_blocked=self._is_queue_submission_blocked,
+            sort_jobs_by_model=self._sort_jobs_by_model,
+            ensure_record_prompt_pack_metadata=self._ensure_record_prompt_pack_metadata,
+            to_queue_job=self._to_queue_job,
+            log_add_to_queue_event=self._log_add_to_queue_event,
+            run_job_payload_factory=lambda job: (lambda j=job: self._run_job(j)),
+        )
+        _logger.info("[PipelineController] Successfully submitted %d jobs to queue", submitted)
         return submitted
 
     def reconstruct_jobs_from_snapshot(self, snapshot: dict[str, Any]) -> list[NormalizedJobRecord]:
