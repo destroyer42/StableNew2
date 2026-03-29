@@ -38,7 +38,7 @@ recovery. It directly impacts production use of ADetailer on the active branch.
 - `docs/ARCHITECTURE_v2.6.md`
 - `docs/GOVERNANCE_v2.6.md`
 - `docs/Research Reports/D-016-Branch-Review-Since-2026-03-22-2205.md`
-- `docs/PR_Backlog/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
+- `docs/CompletedPR/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
 
 ## Goals & Non-Goals
 

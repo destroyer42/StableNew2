@@ -132,7 +132,7 @@ Use these files as the active source of truth instead of this document:
 
 For secondary-motion-specific historical context, use:
 
-- `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/CompletedPlans/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
 
 ## 6. Recommendation
 

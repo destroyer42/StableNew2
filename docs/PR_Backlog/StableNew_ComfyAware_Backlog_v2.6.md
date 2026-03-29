@@ -81,10 +81,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
 
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
-
 ### `PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning`
 
 Status: Completed 2026-03-19
@@ -103,10 +99,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
 
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
-
 ### `PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification`
 
 Status: Completed 2026-03-19
@@ -123,10 +115,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
 
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
-
 ### `PR-VIDEO-218-Continuity-Pack-Foundation`
 
 Status: Completed 2026-03-20
@@ -142,10 +130,6 @@ Required outputs:
 Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-218-Continuity-Pack-Foundation.md`
-
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-218-Continuity-Pack-Foundation.md`
 
 ### `PR-VIDEO-219-Story-and-Shot-Planning-Foundation`
 
@@ -165,10 +149,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
 
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
-
 ### `PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter`
 
 Status: Completed 2026-03-20
@@ -184,10 +164,6 @@ Required outputs:
 Completion record:
 
 - `docs/CompletedPR/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
-
-Execution spec:
-
-- `docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
 
 With `PR-HARDEN-224` through `PR-HARDEN-229` assumed complete, the next
 video/runtime tranche is the StableNew-owned secondary motion layer.
@@ -220,11 +196,7 @@ Schema reference:
 
 Guiding roadmap:
 
-- `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
-
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
+- `docs/CompletedPlans/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
 
 ### `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
 
@@ -243,10 +215,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
 
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
-
 ### `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 
 Status: Completed 2026-03-24
@@ -262,10 +230,6 @@ Required outputs:
 Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
-
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 
 ### `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
 
@@ -283,10 +247,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
-
 ### `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
 
 Status: Completed 2026-03-24
@@ -301,10 +261,6 @@ Required outputs:
 - consistent motion summary shape across all current video backends
 - skip-safe fallback to the original workflow artifact when local prerequisites
   or re-encode steps are unavailable
-
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 
 Completion record:
 
@@ -323,10 +279,6 @@ Required outputs:
 - backend, policy, application-path, and status cohorting for motion evidence
 - no raw frame or dense motion payload retention in centralized learning data
 
-Execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
-
 Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
@@ -335,7 +287,7 @@ Completion record:
 
 The next prompt/image-product tranche is tracked separately in:
 
-- `docs/PR_Backlog/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/CompletedPlans/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
 
 That work is intentionally adjacent to this video tranche, but it should not
 interrupt `PR-VIDEO-237` through `PR-VIDEO-241`.

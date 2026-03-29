@@ -47,10 +47,10 @@ Focused verification passed:
 
 Bookkeeping closure recorded in:
 
-- `docs/Learning_System_Spec_v2.6.md`
+- `docs/Subsystems/Learning/Learning_System_Spec_v2.6.md`
 - `docs/REFINEMENT_POLICY_SCHEMA_v1.md`
 - `docs/StableNew Roadmap v2.6.md`
-- `docs/PR_Backlog/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/CompletedPlans/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
 
 ## Deferred Debt
 

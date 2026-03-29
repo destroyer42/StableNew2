@@ -26,9 +26,9 @@ regression anchor.
 
 ## Key Files
 
-- `docs/GUI_CONSISTENCY_MAINTENANCE_CHECKLIST_v2.6.md`
+- `docs/Subsystems/GUI/GUI_CONSISTENCY_MAINTENANCE_CHECKLIST_v2.6.md`
 - `docs/DOCS_INDEX_v2.6.md`
-- `docs/PR_Backlog/GUI_DARK_MODE_AND_LAYOUT_CONSISTENCY_SWEEP_v2.6.md`
+- `docs/CompletedPlans/GUI_DARK_MODE_AND_LAYOUT_CONSISTENCY_SWEEP_v2.6.md`
 - `tests/gui_v2/test_gui_consistency_maintenance_v2.py`
 
 ## Validation

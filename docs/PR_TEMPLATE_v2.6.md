@@ -140,6 +140,18 @@ Must include:
 
 List the docs that must change in the same PR if runtime truth changes.
 
+Every PR spec must explicitly call out:
+
+- which canonical docs change if the PR alters current truth
+- which active references need location or status updates
+- the final disposition for touched docs: remain active, move to
+	`CompletedPR`, move to `CompletedPlans`, move to `NeedsReview`, or move to
+	`archive`
+
+If a Tier 1 or Tier 2 canonical doc changes, the PR must include explicit
+validation evidence for the new wording against implemented code, tests, or
+both.
+
 For documentation-only follow-up, name the follow-up PR explicitly.
 
 ### 12. Dependencies
@@ -182,7 +194,7 @@ PR specs must not:
 - revive archive DTOs as active runtime dependencies
 - leave both old and new paths active
 
-## Post-Implementation Summary
+## Post-Implementation Summary and Closeout
 
 After implementation, append a short summary section that records:
 
@@ -190,3 +202,14 @@ After implementation, append a short summary section that records:
 - actual files changed
 - tests run
 - deferred debt and next PR owner
+
+Implementation is not fully closed until the same PR or immediate closeout pass
+does all applicable bookkeeping:
+
+- create or update the single final `docs/CompletedPR/PR-...md` record
+- update `docs/StableNew Roadmap v2.6.md` if roadmap truth changed
+- update `docs/DOCS_INDEX_v2.6.md` if active doc location or status changed
+- remove the duplicate execution spec from `docs/PR_Backlog/` once the final
+	`CompletedPR` file exists
+- move completed multi-PR sequence docs to `docs/CompletedPlans/`
+- move stale or uncertain docs to `docs/archive/` or `docs/NeedsReview/`

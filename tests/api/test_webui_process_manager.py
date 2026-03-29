@@ -169,3 +169,20 @@ def test_check_health_uses_retries(monkeypatch):
 
     assert manager.check_health()
     assert called and called[0][1] == 15.0 and called[0][2] == 3.0
+
+
+def test_start_orphan_monitor_skips_under_test_mode(monkeypatch):
+    cfg = WebUIProcessConfig(command=["python", "webui.py"])
+    manager = WebUIProcessManager(cfg)
+    monkeypatch.setenv("STABLENEW_NO_WEBUI", "1")
+    registry = mock.Mock()
+    monkeypatch.setattr(
+        "src.api.webui_process_manager.get_thread_registry",
+        lambda: registry,
+        raising=False,
+    )
+
+    manager._start_orphan_monitor()
+
+    assert manager._orphan_monitor_thread is None
+    registry.spawn.assert_not_called()

@@ -49,6 +49,7 @@ def test_queue_remove_updates_gui():
         job1.positive_prompt_preview = "Test job 1"
         job1.get_display_summary = Mock(return_value="Test job 1")
         job1.is_running = False
+        job1.status = "queued"
         job1.stage = "queued"
         job1.expected_images = 1
         job1.base_params = {}
@@ -58,6 +59,7 @@ def test_queue_remove_updates_gui():
         job2.positive_prompt_preview = "Test job 2"
         job2.get_display_summary = Mock(return_value="Test job 2")
         job2.is_running = False
+        job2.status = "queued"
         job2.stage = "queued"
         job2.expected_images = 1
         job2.base_params = {}

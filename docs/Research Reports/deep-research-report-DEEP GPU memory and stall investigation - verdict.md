@@ -30,7 +30,7 @@ Confirmed.
 
 This aligns with:
 
-- `docs/WebUI GPU Pressure and Stall Investigation 2026-03-21.md`
+- `docs/Research Reports/WebUI GPU Pressure and Stall Investigation 2026-03-21.md`
 - pressure assessment and admission logic in `src/pipeline/executor.py`
 
 The workload class is genuinely heavy for a 12 GB SDXL card:
@@ -59,7 +59,7 @@ memory multiplier once ADetailer and upscale are added.
 Confirmed.
 
 This directly matches the intent of
-`docs/PR_Backlog/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`.
+`docs/CompletedPR/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`.
 
 ### 2.5 Lower-memory WebUI launch policies are relevant
 

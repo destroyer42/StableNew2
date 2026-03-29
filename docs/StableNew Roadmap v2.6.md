@@ -102,10 +102,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
-
 ### 2. `PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning`
 
 Status: Completed 2026-03-19
@@ -123,10 +119,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
 
 ### 3. `PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification`
 
@@ -146,10 +138,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
-
 ### 4. `PR-VIDEO-218-Continuity-Pack-Foundation`
 
 Status: Completed 2026-03-20
@@ -166,10 +154,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-218-Continuity-Pack-Foundation.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-218-Continuity-Pack-Foundation.md`
 
 ### 5. `PR-VIDEO-219-Story-and-Shot-Planning-Foundation`
 
@@ -189,10 +173,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
-
 ### 6. `PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter`
 
 Status: Completed 2026-03-20
@@ -209,10 +189,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
 
 ### 7. `PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink`
 
@@ -239,10 +215,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
-
 ### 8. `PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation`
 
 Status: Completed 2026-03-20
@@ -262,11 +234,7 @@ Completion record:
 
 Guiding roadmap:
 
-- `docs/PR_Backlog/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation.md`
+- `docs/CompletedPlans/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
 
 ### 9. `PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture`
 
@@ -284,10 +252,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
-
 ### 10. `PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment`
 
 Status: Completed 2026-03-20
@@ -304,10 +268,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
-
 ### 11. `PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application`
 
 Status: Completed 2026-03-20
@@ -323,10 +283,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
 
 ### 12. `PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration`
 
@@ -345,10 +301,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
-
 ### 13. `PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback`
 
 Status: Completed 2026-03-20
@@ -365,10 +317,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
 
 ### 14. `PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup`
 
@@ -388,10 +336,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
 
 ### 15. `PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit`
 
@@ -413,10 +357,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
-
 ### 16. `PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery`
 
 Status: Completed 2026-03-20
@@ -433,10 +373,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
 
 ### 17. `PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix`
 
@@ -455,10 +391,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md`
-
 ### 18. `PR-GUI-234-Reprocess-Surface-Consolidation`
 
 Status: Completed 2026-03-20
@@ -475,10 +407,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-GUI-234-Reprocess-Surface-Consolidation.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-GUI-234-Reprocess-Surface-Consolidation.md`
 
 ### 19. `PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX`
 
@@ -499,10 +427,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
-
 ### 19A. `PR-GUI-235A-PresetNaming`
 
 Status: Completed
@@ -522,10 +446,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-GUI-235A-PresetNaming.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-GUI-235A-PresetNaming.md`
 
 ### 20. `PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
 
@@ -557,11 +477,7 @@ Schema reference:
 
 Guiding roadmap:
 
-- `docs/PR_Backlog/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
+- `docs/CompletedPlans/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
 
 ### 21. `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
 
@@ -580,13 +496,9 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
-
 ### 21A. `PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping`
 
-Status: Implemented
+Status: Completed 2026-03-21
 
 Interleaved critical hardening gate before the next runtime-heavy backend
 rollout.
@@ -607,9 +519,9 @@ Reason for slotting here:
   backend-runtime rollout first would reduce confidence in later video PR
   validation
 
-Detailed execution spec:
+Completion record:
 
-- `docs/PR_Backlog/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
+- `docs/CompletedPR/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
 
 Validation note:
 
@@ -637,15 +549,15 @@ Primary outcomes:
 - surface duplicate-process risk and stale-process pressure in logs and
   diagnostics
 
+Completion record:
+
+- `docs/CompletedPR/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
+
 Reason for slotting here:
 
 - `PR-HARDEN-256` reduced blind spots but did not reduce failures enough on its
   own, so runtime admission and guarded restart behavior had to land before the
   next runtime-heavy video PR
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
 
 Validation note:
 
@@ -670,9 +582,9 @@ Primary outcomes:
 - uses the managed restart/recovery path instead of ad hoc profile switching
 - treats `low_memory` as an already-guarded profile
 
-Detailed execution spec:
+Completion record:
 
-- `docs/PR_Backlog/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md`
+- `docs/CompletedPR/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md`
 
 ### 22. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
 
@@ -691,10 +603,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
-
 ### 23. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
 
 Status: Completed 2026-03-24
@@ -710,10 +618,6 @@ Primary outcomes:
 Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
-
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
 
 ### 24. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
 
@@ -733,10 +637,6 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
-
 ### 25. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
 
 Status: Completed 2026-03-24
@@ -755,15 +655,11 @@ Completion record:
 
 - `docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
 
-Detailed execution spec:
-
-- `docs/PR_Backlog/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
-
 ## 4A. Post-`PR-VIDEO-241` Prompt Optimizer Tranche
 
 The next product-facing image/prompt tranche is tracked in:
 
-- `docs/PR_Backlog/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
+- `docs/CompletedPlans/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
 
 It is intentionally queued after the current secondary-motion video sequence
 and before broader lower-leverage cleanup. The planned rollout is:

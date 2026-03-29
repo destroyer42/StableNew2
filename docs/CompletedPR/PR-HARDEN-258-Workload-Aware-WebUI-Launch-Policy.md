@@ -37,7 +37,6 @@ Focused verification passed:
 
 - `docs/StableNew Roadmap v2.6.md`
 - `docs/DOCS_INDEX_v2.6.md`
-- `docs/PR_Backlog/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md`
 
 ## Notes
 

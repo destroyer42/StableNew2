@@ -83,9 +83,8 @@ path kept the runtime stable enough to complete the workload:
 Bookkeeping closure recorded in:
 
 - `docs/StableNew Roadmap v2.6.md`
-- `docs/WebUI GPU Pressure and Stall Investigation 2026-03-21.md`
+- `docs/Research Reports/WebUI GPU Pressure and Stall Investigation 2026-03-21.md`
 - `docs/Research Reports/deep-research-report-DEEP GPU memory and stall investigation - verdict.md`
-- `docs/PR_Backlog/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
 
 ## Follow-On Recommendation
 

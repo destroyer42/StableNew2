@@ -14,7 +14,7 @@ fix shared causes before panel-by-panel polish work resumes.
 ## Delivered
 
 - added the structured audit artifact
-  `docs/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md`
+  `docs/Subsystems/GUI/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md`
 - inventoried the required GUI coverage set:
   - Pipeline
   - Prompt
@@ -29,9 +29,9 @@ fix shared causes before panel-by-panel polish work resumes.
 
 ## Key Files
 
-- `docs/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md`
+- `docs/Subsystems/GUI/GUI_AUDIT_AND_CONSISTENCY_INVENTORY_v2.6.md`
 - `docs/DOCS_INDEX_v2.6.md`
-- `docs/PR_Backlog/GUI_DARK_MODE_AND_LAYOUT_CONSISTENCY_SWEEP_v2.6.md`
+- `docs/CompletedPlans/GUI_DARK_MODE_AND_LAYOUT_CONSISTENCY_SWEEP_v2.6.md`
 
 ## Validation
 

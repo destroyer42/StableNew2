@@ -710,8 +710,9 @@ class PipelineController(CorePipelineController):
 
     def _get_queue_submission_service(self) -> QueueSubmissionService:
         current = getattr(self, "_queue_submission_service", None)
-        if current is None or getattr(current, "_job_service", None) is not self._job_service:
-            current = QueueSubmissionService(job_service=self._job_service, logger=_logger)
+        job_service = getattr(self, "_job_service", None)
+        if current is None or getattr(current, "_job_service", None) is not job_service:
+            current = QueueSubmissionService(job_service=job_service, logger=_logger)
             self._queue_submission_service = current
         return current
 

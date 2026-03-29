@@ -38,7 +38,6 @@ Focused verification passed:
 Bookkeeping closure recorded in:
 
 - `docs/StableNew Roadmap v2.6.md`
-- `docs/PR_Backlog/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
 
 ## Deferred Debt
 

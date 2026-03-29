@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import threading
 import time
 from collections.abc import Iterator, Mapping, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -28,6 +30,7 @@ _PYTHON_EXECUTABLES = {
 _KNOWN_SCRIPT_NAMES = {"a1111_upscale_folder.py", "gui_run_packs.py", "launch_webui.py"}
 _ENV_PREFIX = "STABLENEW_"
 _SIGNIFICANT_MAIN_PROCESS_RSS_MB = 64.0
+_PROCESS_SCAN_LOCK = threading.RLock()
 
 
 @dataclass(frozen=True)
@@ -42,6 +45,14 @@ class ProcessInfo:
     env_markers: tuple[str, ...]
 
 
+@contextmanager
+def hold_process_scan_lock() -> Iterator[None]:
+    """Serialize psutil process enumeration on Windows-sensitive paths."""
+
+    with _PROCESS_SCAN_LOCK:
+        yield
+
+
 def iter_python_processes() -> Iterator[ProcessInfo]:
     """Yield lightweight info for every Python process psutil can observe."""
     if psutil is None:
@@ -50,72 +61,73 @@ def iter_python_processes() -> Iterator[ProcessInfo]:
     # Keep attrs minimal/safe. Do NOT include "cmdline" or "environ" here.
     safe_attrs = ("pid", "ppid", "name", "cwd", "create_time")
 
-    for proc in psutil.process_iter(attrs=safe_attrs):
-        try:
-            info = proc.info
-        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):  # type: ignore[attr-defined]
-            continue
-        except Exception:
-            continue
-
-        # Name check (best-effort)
-        raw_name = info.get("name") or ""
-        name_lower = raw_name.lower()
-        if name_lower not in _PYTHON_EXECUTABLES:
-            continue
-
-        pid = int(info.get("pid") or 0)
-        parent_pid = _safe_int(info.get("ppid"))
-
-        # cmdline (guarded; may throw WinError 87 / AccessDenied)
-        cmdline: tuple[str, ...]
-        try:
-            raw_cmd = proc.cmdline()
-            cmdline = tuple(str(part) for part in (raw_cmd or []) if part)
-        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied, OSError):  # type: ignore[attr-defined]
-            continue
-        except Exception:
-            continue
-
-        if not cmdline:
-            continue
-
-        # cwd/create_time from safe info (guarded conversion)
-        cwd_val = info.get("cwd")
-        cwd = str(cwd_val) if cwd_val else None
-        create_time = _safe_float(info.get("create_time"))
-        rss_mb = None
-        try:
-            memory_info = proc.memory_info()
-            rss_mb = round(float(getattr(memory_info, "rss", 0.0) or 0.0) / (1024 * 1024), 1)
-        except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied, OSError):  # type: ignore[attr-defined]
-            rss_mb = None
-        except Exception:
-            rss_mb = None
-
-        # Decide whether to attempt environ().
-        # Only do this if cwd/cmdline already looks like it might be ours.
-        env_markers: tuple[str, ...] = ()
-        looks_stablenew = _shares_repo_path(cwd) or _matches_known_script(cmdline)
-        if looks_stablenew:
+    with hold_process_scan_lock():
+        for proc in psutil.process_iter(attrs=safe_attrs):
             try:
-                env = proc.environ()
-            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied, OSError):  # type: ignore[attr-defined]
-                env = None
+                info = proc.info
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied):  # type: ignore[attr-defined]
+                continue
             except Exception:
-                env = None
-            env_markers = _collect_env_markers(env)
+                continue
 
-        yield ProcessInfo(
-            pid=pid,
-            parent_pid=parent_pid,
-            name=raw_name or None,
-            cmdline=cmdline,
-            cwd=cwd,
-            create_time=create_time,
-            rss_mb=rss_mb,
-            env_markers=env_markers,
-        )
+            # Name check (best-effort)
+            raw_name = info.get("name") or ""
+            name_lower = raw_name.lower()
+            if name_lower not in _PYTHON_EXECUTABLES:
+                continue
+
+            pid = int(info.get("pid") or 0)
+            parent_pid = _safe_int(info.get("ppid"))
+
+            # cmdline (guarded; may throw WinError 87 / AccessDenied)
+            cmdline: tuple[str, ...]
+            try:
+                raw_cmd = proc.cmdline()
+                cmdline = tuple(str(part) for part in (raw_cmd or []) if part)
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied, OSError):  # type: ignore[attr-defined]
+                continue
+            except Exception:
+                continue
+
+            if not cmdline:
+                continue
+
+            # cwd/create_time from safe info (guarded conversion)
+            cwd_val = info.get("cwd")
+            cwd = str(cwd_val) if cwd_val else None
+            create_time = _safe_float(info.get("create_time"))
+            rss_mb = None
+            try:
+                memory_info = proc.memory_info()
+                rss_mb = round(float(getattr(memory_info, "rss", 0.0) or 0.0) / (1024 * 1024), 1)
+            except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied, OSError):  # type: ignore[attr-defined]
+                rss_mb = None
+            except Exception:
+                rss_mb = None
+
+            # Decide whether to attempt environ().
+            # Only do this if cwd/cmdline already looks like it might be ours.
+            env_markers: tuple[str, ...] = ()
+            looks_stablenew = _shares_repo_path(cwd) or _matches_known_script(cmdline)
+            if looks_stablenew:
+                try:
+                    env = proc.environ()
+                except (psutil.NoSuchProcess, psutil.ZombieProcess, psutil.AccessDenied, OSError):  # type: ignore[attr-defined]
+                    env = None
+                except Exception:
+                    env = None
+                env_markers = _collect_env_markers(env)
+
+            yield ProcessInfo(
+                pid=pid,
+                parent_pid=parent_pid,
+                name=raw_name or None,
+                cmdline=cmdline,
+                cwd=cwd,
+                create_time=create_time,
+                rss_mb=rss_mb,
+                env_markers=env_markers,
+            )
 
 
 def iter_stablenew_like_processes() -> Iterator[ProcessInfo]:

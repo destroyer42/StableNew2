@@ -35,7 +35,6 @@ Focused verification passed:
 Bookkeeping closure recorded in:
 
 - `docs/StableNew Roadmap v2.6.md`
-- `docs/PR_Backlog/PR-GUI-234-Reprocess-Surface-Consolidation.md`
 
 ## Deferred Debt
 

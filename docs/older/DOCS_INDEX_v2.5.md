@@ -162,7 +162,7 @@ These are “living” planning/analysis docs. They are not canonical, but they 
 - **`docs/HowPipelineTabWorks.txt`**  
   Design notes and early explanations of the pipeline tab behavior.
 
-- **`docs/KNOWN_PITFALLS_QUEUE_TESTING.md`**  
+- **`docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md`**  
   Queue testing pitfalls:
   - Common mistakes in tests
   - Guidelines for JobService/runner tests
@@ -181,7 +181,7 @@ These are “living” planning/analysis docs. They are not canonical, but they 
 
 These documents support testing and meta analysis. They remain in `docs/` for easy access.
 
-- **`docs/KNOWN_PITFALLS_QUEUE_TESTING.md`**  
+- **`docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md`**  
   Queue testing pitfalls and guidelines for JobService/runner tests.
 
 - **Snapshot regression docs (StableNew_Coding_and_Testing_v2.5.md §7.12)**  

@@ -13,7 +13,7 @@ document and remove the final v2.5 spec from the active root docs set.
 
 Added:
 
-- `docs/Randomizer_Spec_v2.6.md`
+- `docs/Subsystems/Randomizer/Randomizer_Spec_v2.6.md`
 
 The new spec reflects current repo truth:
 

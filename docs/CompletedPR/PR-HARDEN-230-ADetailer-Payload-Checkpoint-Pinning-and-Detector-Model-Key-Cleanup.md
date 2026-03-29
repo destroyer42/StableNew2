@@ -46,7 +46,6 @@ Bookkeeping closure recorded in:
 
 - `docs/StableNew Roadmap v2.6.md`
 - `docs/DOCS_INDEX_v2.6.md`
-- `docs/PR_Backlog/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
 
 ## Deferred Debt
 
