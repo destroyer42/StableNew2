@@ -55,7 +55,7 @@ def test_stage_flags_preserved_on_load():
         print("\nSaved flags:")
         print(f"  txt2img_enabled: True")
         print(f"  img2img_enabled: False")
-        print(f"  adetailer_enabled: True  ← ENABLED")
+        print(f"  adetailer_enabled: True  <- ENABLED")
         print(f"  upscale_enabled: True")
         
         print("\nLoaded flags:")
@@ -72,9 +72,9 @@ def test_stage_flags_preserved_on_load():
         upscale_ok = pipeline_section.get("upscale_enabled") == True
         
         if txt2img_ok and img2img_ok and adetailer_ok and upscale_ok:
-            print("\n✅ TEST PASSED: All flags preserved correctly!")
+            print("\n[OK] TEST PASSED: All flags preserved correctly!")
         else:
-            print("\n❌ TEST FAILED: Flags were corrupted!")
+            print("\n[FAIL] TEST FAILED: Flags were corrupted!")
             if not txt2img_ok:
                 print(f"  - txt2img should be True, got {pipeline_section.get('txt2img_enabled')}")
             if not img2img_ok:

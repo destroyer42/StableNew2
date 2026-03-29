@@ -32,12 +32,12 @@ def test_empty_slots_removed_on_save():
         with open(pack_path, "w", encoding="utf-8") as f:
             json.dump(pack_data, f, indent=2)
         
-        print(f"  ✓ Created pack with {len(pack_data['pack_data']['slots'])} slots")
+        print(f"  [OK] Created pack with {len(pack_data['pack_data']['slots'])} slots")
         
         # Step 2: Load the pack (will pad to 10 slots for UI)
         print("\nStep 2: Loading pack (will pad to 10 for UI)...")
         loaded_pack = PromptPackModel.load_from_file(pack_path, min_slots=10)
-        print(f"  ✓ Loaded pack has {len(loaded_pack.slots)} slots (padded for UI)")
+        print(f"  [OK] Loaded pack has {len(loaded_pack.slots)} slots (padded for UI)")
         assert len(loaded_pack.slots) == 10, f"Expected 10 slots after load, got {len(loaded_pack.slots)}"
         
         # Verify first 3 have content, last 7 are empty
@@ -46,7 +46,7 @@ def test_empty_slots_removed_on_save():
         assert loaded_pack.slots[2].text == "a rogue"
         assert loaded_pack.slots[3].text == ""
         assert loaded_pack.slots[9].text == ""
-        print("  ✓ First 3 slots have content, last 7 are empty padding")
+        print("  [OK] First 3 slots have content, last 7 are empty padding")
         
         # Step 3: Save the pack (should remove empty slots)
         print("\nStep 3: Saving pack (should remove empty padding)...")
@@ -58,12 +58,12 @@ def test_empty_slots_removed_on_save():
             saved_data = json.load(f)
         
         saved_slots = saved_data["pack_data"]["slots"]
-        print(f"  ✓ Saved JSON has {len(saved_slots)} slots")
+        print(f"  [OK] Saved JSON has {len(saved_slots)} slots")
         assert len(saved_slots) == 3, f"Expected 3 slots in saved JSON, got {len(saved_slots)}"
         assert saved_slots[0]["text"] == "a warrior"
         assert saved_slots[1]["text"] == "a mage"
         assert saved_slots[2]["text"] == "a rogue"
-        print("  ✓ Only non-empty slots were saved")
+        print("  [OK] Only non-empty slots were saved")
         
         # Step 5: Load again to verify round-trip
         print("\nStep 5: Loading again to verify round-trip...")
@@ -73,10 +73,10 @@ def test_empty_slots_removed_on_save():
         assert reloaded_pack.slots[1].text == "a mage"
         assert reloaded_pack.slots[2].text == "a rogue"
         assert reloaded_pack.slots[3].text == ""
-        print("  ✓ Round-trip successful: loads with 3 prompts, pads to 10 for UI")
+        print("  [OK] Round-trip successful: loads with 3 prompts, pads to 10 for UI")
         
         print("\n" + "="*60)
-        print("✓ ALL TESTS PASSED!")
+        print("[OK] ALL TESTS PASSED!")
         print("="*60)
         print("\nEmpty slot removal verified:")
         print("  - Pack with 3 prompts loads and pads to 10 for UI")
@@ -110,11 +110,11 @@ def test_slots_with_only_negative_are_kept():
             data = json.load(f)
         
         saved_slots = data["pack_data"]["slots"]
-        print(f"  ✓ Saved {len(saved_slots)} slots (filtered empty slot)")
+        print(f"  [OK] Saved {len(saved_slots)} slots (filtered empty slot)")
         assert len(saved_slots) == 2, f"Expected 2 slots, got {len(saved_slots)}"
         assert saved_slots[0]["negative"] == "ugly, bad quality"
         assert saved_slots[1]["text"] == "a hero"
-        print("  ✓ Slot with only negative prompt was preserved")
+        print("  [OK] Slot with only negative prompt was preserved")
 
 def test_slots_with_embeddings_only_are_kept():
     """Verify that slots with only embeddings are still saved."""
@@ -143,13 +143,13 @@ def test_slots_with_embeddings_only_are_kept():
             data = json.load(f)
         
         saved_slots = data["pack_data"]["slots"]
-        print(f"  ✓ Saved {len(saved_slots)} slots (filtered 1 empty slot)")
+        print(f"  [OK] Saved {len(saved_slots)} slots (filtered 1 empty slot)")
         assert len(saved_slots) == 4, f"Expected 4 slots, got {len(saved_slots)}"
         assert saved_slots[0]["positive_embeddings"] == ["embed1"]
         assert saved_slots[1]["text"] == "a hero"
         assert saved_slots[2]["negative_embeddings"] == ["bad_embed"]
         assert saved_slots[3]["loras"] == [["lora1", 0.8]]
-        print("  ✓ Slots with only embeddings/LoRAs were preserved")
+        print("  [OK] Slots with only embeddings/LoRAs were preserved")
 
 if __name__ == "__main__":
     test_empty_slots_removed_on_save()

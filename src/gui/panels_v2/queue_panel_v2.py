@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
@@ -47,6 +48,8 @@ class QueuePanelV2(ttk.Frame):
     - Clear all queued jobs
     """
 
+    SLOW_REFRESH_THRESHOLD_MS = 20.0
+
     def __init__(
         self,
         master: tk.Misc,
@@ -66,6 +69,7 @@ class QueuePanelV2(ttk.Frame):
         self._last_rendered_job_rows: tuple[str, ...] = ()
         self._last_rendered_count_text: str = "(0 jobs)"
         self._last_rendered_queue_eta_text: str = ""
+        self._refresh_metrics: dict[str, dict[str, float | int]] = {}
 
         # Title row
         title_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
@@ -695,6 +699,7 @@ class QueuePanelV2(ttk.Frame):
         """
         if self._dispatch_to_ui(lambda: self.update_jobs(jobs)):
             return
+        start = time.perf_counter()
         # Remember selection
         old_selection = self._get_selected_index()
         old_job_id = (
@@ -757,6 +762,8 @@ class QueuePanelV2(ttk.Frame):
             and queue_eta_text == self._last_rendered_queue_eta_text
         ):
             self._update_button_states()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("update_jobs", elapsed_ms)
             return
 
         self.job_listbox.delete(0, tk.END)
@@ -782,6 +789,8 @@ class QueuePanelV2(ttk.Frame):
                     self._select_index(new_idx)
 
         self._update_button_states()
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("update_jobs", elapsed_ms)
 
     def set_normalized_jobs(self, jobs: list[NormalizedJobRecord]) -> None:
         """Update the job list from NormalizedJobRecord objects.
@@ -802,9 +811,12 @@ class QueuePanelV2(ttk.Frame):
 
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Update panel from app state."""
+        start = time.perf_counter()
         if app_state is None:
             app_state = self.app_state
         if app_state is None:
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("update_from_app_state", elapsed_ms)
             return
 
         # Get queue items from app state
@@ -829,6 +841,43 @@ class QueuePanelV2(ttk.Frame):
 
         # Update status label
         self._update_queue_status_display(is_paused, running_job, queue_count)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("update_from_app_state", elapsed_ms)
+
+    def _record_refresh_metric(self, name: str, elapsed_ms: float) -> None:
+        metrics = self._refresh_metrics.setdefault(
+            name,
+            {
+                "count": 0,
+                "total_ms": 0.0,
+                "max_ms": 0.0,
+                "last_ms": 0.0,
+                "slow_count": 0,
+            },
+        )
+        metrics["count"] = int(metrics["count"]) + 1
+        metrics["total_ms"] = float(metrics["total_ms"]) + float(elapsed_ms)
+        metrics["last_ms"] = float(elapsed_ms)
+        metrics["max_ms"] = max(float(metrics["max_ms"]), float(elapsed_ms))
+        if elapsed_ms >= float(self.SLOW_REFRESH_THRESHOLD_MS):
+            metrics["slow_count"] = int(metrics["slow_count"]) + 1
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        refresh_metrics: dict[str, dict[str, float | int]] = {}
+        for name, metrics in sorted(self._refresh_metrics.items()):
+            count = int(metrics.get("count", 0) or 0)
+            total_ms = float(metrics.get("total_ms", 0.0) or 0.0)
+            refresh_metrics[name] = {
+                "count": count,
+                "avg_ms": round(total_ms / count, 3) if count else 0.0,
+                "max_ms": round(float(metrics.get("max_ms", 0.0) or 0.0), 3),
+                "last_ms": round(float(metrics.get("last_ms", 0.0) or 0.0), 3),
+                "slow_count": int(metrics.get("slow_count", 0) or 0),
+            }
+        return {
+            "slow_threshold_ms": float(self.SLOW_REFRESH_THRESHOLD_MS),
+            "refresh_metrics": refresh_metrics,
+        }
 
     # ------------------------------------------------------------------
     # Queue control callbacks (PR-GUI-F1: moved from PipelineRunControlsV2)

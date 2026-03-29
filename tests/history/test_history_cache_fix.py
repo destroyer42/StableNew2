@@ -15,15 +15,17 @@ from src.queue.job_history_store import JSONLJobHistoryStore, JobHistoryEntry
 from src.queue.job_model import JobStatus
 
 
-def test_history_cache_does_not_invalidate_prematurely():
-    """Verify cache is NOT invalidated before file is written.
+def test_history_cache_uses_pending_overlay_before_file_write():
+    """Verify pending entries remain visible before async file write completes.
 
     This test simulates the race condition that caused intermittent
-    empty history display:
+    stale history display:
     1. Job completes, _append() is called
     2. Write is queued to async persistence worker
-    3. Cache should NOT be invalidated yet (old bug)
-    4. GUI tries to refresh - should still see old cached data
+    3. Cache should remain stable, but pending overlay should still surface
+       the newest in-memory entry
+    4. GUI tries to refresh - it should see both the cached disk entry and
+       the new pending entry
     5. After file is written, cache naturally invalidates on next load
     """
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -61,17 +63,54 @@ def test_history_cache_does_not_invalidate_prematurely():
             # Append the entry (async write is mocked, so file doesn't change)
             store._append(entry2)
             
-            # PR-HISTORY-FIX: Cache should NOT be invalidated yet
-            # If we try to list jobs, we should still see the OLD cached data (just job1)
-            # This is correct behavior - we wait for file mtime to change naturally
+            # Cache should remain stable, but pending entries should still be visible
+            # immediately so status transitions do not read back as stale.
             jobs = store.list_jobs()
-            
-            # With the fix, we should still see only job1 (from cache)
-            # because the file hasn't been written yet
-            assert len(jobs) == 1, f"Expected 1 cached job, got {len(jobs)}"
-            assert jobs[0].job_id == "job1", "Should still see old cached data"
-        
-        print("✓ Cache correctly remains valid until file is actually written")
+
+            assert len(jobs) == 2, f"Expected 2 jobs with pending overlay, got {len(jobs)}"
+            job_ids = {job.job_id for job in jobs}
+            assert job_ids == {"job1", "job2"}
+
+
+def test_pending_overlay_replaces_stale_cached_status():
+    """Verify pending status updates override stale cached disk state."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        history_file = Path(tmpdir) / "history.jsonl"
+
+        queued_entry = JobHistoryEntry(
+            job_id="job1",
+            created_at=datetime.now(),
+            status=JobStatus.RUNNING,
+            payload_summary="Job 1",
+        )
+        history_file.write_text(queued_entry.to_json() + "\n", encoding="utf-8")
+
+        store = JSONLJobHistoryStore(history_file)
+        cached = store.get_job("job1")
+        assert cached is not None
+        assert cached.status == JobStatus.RUNNING
+
+        failed_entry = JobHistoryEntry(
+            job_id="job1",
+            created_at=queued_entry.created_at,
+            started_at=queued_entry.created_at,
+            completed_at=datetime.now(),
+            status=JobStatus.FAILED,
+            payload_summary="Job 1",
+            error_message="connection refused",
+        )
+
+        with patch("src.services.persistence_worker.get_persistence_worker") as mock_get_worker:
+            mock_worker = Mock()
+            mock_worker.enqueue.return_value = True
+            mock_get_worker.return_value = mock_worker
+
+            store._append(failed_entry)
+
+            updated = store.get_job("job1")
+            assert updated is not None
+            assert updated.status == JobStatus.FAILED
+            assert updated.error_message == "connection refused"
 
 
 def test_manual_refresh_invalidates_cache():
@@ -113,7 +152,6 @@ def test_manual_refresh_invalidates_cache():
         assert "job1" in job_ids
         assert "job2" in job_ids
         
-        print("✓ Manual cache invalidation forces reload from disk")
 
 
 def test_cache_auto_invalidates_on_mtime_change():
@@ -156,11 +194,3 @@ def test_cache_auto_invalidates_on_mtime_change():
         assert "job1" in job_ids
         assert "job2" in job_ids
         
-        print("✓ Cache auto-invalidates when file mtime changes")
-
-
-if __name__ == "__main__":
-    test_history_cache_does_not_invalidate_prematurely()
-    test_manual_refresh_invalidates_cache()
-    test_cache_auto_invalidates_on_mtime_change()
-    print("\n✅ All job history cache fix tests passed!")

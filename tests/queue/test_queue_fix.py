@@ -67,7 +67,7 @@ def test_queue_jobs_change_detection() -> None:
     assert len(notifications) == 3, "Should notify after clearing"
     assert len(app_state.queue_jobs) == 0, "Should have no jobs"
 
-    print("✅ All queue change detection tests passed!")
+    print("[OK] All queue change detection tests passed!")
 
 
 def test_queue_jobs_no_duplicate_notifications() -> None:
@@ -88,10 +88,10 @@ def test_queue_jobs_no_duplicate_notifications() -> None:
     # Should NOT notify again since job_id is the same
     assert len(notifications) == 1, "Should not notify when jobs haven't changed"
 
-    print("✅ No duplicate notifications test passed!")
+    print("[OK] No duplicate notifications test passed!")
 
 
 if __name__ == "__main__":
     test_queue_jobs_change_detection()
     test_queue_jobs_no_duplicate_notifications()
-    print("\n✅ All tests passed! Queue remove button fix is working correctly.")
+    print("\n[OK] All tests passed! Queue remove button fix is working correctly.")

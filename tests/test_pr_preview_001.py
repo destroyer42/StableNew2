@@ -14,8 +14,6 @@ import tempfile
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch, MagicMock
-import tkinter as tk
-
 from src.gui.preview_panel_v2 import PreviewPanelV2
 
 
@@ -29,17 +27,13 @@ def temp_state_file(tmp_path):
 
 
 @pytest.fixture
-def preview_panel(temp_state_file):
+def preview_panel(temp_state_file, tk_root):
     """Create preview panel with mocked state file."""
     with patch("src.gui.preview_panel_v2.PREVIEW_STATE_PATH", temp_state_file):
-        try:
-            root = tk.Tk()
-            panel = PreviewPanelV2(root, app_state=None)
-            yield panel
-            root.destroy()
-        except tk.TclError:
-            # Skip if Tk environment not available
-            pytest.skip("Tk environment not available")
+        panel = PreviewPanelV2(tk_root, app_state=None)
+        yield panel
+        if panel.winfo_exists():
+            panel.destroy()
 
 
 def test_default_preview_off(preview_panel):

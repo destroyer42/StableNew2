@@ -48,6 +48,7 @@ class PreviewPanelV2(ttk.Frame):
     """Container for preview/inspector content (structure only)."""
     NEGATIVE_THUMBNAIL_CACHE_TTL_S = 1.0
     POSITIVE_THUMBNAIL_CACHE_TTL_S = 15.0
+    SLOW_REFRESH_THRESHOLD_MS = 20.0
 
     def __init__(
         self,
@@ -66,6 +67,7 @@ class PreviewPanelV2(ttk.Frame):
         self._content_visibility_mode = str(
             getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )
+        self._refresh_metrics: dict[str, dict[str, float | int]] = {}
         self._thumbnail_lookup_cache: dict[tuple[str, ...], tuple[float, str | None]] = {}
         self._thumbnail_lookup_pending: set[tuple[str, ...]] = set()
 
@@ -292,9 +294,12 @@ class PreviewPanelV2(ttk.Frame):
         """Render one or more JobUiSummary entries."""
         if self._dispatch_to_ui(lambda: self.set_job_summaries(summaries)):
             return
+        start = time.perf_counter()
         self._job_summaries = list(summaries)
         last_summary = summaries[-1] if summaries else None
         self._render_summary(last_summary, len(summaries))
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("set_job_summaries", elapsed_ms)
 
     def update_from_job_draft(self, job_draft: Any | None) -> None:
         """Render preview directly from a JobDraft pack list."""
@@ -507,11 +512,14 @@ class PreviewPanelV2(ttk.Frame):
 
     def update_from_app_state(self, app_state: Any | None = None) -> None:
         """Update action button availability based on app_state."""
+        start = time.perf_counter()
         if app_state is None:
             app_state = self.app_state
         job_draft = getattr(app_state, "job_draft", None)
         preview_jobs = getattr(app_state, "preview_jobs", None)
         self._update_action_states(job_draft, preview_jobs)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("update_from_app_state", elapsed_ms)
 
     def _bind_app_state_previews(self) -> None:
         logger.debug(f"[PreviewPanel] _bind_app_state_previews called, app_state={self.app_state}")
@@ -551,6 +559,7 @@ class PreviewPanelV2(ttk.Frame):
         self.set_preview_jobs(records)
 
     def _render_summary(self, summary: Any | None, total: int) -> None:
+        start = time.perf_counter()
         logger.debug(f"[PreviewPanel] _render_summary called: summary={bool(summary)}, total={total}")
 
         if summary is None:
@@ -576,6 +585,8 @@ class PreviewPanelV2(ttk.Frame):
             # PR-PREVIEW-001: Preserve checkbox state, don't reset to True
             self._current_show_preview = self._show_preview_var.get()
             self._update_thumbnail()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_render_summary", elapsed_ms)
             return
 
         summary_obj = self._normalize_summary(summary)
@@ -584,6 +595,8 @@ class PreviewPanelV2(ttk.Frame):
             self.job_count_label.config(text="No job selected")
             self.visibility_banner.configure(text="")
             self._update_thumbnail()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_render_summary", elapsed_ms)
             return
 
         job_text = f"Job: {total}" if total == 1 else f"Jobs: {total}"
@@ -670,6 +683,8 @@ class PreviewPanelV2(ttk.Frame):
 
         # Load thumbnail
         self._update_thumbnail(summary, pack_name, self._show_preview_var.get())
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("_render_summary", elapsed_ms)
 
     def _normalize_summary(self, summary: Any) -> Any | None:
         if summary is None:
@@ -1203,19 +1218,26 @@ class PreviewPanelV2(ttk.Frame):
 
     def _update_thumbnail(self, job: Any | None = None, pack_name: str | None = None, show_preview: bool = True) -> None:
         """Update the thumbnail display for the current preview job."""
+        start = time.perf_counter()
         # Check if preview is disabled
         if not show_preview or not self._show_preview_var.get():
             self.thumbnail.clear()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_update_thumbnail", elapsed_ms)
             return
 
         if job is None:
             self.thumbnail.clear()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_update_thumbnail", elapsed_ms)
             return
 
         # Prefer explicit output path from summary/result if available.
         explicit_path = self._find_immediate_output_image(job)
         if explicit_path:
             self.thumbnail.set_image_from_path(explicit_path)
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_update_thumbnail", elapsed_ms)
             return
 
         request_key = self._make_thumbnail_lookup_key(job, pack_name)
@@ -1225,10 +1247,49 @@ class PreviewPanelV2(ttk.Frame):
                 self.thumbnail.clear()
             else:
                 self.thumbnail.set_image_from_path(cached_path)
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("_update_thumbnail", elapsed_ms)
             return
 
         self.thumbnail.set_loading()
         self._schedule_thumbnail_lookup(job, pack_name, request_key)
+        elapsed_ms = (time.perf_counter() - start) * 1000.0
+        self._record_refresh_metric("_update_thumbnail", elapsed_ms)
+
+    def _record_refresh_metric(self, name: str, elapsed_ms: float) -> None:
+        metrics = self._refresh_metrics.setdefault(
+            name,
+            {
+                "count": 0,
+                "total_ms": 0.0,
+                "max_ms": 0.0,
+                "last_ms": 0.0,
+                "slow_count": 0,
+            },
+        )
+        metrics["count"] = int(metrics["count"]) + 1
+        metrics["total_ms"] = float(metrics["total_ms"]) + float(elapsed_ms)
+        metrics["last_ms"] = float(elapsed_ms)
+        metrics["max_ms"] = max(float(metrics["max_ms"]), float(elapsed_ms))
+        if elapsed_ms >= float(self.SLOW_REFRESH_THRESHOLD_MS):
+            metrics["slow_count"] = int(metrics["slow_count"]) + 1
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        refresh_metrics: dict[str, dict[str, float | int]] = {}
+        for name, metrics in sorted(self._refresh_metrics.items()):
+            count = int(metrics.get("count", 0) or 0)
+            total_ms = float(metrics.get("total_ms", 0.0) or 0.0)
+            refresh_metrics[name] = {
+                "count": count,
+                "avg_ms": round(total_ms / count, 3) if count else 0.0,
+                "max_ms": round(float(metrics.get("max_ms", 0.0) or 0.0), 3),
+                "last_ms": round(float(metrics.get("last_ms", 0.0) or 0.0), 3),
+                "slow_count": int(metrics.get("slow_count", 0) or 0),
+            }
+        return {
+            "slow_threshold_ms": float(self.SLOW_REFRESH_THRESHOLD_MS),
+            "refresh_metrics": refresh_metrics,
+        }
 
     def _on_preview_checkbox_changed(self) -> None:
         """Handle preview checkbox state change."""

@@ -120,6 +120,36 @@ def test_prompt_tab_filters_pack_list_live_on_mode_change(
 
 
 @pytest.mark.gui
+def test_pipeline_sidebar_filters_pack_list_live_on_mode_change(
+    tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+    packs_dir = tmp_path / "packs"
+    packs_dir.mkdir(parents=True, exist_ok=True)
+    (packs_dir / "safe_pack.txt").write_text("portrait of a traveler", encoding="utf-8")
+    (packs_dir / "explicit_pack.txt").write_text("nude portrait reference", encoding="utf-8")
+
+    harness = GuiV2Harness(tk_root)
+    try:
+        harness.controller.app_state.set_content_visibility_mode("nsfw")
+        tk_root.update()
+
+        sidebar = harness.pipeline_tab.sidebar
+        visible_before = list(sidebar.pack_listbox.get(0, tk.END))
+        assert "safe_pack" in visible_before
+        assert "explicit_pack" in visible_before
+
+        harness.controller.app_state.set_content_visibility_mode("sfw")
+        tk_root.update()
+
+        visible_after = list(sidebar.pack_listbox.get(0, tk.END))
+        assert "safe_pack" in visible_after
+        assert "explicit_pack" not in visible_after
+    finally:
+        harness.cleanup()
+
+
+@pytest.mark.gui
 def test_preview_panel_redacts_explicit_preview_text_live(tk_root: tk.Tk) -> None:
     app_state = AppStateV2()
     panel = PreviewPanelV2(tk_root, app_state=app_state)

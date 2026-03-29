@@ -41,7 +41,15 @@ def test_single_node_runner_executes_jobs_and_updates_status():
     queue.submit(job_two)
 
     runner.start()
-    time.sleep(0.1)
+    deadline = time.time() + 1.0
+    while time.time() < deadline:
+        jobs = queue.list_jobs()
+        if set(executed) == {"j1", "j2"} and all(
+            job.status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.RUNNING}
+            for job in jobs
+        ):
+            break
+        time.sleep(0.01)
     runner.stop()
 
     jobs = queue.list_jobs()

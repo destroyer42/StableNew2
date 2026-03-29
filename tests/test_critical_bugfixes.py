@@ -17,14 +17,14 @@ def test_single_instance_lock_is_acquired():
     print("1. Before acquire():")
     assert hasattr(lock, "is_acquired"), "❌ is_acquired() method missing!"
     assert not lock.is_acquired(), "❌ Should return False before acquire()"
-    print("   ✓ is_acquired() returns False")
+    print("   [OK] is_acquired() returns False")
     
     # Test 2: Lock acquired
     print("\n2. After acquire():")
     success = lock.acquire()
     assert success, "❌ Failed to acquire lock"
     assert lock.is_acquired(), "❌ Should return True after successful acquire()"
-    print("   ✓ is_acquired() returns True")
+    print("   [OK] is_acquired() returns True")
     
     # Test 3: Lock released
     print("\n3. After release():")
@@ -34,7 +34,7 @@ def test_single_instance_lock_is_acquired():
     print(f"   is_acquired() = {lock.is_acquired()}")
     
     print("\n" + "=" * 60)
-    print("✅ SingleInstanceLock.is_acquired() method works correctly!")
+    print("[OK] SingleInstanceLock.is_acquired() method works correctly!")
     print("=" * 60)
 
 
@@ -74,7 +74,7 @@ def test_reprocessing_guard_logic():
     
     assert skipped == ["txt2img", "img2img"], f"❌ Should skip txt2img+img2img, got {skipped}"
     assert processed == ["adetailer", "upscale"], f"❌ Should process adetailer+upscale, got {processed}"
-    print("   ✓ Correctly skipped pre-start stages")
+    print("   [OK] Correctly skipped pre-start stages")
     
     # Test Case 2: start_stage=None (normal mode)
     print("\n2. Normal mode (no start_stage):")
@@ -96,7 +96,7 @@ def test_reprocessing_guard_logic():
     
     assert skipped == [], f"❌ Should skip nothing, got {skipped}"
     assert processed == stages, f"❌ Should process all stages, got {processed}"
-    print("   ✓ All stages processed when no start_stage")
+    print("   [OK] All stages processed when no start_stage")
     
     # Test Case 3: start_stage="img2img"
     print("\n3. Reprocessing with start_stage='img2img':")
@@ -118,10 +118,10 @@ def test_reprocessing_guard_logic():
     
     assert skipped == ["txt2img"], f"❌ Should skip txt2img, got {skipped}"
     assert processed == ["img2img", "adetailer", "upscale"], f"❌ Should process img2img+adetailer+upscale, got {processed}"
-    print("   ✓ Correctly skipped txt2img only")
+    print("   [OK] Correctly skipped txt2img only")
     
     print("\n" + "=" * 60)
-    print("✅ Reprocessing guard logic works correctly!")
+    print("[OK] Reprocessing guard logic works correctly!")
     print("=" * 60)
 
 
@@ -130,13 +130,13 @@ if __name__ == "__main__":
         test_single_instance_lock_is_acquired()
         test_reprocessing_guard_logic()
         print("\n\n" + "=" * 60)
-        print("🎉 ALL TESTS PASSED - Both critical bugs are fixed!")
+        print("[OK] ALL TESTS PASSED - Both critical bugs are fixed!")
         print("=" * 60)
     except AssertionError as e:
-        print(f"\n\n❌ TEST FAILED: {e}")
+        print(f"\n\n[FAIL] TEST FAILED: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"\n\n❌ TEST ERROR: {e}")
+        print(f"\n\n[FAIL] TEST ERROR: {e}")
         import traceback
         traceback.print_exc()
         sys.exit(1)

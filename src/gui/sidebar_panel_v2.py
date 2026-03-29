@@ -8,6 +8,7 @@ from pathlib import Path
 from tkinter import simpledialog, ttk
 from typing import Any
 
+from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.scrolling import enable_mousewheel
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import (
@@ -148,6 +149,10 @@ class SidebarPanelV2(ttk.Frame):
         self.prompt_pack_adapter = prompt_pack_adapter or PromptPackAdapterV2()
         self._on_apply_pack = on_apply_pack
         self._on_change = on_change
+        self._content_visibility_mode = str(
+            getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        self._app_state_visibility_listener: Callable[[], None] | None = None
 
         # PR-DEFAULT-ADETAILER: Default to True for visibility
         adetailer_default = bool(getattr(self.app_state, "adetailer_enabled", True))
@@ -301,6 +306,7 @@ class SidebarPanelV2(ttk.Frame):
         self.reprocess_panel = self.reprocess_card.child
         self.reprocess_card.grid(row=5, column=0, sticky="ew", padx=8, pady=(0, 4))
         
+        self._bind_app_state()
         # PR-PERSIST-001: Restore saved state
         self.restore_state()
 
@@ -630,12 +636,21 @@ class SidebarPanelV2(ttk.Frame):
             summaries = self.prompt_pack_adapter.load_summaries()
         except Exception:
             summaries = []
-        self._prompt_summaries = summaries
-        return summaries
+        filtered = self._filter_visible_prompt_summaries(summaries)
+        self._prompt_summaries = filtered
+        return filtered
 
     def _populate_packs_for_selected_list(self) -> None:
         if not self.pack_listbox:
             return
+        selected_names = set()
+        try:
+            selection = self.pack_listbox.curselection()  # type: ignore[no-untyped-call]
+            selected_names = {
+                self._current_pack_names[i] for i in selection if i < len(self._current_pack_names)
+            }
+        except Exception:
+            selected_names = set()
         summaries = self._load_prompt_summaries() or self._prompt_summaries
         selected_list = (self.pack_list_var.get() or "").strip()
         packs: list[PromptPackSummary] = []
@@ -653,6 +668,10 @@ class SidebarPanelV2(ttk.Frame):
         self.pack_listbox.delete(0, "end")
         for name in self._current_pack_names:
             self.pack_listbox.insert("end", name)
+        if selected_names:
+            for index, name in enumerate(self._current_pack_names):
+                if name in selected_names:
+                    self.pack_listbox.selection_set(index)
         self._update_pack_actions_state()
 
     def _populate_saved_recipe_combo(self) -> None:
@@ -918,6 +937,60 @@ class SidebarPanelV2(ttk.Frame):
             original_text = self.refresh_packs_button.cget("text")
             self.refresh_packs_button.configure(text="Refreshed")
             self.after(1500, lambda: self.refresh_packs_button.configure(text=original_text))
+
+    def _bind_app_state(self) -> None:
+        app_state = getattr(self, "app_state", None)
+        if app_state is None or not hasattr(app_state, "subscribe"):
+            return
+        self._app_state_visibility_listener = self._on_content_visibility_mode_changed
+        try:
+            app_state.subscribe("content_visibility_mode", self._app_state_visibility_listener)
+        except Exception:
+            self._app_state_visibility_listener = None
+
+    def _filter_visible_prompt_summaries(
+        self, summaries: list[PromptPackSummary]
+    ) -> list[PromptPackSummary]:
+        resolver = ContentVisibilityResolver(self._content_visibility_mode)
+        visible: list[PromptPackSummary] = []
+        for summary in summaries:
+            if resolver.is_visible(self._build_prompt_pack_visibility_item(summary)):
+                visible.append(summary)
+        return visible
+
+    def _build_prompt_pack_visibility_item(self, summary: PromptPackSummary) -> dict[str, Any]:
+        prompt_texts: list[str] = []
+        path = getattr(summary, "path", None)
+        if isinstance(path, Path) and path.exists():
+            try:
+                prompts = read_prompt_pack(path)
+            except Exception:
+                prompts = []
+            for prompt in prompts:
+                if not isinstance(prompt, dict):
+                    continue
+                positive = str(prompt.get("positive") or "").strip()
+                negative = str(prompt.get("negative") or "").strip()
+                if positive:
+                    prompt_texts.append(positive)
+                if negative:
+                    prompt_texts.append(negative)
+        prompt_blob = "\n".join(prompt_texts)
+        return {
+            "name": summary.name,
+            "description": summary.description,
+            "prompt": prompt_blob,
+            "positive_preview": prompt_blob,
+        }
+
+    def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
+        self._content_visibility_mode = str(
+            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+        )
+        self._populate_packs_for_selected_list()
+
+    def _on_content_visibility_mode_changed(self) -> None:
+        self.on_content_visibility_mode_changed()
 
     def set_pack_names(self, names: list[str]) -> None:
         """Best-effort helper for simple string lists (used by AppController)."""
@@ -1349,6 +1422,13 @@ class SidebarPanelV2(ttk.Frame):
             self.save_state()
         except Exception:
             pass
+        listener = self._app_state_visibility_listener
+        app_state = getattr(self, "app_state", None)
+        if listener is not None and app_state is not None and hasattr(app_state, "unsubscribe"):
+            try:
+                app_state.unsubscribe("content_visibility_mode", listener)
+            except Exception:
+                pass
         super().destroy()
 
 

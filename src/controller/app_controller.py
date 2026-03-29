@@ -83,7 +83,11 @@ from src.controller.app_controller_services.run_submission_service import (
 import logging
 import uuid
 
-from src.config.app_config import get_jsonl_log_config, is_debug_shutdown_inspector_enabled
+from src.config.app_config import (
+    get_jsonl_log_config,
+    is_debug_shutdown_inspector_enabled,
+    set_job_history_path,
+)
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service import JobService
@@ -428,7 +432,11 @@ class AppController:
         self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
         history_path = Path("runs") / "job_history.json"
         if os.environ.get("PYTEST_CURRENT_TEST"):
-            history_path = Path(tempfile.gettempdir()) / f"job_history_{os.getpid()}.json"
+            history_path = (
+                Path(tempfile.gettempdir())
+                / f"job_history_{os.getpid()}_{uuid.uuid4().hex}.json"
+            )
+            set_job_history_path(str(history_path))
         self._job_history_path = history_path
         self._duration_stats_service = None
         self._last_diagnostics_bundle: Path | None = None

@@ -11,6 +11,7 @@ from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 from src.pipeline.resolution_layer import UnifiedPromptResolver
 from src.utils.config import ConfigManager
+from src.utils.file_io import build_safe_image_name
 
 
 BASE_PACK_CONFIG: dict[str, Any] = {
@@ -78,7 +79,7 @@ class SequentialIdGenerator:
 
 
 def test_matrix_filename_uniqueness():
-    """Test that matrix-expanded jobs have unique filenames."""
+    """Test that matrix-expanded jobs resolve to unique runtime filenames."""
     
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -137,7 +138,7 @@ def test_matrix_filename_uniqueness():
         
         print("\\nTest: Matrix Expansion Filename Uniqueness")
         print("="*60)
-        print("Matrix: 2 jobs × 2 environments = 4 combinations, limit=4")
+        print("Matrix: 2 jobs x 2 environments = 4 combinations, limit=4")
         print("Seed: 12345 (FIXED - same for all variants)")
         print()
         
@@ -147,19 +148,24 @@ def test_matrix_filename_uniqueness():
         print(f"Total jobs created: {len(jobs)}")
         print()
         
-        # Extract filenames
+        # Build the final runtime filenames the runner would emit.
         filenames = []
         for i, job in enumerate(jobs):
-            template = job.filename_template
-            seed = job.seed or 12345
-            # Simulate filename generation (replace {seed} with actual seed)
-            filename = template.replace("{seed}", str(seed)) + ".png"
+            prompt_row = getattr(job, "prompt_pack_row_index", 0) or 0
+            base_prefix = f"txt2img_p{prompt_row+1:02d}_v{job.variant_index+1:02d}"
+            filename = build_safe_image_name(
+                base_prefix=base_prefix,
+                matrix_values=job.matrix_slot_values,
+                seed=job.seed or 12345,
+                pack_name=job.prompt_pack_name,
+                max_length=100,
+            ) + ".png"
             matrix_values = job.matrix_slot_values
             
             print(f"Job {i+1}:")
             print(f"  Matrix: {matrix_values}")
-            print(f"  Template: {template}")
-            print(f"  Seed: {seed}")
+            print(f"  Base Prefix: {base_prefix}")
+            print(f"  Seed: {job.seed or 12345}")
             print(f"  Filename: {filename}")
             print()
             
@@ -174,13 +180,16 @@ def test_matrix_filename_uniqueness():
         print(f"Unique filenames: {len(unique_filenames)}")
         
         if len(unique_filenames) == len(filenames):
-            print("\\n✅ TEST PASSED: All filenames are unique!")
+            print("\\n[OK] TEST PASSED: All filenames are unique!")
         else:
-            print(f"\\n❌ TEST FAILED: Found {len(duplicates)} duplicate filenames!")
+            print(f"\\n[FAIL] TEST FAILED: Found {len(duplicates)} duplicate filenames!")
             print("Duplicates:")
             for dup in set(duplicates):
                 count = filenames.count(dup)
                 print(f"  {dup} appears {count} times")
+        assert len(unique_filenames) == len(filenames), (
+            f"Expected unique runtime filenames, got duplicates: {sorted(set(duplicates))}"
+        )
 
 if __name__ == "__main__":
     test_matrix_filename_uniqueness()

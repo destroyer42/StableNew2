@@ -71,7 +71,7 @@ def test_matrix_expansion_loads_from_json():
         assert expanded.matrix_slot_values == expected_combos[idx], \
             f"Entry {idx}: expected {expected_combos[idx]}, got {expanded.matrix_slot_values}"
     
-    print("✅ Matrix expansion loads from JSON and creates correct combinations")
+    print("[OK] Matrix expansion loads from JSON and creates correct combinations")
 
 
 def test_matrix_tokens_replaced_in_prompts():
@@ -138,10 +138,10 @@ def test_matrix_tokens_replaced_in_prompts():
         
         print(f"Job {idx}: {prompt}")
     
-    print("✅ Matrix tokens replaced correctly in all job prompts")
+    print("[OK] Matrix tokens replaced correctly in all job prompts")
 
 
 if __name__ == "__main__":
     test_matrix_expansion_loads_from_json()
     test_matrix_tokens_replaced_in_prompts()
-    print("\n✅ All PR-GUI-003-C runtime integration tests passed!")
+    print("\n[OK] All PR-GUI-003-C runtime integration tests passed!")

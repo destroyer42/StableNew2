@@ -88,7 +88,7 @@ def test_lora_scanner_and_cache():
         cache_file.unlink()
     print("   Cleanup complete")
     
-    print("\n✅ LoRA Scanner tests passed!")
+    print("\n[OK] LoRA Scanner tests passed!")
 
 
 def test_autocomplete_data():
@@ -141,7 +141,7 @@ def test_autocomplete_data():
     if scanner._cache_file.exists():
         scanner._cache_file.unlink()
     
-    print("\n✅ Autocomplete tests passed!")
+    print("\n[OK] Autocomplete tests passed!")
 
 
 def test_keyword_dialog_filter():
@@ -173,7 +173,7 @@ def test_keyword_dialog_filter():
     print(f"Filter '{search}': {filtered}")
     assert len(filtered) == 1  # best quality
     
-    print("\n✅ Keyword dialog filter tests passed!")
+    print("\n[OK] Keyword dialog filter tests passed!")
 
 
 def main():

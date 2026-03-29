@@ -11,7 +11,7 @@ def test_global_prompt_integration(tmp_path: Path):
     """Test that global prompt checkboxes correctly control prompt application in executor."""
     
     print("\n" + "="*80)
-    print("INTEGRATION TEST: Global Prompt Checkbox → Config → Executor")
+    print("INTEGRATION TEST: Global Prompt Checkbox -> Config -> Executor")
     print("="*80)
     
     # Create mock GUI with sidebar
@@ -38,14 +38,14 @@ def test_global_prompt_integration(tmp_path: Path):
     pack_config = {"pipeline": {}}
     final_config = controller._build_config_snapshot_with_override(pack_config)
     
-    print(f"\n📋 Config built by controller:")
+    print(f"\nConfig built by controller:")
     print(f"   apply_global_positive_txt2img: {final_config['pipeline']['apply_global_positive_txt2img']}")
     print(f"   apply_global_negative_txt2img: {final_config['pipeline']['apply_global_negative_txt2img']}")
     
     # Verify config flags match checkbox state
     assert final_config["pipeline"]["apply_global_positive_txt2img"] == False, "Positive should be disabled"
     assert final_config["pipeline"]["apply_global_negative_txt2img"] == True, "Negative should be enabled"
-    print("✅ Config flags correctly reflect checkbox state")
+    print("[OK] Config flags correctly reflect checkbox state")
     
     # Step 2: Executor receives config and applies (or doesn't apply) prompts
     mock_api = MagicMock()
@@ -123,7 +123,7 @@ def test_global_prompt_integration(tmp_path: Path):
     }
     
     # Run txt2img stage
-    print("\n🔧 Executor processing txt2img stage...")
+    print("\nExecutor processing txt2img stage...")
     try:
         with (
             patch("src.pipeline.executor.save_image_from_base64", return_value=tmp_path / "image.png"),
@@ -141,29 +141,29 @@ def test_global_prompt_integration(tmp_path: Path):
         assert len(positive_calls) > 0, "Positive merge should have been called"
         assert len(negative_calls) > 0, "Negative merge should have been called"
         
-        print(f"\n📊 Executor behavior:")
+        print(f"\nExecutor behavior:")
         print(f"   _merge_stage_positive called with apply_global={positive_calls[0]}")
         print(f"   _merge_stage_negative called with apply_global={negative_calls[0]}")
         
         assert positive_calls[0] == False, "Positive should NOT be applied"
         assert negative_calls[0] == True, "Negative SHOULD be applied"
         
-        print("\n✅ Executor correctly respected checkbox states!")
+        print("\n[OK] Executor correctly respected checkbox states!")
         print("   - Global positive NOT prepended (checkbox was OFF)")
         print("   - Global negative APPENDED (checkbox was ON)")
         
     except Exception as e:
-        print(f"\n⚠️ Executor test skipped (API mock limitation): {e}")
+        print(f"\n[WARN] Executor test skipped (API mock limitation): {e}")
         print("   Manual testing required with full GUI running")
     
     print("\n" + "="*80)
-    print("✅ INTEGRATION TEST PASSED")
+    print("[OK] INTEGRATION TEST PASSED")
     print("="*80)
     print("\nSummary:")
-    print("  1. GUI checkboxes → Controller reads checkbox state")
-    print("  2. Controller → Sets apply_global_*_txt2img flags in config")
-    print("  3. Executor → Reads flags and applies/skips prompts accordingly")
-    print("\n🎉 Global prompt checkboxes are now fully functional!")
+    print("  1. GUI checkboxes -> Controller reads checkbox state")
+    print("  2. Controller -> Sets apply_global_*_txt2img flags in config")
+    print("  3. Executor -> Reads flags and applies/skips prompts accordingly")
+    print("\n[OK] Global prompt checkboxes are now fully functional!")
 
 if __name__ == "__main__":
     test_global_prompt_integration()

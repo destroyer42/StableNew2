@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 from src.video import (
@@ -12,6 +13,13 @@ from src.video import (
     VideoExecutionRequest,
     build_default_video_backend_registry,
 )
+
+
+def _ready_process_manager(base_url: str = "http://127.0.0.1:8188") -> object:
+    return SimpleNamespace(
+        ensure_running=lambda: True,
+        _config=SimpleNamespace(base_url=base_url),
+    )
 
 
 def test_default_video_backend_registry_registers_builtin_backends() -> None:
@@ -204,7 +212,12 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
             "source_video_path": str(output_video),
         },
     )
-    backend = ComfyWorkflowVideoBackend(client=client, history_poll_interval=0.01, history_timeout=1.0)
+    backend = ComfyWorkflowVideoBackend(
+        client=client,
+        process_manager=_ready_process_manager(),
+        history_poll_interval=0.01,
+        history_timeout=1.0,
+    )
 
     result = backend.execute(
         Mock(),

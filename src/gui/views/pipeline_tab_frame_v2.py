@@ -616,6 +616,9 @@ class PipelineTabFrame(ttk.Frame):
         return {
             "slow_threshold_ms": float(self.SLOW_UPDATE_THRESHOLD_MS),
             "callback_metrics": callback_metrics,
+            "queue_panel": self.queue_panel.get_diagnostics_snapshot() if hasattr(self, "queue_panel") else {},
+            "history_panel": self.history_panel.get_diagnostics_snapshot() if hasattr(self, "history_panel") else {},
+            "preview_panel": self.preview_panel.get_diagnostics_snapshot() if hasattr(self, "preview_panel") else {},
         }
 
 

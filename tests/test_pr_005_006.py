@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 from datetime import datetime
 from unittest.mock import Mock, MagicMock, patch
-import tkinter as tk
 from types import SimpleNamespace
 
 # Add src to path
@@ -17,16 +16,13 @@ from src.gui.app_state_v2 import AppStateV2
 from src.pipeline.job_models_v2 import JobLifecycleLogEvent
 
 
-def test_pr_005_thumbnail_loading():
+def test_pr_005_thumbnail_loading(tk_root):
     """Test PR-005: Preview panel thumbnail loading logic."""
     print("\n=== Testing PR-005: Thumbnail Loading ===")
-    
-    root = tk.Tk()
-    root.withdraw()
-    
+
     try:
         app_state = AppStateV2()
-        panel = PreviewPanelV2(root, app_state=app_state)
+        panel = PreviewPanelV2(tk_root, app_state=app_state)
         
         # Check that _find_latest_output_image method exists
         assert hasattr(panel, '_find_latest_output_image'), \
@@ -44,23 +40,20 @@ def test_pr_005_thumbnail_loading():
         assert image_path is None or isinstance(image_path, Path), \
             f"Expected None or Path, got {type(image_path)}"
         
-        print("✓ _find_latest_output_image method exists and callable")
-        print("✓ Method handles missing images gracefully")
+        print("[OK] _find_latest_output_image method exists and callable")
+        print("[OK] Method handles missing images gracefully")
         
     finally:
-        root.destroy()
+        panel.destroy()
 
 
-def test_pr_005_eta_formatting():
+def test_pr_005_eta_formatting(tk_root):
     """Test PR-005: ETA formatting in running job panel."""
     print("\n=== Testing PR-005: ETA Formatting ===")
-    
-    root = tk.Tk()
-    root.withdraw()
-    
+
     try:
         app_state = AppStateV2()
-        panel = RunningJobPanelV2(root, app_state=app_state)
+        panel = RunningJobPanelV2(tk_root, app_state=app_state)
         
         # Test ETA formatting
         assert panel._format_eta(None) == "", "None should return empty string"
@@ -69,25 +62,22 @@ def test_pr_005_eta_formatting():
         assert panel._format_eta(90) == "ETA: 1m 30s", "90 seconds format wrong"
         assert panel._format_eta(3661) == "ETA: 1h 1m", "1hr format wrong"
         
-        print("✓ _format_eta handles None and zero")
-        print("✓ _format_eta formats seconds correctly")
-        print("✓ _format_eta formats minutes correctly")
-        print("✓ _format_eta formats hours correctly")
+        print("[OK] _format_eta handles None and zero")
+        print("[OK] _format_eta formats seconds correctly")
+        print("[OK] _format_eta formats minutes correctly")
+        print("[OK] _format_eta formats hours correctly")
         
     finally:
-        root.destroy()
+        panel.destroy()
 
 
-def test_pr_006_log_formatting():
+def test_pr_006_log_formatting(tk_root):
     """Test PR-006: Enhanced lifecycle log formatting."""
     print("\n=== Testing PR-006: Lifecycle Log Formatting ===")
-    
-    root = tk.Tk()
-    root.withdraw()
-    
+
     try:
         app_state = AppStateV2()
-        panel = DebugLogPanelV2(root, app_state=app_state)
+        panel = DebugLogPanelV2(tk_root, app_state=app_state)
         
         # Create test events
         test_events = [
@@ -179,15 +169,16 @@ def test_pr_006_log_formatting():
                 assert str(event.draft_size) in formatted, "Missing draft size"
                 assert "batch" in formatted.lower(), "Missing 'batch' message"
             
-            print(f"✓ Formatted: {formatted}")
+            formatted_ascii = formatted.encode("unicode_escape").decode("ascii")
+            print(f"[OK] Formatted: {formatted_ascii}")
         
-        print("✓ All event types format correctly")
-        print("✓ Timestamps included")
-        print("✓ Visual indicators (✓ ✗) present")
-        print("✓ Job IDs shortened to 8 chars")
+        print("[OK] All event types format correctly")
+        print("[OK] Timestamps included")
+        print("[OK] Visual indicators ([OK] [FAIL]) present")
+        print("[OK] Job IDs shortened to 8 chars")
         
     finally:
-        root.destroy()
+        panel.destroy()
 
 
 def main():
@@ -202,17 +193,17 @@ def main():
         test_pr_006_log_formatting()
         
         print("\n" + "=" * 60)
-        print("✓ ALL TESTS PASSED")
+        print("[OK] ALL TESTS PASSED")
         print("=" * 60)
         print("\nPR-005: Preview Thumbnail & ETA - VERIFIED")
         print("PR-006: Lifecycle Log Formatting - VERIFIED")
         return 0
         
     except AssertionError as e:
-        print(f"\n✗ TEST FAILED: {e}")
+        print(f"\n[FAIL] TEST FAILED: {e}")
         return 1
     except Exception as e:
-        print(f"\n✗ ERROR: {e}")
+        print(f"\n[FAIL] ERROR: {e}")
         import traceback
         traceback.print_exc()
         return 1

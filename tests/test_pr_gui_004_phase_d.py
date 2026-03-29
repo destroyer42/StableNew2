@@ -111,15 +111,15 @@ def test_phase_d_integration():
     assert reloaded_slot.negative_embeddings == slot.negative_embeddings, "Negative embeddings mismatch"
     assert reloaded_slot.loras == slot.loras, "LoRAs mismatch"
     
-    print("✅ All roundtrip checks passed!")
+    print("[OK] All roundtrip checks passed!")
     print()
     print("Summary:")
-    print(f"  ✅ Parser: {len(components.loras)} LoRAs, {len(components.positive_embeddings) + len(components.negative_embeddings)} embeddings")
-    print(f"  ✅ JSON save: All fields serialized correctly")
-    print(f"  ✅ TXT export: Pipeline syntax correct")
-    print(f"  ✅ Reload: All fields preserved")
+    print(f"  [OK] Parser: {len(components.loras)} LoRAs, {len(components.positive_embeddings) + len(components.negative_embeddings)} embeddings")
+    print(f"  [OK] JSON save: All fields serialized correctly")
+    print(f"  [OK] TXT export: Pipeline syntax correct")
+    print(f"  [OK] Reload: All fields preserved")
     print()
-    print("PR-GUI-004 Phase D Part 1+2: COMPLETE ✅")
+    print("PR-GUI-004 Phase D Part 1+2: COMPLETE [OK]")
 
 
 if __name__ == "__main__":

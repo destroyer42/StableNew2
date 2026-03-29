@@ -90,3 +90,10 @@ def test_pipeline_payload_includes_lora_settings() -> None:
     assert payload.lora_settings
     assert payload.lora_settings["LoRA-A"]["strength"] == 0.5
     assert payload.lora_settings["LoRA-B"]["enabled"] is False
+
+
+def test_test_mode_uses_isolated_temp_history_paths() -> None:
+    controller_one, _ = _make_controller({})
+    controller_two, _ = _make_controller({})
+
+    assert controller_one._job_history_path != controller_two._job_history_path

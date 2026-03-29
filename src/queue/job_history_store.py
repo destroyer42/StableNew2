@@ -296,6 +296,13 @@ class JSONLJobHistoryStore(JobHistoryStore):
             except Exception:
                 continue
 
+    def _with_pending_overlay(
+        self, entries: dict[str, JobHistoryEntry]
+    ) -> dict[str, JobHistoryEntry]:
+        merged = dict(entries)
+        merged.update(self._pending_entries)
+        return merged
+
     def _load_latest_by_job(self) -> dict[str, JobHistoryEntry]:
         """Load history entries with file mtime-based caching for performance."""
         with self._lock:
@@ -309,8 +316,8 @@ class JSONLJobHistoryStore(JobHistoryStore):
                 current_mtime = self._path.stat().st_mtime
                 
                 if self._cached_entries is not None and self._cache_mtime == current_mtime:
-                    # Cache is valid, return it
-                    return dict(self._cached_entries)
+                    # Cache is valid, but in-memory pending updates still win until disk catches up.
+                    return self._with_pending_overlay(self._cached_entries)
                 
                 # Cache miss or stale - reload from disk
                 lines = self._path.read_text(encoding="utf-8").splitlines()
@@ -332,7 +339,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
                 # Update cache
                 self._cached_entries = latest
                 self._cache_mtime = current_mtime
-                return dict(latest)
+                return self._with_pending_overlay(latest)
                 
             except Exception:
                 # On error, invalidate cache and return empty

@@ -12,7 +12,7 @@ def test_load_multi_slot_txt():
     
     # Parse slots
     all_components = parse_multi_slot_txt(content)
-    print(f"✅ Parsed {len(all_components)} slots from TXT")
+    print(f"[OK] Parsed {len(all_components)} slots from TXT")
     
     # Create workspace and pack
     workspace = PromptWorkspaceState()
@@ -28,7 +28,7 @@ def test_load_multi_slot_txt():
         for _ in range(needed_slots - current_slots):
             workspace.add_slot()
     
-    print(f"✅ Adjusted to {len(workspace.current_pack.slots)} slots")
+    print(f"[OK] Adjusted to {len(workspace.current_pack.slots)} slots")
     
     # Populate slots
     for index, components in enumerate(all_components):
@@ -39,7 +39,7 @@ def test_load_multi_slot_txt():
         slot.negative_embeddings = components.negative_embeddings
         slot.loras = components.loras
     
-    print(f"✅ Populated all slots")
+    print(f"[OK] Populated all slots")
     
     # Verify first slot
     first_slot = workspace.get_slot(0)
@@ -56,7 +56,7 @@ def test_load_multi_slot_txt():
     print(f"  Positive text: {last_slot.text[:60]}...")
     print(f"  LoRAs: {len(last_slot.loras)}")
     
-    print(f"\n✅ All tests passed!")
+    print(f"\n[OK] All tests passed!")
 
 
 if __name__ == "__main__":
