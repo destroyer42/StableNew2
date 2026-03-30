@@ -756,6 +756,35 @@ class PipelineController(CorePipelineController):
     def _runtime_host_manages_queue_state(self) -> bool:
         return self._runtime_host_transport() != "local-only"
 
+    def _sync_remote_webui_connection_state(self, payload: Mapping[str, Any] | None) -> bool:
+        state = str((payload or {}).get("state") or "").strip().lower()
+        is_ready = state in {"ready", "connected"}
+        connection = getattr(self, "_webui_connection", None)
+        if connection is None:
+            return is_ready
+        state_map = {
+            "ready": WebUIConnectionState.READY,
+            "connected": WebUIConnectionState.READY,
+            "connecting": WebUIConnectionState.CONNECTING,
+            "disconnected": WebUIConnectionState.DISCONNECTED,
+            "error": WebUIConnectionState.ERROR,
+        }
+        mapped_state = state_map.get(state, WebUIConnectionState.ERROR)
+        setter = getattr(connection, "_set_state", None)
+        if callable(setter):
+            try:
+                setter(mapped_state)
+            except Exception:
+                pass
+        if is_ready:
+            notifier = getattr(connection, "_notify_ready", None)
+            if callable(notifier):
+                try:
+                    notifier()
+                except Exception:
+                    pass
+        return is_ready
+
     def _sync_auto_run_setting(self, forced_value: bool | None = None) -> None:
         """Propagate auto-run preference from AppState into the runtime host."""
         if not self._job_service:
@@ -1068,6 +1097,14 @@ class PipelineController(CorePipelineController):
 
     def ensure_run_submission_ready(self) -> bool:
         """Perform blocking run prerequisites such as WebUI readiness off the UI thread."""
+        if self._runtime_host_manages_queue_state() and self._job_service is not None:
+            ensure_remote = getattr(self._job_service, "ensure_webui_ready", None)
+            if callable(ensure_remote):
+                try:
+                    payload = ensure_remote(autostart=True)
+                except Exception:
+                    return False
+                return self._sync_remote_webui_connection_state(payload)
         if hasattr(self, "_webui_connection"):
             state = self._webui_connection.ensure_connected(autostart=True)
             if state is not None and state is not WebUIConnectionState.READY:

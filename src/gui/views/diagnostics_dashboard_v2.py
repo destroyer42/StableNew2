@@ -37,6 +37,9 @@ class DiagnosticsDashboardV2(ttk.Frame):
         self._runtime_var = tk.StringVar(value="Running Job: idle")
         self._queue_state_var = tk.StringVar(value="Queue: --")
         self._activity_var = tk.StringVar(value="Activity: --")
+        self._runtime_host_var = tk.StringVar(value="Runtime Host: --")
+        self._runtime_host_error_var = tk.StringVar(value="Host Startup Error: none")
+        self._managed_runtime_var = tk.StringVar(value="Managed Runtimes: --")
         self._preview_timing_var = tk.StringVar(value="Preview Build: not captured")
         self._readiness_timing_var = tk.StringVar(value="WebUI Readiness: not captured")
         self._queue_timing_var = tk.StringVar(value="Queue Projection: not captured")
@@ -63,6 +66,27 @@ class DiagnosticsDashboardV2(ttk.Frame):
         )
         ttk.Label(runtime_frame, textvariable=self._activity_var, anchor="w").grid(
             row=2,
+            column=0,
+            sticky="ew",
+            padx=8,
+            pady=2,
+        )
+        ttk.Label(runtime_frame, textvariable=self._runtime_host_var, anchor="w").grid(
+            row=3,
+            column=0,
+            sticky="ew",
+            padx=8,
+            pady=2,
+        )
+        ttk.Label(runtime_frame, textvariable=self._runtime_host_error_var, anchor="w").grid(
+            row=4,
+            column=0,
+            sticky="ew",
+            padx=8,
+            pady=2,
+        )
+        ttk.Label(runtime_frame, textvariable=self._managed_runtime_var, anchor="w").grid(
+            row=5,
             column=0,
             sticky="ew",
             padx=8,
@@ -238,6 +262,8 @@ class DiagnosticsDashboardV2(ttk.Frame):
         queue = queue if isinstance(queue, dict) else {}
         controller = snapshot.get("controller")
         controller = controller if isinstance(controller, dict) else {}
+        runtime_host = snapshot.get("runtime_host")
+        runtime_host = runtime_host if isinstance(runtime_host, dict) else {}
 
         running_job = app_state.get("running_job") if isinstance(app_state.get("running_job"), dict) else {}
         runtime_status = (
@@ -270,6 +296,11 @@ class DiagnosticsDashboardV2(ttk.Frame):
                     f"runner={self._format_age(controller.get('last_runner_activity_ts'))}",
                 ]
             )
+        )
+        self._runtime_host_var.set(self._format_runtime_host(runtime_host))
+        self._runtime_host_error_var.set(self._format_runtime_host_error(runtime_host))
+        self._managed_runtime_var.set(
+            self._format_managed_runtime_summary(runtime_host.get("managed_runtimes"))
         )
 
     def _update_timing_snapshots(self, snapshot: dict[str, Any]) -> None:
@@ -310,6 +341,32 @@ class DiagnosticsDashboardV2(ttk.Frame):
 
     def _update_processes(self, snapshot: dict[str, Any]) -> None:
         lines = []
+        runtime_host = snapshot.get("runtime_host")
+        runtime_host = runtime_host if isinstance(runtime_host, dict) else {}
+        if runtime_host:
+            transport = runtime_host.get("transport") or "unknown"
+            connected = "yes" if runtime_host.get("connected") else "no"
+            host_pid = runtime_host.get("host_pid")
+            protocol = runtime_host.get("protocol") or "n/a"
+            version = runtime_host.get("version")
+            protocol_text = f"{protocol}@v{version}" if version not in (None, "") else str(protocol)
+            lines.append(
+                "runtime_host"
+                + f" | transport={transport}"
+                + f" | connected={connected}"
+                + f" | pid={host_pid if host_pid not in (None, '') else 'unknown'}"
+                + f" | protocol={protocol_text}"
+            )
+            startup_error = runtime_host.get("startup_error")
+            if startup_error:
+                lines.append(f"runtime_host error={startup_error}")
+            managed_runtimes = runtime_host.get("managed_runtimes")
+            if isinstance(managed_runtimes, dict):
+                for runtime_name in ("webui", "comfy"):
+                    details = managed_runtimes.get(runtime_name)
+                    if not isinstance(details, dict):
+                        continue
+                    lines.append(self._format_managed_runtime_detail(runtime_name, details))
         process_snapshot = snapshot.get("process_inspector")
         process_snapshot = process_snapshot if isinstance(process_snapshot, dict) else {}
         risk = process_snapshot.get("risk") if isinstance(process_snapshot.get("risk"), dict) else {}
@@ -492,6 +549,75 @@ class DiagnosticsDashboardV2(ttk.Frame):
         parts.append(f"summaries={int(payload.get('summary_count', 0) or 0)}")
         parts.append(f"fallback={int(payload.get('fallback_count', 0) or 0)}")
         return "Queue Projection: " + " | ".join(parts)
+
+    def _format_runtime_host(self, payload: Any) -> str:
+        if not isinstance(payload, dict) or not payload:
+            return "Runtime Host: unavailable"
+        connected = "yes" if payload.get("connected") else "no"
+        host_pid = payload.get("host_pid")
+        protocol = payload.get("protocol") or "n/a"
+        version = payload.get("version")
+        protocol_text = f"{protocol} v{version}" if version not in (None, "") else str(protocol)
+        return (
+            "Runtime Host: "
+            + " | ".join(
+                [
+                    str(payload.get("transport") or "unknown"),
+                    f"connected={connected}",
+                    f"pid={host_pid if host_pid not in (None, '') else 'unknown'}",
+                    f"protocol={protocol_text}",
+                ]
+            )
+        )
+
+    def _format_runtime_host_error(self, payload: Any) -> str:
+        if not isinstance(payload, dict):
+            return "Host Startup Error: none"
+        error = payload.get("startup_error")
+        if error:
+            return f"Host Startup Error: {error}"
+        return "Host Startup Error: none"
+
+    def _format_managed_runtime_summary(self, payload: Any) -> str:
+        if not isinstance(payload, dict) or not payload:
+            return "Managed Runtimes: none reported"
+        summaries: list[str] = []
+        for runtime_name in ("webui", "comfy"):
+            details = payload.get(runtime_name)
+            if not isinstance(details, dict):
+                continue
+            state = details.get("state") or "unknown"
+            managed = "yes" if details.get("managed") else "no"
+            pid = details.get("pid")
+            runtime_summary = f"{runtime_name}={state} managed={managed}"
+            if pid not in (None, ""):
+                runtime_summary += f" pid={pid}"
+            error = details.get("startup_error")
+            if error:
+                runtime_summary += f" error={error}"
+            summaries.append(runtime_summary)
+        if not summaries:
+            return "Managed Runtimes: none reported"
+        return "Managed Runtimes: " + " | ".join(summaries)
+
+    def _format_managed_runtime_detail(self, runtime_name: str, details: dict[str, Any]) -> str:
+        state = details.get("state") or "unknown"
+        managed = "yes" if details.get("managed") else "no"
+        pid = details.get("pid")
+        base_url = details.get("base_url") or "n/a"
+        autostart = "yes" if details.get("autostart_enabled") else "no"
+        line = (
+            f"managed {runtime_name}"
+            + f" | state={state}"
+            + f" | managed={managed}"
+            + f" | pid={pid if pid not in (None, '') else 'unknown'}"
+            + f" | autostart={autostart}"
+            + f" | base={base_url}"
+        )
+        error = details.get("startup_error")
+        if error:
+            line += f" | error={error}"
+        return line
 
     @staticmethod
     def _format_ms(value: Any) -> str:

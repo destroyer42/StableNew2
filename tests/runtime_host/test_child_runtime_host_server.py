@@ -81,11 +81,13 @@ def test_runtime_host_server_serves_handshake_diagnostics_and_shutdown(tmp_path)
         pipeline_runner=StubPipelineRunner(),
     )
     stop_calls: list[str] = []
+    owner_stop_calls: list[str] = []
 
     def tracking_stop() -> None:
         stop_calls.append("stop")
 
     bootstrap.job_service.stop = tracking_stop  # type: ignore[method-assign]
+    bootstrap.managed_runtime_owner.stop = lambda: owner_stop_calls.append("stop")  # type: ignore[method-assign]
     server = RuntimeHostServer(bootstrap)
     connection = FakeConnection(
         [
@@ -111,6 +113,7 @@ def test_runtime_host_server_serves_handshake_diagnostics_and_shutdown(tmp_path)
     assert shutdown.payload["accepted"] is True
     assert server.shutdown_requested is True
     assert stop_calls == ["stop"]
+    assert owner_stop_calls == ["stop"]
     assert connection.closed is True
 
 
@@ -126,3 +129,60 @@ def test_runtime_host_server_rejects_unknown_commands(tmp_path) -> None:
     assert response.kind == "error"
     assert response.name == "unknown"
     assert "unknown runtime-host command" in str(response.payload["message"])
+
+
+def test_runtime_host_server_handles_managed_runtime_commands(tmp_path) -> None:
+    bootstrap = build_runtime_host_bootstrap(
+        history_path=tmp_path / "runtime-host-history.jsonl",
+        pipeline_runner=StubPipelineRunner(),
+    )
+    bootstrap.managed_runtime_owner.get_snapshot = lambda: {  # type: ignore[method-assign]
+        "webui": {"state": "disconnected", "pid": 321},
+        "comfy": {"state": "ready", "pid": 654},
+    }
+    bootstrap.managed_runtime_owner.ensure_webui_ready = (  # type: ignore[method-assign]
+        lambda *, autostart=True: {"state": "ready", "pid": 321, "autostart": autostart}
+    )
+    bootstrap.managed_runtime_owner.retry_webui_connection = (  # type: ignore[method-assign]
+        lambda: {"state": "ready", "pid": 321}
+    )
+    bootstrap.managed_runtime_owner.get_recent_webui_output_tail = (  # type: ignore[method-assign]
+        lambda: {"stdout_tail": ["ready"], "stderr_tail": []}
+    )
+    server = RuntimeHostServer(bootstrap)
+
+    ensure = server.handle_message(
+        build_protocol_message("command", "ensure_webui_ready", {"autostart": True}).to_dict()
+    )
+    retry = server.handle_message(build_protocol_message("command", "retry_webui_connection").to_dict())
+    diagnostics = server.handle_message(build_protocol_message("command", "diagnostics_snapshot").to_dict())
+
+    assert ensure.kind == "response"
+    assert ensure.payload["state"] == "ready"
+    assert ensure.payload["autostart"] is True
+    assert retry.kind == "response"
+    assert retry.payload["pid"] == 321
+    assert diagnostics.kind == "snapshot"
+    assert diagnostics.payload["managed_runtimes"]["comfy"]["pid"] == 654
+    assert diagnostics.payload["webui_tail"]["stdout_tail"] == ["ready"]
+
+
+def test_runtime_host_server_stops_on_parent_disconnect(tmp_path) -> None:
+    bootstrap = build_runtime_host_bootstrap(
+        history_path=tmp_path / "runtime-host-history.jsonl",
+        pipeline_runner=StubPipelineRunner(),
+    )
+    stop_calls: list[str] = []
+    owner_stop_calls: list[str] = []
+
+    bootstrap.job_service.stop = lambda: stop_calls.append("stop")  # type: ignore[method-assign]
+    bootstrap.managed_runtime_owner.stop = lambda: owner_stop_calls.append("stop")  # type: ignore[method-assign]
+    server = RuntimeHostServer(bootstrap)
+    connection = FakeConnection([])
+
+    serve_runtime_host_connection(connection, server)
+
+    assert server.shutdown_requested is True
+    assert stop_calls == ["stop"]
+    assert owner_stop_calls == ["stop"]
+    assert connection.closed is True

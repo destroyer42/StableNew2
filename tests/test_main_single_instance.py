@@ -77,3 +77,60 @@ def test_main_reports_runtime_host_launch_failure_and_releases_lock(monkeypatch)
     assert runtime_root.destroyed is True
     assert lock.released is True
     showerror.assert_called_once()
+
+
+def test_main_does_not_schedule_gui_owned_runtime_bootstraps(monkeypatch):
+    class DummyLock:
+        def __init__(self) -> None:
+            self._acquired = False
+
+        def acquire(self) -> bool:
+            self._acquired = True
+            return True
+
+        def is_acquired(self) -> bool:
+            return self._acquired
+
+        def release(self) -> None:
+            self._acquired = False
+
+    class DummyRoot:
+        def __init__(self) -> None:
+            self.after_calls: list[int] = []
+
+        def after(self, delay, callback):
+            self.after_calls.append(int(delay))
+
+        def mainloop(self) -> None:
+            return None
+
+    class DummyWindow:
+        def __init__(self) -> None:
+            self.webui_process_manager = None
+            self.comfy_process_manager = None
+            self.exit_handler = None
+
+        def set_graceful_exit_handler(self, handler):
+            self.exit_handler = handler
+
+    runtime_root = DummyRoot()
+    lock = DummyLock()
+    async_webui = mock.Mock()
+    async_comfy = mock.Mock()
+
+    monkeypatch.setattr(main_module, "setup_logging", lambda *args, **kwargs: None)
+    monkeypatch.setattr(main_module, "SingleInstanceLock", lambda: lock)
+    monkeypatch.setattr(main_module, "tk", SimpleNamespace(Tk=lambda: runtime_root))
+    monkeypatch.setattr(main_module, "messagebox", SimpleNamespace(showerror=mock.Mock()))
+    monkeypatch.setattr(
+        main_module,
+        "build_v2_app",
+        lambda **kwargs: (runtime_root, SimpleNamespace(), SimpleNamespace(), DummyWindow()),
+    )
+    monkeypatch.setattr(main_module, "_async_bootstrap_webui", async_webui)
+    monkeypatch.setattr(main_module, "_async_bootstrap_comfy", async_comfy)
+
+    main_module.main()
+
+    async_webui.assert_not_called()
+    async_comfy.assert_not_called()

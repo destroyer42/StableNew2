@@ -2,7 +2,7 @@ DOCS_INDEX_v2.6.md
 Canonical Documentation Map and Navigation Guide
 
 Status: Authoritative
-Updated: 2026-03-29
+Updated: 2026-03-30
 
 ## 0. Purpose
 
@@ -64,7 +64,6 @@ completed implementation records, and historical planning notes.
 
 - `docs/PR_Backlog/CORE_TOP_20_EXECUTABLE_MINI_ROADMAP_v2.6.md`
 - `docs/PR_Backlog/LOCAL_RUNTIME_ISOLATION_EXECUTABLE_SEQUENCE_v2.6.md`
-- `docs/PR_Backlog/PR-PERF-502 - GUI-Owned Runtime Host Midpoint Cutover.md`
 - `docs/PR_Backlog/PR-PERF-503 - Detached Local Runtime Daemon Promotion.md`
 - `docs/PR_Backlog/PR-PERF-504 - Daemon Default Cleanup and Final Runtime Harmonization.md`
 - `docs/PR_Backlog/PR-CORE-014 - Multi-Character Support.md`
@@ -132,6 +131,7 @@ completed implementation records, and historical planning notes.
 - `docs/CompletedPR/PR-GUI-286-Incremental-Projection-Reconciliation-and-Visibility-Gating.md`
 - `docs/CompletedPR/PR-HARDEN-287-Runtime-Status-Backpressure-GUI-Perf-Journey-and-Architecture-Guards.md`
 - `docs/CompletedPR/PR-PERF-501-Runtime-Host-Port-and-Protocol-Scaffold.md`
+- `docs/CompletedPR/PR-PERF-502-GUI-Owned-Runtime-Host-Midpoint-Cutover.md`
 - `docs/CompletedPR/PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier.md`
 - `docs/CompletedPR/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
 - `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`

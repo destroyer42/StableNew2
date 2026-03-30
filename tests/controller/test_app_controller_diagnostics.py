@@ -188,6 +188,85 @@ def test_diagnostics_snapshot_reuses_cached_heavy_sections(monkeypatch) -> None:
     assert second["threads"]["thread_count"] == 1
 
 
+def test_protected_process_pids_include_host_managed_runtime_pids() -> None:
+    class ManagedRuntimeJobService(DummyJobService):
+        def get_diagnostics_snapshot(self) -> dict[str, object]:
+            return {
+                "jobs": [{"external_pids": [111]}],
+                "managed_runtimes": {
+                    "webui": {"pid": 222},
+                    "comfy": {"pid": 333},
+                },
+            }
+
+    controller = AppController(
+        None,
+        pipeline_runner=DummyPipelineRunner(),
+        job_service=ManagedRuntimeJobService(),
+    )
+
+    assert set(controller._get_protected_process_pids()) == {111, 222, 333}
+
+
+def test_diagnostics_snapshot_normalizes_runtime_host_state() -> None:
+    class RemoteRuntimeJobService(DummyJobService):
+        def describe_protocol(self) -> dict[str, object]:
+            return {
+                "transport": "local-child",
+                "protocol": "stablenew.runtime_host",
+                "version": 1,
+            }
+
+        def get_diagnostics_snapshot(self) -> dict[str, object]:
+            return {
+                "jobs": [],
+                "host_pid": 777,
+                "runtime_host_client": {
+                    "connected": True,
+                    "startup_error": None,
+                    "host_pid": 777,
+                    "transport": "local-child",
+                    "protocol": "stablenew.runtime_host",
+                    "version": 1,
+                },
+                "managed_runtimes": {
+                    "webui": {
+                        "managed": True,
+                        "state": "ready",
+                        "pid": 456,
+                        "autostart_enabled": True,
+                        "startup_error": None,
+                    }
+                },
+            }
+
+    controller = AppController(
+        None,
+        pipeline_runner=DummyPipelineRunner(),
+        job_service=RemoteRuntimeJobService(),
+    )
+
+    snapshot = controller.get_diagnostics_snapshot()
+
+    assert snapshot["runtime_host"] == {
+        "transport": "local-child",
+        "protocol": "stablenew.runtime_host",
+        "version": 1,
+        "connected": True,
+        "host_pid": 777,
+        "startup_error": None,
+        "managed_runtimes": {
+            "webui": {
+                "managed": True,
+                "state": "ready",
+                "pid": 456,
+                "autostart_enabled": True,
+                "startup_error": None,
+            }
+        },
+    }
+
+
 def test_diagnostics_snapshot_refreshes_stale_cache_async(monkeypatch) -> None:
     controller = AppController(
         None, pipeline_runner=DummyPipelineRunner(), job_service=DummyJobService()

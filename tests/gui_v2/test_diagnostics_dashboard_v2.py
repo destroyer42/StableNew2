@@ -63,6 +63,32 @@ class DummyController:
                     "error": None,
                 },
             },
+            "runtime_host": {
+                "transport": "local-child",
+                "protocol": "stablenew.runtime_host",
+                "version": 1,
+                "connected": True,
+                "host_pid": 777,
+                "startup_error": None,
+                "managed_runtimes": {
+                    "webui": {
+                        "managed": True,
+                        "state": "ready",
+                        "pid": 456,
+                        "base_url": "http://127.0.0.1:7860",
+                        "autostart_enabled": True,
+                        "startup_error": None,
+                    },
+                    "comfy": {
+                        "managed": True,
+                        "state": "error",
+                        "pid": 789,
+                        "base_url": "http://127.0.0.1:8188",
+                        "autostart_enabled": False,
+                        "startup_error": "port busy",
+                    },
+                },
+            },
             "app_state": {
                 "running_job": {"display_label": "fantasy_dragon | row=1 | job-99"},
                 "runtime_status": {
@@ -161,12 +187,21 @@ def test_diagnostics_dashboard_renders_snapshot() -> None:
     assert "manual" in bundle_label
     assert "fantasy_dragon" in panel._runtime_var.get()
     assert "queued=1" in panel._queue_state_var.get()
+    assert "local-child" in panel._runtime_host_var.get()
+    assert "connected=yes" in panel._runtime_host_var.get()
+    assert "Host Startup Error: none" == panel._runtime_host_error_var.get()
+    assert "webui=ready" in panel._managed_runtime_var.get()
+    assert "comfy=error" in panel._managed_runtime_var.get()
     assert "24.5ms" in panel._preview_timing_var.get()
     assert "ready" in panel._readiness_timing_var.get()
     assert "18.5ms" in panel._queue_timing_var.get()
     watchdog_text = panel._watchdog_text.get("1.0", tk.END)
     assert "reason=MEMORY" in watchdog_text
     process_text = panel._process_text.get("1.0", tk.END)
+    assert "runtime_host | transport=local-child | connected=yes | pid=777" in process_text
+    assert "managed webui | state=ready" in process_text
+    assert "managed comfy | state=error" in process_text
+    assert "error=port busy" in process_text
     assert "warning" in process_text
     assert "comfy=1" in process_text
     assert "pid=123 python.exe" in process_text
@@ -174,6 +209,34 @@ def test_diagnostics_dashboard_renders_snapshot() -> None:
     assert "MainThread" in thread_text
     ui_text = panel._ui_metrics_text.get("1.0", tk.END)
     assert "hot-surface" in ui_text
+
+    panel.destroy()
+    root.destroy()
+
+
+@pytest.mark.gui
+def test_diagnostics_dashboard_renders_runtime_host_startup_error() -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter not available: {exc}")
+
+    controller = DummyController()
+    controller._snapshot["runtime_host"] = {
+        "transport": "local-child",
+        "protocol": "stablenew.runtime_host",
+        "version": 1,
+        "connected": False,
+        "host_pid": None,
+        "startup_error": "handshake timed out",
+        "managed_runtimes": {},
+    }
+    panel = DiagnosticsDashboardV2(root, controller=controller)
+    root.update_idletasks()
+
+    assert "handshake timed out" in panel._runtime_host_error_var.get()
+    process_text = panel._process_text.get("1.0", tk.END)
+    assert "runtime_host error=handshake timed out" in process_text
 
     panel.destroy()
     root.destroy()

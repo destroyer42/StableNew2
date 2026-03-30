@@ -24,6 +24,7 @@ from src.runtime_host.messages import (
     normalize_json_value,
 )
 from src.runtime_host.port import (
+    RUNTIME_HOST_EVENT_DISCONNECTED,
     RUNTIME_HOST_EVENT_JOB_FAILED,
     RUNTIME_HOST_EVENT_JOB_FINISHED,
     RUNTIME_HOST_EVENT_JOB_STARTED,
@@ -45,6 +46,7 @@ __all__ = [
     "LocalRuntimeHostAdapter",
     "RuntimeHostBootstrap",
     "RuntimeHostConnection",
+    "RUNTIME_HOST_EVENT_DISCONNECTED",
     "RUNTIME_HOST_EVENT_JOB_FAILED",
     "RUNTIME_HOST_EVENT_JOB_FINISHED",
     "RUNTIME_HOST_EVENT_JOB_STARTED",

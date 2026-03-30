@@ -2,7 +2,7 @@ DEBUG HUB v2.6.md
 Canonical Diagnostic Surface Reference
 
 Status: Active canonical reference
-Last Updated: 2026-03-19
+Last Updated: 2026-03-30
 
 ## 0. Purpose
 
@@ -20,6 +20,8 @@ Debug Hub may read from:
 - canonical result summaries
 - replay descriptors
 - diagnostics descriptors
+- runtime-host client state
+- runtime-host diagnostics snapshots
 - stage manifests
 - history records
 - diagnostics bundles
@@ -44,6 +46,10 @@ At minimum, Debug Hub should let an operator inspect:
 - replay descriptors
 - diagnostics bundle linkage
 - failure context
+- runtime-host transport and protocol version
+- runtime-host connection state and host pid
+- host startup or disconnect errors
+- host-owned managed WebUI/Comfy runtime state
 
 ## 3. Image and Video Scope
 
@@ -65,6 +71,12 @@ The modern runtime produces canonical result summaries plus:
 
 - `replay_descriptor`
 - `diagnostics_descriptor`
+
+When production is running through the GUI-owned child runtime host, Debug Hub
+must also show both sides of that boundary clearly:
+
+- the GUI client's connection and transport state
+- the host runtime's pid, managed-runtime state, and host-owned diagnostics
 
 Debug Hub should treat those as first-class entrypoints for understanding what
 happened and how a run could be diagnosed or replayed.

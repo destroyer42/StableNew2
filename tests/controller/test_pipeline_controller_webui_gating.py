@@ -3,6 +3,8 @@ from unittest import mock
 from src.controller.pipeline_controller import PipelineController
 from src.controller.webui_connection_controller import WebUIConnectionState
 from src.queue.job_model import JobStatus
+from src.runtime_host import build_local_runtime_host
+from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
 def test_run_blocked_when_webui_not_ready(monkeypatch):
@@ -155,3 +157,19 @@ def test_queue_updated_refreshes_when_not_managed_externally():
     controller._on_queue_updated(["job-1"])
 
     controller._refresh_app_state_queue.assert_called_once()
+
+
+def test_ensure_run_submission_ready_uses_runtime_host_webui_command_when_remote():
+    runtime_host = build_local_runtime_host(make_stubbed_job_service())
+    runtime_host.describe_protocol = lambda: {"transport": "local-child"}  # type: ignore[method-assign]
+    ensure_remote = mock.Mock(return_value={"state": "ready", "pid": 321})
+    runtime_host.ensure_webui_ready = ensure_remote  # type: ignore[attr-defined]
+
+    controller = PipelineController(runtime_host=runtime_host)
+    controller._webui_connection = mock.Mock()
+
+    result = controller.ensure_run_submission_ready()
+
+    assert result is True
+    ensure_remote.assert_called_once_with(autostart=True)
+    controller._webui_connection.ensure_connected.assert_not_called()

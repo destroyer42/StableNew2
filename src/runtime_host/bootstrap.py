@@ -19,6 +19,7 @@ from src.queue.job_model import Job
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.runtime_host.local_adapter import build_local_runtime_host
+from src.runtime_host.managed_runtime import ManagedRuntimeOwner
 from src.runtime_host.port import RuntimeHostPort
 from src.utils import StructuredLogger
 from src.utils.config import ConfigManager
@@ -38,6 +39,7 @@ class RuntimeHostBootstrap:
     history_service: JobHistoryService
     job_service: JobService
     runtime_host: RuntimeHostPort
+    managed_runtime_owner: ManagedRuntimeOwner
 
 
 class RuntimeHostJobExecutor:
@@ -108,6 +110,7 @@ def build_runtime_host_bootstrap(
     api_url: str | None = None,
     capabilities: OptionalDependencySnapshot | None = None,
     pipeline_runner: Any | None = None,
+    start_managed_runtimes: bool = False,
 ) -> RuntimeHostBootstrap:
     kernel = build_runtime_host_kernel(
         config_manager=config_manager,
@@ -135,6 +138,9 @@ def build_runtime_host_bootstrap(
         require_normalized_records=True,
     )
     runtime_host = build_local_runtime_host(job_service)
+    managed_runtime_owner = ManagedRuntimeOwner()
+    if start_managed_runtimes:
+        managed_runtime_owner.start_background_bootstrap()
     return RuntimeHostBootstrap(
         kernel=kernel,
         history_path=resolved_history_path,
@@ -143,6 +149,7 @@ def build_runtime_host_bootstrap(
         history_service=history_service,
         job_service=job_service,
         runtime_host=runtime_host,
+        managed_runtime_owner=managed_runtime_owner,
     )
 
 

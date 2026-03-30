@@ -125,6 +125,7 @@ from src.queue.single_node_runner import SingleNodeJobRunner
 from src.services.duration_stats_service import DurationStatsService
 from src.state.output_routing import OUTPUT_ROUTE_MOVIE_CLIPS, get_output_route_root
 from src.runtime_host import (
+    RUNTIME_HOST_EVENT_DISCONNECTED,
     RUNTIME_HOST_EVENT_JOB_FAILED,
     RUNTIME_HOST_EVENT_JOB_FINISHED,
     RUNTIME_HOST_EVENT_JOB_STARTED,
@@ -2788,6 +2789,10 @@ class AppController:
         self.job_service.register_callback(
             RUNTIME_HOST_EVENT_QUEUE_EMPTY, _queue_callback(self._on_queue_empty)
         )
+        self.job_service.register_callback(
+            RUNTIME_HOST_EVENT_DISCONNECTED,
+            _queue_callback(self._on_runtime_host_disconnected),
+        )
         self._refresh_job_history()
         # PR-GUI-F3: Load persisted queue state on startup
         self._load_queue_state()
@@ -3052,6 +3057,38 @@ class AppController:
         def _apply() -> None:
             if self.app_state:
                 self.app_state.set_queue_status("idle")
+
+        self._run_in_gui_thread(_apply)
+
+    def _on_runtime_host_disconnected(self, payload: Mapping[str, Any] | None = None) -> None:
+        info = dict(payload) if isinstance(payload, Mapping) else {}
+        transport = str(info.get("transport") or self._runtime_host_transport() or "runtime-host")
+        error_text = str(info.get("error") or "connection lost")
+
+        def _apply() -> None:
+            self.state.last_error = f"Runtime host disconnected: {error_text}"
+            self._clear_runtime_status_cache()
+            self._set_running_job(None)
+            if self.app_state:
+                self.app_state.set_queue_status("disconnected")
+                status_setter = getattr(self.app_state, "set_webui_state", None)
+                if callable(status_setter):
+                    try:
+                        status_setter("error")
+                    except Exception:
+                        pass
+            connection = getattr(self, "webui_connection_controller", None)
+            if connection is not None:
+                setter = getattr(connection, "_set_state", None)
+                if callable(setter):
+                    try:
+                        setter(WebUIConnectionState.ERROR)
+                    except Exception:
+                        pass
+            self._update_webui_state("error")
+            self._update_status(f"Runtime host disconnected ({transport}): {error_text}")
+            self._append_log(f"[runtime-host] Connection lost ({transport}): {error_text}")
+            self._mark_ui_dirty(queue=True)
 
         self._run_in_gui_thread(_apply)
 
@@ -3681,6 +3718,47 @@ class AppController:
             except Exception:
                 pass
 
+    def _apply_runtime_host_webui_status(self, payload: Mapping[str, Any] | None) -> bool:
+        state = str((payload or {}).get("state") or "").strip().lower()
+        is_ready = state in {"ready", "connected"}
+        ui_state = (
+            "connected"
+            if is_ready
+            else "connecting"
+            if state == "connecting"
+            else "disconnected"
+            if state == "disconnected"
+            else "error"
+        )
+        self._update_webui_state(ui_state)
+        if self.app_state is not None and hasattr(self.app_state, "set_webui_state"):
+            try:
+                self.app_state.set_webui_state(ui_state)
+            except Exception:
+                pass
+        connection = getattr(self, "webui_connection_controller", None)
+        if connection is not None:
+            state_map = {
+                "connected": WebUIConnectionState.READY,
+                "connecting": WebUIConnectionState.CONNECTING,
+                "disconnected": WebUIConnectionState.DISCONNECTED,
+                "error": WebUIConnectionState.ERROR,
+            }
+            setter = getattr(connection, "_set_state", None)
+            if callable(setter):
+                try:
+                    setter(state_map.get(ui_state, WebUIConnectionState.ERROR))
+                except Exception:
+                    pass
+            if is_ready:
+                notifier = getattr(connection, "_notify_ready", None)
+                if callable(notifier):
+                    try:
+                        notifier()
+                    except Exception:
+                        pass
+        return is_ready
+
     def _validate_pipeline_config(self) -> tuple[bool, str]:
         """DEPRECATED (PR-CORE1-12): Legacy validation for pipeline_config panel.
 
@@ -3848,6 +3926,15 @@ class AppController:
         # Protect PIDs from running jobs
         if self.job_service:
             snapshot = self.job_service.get_diagnostics_snapshot()
+            managed_runtimes = snapshot.get("managed_runtimes") or {}
+            if isinstance(managed_runtimes, Mapping):
+                for runtime_name in ("webui", "comfy"):
+                    runtime_snapshot = managed_runtimes.get(runtime_name) or {}
+                    if not isinstance(runtime_snapshot, Mapping):
+                        continue
+                    runtime_pid = runtime_snapshot.get("pid")
+                    if isinstance(runtime_pid, int):
+                        pids.add(runtime_pid)
             jobs = snapshot.get("jobs") or []
             for entry in jobs:
                 for pid in entry.get("external_pids", []) or []:
@@ -4020,6 +4107,43 @@ class AppController:
                 }
             except Exception:
                 data["webui_connection"] = None
+        runtime_host = getattr(self, "runtime_host", None) or getattr(self, "job_service", None)
+        protocol_info: dict[str, Any] = {}
+        describe_protocol = getattr(runtime_host, "describe_protocol", None)
+        if callable(describe_protocol):
+            try:
+                described = describe_protocol() or {}
+                if isinstance(described, Mapping):
+                    protocol_info = dict(described)
+            except Exception:
+                protocol_info = {}
+        client_snapshot = data.get("runtime_host_client")
+        client_snapshot = dict(client_snapshot) if isinstance(client_snapshot, Mapping) else {}
+        managed_runtime_snapshot = data.get("managed_runtimes")
+        managed_runtime_snapshot = (
+            dict(managed_runtime_snapshot) if isinstance(managed_runtime_snapshot, Mapping) else {}
+        )
+        transport = str(
+            protocol_info.get("transport")
+            or client_snapshot.get("transport")
+            or data.get("transport")
+            or self._runtime_host_transport()
+        ).strip() or "local-only"
+        connected = client_snapshot.get("connected")
+        if connected is None:
+            connected = transport == "local-only"
+        host_pid = client_snapshot.get("host_pid") or data.get("host_pid")
+        if host_pid is None and transport == "local-only":
+            host_pid = os.getpid()
+        data["runtime_host"] = {
+            "transport": transport,
+            "protocol": protocol_info.get("protocol") or client_snapshot.get("protocol"),
+            "version": protocol_info.get("version") or client_snapshot.get("version"),
+            "connected": bool(connected),
+            "host_pid": host_pid,
+            "startup_error": client_snapshot.get("startup_error"),
+            "managed_runtimes": managed_runtime_snapshot,
+        }
         snapshot = getattr(self, "_optional_dependency_snapshot", None)
         if snapshot is not None and hasattr(snapshot, "to_dict"):
             try:
@@ -4830,6 +4954,20 @@ class AppController:
         return self.start_run_v2()
 
     def on_launch_webui_clicked(self) -> None:
+        runtime_host = getattr(self, "runtime_host", None) or getattr(self, "job_service", None)
+        ensure_remote = getattr(runtime_host, "ensure_webui_ready", None)
+        if callable(ensure_remote) and self._runtime_host_manages_queue_state():
+            self._append_log("[webui] Launch requested by user.")
+            logger.info("[webui] Launch requested by user.")
+            self._update_webui_state("connecting")
+            try:
+                payload = ensure_remote(autostart=True)
+            except Exception as exc:
+                logger.warning("[webui] Remote launch failed: %s", exc)
+                self._update_webui_state("error")
+                return
+            self._apply_runtime_host_webui_status(payload)
+            return
         if not self.webui_process_manager:
             return
         self._append_log("[webui] Launch requested by user.")
@@ -4839,6 +4977,18 @@ class AppController:
         self._update_webui_state("connected" if success else "error")
 
     def on_retry_webui_clicked(self) -> None:
+        runtime_host = getattr(self, "runtime_host", None) or getattr(self, "job_service", None)
+        retry_remote = getattr(runtime_host, "retry_webui_connection", None)
+        if callable(retry_remote) and self._runtime_host_manages_queue_state():
+            self._append_log("[webui] Retry connection requested by user.")
+            try:
+                payload = retry_remote()
+            except Exception as exc:
+                logger.warning("[webui] Remote retry failed: %s", exc)
+                self._update_webui_state("error")
+                return
+            self._apply_runtime_host_webui_status(payload)
+            return
         if not self.webui_process_manager:
             return
         self._append_log("[webui] Retry connection requested by user.")

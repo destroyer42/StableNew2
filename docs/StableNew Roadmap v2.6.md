@@ -2,7 +2,7 @@ StableNew Roadmap v2.6.md
 (Canonical Edition)
 
 Status: Authoritative  
-Updated: 2026-03-29  
+Updated: 2026-03-30  
 Applies To: Codex, Copilot, ChatGPT Planner, Human Contributors
 
 ## 0. Strategic Objective
@@ -41,6 +41,15 @@ Delivered outcomes:
 Current collection baseline:
 
 - `pytest --collect-only -q` -> `2964 collected / 0 skipped`
+
+Runtime-isolation status:
+
+- `PR-PERF-501` and `PR-PERF-502` completed on 2026-03-30
+- production runtime ownership now runs as GUI client plus local child runtime
+  host while preserving queue-only NJR execution
+- `PR-PERF-503` remains the next runtime-isolation PR, but it is gated on
+  explicit midpoint soak signoff from
+  `docs/PR_Backlog/LOCAL_RUNTIME_ISOLATION_EXECUTABLE_SEQUENCE_v2.6.md`
 
 ## 2. Remaining Structural Debt
 
@@ -1036,6 +1045,9 @@ Execution note:
   as the active cross-cutting runtime-host plan; it is intentionally separate
   from the product-feature queue because it spans startup, queue ownership,
   diagnostics, and runtime lifecycle
+- treat `PR-PERF-503` as blocked until midpoint soak validation shows that the
+  child-host cutover materially improved GUI responsiveness without major
+  queue, watchdog, or diagnostics regressions
 - do not execute `PR-CORE-003`, `PR-CORE-006`, `PR-CORE-007`, `PR-CORE-009`,
   `PR-CORE-010`, `PR-CORE-012`, `PR-CORE-013`, `PR-CORE-015`, or
   `PR-CORE-016` verbatim without re-scoping them against the shipped repo state

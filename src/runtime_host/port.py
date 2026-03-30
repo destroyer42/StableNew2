@@ -11,6 +11,7 @@ RUNTIME_HOST_EVENT_JOB_FAILED = "job_failed"
 RUNTIME_HOST_EVENT_WATCHDOG_VIOLATION = "watchdog_violation"
 RUNTIME_HOST_EVENT_QUEUE_EMPTY = "queue_empty"
 RUNTIME_HOST_EVENT_QUEUE_STATUS = "queue_status"
+RUNTIME_HOST_EVENT_DISCONNECTED = "runtime_host_disconnected"
 
 
 @runtime_checkable
@@ -44,6 +45,7 @@ class RuntimeHostPort(Protocol):
 
 
 __all__ = [
+    "RUNTIME_HOST_EVENT_DISCONNECTED",
     "RUNTIME_HOST_EVENT_JOB_FAILED",
     "RUNTIME_HOST_EVENT_JOB_FINISHED",
     "RUNTIME_HOST_EVENT_JOB_STARTED",

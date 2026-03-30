@@ -34,6 +34,12 @@ from .api.webui_process_manager import (
 )
 from .app_factory import build_v2_app
 from .runtime_host import RuntimeHostLaunchError
+from .runtime_host.managed_runtime import (
+    bootstrap_comfy as _runtime_host_bootstrap_comfy,
+    bootstrap_webui as _runtime_host_bootstrap_webui,
+    load_comfy_config as _runtime_host_load_comfy_config,
+    load_webui_config as _runtime_host_load_webui_config,
+)
 from .utils import setup_logging
 from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
 from .video.comfy_process_manager import (
@@ -177,133 +183,36 @@ def _acquire_single_instance_lock() -> socket.socket | None:
 
 def bootstrap_webui(config: dict[str, Any]) -> WebUIProcessManager | None:
     """Bootstrap WebUI using the proper connection controller framework."""
-
-    proc_config: WebUIProcessConfig | None = config.get("process_config")
-    if proc_config is None and config.get("webui_command"):
-        proc_config = WebUIProcessConfig(
-            command=list(config.get("webui_command") or []),
-            working_dir=config.get("webui_workdir"),
-            startup_timeout_seconds=float(config.get("webui_startup_timeout_seconds") or 60.0),
-            autostart_enabled=bool(config.get("webui_autostart_enabled")),
-            base_url=config.get("webui_base_url"),
-        )
-
-    if proc_config is None:
-        logging.info("No WebUI configuration available")
-        # Still call healthcheck if base_url is present (for test compatibility)
-        base_url = config.get("webui_base_url")
-        if base_url:
-            wait_for_webui_ready(base_url)
-        return None
-
-    manager = WebUIProcessManager(proc_config)
-    if proc_config.autostart_enabled:
-        manager.start()
-    wait_for_webui_ready(
-        config.get("webui_base_url"), timeout=proc_config.startup_timeout_seconds, poll_interval=0.5
+    return _runtime_host_bootstrap_webui(
+        config,
+        process_manager_cls=WebUIProcessManager,
+        wait_ready_fn=wait_for_webui_ready,
+        logger_module=logging,
     )
-    return manager
 
 
 def bootstrap_comfy(config: dict[str, Any]) -> ComfyProcessManager | None:
     """Bootstrap managed local ComfyUI when configured."""
-
-    proc_config: ComfyProcessConfig | None = config.get("process_config")
-    if proc_config is None and config.get("comfy_command"):
-        proc_config = ComfyProcessConfig(
-            command=list(config.get("comfy_command") or []),
-            working_dir=config.get("comfy_workdir"),
-            startup_timeout_seconds=float(config.get("comfy_startup_timeout_seconds") or 30.0),
-            autostart_enabled=bool(config.get("comfy_autostart_enabled")),
-            base_url=config.get("comfy_base_url"),
-        )
-
-    if proc_config is None:
-        logging.info("No ComfyUI configuration available")
-        base_url = config.get("comfy_base_url")
-        if base_url:
-            try:
-                wait_for_comfy_ready(base_url)
-            except Exception as exc:
-                logging.info("ComfyUI not available for unmanaged bootstrap probe: %s", exc)
-        return None
-
-    manager = ComfyProcessManager(proc_config)
-    if proc_config.autostart_enabled:
-        manager.start()
-        wait_for_comfy_ready(
-            config.get("comfy_base_url"),
-            timeout=proc_config.startup_timeout_seconds,
-            poll_interval=0.5,
-        )
-    else:
-        try:
-            wait_for_comfy_ready(
-                config.get("comfy_base_url"),
-                timeout=min(float(proc_config.startup_timeout_seconds or 30.0), 2.0),
-                poll_interval=0.5,
-            )
-        except Exception as exc:
-            logging.info("ComfyUI not ready at startup; continuing unmanaged: %s", exc)
-    return manager
+    return _runtime_host_bootstrap_comfy(
+        config,
+        process_manager_cls=ComfyProcessManager,
+        wait_ready_fn=wait_for_comfy_ready,
+        logger_module=logging,
+    )
 
 
 def _load_webui_config() -> dict[str, Any]:
-    cfg = {
-        "webui_base_url": os.getenv("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
-    }
-
-    proc_config = build_default_webui_process_config()
-    if proc_config:
-        env_override_cmd = os.getenv("STABLENEW_WEBUI_COMMAND", "").split()
-        if env_override_cmd:
-            proc_config.command = env_override_cmd
-        workdir_override = os.getenv("STABLENEW_WEBUI_WORKDIR")
-        if workdir_override:
-            proc_config.working_dir = workdir_override
-        autostart_env = os.getenv("STABLENEW_WEBUI_AUTOSTART")
-        if autostart_env is not None:
-            proc_config.autostart_enabled = autostart_env.lower() in {"1", "true", "yes"}
-        timeout_override = os.getenv("STABLENEW_WEBUI_TIMEOUT")
-        if timeout_override:
-            try:
-                proc_config.startup_timeout_seconds = float(timeout_override)
-            except Exception:
-                pass
-        cfg["webui_base_url"] = str(
-            proc_config.base_url or cfg.get("webui_base_url") or "http://127.0.0.1:7860"
-        )
-        cfg["process_config"] = proc_config
-    return cfg
+    return _runtime_host_load_webui_config(
+        build_process_config=build_default_webui_process_config,
+        getenv=os.getenv,
+    )
 
 
 def _load_comfy_config() -> dict[str, Any]:
-    cfg = {
-        "comfy_base_url": os.getenv("STABLENEW_COMFY_BASE_URL", "http://127.0.0.1:8188"),
-    }
-
-    proc_config = build_default_comfy_process_config()
-    if proc_config:
-        env_override_cmd = os.getenv("STABLENEW_COMFY_COMMAND", "").split()
-        if env_override_cmd:
-            proc_config.command = env_override_cmd
-        workdir_override = os.getenv("STABLENEW_COMFY_WORKDIR")
-        if workdir_override:
-            proc_config.working_dir = workdir_override
-        autostart_env = os.getenv("STABLENEW_COMFY_AUTOSTART")
-        if autostart_env is not None:
-            proc_config.autostart_enabled = autostart_env.lower() in {"1", "true", "yes"}
-        timeout_override = os.getenv("STABLENEW_COMFY_TIMEOUT")
-        if timeout_override:
-            try:
-                proc_config.startup_timeout_seconds = float(timeout_override)
-            except Exception:
-                pass
-        cfg["comfy_base_url"] = str(
-            proc_config.base_url or cfg.get("comfy_base_url") or "http://127.0.0.1:8188"
-        )
-        cfg["process_config"] = proc_config
-    return cfg
+    return _runtime_host_load_comfy_config(
+        build_process_config=build_default_comfy_process_config,
+        getenv=os.getenv,
+    )
 
 
 def _async_bootstrap_webui(root: Any, app_state, window) -> None:
@@ -718,9 +627,6 @@ def main() -> None:
         # PR-PROCESS-001: Register emergency cleanup after WebUI bootstrap
         # Delayed by 1000ms to allow WebUI manager to initialize
         root.after(1000, lambda: _register_emergency_cleanup(window))
-
-        root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
-        root.after(700, lambda: _async_bootstrap_comfy(root, app_state, window))
 
         try:
             root.mainloop()

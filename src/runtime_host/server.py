@@ -58,6 +58,7 @@ def _build_runtime_snapshot_payload(
     runtime_host: Any,
     *,
     history_limit: int = 50,
+    managed_runtimes: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     queue = getattr(runtime_host, "job_queue", None) or getattr(runtime_host, "queue", None)
     history_store = getattr(runtime_host, "history_store", None)
@@ -82,6 +83,7 @@ def _build_runtime_snapshot_payload(
         "queue": _queue_status_payload(runtime_host),
         "jobs": jobs,
         "history": history,
+        "managed_runtimes": dict(managed_runtimes or {}),
     }
 
 
@@ -103,6 +105,10 @@ class RuntimeHostServer:
         return self._bootstrap.runtime_host
 
     @property
+    def managed_runtime_owner(self):
+        return self._bootstrap.managed_runtime_owner
+
+    @property
     def shutdown_requested(self) -> bool:
         return self._shutdown_requested
 
@@ -118,6 +124,9 @@ class RuntimeHostServer:
                     "describe_protocol",
                     "runtime_snapshot",
                     "diagnostics_snapshot",
+                    "managed_runtime_snapshot",
+                    "ensure_webui_ready",
+                    "retry_webui_connection",
                     "submit_job",
                     "enqueue_njrs",
                     "run_now",
@@ -131,6 +140,7 @@ class RuntimeHostServer:
                 ],
             }
         )
+        payload["managed_runtimes"] = self.managed_runtime_owner.get_snapshot()
         return payload
 
     def stop(self) -> None:
@@ -140,6 +150,9 @@ class RuntimeHostServer:
         stop = getattr(self.runtime_host, "stop", None)
         if callable(stop):
             stop()
+        owner_stop = getattr(self.managed_runtime_owner, "stop", None)
+        if callable(owner_stop):
+            owner_stop()
 
     def handle_message(
         self,
@@ -170,7 +183,11 @@ class RuntimeHostServer:
             return build_protocol_message(
                 "snapshot",
                 "runtime_snapshot",
-                _build_runtime_snapshot_payload(self.runtime_host, history_limit=history_limit),
+                _build_runtime_snapshot_payload(
+                    self.runtime_host,
+                    history_limit=history_limit,
+                    managed_runtimes=self.managed_runtime_owner.get_snapshot(),
+                ),
             )
         if envelope.name == "diagnostics_snapshot":
             payload = dict(self.runtime_host.get_diagnostics_snapshot())
@@ -178,9 +195,33 @@ class RuntimeHostServer:
                 {
                     "host_pid": os.getpid(),
                     "transport": "local-child",
+                    "managed_runtimes": self.managed_runtime_owner.get_snapshot(),
                 }
             )
+            webui_tail = self.managed_runtime_owner.get_recent_webui_output_tail()
+            if webui_tail is not None:
+                payload["webui_tail"] = webui_tail
             return build_protocol_message("snapshot", "diagnostics_snapshot", payload)
+        if envelope.name == "managed_runtime_snapshot":
+            return build_protocol_message(
+                "snapshot",
+                "managed_runtime_snapshot",
+                self.managed_runtime_owner.get_snapshot(),
+            )
+        if envelope.name == "ensure_webui_ready":
+            return build_protocol_message(
+                "response",
+                "ensure_webui_ready",
+                self.managed_runtime_owner.ensure_webui_ready(
+                    autostart=bool(envelope.payload.get("autostart", True))
+                ),
+            )
+        if envelope.name == "retry_webui_connection":
+            return build_protocol_message(
+                "response",
+                "retry_webui_connection",
+                self.managed_runtime_owner.retry_webui_connection(),
+            )
         if envelope.name == "submit_job":
             job_payload = envelope.payload.get("job") or {}
             job = deserialize_job(job_payload if isinstance(job_payload, Mapping) else {})
@@ -312,6 +353,7 @@ def run_child_runtime_host(
     bootstrap = build_runtime_host_bootstrap(
         history_path=history_path,
         pipeline_runner=pipeline_runner,
+        start_managed_runtimes=True,
     )
     server = RuntimeHostServer(bootstrap)
     serve_runtime_host_connection(connection, server)

@@ -5,6 +5,8 @@ from unittest.mock import patch
 
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
+from src.runtime_host import build_local_runtime_host
+from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
 class FakeJobService:
@@ -118,3 +120,23 @@ def test_shutdown_webui_uses_global_manager_fallback(controller: AppController) 
 
     assert controller.webui_process_manager is fallback
     assert fallback.stop_calls == 1
+
+
+def test_shutdown_app_stops_remote_runtime_host() -> None:
+    runtime_host = build_local_runtime_host(make_stubbed_job_service())
+    runtime_host.describe_protocol = lambda: {"transport": "local-child"}  # type: ignore[method-assign]
+    stop_calls: list[str] = []
+    runtime_host.stop = lambda: stop_calls.append("stop")  # type: ignore[attr-defined]
+
+    controller = AppController(
+        None,
+        threaded=False,
+        runtime_host=runtime_host,
+        webui_process_manager=FakeWebUIManager(),
+    )
+    controller.app_state = AppStateV2()
+    controller.learning_controller = FakeLearningController()
+
+    controller.shutdown_app("remote-host")
+
+    assert stop_calls == ["stop"]

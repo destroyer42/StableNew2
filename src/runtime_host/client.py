@@ -14,6 +14,7 @@ from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
 from src.queue.job_model import Job, JobStatus
 from src.runtime_host.messages import RuntimeHostProtocolMessage, build_protocol_message
 from src.runtime_host.port import (
+    RUNTIME_HOST_EVENT_DISCONNECTED,
     RUNTIME_HOST_EVENT_JOB_FAILED,
     RUNTIME_HOST_EVENT_JOB_FINISHED,
     RUNTIME_HOST_EVENT_JOB_STARTED,
@@ -206,6 +207,7 @@ class ChildRuntimeHostClient(RuntimeHostPort):
         self._jobs_by_id: dict[str, Job] = {}
         self._history_entries: list[JobHistoryEntry] = []
         self._history_by_id: dict[str, JobHistoryEntry] = {}
+        self._managed_runtime_state: dict[str, Any] = {}
         self._connected = False
         self._startup_error: str | None = None
         self._stop_event = threading.Event()
@@ -323,7 +325,34 @@ class ChildRuntimeHostClient(RuntimeHostPort):
             "startup_error": self._startup_error,
             "host_pid": self._protocol_info.get("host_pid"),
             "transport": self.describe_protocol().get("transport", "local-child"),
+            "protocol": self._protocol_info.get("protocol"),
+            "version": self._protocol_info.get("version"),
         }
+        return payload
+
+    def get_managed_runtime_snapshot(self) -> dict[str, Any]:
+        response = self._request("managed_runtime_snapshot")
+        payload = dict(response.payload)
+        self._managed_runtime_state = payload
+        return payload
+
+    def ensure_webui_ready(self, *, autostart: bool = True) -> dict[str, Any]:
+        response = self._request(
+            "ensure_webui_ready",
+            {"autostart": bool(autostart)},
+        )
+        payload = dict(response.payload)
+        managed = dict(self._managed_runtime_state)
+        managed["webui"] = payload
+        self._managed_runtime_state = managed
+        return payload
+
+    def retry_webui_connection(self) -> dict[str, Any]:
+        response = self._request("retry_webui_connection")
+        payload = dict(response.payload)
+        managed = dict(self._managed_runtime_state)
+        managed["webui"] = payload
+        self._managed_runtime_state = managed
         return payload
 
     def stop(self) -> None:
@@ -356,8 +385,24 @@ class ChildRuntimeHostClient(RuntimeHostPort):
             try:
                 self._refresh_from_remote(history_limit=50)
             except Exception as exc:
-                self._startup_error = str(exc)
+                error_message = str(exc) or "runtime host disconnected"
+                self._startup_error = error_message
                 self._connected = False
+                queue_state = dict(self._queue_state)
+                queue_state["status"] = "disconnected"
+                queue_state["runner_running"] = False
+                queue_state["current_job_id"] = None
+                self._queue_state = queue_state
+                self._emit(RUNTIME_HOST_EVENT_QUEUE_STATUS, "disconnected")
+                self._emit(
+                    RUNTIME_HOST_EVENT_DISCONNECTED,
+                    {
+                        "connected": False,
+                        "error": error_message,
+                        "host_pid": self._protocol_info.get("host_pid"),
+                        "transport": self.describe_protocol().get("transport", "local-child"),
+                    },
+                )
                 break
 
     def _dispatch(self, fn: Callable[[], None]) -> None:
@@ -452,6 +497,7 @@ class ChildRuntimeHostClient(RuntimeHostPort):
         self._history_entries = history_entries
         self._history_by_id = {entry.job_id: entry for entry in history_entries}
         self._queue_state = dict(payload.get("queue") or {})
+        self._managed_runtime_state = dict(payload.get("managed_runtimes") or {})
         self._protocol_info.setdefault("host_pid", payload.get("host_pid"))
         self._protocol_info.setdefault("transport", payload.get("transport", "local-child"))
 

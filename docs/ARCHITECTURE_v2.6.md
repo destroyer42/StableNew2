@@ -2,7 +2,7 @@ ARCHITECTURE_v2.6.md
 (Canonical)
 
 StableNew Core Architecture Specification (v2.6)
-Last Updated: 2026-03-29
+Last Updated: 2026-03-30
 Status: Canonical, Binding
 
 0. Purpose
@@ -94,6 +94,18 @@ Each layer has one role:
 - history, replay, learning, and diagnostics consume canonical results
 
 There is no second runtime story for image versus video.
+
+Current production deployment shape after `PR-PERF-502` is a local midpoint,
+not a second execution architecture:
+
+- the GUI process owns Tk surfaces, `AppStateV2` draft state, and the local
+  runtime-host client
+- the GUI launches a bounded-handshake child runtime host before enabling
+  runtime-backed actions
+- the child runtime host owns `JobService`, queue state, runner execution,
+  history, watchdogs, and managed WebUI/Comfy lifecycle
+- the same-process local adapter remains DI-only and test-only until daemon
+  promotion replaces the child-host midpoint
 
 3. Intent Surfaces And Builders/Compilers
 
@@ -287,6 +299,11 @@ must not depend on controller-local or legacy result shapes.
 Diagnostics bundles, crash bundles, watchdog bundles, and runtime snapshots
 must describe the same queue/runner/artifact truth for both image and video
 workloads.
+
+When production runs through the local child runtime host, diagnostics must
+also distinguish GUI-client transport state from host-owned runtime state,
+including protocol/version, host pid, startup or disconnect errors, and
+managed-runtime snapshots.
 
 10. Migration Boundary
 

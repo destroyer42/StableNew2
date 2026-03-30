@@ -137,16 +137,24 @@ Response:
 
 ## 6. Recommended Order and Approval Gates
 
-### Recommended next PR to approve
+### Current completion state
 
-`PR-PERF-502 - GUI-Owned Runtime Host Midpoint Cutover`
+- `PR-PERF-501` completed on 2026-03-30.
+- `PR-PERF-502` completed on 2026-03-30 and moved production execution to the
+  GUI-owned child runtime host with host-owned queue, runner, managed-runtime,
+  and diagnostics truth.
+
+### Recommended next PR to approve after midpoint soak signoff
+
+`PR-PERF-503 - Detached Local Runtime Daemon Promotion`
 
 Reason:
 
-- `PR-PERF-501` completed on 2026-03-30 and landed the reviewed runtime-host
-  seam for controller and bootstrap wiring
-- the midpoint cutover is now the next remaining runtime-isolation step
-- daemon promotion and final cleanup still depend on midpoint soak results
+- the midpoint cutover is now complete in production code and docs
+- daemon promotion is the next remaining runtime-isolation change
+- approval is still blocked until midpoint soak signoff confirms materially
+  improved GUI responsiveness without major queue, watchdog, or diagnostics
+  regressions
 
 ### Estimated execution order
 
@@ -157,7 +165,8 @@ Reason:
 
 2. `PR-PERF-502`  
    Dependency: `PR-PERF-501`  
-   Expected role: midpoint production cutover to GUI-owned child host
+  Status: Completed 2026-03-30
+  Delivered role: midpoint production cutover to GUI-owned child host
 
 3. `PR-PERF-503`  
    Dependency: `PR-PERF-502` plus successful midpoint soak verification  
@@ -170,8 +179,8 @@ Reason:
 ### Approval cadence
 
 1. `PR-PERF-501` completed on 2026-03-30.
-2. Approve `PR-PERF-502` only after `PR-PERF-501` lands cleanly and the new
-   runtime host seam is code-reviewed.
+2. `PR-PERF-502` completed on 2026-03-30; midpoint soak verification is now
+  the blocking gate.
 3. Do not approve `PR-PERF-503` until the midpoint proves one real outcome:
    materially improved GUI responsiveness under active generation without major
    queue, watchdog, or diagnostics regressions.
@@ -238,10 +247,14 @@ Why this PR is first:
 
 ### `PR-PERF-502 - GUI-Owned Runtime Host Midpoint Cutover`
 
-Status: Proposed  
+Status: Completed 2026-03-30  
 Priority: CRITICAL  
 Effort: LARGE  
 Depends on: `PR-PERF-501`
+
+Completion record:
+
+- `docs/CompletedPR/PR-PERF-502-GUI-Owned-Runtime-Host-Midpoint-Cutover.md`
 
 Standalone execution spec:
 

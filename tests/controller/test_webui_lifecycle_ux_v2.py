@@ -5,6 +5,8 @@ from types import SimpleNamespace
 import pytest
 
 from src.controller.app_controller import AppController
+from src.runtime_host import RUNTIME_HOST_EVENT_DISCONNECTED, build_local_runtime_host
+from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
 class DummyLogWidget:
@@ -18,9 +20,13 @@ class DummyLogWidget:
 class DummyStatusBar:
     def __init__(self):
         self.states: list[str] = []
+        self.statuses: list[str] = []
 
     def update_webui_state(self, state: str):
         self.states.append(state)
+
+    def update_status(self, text: str):
+        self.statuses.append(text)
 
 
 class DummyWindow:
@@ -111,3 +117,60 @@ def test_on_retry_webui_updates_state():
 
     assert fake_manager.health_calls == 1
     assert window.status_bar_v2.states[-1] == "connected"
+
+
+def test_on_launch_webui_uses_runtime_host_when_remote():
+    window = DummyWindow()
+    runtime_host = build_local_runtime_host(make_stubbed_job_service())
+    runtime_host.describe_protocol = lambda: {"transport": "local-child"}  # type: ignore[method-assign]
+    runtime_host.ensure_webui_ready = (  # type: ignore[attr-defined]
+        lambda *, autostart=True: {"state": "ready", "pid": 321, "autostart": autostart}
+    )
+    controller = AppController(
+        window,
+        pipeline_runner=FakePipelineRunner(),
+        threaded=False,
+        runtime_host=runtime_host,
+    )
+
+    controller.on_launch_webui_clicked()
+
+    assert window.status_bar_v2.states[-1] == "connected"
+
+
+def test_on_retry_webui_uses_runtime_host_when_remote():
+    window = DummyWindow()
+    runtime_host = build_local_runtime_host(make_stubbed_job_service())
+    runtime_host.describe_protocol = lambda: {"transport": "local-child"}  # type: ignore[method-assign]
+    runtime_host.retry_webui_connection = lambda: {"state": "ready", "pid": 321}  # type: ignore[attr-defined]
+    controller = AppController(
+        window,
+        pipeline_runner=FakePipelineRunner(),
+        threaded=False,
+        runtime_host=runtime_host,
+    )
+
+    controller.on_retry_webui_clicked()
+
+    assert window.status_bar_v2.states[-1] == "connected"
+
+
+def test_runtime_host_disconnect_updates_status_and_webui_state():
+    window = DummyWindow()
+    runtime_host = build_local_runtime_host(make_stubbed_job_service())
+    runtime_host.describe_protocol = lambda: {"transport": "local-child"}  # type: ignore[method-assign]
+    controller = AppController(
+        window,
+        pipeline_runner=FakePipelineRunner(),
+        threaded=False,
+        runtime_host=runtime_host,
+    )
+
+    runtime_host.job_service._emit(  # type: ignore[attr-defined]
+        RUNTIME_HOST_EVENT_DISCONNECTED,
+        {"transport": "local-child", "error": "pipe closed"},
+    )
+
+    assert window.status_bar_v2.states[-1] == "error"
+    assert "pipe closed" in window.status_bar_v2.statuses[-1]
+    assert controller._pending_status_text.endswith("pipe closed")
