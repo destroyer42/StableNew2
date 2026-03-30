@@ -52,6 +52,8 @@ class LogTracePanelV2(ttk.Frame):
             "last_ms": 0.0,
             "slow_count": 0,
             "append_only_count": 0,
+            "rollover_count": 0,
+            "tail_update_count": 0,
             "full_rebuild_count": 0,
             "skipped_collapsed_count": 0,
             "skipped_unchanged_count": 0,
@@ -272,14 +274,14 @@ class LogTracePanelV2(ttk.Frame):
         current_yview = self._log_text.yview()
         self._log_text.config(state=tk.NORMAL)
         if append_only:
-            for level, line in rendered_lines[len(previous_lines) :]:
-                tag = level if level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL") else "INFO"
-                self._log_text.insert(tk.END, f"{line}\n", tag)
+            self._insert_rendered_lines(rendered_lines[len(previous_lines) :])
+            incremental_mode = "append"
         else:
-            self._log_text.delete(1.0, tk.END)
-            for level, line in lines:
-                tag = level if level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL") else "INFO"
-                self._log_text.insert(tk.END, f"{line}\n", tag)
+            incremental_mode = self._apply_incremental_update(previous_lines, rendered_lines)
+            if incremental_mode is None:
+                self._log_text.delete(1.0, tk.END)
+                self._insert_rendered_lines(lines)
+                incremental_mode = "rebuild"
         self._log_text.config(state=tk.DISABLED)
 
         if self._auto_scroll.get():
@@ -289,13 +291,83 @@ class LogTracePanelV2(ttk.Frame):
         self._record_refresh_metric(
             (time.perf_counter() - start) * 1000.0,
             append_only=append_only,
+            incremental_mode=incremental_mode,
         )
+
+    def _apply_incremental_update(
+        self,
+        previous_lines: tuple[tuple[str, str], ...],
+        rendered_lines: tuple[tuple[str, str], ...],
+    ) -> str | None:
+        if not previous_lines or not rendered_lines:
+            return None
+
+        if (
+            len(previous_lines) == len(rendered_lines)
+            and previous_lines[:-1] == rendered_lines[:-1]
+            and previous_lines[-1] != rendered_lines[-1]
+        ):
+            self._log_text.delete(f"{len(previous_lines)}.0", tk.END)
+            level, line = rendered_lines[-1]
+            tag = level if level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL") else "INFO"
+            self._log_text.insert(tk.END, f"{line}\n", tag)
+            return "tail"
+
+        overlap = self._find_overlap(previous_lines, rendered_lines)
+        if overlap <= 0:
+            return None
+        drop_count = len(previous_lines) - overlap
+        if drop_count > 0:
+            self._log_text.delete("1.0", f"{drop_count + 1}.0")
+        self._insert_rendered_lines(rendered_lines[overlap:])
+        return "rollover"
+
+    def _insert_rendered_lines(
+        self,
+        rendered_lines: Iterable[tuple[str, str]],
+        *,
+        index: str = tk.END,
+    ) -> None:
+        pending_tag: str | None = None
+        pending_lines: list[str] = []
+        current_index = index
+
+        def _flush() -> None:
+            nonlocal pending_tag, pending_lines, current_index
+            if not pending_lines or pending_tag is None:
+                return
+            self._log_text.insert(current_index, "\n".join(pending_lines) + "\n", pending_tag)
+            current_index = tk.END
+            pending_tag = None
+            pending_lines = []
+
+        for level, line in rendered_lines:
+            tag = level if level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL") else "INFO"
+            if pending_tag is None:
+                pending_tag = tag
+            if tag != pending_tag:
+                _flush()
+                pending_tag = tag
+            pending_lines.append(line)
+        _flush()
+
+    @staticmethod
+    def _find_overlap(
+        previous_lines: tuple[tuple[str, str], ...],
+        rendered_lines: tuple[tuple[str, str], ...],
+    ) -> int:
+        limit = min(len(previous_lines), len(rendered_lines))
+        for overlap in range(limit, 0, -1):
+            if previous_lines[-overlap:] == rendered_lines[:overlap]:
+                return overlap
+        return 0
 
     def _record_refresh_metric(
         self,
         elapsed_ms: float,
         *,
         append_only: bool = False,
+        incremental_mode: str = "rebuild",
         skipped_collapsed: bool = False,
         skipped_unchanged: bool = False,
     ) -> None:
@@ -315,6 +387,14 @@ class LogTracePanelV2(ttk.Frame):
         if append_only:
             self._refresh_metrics["append_only_count"] = (
                 int(self._refresh_metrics.get("append_only_count", 0) or 0) + 1
+            )
+        elif incremental_mode == "rollover":
+            self._refresh_metrics["rollover_count"] = (
+                int(self._refresh_metrics.get("rollover_count", 0) or 0) + 1
+            )
+        elif incremental_mode == "tail":
+            self._refresh_metrics["tail_update_count"] = (
+                int(self._refresh_metrics.get("tail_update_count", 0) or 0) + 1
             )
         elif not skipped_collapsed and not skipped_unchanged:
             self._refresh_metrics["full_rebuild_count"] = (
@@ -343,6 +423,8 @@ class LogTracePanelV2(ttk.Frame):
             "last_ms": round(float(self._refresh_metrics.get("last_ms", 0.0) or 0.0), 3),
             "slow_count": int(self._refresh_metrics.get("slow_count", 0) or 0),
             "append_only_count": int(self._refresh_metrics.get("append_only_count", 0) or 0),
+            "rollover_count": int(self._refresh_metrics.get("rollover_count", 0) or 0),
+            "tail_update_count": int(self._refresh_metrics.get("tail_update_count", 0) or 0),
             "full_rebuild_count": int(self._refresh_metrics.get("full_rebuild_count", 0) or 0),
             "skipped_collapsed_count": int(
                 self._refresh_metrics.get("skipped_collapsed_count", 0) or 0
@@ -403,16 +485,22 @@ class LogTracePanelV2(ttk.Frame):
                 badges.append(event)
             if job_id and self._audience == "trace":
                 badges.append(f"job={job_id}")
-        created = float(entry.get("created", 0.0) or 0.0)
+        created = self._coerce_float(entry.get("created"), 0.0)
         timestamp = self._format_timestamp(created)
         line = f"{timestamp} [{' | '.join(badges)}] {message}"
         envelope_summary = self._format_payload_summary(payload) if payload else None
         if envelope_summary:
             line += f" {envelope_summary}"
-        repeat_count = int(entry.get("repeat_count", 1) or 1)
+        repeat_count = self._coerce_int(entry.get("repeat_count"), 1)
         if repeat_count > 1:
-            first_created = float(entry.get("first_created", entry.get("created", 0.0)) or 0.0)
-            last_created = float(entry.get("last_created", entry.get("created", 0.0)) or 0.0)
+            first_created = self._coerce_float(
+                entry.get("first_created", entry.get("created", 0.0)),
+                0.0,
+            )
+            last_created = self._coerce_float(
+                entry.get("last_created", entry.get("created", 0.0)),
+                0.0,
+            )
             line += f" [repeated {repeat_count}x over {max(0.0, last_created - first_created):.1f}s]"
         return line
 
@@ -420,6 +508,20 @@ class LogTracePanelV2(ttk.Frame):
         if created <= 0:
             return "--:--:--.---"
         return datetime.fromtimestamp(created).strftime("%H:%M:%S.%f")[:-3]
+
+    @staticmethod
+    def _coerce_float(value: object, default: float) -> float:
+        try:
+            return float(value) if value is not None else default
+        except Exception:
+            return default
+
+    @staticmethod
+    def _coerce_int(value: object, default: int) -> int:
+        try:
+            return int(value) if value is not None else default
+        except Exception:
+            return default
 
     def _format_payload_summary(self, payload: dict[str, Any] | None) -> str | None:
         if not payload:

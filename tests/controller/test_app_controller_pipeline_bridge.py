@@ -143,6 +143,35 @@ def test_refresh_preview_from_state_async_builds_off_thread_and_applies_latest_r
     assert controller.app_state.preview_jobs[0].job_id == "preview-1"
 
 
+def test_request_preview_refresh_marks_preview_dirty_when_gui_context_exists() -> None:
+    main_window = SimpleNamespace(app_state=AppStateV2(), root=None)
+    controller = _build_controller(main_window=main_window)
+    calls: list[dict[str, object]] = []
+
+    def _mark_ui_dirty(**kwargs):
+        calls.append(dict(kwargs))
+
+    controller._mark_ui_dirty = _mark_ui_dirty  # type: ignore[assignment]
+
+    controller.request_preview_refresh()
+
+    assert calls == [{"preview": True}]
+
+
+def test_request_preview_refresh_falls_back_to_sync_without_gui_context() -> None:
+    controller = _build_controller()
+    calls: list[str] = []
+
+    def _refresh_preview_from_state() -> None:
+        calls.append("refresh")
+
+    controller._refresh_preview_from_state = _refresh_preview_from_state  # type: ignore[assignment]
+
+    controller.request_preview_refresh()
+
+    assert calls == ["refresh"]
+
+
 def test_start_run_v2_in_gui_mode_submits_queue_run_off_thread() -> None:
     main_window = SimpleNamespace(app_state=AppStateV2(), root=None)
     dummy = AsyncRunPipelineController()

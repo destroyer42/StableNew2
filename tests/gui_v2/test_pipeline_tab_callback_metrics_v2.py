@@ -193,6 +193,44 @@ def test_pipeline_tab_defers_hidden_hot_surfaces_until_visible() -> None:
     assert tab._hot_surface_dirty == set()
 
 
+def test_pipeline_tab_job_draft_change_uses_controller_preview_refresh_when_available() -> None:
+    class _PreviewRefreshController:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def request_preview_refresh(self) -> None:
+            self.calls += 1
+
+    tab = PipelineTabFrame.__new__(PipelineTabFrame)
+    tab.app_state = object()
+    tab.app_controller = _PreviewRefreshController()
+    tab.pipeline_controller = None
+    tab._callback_metrics = {}
+    tab._hot_surface_dirty = set()
+    tab._hot_surface_flush_scheduled = False
+    tab._hot_surface_flush_metrics = {
+        "count": 0,
+        "total_ms": 0.0,
+        "max_ms": 0.0,
+        "last_ms": 0.0,
+        "slow_count": 0,
+    }
+    tab.after = lambda delay_ms, fn: None  # type: ignore[method-assign]
+    sync_refresh_calls = {"count": 0}
+
+    def _refresh_preview_from_pipeline_jobs() -> bool:
+        sync_refresh_calls["count"] += 1
+        return True
+
+    tab._refresh_preview_from_pipeline_jobs = _refresh_preview_from_pipeline_jobs  # type: ignore[assignment]
+
+    tab._on_job_draft_changed()
+
+    assert tab.app_controller.calls == 1
+    assert sync_refresh_calls["count"] == 0
+    assert tab._hot_surface_dirty == {"preview"}
+
+
 @pytest.mark.gui
 def test_pipeline_tab_owns_hot_surface_subscriptions(tk_root: tk.Tk) -> None:
     harness = GuiV2Harness(tk_root)

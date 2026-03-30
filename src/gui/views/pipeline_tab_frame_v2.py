@@ -278,7 +278,6 @@ class PipelineTabFrame(ttk.Frame):
             try:
                 self.app_state.add_resource_listener(self._on_app_state_resources_changed)
                 self.app_state.subscribe("job_draft", self._on_job_draft_changed)
-                self.app_state.subscribe("queue_items", self._on_queue_items_changed)
                 self.app_state.subscribe("queue_jobs", self._on_queue_jobs_changed)
                 self.app_state.subscribe("running_job", self._on_running_job_changed)
                 self.app_state.subscribe("runtime_status", self._on_runtime_status_changed)
@@ -289,7 +288,6 @@ class PipelineTabFrame(ttk.Frame):
                 pass
             self._on_app_state_resources_changed(self.app_state.resources)
             self._on_job_draft_changed()
-            self._on_queue_items_changed()
             self._on_queue_jobs_changed()
             self._on_running_job_changed()
             self._on_queue_status_changed()
@@ -486,10 +484,18 @@ class PipelineTabFrame(ttk.Frame):
         def _run() -> None:
             if self.app_state is None:
                 return
-            try:
-                self._refresh_preview_from_pipeline_jobs()
-            except Exception:
-                pass
+            controller = self.app_controller or self.pipeline_controller
+            request_preview_refresh = getattr(controller, "request_preview_refresh", None)
+            if callable(request_preview_refresh):
+                try:
+                    request_preview_refresh()
+                except Exception:
+                    pass
+            else:
+                try:
+                    self._refresh_preview_from_pipeline_jobs()
+                except Exception:
+                    pass
             self._mark_hot_surface_dirty("preview")
 
         self._measure_callback("_on_job_draft_changed", _run)

@@ -70,8 +70,11 @@ class PreviewPanelV2(ttk.Frame):
             getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
         )
         self._refresh_metrics: dict[str, dict[str, float | int]] = {}
+        self._last_render_signature: tuple[Any, ...] | None = None
         self._thumbnail_lookup_cache: dict[tuple[str, ...], tuple[float, str | None]] = {}
         self._thumbnail_lookup_pending: set[tuple[str, ...]] = set()
+        self._prompt_text_value = ""
+        self._negative_prompt_text_value = ""
 
         header_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         header_frame.pack(fill="x", pady=(0, 4))
@@ -299,6 +302,14 @@ class PreviewPanelV2(ttk.Frame):
         start = time.perf_counter()
         self._job_summaries = list(summaries)
         last_summary = summaries[-1] if summaries else None
+        render_signature = self._build_render_signature(last_summary, len(summaries))
+        if last_summary is not None and render_signature == self._last_render_signature:
+            self._current_preview_job = last_summary
+            self._current_pack_name = self._resolve_pack_name(last_summary)
+            self._current_show_preview = self._show_preview_var.get()
+            elapsed_ms = (time.perf_counter() - start) * 1000.0
+            self._record_refresh_metric("set_job_summaries", elapsed_ms)
+            return
         self._render_summary(last_summary, len(summaries))
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         self._record_refresh_metric("set_job_summaries", elapsed_ms)
@@ -562,33 +573,86 @@ class PreviewPanelV2(ttk.Frame):
         logger.debug(f"[PreviewPanel] Got {len(records) if records else 0} preview jobs from app_state")
         self.set_preview_jobs(records)
 
+    def _build_render_signature(self, summary: Any | None, total: int) -> tuple[Any, ...]:
+        summary_obj = self._normalize_summary(summary)
+        if summary_obj is None:
+            return (
+                "empty",
+                int(total),
+                self._content_visibility_mode,
+                bool(self._show_preview_var.get()),
+            )
+        pack_name = self._resolve_pack_name(summary_obj, summary)
+        return (
+            "summary",
+            int(total),
+            self._content_visibility_mode,
+            bool(self._show_preview_var.get()),
+            str(getattr(summary_obj, "job_id", "") or ""),
+            str(getattr(summary_obj, "label", None) or getattr(summary_obj, "base_model", "-") or "-"),
+            str(getattr(summary_obj, "positive_preview", "") or ""),
+            str(getattr(summary_obj, "negative_preview", "") or ""),
+            str(getattr(summary_obj, "stages_display", "-") or "-"),
+            str(getattr(summary_obj, "sampler_name", getattr(summary_obj, "sampler", "-")) or "-"),
+            self._coerce_int(getattr(summary_obj, "steps", None)),
+            self._coerce_float(getattr(summary_obj, "cfg_scale", None)),
+            getattr(summary_obj, "seed", None),
+            getattr(summary_obj, "actual_seed", None),
+            getattr(summary_obj, "resolved_seed", None),
+            str(pack_name or ""),
+            self._make_thumbnail_lookup_key(summary, pack_name),
+        )
+
+    @staticmethod
+    def _set_label_text(widget: ttk.Label, value: str) -> None:
+        if str(widget.cget("text") or "") == value:
+            return
+        widget.config(text=value)
+
+    def _resolve_pack_name(self, summary_obj: Any | None, raw_summary: Any | None = None) -> str | None:
+        candidate = getattr(summary_obj, "pack_name", None) or getattr(summary_obj, "prompt_pack_name", None)
+        if candidate:
+            return str(candidate)
+        candidate = getattr(raw_summary, "pack_name", None) or getattr(raw_summary, "prompt_pack_name", None)
+        if candidate:
+            return str(candidate)
+        candidate = getattr(summary_obj, "label", None) or getattr(raw_summary, "label", None)
+        return str(candidate) if candidate else None
+
     def _render_summary(self, summary: Any | None, total: int) -> None:
         start = time.perf_counter()
         logger.debug(f"[PreviewPanel] _render_summary called: summary={bool(summary)}, total={total}")
+        render_signature = self._build_render_signature(summary, total)
 
         if summary is None:
             logger.debug("[PreviewPanel] Rendering empty state")
-            self.job_count_label.config(text="No job selected")
-            self.visibility_banner.configure(text="")
-            self._set_text_widget(self.prompt_text, "")
-            self._set_text_widget(self.negative_prompt_text, "")
-            self.model_label.config(text="Model: -")
-            self.sampler_label.config(text="Sampler: -")
-            self.steps_label.config(text="Steps: -")
-            self.cfg_label.config(text="CFG: -")
-            self.seed_label.config(text="Seed: -")
-            self.stage_summary_label.config(text="Stages: -")
-            self.stage_flags_label.config(
-                text=self._format_flags(refiner=False, hires=False, upscale=False)
+            self._set_label_text(self.job_count_label, "No job selected")
+            self._set_label_text(self.visibility_banner, "")
+            self._set_text_widget(self.prompt_text, "", cache_attr_name="_prompt_text_value")
+            self._set_text_widget(
+                self.negative_prompt_text,
+                "",
+                cache_attr_name="_negative_prompt_text_value",
             )
-            self.randomizer_label.config(text="Randomizer: OFF")
-            self.learning_metadata_label.config(text="Learning metadata: N/A")
+            self._set_label_text(self.model_label, "Model: -")
+            self._set_label_text(self.sampler_label, "Sampler: -")
+            self._set_label_text(self.steps_label, "Steps: -")
+            self._set_label_text(self.cfg_label, "CFG: -")
+            self._set_label_text(self.seed_label, "Seed: -")
+            self._set_label_text(self.stage_summary_label, "Stages: -")
+            self._set_label_text(
+                self.stage_flags_label,
+                self._format_flags(refiner=False, hires=False, upscale=False),
+            )
+            self._set_label_text(self.randomizer_label, "Randomizer: OFF")
+            self._set_label_text(self.learning_metadata_label, "Learning metadata: N/A")
             # Clear thumbnail when no job
             self._current_preview_job = None
             self._current_pack_name = None
             # PR-PREVIEW-001: Preserve checkbox state, don't reset to True
             self._current_show_preview = self._show_preview_var.get()
             self._update_thumbnail()
+            self._last_render_signature = render_signature
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             self._record_refresh_metric("_render_summary", elapsed_ms)
             return
@@ -596,16 +660,17 @@ class PreviewPanelV2(ttk.Frame):
         summary_obj = self._normalize_summary(summary)
         if summary_obj is None:
             logger.debug("[PreviewPanel] _normalize_summary returned None")
-            self.job_count_label.config(text="No job selected")
-            self.visibility_banner.configure(text="")
+            self._set_label_text(self.job_count_label, "No job selected")
+            self._set_label_text(self.visibility_banner, "")
             self._update_thumbnail()
+            self._last_render_signature = render_signature
             elapsed_ms = (time.perf_counter() - start) * 1000.0
             self._record_refresh_metric("_render_summary", elapsed_ms)
             return
 
         job_text = f"Job: {total}" if total == 1 else f"Jobs: {total}"
         logger.debug(f"[PreviewPanel] Setting job_count_label to: {job_text}")
-        self.job_count_label.config(text=job_text)
+        self._set_label_text(self.job_count_label, job_text)
 
         positive = getattr(summary_obj, "positive_preview", "") or ""
         negative = getattr(summary_obj, "negative_preview", "") or ""
@@ -626,37 +691,42 @@ class PreviewPanelV2(ttk.Frame):
                 "name": getattr(summary_obj, "prompt_pack_name", ""),
             },
         )
-        self.visibility_banner.configure(text="")
+        self._set_label_text(self.visibility_banner, "")
         logger.debug(f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}")
-        self._set_text_widget(self.prompt_text, positive)
-        self._set_text_widget(self.negative_prompt_text, negative)
-
-        # Force Tkinter to update the display immediately
-        self.update_idletasks()
+        self._set_text_widget(self.prompt_text, positive, cache_attr_name="_prompt_text_value")
+        self._set_text_widget(
+            self.negative_prompt_text,
+            negative,
+            cache_attr_name="_negative_prompt_text_value",
+        )
 
         model_text = getattr(summary_obj, "label", None) or getattr(summary_obj, "base_model", "-")
         logger.debug(f"[PreviewPanel] Model: {model_text}")
-        self.model_label.config(text=f"Model: {model_text}")
+        self._set_label_text(self.model_label, f"Model: {model_text}")
         sampler_text = getattr(summary_obj, "sampler_name", getattr(summary_obj, "sampler", "-"))
         logger.debug(f"[PreviewPanel] Sampler: {sampler_text}")
-        self.sampler_label.config(text=f"Sampler: {sampler_text}")
+        self._set_label_text(self.sampler_label, f"Sampler: {sampler_text}")
         steps_value = self._coerce_int(getattr(summary_obj, "steps", None))
         logger.debug(f"[PreviewPanel] Steps: {steps_value}")
-        self.steps_label.config(text=f"Steps: {steps_value if steps_value is not None else '-'}")
+        self._set_label_text(
+            self.steps_label,
+            f"Steps: {steps_value if steps_value is not None else '-'}",
+        )
         cfg_value = self._coerce_float(getattr(summary_obj, "cfg_scale", None))
         cfg_text = f"{cfg_value:.1f}" if cfg_value is not None else "-"
         logger.debug(f"[PreviewPanel] CFG: {cfg_text}")
-        self.cfg_label.config(text=f"CFG: {cfg_text}")
+        self._set_label_text(self.cfg_label, f"CFG: {cfg_text}")
         # PR-PIPE-007: Show resolved seed when available
         requested_seed = getattr(summary_obj, "seed", None)
         actual_seed = getattr(summary_obj, "actual_seed", None) or getattr(summary_obj, "resolved_seed", None)
         seed_text = format_seed_display(requested_seed, actual_seed)
-        self.seed_label.config(text=f"Seed: {seed_text}")
+        self._set_label_text(self.seed_label, f"Seed: {seed_text}")
 
         stages_text = getattr(summary_obj, "stages_display", "-")
-        self.stage_summary_label.config(text=f"Stages: {stages_text}")
-        self.stage_flags_label.config(
-            text=self._format_flags(refiner=False, hires=False, upscale=False)
+        self._set_label_text(self.stage_summary_label, f"Stages: {stages_text}")
+        self._set_label_text(
+            self.stage_flags_label,
+            self._format_flags(refiner=False, hires=False, upscale=False),
         )
 
         # PR-CORE-D: Display randomization/matrix metadata if available
@@ -672,11 +742,11 @@ class PreviewPanelV2(ttk.Frame):
                 batch_text = f"b{batch_idx}" if batch_idx is not None else "-"
                 randomizer_text += f" [{variant_text}/{batch_text}]"
 
-        self.randomizer_label.config(text=randomizer_text)
-        self.learning_metadata_label.config(text="Learning metadata: N/A")
+        self._set_label_text(self.randomizer_label, randomizer_text)
+        self._set_label_text(self.learning_metadata_label, "Learning metadata: N/A")
 
         # Update thumbnail with pack info from summary
-        pack_name = getattr(summary_obj, "pack_name", None) or getattr(summary_obj, "label", None)
+        pack_name = self._resolve_pack_name(summary_obj, summary)
         
         # PR-PREVIEW-001: Don't override user's checkbox preference from pack config
         # The checkbox state is the authoritative source, not the pack
@@ -687,6 +757,7 @@ class PreviewPanelV2(ttk.Frame):
 
         # Load thumbnail
         self._update_thumbnail(summary, pack_name, self._show_preview_var.get())
+        self._last_render_signature = render_signature
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         self._record_refresh_metric("_render_summary", elapsed_ms)
 
@@ -704,7 +775,11 @@ class PreviewPanelV2(ttk.Frame):
                 steps=summary.steps,
                 cfg_scale=summary.cfg_scale,
                 seed=getattr(summary, "seed", None),
+                actual_seed=getattr(summary, "actual_seed", None),
+                resolved_seed=getattr(summary, "resolved_seed", None),
                 base_model=summary.base_model,
+                pack_name=getattr(summary, "prompt_pack_name", None),
+                prompt_pack_name=getattr(summary, "prompt_pack_name", None),
             )
         return summary
 
@@ -717,12 +792,22 @@ class PreviewPanelV2(ttk.Frame):
         ]
         return " · ".join(parts)
 
-    @staticmethod
-    def _set_text_widget(widget: tk.Text, value: str) -> None:
+    def _set_text_widget(
+        self,
+        widget: tk.Text,
+        value: str,
+        *,
+        cache_attr_name: str | None = None,
+    ) -> None:
+        if cache_attr_name and getattr(self, cache_attr_name, None) == value:
+            return
         widget.config(state=tk.NORMAL)
         widget.delete("1.0", tk.END)
-        widget.insert(tk.END, value)
+        if value:
+            widget.insert(tk.END, value)
         widget.config(state=tk.DISABLED)
+        if cache_attr_name:
+            setattr(self, cache_attr_name, value)
 
     def _on_add_to_queue(self) -> None:
         """Move the draft job into the queue."""

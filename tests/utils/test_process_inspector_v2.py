@@ -106,6 +106,109 @@ def test_iter_stablenew_like_processes_filters(monkeypatch) -> None:
     assert result == [python_one, python_two]
 
 
+def test_iter_stablenew_like_processes_skips_vscode_extension_workers(monkeypatch) -> None:
+    vscode_worker = process_inspector_v2.ProcessInfo(
+        pid=10,
+        parent_pid=None,
+        name="python.exe",
+        cmdline=(
+            "python",
+            "C:/Users/rob/.vscode/extensions/ms-python.mypy-type-checker-2025.2.0/bundled/tool/lsp_server.py",
+        ),
+        cwd=str(process_inspector_v2.REPO_ROOT),
+        create_time=0.0,
+        rss_mb=15.0,
+        env_markers=("STABLENEW_RIFE_EXE=C:/tools/rife.exe",),
+    )
+
+    monkeypatch.setattr(
+        process_inspector_v2,
+        "iter_python_processes",
+        lambda: iter([vscode_worker]),
+    )
+
+    result = list(process_inspector_v2.iter_stablenew_like_processes())
+
+    assert result == []
+
+
+def test_iter_stablenew_like_processes_keeps_debugpy_main_process(monkeypatch) -> None:
+    debugpy_main = process_inspector_v2.ProcessInfo(
+        pid=20,
+        parent_pid=None,
+        name="python.exe",
+        cmdline=(
+            "python",
+            "-m",
+            "debugpy",
+            "--listen",
+            "5678",
+            "-m",
+            "src.main",
+        ),
+        cwd=str(process_inspector_v2.REPO_ROOT),
+        create_time=0.0,
+        rss_mb=300.0,
+        env_markers=(),
+    )
+
+    monkeypatch.setattr(
+        process_inspector_v2,
+        "iter_python_processes",
+        lambda: iter([debugpy_main]),
+    )
+
+    result = list(process_inspector_v2.iter_stablenew_like_processes())
+
+    assert result == [debugpy_main]
+
+
+def test_iter_stablenew_like_processes_includes_descendant_runtime_children(monkeypatch) -> None:
+    main_process = process_inspector_v2.ProcessInfo(
+        pid=30,
+        parent_pid=None,
+        name="python.exe",
+        cmdline=("python", "-m", "src.main"),
+        cwd=str(process_inspector_v2.REPO_ROOT),
+        create_time=0.0,
+        rss_mb=500.0,
+        env_markers=(),
+    )
+    webui_child = process_inspector_v2.ProcessInfo(
+        pid=31,
+        parent_pid=30,
+        name="python.exe",
+        cmdline=("python", "launch.py"),
+        cwd="C:/tools/stable-diffusion-webui",
+        create_time=0.0,
+        rss_mb=700.0,
+        env_markers=(),
+    )
+    vscode_worker = process_inspector_v2.ProcessInfo(
+        pid=32,
+        parent_pid=None,
+        name="python.exe",
+        cmdline=(
+            "python",
+            "C:/Users/rob/.vscode/extensions/ms-python.mypy-type-checker-2025.2.0/bundled/tool/lsp_server.py",
+        ),
+        cwd=str(process_inspector_v2.REPO_ROOT),
+        create_time=0.0,
+        rss_mb=20.0,
+        env_markers=(),
+    )
+
+    monkeypatch.setattr(
+        process_inspector_v2,
+        "iter_python_processes",
+        lambda: iter([main_process, webui_child, vscode_worker]),
+    )
+
+    result = list(process_inspector_v2.iter_stablenew_like_processes())
+
+    assert result == [main_process, webui_child]
+
+
 def test_collect_process_risk_snapshot_ignores_single_main_process_high_rss(monkeypatch) -> None:
     main_process = process_inspector_v2.ProcessInfo(
         pid=1,
@@ -199,4 +302,101 @@ def test_collect_process_risk_snapshot_ignores_tiny_duplicate_main_process(monke
     assert result["status"] == "normal"
     assert result["main_process_count"] == 2
     assert result["significant_main_process_count"] == 1
+    assert result["suspicious_processes"] == []
+
+
+def test_collect_process_risk_snapshot_ignores_comfyui_runtime_high_rss(monkeypatch) -> None:
+    main_process = process_inspector_v2.ProcessInfo(
+        pid=1,
+        parent_pid=None,
+        name="python.exe",
+        cmdline=("python", "-m", "src.main"),
+        cwd=str(process_inspector_v2.REPO_ROOT),
+        create_time=0.0,
+        rss_mb=900.0,
+        env_markers=(),
+    )
+    comfy_process = process_inspector_v2.ProcessInfo(
+        pid=2,
+        parent_pid=1,
+        name="python.exe",
+        cmdline=(
+            "python",
+            "E:/Users/rober/AppData/Local/Programs/ComfyUI/resources/ComfyUI/main.py",
+            "--listen",
+            "127.0.0.1",
+            "--port",
+            "8000",
+        ),
+        cwd="E:/Users/rober/AppData/Local/Programs/ComfyUI/resources/ComfyUI",
+        create_time=0.0,
+        rss_mb=756.5,
+        env_markers=(),
+    )
+
+    monkeypatch.setattr(
+        process_inspector_v2,
+        "iter_stablenew_like_processes",
+        lambda: iter([main_process, comfy_process]),
+    )
+
+    result = process_inspector_v2.collect_process_risk_snapshot()
+
+    assert result["status"] == "normal"
+    assert result["webui_process_count"] == 0
+    assert result["comfy_process_count"] == 1
+    assert result["suspicious_processes"] == []
+
+
+def test_collect_process_risk_snapshot_does_not_treat_duplicate_comfyui_as_duplicate_webui(monkeypatch) -> None:
+    main_process = process_inspector_v2.ProcessInfo(
+        pid=1,
+        parent_pid=None,
+        name="python.exe",
+        cmdline=("python", "-m", "src.main"),
+        cwd=str(process_inspector_v2.REPO_ROOT),
+        create_time=0.0,
+        rss_mb=900.0,
+        env_markers=(),
+    )
+    comfy_launcher = process_inspector_v2.ProcessInfo(
+        pid=2,
+        parent_pid=1,
+        name="python.exe",
+        cmdline=(
+            "E:/Users/rober/ComfyUI/.venv-explicit/Scripts/python.exe",
+            "E:/Users/rober/AppData/Local/Programs/ComfyUI/resources/ComfyUI/main.py",
+            "--listen",
+        ),
+        cwd="E:/Users/rober/AppData/Local/Programs/ComfyUI/resources/ComfyUI",
+        create_time=0.0,
+        rss_mb=4.5,
+        env_markers=(),
+    )
+    comfy_worker = process_inspector_v2.ProcessInfo(
+        pid=3,
+        parent_pid=2,
+        name="python.exe",
+        cmdline=(
+            "C:/Users/rob/AppData/Local/Programs/Python/Python310/python.exe",
+            "E:/Users/rober/AppData/Local/Programs/ComfyUI/resources/ComfyUI/main.py",
+            "--listen",
+        ),
+        cwd="E:/Users/rober/AppData/Local/Programs/ComfyUI/resources/ComfyUI",
+        create_time=0.0,
+        rss_mb=756.8,
+        env_markers=(),
+    )
+
+    monkeypatch.setattr(
+        process_inspector_v2,
+        "iter_stablenew_like_processes",
+        lambda: iter([main_process, comfy_launcher, comfy_worker]),
+    )
+
+    result = process_inspector_v2.collect_process_risk_snapshot()
+
+    assert result["status"] == "normal"
+    assert result["webui_process_count"] == 0
+    assert result["comfy_process_count"] == 2
     assert result["suspicious_processes"] == []

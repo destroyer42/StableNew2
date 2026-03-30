@@ -250,7 +250,7 @@
     "matrix": {
       "enabled": true,
       "mode": "random",
-      "limit": 8,
+      "limit": 2,
       "slots": [
         {
           "name": "main subject",

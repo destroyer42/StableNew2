@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from datetime import datetime
+from unittest.mock import patch
 
 import pytest
 
@@ -115,6 +116,26 @@ class TestPreviewPanelSummary:
         preview_panel.set_job_summaries([summary])
 
         assert "Learning metadata" in preview_panel.learning_metadata_label.cget("text")
+
+    def test_identical_summary_payload_skips_rerender(self, preview_panel):
+        summary = make_ui_summary(job_id="job-same", positive_preview="same prompt")
+        preview_panel.set_job_summaries([summary])
+
+        with pytest.MonkeyPatch.context() as monkeypatch:
+            monkeypatch.setattr(
+                preview_panel,
+                "_render_summary",
+                lambda *_args, **_kwargs: pytest.fail("identical summary should not rerender"),
+            )
+            preview_panel.set_job_summaries([make_ui_summary(job_id="job-same", positive_preview="same prompt")])
+
+    def test_render_summary_does_not_force_idle_flush(self, preview_panel):
+        summary = make_ui_summary(job_id="job-no-flush", positive_preview="prompt")
+
+        with patch.object(preview_panel, "update_idletasks", wraps=preview_panel.update_idletasks) as idle_spy:
+            preview_panel.set_job_summaries([summary])
+
+        idle_spy.assert_not_called()
 
     def test_update_from_job_draft_builds_summary(self, preview_panel):
         entry = PackJobEntry(

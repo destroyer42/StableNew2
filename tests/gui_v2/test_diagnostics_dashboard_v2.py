@@ -110,11 +110,16 @@ class DummyController:
             "process_inspector": {
                 "scanner_status": "Last scan: 10:00:00 scanned=2 killed=0",
                 "protected_pids": [123, 456],
+                "processes": [
+                    "pid=123 python.exe | main | rss=320MB",
+                    "pid=456 python.exe | webui | rss=640MB",
+                ],
                 "risk": {
                     "status": "warning",
                     "stablenew_like_count": 2,
                     "main_process_count": 1,
                     "webui_process_count": 1,
+                    "comfy_process_count": 1,
                     "suspicious_processes": [
                         {"pid": 987, "rss_mb": 640.0, "reasons": ["high_rss_512mb_plus"]}
                     ],
@@ -163,6 +168,8 @@ def test_diagnostics_dashboard_renders_snapshot() -> None:
     assert "reason=MEMORY" in watchdog_text
     process_text = panel._process_text.get("1.0", tk.END)
     assert "warning" in process_text
+    assert "comfy=1" in process_text
+    assert "pid=123 python.exe" in process_text
     thread_text = panel._thread_text.get("1.0", tk.END)
     assert "MainThread" in thread_text
     ui_text = panel._ui_metrics_text.get("1.0", tk.END)

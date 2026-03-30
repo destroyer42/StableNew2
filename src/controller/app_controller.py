@@ -144,7 +144,11 @@ from src.utils.error_envelope_v2 import (
 from src.utils.thread_registry import get_thread_registry
 from src.utils.file_io import load_image_to_base64, read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
-from src.utils.process_inspector_v2 import collect_process_risk_snapshot
+from src.utils.process_inspector_v2 import (
+    collect_process_risk_snapshot,
+    format_process_brief,
+    iter_stablenew_like_processes,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +156,7 @@ _IMAGE_OUTPUT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", "
 _QUEUE_PROJECTION_TIMING_INFO_MS = 150.0
 _QUEUE_PROJECTION_TIMING_WARN_MS = 1000.0
 _INITIAL_RESOURCE_PROBE_GRACE_SEC = 30.0
+_DIAGNOSTICS_HEAVY_SNAPSHOT_TTL_SEC = 4.0
 
 
 class LifecycleState(Enum):
@@ -481,6 +486,10 @@ class AppController:
         self._app_state_visibility_listener = None
 
         self._diagnostics_lock = threading.Lock()
+        self._diagnostics_process_snapshot_cache: dict[str, Any] | None = None
+        self._diagnostics_thread_snapshot_cache: dict[str, Any] | None = None
+        self._diagnostics_heavy_snapshot_ts = 0.0
+        self._diagnostics_heavy_snapshot_refresh_in_progress = False
         self._last_error_envelope: UnifiedErrorEnvelope | None = None
         self._error_modal: ErrorModalV2 | None = None
         self._original_excepthook = sys.excepthook
@@ -3947,13 +3956,91 @@ class AppController:
                 data["log_trace_panel"] = None
         data["app_state"] = self._build_diagnostics_app_state_snapshot()
         data["jobs"] = self._build_enriched_diagnostics_jobs(data.get("jobs"))
-        data["process_inspector"] = self._build_process_inspector_snapshot()
-        data["threads"] = self._build_thread_snapshot()
+        process_snapshot, thread_snapshot = self._get_cached_heavy_diagnostics_snapshots()
+        data["process_inspector"] = process_snapshot
+        data["threads"] = thread_snapshot
         data["last_bundle"] = (
             str(self._last_diagnostics_bundle) if self._last_diagnostics_bundle else None
         )
         data["last_bundle_reason"] = self._last_diagnostics_bundle_reason
         return data
+
+    def _get_cached_heavy_diagnostics_snapshots(
+        self,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        process_snapshot: dict[str, Any] | None = None
+        thread_snapshot: dict[str, Any] | None = None
+        refresh_needed = False
+        now = time.monotonic()
+        with self._diagnostics_lock:
+            if isinstance(self._diagnostics_process_snapshot_cache, dict):
+                process_snapshot = deepcopy(self._diagnostics_process_snapshot_cache)
+            if isinstance(self._diagnostics_thread_snapshot_cache, dict):
+                thread_snapshot = deepcopy(self._diagnostics_thread_snapshot_cache)
+            cache_ready = process_snapshot is not None and thread_snapshot is not None
+            cache_stale = (
+                cache_ready
+                and self._diagnostics_heavy_snapshot_ts > 0.0
+                and (now - self._diagnostics_heavy_snapshot_ts)
+                >= _DIAGNOSTICS_HEAVY_SNAPSHOT_TTL_SEC
+            )
+            if (
+                cache_stale
+                and not self._diagnostics_heavy_snapshot_refresh_in_progress
+                and not self._is_shutting_down
+            ):
+                self._diagnostics_heavy_snapshot_refresh_in_progress = True
+                refresh_needed = True
+        if process_snapshot is None or thread_snapshot is None:
+            process_snapshot = self._build_process_inspector_snapshot()
+            thread_snapshot = self._build_thread_snapshot()
+            self._store_heavy_diagnostics_snapshots(process_snapshot, thread_snapshot)
+            return process_snapshot, thread_snapshot
+        if refresh_needed:
+            self._schedule_heavy_diagnostics_refresh()
+        return process_snapshot, thread_snapshot
+
+    def _schedule_heavy_diagnostics_refresh(self) -> None:
+        try:
+            self._spawn_tracked_thread(
+                target=self._refresh_heavy_diagnostics_snapshots_async,
+                name="DiagnosticsSnapshotRefresh",
+                purpose="Refresh cached process and thread diagnostics snapshots",
+            )
+        except Exception:
+            with self._diagnostics_lock:
+                self._diagnostics_heavy_snapshot_refresh_in_progress = False
+
+    def _refresh_heavy_diagnostics_snapshots_async(self) -> None:
+        process_snapshot: dict[str, Any] | None = None
+        thread_snapshot: dict[str, Any] | None = None
+        try:
+            process_snapshot = self._build_process_inspector_snapshot()
+        except Exception:
+            process_snapshot = None
+        try:
+            thread_snapshot = self._build_thread_snapshot()
+        except Exception:
+            thread_snapshot = None
+        with self._diagnostics_lock:
+            if process_snapshot is not None:
+                self._diagnostics_process_snapshot_cache = deepcopy(process_snapshot)
+            if thread_snapshot is not None:
+                self._diagnostics_thread_snapshot_cache = deepcopy(thread_snapshot)
+            if process_snapshot is not None or thread_snapshot is not None:
+                self._diagnostics_heavy_snapshot_ts = time.monotonic()
+            self._diagnostics_heavy_snapshot_refresh_in_progress = False
+
+    def _store_heavy_diagnostics_snapshots(
+        self,
+        process_snapshot: dict[str, Any],
+        thread_snapshot: dict[str, Any],
+    ) -> None:
+        with self._diagnostics_lock:
+            self._diagnostics_process_snapshot_cache = deepcopy(process_snapshot)
+            self._diagnostics_thread_snapshot_cache = deepcopy(thread_snapshot)
+            self._diagnostics_heavy_snapshot_ts = time.monotonic()
+            self._diagnostics_heavy_snapshot_refresh_in_progress = False
 
     def _find_live_job(self, job_id: str) -> Any | None:
         job_service = getattr(self, "job_service", None)
@@ -4300,6 +4387,13 @@ class AppController:
             risk = collect_process_risk_snapshot()
         except Exception:
             risk = None
+        try:
+            process_lines = [
+                format_process_brief(process)
+                for process in iter_stablenew_like_processes()
+            ]
+        except Exception:
+            process_lines = []
         return {
             "scanner_status": scanner.get_status_text() if scanner is not None else None,
             "scanner_enabled": bool(getattr(scanner, "enabled", False)) if scanner is not None else False,
@@ -4309,6 +4403,7 @@ class AppController:
             "protected_pids": sorted(int(pid) for pid in self._get_protected_process_pids()),
             "summary": summary_payload,
             "risk": risk,
+            "processes": process_lines,
         }
 
     def _build_thread_snapshot(self) -> dict[str, Any]:
@@ -6900,6 +6995,16 @@ class AppController:
             refresh_fn()
         except Exception as exc:
             self._append_log(f"[controller] Refresh preview error: {exc!r}")
+
+    def request_preview_refresh(self) -> None:
+        """Request a debounced preview refresh suitable for GUI-triggered draft updates."""
+        scheduler = getattr(self, "_ui_scheduler", None)
+        main_window = getattr(self, "main_window", None)
+        dispatcher = getattr(main_window, "run_in_main_thread", None) if main_window is not None else None
+        if callable(scheduler) or callable(dispatcher) or self._get_ui_root() is not None:
+            self._mark_ui_dirty(preview=True)
+            return
+        self._refresh_preview_from_state()
 
     def _refresh_preview_from_state_async(self) -> None:
         """

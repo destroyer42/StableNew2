@@ -8,7 +8,6 @@ from pathlib import Path
 from tkinter import ttk
 from typing import Any
 
-from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
 from src.utils.system_info_v2 import collect_system_snapshot
 
 
@@ -321,6 +320,7 @@ class DiagnosticsDashboardV2(ttk.Frame):
                 + f" | processes={int(risk.get('stablenew_like_count', 0) or 0)}"
                 + f" | main={int(risk.get('main_process_count', 0) or 0)}"
                 + f" | webui={int(risk.get('webui_process_count', 0) or 0)}"
+                + f" | comfy={int(risk.get('comfy_process_count', 0) or 0)}"
             )
             suspicious = risk.get("suspicious_processes")
             if isinstance(suspicious, list):
@@ -339,8 +339,12 @@ class DiagnosticsDashboardV2(ttk.Frame):
         protected_pids = process_snapshot.get("protected_pids")
         if isinstance(protected_pids, list) and protected_pids:
             lines.append("protected_pids=" + ", ".join(str(pid) for pid in protected_pids[:10]))
-        for proc in iter_stablenew_like_processes():
-            lines.append(format_process_brief(proc))
+        processes = process_snapshot.get("processes")
+        if isinstance(processes, list):
+            for process_line in processes:
+                if not process_line:
+                    continue
+                lines.append(str(process_line))
         self._replace_text(self._process_text, lines)
 
     def _update_threads(self, snapshot: dict[str, Any]) -> None:

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
@@ -82,6 +83,9 @@ class BottomZone(ttk.Frame):
         super().__init__(master, style="StatusBar.TFrame")
         self._app_state = app_state
         self._rendered_operator_log_snapshot: tuple[str, ...] = ()
+        self._force_operator_log_projection = bool(os.environ.get("PYTEST_CURRENT_TEST")) or (
+            os.environ.get("STABLENEW_TEST_MODE") == "1"
+        )
         self.status_bar_v2 = StatusBarV2(self, controller=controller, app_state=app_state)
         self.status_bar_v2.grid(row=1, column=0, sticky="ew")
 
@@ -113,11 +117,30 @@ class BottomZone(ttk.Frame):
                 app_state.subscribe("operator_log", self._on_operator_log_changed)
             except Exception:
                 pass
-            self._on_operator_log_changed()
+            if self._should_project_operator_log():
+                self._on_operator_log_changed()
+
+    def _should_project_operator_log(self) -> bool:
+        if self._force_operator_log_projection:
+            return True
+        try:
+            return bool(self.log_text.winfo_manager())
+        except Exception:
+            return False
+
+    @staticmethod
+    def _find_overlap(previous_lines: tuple[str, ...], current_lines: tuple[str, ...]) -> int:
+        limit = min(len(previous_lines), len(current_lines))
+        for overlap in range(limit, 0, -1):
+            if previous_lines[-overlap:] == current_lines[:overlap]:
+                return overlap
+        return 0
 
     def _on_operator_log_changed(self) -> None:
         state = getattr(self, "_app_state", None)
         if state is None:
+            return
+        if not self._should_project_operator_log():
             return
         current_snapshot = tuple(getattr(state, "operator_log", []) or [])
         if current_snapshot == self._rendered_operator_log_snapshot:
@@ -133,6 +156,25 @@ class BottomZone(ttk.Frame):
             ):
                 for line in current_snapshot[len(self._rendered_operator_log_snapshot) :]:
                     self.log_text.insert("end", line + "\n")
+            elif (
+                self._rendered_operator_log_snapshot
+                and len(current_snapshot) == len(self._rendered_operator_log_snapshot)
+                and current_snapshot[:-1] == self._rendered_operator_log_snapshot[:-1]
+            ):
+                self.log_text.delete(f"{len(self._rendered_operator_log_snapshot)}.0", "end")
+                self.log_text.insert("end", current_snapshot[-1] + "\n")
+            elif self._rendered_operator_log_snapshot:
+                overlap = self._find_overlap(self._rendered_operator_log_snapshot, current_snapshot)
+                if overlap > 0:
+                    drop_count = len(self._rendered_operator_log_snapshot) - overlap
+                    if drop_count > 0:
+                        self.log_text.delete("1.0", f"{drop_count + 1}.0")
+                    for line in current_snapshot[overlap:]:
+                        self.log_text.insert("end", line + "\n")
+                else:
+                    self.log_text.delete("1.0", "end")
+                    if current_snapshot:
+                        self.log_text.insert("1.0", "\n".join(current_snapshot) + "\n")
             else:
                 self.log_text.delete("1.0", "end")
                 if current_snapshot:
