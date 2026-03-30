@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import pytest
 from unittest.mock import MagicMock, Mock
+from types import SimpleNamespace
 
 
 def test_learning_tab_receives_pipeline_controller():
@@ -87,8 +88,8 @@ def test_learning_metadata_added_to_pack_entry():
     assert entry.learning_metadata["learning_experiment_name"] == "Test Experiment"
 
 
-def test_submit_variant_job_creates_pack_entry():
-    """Verify _submit_variant_job creates a PackJobEntry with learning metadata."""
+def test_submit_variant_job_delegates_to_execution_controller():
+    """Verify _submit_variant_job uses the canonical execution controller path."""
     from src.gui.controllers.learning_controller import LearningController
     from src.gui.learning_state import LearningState, LearningExperiment, LearningVariant
     
@@ -109,34 +110,26 @@ def test_submit_variant_job_creates_pack_entry():
         LearningVariant(experiment_id="Steps Test", param_value=40, status="pending"),
     ]
     
-    # Create mock pipeline controller
-    mock_controller = MagicMock()
-    mock_queue_controller = MagicMock()
-    mock_queue_controller.submit_pack_job = MagicMock(return_value=True)
-    mock_controller.queue_controller = mock_queue_controller
+    execution_controller = MagicMock()
+    execution_controller.submit_variant_job.return_value = True
     
     # Create controller
     controller = LearningController(
         learning_state=learning_state,
-        pipeline_controller=mock_controller,
+        execution_controller=execution_controller,
     )
+    controller._build_variant_njr = Mock(return_value=SimpleNamespace(job_id="learning-job-1"))
     
     # Submit a variant job
     variant = learning_state.plan[0]
     controller._submit_variant_job(variant)
     
-    # Verify queue submission was called
-    assert mock_queue_controller.submit_pack_job.called
-    
-    # Verify the PackJobEntry has learning metadata
-    call_args = mock_queue_controller.submit_pack_job.call_args
-    pack_entry = call_args[0][0]
-    
-    assert pack_entry.learning_metadata is not None
-    assert pack_entry.learning_metadata["learning_enabled"] is True
-    assert pack_entry.learning_metadata["learning_experiment_name"] == "Steps Test"
-    assert pack_entry.learning_metadata["learning_variable"] == "Steps"
-    assert pack_entry.learning_metadata["learning_variant_value"] == 20
+    execution_controller.submit_variant_job.assert_called_once_with(
+        record=controller._build_variant_njr.return_value,
+        variant=variant,
+        experiment_name="Steps Test",
+        variable_under_test="Steps",
+    )
     
     # Verify variant status updated to queued
     assert variant.status == "queued"

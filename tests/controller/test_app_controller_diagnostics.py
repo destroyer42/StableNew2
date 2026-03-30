@@ -41,6 +41,29 @@ class DummyWebUIProcessManager:
         return {"stdout_tail": "boot ok", "stderr_tail": ""}
 
 
+def test_open_debug_hub_uses_app_controller_as_controller(monkeypatch) -> None:
+    recorded: dict[str, object] = {}
+
+    def fake_open(**kwargs: object) -> object:
+        recorded.update(kwargs)
+        return object()
+
+    monkeypatch.setattr("src.controller.app_controller.DebugHubPanelV2.open", fake_open)
+
+    controller = AppController(
+        None,
+        pipeline_runner=DummyPipelineRunner(),
+        job_service=DummyJobService(),
+    )
+    controller.pipeline_controller = object()
+    controller.app_state = object()
+    controller.gui_log_handler = object()
+
+    controller.open_debug_hub()
+
+    assert recorded["controller"] is controller
+
+
 def test_manual_diagnostics_bundle_triggers_builder(monkeypatch, tmp_path: Path) -> None:
     recorded: list[dict[str, object]] = []
 
@@ -108,8 +131,15 @@ def test_diagnostics_snapshot_includes_pipeline_tab_metrics() -> None:
                             "_on_runtime_status_changed": {"count": 3, "avg_ms": 1.5}
                         },
                         "hot_surface_scheduler": {"count": 2, "avg_ms": 4.0},
+                        "running_job_panel": {"count": 4, "avg_ms": 2.0},
                     }
                 },
+            )()
+            ,
+            "log_trace_panel_v2": type(
+                "LogTracePanel",
+                (),
+                {"get_diagnostics_snapshot": lambda self: {"count": 5, "avg_ms": 1.0}},
             )()
         },
     )()
@@ -118,6 +148,9 @@ def test_diagnostics_snapshot_includes_pipeline_tab_metrics() -> None:
 
     assert snapshot["pipeline_tab"]["callback_metrics"]["_on_runtime_status_changed"]["count"] == 3
     assert snapshot["pipeline_tab"]["hot_surface_scheduler"]["count"] == 2
+    assert snapshot["pipeline_tab"]["running_job_panel"]["count"] == 4
+    assert snapshot["log_trace_panel"]["count"] == 5
+    assert isinstance(snapshot["threads"], dict)
 
 
 def test_diagnostics_snapshot_includes_optional_dependency_snapshot() -> None:

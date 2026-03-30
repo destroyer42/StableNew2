@@ -59,6 +59,31 @@ def _actor_trigger_phrases(actor_resolutions: Iterable[Mapping[str, Any]] | None
     return tuple(phrases)
 
 
+def _style_trigger_phrase(style_lora: Mapping[str, Any] | None) -> str:
+    payload = dict(style_lora or {}) if isinstance(style_lora, Mapping) else {}
+    if not payload:
+        return ""
+    if not bool(payload.get("applied", payload.get("enabled", True))):
+        return ""
+    return str(payload.get("trigger_phrase") or "").strip()
+
+
+def _style_lora_tags(style_lora: Mapping[str, Any] | None) -> tuple[tuple[str, float], ...]:
+    payload = dict(style_lora or {}) if isinstance(style_lora, Mapping) else {}
+    if not payload:
+        return ()
+    if not bool(payload.get("applied", payload.get("enabled", True))):
+        return ()
+    lora_name = str(payload.get("lora_name") or "").strip()
+    if not lora_name:
+        return ()
+    try:
+        weight = float(payload.get("weight") or 1.0)
+    except (TypeError, ValueError):
+        weight = 1.0
+    return ((lora_name, weight),)
+
+
 def _actor_lora_tags(actor_resolutions: Iterable[Mapping[str, Any]] | None) -> tuple[tuple[str, float], ...]:
     tags: list[tuple[str, float]] = []
     for actor in list(actor_resolutions or []):
@@ -234,6 +259,7 @@ class UnifiedPromptResolver:
         pack_row: PackRow,
         matrix_slot_values: Mapping[str, str] | None = None,
         actor_resolutions: Iterable[Mapping[str, Any]] | None = None,
+        style_lora: Mapping[str, Any] | None = None,
         pack_negative: str | None = None,
         global_negative: str = "",
         apply_global_negative: bool = True,
@@ -242,9 +268,14 @@ class UnifiedPromptResolver:
         subject = self._substitute_matrix_tokens(pack_row.subject_template, matrix_slot_values)
         quality = self._substitute_matrix_tokens(pack_row.quality_line, matrix_slot_values)
         
-        actor_trigger_phrases = _actor_trigger_phrases(actor_resolutions)
+        actor_trigger_phrases = list(_actor_trigger_phrases(actor_resolutions))
+        style_trigger_phrase = _style_trigger_phrase(style_lora)
+        if style_trigger_phrase:
+            actor_trigger_phrases.append(style_trigger_phrase)
         merged_lora_tags = _dedupe_lora_tags(
-            list(_actor_lora_tags(actor_resolutions)) + list(pack_row.lora_tags)
+            list(_actor_lora_tags(actor_resolutions))
+            + list(pack_row.lora_tags)
+            + list(_style_lora_tags(style_lora))
         )
         lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in merged_lora_tags)
         positive_parts: list[str] = []

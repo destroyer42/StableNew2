@@ -125,3 +125,18 @@ def test_preview_jobs_switch_from_manual_to_pack_when_draft_added(tmp_path: Path
     assert "sorceress" in preview_jobs[0].positive_prompt.lower()
     assert preview_jobs[0].base_model == "model.safetensors"
     assert preview_jobs[0].positive_prompt not in initial_prompts
+
+
+def test_preview_jobs_record_timing_snapshot(tmp_path: Path) -> None:
+    controller = _make_controller(tmp_path)
+    controller._app_state.job_draft.packs = [_make_pack_entry("A clockwork knight")]
+
+    preview_jobs = controller.get_preview_jobs()
+    timing = controller.get_preview_build_timing_snapshot()
+
+    assert preview_jobs
+    assert timing is not None
+    assert timing["source"] == "pack_bundle"
+    assert timing["pack_entry_count"] == 1
+    assert timing["job_count"] == len(preview_jobs)
+    assert timing["elapsed_ms"] >= 0.0

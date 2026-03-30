@@ -74,3 +74,23 @@ def test_prompt_tab_template_preview_updates_current_prompt(tk_root) -> None:
         assert frame.workspace_state.get_current_template_id() == "establishing_wide"
     finally:
         frame.destroy()
+
+
+def test_prompt_tab_style_lora_selection_updates_pack_preset_data(tk_root) -> None:
+    frame = PromptTabFrame(tk_root)
+    try:
+        style_choices = [choice for choice, style_id in frame._style_choice_to_id.items() if style_id]
+        assert style_choices
+
+        selected_choice = style_choices[0]
+        selected_style_id = frame._style_choice_to_id[selected_choice]
+        frame.style_lora_var.set(selected_choice)
+        frame._on_style_lora_selection_changed()
+
+        assert frame.workspace_state.get_pack_style_lora_config()["style_id"] == selected_style_id
+        assert frame.style_lora_status_var.get()
+
+        frame._clear_style_lora_selection()
+        assert frame.workspace_state.get_pack_style_lora_config() == {}
+    finally:
+        frame.destroy()

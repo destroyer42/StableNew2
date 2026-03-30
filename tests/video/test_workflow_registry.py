@@ -15,7 +15,10 @@ from src.video import (
 def test_default_workflow_registry_registers_builtin_ltx_workflow() -> None:
     registry = build_default_workflow_registry()
 
-    assert registry.list_workflow_ids() == ["ltx_multiframe_anchor_v1"]
+    assert registry.list_workflow_ids() == [
+        "ltx_multiframe_anchor_v1",
+        "ltx_multiframe_anchor_v1_conditioned",
+    ]
     spec = registry.get("ltx_multiframe_anchor_v1")
     assert spec.backend_id == "comfy"
     assert spec.workflow_version == "1.0.0"
@@ -23,6 +26,9 @@ def test_default_workflow_registry_registers_builtin_ltx_workflow() -> None:
     assert spec.pinned_revision == "catalog:ltx_multiframe_anchor_v1@1.0.0"
     assert "multi_frame_anchor_video" in spec.capability_tags
     assert any(binding.binding_name == "end_anchor" for binding in spec.input_bindings)
+    conditioned = registry.get("ltx_multiframe_anchor_v1_conditioned")
+    assert conditioned.pinned_revision == "catalog:ltx_multiframe_anchor_v1_conditioned@1.0.0"
+    assert any(binding.binding_name == "depth_map" for binding in conditioned.input_bindings)
 
 
 def test_workflow_registry_rejects_duplicate_workflow_versions() -> None:

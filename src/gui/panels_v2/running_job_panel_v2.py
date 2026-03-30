@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+import time
 import tkinter as tk
 from collections.abc import Callable
 from datetime import datetime
@@ -39,6 +40,8 @@ class RunningJobPanelV2(ttk.Frame):
     - Cancel button
     """
 
+    SLOW_UPDATE_THRESHOLD_MS = 16.0
+
     def __init__(
         self,
         master: tk.Misc,
@@ -50,11 +53,22 @@ class RunningJobPanelV2(ttk.Frame):
         super().__init__(master, style=SURFACE_FRAME_STYLE, padding=(8, 8, 8, 8), **kwargs)
         self.controller = controller
         self.app_state = app_state
-        self._current_job: UnifiedJobSummary | None = None
+        self._current_job: Any | None = None
         self._current_job_summary: UnifiedJobSummary | None = None  # PR-CORE-D
         self._runtime_status: RuntimeJobStatus | None = None  # Dynamic execution state
         self._queue_origin: int | None = None  # PR-GUI-F2: Original queue position (1-based)
         self._timer_id: str | None = None  # Tk after() timer ID for elapsed time updates
+        self._last_display_signature: tuple[Any, ...] | None = None
+        self._timeline_is_clear = True
+        self._refresh_metrics: dict[str, float | int] = {
+            "count": 0,
+            "total_ms": 0.0,
+            "max_ms": 0.0,
+            "last_ms": 0.0,
+            "slow_count": 0,
+            "skipped_count": 0,
+            "timeline_clear_count": 0,
+        }
         if self.app_state is not None and hasattr(self.app_state, "subscribe"):
             try:
                 self.app_state.subscribe(
@@ -179,6 +193,64 @@ class RunningJobPanelV2(ttk.Frame):
                 return False
         return False
 
+    @staticmethod
+    def _set_widget_text(widget: Any, value: str) -> None:
+        if str(widget.cget("text")) == value:
+            return
+        widget.configure(text=value)
+
+    @staticmethod
+    def _set_button_disabled(button: ttk.Button, disabled: bool) -> None:
+        is_disabled = bool(button.instate(["disabled"]))
+        if is_disabled == disabled:
+            return
+        button.state(["disabled"] if disabled else ["!disabled"])
+
+    def _clear_timeline(self) -> None:
+        if self._timeline_is_clear:
+            return
+        self._timeline.clear()
+        self._timeline_is_clear = True
+        self._refresh_metrics["timeline_clear_count"] = (
+            int(self._refresh_metrics.get("timeline_clear_count", 0) or 0) + 1
+        )
+
+    def _record_update_metric(self, elapsed_ms: float, *, skipped: bool = False) -> None:
+        self._refresh_metrics["count"] = int(self._refresh_metrics.get("count", 0) or 0) + 1
+        self._refresh_metrics["total_ms"] = (
+            float(self._refresh_metrics.get("total_ms", 0.0) or 0.0) + float(elapsed_ms)
+        )
+        self._refresh_metrics["last_ms"] = float(elapsed_ms)
+        self._refresh_metrics["max_ms"] = max(
+            float(self._refresh_metrics.get("max_ms", 0.0) or 0.0),
+            float(elapsed_ms),
+        )
+        if elapsed_ms >= float(self.SLOW_UPDATE_THRESHOLD_MS):
+            self._refresh_metrics["slow_count"] = (
+                int(self._refresh_metrics.get("slow_count", 0) or 0) + 1
+            )
+        if skipped:
+            self._refresh_metrics["skipped_count"] = (
+                int(self._refresh_metrics.get("skipped_count", 0) or 0) + 1
+            )
+
+    def get_diagnostics_snapshot(self) -> dict[str, float | int | bool]:
+        count = int(self._refresh_metrics.get("count", 0) or 0)
+        total_ms = float(self._refresh_metrics.get("total_ms", 0.0) or 0.0)
+        return {
+            "count": count,
+            "avg_ms": round(total_ms / count, 3) if count else 0.0,
+            "max_ms": round(float(self._refresh_metrics.get("max_ms", 0.0) or 0.0), 3),
+            "last_ms": round(float(self._refresh_metrics.get("last_ms", 0.0) or 0.0), 3),
+            "slow_count": int(self._refresh_metrics.get("slow_count", 0) or 0),
+            "skipped_count": int(self._refresh_metrics.get("skipped_count", 0) or 0),
+            "timeline_clear_count": int(
+                self._refresh_metrics.get("timeline_clear_count", 0) or 0
+            ),
+            "timer_active": bool(self._timer_id),
+            "slow_threshold_ms": float(self.SLOW_UPDATE_THRESHOLD_MS),
+        }
+
     def _format_eta(self, seconds: float | None) -> str:
         """Format ETA seconds to a human-readable string.
         
@@ -239,28 +311,38 @@ class RunningJobPanelV2(ttk.Frame):
 
     def _update_display(self) -> None:
         """Update the display based on current job state."""
+        start = time.perf_counter()
         job = self._current_job
         runtime = self._runtime_status
 
         if job is None:
+            idle_signature = (None, None, None)
+            if self._last_display_signature == idle_signature:
+                self._stop_timer()
+                self._record_update_metric((time.perf_counter() - start) * 1000.0, skipped=True)
+                return
+            self._last_display_signature = idle_signature
             # Stop timer when no job running
             self._stop_timer()
-            self.job_info_label.configure(text="No job running")
-            self.pack_info_label.configure(text="")  # PR-CORE-D
-            self.stage_chain_label.configure(text="")  # PR-CORE-D
-            self.seed_label.configure(text="Seed: -")  # PR-PIPE-007
-            self._timeline.clear()  # PR-PIPE-008
-            self.status_label.configure(text="Status: Idle")
-            self.elapsed_label.configure(text="")
-            self.eta_label.configure(text="")
-            self.queue_origin_label.configure(text="")  # PR-GUI-F2
-            self.pause_resume_button.configure(text="Pause Queue")
-            self.pause_resume_button.state(["disabled"])
-            self.cancel_button.state(["disabled"])
+            self._set_widget_text(self.job_info_label, "No job running")
+            self._set_widget_text(self.pack_info_label, "")
+            self._set_widget_text(self.stage_chain_label, "")
+            self._set_widget_text(self.seed_label, "Seed: -")
+            self._clear_timeline()
+            self._set_widget_text(self.status_label, "Status: Idle")
+            self._set_widget_text(self.elapsed_label, "")
+            self._set_widget_text(self.eta_label, "")
+            self._set_widget_text(self.queue_origin_label, "")
+            self._set_widget_text(self.pause_resume_button, "Pause Queue")
+            self._set_button_disabled(self.pause_resume_button, True)
+            self._set_button_disabled(self.cancel_button, True)
+            self._record_update_metric((time.perf_counter() - start) * 1000.0)
             return
 
-        # Job info (from UnifiedJobSummary - static data)
-        self.job_info_label.configure(text=job.get_display_summary())
+        job_info_text = job.get_display_summary()
+        pack_text = ""
+        stage_text = ""
+        seed_text = "Seed: -"
 
         # PR-CORE-D: Display PromptPack metadata if available
         if self._current_job_summary:
@@ -277,54 +359,30 @@ class RunningJobPanelV2(ttk.Frame):
                     v_text = f"v{variant_idx + 1}" if variant_idx is not None else "v?"
                     b_text = f"b{batch_idx + 1}" if batch_idx is not None else "b?"
                     pack_text += f" [{v_text}/{b_text}]"
-                self.pack_info_label.configure(text=pack_text)
-            else:
-                self.pack_info_label.configure(text="")
 
             # D-GUI-002: Display current stage with progress
             # Use RuntimeJobStatus if available, otherwise fall back to static stage chain
             if runtime:
                 # Runtime status available - show current execution state
                 stage_text = f"Stage: {runtime.get_stage_display()}"
-                self.stage_chain_label.configure(text=stage_text)
             else:
                 # No runtime status - show stage chain from job config
                 stage_labels = getattr(self._current_job_summary, "stage_chain_labels", None)
                 if stage_labels:
                     # Show all stages since we don't know which is current
                     stage_text = f"Stages: {' → '.join(stage_labels)}"
-                    self.stage_chain_label.configure(text=stage_text)
-                else:
-                    self.stage_chain_label.configure(text="")
 
             # PR-PIPE-007: Display seed
             # Use actual_seed from runtime if available, otherwise show "calculating..."
             if runtime and runtime.actual_seed is not None:
-                seed_text = str(runtime.actual_seed)
+                seed_text = f"Seed: {runtime.actual_seed}"
             else:
-                seed_text = "calculating..."
-            self.seed_label.configure(text=f"Seed: {seed_text}")
-
-            # PR-PIPE-008: Update timeline widget
-            # TODO: Need stage_chain structure from runtime for timeline
-            # For now, clear timeline if no runtime data
-            if runtime:
-                # We don't have stage_chain structure in runtime yet
-                # This will be enhanced in future phase
-                self._timeline.clear()
-            else:
-                self._timeline.clear()
-        else:
-            self.pack_info_label.configure(text="")
-            self.stage_chain_label.configure(text="")
-            self.seed_label.configure(text="Seed: -")  # PR-PIPE-007
-            self._timeline.clear()  # PR-PIPE-008
+                seed_text = "Seed: calculating..."
 
         # PR-GUI-F2: Queue origin display
+        queue_origin_text = ""
         if self._queue_origin is not None:
-            self.queue_origin_label.configure(text=f"(from #{self._queue_origin})")
-        else:
-            self.queue_origin_label.configure(text="")
+            queue_origin_text = f"(from #{self._queue_origin})"
 
         # Status (progress from runtime if available)
         status_value = job.status if isinstance(job.status, str) else job.status.value
@@ -335,29 +393,27 @@ class RunningJobPanelV2(ttk.Frame):
             progress_pct = runtime.get_progress_percentage()
             if progress_pct > 0:
                 status_text += f" ({progress_pct}%)"
-        
-        self.status_label.configure(text=status_text)
 
         # Elapsed time
         # Use runtime.started_at if available, otherwise use job.created_at
+        started_at: datetime | None
         if runtime:
             started_at = runtime.started_at
         else:
             started_at = getattr(job, 'created_at', None)
         elapsed_text = self._format_elapsed(started_at)
-        self.elapsed_label.configure(text=elapsed_text)
 
         # ETA display
         if runtime and runtime.eta_seconds is not None:
             # Use ETA from runtime status
-            self.eta_label.configure(text=runtime.get_eta_display())
+            eta_text = runtime.get_eta_display()
         elif runtime and runtime.progress > 0 and runtime.started_at:
             # Calculate ETA from progress
             eta_seconds = self._estimate_eta_from_progress(runtime.progress, runtime.started_at)
-            self.eta_label.configure(text=self._format_eta(eta_seconds))
+            eta_text = self._format_eta(eta_seconds)
         else:
             # No ETA available
-            self.eta_label.configure(text="ETA: calculating...")
+            eta_text = "ETA: calculating..."
 
         # Button states
         status_str = job.status if isinstance(job.status, str) else job.status.value
@@ -365,19 +421,53 @@ class RunningJobPanelV2(ttk.Frame):
         is_paused = status_str.upper() == "PAUSED"
         can_control = is_running or is_paused
 
-        if is_paused:
-            self.pause_resume_button.configure(text="Resume Queue")
-        else:
-            self.pause_resume_button.configure(text="Pause Queue")
+        pause_resume_text = "Resume Queue" if is_paused else "Pause Queue"
+        timeline_needs_clear = not self._timeline_is_clear
+        display_signature = (
+            getattr(job, "job_id", None),
+            getattr(runtime, "job_id", None) if runtime else None,
+            job_info_text,
+            pack_text,
+            stage_text,
+            seed_text,
+            queue_origin_text,
+            status_text,
+            elapsed_text,
+            eta_text,
+            pause_resume_text,
+            can_control,
+            is_running,
+            is_paused,
+        )
 
-        self.pause_resume_button.state(["!disabled"] if can_control else ["disabled"])
-        self.cancel_button.state(["!disabled"] if can_control else ["disabled"])
+        if self._last_display_signature == display_signature and not timeline_needs_clear:
+            if can_control:
+                self._start_timer()
+            else:
+                self._stop_timer()
+            self._record_update_metric((time.perf_counter() - start) * 1000.0, skipped=True)
+            return
+
+        self._last_display_signature = display_signature
+        self._set_widget_text(self.job_info_label, job_info_text)
+        self._set_widget_text(self.pack_info_label, pack_text)
+        self._set_widget_text(self.stage_chain_label, stage_text)
+        self._set_widget_text(self.seed_label, seed_text)
+        self._clear_timeline()
+        self._set_widget_text(self.queue_origin_label, queue_origin_text)
+        self._set_widget_text(self.status_label, status_text)
+        self._set_widget_text(self.elapsed_label, elapsed_text)
+        self._set_widget_text(self.eta_label, eta_text)
+        self._set_widget_text(self.pause_resume_button, pause_resume_text)
+        self._set_button_disabled(self.pause_resume_button, not can_control)
+        self._set_button_disabled(self.cancel_button, not can_control)
 
         # Start timer for elapsed time updates (if job is running or paused)
-        if is_running or is_paused:
+        if can_control:
             self._start_timer()
         else:
             self._stop_timer()
+        self._record_update_metric((time.perf_counter() - start) * 1000.0)
 
     def _on_pause_resume(self) -> None:
         """Handle pause/resume queue click while a job is active."""

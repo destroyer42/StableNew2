@@ -10,6 +10,7 @@ GUI Run buttons -> AppController._start_run_v2 -> PipelineController.start_pipel
 from __future__ import annotations
 
 import logging
+import time
 import uuid
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
@@ -69,6 +70,9 @@ from src.utils.error_envelope_v2 import (
 # Logger for this module
 _logger = logging.getLogger(__name__)
 
+_PREVIEW_BUILD_TIMING_INFO_MS = 150.0
+_PREVIEW_BUILD_TIMING_WARN_MS = 1000.0
+
 
 @dataclass(frozen=True)
 class PreviewSummaryDTO:
@@ -79,6 +83,15 @@ class PreviewSummaryDTO:
     sampler_name: str | None
     steps: int | None
     cfg_scale: float | None
+
+
+@dataclass(frozen=True)
+class PreparedQueueRunSubmission:
+    run_mode: str
+    source: str
+    prompt_source: str
+    prompt_pack_id: str | None
+    run_config: dict[str, Any] | None
 
 
 class PipelineController(CorePipelineController):
@@ -314,12 +327,55 @@ class PipelineController(CorePipelineController):
         self._prompt_pack_builder = builder
         return builder
 
+    def _record_preview_build_timing(
+        self,
+        *,
+        source: str,
+        elapsed_ms: float,
+        job_count: int,
+        pack_entry_count: int,
+        error: str | None = None,
+    ) -> None:
+        payload = {
+            "source": source,
+            "elapsed_ms": round(float(elapsed_ms), 3),
+            "job_count": int(job_count),
+            "pack_entry_count": int(pack_entry_count),
+            "error": error,
+        }
+        self._last_preview_build_timing = payload
+        if error is None and elapsed_ms < _PREVIEW_BUILD_TIMING_INFO_MS:
+            return
+        level = (
+            logging.WARNING
+            if error is not None or elapsed_ms >= _PREVIEW_BUILD_TIMING_WARN_MS
+            else logging.INFO
+        )
+        log_with_ctx(
+            _logger,
+            level,
+            "Preview build timing",
+            ctx=LogContext(subsystem="pipeline_controller", stage="preview_build"),
+            extra_fields=payload,
+        )
+
+    def get_preview_build_timing_snapshot(self) -> dict[str, Any] | None:
+        payload = getattr(self, "_last_preview_build_timing", None)
+        if isinstance(payload, Mapping):
+            return dict(payload)
+        return None
+
     def get_preview_jobs(self) -> list[NormalizedJobRecord]:
         """Return normalized jobs derived from the current GUI state for preview panels."""
+        started_at = time.monotonic()
+        source = "state"
+        pack_entry_count = 0
         try:
             job_draft = getattr(self._app_state, "job_draft", None)
             pack_entries = getattr(job_draft, "packs", None) or []
+            pack_entry_count = len(pack_entries)
             if pack_entries:
+                source = "pack_bundle"
                 njrs = self._build_njrs_from_pack_bundle(pack_entries)
                 if njrs:
                     _logger.debug(
@@ -327,12 +383,33 @@ class PipelineController(CorePipelineController):
                         len(njrs),
                         len(pack_entries),
                     )
+                    self._record_preview_build_timing(
+                        source=source,
+                        elapsed_ms=(time.monotonic() - started_at) * 1000.0,
+                        job_count=len(njrs),
+                        pack_entry_count=pack_entry_count,
+                    )
                     return njrs
+                source = "state_fallback"
                 _logger.debug(
                     "Prompt pack preview builder returned no jobs, falling back to empty list"
                 )
-            return self._build_normalized_jobs_from_state()
+            njrs = self._build_normalized_jobs_from_state()
+            self._record_preview_build_timing(
+                source=source,
+                elapsed_ms=(time.monotonic() - started_at) * 1000.0,
+                job_count=len(njrs),
+                pack_entry_count=pack_entry_count,
+            )
+            return njrs
         except Exception as exc:
+            self._record_preview_build_timing(
+                source=source,
+                elapsed_ms=(time.monotonic() - started_at) * 1000.0,
+                job_count=0,
+                pack_entry_count=pack_entry_count,
+                error=str(exc),
+            )
             _logger.exception("Failed to build preview jobs - EXCEPTION DETAILS:")
             return []
 
@@ -896,35 +973,42 @@ class PipelineController(CorePipelineController):
         run_config: dict[str, Any] | None = None,
     ) -> bool:
         """Submit preview-built NJRs using the canonical controller path."""
-        if not self.gui_can_run():
+        prepared = self.prepare_queue_run_submission(run_config=run_config, source="gui")
+        if prepared is None:
             return False
-        self._sync_auto_run_setting()
+        if not self.ensure_run_submission_ready():
+            try:
+                self._safe_gui_transition(GUIState.ERROR)
+            except Exception:
+                pass
+            return False
 
-        if hasattr(self, "_webui_connection"):
-            state = self._webui_connection.ensure_connected(autostart=True)
-            if state is not None and state is not WebUIConnectionState.READY:
-                try:
-                    self._safe_gui_transition(GUIState.ERROR)
-                except Exception:
-                    pass
-                return False
+        return self._submit_preview_jobs_for_run(
+            run_mode=prepared.run_mode,
+            source=prepared.source,
+            prompt_source=prepared.prompt_source,
+            prompt_pack_id=prepared.prompt_pack_id,
+            on_complete=on_complete,
+            on_error=on_error,
+        )
+
+    def prepare_queue_run_submission(
+        self,
+        *,
+        run_config: dict[str, Any] | None = None,
+        source: str = "gui",
+    ) -> PreparedQueueRunSubmission | None:
+        """Prepare queue-backed run metadata without building preview jobs on the caller thread."""
+        if not self.gui_can_run():
+            return None
+        self._sync_auto_run_setting()
 
         if run_config is not None:
             self._last_run_config = run_config
-            requested_mode = (run_config.get("run_mode") or "").strip().lower()
             try:
                 self._set_pipeline_run_mode("queue")
             except Exception:
                 pass
-        run_mode = "queue"
-        pipeline_state = self._get_pipeline_state()
-        if pipeline_state is not None:
-            try:
-                run_mode = self._normalize_run_mode(pipeline_state)
-            except Exception:
-                run_mode = "queue"
-        if run_config is not None:
-            run_mode = "queue"
 
         prompt_source = "manual"
         prompt_pack_id = None
@@ -932,14 +1016,21 @@ class PipelineController(CorePipelineController):
             prompt_source = str(run_config.get("prompt_source") or prompt_source)
             prompt_pack_id = run_config.get("prompt_pack_id")
 
-        return self._submit_preview_jobs_for_run(
-            run_mode=run_mode,
-            source="gui",
+        return PreparedQueueRunSubmission(
+            run_mode="queue",
+            source=source,
             prompt_source=prompt_source,
             prompt_pack_id=prompt_pack_id,
-            on_complete=on_complete,
-            on_error=on_error,
+            run_config=dict(run_config) if run_config is not None else None,
         )
+
+    def ensure_run_submission_ready(self) -> bool:
+        """Perform blocking run prerequisites such as WebUI readiness off the UI thread."""
+        if hasattr(self, "_webui_connection"):
+            state = self._webui_connection.ensure_connected(autostart=True)
+            if state is not None and state is not WebUIConnectionState.READY:
+                return False
+        return True
 
     def stop_pipeline(self) -> bool:
         """Cancel the active job."""

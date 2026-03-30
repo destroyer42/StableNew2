@@ -13,7 +13,12 @@ from src.gui.help_text.stage_setting_help_v2 import BASE_GENERATION_SETTING_HELP
 from src.gui.layout_v2 import configure_grid_columns
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import BODY_LABEL_STYLE, MUTED_LABEL_STYLE
-from src.gui.view_contracts.pipeline_layout_contract import get_three_pair_form_column_specs
+from src.gui.view_contracts.pipeline_layout_contract import (
+    LABEL_COLUMN_MIN_WIDTH,
+    PRIMARY_CONTROL_MIN_WIDTH,
+    SECONDARY_CONTROL_MIN_WIDTH,
+    get_three_pair_form_column_specs,
+)
 from src.utils.webui_resource_names import normalize_vae_config_value, vae_names_match
 
 
@@ -22,6 +27,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
 
     MIN_DIMENSION = 64
     MAX_DIMENSION = 4096
+    LABEL_COLUMN_MIN_WIDTH = LABEL_COLUMN_MIN_WIDTH
+    PRIMARY_CONTROL_MIN_WIDTH = PRIMARY_CONTROL_MIN_WIDTH
+    SECONDARY_CONTROL_MIN_WIDTH = SECONDARY_CONTROL_MIN_WIDTH
 
     def __init__(
         self,

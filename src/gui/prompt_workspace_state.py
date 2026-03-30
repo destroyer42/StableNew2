@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from src.controller.content_visibility_resolver import (
@@ -156,6 +157,25 @@ class PromptWorkspaceState:
         if self.current_pack:
             self.current_pack.matrix = matrix
             self.dirty = True
+
+    def get_pack_style_lora_config(self) -> dict[str, object]:
+        if not self.current_pack or not isinstance(self.current_pack.preset_data, Mapping):
+            return {}
+        payload = self.current_pack.preset_data.get("style_lora")
+        if isinstance(payload, Mapping):
+            return dict(payload)
+        return {}
+
+    def set_pack_style_lora_config(self, style_lora: Mapping[str, object] | None) -> None:
+        if not self.current_pack:
+            raise RuntimeError("No prompt pack loaded")
+        preset_data = dict(getattr(self.current_pack, "preset_data", {}) or {})
+        if style_lora:
+            preset_data["style_lora"] = dict(style_lora)
+        else:
+            preset_data.pop("style_lora", None)
+        self.current_pack.preset_data = preset_data
+        self.dirty = True
 
     def get_current_slot(self) -> PromptSlot | None:
         """Get the current slot object."""

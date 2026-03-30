@@ -20,6 +20,18 @@ _DEFAULT_OUTPUT_ROUTES = (
     OUTPUT_ROUTE_MOVIE_CLIPS,
     OUTPUT_ROUTE_TESTING,
 )
+_VALID_DEPTH_INPUT_MODES = {"none", "auto", "upload"}
+_VALID_CAMERA_PRESETS = {
+    "none",
+    "dolly_in",
+    "dolly_out",
+    "truck_left",
+    "truck_right",
+    "orbit_left",
+    "orbit_right",
+    "tilt_up",
+    "tilt_down",
+}
 
 
 class VideoWorkflowController:
@@ -64,10 +76,107 @@ class VideoWorkflowController:
             "prompt": "",
             "negative_prompt": "",
             "motion_profile": "gentle",
+            "camera_intent": {
+                "preset": "none",
+                "strength": 0.35,
+            },
+            "controlnet": {
+                "model": "depth",
+                "weight": 1.0,
+                "guidance_start": 0.0,
+                "guidance_end": 1.0,
+            },
+            "depth_input": {
+                "mode": "none",
+                "path": "",
+            },
             "output_route": OUTPUT_ROUTE_REPROCESS,
             "continuity_pack_id": "",
             "continuity_pack_name": "",
             "continuity_pack_summary": None,
+        }
+
+    @staticmethod
+    def _parse_float(
+        value: Any,
+        *,
+        field_name: str,
+        minimum: float | None = None,
+        maximum: float | None = None,
+    ) -> float:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"{field_name} must be a number") from exc
+        if minimum is not None and parsed < minimum:
+            raise ValueError(f"{field_name} must be >= {minimum}")
+        if maximum is not None and parsed > maximum:
+            raise ValueError(f"{field_name} must be <= {maximum}")
+        return parsed
+
+    @staticmethod
+    def _mapping_dict(value: Any) -> dict[str, Any]:
+        if isinstance(value, Mapping):
+            return dict(value)
+        return {}
+
+    def _normalize_camera_intent(self, form_data: Mapping[str, Any]) -> dict[str, Any]:
+        payload = self._mapping_dict(form_data.get("camera_intent"))
+        preset = str(payload.get("preset") or form_data.get("camera_preset") or "none").strip().lower() or "none"
+        if preset not in _VALID_CAMERA_PRESETS:
+            allowed = ", ".join(sorted(_VALID_CAMERA_PRESETS))
+            raise ValueError(f"camera_intent.preset must be one of: {allowed}")
+        strength_value = payload.get("strength", form_data.get("camera_strength", 0.35))
+        strength = self._parse_float(
+            strength_value,
+            field_name="camera_intent.strength",
+            minimum=0.0,
+            maximum=1.0,
+        )
+        return {
+            "preset": preset,
+            "strength": strength,
+        }
+
+    def _normalize_controlnet(self, form_data: Mapping[str, Any]) -> dict[str, Any]:
+        payload = self._mapping_dict(form_data.get("controlnet"))
+        model = str(payload.get("model") or form_data.get("controlnet_model") or "depth").strip() or "depth"
+        weight = self._parse_float(
+            payload.get("weight", form_data.get("controlnet_weight", 1.0)),
+            field_name="controlnet.weight",
+            minimum=0.0,
+        )
+        guidance_start = self._parse_float(
+            payload.get("guidance_start", form_data.get("controlnet_guidance_start", 0.0)),
+            field_name="controlnet.guidance_start",
+            minimum=0.0,
+            maximum=1.0,
+        )
+        guidance_end = self._parse_float(
+            payload.get("guidance_end", form_data.get("controlnet_guidance_end", 1.0)),
+            field_name="controlnet.guidance_end",
+            minimum=0.0,
+            maximum=1.0,
+        )
+        if guidance_end < guidance_start:
+            raise ValueError("controlnet.guidance_end must be >= controlnet.guidance_start")
+        return {
+            "model": model,
+            "weight": weight,
+            "guidance_start": guidance_start,
+            "guidance_end": guidance_end,
+        }
+
+    def _normalize_depth_input(self, form_data: Mapping[str, Any]) -> dict[str, Any]:
+        payload = self._mapping_dict(form_data.get("depth_input"))
+        mode = str(payload.get("mode") or form_data.get("depth_mode") or "none").strip().lower() or "none"
+        if mode not in _VALID_DEPTH_INPUT_MODES:
+            allowed = ", ".join(sorted(_VALID_DEPTH_INPUT_MODES))
+            raise ValueError(f"depth_input.mode must be one of: {allowed}")
+        path = str(payload.get("path") or payload.get("upload_path") or form_data.get("depth_path") or "").strip()
+        return {
+            "mode": mode,
+            "path": path,
         }
 
     @staticmethod
@@ -118,8 +227,15 @@ class VideoWorkflowController:
             return False, "Please select a video workflow."
         workflow_version = str(form_data.get("workflow_version") or "").strip() or None
         try:
-            self._workflow_registry.get(workflow_id, workflow_version)
+            spec = self._workflow_registry.get(workflow_id, workflow_version)
         except Exception as exc:
+            return False, str(exc)
+
+        try:
+            camera_intent = self._normalize_camera_intent(form_data)
+            controlnet = self._normalize_controlnet(form_data)
+            depth_input = self._normalize_depth_input(form_data)
+        except ValueError as exc:
             return False, str(exc)
 
         end_anchor = Path(str(form_data.get("end_anchor_path") or "").strip())
@@ -133,6 +249,19 @@ class VideoWorkflowController:
             path = Path(str(candidate or "").strip())
             if not path.exists() or not path.is_file():
                 return False, f"Mid anchor image does not exist: {path}"
+        input_bindings = getattr(spec, "input_bindings", ()) or ()
+        requires_depth_input = any(
+            getattr(binding, "source_field", None) == "stage_config.depth_input.resolved_path"
+            for binding in input_bindings
+        )
+        if requires_depth_input and depth_input["mode"] == "none":
+            return False, (
+                "The selected conditioned workflow requires depth_input.mode to be 'auto' or 'upload'."
+            )
+        if depth_input["mode"] == "upload":
+            depth_path = Path(depth_input["path"])
+            if not depth_path.exists() or not depth_path.is_file():
+                return False, f"Depth input image does not exist: {depth_path}"
         if self._continuity_form_supplied(form_data) and self._build_continuity_link(form_data) is None:
             return False, (
                 "Continuity pack metadata requires a valid pack_id. Please provide continuity_pack_id or "
@@ -171,6 +300,9 @@ class VideoWorkflowController:
         prompt = str(form_data.get("prompt") or "").strip()
         negative_prompt = str(form_data.get("negative_prompt") or "").strip()
         motion_profile = str(form_data.get("motion_profile") or "").strip()
+        camera_intent = self._normalize_camera_intent(form_data)
+        controlnet = self._normalize_controlnet(form_data)
+        depth_input = self._normalize_depth_input(form_data)
         output_dir = getattr(self._app_controller, "output_dir", None) or "output"
         continuity_link = self._build_continuity_link(form_data)
 
@@ -185,6 +317,9 @@ class VideoWorkflowController:
                 "motion_profile": motion_profile,
                 "prompt": prompt,
                 "negative_prompt": negative_prompt,
+                "camera_intent": camera_intent,
+                "controlnet": controlnet,
+                "depth_input": depth_input,
             },
             "pipeline": {
                 "output_route": output_route,
@@ -201,6 +336,9 @@ class VideoWorkflowController:
                 "display_name": spec.display_name,
                 "backend_id": spec.backend_id,
                 "output_route": output_route,
+                "camera_intent": camera_intent,
+                "controlnet": controlnet,
+                "depth_input": depth_input,
             }
         }
         if continuity_link:

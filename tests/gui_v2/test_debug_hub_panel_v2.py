@@ -1,10 +1,14 @@
 import tkinter as tk
+from datetime import datetime
 
 import pytest
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
 from src.pipeline.job_models_v2 import NormalizedJobRecord, PackUsageInfo, StagePromptInfo
+from src.pipeline.job_models_v2 import UnifiedJobSummary
+from src.queue.job_history_store import JobHistoryEntry
+from src.queue.job_model import JobStatus
 from src.utils import InMemoryLogHandler
 
 
@@ -69,8 +73,12 @@ def _cleanup_panel(panel: DebugHubPanelV2) -> None:
 
 @pytest.fixture(scope="module")
 def tk_root():
-    root = tk.Tk()
-    root.withdraw()
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter/Tcl not available: {exc}")
+        return
     yield root
     try:
         root.destroy()
@@ -118,3 +126,37 @@ def test_debug_hub_unsubscribes_history_listener_on_close(tk_root: tk.Tk) -> Non
 
     listeners_after = list(state._listeners.get("history_items", []))
     assert not listeners_after
+
+
+def test_debug_hub_explain_combo_uses_live_labels(tk_root: tk.Tk) -> None:
+    state = AppStateV2()
+    record = _build_job()
+    summary = UnifiedJobSummary.from_normalized_record(record)
+    state.set_running_job(summary)
+    state.set_queue_jobs([summary])
+    state.set_history_items(
+        [
+            JobHistoryEntry(
+                job_id="job-history-001",
+                created_at=datetime.utcnow(),
+                status=JobStatus.COMPLETED,
+                payload_summary="fantasy_dragon",
+                snapshot={"normalized_job": record.to_queue_snapshot()},
+            )
+        ]
+    )
+    log_handler = InMemoryLogHandler(max_entries=10)
+    panel = DebugHubPanelV2.open(
+        master=tk_root,
+        controller=_StubController(record),
+        app_state=state,
+        log_handler=log_handler,
+    )
+    panel.update_idletasks()
+
+    values = list(panel.pipeline_tab._job_combo.cget("values"))  # noqa: SLF001
+    assert values
+    assert any("RUNNING" in value for value in values)
+    assert any("fantasy_dragon" in value for value in values)
+
+    _cleanup_panel(panel)

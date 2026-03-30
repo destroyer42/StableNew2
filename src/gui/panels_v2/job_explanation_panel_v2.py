@@ -36,10 +36,12 @@ class JobExplanationPanelV2(tk.Toplevel):
         *,
         master: tk.Misc | None = None,
         base_runs_dir: Path | None = None,
+        controller: Any | None = None,
     ) -> None:
         self.job_id = job_id
         self._base_dir = base_runs_dir or Path("runs")
         self._run_dir = self._base_dir / job_id
+        self._controller = controller
         super().__init__(master or self._resolve_master())
         self.title(f"Explain job {job_id}")
         self.geometry("860x620")
@@ -124,8 +126,12 @@ class JobExplanationPanelV2(tk.Toplevel):
         return root
 
     def _load_data(self) -> None:
+        live_payload = self._get_live_payload()
         run_metadata = _read_json(self._run_dir / "run_metadata.json")
         if not run_metadata:
+            if live_payload:
+                self._populate_live_payload(live_payload)
+                return
             self._origin_text.config(text="Run metadata not found.")
             self.stage_tree.insert("", "end", values=("?", "Missing metadata", "", "", "missing"))
             self._stage_flow_label.config(text="Stages unknown")
@@ -148,6 +154,46 @@ class JobExplanationPanelV2(tk.Toplevel):
         self._fill_stage_flow(run_metadata)
         self._populate_metadata(config)
         self._populate_stage_prompts(run_metadata, config)
+
+    def _get_live_payload(self) -> dict[str, Any] | None:
+        getter = getattr(self._controller, "get_job_explanation_payload", None)
+        if not callable(getter):
+            return None
+        try:
+            payload = getter(self.job_id)
+        except Exception:
+            logger.exception("Failed to load live explanation payload for %s", self.job_id)
+            return None
+        return payload if isinstance(payload, dict) else None
+
+    def _populate_live_payload(self, payload: dict[str, Any]) -> None:
+        origin_text = str(payload.get("origin_text") or "Live job diagnostics")
+        self._origin_text.config(text=origin_text)
+        stage_flow = payload.get("stage_flow") or []
+        if isinstance(stage_flow, list) and stage_flow:
+            self._stage_flow_label.config(text=" -> ".join(str(stage) for stage in stage_flow))
+        else:
+            self._stage_flow_label.config(text="Stages unknown")
+        self._populate_metadata(payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {})
+        self.stage_tree.delete(*self.stage_tree.get_children())
+        rows = payload.get("stage_prompts") or []
+        if isinstance(rows, list) and rows:
+            for row in rows:
+                if not isinstance(row, dict):
+                    continue
+                self.stage_tree.insert(
+                    "",
+                    "end",
+                    values=(
+                        row.get("stage", "?"),
+                        row.get("prompt", "-"),
+                        row.get("negative", "-"),
+                        row.get("global_terms", "-"),
+                        row.get("status", "available"),
+                    ),
+                )
+        else:
+            self.stage_tree.insert("", "end", values=("?", "No prompt diagnostics", "", "", "missing"))
 
     def _populate_stage_prompts(self, run_metadata: dict[str, Any], config: dict[str, Any]) -> None:
         manifest_templates = [

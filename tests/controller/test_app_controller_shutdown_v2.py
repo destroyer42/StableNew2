@@ -86,6 +86,29 @@ def test_shutdown_app_uses_daemon_watchdog_thread(controller: AppController) -> 
     assert watchdog.daemon is True
 
 
+def test_shutdown_app_waits_for_watchdog_before_closing_loggers(controller: AppController) -> None:
+    import threading
+
+    started = threading.Event()
+    tick = threading.Event()
+
+    def fake_watchdog() -> None:
+        started.set()
+        while not controller._shutdown_completed:
+            tick.wait(0.001)
+
+    def assert_close_order() -> None:
+        assert started.wait(timeout=1.0)
+        watchdog = controller._shutdown_watchdog_thread
+        assert watchdog is not None
+        assert not watchdog.is_alive()
+
+    controller._shutdown_watchdog = fake_watchdog  # type: ignore[method-assign]
+
+    with patch("src.controller.app_controller.close_all_structured_loggers", side_effect=assert_close_order):
+        controller.shutdown_app("watchdog-order")
+
+
 def test_shutdown_webui_uses_global_manager_fallback(controller: AppController) -> None:
     fallback = FakeWebUIManager()
     controller.webui_process_manager = None

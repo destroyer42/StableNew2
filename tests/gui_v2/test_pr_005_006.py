@@ -20,9 +20,13 @@ from src.pipeline.job_models_v2 import JobLifecycleLogEvent
 def test_pr_005_thumbnail_loading():
     """Test PR-005: Preview panel thumbnail loading logic."""
     print("\n=== Testing PR-005: Thumbnail Loading ===")
-    
-    root = tk.Tk()
-    root.withdraw()
+
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter/Tcl not available: {exc}")
+        return
     
     try:
         app_state = AppStateV2()
@@ -54,9 +58,13 @@ def test_pr_005_thumbnail_loading():
 def test_pr_005_eta_formatting():
     """Test PR-005: ETA formatting in running job panel."""
     print("\n=== Testing PR-005: ETA Formatting ===")
-    
-    root = tk.Tk()
-    root.withdraw()
+
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter/Tcl not available: {exc}")
+        return
     
     try:
         app_state = AppStateV2()
@@ -81,9 +89,13 @@ def test_pr_005_eta_formatting():
 def test_pr_006_log_formatting():
     """Test PR-006: Enhanced lifecycle log formatting."""
     print("\n=== Testing PR-006: Lifecycle Log Formatting ===")
-    
-    root = tk.Tk()
-    root.withdraw()
+
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter/Tcl not available: {exc}")
+        return
     
     try:
         app_state = AppStateV2()

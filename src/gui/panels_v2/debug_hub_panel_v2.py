@@ -120,6 +120,7 @@ class _PipelineTab(ttk.Frame):
         self._selected_job_id: str | None = None
         self._history_listener_registered = False
         self._pending_history_refresh = False
+        self._job_value_map: dict[str, str] = {}
         self.bind("<Map>", self._on_map, add="+")
 
         action_bar = ttk.Frame(self)
@@ -144,14 +145,13 @@ class _PipelineTab(ttk.Frame):
 
         if app_state and hasattr(app_state, "subscribe"):
             app_state.subscribe("history_items", self._on_history_updated)
+            app_state.subscribe("queue_jobs", self._on_history_updated)
+            app_state.subscribe("running_job", self._on_history_updated)
             self._history_listener_registered = True
             self._on_history_updated()
 
     def _on_history_updated(self, *_) -> None:
         if not self.winfo_exists():
-            return
-        if not self.winfo_ismapped():
-            self._pending_history_refresh = True
             return
         self._pending_history_refresh = False
         combo = getattr(self, "_job_combo", None)
@@ -161,13 +161,88 @@ class _PipelineTab(ttk.Frame):
             return
         if not combo.winfo_exists():
             return
-        items = getattr(self.app_state, "history_items", []) or []
-        ids = [getattr(entry, "job_id", "") for entry in items if getattr(entry, "job_id", "")]
-        combo["values"] = ids
-        if self._selected_job_id not in ids:
+        values = self._build_job_choices()
+        combo["values"] = values
+        if not values:
             explain_btn.configure(state=tk.DISABLED)
             job_var.set("")
             self._selected_job_id = None
+            return
+        if self._selected_job_id is not None:
+            for label, mapped_job_id in self._job_value_map.items():
+                if mapped_job_id == self._selected_job_id:
+                    job_var.set(label)
+                    explain_btn.configure(state=tk.NORMAL)
+                    return
+        job_var.set(values[0])
+        self._selected_job_id = self._job_value_map.get(values[0])
+        explain_btn.configure(state=tk.NORMAL)
+
+    def _build_job_choices(self) -> list[str]:
+        choices: list[tuple[str, str]] = []
+        seen: set[str] = set()
+
+        def _add(job_id: str, label: str) -> None:
+            if not job_id or job_id in seen:
+                return
+            seen.add(job_id)
+            choices.append((label, job_id))
+
+        running_job = getattr(self.app_state, "running_job", None)
+        if running_job is not None and getattr(running_job, "job_id", None):
+            _add(
+                str(running_job.job_id),
+                self._format_summary_label("RUNNING", running_job, str(running_job.job_id)),
+            )
+
+        for summary in list(getattr(self.app_state, "queue_jobs", []) or []):
+            job_id = getattr(summary, "job_id", None)
+            if not job_id:
+                continue
+            status = getattr(summary, "status", "QUEUED") or "QUEUED"
+            _add(str(job_id), self._format_summary_label(str(status).upper(), summary, str(job_id)))
+
+        history_items = list(getattr(self.app_state, "history_items", []) or [])
+        for entry in history_items[:25]:
+            job_id = getattr(entry, "job_id", None)
+            if not job_id:
+                continue
+            status = getattr(getattr(entry, "status", None), "value", None) or getattr(entry, "status", "history")
+            _add(str(job_id), self._format_history_label(str(status).upper(), entry, str(job_id)))
+
+        self._job_value_map = {label: job_id for label, job_id in choices}
+        return [label for label, _ in choices]
+
+    @staticmethod
+    def _format_summary_label(prefix: str, summary: Any, job_id: str) -> str:
+        display = None
+        getter = getattr(summary, "get_display_summary", None)
+        if callable(getter):
+            try:
+                display = getter()
+            except Exception:
+                display = None
+        if not display:
+            pack_name = getattr(summary, "prompt_pack_name", None) or getattr(summary, "base_model", None)
+            display = str(pack_name or job_id)
+        return f"{prefix} | {display} | {job_id}"
+
+    @staticmethod
+    def _format_history_label(prefix: str, entry: Any, job_id: str) -> str:
+        snapshot = getattr(entry, "snapshot", None)
+        normalized = snapshot.get("normalized_job") if isinstance(snapshot, dict) else None
+        pack_name = None
+        if isinstance(normalized, dict):
+            pack_name = normalized.get("prompt_pack_name") or normalized.get("pack_name")
+            stages = normalized.get("stage_chain")
+            stage_text = " -> ".join(str(stage) for stage in stages) if isinstance(stages, list) and stages else ""
+        else:
+            stage_text = ""
+        payload_summary = getattr(entry, "payload_summary", None) or job_id
+        display = str(pack_name or payload_summary)
+        if stage_text:
+            display = f"{display} | {stage_text}"
+        return f"{prefix} | {display} | {job_id}"
 
     def _on_map(self, _event: tk.Event | None = None) -> None:
         if not self._pending_history_refresh:
@@ -176,8 +251,9 @@ class _PipelineTab(ttk.Frame):
 
     def _on_job_selected(self) -> None:
         value = self._job_var.get()
-        if value:
-            self._selected_job_id = value
+        job_id = self._job_value_map.get(value)
+        if job_id:
+            self._selected_job_id = job_id
             self._explain_btn.configure(state=tk.NORMAL)
         else:
             self._selected_job_id = None
@@ -201,6 +277,14 @@ class _PipelineTab(ttk.Frame):
         ):
             try:
                 self.app_state.unsubscribe("history_items", self._on_history_updated)
+            except Exception:
+                pass
+            try:
+                self.app_state.unsubscribe("queue_jobs", self._on_history_updated)
+            except Exception:
+                pass
+            try:
+                self.app_state.unsubscribe("running_job", self._on_history_updated)
             except Exception:
                 pass
             self._history_listener_registered = False

@@ -144,10 +144,13 @@ from src.utils.error_envelope_v2 import (
 from src.utils.thread_registry import get_thread_registry
 from src.utils.file_io import load_image_to_base64, read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
+from src.utils.process_inspector_v2 import collect_process_risk_snapshot
 
 logger = logging.getLogger(__name__)
 
 _IMAGE_OUTPUT_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".tif"}
+_QUEUE_PROJECTION_TIMING_INFO_MS = 150.0
+_QUEUE_PROJECTION_TIMING_WARN_MS = 1000.0
 _INITIAL_RESOURCE_PROBE_GRACE_SEC = 30.0
 
 
@@ -397,9 +400,14 @@ class AppController:
         self._ui_debounce_pending = False
         self._ui_debounce_delay_ms = 150  # Coalesce updates within 150ms window
         self._preview_refresh_request_id = 0
+        self._queue_refresh_request_id = 0
+        self._queue_refresh_in_progress = False
+        self._run_submission_in_progress = False
+        self._last_queue_projection_timing: dict[str, Any] | None = None
         self._runtime_status_lock = threading.Lock()
         self._runtime_status_flush_scheduled = False
         self._pending_runtime_status = None
+        self._last_runtime_status = None
         self._last_runtime_status_flush_ts = 0.0
         self._runtime_status_min_interval_ms = 250
         
@@ -683,25 +691,8 @@ class AppController:
     def _ui_dispatch(self, fn: Callable[[], None]) -> None:
         import threading
 
-        ui_thread_id = getattr(self, "_ui_thread_id", threading.get_ident())
-        if threading.get_ident() == ui_thread_id:
-            fn()
-            return
-        scheduler = getattr(self, "_ui_scheduler", None)
-        if callable(scheduler):
-            scheduler(fn)
-            return
-        if self._dispatch_via_root_after(0, fn):
-            return
-        # fallback: run directly (test mode)
-        fn()
-
-    def _run_in_gui_thread(self, fn: Callable[[], None]) -> None:
-        """Schedule the callable on the Tk main thread, safe from any thread."""
-        import threading
-
-        ui_thread_id = getattr(self, "_ui_thread_id", threading.get_ident())
-        if threading.get_ident() == ui_thread_id:
+        ui_thread_id = getattr(self, "_ui_thread_id", None)
+        if ui_thread_id is not None and threading.get_ident() == ui_thread_id:
             fn()
             return
         scheduler = getattr(self, "_ui_scheduler", None)
@@ -714,9 +705,26 @@ class AppController:
             if callable(dispatcher):
                 dispatcher(fn)
                 return
-            if self._dispatch_via_root_after(0, fn):
-                return
+        if self._dispatch_via_root_after(0, fn):
+            return
+        # fallback: run directly (test mode)
         fn()
+
+    def _run_in_gui_thread(self, fn: Callable[[], None]) -> None:
+        """Schedule the callable on the Tk main thread, safe from any thread."""
+        import threading
+
+        ui_thread_id = getattr(self, "_ui_thread_id", None)
+        if ui_thread_id is not None and threading.get_ident() == ui_thread_id:
+            fn()
+            return
+        mw = getattr(self, "main_window", None)
+        if mw is not None:
+            dispatcher = getattr(mw, "run_in_main_thread", None)
+            if callable(dispatcher):
+                dispatcher(fn)
+                return
+        self._ui_dispatch(fn)
 
     def _get_ui_root(self) -> Any | None:
         mw = getattr(self, "main_window", None)
@@ -864,28 +872,153 @@ class AppController:
         """
         def _status_callback(status_data: dict[str, Any]) -> None:
             try:
-                from datetime import datetime
                 from src.pipeline.job_models_v2 import RuntimeJobStatus
-                
-                # Create RuntimeJobStatus from status_data
+
+                previous_status = self._get_latest_runtime_status()
+                running_job = getattr(getattr(self, "app_state", None), "running_job", None)
+                fallback_job_id = getattr(running_job, "job_id", None)
+                current_stage = str(
+                    status_data.get("current_stage")
+                    or getattr(previous_status, "current_stage", "")
+                    or self._infer_runtime_stage_name()
+                )
+                total_stages = max(
+                    int(
+                        status_data.get("total_stages")
+                        if "total_stages" in status_data
+                        else getattr(previous_status, "total_stages", None)
+                        or self._infer_runtime_stage_count()
+                    ),
+                    1,
+                )
+                default_stage_index = self._infer_runtime_stage_index(current_stage)
                 runtime_status = RuntimeJobStatus(
-                    job_id=status_data.get("job_id", ""),
-                    current_stage=status_data.get("current_stage", ""),
-                    stage_detail=status_data.get("stage_detail"),
-                    stage_index=status_data.get("stage_index", 0),
-                    total_stages=status_data.get("total_stages", 1),
-                    progress=status_data.get("progress", 0.0),
-                    eta_seconds=status_data.get("eta_seconds"),
-                    started_at=status_data.get("started_at") or datetime.utcnow(),
-                    actual_seed=status_data.get("actual_seed"),
-                    current_step=status_data.get("current_step", 0),
-                    total_steps=status_data.get("total_steps", 0),
+                    job_id=str(
+                        status_data.get("job_id")
+                        or getattr(previous_status, "job_id", "")
+                        or fallback_job_id
+                        or ""
+                    ),
+                    current_stage=current_stage,
+                    stage_detail=(
+                        status_data.get("stage_detail")
+                        if "stage_detail" in status_data
+                        else getattr(previous_status, "stage_detail", None)
+                    ),
+                    stage_index=int(
+                        status_data.get("stage_index")
+                        if "stage_index" in status_data
+                        else getattr(previous_status, "stage_index", default_stage_index)
+                        or 0
+                    ),
+                    total_stages=total_stages,
+                    progress=float(
+                        status_data.get("progress")
+                        if "progress" in status_data
+                        else getattr(previous_status, "progress", 0.0)
+                        or 0.0
+                    ),
+                    eta_seconds=(
+                        status_data.get("eta_seconds")
+                        if "eta_seconds" in status_data
+                        else getattr(previous_status, "eta_seconds", None)
+                    ),
+                    started_at=self._coerce_runtime_status_started_at(
+                        status_data.get("started_at") if "started_at" in status_data else None,
+                        getattr(previous_status, "started_at", None)
+                        or getattr(running_job, "started_at", None)
+                        or getattr(running_job, "created_at", None),
+                    ),
+                    actual_seed=(
+                        status_data.get("actual_seed")
+                        if "actual_seed" in status_data
+                        else getattr(previous_status, "actual_seed", None)
+                    ),
+                    current_step=int(
+                        status_data.get("current_step")
+                        if "current_step" in status_data
+                        else getattr(previous_status, "current_step", 0)
+                        or 0
+                    ),
+                    total_steps=int(
+                        status_data.get("total_steps")
+                        if "total_steps" in status_data
+                        else getattr(previous_status, "total_steps", 0)
+                        or 0
+                    ),
                 )
                 self._queue_runtime_status_update(runtime_status)
             except Exception as exc:
                 logger.warning(f"Failed to process runtime status update: {exc}")
         
         return _status_callback
+
+    def _get_latest_runtime_status(self) -> Any | None:
+        lock = getattr(self, "_runtime_status_lock", None)
+        if lock is None:
+            return getattr(self, "_pending_runtime_status", None) or getattr(self, "_last_runtime_status", None)
+        with lock:
+            pending_status = getattr(self, "_pending_runtime_status", None)
+        return pending_status or getattr(self, "_last_runtime_status", None)
+
+    def _clear_runtime_status_cache(self) -> None:
+        lock = getattr(self, "_runtime_status_lock", None)
+        if lock is None:
+            self._pending_runtime_status = None
+            self._runtime_status_flush_scheduled = False
+            self._last_runtime_status = None
+            return
+        with lock:
+            self._pending_runtime_status = None
+            self._runtime_status_flush_scheduled = False
+        self._last_runtime_status = None
+
+    @staticmethod
+    def _coerce_runtime_status_started_at(value: Any, fallback: Any | None = None) -> datetime:
+        for candidate in (value, fallback):
+            if isinstance(candidate, datetime):
+                return candidate
+            if isinstance(candidate, (int, float)):
+                try:
+                    return datetime.fromtimestamp(candidate)
+                except Exception:
+                    continue
+            if isinstance(candidate, str) and candidate.strip():
+                try:
+                    return datetime.fromisoformat(candidate)
+                except Exception:
+                    continue
+        return datetime.utcnow()
+
+    def _infer_runtime_stage_name(self) -> str:
+        running_job = getattr(getattr(self, "app_state", None), "running_job", None)
+        stage_chain_value = getattr(running_job, "stage_chain_labels", None)
+        if not isinstance(stage_chain_value, (list, tuple)):
+            return ""
+        stage_chain = list(stage_chain_value)
+        return str(stage_chain[0] if stage_chain else "")
+
+    def _infer_runtime_stage_count(self) -> int:
+        running_job = getattr(getattr(self, "app_state", None), "running_job", None)
+        stage_chain_value = getattr(running_job, "stage_chain_labels", None)
+        if not isinstance(stage_chain_value, (list, tuple)):
+            return 1
+        stage_chain = list(stage_chain_value)
+        return len(stage_chain) or 1
+
+    def _infer_runtime_stage_index(self, current_stage: str) -> int:
+        running_job = getattr(getattr(self, "app_state", None), "running_job", None)
+        stage_chain_value = getattr(running_job, "stage_chain_labels", None)
+        if not isinstance(stage_chain_value, (list, tuple)):
+            return 0
+        stage_chain = list(stage_chain_value)
+        if not stage_chain or not current_stage:
+            return 0
+        target = str(current_stage).strip().lower()
+        for index, stage_name in enumerate(stage_chain):
+            if str(stage_name).strip().lower() == target:
+                return index
+        return 0
 
     def _queue_runtime_status_update(self, runtime_status: Any) -> None:
         import time
@@ -928,6 +1061,7 @@ class AppController:
             self._pending_runtime_status = None
             self._runtime_status_flush_scheduled = False
             self._last_runtime_status_flush_ts = time.monotonic()
+            self._last_runtime_status = runtime_status
 
         if runtime_status is None:
             return
@@ -1321,13 +1455,125 @@ class AppController:
         return first.get("positive", "").strip(), first.get("negative", "").strip()
 
     def _start_run_v2(self, mode: RunMode, source: RunSource) -> Any:
-        return self._get_run_submission_service().start_run(
+        run_service = self._get_run_submission_service()
+        run_service.ensure_queue_run_mode(self.app_state, source.value)
+        pipeline_controller = getattr(self, "pipeline_controller", None)
+        if self._should_submit_run_async() and pipeline_controller is not None:
+            prepare = getattr(pipeline_controller, "prepare_queue_run_submission", None)
+            if callable(prepare):
+                if self._run_submission_in_progress:
+                    self._append_log("[controller] Run submission already in progress; ignoring duplicate request.")
+                    return False
+                run_config = self._build_run_config(mode, source)
+                prepared = prepare(run_config=run_config, source="gui")
+                if prepared is None:
+                    return False
+                self._last_run_config = dict(prepared.run_config or {})
+                self._capture_stage_plan_for_tests(pipeline_controller)
+                self.current_operation_label = "Submitting run to queue"
+                self.last_ui_action = "_start_run_v2(async)"
+                self._run_submission_in_progress = True
+                self._spawn_tracked_thread(
+                    target=self._submit_run_to_queue_async,
+                    args=(pipeline_controller, prepared, source.value),
+                    name="RunQueueSubmit",
+                    purpose="Build preview jobs and submit run asynchronously",
+                )
+                return True
+        return run_service.start_run(
             app_state=self.app_state,
-            pipeline_controller=getattr(self, "pipeline_controller", None),
+            pipeline_controller=pipeline_controller,
             mode=mode.value,
             source=source.value,
             set_last_run_config=lambda cfg: setattr(self, "_last_run_config", cfg),
         )
+
+    def _should_submit_run_async(self) -> bool:
+        return bool(
+            getattr(self, "threaded", False)
+            and getattr(self, "main_window", None) is not None
+            and getattr(self, "_thread_registry", None) is not None
+        )
+
+    def _submit_run_to_queue_async(
+        self,
+        controller: Any,
+        prepared_run: Any,
+        origin_source: str,
+    ) -> None:
+        submitted = 0
+        error: Exception | None = None
+        ready = False
+        had_preview_jobs = False
+        try:
+            ensure_ready = getattr(controller, "ensure_run_submission_ready", None)
+            if callable(ensure_ready):
+                ready = bool(ensure_ready())
+            else:
+                ready = True
+            if ready:
+                preview_jobs = list(getattr(controller, "get_preview_jobs")() or [])
+                had_preview_jobs = bool(preview_jobs)
+                if preview_jobs:
+                    submitted = int(
+                        controller.submit_preview_jobs_to_queue(
+                            records=preview_jobs,
+                            source=prepared_run.source,
+                            prompt_source=prepared_run.prompt_source,
+                            run_config=prepared_run.run_config,
+                        )
+                        or 0
+                    )
+        except Exception as exc:  # noqa: BLE001
+            error = exc
+
+        def _finish() -> None:
+            self._run_submission_in_progress = False
+            self.current_operation_label = None
+            self.last_ui_action = None
+            if self._is_preview_queue_submission_blocked():
+                return
+            transition = getattr(controller, "_safe_gui_transition", None)
+            if error is not None:
+                self._append_log(
+                    f"[controller] Run submission error: {error!r} (source={origin_source})"
+                )
+                if callable(transition):
+                    try:
+                        transition(GUIState.ERROR)
+                    except Exception:
+                        pass
+                return
+            if not ready:
+                self._append_log(
+                    f"[controller] Run submission aborted because WebUI is not ready (source={origin_source})"
+                )
+                if callable(transition):
+                    try:
+                        transition(GUIState.ERROR)
+                    except Exception:
+                        pass
+                return
+            if submitted <= 0:
+                if had_preview_jobs:
+                    self._append_log(
+                        f"[controller] Run submission completed without queueing jobs (source={origin_source})"
+                    )
+                else:
+                    self._append_log(
+                        f"[controller] No preview jobs available to run (source={origin_source})"
+                    )
+                return
+            if callable(transition):
+                try:
+                    transition(GUIState.RUNNING)
+                except Exception:
+                    pass
+            self._append_log(
+                f"[controller] Submitted {submitted} job(s) to the queue in background (source={origin_source})"
+            )
+
+        self._ui_dispatch(_finish)
 
     def _get_run_submission_service(self) -> QueueRunSubmissionService:
         return QueueRunSubmissionService(
@@ -2696,6 +2942,7 @@ class AppController:
         def _apply() -> None:
             if not self.app_state:
                 return
+            self._clear_runtime_status_cache()
             self._set_running_job(job)
 
         self._run_in_gui_thread(_apply)
@@ -2704,6 +2951,7 @@ class AppController:
         def _apply() -> None:
             if self.app_state:
                 self.app_state.set_running_job(None)
+                self._clear_runtime_status_cache()
                 if hasattr(self.app_state, "set_runtime_status"):
                     self.app_state.set_runtime_status(None)
             self._refresh_job_history()
@@ -2714,6 +2962,7 @@ class AppController:
         def _apply() -> None:
             if self.app_state:
                 self.app_state.set_running_job(None)
+                self._clear_runtime_status_cache()
                 if hasattr(self.app_state, "set_runtime_status"):
                     self.app_state.set_runtime_status(None)
             self._refresh_job_history()
@@ -2753,10 +3002,93 @@ class AppController:
     def _refresh_app_state_queue(self) -> None:
         if not self.app_state or not self.job_service:
             return
+        if self._should_refresh_queue_async():
+            self._queue_refresh_request_id += 1
+            if self._queue_refresh_in_progress:
+                return
+            self._queue_refresh_in_progress = True
+            request_id = self._queue_refresh_request_id
+
+            def _worker() -> None:
+                queue_items: list[str] = []
+                queue_jobs: list[UnifiedJobSummary] = []
+                error: Exception | None = None
+                try:
+                    queue_items, queue_jobs = self._build_queue_projection()
+                except Exception as exc:  # noqa: BLE001
+                    error = exc
+
+                def _apply() -> None:
+                    self._queue_refresh_in_progress = False
+                    if error is not None:
+                        logger.exception("[AppController] Error refreshing queue state: %s", error)
+                    elif request_id == self._queue_refresh_request_id and self.app_state is not None:
+                        self.app_state.set_queue_items(queue_items)
+                        self.app_state.set_queue_jobs(queue_jobs)
+                    if request_id != self._queue_refresh_request_id:
+                        self._refresh_app_state_queue()
+
+                self._ui_dispatch(_apply)
+
+            self._spawn_tracked_thread(
+                target=_worker,
+                name="QueueProjectionRefresh",
+                purpose="Refresh queue summaries off the UI thread",
+            )
+            return
+
+        queue_items, queue_jobs = self._build_queue_projection()
+        self.app_state.set_queue_items(queue_items)
+        self.app_state.set_queue_jobs(queue_jobs)
+
+    def _should_refresh_queue_async(self) -> bool:
+        return bool(
+            getattr(self, "threaded", False)
+            and getattr(self, "main_window", None) is not None
+            and getattr(self, "_thread_registry", None) is not None
+        )
+
+    def _record_queue_projection_timing(
+        self,
+        *,
+        elapsed_ms: float,
+        job_count: int,
+        summary_count: int,
+        fallback_count: int,
+    ) -> None:
+        payload = {
+            "elapsed_ms": round(float(elapsed_ms), 3),
+            "job_count": int(job_count),
+            "summary_count": int(summary_count),
+            "fallback_count": int(fallback_count),
+        }
+        self._last_queue_projection_timing = payload
+        if elapsed_ms < _QUEUE_PROJECTION_TIMING_INFO_MS:
+            return
+        level = (
+            logging.WARNING
+            if elapsed_ms >= _QUEUE_PROJECTION_TIMING_WARN_MS
+            else logging.INFO
+        )
+        log_with_ctx(
+            logger,
+            level,
+            "Queue projection timing",
+            ctx=LogContext(subsystem="controller", stage="queue_projection"),
+            extra_fields=payload,
+        )
+        if elapsed_ms >= _QUEUE_PROJECTION_TIMING_WARN_MS:
+            self._append_log(
+                f"[perf] Queue projection took {elapsed_ms:.1f}ms for {job_count} active job(s)."
+            )
+
+    def _build_queue_projection(self) -> tuple[list[str], list[UnifiedJobSummary]]:
+        started_at = time.monotonic()
         jobs = self._list_service_jobs()
         # Convert Job objects to UnifiedJobSummary via their NJRs
-        queue_jobs = []
-        summaries = []
+        queue_jobs: list[UnifiedJobSummary] = []
+        summaries: list[str] = []
+        fallback_count = 0
         for job in jobs:
             njr = getattr(job, "_normalized_record", None)
             if njr:
@@ -2773,17 +3105,24 @@ class AppController:
                 except Exception as exc:
                     logger.warning(f"Failed to convert job {job.job_id} to UnifiedJobSummary: {exc}")
                     summaries.append(job.job_id)
+                    fallback_count += 1
             else:
                 logger.debug(f"Job {job.job_id} missing NJR, using fallback queue summary")
                 summaries.append(job.job_id)
+                fallback_count += 1
                 try:
                     status_value = str(getattr(job, "status", "queued")).lower()
                     status = JobStatusV2(status_value) if status_value in JobStatusV2._value2member_map_ else JobStatusV2.QUEUED
                     queue_jobs.append(UnifiedJobSummary.from_job(job, status))
                 except Exception:
                     pass
-        self.app_state.set_queue_items(summaries)
-        self.app_state.set_queue_jobs(queue_jobs)
+        self._record_queue_projection_timing(
+            elapsed_ms=(time.monotonic() - started_at) * 1000.0,
+            job_count=len(jobs),
+            summary_count=len(queue_jobs),
+            fallback_count=fallback_count,
+        )
+        return summaries, queue_jobs
 
     def _list_service_jobs(self) -> list[Job]:
         queue = getattr(self.job_service, "queue", None)
@@ -2803,6 +3142,7 @@ class AppController:
         if not self.app_state:
             return
         if job is None:
+            self._clear_runtime_status_cache()
             self.app_state.set_running_job(None)
             if hasattr(self.app_state, "set_runtime_status"):
                 self.app_state.set_runtime_status(None)
@@ -3325,7 +3665,7 @@ class AppController:
         try:
             DebugHubPanelV2.open(
                 master=self.main_window.root if self.main_window else None,
-                controller=self.pipeline_controller or self,
+                controller=self,
                 app_state=self.app_state,
                 log_handler=self.gui_log_handler,
             )
@@ -3338,10 +3678,63 @@ class AppController:
             return
         try:
             JobExplanationPanelV2(
-                job_id, master=self.main_window.root if self.main_window else None
+                job_id,
+                master=self.main_window.root if self.main_window else None,
+                controller=self,
             )
         except Exception as exc:
             self._append_log(f"[controller] Failed to explain job {job_id}: {exc!r}")
+
+    def get_preview_jobs(self) -> list[Any]:
+        pipeline_controller = getattr(self, "pipeline_controller", None)
+        getter = getattr(pipeline_controller, "get_preview_jobs", None)
+        if callable(getter):
+            try:
+                return list(getter())
+            except Exception:
+                pass
+        app_state = getattr(self, "app_state", None)
+        return list(getattr(app_state, "preview_jobs", []) or [])
+
+    def get_job_explanation_payload(self, job_id: str) -> dict[str, Any] | None:
+        if not job_id:
+            return None
+        live_job = self._find_live_job(job_id)
+        history_entry = self._get_history_entry_by_job_id(job_id)
+        normalized = self._extract_normalized_snapshot(live_job=live_job, history_entry=history_entry)
+        runtime_status = self._get_latest_runtime_status()
+        if getattr(runtime_status, "job_id", None) != job_id:
+            runtime_status = None
+        if not normalized and history_entry is None and live_job is None:
+            return None
+
+        status_value = self._resolve_job_status_value(live_job=live_job, history_entry=history_entry)
+        stage_flow = self._resolve_stage_flow(normalized, runtime_status)
+        return {
+            "job_id": job_id,
+            "display_label": self._build_debug_job_label(job_id, normalized),
+            "origin_text": self._build_job_origin_text(
+                job_id=job_id,
+                normalized=normalized,
+                live_job=live_job,
+                history_entry=history_entry,
+                runtime_status=runtime_status,
+            ),
+            "stage_flow": stage_flow,
+            "stage_prompts": self._build_job_stage_prompt_rows(
+                normalized=normalized,
+                stage_flow=stage_flow,
+                runtime_status=runtime_status,
+            ),
+            "metadata": self._build_job_metadata_payload(
+                job_id=job_id,
+                normalized=normalized,
+                live_job=live_job,
+                history_entry=history_entry,
+                runtime_status=runtime_status,
+                status_value=status_value,
+            ),
+        }
 
     def get_process_auto_scanner(self) -> ProcessAutoScannerService | None:
         return getattr(self, "process_auto_scanner", None)
@@ -3490,8 +3883,48 @@ class AppController:
                 data["webui_tail"] = None
         data["controller"] = {
             "last_ui_heartbeat_ts": getattr(self, "last_ui_heartbeat_ts", None),
+            "last_queue_activity_ts": getattr(self, "last_queue_activity_ts", None),
             "last_runner_activity_ts": getattr(self, "last_runner_activity_ts", None),
+            "queue_projection_timing": (
+                dict(self._last_queue_projection_timing)
+                if isinstance(self._last_queue_projection_timing, Mapping)
+                else None
+            ),
         }
+        pipeline_controller = getattr(self, "pipeline_controller", None)
+        preview_timing_getter = getattr(
+            pipeline_controller,
+            "get_preview_build_timing_snapshot",
+            None,
+        )
+        if callable(preview_timing_getter):
+            try:
+                data["pipeline_controller"] = {
+                    "preview_build_timing": preview_timing_getter(),
+                }
+            except Exception:
+                data["pipeline_controller"] = None
+        webui_connection = getattr(self, "webui_connection_controller", None)
+        if webui_connection is None and pipeline_controller is not None:
+            webui_connection = getattr(pipeline_controller, "_webui_connection", None)
+        readiness_timing_getter = getattr(
+            webui_connection,
+            "get_last_connection_timing_snapshot",
+            None,
+        )
+        readiness_state_getter = getattr(webui_connection, "get_state", None)
+        if callable(readiness_timing_getter):
+            try:
+                readiness_state = None
+                if callable(readiness_state_getter):
+                    state = readiness_state_getter()
+                    readiness_state = getattr(state, "value", str(state) if state is not None else None)
+                data["webui_connection"] = {
+                    "state": readiness_state,
+                    "timing": readiness_timing_getter(),
+                }
+            except Exception:
+                data["webui_connection"] = None
         snapshot = getattr(self, "_optional_dependency_snapshot", None)
         if snapshot is not None and hasattr(snapshot, "to_dict"):
             try:
@@ -3505,11 +3938,475 @@ class AppController:
                 data["pipeline_tab"] = getter()
             except Exception:
                 data["pipeline_tab"] = None
+        log_trace_panel = getattr(getattr(self, "main_window", None), "log_trace_panel_v2", None)
+        log_trace_getter = getattr(log_trace_panel, "get_diagnostics_snapshot", None)
+        if callable(log_trace_getter):
+            try:
+                data["log_trace_panel"] = log_trace_getter()
+            except Exception:
+                data["log_trace_panel"] = None
+        data["app_state"] = self._build_diagnostics_app_state_snapshot()
+        data["jobs"] = self._build_enriched_diagnostics_jobs(data.get("jobs"))
+        data["process_inspector"] = self._build_process_inspector_snapshot()
+        data["threads"] = self._build_thread_snapshot()
         data["last_bundle"] = (
             str(self._last_diagnostics_bundle) if self._last_diagnostics_bundle else None
         )
         data["last_bundle_reason"] = self._last_diagnostics_bundle_reason
         return data
+
+    def _find_live_job(self, job_id: str) -> Any | None:
+        job_service = getattr(self, "job_service", None)
+        job_queue = getattr(job_service, "job_queue", None)
+        getter = getattr(job_queue, "get_job", None)
+        if callable(getter):
+            try:
+                return getter(job_id)
+            except Exception:
+                return None
+        return None
+
+    def _extract_normalized_snapshot(
+        self,
+        *,
+        live_job: Any | None,
+        history_entry: Any | None,
+    ) -> dict[str, Any]:
+        candidates: list[Any] = []
+        if live_job is not None:
+            candidates.append(getattr(live_job, "_normalized_record", None))
+            candidates.append(getattr(live_job, "snapshot", None))
+        if history_entry is not None:
+            candidates.append(getattr(history_entry, "snapshot", None))
+        for candidate in candidates:
+            if candidate is None:
+                continue
+            if hasattr(candidate, "to_queue_snapshot") and callable(candidate.to_queue_snapshot):
+                try:
+                    snapshot = candidate.to_queue_snapshot()
+                    if isinstance(snapshot, dict):
+                        return dict(snapshot)
+                except Exception:
+                    continue
+            if isinstance(candidate, dict):
+                normalized = candidate.get("normalized_job") if "normalized_job" in candidate else candidate
+                if isinstance(normalized, dict):
+                    return dict(normalized)
+        return {}
+
+    @staticmethod
+    def _resolve_job_status_value(*, live_job: Any | None, history_entry: Any | None) -> str:
+        status = getattr(live_job, "status", None)
+        if hasattr(status, "value"):
+            return str(status.value)
+        if status is not None:
+            return str(status)
+        history_status = getattr(history_entry, "status", None)
+        if hasattr(history_status, "value"):
+            return str(history_status.value)
+        if history_status is not None:
+            return str(history_status)
+        return ""
+
+    def _resolve_stage_flow(
+        self,
+        normalized: Mapping[str, Any],
+        runtime_status: Any | None,
+    ) -> list[str]:
+        stage_chain = normalized.get("stage_chain") if isinstance(normalized, Mapping) else None
+        if isinstance(stage_chain, list) and stage_chain:
+            return [str(stage) for stage in stage_chain if stage]
+        runtime_stage = getattr(runtime_status, "current_stage", None)
+        if runtime_stage:
+            return [str(runtime_stage)]
+        return ["txt2img"]
+
+    def _build_debug_job_label(self, job_id: str, normalized: Mapping[str, Any]) -> str:
+        pack_name = str(
+            normalized.get("prompt_pack_name")
+            or normalized.get("pack_name")
+            or normalized.get("prompt_pack_id")
+            or normalized.get("model")
+            or job_id
+        )
+        row_index = normalized.get("prompt_pack_row_index")
+        variant_index = normalized.get("variant_index")
+        batch_index = normalized.get("batch_index")
+        parts = [pack_name]
+        if isinstance(row_index, int):
+            parts.append(f"row={row_index + 1}")
+        if isinstance(variant_index, int):
+            parts.append(f"v={variant_index + 1}")
+        if isinstance(batch_index, int):
+            parts.append(f"b={batch_index + 1}")
+        return " | ".join(parts + [job_id])
+
+    def _build_job_origin_text(
+        self,
+        *,
+        job_id: str,
+        normalized: Mapping[str, Any],
+        live_job: Any | None,
+        history_entry: Any | None,
+        runtime_status: Any | None,
+    ) -> str:
+        parts: list[str] = [f"Job: {job_id}"]
+        pack_usage = normalized.get("pack_usage") if isinstance(normalized, Mapping) else None
+        if isinstance(pack_usage, list) and pack_usage:
+            pack_labels = []
+            for item in pack_usage:
+                if isinstance(item, dict):
+                    name = item.get("pack_name") or item.get("pack_id")
+                    stage = item.get("used_for_stage")
+                    if name and stage:
+                        pack_labels.append(f"{name} ({stage})")
+                    elif name:
+                        pack_labels.append(str(name))
+            if pack_labels:
+                parts.append("Packs: " + ", ".join(pack_labels))
+        elif normalized.get("prompt_pack_name"):
+            parts.append(f"Pack: {normalized.get('prompt_pack_name')}")
+
+        prompt_source = getattr(live_job, "prompt_source", None) or getattr(
+            history_entry, "prompt_source", None
+        )
+        if prompt_source:
+            parts.append(f"source={prompt_source}")
+        run_mode = getattr(live_job, "run_mode", None) or getattr(history_entry, "run_mode", None)
+        if run_mode:
+            parts.append(f"run_mode={run_mode}")
+        status_value = self._resolve_job_status_value(live_job=live_job, history_entry=history_entry)
+        if status_value:
+            parts.append(f"status={status_value}")
+        if runtime_status is not None and hasattr(runtime_status, "get_stage_display"):
+            try:
+                parts.append(f"runtime={runtime_status.get_stage_display()}")
+            except Exception:
+                pass
+        return " | ".join(parts)
+
+    def _build_job_stage_prompt_rows(
+        self,
+        *,
+        normalized: Mapping[str, Any],
+        stage_flow: list[str],
+        runtime_status: Any | None,
+    ) -> list[dict[str, str]]:
+        def _prompt_info_for(stage_name: str) -> Mapping[str, Any]:
+            key = f"{stage_name}_prompt_info"
+            value = normalized.get(key)
+            return value if isinstance(value, Mapping) else {}
+
+        rows: list[dict[str, str]] = []
+        runtime_stage = str(getattr(runtime_status, "current_stage", "") or "")
+        for stage_name in stage_flow:
+            info = _prompt_info_for(str(stage_name))
+            prompt = str(info.get("final_prompt") or normalized.get("prompt") or "-")
+            negative = str(
+                info.get("final_negative_prompt") or normalized.get("negative_prompt") or "-"
+            )
+            global_terms = str(info.get("global_negative_terms") or "-")
+            status = "current" if runtime_stage and runtime_stage == str(stage_name) else "available"
+            rows.append(
+                {
+                    "stage": str(stage_name),
+                    "prompt": prompt,
+                    "negative": negative,
+                    "global_terms": global_terms,
+                    "status": status,
+                }
+            )
+        return rows
+
+    def _build_job_metadata_payload(
+        self,
+        *,
+        job_id: str,
+        normalized: Mapping[str, Any],
+        live_job: Any | None,
+        history_entry: Any | None,
+        runtime_status: Any | None,
+        status_value: str,
+    ) -> dict[str, Any]:
+        metadata: dict[str, Any] = {
+            "job_id": job_id,
+            "status": status_value,
+            "prompt_pack_id": normalized.get("prompt_pack_id"),
+            "prompt_pack_name": normalized.get("prompt_pack_name"),
+            "row_index": normalized.get("prompt_pack_row_index"),
+            "variant_index": normalized.get("variant_index"),
+            "batch_index": normalized.get("batch_index"),
+            "model": normalized.get("model"),
+            "sampler": normalized.get("sampler"),
+            "steps": normalized.get("steps"),
+            "cfg_scale": normalized.get("cfg_scale"),
+            "width": normalized.get("width"),
+            "height": normalized.get("height"),
+            "seed": normalized.get("seed"),
+            "output_dir": normalized.get("output_dir"),
+            "stage_chain": list(normalized.get("stage_chain") or []),
+            "randomization_enabled": normalized.get("randomization_enabled"),
+            "matrix_slot_values": normalized.get("matrix_slot_values"),
+            "config_layers": normalized.get("config_layers"),
+            "error_message": getattr(live_job, "error_message", None)
+            or getattr(history_entry, "error_message", None),
+        }
+        result = getattr(live_job, "result", None) or getattr(history_entry, "result", None)
+        if isinstance(result, dict):
+            metadata["result"] = dict(result)
+        if runtime_status is not None:
+            metadata["runtime_status"] = {
+                "current_stage": getattr(runtime_status, "current_stage", None),
+                "stage_index": getattr(runtime_status, "stage_index", None),
+                "total_stages": getattr(runtime_status, "total_stages", None),
+                "progress": getattr(runtime_status, "progress", None),
+                "eta_seconds": getattr(runtime_status, "eta_seconds", None),
+                "actual_seed": getattr(runtime_status, "actual_seed", None),
+                "current_step": getattr(runtime_status, "current_step", None),
+                "total_steps": getattr(runtime_status, "total_steps", None),
+                "stage_detail": getattr(runtime_status, "stage_detail", None),
+            }
+        return metadata
+
+    def _build_diagnostics_app_state_snapshot(self) -> dict[str, Any]:
+        app_state = getattr(self, "app_state", None)
+        running_job = getattr(app_state, "running_job", None)
+        runtime_status = getattr(app_state, "runtime_status", None) or self._get_latest_runtime_status()
+        queue_jobs = list(getattr(app_state, "queue_jobs", []) or [])
+        history_items = list(getattr(app_state, "history_items", []) or [])
+        return {
+            "running_job": self._serialize_job_summary(running_job),
+            "runtime_status": self._serialize_runtime_status(runtime_status),
+            "queue_job_count": len(queue_jobs),
+            "history_count": len(history_items),
+        }
+
+    def _build_enriched_diagnostics_jobs(self, jobs: Any) -> list[dict[str, Any]]:
+        if not isinstance(jobs, list):
+            return []
+        app_state = getattr(self, "app_state", None)
+        queue_jobs = list(getattr(app_state, "queue_jobs", []) or [])
+        running_job = getattr(app_state, "running_job", None)
+        history_items = list(getattr(app_state, "history_items", []) or [])
+        summary_index = {
+            summary.job_id: summary
+            for summary in ([running_job] if running_job is not None else []) + queue_jobs
+            if getattr(summary, "job_id", None)
+        }
+        history_index = {
+            getattr(entry, "job_id", None): entry
+            for entry in history_items
+            if getattr(entry, "job_id", None)
+        }
+        runtime_status = self._get_latest_runtime_status()
+
+        enriched: list[dict[str, Any]] = []
+        for entry in jobs:
+            if not isinstance(entry, dict):
+                continue
+            job_id = str(entry.get("job_id") or "")
+            live_job = self._find_live_job(job_id)
+            history_entry = history_index.get(job_id)
+            normalized = self._extract_normalized_snapshot(
+                live_job=live_job,
+                history_entry=history_entry,
+            )
+            summary = summary_index.get(job_id)
+            display_label = (
+                summary.get_display_summary()
+                if summary is not None and hasattr(summary, "get_display_summary")
+                else self._build_debug_job_label(job_id, normalized)
+            )
+            stage_display = self._format_job_stage_display(
+                job_id=job_id,
+                summary=summary,
+                normalized=normalized,
+                runtime_status=runtime_status,
+                result_summary=entry.get("result_summary"),
+            )
+            diagnostics_text = self._format_job_diagnostics_text(entry, history_entry)
+            pids = [int(pid) for pid in entry.get("external_pids", []) if isinstance(pid, int)]
+            enriched_entry = dict(entry)
+            enriched_entry["display_label"] = display_label
+            enriched_entry["stage_display"] = stage_display
+            enriched_entry["pid_display"] = ", ".join(str(pid) for pid in pids) if pids else "none"
+            enriched_entry["diagnostics_text"] = diagnostics_text
+            enriched.append(enriched_entry)
+        return enriched
+
+    def _format_job_stage_display(
+        self,
+        *,
+        job_id: str,
+        summary: Any | None,
+        normalized: Mapping[str, Any],
+        runtime_status: Any | None,
+        result_summary: Any,
+    ) -> str:
+        if getattr(runtime_status, "job_id", None) == job_id and hasattr(runtime_status, "get_stage_display"):
+            try:
+                stage_text = runtime_status.get_stage_display()
+                progress = getattr(runtime_status, "progress", None)
+                if isinstance(progress, (int, float)):
+                    return f"{stage_text} ({int(float(progress) * 100)}%)"
+                return stage_text
+            except Exception:
+                pass
+        stage_chain = normalized.get("stage_chain") if isinstance(normalized, Mapping) else None
+        if isinstance(stage_chain, list) and stage_chain:
+            return " -> ".join(str(stage) for stage in stage_chain if stage)
+        if summary is not None:
+            stage_labels = getattr(summary, "stage_chain_labels", None)
+            if isinstance(stage_labels, list) and stage_labels:
+                return " -> ".join(str(stage) for stage in stage_labels if stage)
+        if isinstance(result_summary, Mapping):
+            primary_stage = result_summary.get("primary_stage")
+            if primary_stage:
+                return str(primary_stage)
+        return "-"
+
+    def _format_job_diagnostics_text(self, entry: Mapping[str, Any], history_entry: Any | None) -> str:
+        parts: list[str] = []
+        result_summary = entry.get("result_summary")
+        if isinstance(result_summary, Mapping):
+            duration_ms = result_summary.get("duration_ms")
+            if isinstance(duration_ms, (int, float)):
+                parts.append(f"duration={float(duration_ms):.0f}ms")
+            output_count = result_summary.get("output_count")
+            if isinstance(output_count, int):
+                parts.append(f"outputs={output_count}")
+            error = result_summary.get("error")
+            if error:
+                parts.append(f"error={error}")
+        retries = entry.get("retry_attempts")
+        if isinstance(retries, list) and retries:
+            parts.append(f"retries={len(retries)}")
+        duration_ms = getattr(history_entry, "duration_ms", None)
+        if not parts and isinstance(duration_ms, int):
+            parts.append(f"duration={duration_ms}ms")
+        return " | ".join(parts) if parts else "no diagnostics"
+
+    def _build_process_inspector_snapshot(self) -> dict[str, Any]:
+        scanner = getattr(self, "process_auto_scanner", None)
+        scanner_summary = getattr(scanner, "summary", None)
+        summary_payload = None
+        if scanner_summary is not None:
+            summary_payload = {
+                "timestamp": getattr(scanner_summary, "timestamp", None),
+                "scanned": getattr(scanner_summary, "scanned", None),
+                "killed": list(getattr(scanner_summary, "killed", []) or []),
+            }
+        try:
+            risk = collect_process_risk_snapshot()
+        except Exception:
+            risk = None
+        return {
+            "scanner_status": scanner.get_status_text() if scanner is not None else None,
+            "scanner_enabled": bool(getattr(scanner, "enabled", False)) if scanner is not None else False,
+            "scan_interval": float(getattr(scanner, "scan_interval", 0.0) or 0.0)
+            if scanner is not None
+            else 0.0,
+            "protected_pids": sorted(int(pid) for pid in self._get_protected_process_pids()),
+            "summary": summary_payload,
+            "risk": risk,
+        }
+
+    def _build_thread_snapshot(self) -> dict[str, Any]:
+        tracked_status = None
+        tracked_threads: dict[int, Any] = {}
+        try:
+            registry = get_thread_registry()
+            tracked_status = registry.dump_status()
+            tracked_threads = {
+                thread.thread.ident: thread
+                for thread in registry.get_active_threads()
+                if getattr(thread.thread, "ident", None) is not None
+            }
+        except Exception:
+            tracked_status = None
+        try:
+            frames = sys._current_frames()
+        except Exception:
+            frames = {}
+        threads: list[dict[str, Any]] = []
+        for thread in threading.enumerate():
+            ident = getattr(thread, "ident", None)
+            frame = frames.get(ident) if ident is not None else None
+            top_frame = None
+            if frame is not None:
+                try:
+                    top_frame = {
+                        "file": str(frame.f_code.co_filename),
+                        "line": int(frame.f_lineno),
+                        "function": str(frame.f_code.co_name),
+                    }
+                except Exception:
+                    top_frame = None
+            tracked = tracked_threads.get(ident) if ident is not None else None
+            threads.append(
+                {
+                    "name": thread.name,
+                    "ident": ident,
+                    "daemon": bool(thread.daemon),
+                    "alive": bool(thread.is_alive()),
+                    "tracked": tracked is not None,
+                    "purpose": getattr(tracked, "purpose", None) if tracked is not None else None,
+                    "top_frame": top_frame,
+                }
+            )
+        threads.sort(key=lambda item: (0 if item.get("name") == "MainThread" else 1, str(item.get("name") or "")))
+        return {
+            "thread_count": len(threads),
+            "tracked_status": tracked_status,
+            "threads": threads,
+        }
+
+    def _serialize_job_summary(self, summary: Any | None) -> dict[str, Any] | None:
+        if summary is None:
+            return None
+        display_label = None
+        getter = getattr(summary, "get_display_summary", None)
+        if callable(getter):
+            try:
+                display_label = getter()
+            except Exception:
+                display_label = None
+        return {
+            "job_id": getattr(summary, "job_id", None),
+            "display_label": display_label,
+            "prompt_pack_name": getattr(summary, "prompt_pack_name", None),
+            "stage_chain_labels": list(getattr(summary, "stage_chain_labels", []) or []),
+            "status": getattr(summary, "status", None),
+        }
+
+    def _serialize_runtime_status(self, status: Any | None) -> dict[str, Any] | None:
+        if status is None:
+            return None
+        stage_display = None
+        stage_label = getattr(status, "get_stage_display", None)
+        if callable(stage_label):
+            try:
+                stage_display = stage_label()
+            except Exception:
+                stage_display = None
+        eta_display = None
+        eta_getter = getattr(status, "get_eta_display", None)
+        if callable(eta_getter):
+            try:
+                eta_display = eta_getter()
+            except Exception:
+                eta_display = None
+        progress = getattr(status, "progress", None)
+        progress_pct = int(float(progress) * 100) if isinstance(progress, (int, float)) else None
+        started_at = getattr(status, "started_at", None)
+        return {
+            "job_id": getattr(status, "job_id", None),
+            "stage_display": stage_display,
+            "progress_pct": progress_pct,
+            "eta_display": eta_display,
+            "started_at": started_at.isoformat() if isinstance(started_at, datetime) else None,
+            "stage_detail": getattr(status, "stage_detail", None),
+        }
 
     def show_log_trace_panel(self) -> None:
         """Expose helper that expands the LogTracePanelV2 if present."""
@@ -3755,6 +4652,7 @@ class AppController:
         if not self.webui_process_manager:
             return
         self._append_log("[webui] Launch requested by user.")
+        logger.info("[webui] Launch requested by user.")
         self._update_webui_state("connecting")
         success = self.webui_process_manager.ensure_running()
         self._update_webui_state("connected" if success else "error")
@@ -4164,12 +5062,7 @@ class AppController:
         except Exception:
             logger.exception("Error saving queue state during shutdown")
 
-        try:
-            logger.info("[controller] Step 8/8: Closing loggers and API clients...")
-            close_all_structured_loggers()
-            logger.info("[controller] Step 8/8: Loggers closed")
-        except Exception:
-            logger.exception("Error closing structured loggers during shutdown")
+        logger.info("[controller] Step 8/8: Closing API clients and finalizing shutdown...")
 
         # Close API client resources
         try:
@@ -4186,7 +5079,13 @@ class AppController:
             logger.exception("Error clearing WebUI process manager during shutdown")
 
         self._shutdown_completed = True
+        self._await_shutdown_watchdog_exit()
         logger.info("[controller] ===== SHUTDOWN_APP COMPLETE =====")
+
+        try:
+            close_all_structured_loggers()
+        except Exception:
+            pass
 
 
     def _cancel_active_jobs(self, reason: str) -> None:
@@ -4277,7 +5176,6 @@ class AppController:
         deadline = time.time() + timeout
         while time.time() < deadline:
             if self._shutdown_completed:
-                logger.info("[controller] Shutdown watchdog: Clean shutdown detected, exiting early")
                 return
             time.sleep(0.5)
         
@@ -4291,6 +5189,19 @@ class AppController:
             if hard_exit:
                 logger.error("Hard exit forced due to shutdown hang.")
                 os._exit(1)
+
+    def _await_shutdown_watchdog_exit(self, timeout: float = 1.0) -> None:
+        thread = getattr(self, "_shutdown_watchdog_thread", None)
+        if thread is None:
+            return
+        import threading
+
+        if thread is threading.current_thread():
+            return
+        try:
+            thread.join(max(0.0, float(timeout)))
+        except Exception:
+            return
 
     # ------------------------------------------------------------------
     # Packs / Presets

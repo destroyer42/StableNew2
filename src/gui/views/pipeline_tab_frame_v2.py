@@ -563,13 +563,33 @@ class PipelineTabFrame(ttk.Frame):
 
         self._measure_callback("_on_preview_jobs_changed", _run)
 
+    def _ensure_hot_surface_state(self) -> None:
+        if not hasattr(self, "_hot_surface_dirty"):
+            self._hot_surface_dirty = set()
+        if not hasattr(self, "_hot_surface_flush_scheduled"):
+            self._hot_surface_flush_scheduled = False
+        if not hasattr(self, "_hot_surface_flush_metrics"):
+            self._hot_surface_flush_metrics = {
+                "count": 0,
+                "total_ms": 0.0,
+                "max_ms": 0.0,
+                "last_ms": 0.0,
+                "slow_count": 0,
+            }
+
+    def _ensure_callback_metrics_state(self) -> None:
+        if not hasattr(self, "_callback_metrics"):
+            self._callback_metrics = {}
+
     def _mark_hot_surface_dirty(self, *surfaces: str) -> None:
         if not surfaces:
             return
+        self._ensure_hot_surface_state()
         self._hot_surface_dirty.update(surface for surface in surfaces if surface)
         self._schedule_hot_surface_flush_if_needed()
 
     def _schedule_hot_surface_flush_if_needed(self) -> None:
+        self._ensure_hot_surface_state()
         if self._hot_surface_flush_scheduled:
             return
         if not self._hot_surface_dirty:
@@ -589,6 +609,7 @@ class PipelineTabFrame(ttk.Frame):
             return True
 
     def _flush_hot_surfaces(self) -> None:
+        self._ensure_hot_surface_state()
         dirty = set(self._hot_surface_dirty)
         self._hot_surface_dirty.clear()
         self._hot_surface_flush_scheduled = False
@@ -658,6 +679,7 @@ class PipelineTabFrame(ttk.Frame):
             self._record_callback_metric(name, elapsed_ms)
 
     def _record_callback_metric(self, name: str, elapsed_ms: float) -> None:
+        self._ensure_callback_metrics_state()
         metrics = self._callback_metrics.setdefault(
             name,
             {
@@ -676,6 +698,8 @@ class PipelineTabFrame(ttk.Frame):
             metrics["slow_count"] = int(metrics["slow_count"]) + 1
 
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        self._ensure_callback_metrics_state()
+        self._ensure_hot_surface_state()
         callback_metrics: dict[str, dict[str, float | int]] = {}
         for name, metrics in sorted(self._callback_metrics.items()):
             count = int(metrics.get("count", 0) or 0)
@@ -703,6 +727,9 @@ class PipelineTabFrame(ttk.Frame):
                 "dirty_pending": sorted(self._hot_surface_dirty),
                 "scheduled": bool(self._hot_surface_flush_scheduled),
             },
+            "running_job_panel": self.running_job_panel.get_diagnostics_snapshot()
+            if hasattr(self, "running_job_panel")
+            else {},
             "queue_panel": self.queue_panel.get_diagnostics_snapshot() if hasattr(self, "queue_panel") else {},
             "history_panel": self.history_panel.get_diagnostics_snapshot() if hasattr(self, "history_panel") else {},
             "preview_panel": self.preview_panel.get_diagnostics_snapshot() if hasattr(self, "preview_panel") else {},

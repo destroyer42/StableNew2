@@ -9,9 +9,10 @@ import logging
 import random
 from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from src.gui.app_state_v2 import PackJobEntry
+from src.pipeline import config_contract_v26
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
     derive_backend_options,
@@ -31,6 +32,7 @@ from src.pipeline.prompt_pack_parser import PackRow, parse_prompt_pack_text
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 from src.training.lora_manager import LoRAManager
+from src.training.style_lora_manager import StyleLoRAManager
 from src.utils.config import ConfigManager
 from src.utils.embedding_prompt_utils import render_embedding_reference
 from src.utils.prompt_pack_utils import get_matrix_slots_dict, load_pack_metadata
@@ -79,6 +81,7 @@ class PromptPackNormalizedJobBuilder:
         config_resolver: UnifiedConfigResolver | None = None,
         packs_dir: Path | str = "packs",
         lora_manager: LoRAManager | None = None,
+        style_lora_manager: StyleLoRAManager | None = None,
     ) -> None:
         self._config_manager = config_manager
         self._job_builder = job_builder
@@ -86,6 +89,7 @@ class PromptPackNormalizedJobBuilder:
         self._config_resolver = config_resolver or UnifiedConfigResolver()
         self._packs_dir = Path(packs_dir)
         self._lora_manager = lora_manager
+        self._style_lora_manager = style_lora_manager
         self._pack_rows_cache: dict[tuple[Any, ...], list[PackRow]] = {}
         self._pack_metadata_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._pack_config_cache: dict[tuple[Any, ...], dict[str, Any] | None] = {}
@@ -371,10 +375,25 @@ class PromptPackNormalizedJobBuilder:
 
         stage_chain = self._build_stage_chain(merged_config, stage_flags)
         resolved_actors = self._resolve_entry_actors(entry, merged_config)
-        record_metadata = self._build_record_metadata(merged_config, resolved_actors)
-        prompt_resolution = self._resolve_prompt(entry, merged_config, resolved_actors)
+        resolved_style_lora = self._resolve_style_lora(merged_config)
+        record_metadata = self._build_record_metadata(
+            merged_config,
+            resolved_actors,
+            resolved_style_lora,
+        )
+        prompt_resolution = self._resolve_prompt(
+            entry,
+            merged_config,
+            resolved_actors,
+            resolved_style_lora,
+        )
         config_for_builder = self._build_config_payload(
-            entry, merged_config, prompt_resolution, stage_chain, record_metadata
+            entry,
+            merged_config,
+            prompt_resolution,
+            stage_chain,
+            record_metadata,
+            resolved_style_lora,
         )
 
         randomizer_plan = self._build_randomizer_plan(entry, merged_config)
@@ -486,6 +505,7 @@ class PromptPackNormalizedJobBuilder:
         entry: PackJobEntry,
         config: dict[str, Any],
         resolved_actors: list[dict[str, Any]] | None = None,
+        resolved_style_lora: dict[str, Any] | None = None,
     ) -> Any:
         pack_rows = self._load_pack_rows(entry.pack_id)
         row_index = entry.pack_row_index or 0
@@ -511,10 +531,42 @@ class PromptPackNormalizedJobBuilder:
             pack_row=pack_row,
             matrix_slot_values=matrix_values,
             actor_resolutions=resolved_actors,
+            style_lora=resolved_style_lora,
             pack_negative=negative_prompt,
             global_negative=self._config_manager.get_global_negative_prompt(),
             apply_global_negative=bool(apply_global),
         )
+
+    def _resolve_style_lora(self, merged_config: dict[str, Any]) -> dict[str, Any] | None:
+        raw_style_lora = merged_config.get("style_lora")
+        if not isinstance(raw_style_lora, Mapping):
+            return None
+        try:
+            normalized = config_contract_v26.validate_style_lora_execution_config({"style_lora": raw_style_lora})
+            style_payload = _mapping_dict(normalized.get("style_lora"))
+        except ValueError as exc:
+            return {
+                "style_id": str(raw_style_lora.get("style_id") or raw_style_lora.get("name") or "").strip(),
+                "applied": False,
+                "available": False,
+                "warning": str(exc),
+            }
+        if not style_payload or not bool(style_payload.get("enabled", True)):
+            return None
+        if self._style_lora_manager is None:
+            self._style_lora_manager = StyleLoRAManager()
+        base_model = str(
+            _mapping_dict(merged_config.get("txt2img")).get("model")
+            or merged_config.get("model")
+            or ""
+        ).strip() or None
+        resolved = self._style_lora_manager.resolve_selection(style_payload, base_model=base_model)
+        if resolved is None:
+            return None
+        resolved_payload = resolved.to_dict()
+        if not resolved_payload.get("applied") and resolved_payload.get("warning"):
+            _logger.warning("[PromptPackNormalizedJobBuilder] %s", resolved_payload["warning"])
+        return resolved_payload
 
     @staticmethod
     def _extract_actor_groups(payload: Any) -> list[Any]:
@@ -549,12 +601,13 @@ class PromptPackNormalizedJobBuilder:
             return []
         if self._lora_manager is None:
             self._lora_manager = LoRAManager()
-        return self._lora_manager.resolve_actors(actor_items)
+        return cast(list[dict[str, Any]], list(self._lora_manager.resolve_actors(actor_items)))
 
     def _build_record_metadata(
         self,
         merged_config: dict[str, Any],
         resolved_actors: list[dict[str, Any]],
+        resolved_style_lora: dict[str, Any] | None,
     ) -> dict[str, Any]:
         data = _mapping_dict(merged_config)
         metadata = copy.deepcopy(_mapping_dict(data.get("metadata")))
@@ -570,6 +623,8 @@ class PromptPackNormalizedJobBuilder:
             metadata["plan_origin"] = copy.deepcopy(plan_origin)
         if story_plan:
             metadata["story_plan"] = copy.deepcopy(story_plan)
+        if resolved_style_lora:
+            metadata["style_lora"] = copy.deepcopy(resolved_style_lora)
         return metadata
 
     def _build_config_payload(
@@ -579,6 +634,7 @@ class PromptPackNormalizedJobBuilder:
         prompt_resolution: Any,
         stage_chain: list[StageConfig],
         record_metadata: dict[str, Any],
+        resolved_style_lora: dict[str, Any] | None,
     ) -> dict[str, Any]:
         txt2img = _effective_txt2img_stage_config(merged_config.get("txt2img", {}))
         pipeline_section = merged_config.get("pipeline", {})
@@ -630,6 +686,7 @@ class PromptPackNormalizedJobBuilder:
             "animatediff": merged_config.get("animatediff"),
             "video_workflow": merged_config.get("video_workflow"),
             "aesthetic": merged_config.get("aesthetic"),
+            "style_lora": copy.deepcopy(resolved_style_lora) if resolved_style_lora else merged_config.get("style_lora"),
             "metadata": copy.deepcopy(record_metadata),
         }
         actors = record_metadata.get("actors") or []

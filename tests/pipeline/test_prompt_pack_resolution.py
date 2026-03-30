@@ -110,3 +110,45 @@ def test_resolve_from_pack_row_prepends_actor_tokens_and_actor_loras() -> None:
     assert result.positive.endswith(
         "<lora:shared_style:0.9> <lora:bran_lora:0.8> <lora:pack_style:0.7>"
     )
+
+
+def test_resolve_from_pack_row_appends_style_trigger_and_style_lora_after_pack_loras() -> None:
+    row = PackRow(
+        embeddings=(),
+        quality_line="cinematic quality",
+        subject_template="portrait on a rooftop",
+        lora_tags=(("pack_style", 0.7),),
+        negative_embeddings=(),
+        negative_phrases=(),
+    )
+    resolver = UnifiedPromptResolver(max_preview_length=200)
+    result = resolver.resolve_from_pack(
+        pack_row=row,
+        actor_resolutions=[
+            {
+                "name": "Ada",
+                "trigger_phrase": "ada person",
+                "lora_name": "ada_lora",
+                "weight": 0.9,
+            }
+        ],
+        style_lora={
+            "style_id": "cinematic_grit",
+            "trigger_phrase": "cinematic grit lighting",
+            "lora_name": "style_cinematic_grit",
+            "weight": 0.65,
+            "applied": True,
+        },
+        pack_negative="",
+        global_negative="",
+    )
+
+    assert "ada person, cinematic grit lighting" in result.positive
+    assert result.lora_tags == (
+        ("ada_lora", 0.9),
+        ("pack_style", 0.7),
+        ("style_cinematic_grit", 0.65),
+    )
+    assert result.positive.endswith(
+        "<lora:ada_lora:0.9> <lora:pack_style:0.7> <lora:style_cinematic_grit:0.65>"
+    )

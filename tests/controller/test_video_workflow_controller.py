@@ -76,3 +76,64 @@ def test_submit_video_workflow_job_builds_queue_backed_reprocess_njr(tmp_path: P
     assert njr.continuity_link["pack_id"] == "cont-001"
     assert request.prompt_pack_id == "video_workflow"
     assert "video_workflow" in request.tags
+
+
+def test_conditioned_video_workflow_requires_depth_input_mode(tmp_path: Path) -> None:
+    source = tmp_path / "source.png"
+    end = tmp_path / "end.png"
+    for path in (source, end):
+        path.write_bytes(b"png")
+
+    controller = VideoWorkflowController(
+        app_controller=SimpleNamespace(job_service=_JobServiceStub(), output_dir=str(tmp_path / "output"))
+    )
+
+    valid, reason = controller.validate_form_data(
+        {
+            "workflow_id": "ltx_multiframe_anchor_v1_conditioned",
+            "workflow_version": "1.0.0",
+            "end_anchor_path": str(end),
+            "camera_intent": {"preset": "dolly_in", "strength": 0.4},
+            "controlnet": {"model": "depth", "weight": 0.9, "guidance_start": 0.1, "guidance_end": 0.9},
+            "depth_input": {"mode": "none", "path": ""},
+        }
+    )
+
+    assert valid is False
+    assert "requires depth_input.mode" in str(reason)
+
+
+def test_submit_conditioned_video_workflow_job_carries_conditioning_payload(tmp_path: Path) -> None:
+    source = tmp_path / "source.png"
+    end = tmp_path / "end.png"
+    depth = tmp_path / "depth.png"
+    for path in (source, end, depth):
+        path.write_bytes(b"png")
+
+    job_service = _JobServiceStub()
+    controller = VideoWorkflowController(
+        app_controller=SimpleNamespace(job_service=job_service, output_dir=str(tmp_path / "output"))
+    )
+
+    job_id = controller.submit_video_workflow_job(
+        source_image_path=source,
+        form_data={
+            "workflow_id": "ltx_multiframe_anchor_v1_conditioned",
+            "workflow_version": "1.0.0",
+            "end_anchor_path": str(end),
+            "prompt": "prompt text",
+            "negative_prompt": "negative text",
+            "motion_profile": "balanced",
+            "camera_intent": {"preset": "dolly_in", "strength": 0.4},
+            "controlnet": {"model": "depth", "weight": 0.9, "guidance_start": 0.1, "guidance_end": 0.9},
+            "depth_input": {"mode": "upload", "path": str(depth)},
+            "output_route": "Testing",
+        },
+    )
+
+    assert job_id == "job-video-queued"
+    njr = job_service.calls[0][0][0]
+    assert njr.config["video_workflow"]["camera_intent"]["preset"] == "dolly_in"
+    assert njr.config["video_workflow"]["controlnet"]["weight"] == 0.9
+    assert njr.config["video_workflow"]["depth_input"]["path"] == str(depth)
+    assert njr.extra_metadata["video_workflow"]["depth_input"]["mode"] == "upload"

@@ -18,6 +18,7 @@ CONFIG_CONTRACT_SCHEMA_V26 = "stablenew.config.v2.6"
 _EXECUTION_HINT_KEYS = {
     "prompt",
     "negative_prompt",
+    "style_lora",
     "model",
     "model_name",
     "sampler",
@@ -463,6 +464,45 @@ def canonicalize_backend_options(
     return derive_backend_options(execution_config)
 
 
+def validate_style_lora_execution_config(value: Any) -> dict[str, Any]:
+    data = _mapping_dict(value)
+    nested = isinstance(data.get("style_lora"), Mapping)
+    payload = _mapping_dict(data.get("style_lora")) if nested else data
+    if not payload:
+        return data
+
+    normalized: dict[str, Any] = dict(payload)
+    normalized["enabled"] = bool(payload.get("enabled", True))
+    style_id = str(
+        payload.get("style_id")
+        or payload.get("id")
+        or payload.get("name")
+        or ""
+    ).strip()
+    if normalized["enabled"] and not style_id:
+        raise ValueError("style_lora.style_id is required when style_lora is enabled")
+    if style_id:
+        normalized["style_id"] = style_id
+
+    if normalized["enabled"] and payload.get("weight") not in (None, ""):
+        normalized["weight"] = _coerce_svd_float(
+            payload.get("weight"),
+            field_name="style_lora.weight",
+            minimum=0.0,
+        )
+
+    for field_name in ("file_path", "lora_name", "trigger_phrase"):
+        if payload.get(field_name) in (None, ""):
+            normalized.pop(field_name, None)
+            continue
+        normalized[field_name] = str(payload.get(field_name)).strip()
+
+    if nested:
+        data["style_lora"] = normalized
+        return data
+    return normalized
+
+
 @dataclass(frozen=True, slots=True)
 class CanonicalConfigLayers:
     intent_config: dict[str, Any] = field(default_factory=dict)
@@ -537,6 +577,7 @@ __all__ = [
     "extract_plan_origin_linkage",
     "extract_execution_config",
     "is_layered_config",
+    "validate_style_lora_execution_config",
     "validate_train_lora_execution_config",
     "validate_svd_native_execution_config",
 ]

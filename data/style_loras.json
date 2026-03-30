@@ -1,0 +1,26 @@
+{
+  "styles": [
+    {
+      "style_id": "cinematic_grit",
+      "display_name": "Cinematic Grit",
+      "trigger_phrase": "cinematic grit, practical lighting, textured film grain",
+      "lora_name": "style_cinematic_grit",
+      "weight": 0.65,
+      "compatible_model_families": [
+        "sdxl"
+      ],
+      "notes": "Example catalog entry. Install the matching LoRA in your WebUI models/Lora directory to activate it."
+    },
+    {
+      "style_id": "storybook_painterly",
+      "display_name": "Storybook Painterly",
+      "trigger_phrase": "storybook painterly brushwork, illustrated depth, soft pigments",
+      "lora_name": "style_storybook_painterly",
+      "weight": 0.6,
+      "compatible_model_families": [
+        "sdxl"
+      ],
+      "notes": "Curated style example for pack-level consistency testing and UI selection."
+    }
+  ]
+}

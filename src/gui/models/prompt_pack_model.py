@@ -91,6 +91,11 @@ class PromptPackModel:
         slots = [PromptSlot(index=i, text="", negative="") for i in range(slot_count)]
         return cls(name=name, slots=slots)
 
+    @staticmethod
+    def _reindex_slots(slots: list[PromptSlot]) -> None:
+        for index, slot in enumerate(slots):
+            slot.index = index
+
     @classmethod
     def load_from_file(cls, path: str | Path, min_slots: int = 10) -> PromptPackModel:
         """Load from unified JSON format; supports legacy formats with backward compat."""
@@ -127,6 +132,8 @@ class PromptPackModel:
             slot_index = int(slot.get("index", idx))
             if slot_index < 0:
                 slot_index = idx
+            if slot_index in indexed_slots:
+                slot_index = idx
             max_index = max(max_index, slot_index)
             indexed_slots[slot_index] = PromptSlot(
                 index=slot_index,
@@ -143,6 +150,7 @@ class PromptPackModel:
             indexed_slots.get(index, PromptSlot(index=index, text="", negative=""))
             for index in range(slot_count)
         ]
+        cls._reindex_slots(slots)
         
         # Load matrix config (backward compatible)
         matrix_slots = []
@@ -167,6 +175,7 @@ class PromptPackModel:
     def save_to_file(self, path: str | Path | None = None) -> Path:
         """Persist to unified JSON format with matrix and preset data; auto-export TXT if in packs/ folder."""
         target = Path(path or self.path or f"{self.name}.json")
+        self._reindex_slots(self.slots)
         
         # Filter out empty padding slots (keep only slots with content)
         non_empty_slots = [
@@ -184,7 +193,7 @@ class PromptPackModel:
             "name": self.name,
             "slots": [
                 {
-                    "index": slot.index,
+                    "index": index,
                     "text": slot.text,
                     "negative": getattr(slot, "negative", ""),
                     "template_id": getattr(slot, "template_id", ""),
@@ -195,7 +204,7 @@ class PromptPackModel:
                     "negative_embeddings": serialize_embedding_entries(getattr(slot, "negative_embeddings", [])),
                     "loras": [[name, weight] for name, weight in getattr(slot, "loras", [])]
                 }
-                for slot in non_empty_slots
+                for index, slot in enumerate(non_empty_slots)
             ],
             "matrix": {
                 "enabled": self.matrix.enabled,

@@ -39,7 +39,8 @@ def test_pipeline_tab_three_column_layout_v2() -> None:
         assert isinstance(getattr(pipeline_tab, "sidebar", None), SidebarPanelV2)
         assert isinstance(getattr(pipeline_tab, "stage_cards_panel", None), StageCardsPanel)
         assert isinstance(getattr(pipeline_tab, "preview_panel", None), PreviewPanelV2)
-        assert pipeline_tab.rowconfigure(0)["weight"] == 1
+        assert pipeline_tab.rowconfigure(0)["weight"] == 0
+        assert pipeline_tab.rowconfigure(1)["weight"] == 1
         for idx in range(3):
             column_info = pipeline_tab.columnconfigure(idx)
             assert column_info["weight"] == 1

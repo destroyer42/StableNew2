@@ -42,6 +42,7 @@ from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
+from src.training.style_lora_manager import ResolvedStyleLoRA, StyleLoRAManager
 from src.utils.config import ConfigManager
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
@@ -99,6 +100,15 @@ class PromptTabFrame(ttk.Frame):
         self._prompt_template_lookup = {
             definition.id: definition for definition in self._prompt_templates
         }
+        self._style_lora_manager = StyleLoRAManager()
+        self._style_lora_guard = False
+        self._style_lora_none_label = "(None)"
+        self._style_choice_to_id: dict[str, str] = {self._style_lora_none_label: ""}
+        self._style_id_to_choice: dict[str, str] = {"": self._style_lora_none_label}
+        for definition in self._style_lora_manager.list_styles():
+            choice = f"{definition.display_name} [{definition.style_id}]"
+            self._style_choice_to_id[choice] = definition.style_id
+            self._style_id_to_choice[definition.style_id] = choice
 
         configure_grid_columns(self, get_prompt_tab_column_specs())
         self.rowconfigure(0, weight=1)
@@ -617,6 +627,43 @@ class PromptTabFrame(ttk.Frame):
         )
         self.summary_label.pack(anchor="w", pady=(0, 6))
 
+        style_frame = ttk.LabelFrame(self.right_frame, text="Style Consistency LoRA", padding=6)
+        style_frame.pack(fill="x", pady=(0, 6))
+        style_frame.columnconfigure(0, weight=1)
+
+        style_selector_row = ttk.Frame(style_frame)
+        style_selector_row.pack(fill="x", pady=(0, 4))
+        style_selector_row.columnconfigure(0, weight=1)
+
+        self.style_lora_var = tk.StringVar(value=self._style_lora_none_label)
+        self.style_lora_combo = ttk.Combobox(
+            style_selector_row,
+            textvariable=self.style_lora_var,
+            values=list(self._style_choice_to_id.keys()),
+            state="readonly",
+        )
+        self.style_lora_combo.grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        self.style_lora_combo.bind("<<ComboboxSelected>>", self._on_style_lora_selection_changed)
+        attach_tooltip(
+            self.style_lora_combo,
+            "Apply one curated style LoRA to the whole pack. StableNew adds the style trigger phrase and LoRA token during prompt resolution.",
+        )
+
+        ttk.Button(
+            style_selector_row,
+            text="Clear",
+            command=self._clear_style_lora_selection,
+            width=6,
+        ).grid(row=0, column=1, sticky="e")
+
+        self.style_lora_status_var = tk.StringVar(value="No pack-level style LoRA selected.")
+        ttk.Label(
+            style_frame,
+            textvariable=self.style_lora_status_var,
+            justify="left",
+            wraplength=320,
+        ).pack(fill="x")
+
         optimizer_frame = ttk.LabelFrame(self.right_frame, text="Prompt Optimizer", padding=6)
         optimizer_frame.pack(fill="x", pady=(0, 6))
         self._build_prompt_optimizer_panel(optimizer_frame)
@@ -633,6 +680,95 @@ class PromptTabFrame(ttk.Frame):
             relief="solid"
         )
         self.meta_text.pack(fill="both", expand=True)
+
+    def _current_style_base_model(self) -> str | None:
+        pack = self.workspace_state.current_pack
+        if pack is None:
+            return None
+        preset_data = getattr(pack, "preset_data", {}) or {}
+        if not isinstance(preset_data, dict):
+            return None
+        txt2img = preset_data.get("txt2img")
+        if isinstance(txt2img, dict):
+            model_name = str(txt2img.get("model") or txt2img.get("model_name") or "").strip()
+            if model_name:
+                return model_name
+        model_name = str(preset_data.get("model") or preset_data.get("model_name") or "").strip()
+        return model_name or None
+
+    def _resolve_selected_style_lora(self) -> ResolvedStyleLoRA | None:
+        style_config: dict[str, object] = self.workspace_state.get_pack_style_lora_config()
+        if not style_config:
+            return None
+        return self._style_lora_manager.resolve_selection(
+            style_config,
+            base_model=self._current_style_base_model(),
+        )
+
+    def _sync_style_lora_controls(self) -> None:
+        style_config: dict[str, object] = self.workspace_state.get_pack_style_lora_config()
+        style_id = str(style_config.get("style_id") or "").strip()
+        combo_value = self._style_id_to_choice.get(style_id)
+        if combo_value is None:
+            combo_value = f"{style_id} [missing from catalog]" if style_id else self._style_lora_none_label
+        self._style_lora_guard = True
+        try:
+            self.style_lora_var.set(combo_value)
+        finally:
+            self._style_lora_guard = False
+        self._refresh_style_lora_status()
+
+    def _refresh_style_lora_status(self) -> None:
+        style_config: dict[str, object] = self.workspace_state.get_pack_style_lora_config()
+        if not style_config:
+            if len(self._style_choice_to_id) <= 1:
+                self.style_lora_status_var.set(
+                    "No style LoRAs are cataloged yet. Add entries to data/style_loras.json to enable pack-level styles."
+                )
+            else:
+                self.style_lora_status_var.set("No pack-level style LoRA selected.")
+            return
+
+        resolved = self._resolve_selected_style_lora()
+        if resolved is None:
+            self.style_lora_status_var.set("No pack-level style LoRA selected.")
+            return
+        if resolved.applied:
+            self.style_lora_status_var.set(
+                f"{resolved.display_name}: adds '{resolved.trigger_phrase}' and <lora:{resolved.lora_name}:{resolved.weight:g}> to every generated prompt."
+            )
+            return
+        self.style_lora_status_var.set(
+            resolved.warning or f"{resolved.display_name} is selected but currently inactive."
+        )
+
+    def _on_style_lora_selection_changed(self, _event: object | None = None) -> None:
+        if self._style_lora_guard:
+            return
+        selected_id = self._style_choice_to_id.get(self.style_lora_var.get(), "")
+        if selected_id:
+            self.workspace_state.set_pack_style_lora_config(
+                {
+                    "enabled": True,
+                    "style_id": selected_id,
+                }
+            )
+        else:
+            self.workspace_state.set_pack_style_lora_config(None)
+        self._mark_pack_modified()
+        self._refresh_style_lora_status()
+        self._refresh_metadata()
+
+    def _clear_style_lora_selection(self) -> None:
+        self._style_lora_guard = True
+        try:
+            self.style_lora_var.set(self._style_lora_none_label)
+        finally:
+            self._style_lora_guard = False
+        self.workspace_state.set_pack_style_lora_config(None)
+        self._mark_pack_modified()
+        self._refresh_style_lora_status()
+        self._refresh_metadata()
 
     def _build_prompt_optimizer_vars(self) -> dict[str, tk.Variable]:
         defaults = dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS)
@@ -658,7 +794,7 @@ class PromptTabFrame(ttk.Frame):
             "subject_anchor_boost_min_chunk_count": tk.IntVar(value=int(defaults["subject_anchor_boost_min_chunk_count"])),
         }
 
-    def _build_prompt_optimizer_panel(self, parent: ttk.Frame) -> None:
+    def _build_prompt_optimizer_panel(self, parent: tk.Misc) -> None:
         parent.columnconfigure(0, weight=1)
         parent.columnconfigure(1, weight=1)
         checkbox_specs = [
@@ -838,6 +974,7 @@ class PromptTabFrame(ttk.Frame):
                 self.matrix_tab_panel.refresh()
 
             self._sync_template_controls()
+            self._sync_style_lora_controls()
             
             # Apply highlighting and update quick insert buttons
             self._highlight_matrix_tokens()
@@ -950,6 +1087,7 @@ class PromptTabFrame(ttk.Frame):
         
         # Build preview sections
         dirty = " (modified)" if self.workspace_state.dirty else ""
+        resolved_style_lora = self._resolve_selected_style_lora()
         preview_lines = [
             f"Pack: {pack.name if pack else 'None'}{dirty}",
             f"Slot: {slot_index + 1}",
@@ -982,6 +1120,9 @@ class PromptTabFrame(ttk.Frame):
                     preview_lines.append(f"  {key}: {value or '(empty)'}")
             preview_lines.append("")
 
+        if resolved_style_lora and resolved_style_lora.applied and resolved_style_lora.trigger_phrase:
+            preview_lines.append(f"Style Trigger: {resolved_style_lora.trigger_phrase}")
+
         # Positive prompt
         positive_text = resolver.redact_text(
             self.workspace_state.get_current_prompt_text().strip(),
@@ -1002,7 +1143,19 @@ class PromptTabFrame(ttk.Frame):
                     lora_line_parts.append(f"<lora:{lora_name}:{lora_weight}>")
                 elif self._content_visibility_mode == "sfw":
                     lora_line_parts.append(f"<lora:{REDACTED_TEXT}:{lora_weight}>")
+            if resolved_style_lora and resolved_style_lora.applied:
+                lora_line_parts.append(
+                    f"<lora:{resolved_style_lora.lora_name}:{resolved_style_lora.weight:g}>"
+                )
             preview_lines.append(" ".join(lora_line_parts))
+        elif resolved_style_lora and resolved_style_lora.applied:
+            preview_lines.append(
+                f"<lora:{resolved_style_lora.lora_name}:{resolved_style_lora.weight:g}>"
+            )
+
+        if resolved_style_lora and not resolved_style_lora.applied and resolved_style_lora.warning:
+            preview_lines.append("")
+            preview_lines.append(f"Style LoRA Warning: {resolved_style_lora.warning}")
         
         preview_lines.append("")
         
@@ -1031,7 +1184,7 @@ class PromptTabFrame(ttk.Frame):
             "━━━ STATISTICS ━━━",
             f"Positive: {len(positive_text)} chars",
             f"Negative: {len(negative_text)} chars",
-            f"LoRAs: {len(current_slot.loras)}",
+            f"LoRAs: {len(current_slot.loras) + (1 if resolved_style_lora and resolved_style_lora.applied else 0)}",
             f"Pos Embeddings: {len(current_slot.positive_embeddings)}",
             f"Neg Embeddings: {len(current_slot.negative_embeddings)}",
         ])

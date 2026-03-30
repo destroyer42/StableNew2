@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 import tkinter as tk
 from collections.abc import Callable, Iterable
 from datetime import datetime
@@ -17,14 +18,16 @@ from src.utils.logger import normalize_log_message
 class LogTracePanelV2(ttk.Frame):
     """Collapsible panel that shows recent log entries."""
 
+    SLOW_REFRESH_THRESHOLD_MS = 25.0
+
     def __init__(
         self,
         master: tk.Misc,
         log_handler: InMemoryLogHandler,
-        *args: object,
+        *args: Any,
         on_generate_bundle: Callable[[], None] | None = None,
         audience: str = "trace",
-        **kwargs: object,
+        **kwargs: Any,
     ):
         super().__init__(master, *args, **kwargs)
         self._log_handler = log_handler
@@ -42,6 +45,17 @@ class LogTracePanelV2(ttk.Frame):
         self._last_filter_signature: tuple[str, str, str, str, str] | None = None
         self._render_entry_limit = 150 if audience == "operator" else 300
         self._deferred_refresh_id: str | None = None
+        self._refresh_metrics: dict[str, int | float] = {
+            "count": 0,
+            "total_ms": 0.0,
+            "max_ms": 0.0,
+            "last_ms": 0.0,
+            "slow_count": 0,
+            "append_only_count": 0,
+            "full_rebuild_count": 0,
+            "skipped_collapsed_count": 0,
+            "skipped_unchanged_count": 0,
+        }
 
         header = ttk.Frame(self)
         header.pack(side=tk.TOP, fill=tk.X)
@@ -213,7 +227,9 @@ class LogTracePanelV2(ttk.Frame):
         )
 
     def refresh(self, *, force: bool = False) -> None:
+        start = time.perf_counter()
         if not force and not self._expanded.get():
+            self._record_refresh_metric((time.perf_counter() - start) * 1000.0, skipped_collapsed=True)
             return
         filter_signature = self._current_filter_signature()
         log_version = self._log_handler.get_version()
@@ -222,6 +238,7 @@ class LogTracePanelV2(ttk.Frame):
             and log_version == self._last_log_version
             and filter_signature == self._last_filter_signature
         ):
+            self._record_refresh_metric((time.perf_counter() - start) * 1000.0, skipped_unchanged=True)
             return
         entries = list(self._log_handler.get_entries())
         filtered = self._apply_filter(entries)
@@ -240,23 +257,101 @@ class LogTracePanelV2(ttk.Frame):
         if rendered_lines == self._last_rendered_lines:
             self._last_log_version = log_version
             self._last_filter_signature = filter_signature
+            self._record_refresh_metric((time.perf_counter() - start) * 1000.0, skipped_unchanged=True)
             return
+        previous_lines = self._last_rendered_lines
+        append_only = (
+            filter_signature == self._last_filter_signature
+            and len(rendered_lines) >= len(previous_lines)
+            and rendered_lines[: len(previous_lines)] == previous_lines
+        )
         self._last_rendered_lines = rendered_lines
         self._last_log_version = log_version
         self._last_filter_signature = filter_signature
 
         current_yview = self._log_text.yview()
         self._log_text.config(state=tk.NORMAL)
-        self._log_text.delete(1.0, tk.END)
-        for level, line in lines:
-            tag = level if level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL") else "INFO"
-            self._log_text.insert(tk.END, f"{line}\n", tag)
+        if append_only:
+            for level, line in rendered_lines[len(previous_lines) :]:
+                tag = level if level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL") else "INFO"
+                self._log_text.insert(tk.END, f"{line}\n", tag)
+        else:
+            self._log_text.delete(1.0, tk.END)
+            for level, line in lines:
+                tag = level if level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL") else "INFO"
+                self._log_text.insert(tk.END, f"{line}\n", tag)
         self._log_text.config(state=tk.DISABLED)
 
         if self._auto_scroll.get():
             self._log_text.see(tk.END)
         else:
             self._log_text.yview_moveto(current_yview[0])
+        self._record_refresh_metric(
+            (time.perf_counter() - start) * 1000.0,
+            append_only=append_only,
+        )
+
+    def _record_refresh_metric(
+        self,
+        elapsed_ms: float,
+        *,
+        append_only: bool = False,
+        skipped_collapsed: bool = False,
+        skipped_unchanged: bool = False,
+    ) -> None:
+        self._refresh_metrics["count"] = int(self._refresh_metrics.get("count", 0) or 0) + 1
+        self._refresh_metrics["total_ms"] = (
+            float(self._refresh_metrics.get("total_ms", 0.0) or 0.0) + float(elapsed_ms)
+        )
+        self._refresh_metrics["last_ms"] = float(elapsed_ms)
+        self._refresh_metrics["max_ms"] = max(
+            float(self._refresh_metrics.get("max_ms", 0.0) or 0.0),
+            float(elapsed_ms),
+        )
+        if elapsed_ms >= float(self.SLOW_REFRESH_THRESHOLD_MS):
+            self._refresh_metrics["slow_count"] = (
+                int(self._refresh_metrics.get("slow_count", 0) or 0) + 1
+            )
+        if append_only:
+            self._refresh_metrics["append_only_count"] = (
+                int(self._refresh_metrics.get("append_only_count", 0) or 0) + 1
+            )
+        elif not skipped_collapsed and not skipped_unchanged:
+            self._refresh_metrics["full_rebuild_count"] = (
+                int(self._refresh_metrics.get("full_rebuild_count", 0) or 0) + 1
+            )
+        if skipped_collapsed:
+            self._refresh_metrics["skipped_collapsed_count"] = (
+                int(self._refresh_metrics.get("skipped_collapsed_count", 0) or 0) + 1
+            )
+        if skipped_unchanged:
+            self._refresh_metrics["skipped_unchanged_count"] = (
+                int(self._refresh_metrics.get("skipped_unchanged_count", 0) or 0) + 1
+            )
+
+    def get_diagnostics_snapshot(self) -> dict[str, float | int | bool | str]:
+        count = int(self._refresh_metrics.get("count", 0) or 0)
+        total_ms = float(self._refresh_metrics.get("total_ms", 0.0) or 0.0)
+        return {
+            "audience": self._audience,
+            "expanded": bool(self._expanded.get()),
+            "line_count": len(self._last_rendered_lines),
+            "render_limit": int(self._render_entry_limit),
+            "count": count,
+            "avg_ms": round(total_ms / count, 3) if count else 0.0,
+            "max_ms": round(float(self._refresh_metrics.get("max_ms", 0.0) or 0.0), 3),
+            "last_ms": round(float(self._refresh_metrics.get("last_ms", 0.0) or 0.0), 3),
+            "slow_count": int(self._refresh_metrics.get("slow_count", 0) or 0),
+            "append_only_count": int(self._refresh_metrics.get("append_only_count", 0) or 0),
+            "full_rebuild_count": int(self._refresh_metrics.get("full_rebuild_count", 0) or 0),
+            "skipped_collapsed_count": int(
+                self._refresh_metrics.get("skipped_collapsed_count", 0) or 0
+            ),
+            "skipped_unchanged_count": int(
+                self._refresh_metrics.get("skipped_unchanged_count", 0) or 0
+            ),
+            "slow_threshold_ms": float(self.SLOW_REFRESH_THRESHOLD_MS),
+        }
 
     def schedule_refresh_soon(self, delay_ms: int = 125) -> None:
         """Coalesce bursty refresh requests into a single near-term repaint."""
@@ -281,9 +376,10 @@ class LogTracePanelV2(ttk.Frame):
         if not payload_text:
             return None
         try:
-            return json.loads(payload_text)
+            parsed = json.loads(payload_text)
         except json.JSONDecodeError:
             return None
+        return parsed if isinstance(parsed, dict) else None
 
     def _format_line(
         self,

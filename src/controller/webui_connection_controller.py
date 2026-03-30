@@ -16,9 +16,11 @@ from src.api.webui_process_manager import (
     build_default_webui_process_config,
 )
 from src.config import app_config
+from src.utils import LogContext, log_with_ctx
 
 STRICT_READY_CACHE_TTL = 2.5
 HEALTH_PROBE_TIMEOUT = (0.25, 1.0)
+READINESS_TIMING_WARN_MS = 1000.0
 
 
 class WebUIConnectionState(Enum):
@@ -53,6 +55,59 @@ class WebUIConnectionController:
         self._last_strict_status = False
         self._last_strict_reason: str | None = None
         self._strict_cache_ttl = STRICT_READY_CACHE_TTL
+        self._last_connection_timing: dict[str, object] | None = None
+
+    def _record_connection_timing(
+        self,
+        *,
+        base_url: str,
+        autostart: bool,
+        total_elapsed_ms: float,
+        fast_probe_elapsed_ms: float,
+        retry_attempts_used: int,
+        warmup_requested_ms: float,
+        autostart_invoked: bool,
+        state: WebUIConnectionState,
+        autostart_elapsed_ms: float | None = None,
+        autodetect_elapsed_ms: float | None = None,
+        detected_url: str | None = None,
+        error: str | None = None,
+    ) -> None:
+        payload: dict[str, object] = {
+            "base_url": base_url,
+            "autostart": bool(autostart),
+            "autostart_invoked": bool(autostart_invoked),
+            "state": state.value,
+            "total_elapsed_ms": round(float(total_elapsed_ms), 3),
+            "fast_probe_elapsed_ms": round(float(fast_probe_elapsed_ms), 3),
+            "retry_attempts_used": int(retry_attempts_used),
+            "warmup_requested_ms": round(float(warmup_requested_ms), 3),
+            "error": error,
+        }
+        if autostart_elapsed_ms is not None:
+            payload["autostart_elapsed_ms"] = round(float(autostart_elapsed_ms), 3)
+        if autodetect_elapsed_ms is not None:
+            payload["autodetect_elapsed_ms"] = round(float(autodetect_elapsed_ms), 3)
+        if detected_url:
+            payload["detected_url"] = detected_url
+        self._last_connection_timing = payload
+        level = (
+            logging.WARNING
+            if state is WebUIConnectionState.ERROR or total_elapsed_ms >= READINESS_TIMING_WARN_MS
+            else logging.INFO
+        )
+        log_with_ctx(
+            self._logger,
+            level,
+            "WebUI readiness timing",
+            ctx=LogContext(subsystem="webui_connection"),
+            extra_fields=payload,
+        )
+
+    def get_last_connection_timing_snapshot(self) -> dict[str, object] | None:
+        if isinstance(self._last_connection_timing, dict):
+            return dict(self._last_connection_timing)
+        return None
 
     def get_state(self) -> WebUIConnectionState:
         return self._state
@@ -95,6 +150,16 @@ class WebUIConnectionController:
         retry_interval = app_config.get_webui_health_retry_interval_seconds()
         total_timeout = app_config.get_webui_health_total_timeout_seconds()
         autostart_enabled = app_config.get_webui_autostart_enabled()
+        overall_started_at = time.monotonic()
+        fast_probe_started_at = time.monotonic()
+        fast_probe_elapsed_ms = 0.0
+        retry_attempts_used = 0
+        warmup_requested_ms = 0.0
+        autostart_invoked = False
+        autostart_elapsed_ms: float | None = None
+        autodetect_elapsed_ms: float | None = None
+        detected_url: str | None = None
+        last_error: str | None = None
 
         # fast probe
         self._set_state(WebUIConnectionState.CONNECTING)
@@ -105,16 +170,41 @@ class WebUIConnectionController:
                 self._set_state(WebUIConnectionState.READY)
                 self._logger.debug("WebUI models/options are ready at %s", base_url)
                 self._notify_ready()
+                fast_probe_elapsed_ms = (time.monotonic() - fast_probe_started_at) * 1000.0
+                self._record_connection_timing(
+                    base_url=base_url,
+                    autostart=autostart,
+                    total_elapsed_ms=(time.monotonic() - overall_started_at) * 1000.0,
+                    fast_probe_elapsed_ms=fast_probe_elapsed_ms,
+                    retry_attempts_used=retry_attempts_used,
+                    warmup_requested_ms=warmup_requested_ms,
+                    autostart_invoked=autostart_invoked,
+                    state=self._state,
+                )
                 return self._state
-        except Exception:
-            pass
+        except Exception as exc:
+            last_error = str(exc)
+        fast_probe_elapsed_ms = (time.monotonic() - fast_probe_started_at) * 1000.0
 
         if not autostart or not autostart_enabled:
             self._set_state(WebUIConnectionState.ERROR)
+            self._record_connection_timing(
+                base_url=base_url,
+                autostart=autostart,
+                total_elapsed_ms=(time.monotonic() - overall_started_at) * 1000.0,
+                fast_probe_elapsed_ms=fast_probe_elapsed_ms,
+                retry_attempts_used=retry_attempts_used,
+                warmup_requested_ms=warmup_requested_ms,
+                autostart_invoked=autostart_invoked,
+                state=self._state,
+                error=last_error,
+            )
             return self._state
 
         # attempt autostart
         try:
+            autostart_invoked = True
+            autostart_started_at = time.monotonic()
             proc_cfg = build_default_webui_process_config()
             if proc_cfg is None:
                 raise RuntimeError("No WebUI process config available")
@@ -122,15 +212,30 @@ class WebUIConnectionController:
             self._process_manager = manager
             manager.start()
             self._process_pid = manager.pid
+            autostart_elapsed_ms = (time.monotonic() - autostart_started_at) * 1000.0
         except Exception as exc:  # pragma: no cover - surface as error state
             self._logger.warning("WebUI autostart failed: %s", exc)
             self._set_state(WebUIConnectionState.ERROR)
+            self._record_connection_timing(
+                base_url=base_url,
+                autostart=autostart,
+                total_elapsed_ms=(time.monotonic() - overall_started_at) * 1000.0,
+                fast_probe_elapsed_ms=fast_probe_elapsed_ms,
+                retry_attempts_used=retry_attempts_used,
+                warmup_requested_ms=warmup_requested_ms,
+                autostart_invoked=autostart_invoked,
+                state=self._state,
+                autostart_elapsed_ms=autostart_elapsed_ms,
+                error=str(exc),
+            )
             return self._state
 
         # wait a bit before retries
+        warmup_requested_ms = min(10.0, total_timeout) * 1000.0
         time.sleep(min(10.0, total_timeout))
 
         for _ in range(max(retry_count, 0)):
+            retry_attempts_used += 1
             try:
                 if wait_for_webui_ready(
                     base_url, timeout=retry_interval, poll_interval=retry_interval
@@ -138,10 +243,22 @@ class WebUIConnectionController:
                     self._set_state(WebUIConnectionState.READY)
                     self._logger.debug("WebUI models/options are ready at %s", base_url)
                     self._notify_ready()
+                    self._record_connection_timing(
+                        base_url=base_url,
+                        autostart=autostart,
+                        total_elapsed_ms=(time.monotonic() - overall_started_at) * 1000.0,
+                        fast_probe_elapsed_ms=fast_probe_elapsed_ms,
+                        retry_attempts_used=retry_attempts_used,
+                        warmup_requested_ms=warmup_requested_ms,
+                        autostart_invoked=autostart_invoked,
+                        state=self._state,
+                        autostart_elapsed_ms=autostart_elapsed_ms,
+                    )
                     return self._state
-            except WebUIHealthCheckTimeout:
-                pass
+            except WebUIHealthCheckTimeout as exc:
+                last_error = str(exc)
             except Exception as exc:  # pragma: no cover
+                last_error = str(exc)
                 self._logger.debug("WebUI probe failed: %s", exc)
             time.sleep(retry_interval)
 
@@ -149,7 +266,9 @@ class WebUIConnectionController:
         self._logger.info("Trying to auto-detect WebUI on other ports...")
         from src.api.healthcheck import find_webui_port
 
+        autodetect_started_at = time.monotonic()
         detected_url = find_webui_port()
+        autodetect_elapsed_ms = (time.monotonic() - autodetect_started_at) * 1000.0
         if detected_url and detected_url != base_url:
             self._logger.info(f"Found WebUI on different port: {detected_url}")
             # Update the base_url_provider to use the detected URL
@@ -159,11 +278,39 @@ class WebUIConnectionController:
                     self._set_state(WebUIConnectionState.READY)
                     self._logger.debug("WebUI models/options are ready at %s", detected_url)
                     self._notify_ready()
+                    self._record_connection_timing(
+                        base_url=base_url,
+                        autostart=autostart,
+                        total_elapsed_ms=(time.monotonic() - overall_started_at) * 1000.0,
+                        fast_probe_elapsed_ms=fast_probe_elapsed_ms,
+                        retry_attempts_used=retry_attempts_used,
+                        warmup_requested_ms=warmup_requested_ms,
+                        autostart_invoked=autostart_invoked,
+                        state=self._state,
+                        autostart_elapsed_ms=autostart_elapsed_ms,
+                        autodetect_elapsed_ms=autodetect_elapsed_ms,
+                        detected_url=detected_url,
+                    )
                     return self._state
             except Exception as e:
+                last_error = str(e)
                 self._logger.warning(f"Failed to connect to detected WebUI: {e}")
 
         self._set_state(WebUIConnectionState.ERROR)
+        self._record_connection_timing(
+            base_url=base_url,
+            autostart=autostart,
+            total_elapsed_ms=(time.monotonic() - overall_started_at) * 1000.0,
+            fast_probe_elapsed_ms=fast_probe_elapsed_ms,
+            retry_attempts_used=retry_attempts_used,
+            warmup_requested_ms=warmup_requested_ms,
+            autostart_invoked=autostart_invoked,
+            state=self._state,
+            autostart_elapsed_ms=autostart_elapsed_ms,
+            autodetect_elapsed_ms=autodetect_elapsed_ms,
+            detected_url=detected_url,
+            error=last_error,
+        )
         return self._state
 
     def get_base_url(self) -> str:

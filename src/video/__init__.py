@@ -13,6 +13,12 @@ from src.video.comfy_process_manager import (
     get_global_comfy_process_manager,
 )
 from src.video.comfy_workflow_backend import ComfyWorkflowVideoBackend
+from src.video.depth_map_resolver import (
+    DEFAULT_DEPTH_ESTIMATOR_MODEL_ID,
+    DepthMapResolver,
+    DepthResolutionResult,
+    VALID_DEPTH_INPUT_MODES,
+)
 from src.video.svd_config import SVDConfig, SVDInferenceConfig, SVDOutputConfig, SVDPreprocessConfig
 from src.video.svd_native_backend import SVDNativeVideoBackend
 from src.video.svd_runner import SVDRunner
@@ -51,7 +57,10 @@ __all__ = [
     "ComfyStartupError",
     "ComfyWorkflowVideoBackend",
     "CompiledWorkflowRequest",
+    "DEFAULT_DEPTH_ESTIMATOR_MODEL_ID",
     "DependencyProbeResult",
+    "DepthMapResolver",
+    "DepthResolutionResult",
     "SVDConfig",
     "SVDInferenceConfig",
     "SVDNativeVideoBackend",
@@ -64,6 +73,7 @@ __all__ = [
     "VideoBackendRegistry",
     "VideoExecutionRequest",
     "VideoExecutionResult",
+    "VALID_DEPTH_INPUT_MODES",
     "WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED",
     "WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO",
     "WORKFLOW_CAP_SEGMENT_STITCHABLE",

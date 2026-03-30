@@ -78,3 +78,22 @@ def test_ensure_connected_does_not_mark_ready_when_healthcheck_times_out(monkeyp
     assert state == WebUIConnectionState.ERROR
     assert not fake_pm.return_value.start.called
     assert len(calls) == 1
+
+
+def test_ensure_connected_records_timing_snapshot(monkeypatch):
+    ctrl, calls, fake_pm = _build_controller(
+        monkeypatch,
+        [WebUIHealthCheckTimeout("timeout"), True],
+        retry_count=1,
+    )
+
+    state = ctrl.ensure_connected(autostart=True)
+    timing = ctrl.get_last_connection_timing_snapshot()
+
+    assert state == WebUIConnectionState.READY
+    assert timing is not None
+    assert timing["state"] == "ready"
+    assert timing["autostart_invoked"] is True
+    assert timing["retry_attempts_used"] == 1
+    assert timing["fast_probe_elapsed_ms"] >= 0.0
+    assert timing["total_elapsed_ms"] >= 0.0

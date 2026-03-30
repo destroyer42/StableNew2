@@ -116,6 +116,7 @@ class AppStateV2:
             "runtime_status",
             "queue_status",
             "queue_items",
+            "queue_jobs",
             "history_items",
             "preview_jobs",
             "operator_log",

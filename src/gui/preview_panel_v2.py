@@ -747,6 +747,11 @@ class PreviewPanelV2(ttk.Frame):
 
     def _on_details_clicked(self) -> None:
         """Show detailed information about the preview jobs."""
+        if not self._job_summaries and self.app_state is None:
+            show_log_trace_panel = getattr(self.controller, "show_log_trace_panel", None)
+            if callable(show_log_trace_panel):
+                show_log_trace_panel()
+                return
         self._show_preview_details()
 
     def _update_action_states(
@@ -1215,7 +1220,7 @@ class PreviewPanelV2(ttk.Frame):
         if request_key != current_key or not self._show_preview_var.get():
             return
         try:
-            if not self.winfo_ismapped():
+            if not self.winfo_exists():
                 return
         except Exception:
             pass

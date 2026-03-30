@@ -6,6 +6,8 @@
         "index": 0,
         "text": "(masterpiece, best quality), a [[job]] in [[environment]], highly detailed",
         "negative": "bad quality, blurry, watermark, signature",
+        "template_id": "",
+        "template_variables": {},
         "positive_embeddings": [
           "BadDream",
           "UnrealisticDream"

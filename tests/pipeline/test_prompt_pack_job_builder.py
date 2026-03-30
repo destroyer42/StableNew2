@@ -10,6 +10,7 @@ from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.prompt_pack_parser import parse_prompt_pack_text
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 from src.training.lora_manager import LoRAManager
+from src.training.style_lora_manager import StyleLoRAManager
 from src.utils.config import ConfigManager
 from src.utils.prompt_pack_utils import load_pack_metadata
 
@@ -545,3 +546,95 @@ def test_prompt_pack_job_builder_injects_actor_tokens_and_actor_loras_from_plan_
     assert record.extra_metadata["actors"][0]["trigger_phrase"] == "ada person"
     assert record.extra_metadata["plan_origin"]["shot_id"] == "shot-001"
     assert record.intent_config["plan_origin"]["actors"][0]["character_name"] == "Ada"
+
+
+def _write_style_catalog(tmp_path: Path, *, missing_file: bool = False) -> tuple[Path, Path]:
+    weight_path = tmp_path / "style_cinematic_grit.safetensors"
+    if not missing_file:
+        weight_path.write_bytes(b"style")
+    catalog_path = tmp_path / "style_loras.json"
+    catalog_path.write_text(
+        json.dumps(
+            {
+                "styles": [
+                    {
+                        "style_id": "cinematic_grit",
+                        "display_name": "Cinematic Grit",
+                        "trigger_phrase": "cinematic grit lighting",
+                        "lora_name": "style_cinematic_grit",
+                        "weight": 0.65,
+                        "file_path": str(weight_path),
+                        "compatible_model_families": ["sdxl"],
+                    }
+                ]
+            }
+        ),
+        encoding="utf-8",
+    )
+    return catalog_path, weight_path
+
+
+def test_prompt_pack_job_builder_applies_pack_level_style_lora(tmp_path: Path) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    config_manager._config["style_lora"] = {"enabled": True, "style_id": "cinematic_grit"}
+    config_manager._config["txt2img"]["model"] = "juggernautXL.safetensors"
+    catalog_path, _weight_path = _write_style_catalog(tmp_path)
+
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=config_manager,
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+        style_lora_manager=StyleLoRAManager(catalog_path=catalog_path, webui_root=None),
+    )
+    entry = PackJobEntry(
+        pack_id="styled-pack",
+        pack_name="Styled Pack",
+        prompt_text="A portrait at dusk",
+        config_snapshot={},
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+        matrix_slot_values={},
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert records
+    record = records[0]
+    assert "cinematic grit lighting" in record.positive_prompt
+    assert record.lora_tags[-1].name == "style_cinematic_grit"
+    assert record.lora_tags[-1].weight == 0.65
+    assert record.extra_metadata["style_lora"]["style_id"] == "cinematic_grit"
+    assert record.extra_metadata["style_lora"]["applied"] is True
+    assert record.config["style_lora"]["applied"] is True
+
+
+def test_prompt_pack_job_builder_warns_when_pack_level_style_lora_is_unavailable(tmp_path: Path) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    config_manager._config["style_lora"] = {"enabled": True, "style_id": "cinematic_grit"}
+    config_manager._config["txt2img"]["model"] = "juggernautXL.safetensors"
+    catalog_path, _weight_path = _write_style_catalog(tmp_path, missing_file=True)
+
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=config_manager,
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+        style_lora_manager=StyleLoRAManager(catalog_path=catalog_path, webui_root=None),
+    )
+    entry = PackJobEntry(
+        pack_id="styled-pack",
+        pack_name="Styled Pack",
+        prompt_text="A portrait at dusk",
+        config_snapshot={},
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+        matrix_slot_values={},
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert records
+    record = records[0]
+    assert "cinematic grit lighting" not in record.positive_prompt
+    assert all(tag.name != "style_cinematic_grit" for tag in record.lora_tags)
+    assert record.extra_metadata["style_lora"]["applied"] is False
+    assert "missing weight file" in str(record.extra_metadata["style_lora"]["warning"])

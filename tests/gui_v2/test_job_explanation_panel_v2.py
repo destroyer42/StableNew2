@@ -67,3 +67,43 @@ def test_job_explanation_panel_handles_missing_metadata(tmp_path, tk_root):
     assert tree_children
     assert "Run metadata not found" in panel._origin_text.cget("text")
     panel.destroy()
+
+
+def test_job_explanation_panel_uses_live_payload_when_run_metadata_missing(tmp_path, tk_root):
+    controller = type(
+        "Controller",
+        (),
+        {
+            "get_job_explanation_payload": lambda self, job_id: {
+                "origin_text": f"Job: {job_id} | Pack: fantasy",
+                "stage_flow": ["txt2img", "upscale"],
+                "metadata": {"model": "sdxl", "steps": 20},
+                "stage_prompts": [
+                    {
+                        "stage": "txt2img",
+                        "prompt": "a sunset over cliffs, cinematic",
+                        "negative": "blurry, GLOBAL_BAD",
+                        "global_terms": "GLOBAL_BAD",
+                        "status": "current",
+                    }
+                ],
+            }
+        },
+    )()
+
+    panel = JobExplanationPanelV2(
+        "missing-job",
+        master=tk_root,
+        base_runs_dir=tmp_path / "runs",
+        controller=controller,
+    )
+
+    assert "Pack: fantasy" in panel._origin_text.cget("text")
+    children = panel.stage_tree.get_children()
+    assert children
+    values = panel.stage_tree.item(children[0], "values")
+    assert values[0] == "txt2img"
+    assert "cinematic" in values[1]
+    assert "GLOBAL_BAD" in values[3]
+
+    panel.destroy()

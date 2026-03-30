@@ -33,10 +33,13 @@ class SpyJobService(JobService):
     def __init__(self, job_queue: JobQueue, runner: DummyRunner) -> None:
         super().__init__(job_queue, runner)
         self.cancel_calls = 0
+        self.return_to_queue_calls = 0
 
-    def cancel_current(self) -> None:
+    def cancel_current(self, *, return_to_queue: bool = False) -> None:
         self.cancel_calls += 1
-        super().cancel_current()
+        if return_to_queue:
+            self.return_to_queue_calls += 1
+        super().cancel_current(return_to_queue=return_to_queue)
 
 
 def test_stop_delegates_to_job_service_cancel() -> None:
@@ -72,3 +75,4 @@ def test_cancel_job_and_return_v2_delegates_to_job_service() -> None:
     controller.on_cancel_job_and_return_v2()
 
     assert service.cancel_calls == 1
+    assert service.return_to_queue_calls == 1

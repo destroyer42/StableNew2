@@ -18,6 +18,7 @@ from src.video.comfy_process_manager import (
     build_default_comfy_process_config,
     get_global_comfy_process_manager,
 )
+from src.video.depth_map_resolver import DepthMapResolver
 from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 from src.video.motion.secondary_motion_video_reencode import apply_secondary_motion_to_video
 from src.video.video_backend_types import (
@@ -73,6 +74,40 @@ def _dedupe_paths(values: list[str]) -> list[str]:
     return deduped
 
 
+def _mapping_dict(value: Any) -> dict[str, Any]:
+    if isinstance(value, Mapping):
+        return dict(value)
+    return {}
+
+
+def _contains_locator(payload: Any, locator: str) -> bool:
+    needle = str(locator or "").strip().lower()
+    if not needle:
+        return False
+    if isinstance(payload, Mapping):
+        for key, value in payload.items():
+            if needle in str(key).lower() or _contains_locator(value, needle):
+                return True
+        return False
+    if isinstance(payload, (list, tuple, set)):
+        return any(_contains_locator(item, needle) for item in payload)
+    return needle in str(payload).lower()
+
+
+def _has_model_inventory(payload: Any) -> bool:
+    if isinstance(payload, Mapping):
+        for key, value in payload.items():
+            normalized = str(key or "").strip().lower()
+            if normalized in {"models", "checkpoints", "loras", "vae"}:
+                return True
+            if _has_model_inventory(value):
+                return True
+        return False
+    if isinstance(payload, (list, tuple, set)):
+        return any(_has_model_inventory(item) for item in payload)
+    return False
+
+
 def _history_entry_from_payload(payload: Mapping[str, Any], prompt_id: str) -> dict[str, Any] | None:
     if "outputs" in payload:
         return dict(payload)
@@ -114,6 +149,7 @@ class ComfyWorkflowVideoBackend:
         compiler: WorkflowCompiler | None = None,
         client: ComfyApiClient | None = None,
         dependency_probe: ComfyDependencyProbe | None = None,
+        depth_map_resolver: DepthMapResolver | None = None,
         process_manager: ComfyProcessManager | None = None,
         base_url: str = "http://127.0.0.1:8188",
         history_poll_interval: float = 0.5,
@@ -123,6 +159,7 @@ class ComfyWorkflowVideoBackend:
         self._compiler = compiler or WorkflowCompiler()
         self._client = client
         self._dependency_probe = dependency_probe
+        self._depth_map_resolver = depth_map_resolver or DepthMapResolver()
         self._process_manager = process_manager
         self._managed_process_manager: ComfyProcessManager | None = None
         self._base_url = str(base_url or "http://127.0.0.1:8188").rstrip("/")
@@ -130,7 +167,8 @@ class ComfyWorkflowVideoBackend:
         self._history_timeout = max(history_timeout, 5.0)
 
     def execute(self, pipeline: Any, request: VideoExecutionRequest) -> VideoExecutionResult | None:
-        stage_config = dict(request.stage_config or {})
+        stage_config = deepcopy(dict(request.stage_config or {}))
+        request.stage_config = stage_config
         workflow_id = str(
             request.workflow_id
             or stage_config.get("workflow_id")
@@ -160,6 +198,12 @@ class ComfyWorkflowVideoBackend:
         dependency_result = probe.probe_workflow(spec, object_info=object_info)
         if not dependency_result.ready:
             raise RuntimeError(_format_missing_dependency_message(spec, dependency_result))
+
+        conditioning = self._resolve_conditioning_inputs(
+            spec=spec,
+            request=request,
+            object_info=object_info,
+        )
 
         compiled = self._compiler.compile(spec, request)
         queue_payload = self._build_queue_payload(
@@ -223,6 +267,7 @@ class ComfyWorkflowVideoBackend:
             queue_response=queue_response,
             history_entry=history_entry,
             resolved_outputs=resolved_outputs,
+            conditioning=conditioning,
         )
         metadata_payload = {
             "stage": request.stage_name,
@@ -238,6 +283,7 @@ class ComfyWorkflowVideoBackend:
             "motion_profile": request.motion_profile,
             "workflow_id": spec.workflow_id,
             "workflow_version": spec.workflow_version,
+            "conditioning": dict(conditioning),
             "manifest_path": str(manifest_path),
             "output_paths": list(resolved_outputs["output_paths"]),
             "video_paths": list(resolved_outputs["video_paths"]),
@@ -290,6 +336,7 @@ class ComfyWorkflowVideoBackend:
             "prompt_id": prompt_id,
             "dependency_probe": dependency_result.to_dict(),
             "compiled_workflow": compiled.to_dict(),
+            "conditioning": dict(conditioning),
             "secondary_motion": dict(resolved_outputs.get("secondary_motion") or {}),
             "secondary_motion_summary": dict(resolved_outputs.get("secondary_motion_summary") or {}),
             "secondary_motion_source_video_path": resolved_outputs.get("secondary_motion_source_video_path"),
@@ -327,6 +374,7 @@ class ComfyWorkflowVideoBackend:
                 "prompt_id": prompt_id,
                 "compiled_inputs": dict(compiled.compiled_inputs),
                 "compiled_outputs": dict(compiled.compiled_outputs),
+                "conditioning": dict(conditioning),
             },
             diagnostic_payload={
                 "queue_response": dict(queue_response),
@@ -345,10 +393,75 @@ class ComfyWorkflowVideoBackend:
                 "manifest_path": str(manifest_path),
                 "dependency_snapshot": dict(compiled.dependency_snapshot),
                 "compiled_inputs": dict(compiled.compiled_inputs),
+                "conditioning": dict(conditioning),
                 "secondary_motion": dict(resolved_outputs.get("secondary_motion") or {}),
                 "secondary_motion_summary": dict(resolved_outputs.get("secondary_motion_summary") or {}),
                 "secondary_motion_source_video_path": resolved_outputs.get("secondary_motion_source_video_path"),
             },
+        )
+
+    def _resolve_conditioning_inputs(
+        self,
+        *,
+        spec: Any,
+        request: VideoExecutionRequest,
+        object_info: Mapping[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        stage_config = _mapping_dict(request.stage_config)
+        camera_intent = _mapping_dict(stage_config.get("camera_intent"))
+        controlnet = _mapping_dict(stage_config.get("controlnet"))
+        depth_input = _mapping_dict(stage_config.get("depth_input"))
+
+        requires_depth_map = any(
+            binding.source_field == "stage_config.depth_input.resolved_path"
+            for binding in spec.input_bindings
+        )
+        if not requires_depth_map:
+            return {
+                "camera_intent": camera_intent,
+                "controlnet": controlnet,
+                "depth_input": depth_input,
+            }
+
+        selected_controlnet_model = str(controlnet.get("model") or "depth").strip() or "depth"
+        controlnet.setdefault("model", selected_controlnet_model)
+        self._ensure_controlnet_model_available(
+            spec=spec,
+            controlnet_model=selected_controlnet_model,
+            object_info=object_info,
+        )
+        depth_resolution = self._depth_map_resolver.resolve(
+            source_image_path=request.input_image_path,
+            depth_input=depth_input,
+            output_dir=request.output_dir,
+        )
+        depth_input.update(depth_resolution.to_stage_config())
+        stage_config["camera_intent"] = camera_intent
+        stage_config["controlnet"] = controlnet
+        stage_config["depth_input"] = depth_input
+        request.stage_config = stage_config
+        return {
+            "camera_intent": camera_intent,
+            "controlnet": controlnet,
+            "depth_input": depth_input,
+        }
+
+    def _ensure_controlnet_model_available(
+        self,
+        *,
+        spec: Any,
+        controlnet_model: str,
+        object_info: Mapping[str, Any] | None = None,
+    ) -> None:
+        payload = dict(object_info or {})
+        if not payload or not _has_model_inventory(payload):
+            return
+        locator = str(controlnet_model or "").strip() or "depth"
+        if _contains_locator(payload, locator):
+            return
+        raise RuntimeError(
+            f"Workflow '{spec.workflow_id}' missing required Comfy ControlNet model/checkpoint '{locator}'. "
+            "Install the required ControlNet model, refresh ComfyUI model inventory, and restart ComfyUI before running the conditioned video_workflow stage."
         )
 
     def execute_segment(
@@ -647,6 +760,7 @@ class ComfyWorkflowVideoBackend:
         queue_response: Mapping[str, Any],
         history_entry: Mapping[str, Any],
         resolved_outputs: Mapping[str, Any],
+        conditioning: Mapping[str, Any],
     ) -> Path:
         output_dir = Path(request.output_dir)
         manifest_dir = output_dir / "manifests"
@@ -666,6 +780,7 @@ class ComfyWorkflowVideoBackend:
             "prompt": request.prompt,
             "negative_prompt": request.negative_prompt,
             "motion_profile": request.motion_profile,
+            "conditioning": dict(conditioning),
             "output_paths": list(resolved_outputs["output_paths"]),
             "video_path": resolved_outputs["video_path"],
             "video_paths": list(resolved_outputs["video_paths"]),

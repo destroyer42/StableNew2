@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from types import SimpleNamespace
 
 from src.gui.app_state_v2 import AppStateV2
 
@@ -73,3 +74,27 @@ def test_flush_now_drains_pending_hot_key_notifications() -> None:
     state.flush_now()
 
     assert calls == ["log"]
+
+
+def test_queue_jobs_batches_like_other_hot_runtime_keys() -> None:
+    state = AppStateV2()
+    invoker = _FakeInvoker()
+    state.set_invoker(invoker)
+    calls: list[str] = []
+
+    state.subscribe("queue_jobs", lambda: calls.append("queue_jobs"))
+
+    state.set_queue_jobs([SimpleNamespace(job_id="job-1")])
+    state.set_queue_jobs([
+        SimpleNamespace(job_id="job-1"),
+        SimpleNamespace(job_id="job-2"),
+    ])
+
+    assert calls == []
+    assert invoker.immediate == []
+    assert len(invoker.delayed) == 1
+
+    _, delayed_flush = invoker.delayed.pop()
+    delayed_flush()
+
+    assert calls == ["queue_jobs"]

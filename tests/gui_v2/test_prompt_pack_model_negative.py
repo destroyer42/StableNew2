@@ -153,3 +153,47 @@ def test_load_padded_slots_include_negative():
         # Padded slots should have negative=""
         for i in range(2, 10):
             assert pack.slots[i].negative == ""
+
+
+def test_load_duplicate_slot_indexes_self_heals_to_sequential_slots(tmp_path: Path):
+    payload = {
+        "pack_data": {
+            "name": "Dupes",
+            "slots": [
+                {"index": 0, "text": "slot zero", "negative": "bad hands"},
+                {"index": 0, "text": "slot one", "negative": "bad anatomy"},
+                {"index": 0, "text": "slot two", "negative": "bad feet"},
+            ],
+        }
+    }
+    path = tmp_path / "dupes.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    pack = PromptPackModel.load_from_file(path, min_slots=1)
+
+    assert [slot.text for slot in pack.slots[:3]] == ["slot zero", "slot one", "slot two"]
+    assert [slot.index for slot in pack.slots[:3]] == [0, 1, 2]
+
+
+def test_save_rewrites_duplicate_slot_indexes_to_canonical_sequence(tmp_path: Path):
+    payload = {
+        "pack_data": {
+            "name": "Dupes",
+            "slots": [
+                {"index": 0, "text": "slot zero"},
+                {"index": 0, "text": "slot one"},
+                {"index": 0, "text": "slot two"},
+            ],
+        }
+    }
+    source = tmp_path / "dupes.json"
+    source.write_text(json.dumps(payload), encoding="utf-8")
+
+    pack = PromptPackModel.load_from_file(source, min_slots=1)
+    saved = tmp_path / "dupes_saved.json"
+    pack.save_to_file(saved)
+
+    saved_payload = json.loads(saved.read_text(encoding="utf-8"))
+    saved_slots = saved_payload["pack_data"]["slots"]
+    assert [slot["index"] for slot in saved_slots] == [0, 1, 2]
+    assert [slot["text"] for slot in saved_slots] == ["slot zero", "slot one", "slot two"]

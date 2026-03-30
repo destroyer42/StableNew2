@@ -1,7 +1,7 @@
 {
   "stablenew_review": {
     "schema": "stablenew.review.v2.6",
-    "review_timestamp": "2026-03-29T15:20:46",
+    "review_timestamp": "2026-03-30T01:16:16",
     "source": "review_tab",
     "image_path": "img_a.png",
     "user_rating": 5,
@@ -25,8 +25,8 @@
     "stages": [],
     "review_context": {},
     "review_actor": "user",
-    "review_record_id": "010c8548-eaed-4bca-b255-f17e5ea3341d",
-    "run_id": "010c8548-eaed-4bca-b255-f17e5ea3341d",
+    "review_record_id": "a00eb4b0-be5c-44c1-bcfd-03e9913886ac",
+    "run_id": "a00eb4b0-be5c-44c1-bcfd-03e9913886ac",
     "record_kind": "review_tab_feedback",
     "steps": 0,
     "cfg_scale": 0.0

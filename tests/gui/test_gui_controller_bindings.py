@@ -14,10 +14,18 @@ from src.queue.job_model import Job, JobPriority, JobStatus
 
 @pytest.fixture
 def tk_root():
-    root = tk.Tk()
-    root.withdraw()
+    try:
+        root = tk.Tk()
+        root.withdraw()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter/Tcl not available: {exc}")
+        return
+
     yield root
-    root.destroy()
+    try:
+        root.destroy()
+    except Exception:
+        pass
 
 
 def test_preview_panel_calls_controller_methods(tk_root: tk.Tk) -> None:

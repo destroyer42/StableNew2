@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import tkinter as tk
+from unittest.mock import patch
 
 import pytest
 
@@ -170,6 +171,34 @@ def test_log_trace_panel_skips_rerender_when_log_version_is_unchanged() -> None:
     panel.refresh()
 
     assert calls["count"] == 0
+
+    logger.removeHandler(handler)
+    root.destroy()
+
+
+def test_log_trace_panel_appends_new_lines_without_full_rebuild() -> None:
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter not available: {exc}")
+    root.withdraw()
+    handler = InMemoryLogHandler(max_entries=20)
+    logger = get_logger(f"{__name__}.append")
+    logger.setLevel(logging.INFO)
+    logger.addHandler(handler)
+
+    panel = LogTracePanelV2(root, log_handler=handler, audience="operator")
+    logger.info("First line")
+    panel.refresh(force=True)
+
+    with patch.object(panel._log_text, "delete", wraps=panel._log_text.delete) as delete_spy:
+        logger.info("Second line")
+        panel.refresh(force=True)
+        delete_spy.assert_not_called()
+
+    content = panel._log_text.get("1.0", tk.END)
+    assert "First line" in content
+    assert "Second line" in content
 
     logger.removeHandler(handler)
     root.destroy()
