@@ -8,7 +8,6 @@ and Pipeline metadata integration.
 from __future__ import annotations
 
 import tempfile
-import tkinter as tk
 from pathlib import Path
 
 import pytest
@@ -17,22 +16,7 @@ from src.app_factory import build_v2_app
 from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.gui.prompt_workspace_state import PromptWorkspaceState
-
-
-def _create_root() -> tk.Tk:
-    """Create a real Tk root for journey tests; fail fast if unavailable."""
-    import os
-
-    # Set Tkinter environment variables for Windows
-    os.environ["TCL_LIBRARY"] = r"C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tcl8.6"
-    os.environ["TK_LIBRARY"] = r"C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tk8.6"
-
-    try:
-        root = tk.Tk()
-        root.withdraw()
-        return root
-    except tk.TclError as exc:  # pragma: no cover - environment dependent
-        pytest.fail(f"Tkinter unavailable for journey test: {exc}")
+from tests.journeys.utils.tk_root_factory import create_root
 
 
 @pytest.mark.journey
@@ -60,7 +44,7 @@ def test_jt01_prompt_pack_authoring_and_randomization():
         temp_path = Path(temp_dir)
 
         # Step 1: Launch StableNew (build V2 app)
-        root = _create_root()
+        root = create_root()
         try:
             root, app_state, app_controller, window = build_v2_app(
                 root=root,

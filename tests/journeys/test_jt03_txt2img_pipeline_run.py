@@ -32,7 +32,7 @@ def test_jt03_txt2img_pipeline_run():
     """JT-03: Validate complete txt2img generation flow using Pipeline tab.
 
     Assertions via journey_helpers_v2:
-    - job.run_mode == "direct"
+    - job.run_mode == "queue"
     - job.source == "run" (implied by start_run_v2)
     - Stage plan contains txt2img stage
     """
@@ -100,8 +100,8 @@ def test_jt03_txt2img_pipeline_run():
                 job_entry = start_run_and_wait(controller, use_run_now=False, timeout_seconds=30.0)
 
                 # Step 8: Assert job metadata via helper API
-                assert job_entry.run_mode == "direct", (
-                    f"Expected run_mode 'direct', got '{job_entry.run_mode}'"
+                assert job_entry.run_mode == "queue", (
+                    f"Expected run_mode 'queue', got '{job_entry.run_mode}'"
                 )
 
                 # Get and verify stage plan
@@ -215,7 +215,7 @@ def test_jt03_txt2img_edge_cases():
 
                     # Verify job was created
                     assert job_entry is not None, "Job entry should be created"
-                    assert job_entry.run_mode == "direct"
+                    assert job_entry.run_mode == "queue"
 
             finally:
                 try:
@@ -285,7 +285,7 @@ def test_jt03_txt2img_metadata_accuracy():
 
             # Step 5: Verify job metadata
             assert job_entry is not None
-            assert job_entry.run_mode == "direct"
+            assert job_entry.run_mode == "queue"
 
     finally:
         try:

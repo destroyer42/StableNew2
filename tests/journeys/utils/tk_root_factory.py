@@ -9,8 +9,48 @@ from __future__ import annotations
 
 import os
 import sys
+from pathlib import Path
 
 import pytest
+
+
+def _is_valid_tcl_dir(path: str | os.PathLike[str] | None) -> bool:
+    if not path:
+        return False
+    return Path(path).joinpath("init.tcl").is_file()
+
+
+def _is_valid_tk_dir(path: str | os.PathLike[str] | None) -> bool:
+    if not path:
+        return False
+    return Path(path).joinpath("tk.tcl").is_file()
+
+
+def _configure_windows_tk_environment(tk_module) -> None:
+    current_tcl = os.environ.get("TCL_LIBRARY")
+    current_tk = os.environ.get("TK_LIBRARY")
+    if _is_valid_tcl_dir(current_tcl) and _is_valid_tk_dir(current_tk):
+        return
+
+    module_path = Path(tk_module.__file__).resolve()
+    candidate_roots = [
+        module_path.parents[2],
+        Path(sys.executable).resolve().parent,
+        Path(sys.base_prefix),
+        Path(sys.exec_prefix),
+    ]
+    seen: set[tuple[str, str]] = set()
+    for root in candidate_roots:
+        tcl_dir = root / "tcl" / "tcl8.6"
+        tk_dir = root / "tcl" / "tk8.6"
+        key = (str(tcl_dir), str(tk_dir))
+        if key in seen:
+            continue
+        seen.add(key)
+        if _is_valid_tcl_dir(tcl_dir) and _is_valid_tk_dir(tk_dir):
+            os.environ["TCL_LIBRARY"] = str(tcl_dir)
+            os.environ["TK_LIBRARY"] = str(tk_dir)
+            return
 
 
 def create_root():
@@ -27,16 +67,7 @@ def create_root():
         pytest.skip(f"Tkinter import failed for journey test: {exc}")
 
     if sys.platform.startswith("win"):
-        tcl_library = os.environ.get("TCL_LIBRARY")
-        tk_library = os.environ.get("TK_LIBRARY")
-        if not tcl_library or not tk_library:
-            base_dir = os.path.dirname(os.path.abspath(tk.__file__))
-            candidate_tcl = os.path.join(base_dir, "tcl", "tcl8.6")
-            candidate_tk = os.path.join(base_dir, "tcl", "tk8.6")
-            if os.path.isdir(candidate_tcl):
-                os.environ.setdefault("TCL_LIBRARY", candidate_tcl)
-            if os.path.isdir(candidate_tk):
-                os.environ.setdefault("TK_LIBRARY", candidate_tk)
+        _configure_windows_tk_environment(tk)
 
     try:
         root = tk.Tk()  # noqa: F841 - referenced by tk variable after import

@@ -104,6 +104,8 @@ def start_run_and_wait(
     Args:
         controller: The AppController instance.
         use_run_now: If True, use on_run_job_now_v2() (queue-backed "Run Now").
+            If False, use start_run_v2(), which is currently queue-backed under
+            the repo's queue-first run-button contract.
         add_to_queue_only: If True, use on_add_job_to_queue_v2() (add without running).
         timeout_seconds: Maximum time to wait for job completion.
 

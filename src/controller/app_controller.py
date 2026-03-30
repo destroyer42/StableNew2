@@ -124,6 +124,18 @@ from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.services.duration_stats_service import DurationStatsService
 from src.state.output_routing import OUTPUT_ROUTE_MOVIE_CLIPS, get_output_route_root
+from src.runtime_host import (
+    RUNTIME_HOST_EVENT_JOB_FAILED,
+    RUNTIME_HOST_EVENT_JOB_FINISHED,
+    RUNTIME_HOST_EVENT_JOB_STARTED,
+    RUNTIME_HOST_EVENT_QUEUE_EMPTY,
+    RUNTIME_HOST_EVENT_QUEUE_STATUS,
+    RUNTIME_HOST_EVENT_QUEUE_UPDATED,
+    RUNTIME_HOST_EVENT_WATCHDOG_VIOLATION,
+    RuntimeHostPort,
+    build_local_runtime_host,
+    coerce_runtime_host,
+)
 from src.utils import (
     InMemoryLogHandler,
     LogContext,
@@ -367,6 +379,7 @@ class AppController:
         config_manager: ConfigManager | None = None,
         resource_service: WebUIResourceService | None = None,
         job_service: JobService | None = None,
+        runtime_host: RuntimeHostPort | None = None,
         pipeline_controller: PipelineController | None = None,
         ui_scheduler: Callable[[Callable[[], None]], None] = None,
         runtime_ports: ImageRuntimePorts | None = None,
@@ -388,7 +401,8 @@ class AppController:
         # PR-THREAD-001: Thread registry for clean shutdown
         self._thread_registry = get_thread_registry()
         self._is_shutting_down = False
-        self.job_service = job_service  # Ensure job_service is always set, even if None
+        self.runtime_host = coerce_runtime_host(runtime_host or job_service)
+        self.job_service = self.runtime_host
         self.last_ui_heartbeat_ts = time.monotonic()
         self.last_queue_activity_ts = time.monotonic()
         self.last_runner_activity_ts = time.monotonic()
@@ -507,7 +521,7 @@ class AppController:
             self.pipeline_controller = PipelineController(
                 api_client=self._api_client,
                 structured_logger=self._structured_logger,
-                job_service=self.job_service,
+                runtime_host=self.runtime_host,
                 pipeline_runner=self.pipeline_runner,
                 job_lifecycle_logger=self._job_lifecycle_logger,
                 app_state=self.app_state,
@@ -519,16 +533,21 @@ class AppController:
         except Exception:
             pass
 
-        pipeline_job_service = None
+        pipeline_runtime_host = None
+        get_runtime_host = getattr(self.pipeline_controller, "get_runtime_host", None)
+        if callable(get_runtime_host):
+            pipeline_runtime_host = get_runtime_host()
         get_job_service = getattr(self.pipeline_controller, "get_job_service", None)
-        if callable(get_job_service):
-            pipeline_job_service = get_job_service()
-        elif hasattr(self.pipeline_controller, "_job_service"):
-            pipeline_job_service = getattr(self.pipeline_controller, "_job_service", None)
-        if pipeline_job_service is not None:
-            self.job_service = pipeline_job_service
+        if pipeline_runtime_host is None and callable(get_job_service):
+            pipeline_runtime_host = get_job_service()
+        elif pipeline_runtime_host is None and hasattr(self.pipeline_controller, "_job_service"):
+            pipeline_runtime_host = getattr(self.pipeline_controller, "_job_service", None)
+        if pipeline_runtime_host is not None:
+            self.runtime_host = coerce_runtime_host(pipeline_runtime_host)
+            self.job_service = self.runtime_host
         elif self.job_service is None:
-            self.job_service = self._build_job_service()
+            self.runtime_host = self._build_runtime_host()
+            self.job_service = self.runtime_host
 
         if self.job_service and hasattr(self.job_service, "set_job_lifecycle_logger"):
             self.job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
@@ -2655,7 +2674,7 @@ class AppController:
             self._update_status(self._pending_status_text)
 
     # ------------------------------------------------------------------
-    # Queue & JobService helpers (PR-039B)
+    # Queue & runtime-host helpers (PR-039B)
     # ------------------------------------------------------------------
 
     def _single_node_runner_factory(
@@ -2663,7 +2682,7 @@ class AppController:
         job_queue: JobQueue,
         run_callable: Callable[[Job], dict] | None,
     ) -> SingleNodeJobRunner:
-        """Factory that produces the SingleNodeJobRunner used by JobService."""
+        """Factory that produces the runner used by the local runtime host."""
 
         return SingleNodeJobRunner(
             job_queue,
@@ -2671,7 +2690,7 @@ class AppController:
             poll_interval=0.05,
         )
 
-    def _build_job_service(self) -> JobService:
+    def _build_local_runtime_service(self) -> JobService:
         self._job_history_path.parent.mkdir(parents=True, exist_ok=True)
         history_store = JSONLJobHistoryStore(self._job_history_path)
         job_queue = JobQueue(history_store=history_store)
@@ -2685,6 +2704,40 @@ class AppController:
             job_lifecycle_logger=self._job_lifecycle_logger,
             require_normalized_records=True,
         )
+
+    def _build_job_service(self) -> JobService:
+        """Compatibility hook for tests still overriding the older helper name."""
+        return self._build_local_runtime_service()
+
+    def _build_runtime_host(self) -> RuntimeHostPort:
+        return build_local_runtime_host(self._build_local_runtime_service())
+
+    def _runtime_host_transport(self) -> str:
+        host = getattr(self, "runtime_host", None) or getattr(self, "job_service", None)
+        describe_protocol = getattr(host, "describe_protocol", None)
+        if callable(describe_protocol):
+            try:
+                payload = describe_protocol() or {}
+            except Exception:
+                payload = {}
+            transport = str(payload.get("transport") or "").strip()
+            if transport:
+                return transport
+        return "local-only"
+
+    def _runtime_host_manages_queue_state(self) -> bool:
+        return self._runtime_host_transport() != "local-only"
+
+    def _queue_is_paused(self, queue: Any | None) -> bool:
+        if queue is None:
+            return False
+        paused = getattr(queue, "is_paused", False)
+        if callable(paused):
+            try:
+                return bool(paused())
+            except Exception:
+                return False
+        return bool(paused)
 
     def _setup_queue_callbacks(self) -> None:
         if not self.job_service:
@@ -2718,22 +2771,22 @@ class AppController:
             return handler if use_event_dispatcher else _wrap_ui_callback(handler)
 
         self.job_service.register_callback(
-            JobService.EVENT_QUEUE_UPDATED, _queue_callback(self._on_queue_updated)
+            RUNTIME_HOST_EVENT_QUEUE_UPDATED, _queue_callback(self._on_queue_updated)
         )
         self.job_service.register_callback(
-            JobService.EVENT_QUEUE_STATUS, _queue_callback(self._on_queue_status_changed)
+            RUNTIME_HOST_EVENT_QUEUE_STATUS, _queue_callback(self._on_queue_status_changed)
         )
         self.job_service.register_callback(
-            JobService.EVENT_JOB_STARTED, _queue_callback(self._on_job_started)
+            RUNTIME_HOST_EVENT_JOB_STARTED, _queue_callback(self._on_job_started)
         )
         self.job_service.register_callback(
-            JobService.EVENT_JOB_FINISHED, _queue_callback(self._on_job_finished)
+            RUNTIME_HOST_EVENT_JOB_FINISHED, _queue_callback(self._on_job_finished)
         )
         self.job_service.register_callback(
-            JobService.EVENT_JOB_FAILED, _queue_callback(self._on_job_failed)
+            RUNTIME_HOST_EVENT_JOB_FAILED, _queue_callback(self._on_job_failed)
         )
         self.job_service.register_callback(
-            JobService.EVENT_QUEUE_EMPTY, _queue_callback(self._on_queue_empty)
+            RUNTIME_HOST_EVENT_QUEUE_EMPTY, _queue_callback(self._on_queue_empty)
         )
         self._refresh_job_history()
         # PR-GUI-F3: Load persisted queue state on startup
@@ -2762,7 +2815,7 @@ class AppController:
             self._original_tk_report_callback_exception = root.report_callback_exception
             root.report_callback_exception = self._handle_tk_exception
         self.job_service.register_callback(
-            JobService.EVENT_WATCHDOG_VIOLATION,
+            RUNTIME_HOST_EVENT_WATCHDOG_VIOLATION,
             self._wrap_ui_callback(self._on_watchdog_violation_event),
         )
 
@@ -2771,7 +2824,18 @@ class AppController:
     # ------------------------------------------------------------------
 
     def _load_queue_state(self) -> None:
-        """Sync queue flags and queue view from JobExecutionController-owned state."""
+        """Sync queue flags and queue view from the active runtime owner."""
+        if self.job_service and self._runtime_host_manages_queue_state():
+            queue = getattr(self.job_service, "job_queue", None) or getattr(
+                self.job_service, "queue", None
+            )
+            if self.app_state:
+                self.app_state.set_auto_run_queue(
+                    bool(getattr(self.job_service, "auto_run_enabled", False))
+                )
+                self.app_state.set_is_queue_paused(self._queue_is_paused(queue))
+            self._refresh_app_state_queue()
+            return
         pipeline_controller = getattr(self, "pipeline_controller", None)
         job_exec = getattr(pipeline_controller, "_job_controller", None)
         if job_exec is None:
@@ -2784,7 +2848,9 @@ class AppController:
         self._refresh_app_state_queue()
 
     def _save_queue_state(self) -> None:
-        """Persist queue state through the JobExecutionController owner."""
+        """Persist queue state only when the GUI owns the local queue."""
+        if self._runtime_host_manages_queue_state():
+            return
         pipeline_controller = getattr(self, "pipeline_controller", None)
         job_exec = getattr(pipeline_controller, "_job_controller", None)
         if job_exec is None:
@@ -3305,12 +3371,20 @@ class AppController:
         if self.app_state:
             self.app_state.set_is_queue_paused(True)
         job_exec = getattr(getattr(self, "pipeline_controller", None), "_job_controller", None)
-        if job_exec and hasattr(job_exec, "set_queue_paused"):
+        if (
+            job_exec
+            and hasattr(job_exec, "set_queue_paused")
+            and not self._runtime_host_manages_queue_state()
+        ):
             job_exec.set_queue_paused(True)
         if self.job_service:
-            queue = getattr(self.job_service, "job_queue", None)
-            if queue and hasattr(queue, "pause"):
-                queue.pause()
+            pause_queue = getattr(self.job_service, "pause", None)
+            if callable(pause_queue):
+                pause_queue()
+            else:
+                queue = getattr(self.job_service, "job_queue", None)
+                if queue and hasattr(queue, "pause"):
+                    queue.pause()
         self._save_queue_state()
 
     def on_resume_queue_v2(self) -> None:
@@ -3318,12 +3392,20 @@ class AppController:
         if self.app_state:
             self.app_state.set_is_queue_paused(False)
         job_exec = getattr(getattr(self, "pipeline_controller", None), "_job_controller", None)
-        if job_exec and hasattr(job_exec, "set_queue_paused"):
+        if (
+            job_exec
+            and hasattr(job_exec, "set_queue_paused")
+            and not self._runtime_host_manages_queue_state()
+        ):
             job_exec.set_queue_paused(False)
         if self.job_service:
-            queue = getattr(self.job_service, "job_queue", None)
-            if queue and hasattr(queue, "resume"):
-                queue.resume()
+            resume_queue = getattr(self.job_service, "resume", None)
+            if callable(resume_queue):
+                resume_queue()
+            else:
+                queue = getattr(self.job_service, "job_queue", None)
+                if queue and hasattr(queue, "resume"):
+                    queue.resume()
         self._save_queue_state()
 
     def on_set_auto_run_v2(self, enabled: bool) -> None:
@@ -3331,7 +3413,11 @@ class AppController:
         if self.app_state:
             self.app_state.set_auto_run_queue(enabled)
         job_exec = getattr(getattr(self, "pipeline_controller", None), "_job_controller", None)
-        if job_exec and hasattr(job_exec, "set_auto_run_enabled"):
+        if (
+            job_exec
+            and hasattr(job_exec, "set_auto_run_enabled")
+            and not self._runtime_host_manages_queue_state()
+        ):
             job_exec.set_auto_run_enabled(enabled)
         if self.job_service:
             self.job_service.auto_run_enabled = enabled
@@ -3339,7 +3425,7 @@ class AppController:
             if enabled:
                 queue = getattr(self.job_service, "job_queue", None)
                 app_paused = bool(getattr(self.app_state, "is_queue_paused", False)) if self.app_state else False
-                queue_paused = bool(getattr(queue, "is_paused", False)) if queue and hasattr(queue, "is_paused") else False
+                queue_paused = self._queue_is_paused(queue)
                 is_paused = app_paused or queue_paused
                 if is_paused:
                     self._append_log("[controller] Auto-run enabled but queue is paused; runner not started")
@@ -5120,11 +5206,11 @@ class AppController:
         except Exception:
             logger.exception("Error shutting down WebUI")
         try:
-            logger.info("[controller] Step 5/8: Shutting down job service...")
-            self._shutdown_job_service()
-            logger.info("[controller] Step 5/8: Job service shutdown complete")
+            logger.info("[controller] Step 5/8: Shutting down runtime host...")
+            self._shutdown_runtime_host()
+            logger.info("[controller] Step 5/8: Runtime host shutdown complete")
         except Exception:
-            logger.exception("Error shutting down job service")
+            logger.exception("Error shutting down runtime host")
         
         # PR-SHUTDOWN-001: Call enhanced shutdown() for watchdog and thread cleanup
         try:
@@ -5249,16 +5335,20 @@ class AppController:
             except Exception:
                 logger.exception("Error stopping WebUI")
 
-    def _shutdown_job_service(self) -> None:
-        svc = getattr(self, "job_service", None)
-        if not svc:
+    def _shutdown_runtime_host(self) -> None:
+        host = getattr(self, "runtime_host", None) or getattr(self, "job_service", None)
+        if not host:
             return
-        # Call public stop() method for deterministic lifecycle management
-        if hasattr(svc, "stop"):
+        # Call the public stop() hook for deterministic runtime lifecycle cleanup.
+        if hasattr(host, "stop"):
             try:
-                svc.stop()
+                host.stop()
             except Exception:
-                logger.exception("Error stopping job service")
+                logger.exception("Error stopping runtime host")
+
+    def _shutdown_job_service(self) -> None:
+        """Compatibility alias for older tests and shutdown helpers."""
+        self._shutdown_runtime_host()
 
     def _shutdown_watchdog(self) -> None:
         # PR-SHUTDOWN-002: Increased default from 8s to 15s to reduce false alarms
@@ -7071,11 +7161,11 @@ class AppController:
         self._append_log(f"[controller] Enqueued job {job.job_id} with {pack_count} pack(s)")
 
     def on_run_job_now(self) -> None:
-        """Enqueue and execute the next queued job via JobService."""
+        """Enqueue and execute the next queued job via the runtime host."""
         self.on_run_queue_now_clicked()
 
     def on_run_queue_now_clicked(self) -> None:
-        """Delegate to JobService to execute the next queued job."""
+        """Delegate immediate execution to the runtime host."""
         job = self._build_job_from_draft()
         if job is None or not self.job_service:
             return

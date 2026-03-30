@@ -27,7 +27,7 @@ class TestJT05UpscaleStageRun:
 
     Assertions via journey_helpers_v2:
     - job.run_mode == "queue" for use_run_now=True
-    - job.run_mode == "direct" for use_run_now=False
+    - job.run_mode == "queue" for use_run_now=False under current queue-first defaults
     - Stage plan contains upscale stage
     - Stage ordering: txt2img before upscale (when both enabled)
     """
@@ -98,7 +98,7 @@ class TestJT05UpscaleStageRun:
         """Test complete txt2img → upscale multi-stage pipeline.
 
         Assertions:
-        - job.run_mode == "direct" (via use_run_now=False)
+        - job.run_mode == "queue" (via use_run_now=False under current queue-first defaults)
         - Stage plan contains txt2img and upscale stages
         - Stage ordering: txt2img before upscale
         """
@@ -139,12 +139,12 @@ class TestJT05UpscaleStageRun:
             window.pipeline_tab.upscale_factor.set(2.0)
             window.pipeline_tab.upscale_model.set("ESRGAN")
 
-        # Execute run via helper API with use_run_now=False for direct mode
+        # Execute run via helper API with use_run_now=False for queue-backed run-button mode
         job_entry = start_run_and_wait(app_controller, use_run_now=False, timeout_seconds=30.0)
 
         # Assert job metadata
-        assert job_entry.run_mode == "direct", (
-            f"Expected run_mode 'direct', got '{job_entry.run_mode}'"
+        assert job_entry.run_mode == "queue", (
+            f"Expected run_mode 'queue', got '{job_entry.run_mode}'"
         )
 
     @patch("src.api.webui_api.WebUIAPI")
@@ -227,7 +227,7 @@ class TestJT05UpscaleStageRun:
             job_entry = start_run_and_wait(app_controller, use_run_now=False, timeout_seconds=30.0)
 
             # Assert job metadata
-            assert job_entry.run_mode == "direct"
+            assert job_entry.run_mode == "queue"
 
     @patch("src.api.webui_api.WebUIAPI")
     def test_jt05_upscale_error_handling(self, mock_webui_api, app_root):

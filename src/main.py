@@ -33,6 +33,7 @@ from .api.webui_process_manager import (
     build_default_webui_process_config,
 )
 from .app_factory import build_v2_app
+from .runtime_host import RuntimeHostLaunchError
 from .utils import setup_logging
 from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
 from .video.comfy_process_manager import (
@@ -665,43 +666,75 @@ def main() -> None:
             auto_exit_seconds = float(auto_exit_env)
         except Exception:
             auto_exit_seconds = 0.0
-    
-    root, app_state, app_controller, window = build_v2_app(
-        root=tk.Tk(), webui_manager=webui_manager
-    )
-    
-    window.set_graceful_exit_handler(
-        lambda reason=None: graceful_exit(
-            app_controller,
-            root,
-            single_instance_lock,
-            logging.getLogger(__name__),
-            window=window,
-            reason=reason,
-        )
-    )
 
-    if auto_exit_seconds > 0:
-        try:
-            window.schedule_auto_exit(auto_exit_seconds)
-        except Exception:
-            pass
-    
-    # PR-PROCESS-001: Register emergency cleanup after WebUI bootstrap
-    # Delayed by 1000ms to allow WebUI manager to initialize
-    root.after(1000, lambda: _register_emergency_cleanup(window))
-    
-    root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
-    root.after(700, lambda: _async_bootstrap_comfy(root, app_state, window))
-
+    root = None
+    app_controller = None
+    window = None
     try:
-        root.mainloop()
-    except BaseException as exc:
-        logger = logging.getLogger(__name__)
-        logger.exception("Fatal exception in main loop", exc_info=exc)
-        graceful_exit(
-            app_controller, root, single_instance_lock, logger, window=window, reason="fatal-error"
+        root = tk.Tk()
+        try:
+            root, app_state, app_controller, window = build_v2_app(
+                root=root,
+                webui_manager=webui_manager,
+                launch_runtime_host=True,
+            )
+        except RuntimeHostLaunchError as exc:
+            logger = logging.getLogger(__name__)
+            logger.error("Runtime host launch failed during startup: %s", exc)
+            message = (
+                "StableNew could not start the runtime host.\n\n"
+                f"{exc}"
+            )
+            if messagebox is not None:
+                try:
+                    messagebox.showerror("StableNew Startup Error", message)
+                except Exception:
+                    print(message, file=sys.stderr)
+            else:
+                print(message, file=sys.stderr)
+            try:
+                root.destroy()
+            except Exception:
+                pass
+            return
+
+        window.set_graceful_exit_handler(
+            lambda reason=None: graceful_exit(
+                app_controller,
+                root,
+                single_instance_lock,
+                logging.getLogger(__name__),
+                window=window,
+                reason=reason,
+            )
         )
+
+        if auto_exit_seconds > 0:
+            try:
+                window.schedule_auto_exit(auto_exit_seconds)
+            except Exception:
+                pass
+
+        # PR-PROCESS-001: Register emergency cleanup after WebUI bootstrap
+        # Delayed by 1000ms to allow WebUI manager to initialize
+        root.after(1000, lambda: _register_emergency_cleanup(window))
+
+        root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
+        root.after(700, lambda: _async_bootstrap_comfy(root, app_state, window))
+
+        try:
+            root.mainloop()
+        except BaseException as exc:
+            logger = logging.getLogger(__name__)
+            logger.exception("Fatal exception in main loop", exc_info=exc)
+            graceful_exit(
+                app_controller,
+                root,
+                single_instance_lock,
+                logger,
+                window=window,
+                reason="fatal-error",
+            )
     finally:
         if single_instance_lock.is_acquired():
             single_instance_lock.release()

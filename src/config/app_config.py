@@ -33,6 +33,8 @@ _webui_health_initial_timeout: float | None = None
 _webui_health_retry_count: int | None = None
 _webui_health_retry_interval: float | None = None
 _webui_health_total_timeout: float | None = None
+_runtime_host_handshake_timeout: float | None = None
+_runtime_host_poll_interval: float | None = None
 STABLENEW_WEBUI_ROOT = "C:\\Users\\rob\\stable-diffusion-webui"
 STABLENEW_WEBUI_COMMAND = "webui-user.bat --api --xformers"
 _WEBUI_LAUNCH_PROFILES: dict[str, list[str]] = {
@@ -121,6 +123,41 @@ def get_process_container_config() -> ProcessContainerConfig:
 def set_process_container_config(config: ProcessContainerConfig) -> None:
     global _process_container_config
     _process_container_config = config
+
+
+def runtime_host_handshake_timeout_default() -> float:
+    value = _float_env("STABLENEW_RUNTIME_HOST_HANDSHAKE_TIMEOUT", 10.0)
+    return float(value if value is not None else 10.0)
+
+
+def get_runtime_host_handshake_timeout() -> float:
+    global _runtime_host_handshake_timeout
+    if _runtime_host_handshake_timeout is None:
+        _runtime_host_handshake_timeout = runtime_host_handshake_timeout_default()
+    return float(_runtime_host_handshake_timeout)
+
+
+def set_runtime_host_handshake_timeout(value: float) -> None:
+    global _runtime_host_handshake_timeout
+    _runtime_host_handshake_timeout = float(value)
+
+
+def runtime_host_poll_interval_default() -> float:
+    value = _float_env("STABLENEW_RUNTIME_HOST_POLL_INTERVAL", 0.5)
+    interval = float(value if value is not None else 0.5)
+    return interval if interval > 0.0 else 0.5
+
+
+def get_runtime_host_poll_interval() -> float:
+    global _runtime_host_poll_interval
+    if _runtime_host_poll_interval is None:
+        _runtime_host_poll_interval = runtime_host_poll_interval_default()
+    return float(_runtime_host_poll_interval)
+
+
+def set_runtime_host_poll_interval(value: float) -> None:
+    global _runtime_host_poll_interval
+    _runtime_host_poll_interval = float(value)
 
 
 def _int_env(name: str, default: int | None) -> int | None:

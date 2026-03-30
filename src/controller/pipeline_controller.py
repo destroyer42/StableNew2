@@ -3,7 +3,7 @@
 PipelineController canonical run path:
 
 GUI Run buttons -> AppController._start_run_v2 -> PipelineController.start_pipeline
--> preview NJR build -> JobService submit_job_with_run_mode
+-> preview NJR build -> runtime-host queue submission
 -> PipelineController._run_job -> PipelineRunner.run_njr.
 """
 
@@ -59,6 +59,17 @@ from src.pipeline.job_models_v2 import (
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 from src.pipeline.run_plan import RunPlan
 from src.queue.job_history_store import JobHistoryEntry
+from src.runtime_host import (
+    RUNTIME_HOST_EVENT_JOB_FAILED,
+    RUNTIME_HOST_EVENT_JOB_FINISHED,
+    RUNTIME_HOST_EVENT_JOB_STARTED,
+    RUNTIME_HOST_EVENT_QUEUE_EMPTY,
+    RUNTIME_HOST_EVENT_QUEUE_STATUS,
+    RUNTIME_HOST_EVENT_QUEUE_UPDATED,
+    RuntimeHostPort,
+    build_local_runtime_host,
+    coerce_runtime_host,
+)
 from src.utils import LogContext, StructuredLogger, log_with_ctx
 from src.utils.config import ConfigManager
 from src.utils.error_envelope_v2 import (
@@ -423,7 +434,7 @@ class PipelineController(CorePipelineController):
         prompt_pack_id: str | None = None,
         run_config: dict[str, Any] | None = None,
     ) -> Job:
-        """Convert a NormalizedJobRecord into the Job model used by JobService.
+        """Convert a NormalizedJobRecord into the queue job model used by the runtime host.
 
         This adapter preserves all metadata from the normalized record
         while producing a Job compatible with the existing queue system.
@@ -450,7 +461,7 @@ class PipelineController(CorePipelineController):
         on_complete: Callable[[dict[Any, Any]], None] | None = None,
         on_error: Callable[[Exception], None] | None = None,
     ) -> bool:
-        """Start pipeline using preview-built NJRs and JobService submission."""
+        """Start pipeline using preview-built NJRs and runtime-host submission."""
         if not self.gui_can_run():
             return False
         self._sync_auto_run_setting()
@@ -633,6 +644,7 @@ class PipelineController(CorePipelineController):
         config_manager: ConfigManager | None = None,
         gui_defaults_resolver: GuiDefaultsResolver | None = None,
         runtime_ports: ImageRuntimePorts | None = None,
+        runtime_host: RuntimeHostPort | None = None,
         **kwargs,
     ):
         # Pop parameters that are not for the parent class
@@ -652,10 +664,19 @@ class PipelineController(CorePipelineController):
         self._last_stage_events: list[dict[Any, Any]] | None = None
         self._learning_enabled: bool = False
         self._learning_queue_cap: int = 3
-        injected_queue = getattr(job_service, "queue", None) if job_service is not None else None
-        injected_runner = getattr(job_service, "runner", None) if job_service is not None else None
+        self._runtime_host = coerce_runtime_host(runtime_host or job_service)
+        injected_queue = (
+            getattr(self._runtime_host, "queue", None) if self._runtime_host is not None else None
+        )
+        injected_runner = (
+            getattr(self._runtime_host, "runner", None)
+            if self._runtime_host is not None
+            else None
+        )
         injected_history_store = (
-            getattr(job_service, "history_store", None) if job_service is not None else None
+            getattr(self._runtime_host, "history_store", None)
+            if self._runtime_host is not None
+            else None
         )
         self._job_controller = JobExecutionController(
             execute_job=self._execute_job,
@@ -663,7 +684,7 @@ class PipelineController(CorePipelineController):
             replay_runner=self,
             queue=injected_queue,
             runner=injected_runner,
-            restore_state=job_service is None,
+            restore_state=self._runtime_host is None,
         )
         self._queue_execution_enabled: bool = is_queue_execution_enabled()
         self._config_manager = config_manager or ConfigManager()
@@ -699,10 +720,13 @@ class PipelineController(CorePipelineController):
         history_store = self._job_controller.get_history_store()
         history_service = self.get_job_history_service()
         self._job_service = (
-            job_service
-            if job_service is not None
-            else JobService(queue, runner, history_store, history_service=history_service)
+            self._runtime_host
+            if self._runtime_host is not None
+            else build_local_runtime_host(
+                JobService(queue, runner, history_store, history_service=history_service)
+            )
         )
+        self._runtime_host = self._job_service
         if self._job_lifecycle_logger and hasattr(self._job_service, "set_job_lifecycle_logger"):
             try:
                 self._job_service.set_job_lifecycle_logger(self._job_lifecycle_logger)
@@ -716,13 +740,31 @@ class PipelineController(CorePipelineController):
         self._sync_auto_run_setting()
         self._setup_queue_callbacks()
 
+    def _runtime_host_transport(self) -> str:
+        host = self._runtime_host if self._runtime_host is not None else self._job_service
+        describe_protocol = getattr(host, "describe_protocol", None)
+        if callable(describe_protocol):
+            try:
+                payload = describe_protocol() or {}
+            except Exception:
+                payload = {}
+            transport = str(payload.get("transport") or "").strip()
+            if transport:
+                return transport
+        return "local-only"
+
+    def _runtime_host_manages_queue_state(self) -> bool:
+        return self._runtime_host_transport() != "local-only"
+
     def _sync_auto_run_setting(self, forced_value: bool | None = None) -> None:
-        """Propagate auto-run preference from AppState into JobService."""
+        """Propagate auto-run preference from AppState into the runtime host."""
         if not self._job_service:
             return
         if forced_value is None:
             if self._app_state is not None:
                 enabled = bool(getattr(self._app_state, "auto_run_queue", False))
+            elif self._runtime_host_manages_queue_state():
+                enabled = bool(getattr(self._job_service, "auto_run_enabled", False))
             else:
                 enabled = bool(
                     getattr(
@@ -1093,14 +1135,14 @@ class PipelineController(CorePipelineController):
     def _setup_queue_callbacks(self) -> None:
         if not self._job_service:
             return
-        self._job_service.register_callback(JobService.EVENT_QUEUE_UPDATED, self._on_queue_updated)
+        self._job_service.register_callback(RUNTIME_HOST_EVENT_QUEUE_UPDATED, self._on_queue_updated)
         self._job_service.register_callback(
-            JobService.EVENT_QUEUE_STATUS, self._on_queue_status_changed
+            RUNTIME_HOST_EVENT_QUEUE_STATUS, self._on_queue_status_changed
         )
-        self._job_service.register_callback(JobService.EVENT_JOB_STARTED, self._on_job_started)
-        self._job_service.register_callback(JobService.EVENT_JOB_FINISHED, self._on_job_finished)
-        self._job_service.register_callback(JobService.EVENT_JOB_FAILED, self._on_job_failed)
-        self._job_service.register_callback(JobService.EVENT_QUEUE_EMPTY, self._on_queue_empty)
+        self._job_service.register_callback(RUNTIME_HOST_EVENT_JOB_STARTED, self._on_job_started)
+        self._job_service.register_callback(RUNTIME_HOST_EVENT_JOB_FINISHED, self._on_job_finished)
+        self._job_service.register_callback(RUNTIME_HOST_EVENT_JOB_FAILED, self._on_job_failed)
+        self._job_service.register_callback(RUNTIME_HOST_EVENT_QUEUE_EMPTY, self._on_queue_empty)
         self._setup_history_callbacks()
 
     def _on_queue_updated(self, summaries: list[str]) -> None:
@@ -1325,7 +1367,11 @@ class PipelineController(CorePipelineController):
     def on_set_auto_run_v2(self, enabled: bool) -> None:
         if self._app_state:
             self._app_state.set_auto_run_queue(bool(enabled))
-        if self._job_controller and hasattr(self._job_controller, "set_auto_run_enabled"):
+        if (
+            self._job_controller
+            and hasattr(self._job_controller, "set_auto_run_enabled")
+            and not self._runtime_host_manages_queue_state()
+        ):
             try:
                 self._job_controller.set_auto_run_enabled(bool(enabled))
             except Exception:
@@ -1349,7 +1395,11 @@ class PipelineController(CorePipelineController):
         if not self._job_service:
             return
         self._job_service.pause()
-        if self._job_controller and hasattr(self._job_controller, "set_queue_paused"):
+        if (
+            self._job_controller
+            and hasattr(self._job_controller, "set_queue_paused")
+            and not self._runtime_host_manages_queue_state()
+        ):
             try:
                 self._job_controller.set_queue_paused(True)
             except Exception:
@@ -1361,7 +1411,11 @@ class PipelineController(CorePipelineController):
         if not self._job_service:
             return
         self._job_service.resume()
-        if self._job_controller and hasattr(self._job_controller, "set_queue_paused"):
+        if (
+            self._job_controller
+            and hasattr(self._job_controller, "set_queue_paused")
+            and not self._runtime_host_manages_queue_state()
+        ):
             try:
                 self._job_controller.set_queue_paused(False)
             except Exception:
@@ -1746,26 +1800,30 @@ class PipelineController(CorePipelineController):
         """Return the queue execution controller backing this pipeline controller."""
         return self._job_controller
 
-    def get_job_service(self) -> JobService | None:
-        """Return the queue service used by pipeline-facing GUI actions."""
-        return self._job_service
+    def get_runtime_host(self) -> RuntimeHostPort | None:
+        """Return the runtime-host seam used by pipeline-facing GUI actions."""
+        return self._runtime_host
+
+    def get_job_service(self) -> RuntimeHostPort | None:
+        """Compatibility alias for callers still using the older JobService name."""
+        return self.get_runtime_host()
 
     def replace_queue_runner(self, runner: Any) -> None:
         if self._job_service is None:
-            raise RuntimeError("PipelineController has no JobService to synchronize")
+            raise RuntimeError("PipelineController has no runtime host to synchronize")
         self._job_controller.replace_runner(runner)
         replace_runner = getattr(self._job_service, "replace_runner", None)
         if not callable(replace_runner):
-            raise RuntimeError("JobService does not support coordinated runner replacement")
+            raise RuntimeError("Runtime host does not support coordinated runner replacement")
         replace_runner(runner)
         if self._job_controller.get_runner() is not self._job_service.runner:
-            raise RuntimeError("Queue runner replacement left controller and service desynchronized")
+            raise RuntimeError("Queue runner replacement left controller and runtime host desynchronized")
 
     # -------------------------------------------------------------------------
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
         """Get diagnostics snapshot (PR-CORE1-A3: includes NJR visibility).
 
-        Delegates to JobService which provides queue/history state including
+        Delegates to the runtime host, which provides queue/history state including
         NormalizedJobRecord snapshots for debugging.
         """
         if self._job_service is None:

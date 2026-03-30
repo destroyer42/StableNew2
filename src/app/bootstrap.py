@@ -73,6 +73,23 @@ def build_gui_kernel(
     )
 
 
+def build_runtime_host_kernel(
+    *,
+    config_manager: ConfigManager | None = None,
+    runtime_ports: ImageRuntimePorts | None = None,
+    structured_logger: StructuredLogger | None = None,
+    api_url: str | None = None,
+    capabilities: OptionalDependencySnapshot | None = None,
+) -> ApplicationKernel:
+    return build_application_kernel(
+        config_manager=config_manager,
+        runtime_ports=runtime_ports,
+        structured_logger=structured_logger,
+        api_url=api_url,
+        capabilities=capabilities,
+    )
+
+
 def build_cli_kernel(
     *,
     api_url: str,
@@ -93,4 +110,5 @@ __all__ = [
     "build_application_kernel",
     "build_cli_kernel",
     "build_gui_kernel",
+    "build_runtime_host_kernel",
 ]

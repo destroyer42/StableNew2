@@ -69,6 +69,57 @@ def test_sync_auto_run_setting_falls_back_to_job_controller_when_no_app_state():
     assert controller._job_service.auto_run_enabled is True
 
 
+def test_sync_auto_run_setting_uses_runtime_host_state_when_remote_and_no_app_state():
+    controller = PipelineController()
+    controller._job_service = mock.Mock()
+    controller._job_service.auto_run_enabled = True
+    controller._job_service.describe_protocol.return_value = {"transport": "local-child"}
+    controller._runtime_host = controller._job_service
+    controller._app_state = None
+    controller._job_controller = mock.Mock()
+    controller._job_controller.auto_run_enabled = False
+
+    controller._sync_auto_run_setting()
+
+    assert controller._job_service.auto_run_enabled is True
+
+
+def test_on_set_auto_run_skips_local_job_controller_sync_for_remote_runtime_host():
+    controller = PipelineController()
+    controller._app_state = mock.Mock()
+    controller._app_state.is_queue_paused = False
+    controller._job_controller = mock.Mock()
+    controller._job_service = mock.Mock()
+    controller._job_service.describe_protocol.return_value = {"transport": "local-child"}
+    controller._runtime_host = controller._job_service
+    controller._job_service.queue = mock.Mock()
+    controller._job_service.queue.list_jobs.return_value = [mock.Mock(status=JobStatus.QUEUED)]
+
+    controller.on_set_auto_run_v2(True)
+
+    assert controller._job_service.auto_run_enabled is True
+    controller._job_controller.set_auto_run_enabled.assert_not_called()
+    controller._job_service.resume.assert_called_once()
+
+
+def test_pause_resume_queue_skip_local_job_controller_sync_for_remote_runtime_host():
+    controller = PipelineController()
+    controller._app_state = mock.Mock()
+    controller._job_controller = mock.Mock()
+    controller._job_service = mock.Mock()
+    controller._job_service.describe_protocol.return_value = {"transport": "local-child"}
+    controller._runtime_host = controller._job_service
+
+    controller.on_pause_queue_v2()
+    controller.on_resume_queue_v2()
+
+    controller._job_service.pause.assert_called_once()
+    controller._job_service.resume.assert_called_once()
+    controller._job_controller.set_queue_paused.assert_not_called()
+    controller._app_state.set_is_queue_paused.assert_any_call(True)
+    controller._app_state.set_is_queue_paused.assert_any_call(False)
+
+
 def test_on_queue_remove_refreshes_app_state_when_job_removed():
     controller = PipelineController()
     controller._app_state = mock.Mock()

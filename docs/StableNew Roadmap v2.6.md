@@ -1032,6 +1032,10 @@ Execution note:
 - use `docs/PR_Backlog/CORE_TOP_20_EXECUTABLE_MINI_ROADMAP_v2.6.md` as the
   active entry point for the split `PR-CORE-001` through `PR-CORE-020` specs
   now that the old bundled file has been retired
+- treat `docs/PR_Backlog/LOCAL_RUNTIME_ISOLATION_EXECUTABLE_SEQUENCE_v2.6.md`
+  as the active cross-cutting runtime-host plan; it is intentionally separate
+  from the product-feature queue because it spans startup, queue ownership,
+  diagnostics, and runtime lifecycle
 - do not execute `PR-CORE-003`, `PR-CORE-006`, `PR-CORE-007`, `PR-CORE-009`,
   `PR-CORE-010`, `PR-CORE-012`, `PR-CORE-013`, `PR-CORE-015`, or
   `PR-CORE-016` verbatim without re-scoping them against the shipped repo state
