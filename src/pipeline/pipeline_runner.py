@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable, Mapping
 from copy import deepcopy
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
@@ -98,13 +98,12 @@ class PipelineJobTimeoutError(Exception):
 class PipelineRunner:
     """
     Adapter that drives the real multi-stage Pipeline executor.
-    Consolidates output folders by prompt pack - all jobs from the same pack
-    go into the same timestamped folder.
+    Consolidates output folders within a single submission batch.
+    Repeat submissions get a fresh timestamped folder even when pack/model/VAE match.
     """
     
-    # Cache for active pack folders keyed by route + canonical folder key.
+    # Cache active run folders keyed by route + submission batch key.
     _pack_folder_cache: dict[str, Path] = {}
-    _folder_cache_timeout_minutes = 30  # Reuse folder if same pack within 30 minutes
 
     @staticmethod
     def _pin_stage_model_to_njr_base(
@@ -235,44 +234,13 @@ class PipelineRunner:
         return value[:10] + value[-5:]
 
     @staticmethod
-    def _extract_folder_timestamp(run_dir: Path) -> datetime | None:
-        try:
-            return datetime.strptime(run_dir.name[:15], "%Y%m%d_%H%M%S")
-        except ValueError:
-            return None
-
-    @classmethod
-    def _folder_is_reusable(cls, run_dir: Path, now: datetime) -> bool:
-        folder_time = cls._extract_folder_timestamp(run_dir)
-        if folder_time is None:
-            try:
-                folder_time = datetime.fromtimestamp(run_dir.stat().st_mtime)
-            except Exception:
-                return False
-        timeout_seconds = cls._folder_cache_timeout_minutes * 60
-        return (now - folder_time).total_seconds() < timeout_seconds
-
-    @classmethod
-    def _find_recent_matching_run_dir(
-        cls,
-        *,
-        route_root: Path,
-        folder_name: str,
-        now: datetime,
-    ) -> Path | None:
-        suffix = f"_{folder_name}"
-        if not route_root.exists():
-            return None
-        candidates = [
-            child
-            for child in route_root.iterdir()
-            if child.is_dir() and (child.name == folder_name or child.name.endswith(suffix))
-        ]
-        candidates.sort(key=lambda path: path.name, reverse=True)
-        for candidate in candidates:
-            if cls._folder_is_reusable(candidate, now):
-                return candidate
-        return None
+    def _resolve_submission_batch_key(njr: NormalizedJobRecord) -> str:
+        extra_metadata = getattr(njr, "extra_metadata", None)
+        if isinstance(extra_metadata, Mapping):
+            submission_batch_id = str(extra_metadata.get("submission_batch_id") or "").strip()
+            if submission_batch_id:
+                return submission_batch_id
+        return f"single-run:{uuid4().hex}"
 
     @classmethod
     def _resolve_run_dir(
@@ -284,20 +252,16 @@ class PipelineRunner:
         now: datetime,
     ) -> Path:
         cached_dir = cls._pack_folder_cache.get(route_cache_key)
-        if cached_dir and cached_dir.exists() and cls._folder_is_reusable(cached_dir, now):
+        if cached_dir and cached_dir.exists():
             return cached_dir
 
-        existing_dir = cls._find_recent_matching_run_dir(
-            route_root=route_root,
-            folder_name=folder_name,
-            now=now,
-        )
-        if existing_dir is not None:
-            cls._pack_folder_cache[route_cache_key] = existing_dir
-            return existing_dir
-
-        run_dir = route_root / f"{now.strftime('%Y%m%d_%H%M%S')}_{folder_name}"
-        run_dir.mkdir(parents=True, exist_ok=True)
+        timestamp = now.strftime('%Y%m%d_%H%M%S_%f')
+        run_dir = route_root / f"{timestamp}_{folder_name}"
+        suffix = 1
+        while run_dir.exists():
+            run_dir = route_root / f"{timestamp}_{folder_name}_{suffix:02d}"
+            suffix += 1
+        run_dir.mkdir(parents=True, exist_ok=False)
         cls._pack_folder_cache[route_cache_key] = run_dir
         return run_dir
 
@@ -1080,7 +1044,8 @@ class PipelineRunner:
         output_route = classify_njr_output_route(njr)
         base_output_dir = getattr(njr, "path_output_dir", None) or self._runs_base_dir
         route_root = get_output_route_root(base_output_dir, output_route, create=True)
-        route_cache_key = f"{output_route}:{cache_key}"
+        submission_batch_key = self._resolve_submission_batch_key(njr)
+        route_cache_key = f"{output_route}:{submission_batch_key}"
         
         now = datetime.now()
         run_dir = self._resolve_run_dir(
@@ -2690,7 +2655,11 @@ class PipelineRunResult:
         for record in data.get("learning_records") or []:
             if isinstance(record, Mapping):
                 learning_records.append(LearningRecord(**record))
-        stage_events = [dict(event) for event in data.get("stage_events") or []]
+        stage_events = [
+            dict(event)
+            for event in data.get("stage_events") or []
+            if isinstance(event, Mapping)
+        ]
         return cls(
             run_id=run_id,
             success=bool(data.get("success", False)),
@@ -2731,11 +2700,39 @@ def normalize_run_result(value: Any, default_run_id: str | None = None) -> dict[
                     "randomizer_plan_size": int(mapping.get("randomizer_plan_size") or 0),
                     "metadata": _merge_output_dir_into_metadata(mapping),
                     "stage_plan": mapping.get("stage_plan"),
-                    "stage_events": [dict(event) for event in mapping.get("stage_events") or []],
+                    "stage_events": [
+                        dict(event)
+                        for event in mapping.get("stage_events") or []
+                        if isinstance(event, Mapping)
+                    ],
                 }
             return PipelineRunResult.from_dict(mapping, default_run_id=default_run_id).to_dict()
         except Exception as e:
             logger.error(f"Failed to normalize Mapping to PipelineRunResult: {e}")
+            try:
+                return {
+                    "run_id": str(mapping.get("run_id") or default_run_id or ""),
+                    "success": mapping.get("success"),
+                    "error": mapping.get("error"),
+                    "output_dir": mapping.get("output_dir"),
+                    "variants": canonicalize_variant_entries(mapping.get("variants") or []),
+                    "learning_records": [
+                        dict(record)
+                        for record in mapping.get("learning_records") or []
+                        if isinstance(record, Mapping)
+                    ],
+                    "randomizer_mode": str(mapping.get("randomizer_mode") or ""),
+                    "randomizer_plan_size": int(mapping.get("randomizer_plan_size") or 0),
+                    "metadata": _merge_output_dir_into_metadata(mapping),
+                    "stage_plan": mapping.get("stage_plan"),
+                    "stage_events": [
+                        dict(event)
+                        for event in mapping.get("stage_events") or []
+                        if isinstance(event, Mapping)
+                    ],
+                }
+            except Exception:
+                pass
             
     # Fallback for any case that fails
     fallback = PipelineRunResult(

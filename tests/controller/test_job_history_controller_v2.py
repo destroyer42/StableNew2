@@ -12,9 +12,13 @@ from src.queue.job_history_store import JobHistoryEntry, JobStatus
 class FakeHistoryStore:
     def __init__(self, entries: list[JobHistoryEntry]) -> None:
         self._entries = list(entries)
+        self.invalidate_count = 0
 
     def list_jobs(self, *args: Any, **kwargs: Any) -> list[JobHistoryEntry]:
         return list(self._entries)
+
+    def invalidate_cache(self) -> None:
+        self.invalidate_count += 1
 
 
 class FakeJobService:
@@ -70,3 +74,21 @@ def test_manual_refresh_reloads_history() -> None:
 
     controller.refresh_job_history()
     assert controller.app_state.history_items[0].job_id == "manual-refresh"
+
+
+def test_automatic_history_refresh_does_not_force_cache_invalidation() -> None:
+    entry = _build_entry("auto-refresh")
+    controller, service = _make_controller([entry])
+
+    controller._refresh_job_history()
+
+    assert service.history_store.invalidate_count == 0
+
+
+def test_manual_history_refresh_invalidates_cache_once() -> None:
+    entry = _build_entry("manual-invalidate")
+    controller, service = _make_controller([entry])
+
+    controller.refresh_job_history()
+
+    assert service.history_store.invalidate_count == 1

@@ -49,6 +49,16 @@ class FakeWindow:
         callback()
 
 
+class ControlledWindow(FakeWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.app_controller = SimpleNamespace(on_webui_ready=mock.Mock())
+        self._scheduled: list[tuple[int, object]] = []
+
+    def after(self, delay, callback):
+        self._scheduled.append((delay, callback))
+
+
 class FakeConnectionController:
     def __init__(self, *args, **kwargs):
         self._state = WebUIConnectionState.DISCONNECTED
@@ -93,3 +103,47 @@ def test_webui_launch_opens_browser(monkeypatch):
     open_mock.assert_called_once_with("http://127.0.0.1:7860")
     assert panel.state_history[-1] == WebUIConnectionState.READY
     assert window.status_bar_v2.state_text_history[-1] == "WebUI: Ready"
+
+
+def test_webui_reconnect_retriggers_ready_callback(monkeypatch) -> None:
+    from src.main import _update_window_webui_manager
+
+    class SequenceConnectionController:
+        def __init__(self, *args, **kwargs):
+            self._states = [
+                WebUIConnectionState.READY,
+                WebUIConnectionState.DISCONNECTED,
+                WebUIConnectionState.READY,
+            ]
+            self._state = WebUIConnectionState.DISCONNECTED
+
+        def ensure_connected(self, autostart: bool = True) -> WebUIConnectionState:
+            self._state = WebUIConnectionState.READY
+            return self._state
+
+        def reconnect(self) -> WebUIConnectionState:
+            self._state = WebUIConnectionState.READY
+            return self._state
+
+        def get_state(self) -> WebUIConnectionState:
+            if self._states:
+                self._state = self._states.pop(0)
+            return self._state
+
+        def get_base_url(self) -> str:
+            return "http://127.0.0.1:7860"
+
+    window = ControlledWindow()
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.WebUIConnectionController",
+        SequenceConnectionController,
+    )
+
+    _update_window_webui_manager(window, SimpleNamespace())
+
+    initial_callback = window._scheduled.pop(0)[1]
+    initial_callback()
+    reconnect_callback = window._scheduled.pop(0)[1]
+    reconnect_callback()
+
+    assert window.app_controller.on_webui_ready.call_count == 2

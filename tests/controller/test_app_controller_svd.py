@@ -128,6 +128,53 @@ def test_runtime_status_callback_preserves_stage_detail() -> None:
 
 def test_on_webui_ready_triggers_deferred_autostart() -> None:
     class _JobController:
+        def __init__(self, events: list[str]) -> None:
+            self.called = 0
+            self._events = events
+
+        def trigger_deferred_autostart(self) -> None:
+            self._events.append("trigger")
+            self.called += 1
+
+    events: list[str] = []
+    controller = AppController.__new__(AppController)
+    controller.pipeline_controller = type(
+        "PipelineControllerStub",
+        (),
+        {"_job_controller": _JobController(events)},
+    )()
+    controller._append_log = lambda *_args, **_kwargs: None
+    controller.current_operation_label = None
+    controller.last_ui_action = None
+    controller._api_client = SimpleNamespace(
+        clear_startup_probe_grace=lambda: events.append("clear_startup_probe_grace"),
+        clear_runtime_failure_state=lambda: events.append("clear_runtime_failure_state"),
+    )
+    controller.refresh_resources_from_webui = lambda: {
+        "models": ["model-a"],
+        "vaes": ["vae-a"],
+        "samplers": ["Euler a"],
+        "schedulers": ["Karras"],
+        "upscalers": [],
+        "hypernetworks": [],
+        "embeddings": [],
+        "adetailer_models": [],
+        "adetailer_detectors": [],
+    }
+    controller._spawn_tracked_thread = lambda *, target, name, purpose: target()
+
+    controller.on_webui_ready()
+
+    assert events == [
+        "clear_startup_probe_grace",
+        "clear_runtime_failure_state",
+        "trigger",
+    ]
+    assert controller.pipeline_controller._job_controller.called == 1
+
+
+def test_on_webui_ready_retries_until_critical_resources_arrive(monkeypatch) -> None:
+    class _JobController:
         def __init__(self) -> None:
             self.called = 0
 
@@ -135,16 +182,55 @@ def test_on_webui_ready_triggers_deferred_autostart() -> None:
             self.called += 1
 
     controller = AppController.__new__(AppController)
-    controller.pipeline_controller = type("PipelineControllerStub", (), {"_job_controller": _JobController()})()
+    job_controller = _JobController()
+    controller.pipeline_controller = type("PipelineControllerStub", (), {"_job_controller": job_controller})()
     controller._append_log = lambda *_args, **_kwargs: None
     controller.current_operation_label = None
     controller.last_ui_action = None
-    controller.refresh_resources_from_webui = lambda: None
+    failure_state_clears: list[str] = []
+    controller._api_client = SimpleNamespace(
+        clear_startup_probe_grace=lambda: None,
+        clear_runtime_failure_state=lambda: failure_state_clears.append("clear"),
+    )
+    attempts: list[str] = []
+    responses = [
+        {
+            "models": [],
+            "vaes": [],
+            "samplers": [],
+            "schedulers": [],
+            "upscalers": [],
+            "hypernetworks": [],
+            "embeddings": [],
+            "adetailer_models": [],
+            "adetailer_detectors": [],
+        },
+        {
+            "models": ["model-a"],
+            "vaes": ["vae-a"],
+            "samplers": ["Euler a"],
+            "schedulers": ["Karras"],
+            "upscalers": [],
+            "hypernetworks": [],
+            "embeddings": [],
+            "adetailer_models": [],
+            "adetailer_detectors": [],
+        },
+    ]
+
+    def _refresh_resources():
+        attempts.append("refresh")
+        return responses.pop(0)
+
+    controller.refresh_resources_from_webui = _refresh_resources
     controller._spawn_tracked_thread = lambda *, target, name, purpose: target()
+    monkeypatch.setattr("src.controller.app_controller.time.sleep", lambda *_args, **_kwargs: None)
 
     controller.on_webui_ready()
 
-    assert controller.pipeline_controller._job_controller.called == 1
+    assert attempts == ["refresh", "refresh"]
+    assert failure_state_clears == ["clear", "clear"]
+    assert job_controller.called == 1
 
 
 def test_send_history_job_image_to_svd_selects_svd_tab(tmp_path) -> None:

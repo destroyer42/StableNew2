@@ -69,6 +69,39 @@ def test_submit_normalized_jobs_uses_coalesced_batch_updates() -> None:
     job_service._emit_queue_updated.assert_called_once_with()
 
 
+def test_submit_normalized_jobs_stamps_shared_submission_batch_id() -> None:
+    job_service = Mock()
+    service = QueueSubmissionService(job_service=job_service)
+    records = [
+        make_test_njr(job_id="job-1", prompt_source="pack", prompt_pack_id="pack-a"),
+        make_test_njr(job_id="job-2", prompt_source="pack", prompt_pack_id="pack-b"),
+    ]
+
+    submitted = service.submit_normalized_jobs(
+        records,
+        run_config=None,
+        source="gui",
+        prompt_source="pack",
+        last_run_config=None,
+        can_enqueue_learning_jobs=lambda count: (True, ""),
+        is_queue_submission_blocked=lambda: False,
+        sort_jobs_by_model=lambda rows: rows,
+        ensure_record_prompt_pack_metadata=lambda *_args: None,
+        to_queue_job=lambda record, **_kwargs: Mock(payload=None, job_id=record.job_id),
+        log_add_to_queue_event=lambda _job_id: None,
+        run_job_payload_factory=lambda job: (lambda j=job: {"job_id": j.job_id}),
+    )
+
+    batch_ids = {
+        str(getattr(record, "extra_metadata", {}).get("submission_batch_id") or "")
+        for record in records
+    }
+
+    assert submitted == 2
+    assert len(batch_ids) == 1
+    assert "" not in batch_ids
+
+
 def test_submit_normalized_jobs_stops_mid_batch_when_shutdown_starts() -> None:
     job_service = Mock()
     service = QueueSubmissionService(job_service=job_service)
@@ -128,3 +161,57 @@ def test_submit_normalized_jobs_blocks_learning_source_over_cap() -> None:
 
     assert submitted == 0
     job_service.submit_job_with_run_mode.assert_not_called()
+
+
+def test_submit_normalized_jobs_continues_after_row_failure() -> None:
+    batch_entries: list[str] = []
+
+    class _QueueBatchSpy:
+        def coalesce_state_notifications(self):
+            class _Context:
+                def __enter__(self_inner):
+                    batch_entries.append("enter")
+                    return self_inner
+
+                def __exit__(self_inner, exc_type, exc, tb):
+                    batch_entries.append("exit")
+                    return False
+
+            return _Context()
+
+    job_service = Mock()
+    job_service.job_queue = _QueueBatchSpy()
+    service = QueueSubmissionService(job_service=job_service)
+    fake_jobs = [Mock(payload=None), Mock(payload=None)]
+
+    def _to_queue_job(record, **_kwargs):
+        if record.job_id == "job-2":
+            raise RuntimeError("broken row")
+        return fake_jobs.pop(0)
+
+    submitted = service.submit_normalized_jobs(
+        [
+            make_test_njr(job_id="job-1", prompt_source="pack", prompt_pack_id="pack-a"),
+            make_test_njr(job_id="job-2", prompt_source="pack", prompt_pack_id="pack-b"),
+            make_test_njr(job_id="job-3", prompt_source="pack", prompt_pack_id="pack-c"),
+        ],
+        run_config=None,
+        source="gui",
+        prompt_source="pack",
+        last_run_config=None,
+        can_enqueue_learning_jobs=lambda count: (True, ""),
+        is_queue_submission_blocked=lambda: False,
+        sort_jobs_by_model=lambda rows: rows,
+        ensure_record_prompt_pack_metadata=lambda *_args: None,
+        to_queue_job=_to_queue_job,
+        log_add_to_queue_event=lambda _job_id: None,
+        run_job_payload_factory=lambda job: (lambda j=job: {"job_id": j.job_id}),
+    )
+
+    result = service.get_last_submission_result()
+
+    assert submitted == 2
+    assert batch_entries == ["enter", "exit"]
+    assert job_service.submit_job_with_run_mode.call_count == 2
+    assert result.submitted_record_ids == ("job-1", "job-3")
+    assert result.failed_record_ids == ("job-2",)

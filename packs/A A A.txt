@@ -1,101 +1,101 @@
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
-a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling giving an amazing sensuous blowjob to a man's penis, close-up shot, 85 mm, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
+a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling in front of a man, giving an amazing sensuous blowjob, oral sex, close-up shot, 85 mm, golden-hour natural lighting
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.22>
+neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
+neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1>
+a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling in front of a man, giving an amazing sensuous blowjob, oral sex, POV shot, 85 mm, golden-hour natural lighting
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.5>
+neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
+neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1>
+a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling in front of a man, giving an amazing sensuous blowjob, oral sex, low angle shot, 85 mm, golden-hour natural lighting
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.18>
+neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
+neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1>
+a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling in front of a man, giving an amazing sensuous blowjob, oral sex, underneath looking up shot, 85 mm, golden-hour natural lighting
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.14>
+neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
+neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
+
+<embedding:Stable_Yogis_Anatomy_Positives_V1>
+a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling in front of a man, giving an amazing sensuous blowjob, oral sex, subtle over the shuolder shot, 85 mm, golden-hour natural lighting
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.13>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
 a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling giving an amazing sensuous blowjob to a man's penis, POV shot, 85 mm, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
-neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
-neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
-
-<embedding:Stable_Yogis_Anatomy_Positives_V1>
-a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling giving an amazing sensuous blowjob to a man's penis, low angle shot, 85 mm, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
-neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
-neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
-
-<embedding:Stable_Yogis_Anatomy_Positives_V1>
-a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling giving an amazing sensuous blowjob to a man's penis, underneath looking up shot, 85 mm, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
-neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
-neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
-
-<embedding:Stable_Yogis_Anatomy_Positives_V1>
-a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling giving an amazing sensuous blowjob to a man's penis, subtle over the shuolder shot, 85 mm, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
-neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
-neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
-
-<embedding:Stable_Yogis_Anatomy_Positives_V1>
-a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling giving an amazing sensuous blowjob to a man's penis, POV shot, 85 mm, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.19>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
 a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling giving an amazing blowjob to a man's penis while he grips her head, deepthroating man's penis while he hold's back her hair, low angle shot, 85 mm, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.17>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
 a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling giving an amazing blowjob to a man's penis while he grips her head, deepthroating man's penis while he hold's back her hair, subtle over the shoulder shot, 85 mm, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.21>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
-a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling giving an amazing blowjob to a man's penis while he grips her head, deepthroating man's penis while he hold's back her hair, underneath looking up shot, 85 mm, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
+a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling facing a man's groin, giving an amazing blowjob, oral sex while he grips her head by her hair, underneath looking up shot, 85 mm, golden-hour natural lighting
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.27>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
-a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling giving an amazing blowjob to a man's penis while he grips her head, deepthroating man's penis while he hold's back her hair,bird's eye shot, 85 mm, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
+a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject,kneeling facing a man's groin, giving an amazing blowjob, oral sex while he grips her head by her hair, bird's eye shot, 85 mm, golden-hour natural lighting
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.18>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
-a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject,  kneeling, facial, cumshot, giving an amazing blowjob to a man's penis while he grips her head, deepthroating man's penis, POV shot, 85 mm, golden-hour natural lighting
+a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject,  kneeling facing a man's groin, giving an amazing blowjob, oral sex while he grips her head by her hair, low angle close-up shot, 85 mm, golden-hour natural lighting
 <lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.19> <lora:finenude_v0_2a:1.2>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
 a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, kneeling in front of man, giving a sensual blowjob, the man is grabbing the back of her head by her hair and is pulling her face deeper into his groin,  side-view camera shot, 85 mm portrait, golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8>
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.23>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
 a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject lying down knees spread, detailed beautiiful vagina visible, she is using each of her hands to vigorously penetrate her clitoris and her butthole, cum leaking out of vagina, orgasming face with eyes rolled back, facing forward, 85 mm portrait,  golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8> <lora:finenude_v0_2a:0.8>
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.16> <lora:finenude_v0_2a:1.13>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
 a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, detailed beautiiful vagina visible, using both hands to spread her vaginal lips wide showing the inside of her vulva, being penetrated from behind, dick inserted deep, cum dripping out, ejaculate, in a vividly green forest, eyes rolling back in ecstasy, facing forward, 85 mm portrait,  golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8> <lora:finenude_v0_2a:0.8>
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.27> <lora:finenude_v0_2a:1.21>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
 a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, detailed beautiiful wet vagina visible, using both hands to spread her vaginal lips wide showing the inside of her vulva, being penetrated from behind, ass fucked, dick is balls deep, in a vividly green forest, eyes rolling back in ecstasy, facing forward, 85 mm portrait,  golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8> <lora:finenude_v0_2a:0.8>
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.17> <lora:finenude_v0_2a:1.19>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
 a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, detailed beautiiful vagina visible, a man uses his hand to finger her vagina, finger-banging, finger-fucking, cum dripping out, ejaculate, in a vividly green forest, eyes rolling back in ecstasy, facing forward, 85 mm portrait,  golden-hour natural lighting
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8> <lora:finenude_v0_2a:0.8>
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.18> <lora:finenude_v0_2a:1.15>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face
 
 <embedding:Stable_Yogis_Anatomy_Positives_V1>
 a gorgeous busty athletic naked [[hair]]-haired, blue-eyed woman as the central subject, on all fours on a bed facing away, ass in the air, head pulled back by her hair being pulled, man standing over her is fucking her in the ass, low angle shot from behind, golden hour lightiing
-<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:0.8> <lora:finenude_v0_2a:0.8>
+<lora:add-detail-xl:1.5> <lora:style_lora_realis:0.5425531914893618> <lora:BetterThanWords-merged-SDXL-LoRA-v3:0.8> <lora:NSFWFilterXL_animagine:1.5> <lora:finenude_v0_2a:1.5>
 neg: <embedding:SDXLnegXL> <embedding:DeepNegative_xl_v1>
 neg: blurry, out of focus, lowres, jpeg artifacts, text, watermark, signature, logo, cropped, out of frame, duplicate, multiple people, extra limbs, extra arms, extra legs, extra hands, extra fingers, fused fingers, missing fingers, malformed hands, bad anatomy, bad proportions, deformed body, disfigured, asymmetrical eyes, crossed eyes, lazy eye, cloned face

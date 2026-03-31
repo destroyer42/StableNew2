@@ -101,11 +101,11 @@ class RuntimeHostServer:
         self._shutdown_requested = False
 
     @property
-    def runtime_host(self):
+    def runtime_host(self) -> Any:
         return self._bootstrap.runtime_host
 
     @property
-    def managed_runtime_owner(self):
+    def managed_runtime_owner(self) -> Any:
         return self._bootstrap.managed_runtime_owner
 
     @property
@@ -179,7 +179,8 @@ class RuntimeHostServer:
                 self.build_handshake_payload(),
             )
         if envelope.name == "runtime_snapshot":
-            history_limit = int(envelope.payload.get("history_limit") or 50)
+            raw_history_limit = envelope.payload.get("history_limit")
+            history_limit = int(raw_history_limit) if isinstance(raw_history_limit, (str, int, float)) else 50
             return build_protocol_message(
                 "snapshot",
                 "runtime_snapshot",
@@ -242,9 +243,10 @@ class RuntimeHostServer:
                 {"accepted": True, "job_id": job.job_id},
             )
         if envelope.name == "enqueue_njrs":
-            raw_njrs = envelope.payload.get("njrs") or []
+            raw_njrs = envelope.payload.get("njrs")
+            raw_njr_items = raw_njrs if isinstance(raw_njrs, list) else []
             njrs = []
-            for item in raw_njrs:
+            for item in raw_njr_items:
                 if not isinstance(item, Mapping):
                     continue
                 record = normalized_job_from_snapshot(item)
@@ -274,12 +276,21 @@ class RuntimeHostServer:
             )
         if envelope.name == "pause_queue":
             self.runtime_host.pause()
+            persist_queue_state = getattr(self.runtime_host, "persist_queue_state", None)
+            if callable(persist_queue_state):
+                persist_queue_state()
             return build_protocol_message("response", "pause_queue", {"accepted": True})
         if envelope.name == "resume_queue":
             self.runtime_host.resume()
+            persist_queue_state = getattr(self.runtime_host, "persist_queue_state", None)
+            if callable(persist_queue_state):
+                persist_queue_state()
             return build_protocol_message("response", "resume_queue", {"accepted": True})
         if envelope.name == "set_auto_run":
             self.runtime_host.auto_run_enabled = bool(envelope.payload.get("enabled", False))
+            persist_queue_state = getattr(self.runtime_host, "persist_queue_state", None)
+            if callable(persist_queue_state):
+                persist_queue_state()
             return build_protocol_message(
                 "response",
                 "set_auto_run",
@@ -297,8 +308,8 @@ class RuntimeHostServer:
                     method = getattr(queue, action, None)
                     if callable(method):
                         result = method(job_id)
-                        if action == "remove":
-                            result = result is not None
+                        if action == "remove" and result is not None:
+                            result = serialize_job(result)
             return build_protocol_message(
                 "response",
                 "queue_action",
@@ -332,7 +343,10 @@ def serve_runtime_host_connection(
             except EOFError:
                 break
             response = server.handle_message(incoming)
-            connection.send(response.to_dict())
+            try:
+                connection.send(response.to_dict())
+            except BrokenPipeError:
+                break
             if server.shutdown_requested:
                 break
     finally:

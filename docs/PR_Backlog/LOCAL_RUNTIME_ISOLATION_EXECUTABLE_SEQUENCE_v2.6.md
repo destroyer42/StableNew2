@@ -10,12 +10,15 @@ Applies to: GUI responsiveness under generation load, queue and runner isolation
 StableNew now shows cheap Tk callback timings during generation, but the product
 can still hang for multi-second windows. That means the remaining freeze is no
 longer best explained by the measured UI callback surfaces. The stronger
-working theory is same-process starvation, native blocking, or memory-pressure
-side effects while the queue and runner execute.
+working theory was same-process starvation, native blocking, or memory-pressure
+side effects while the queue and runner execute, and that theory drove the
+runtime-isolation sequence below.
 
-This sequence defines the approved migration path from the current same-process
-GUI plus queue plus runner topology to a local runtime host model that can keep
-the GUI responsive while jobs run.
+This sequence originally defined the approved migration path from the historical
+same-process GUI plus queue plus runner topology to a local runtime host model
+that can keep the GUI responsive while jobs run. `PR-PERF-502` has now
+completed the midpoint cutover, so this document remains active as the backlog
+sequence and soak-validation gate for the follow-through work.
 
 The sequence is intentionally two-stage:
 
@@ -30,16 +33,27 @@ controlled proving phase for the final daemon model.
 
 ## 2. Current Repo Truth
 
-Current production runtime behavior is still same-process even though execution
-already runs on a background worker thread:
+Historical baseline when this sequence was authored:
 
-- fresh execution is queue-only per `docs/ARCHITECTURE_v2.6.md`
-- `PipelineRunner.run_njr(...)` remains the only production runner entrypoint
-- `AppController` builds a local `JobService`
-- `JobService` defaults to a local `SingleNodeJobRunner`
-- `SingleNodeJobRunner` starts a background `QueueWorker`, but that worker still
-  shares the GUI process
-- WebUI and Comfy bootstrap are still launched from GUI startup flow today
+- fresh execution was queue-only per `docs/ARCHITECTURE_v2.6.md`
+- `PipelineRunner.run_njr(...)` remained the only production runner entrypoint
+- `AppController` built a local `JobService`
+- `JobService` defaulted to a local `SingleNodeJobRunner`
+- `SingleNodeJobRunner` started a background `QueueWorker`, but that worker
+  still shared the GUI process
+- WebUI and Comfy bootstrap were still launched from GUI startup flow
+
+Current production truth after `PR-PERF-502`:
+
+- the GUI launches a bounded-handshake child runtime host before enabling
+  runtime-backed actions
+- the child runtime host owns `JobService`, queue state, runner execution,
+  history, managed-runtime lifecycle, watchdogs, and runtime diagnostics truth
+- production controllers operate through the runtime-host client instead of a
+  same-process production `JobService` path
+- the same-process local adapter remains DI-only and test-only until
+  `PR-PERF-503` and `PR-PERF-504` complete the daemon promotion and final
+  harmonization steps
 
 Relevant repo seams:
 

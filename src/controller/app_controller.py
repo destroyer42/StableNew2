@@ -1720,6 +1720,7 @@ class AppController:
         origin_thread_name: str,
     ) -> None:
         submitted = 0
+        preview_submission_result: Any | None = None
         error: Exception | None = None
         clear_preview_on_success = bool(preview_records)
         blocked_by_shutdown = False
@@ -1734,6 +1735,16 @@ class AppController:
                     )
                     or 0
                 )
+                get_submission_result = getattr(
+                    controller,
+                    "get_last_preview_queue_submission_result",
+                    None,
+                )
+                if callable(get_submission_result):
+                    try:
+                        preview_submission_result = get_submission_result()
+                    except Exception:
+                        preview_submission_result = None
             else:
                 submitted = int(controller.enqueue_draft_jobs(run_config=run_config) or 0)
         except Exception as exc:  # noqa: BLE001
@@ -1754,6 +1765,19 @@ class AppController:
                     f"(thread={origin_thread_name})"
                 )
                 return
+            remaining_record_ids = tuple(
+                str(record_id)
+                for record_id in (
+                    getattr(preview_submission_result, "remaining_record_ids", ()) or ()
+                )
+                if record_id
+            )
+            remaining_id_set = set(remaining_record_ids)
+            remaining_records = [
+                record
+                for record in preview_records
+                if str(getattr(record, "job_id", "") or "") in remaining_id_set
+            ]
             if submitted > 0 and clear_preview_on_success and submitted >= len(preview_records):
                 app_state = getattr(self, "app_state", None)
                 if app_state is not None:
@@ -1775,6 +1799,21 @@ class AppController:
                 )
                 return
             if submitted > 0 and clear_preview_on_success:
+                if remaining_records and len(remaining_records) < len(preview_records):
+                    app_state = getattr(self, "app_state", None)
+                    if app_state is not None:
+                        preview_setter = getattr(app_state, "set_preview_jobs", None)
+                        if callable(preview_setter):
+                            try:
+                                preview_setter(remaining_records)
+                            except Exception:
+                                pass
+                    self._log_preview_queue_finish(
+                        f"[controller] Submitted {submitted} job(s) from preview to queue; "
+                        f"{len(remaining_records)} preview job(s) remain "
+                        f"(thread={origin_thread_name})"
+                    )
+                    return
                 self._log_preview_queue_finish(
                     f"[controller] Preview queue submission stopped early after {submitted} job(s); "
                     f"draft preview was preserved (thread={origin_thread_name})"
@@ -3535,9 +3574,14 @@ class AppController:
 
     def refresh_job_history(self, limit: int | None = None) -> None:
         """Trigger a manual history refresh (exposed to GUI)."""
-        self._refresh_job_history(limit=limit)
+        self._refresh_job_history(limit=limit, force_remote_refresh=True)
 
-    def _refresh_job_history(self, limit: int | None = None) -> None:
+    def _refresh_job_history(
+        self,
+        limit: int | None = None,
+        *,
+        force_remote_refresh: bool = False,
+    ) -> None:
         if not self.app_state or not self.job_service:
             return
         store = getattr(self.job_service, "history_store", None)
@@ -3546,7 +3590,7 @@ class AppController:
         try:
             # PR-HISTORY-FIX: Force cache invalidation before refresh to ensure we get latest data
             # This is critical for manual refresh button to work correctly
-            if hasattr(store, "invalidate_cache"):
+            if force_remote_refresh and hasattr(store, "invalidate_cache"):
                 store.invalidate_cache()
             
             # Only show completed and failed jobs in history (not queued/running/cancelled)
@@ -6081,6 +6125,42 @@ class AppController:
                 )
                 self._warned_missing_pipeline_apply = True
 
+    @staticmethod
+    def _critical_webui_resource_keys() -> tuple[str, ...]:
+        return ("models", "vaes", "samplers", "schedulers")
+
+    def _has_critical_webui_resources(self, resources: dict[str, list[Any]] | None) -> bool:
+        if not isinstance(resources, dict):
+            return False
+        return any(bool(resources.get(key)) for key in self._critical_webui_resource_keys())
+
+    def _current_webui_resources(self) -> dict[str, list[Any]]:
+        current_resources = None
+        app_state = getattr(self, "app_state", None)
+        if app_state is not None:
+            current_resources = getattr(app_state, "resources", None)
+        if not current_resources:
+            state = getattr(self, "state", None)
+            current_resources = getattr(state, "resources", None) if state is not None else None
+        return self._normalize_resource_map(current_resources or {})
+
+    def _merge_preserved_webui_resources(
+        self,
+        resources: dict[str, list[Any]] | None,
+    ) -> tuple[dict[str, list[Any]], bool]:
+        normalized = self._normalize_resource_map(resources or {})
+        if self._has_critical_webui_resources(normalized):
+            return normalized, False
+
+        existing = self._current_webui_resources()
+        if not self._has_critical_webui_resources(existing):
+            return normalized, False
+
+        merged = dict(normalized)
+        for key in self._critical_webui_resource_keys():
+            merged[key] = list(existing.get(key) or [])
+        return merged, True
+
     def refresh_resources_from_webui(self) -> dict[str, list[Any]] | None:
         """Refresh resources from WebUI API and update GUI dropdowns.
         
@@ -6101,7 +6181,14 @@ class AppController:
             logger.warning(message)
             return None
 
-        normalized = self._normalize_resource_map(payload)
+        normalized, preserved_critical = self._merge_preserved_webui_resources(payload)
+        if preserved_critical:
+            message = (
+                "WebUI refresh returned no models/vaes/samplers/schedulers; "
+                "preserving previous dropdown data"
+            )
+            self._append_log(f"[resources] {message}")
+            logger.warning(message)
         
         # PR-HB-003: Schedule GUI updates on main thread
         def _update_gui():
@@ -6144,9 +6231,11 @@ class AppController:
         PR-HB-003: Spawns worker thread for resource refresh to avoid blocking
         the calling thread (which may be UI thread or connection thread).
         """
+        api_client = getattr(self, "_api_client", None)
         try:
-            if hasattr(self._api_client, "clear_startup_probe_grace"):
-                self._api_client.clear_startup_probe_grace()
+            clear_startup_probe_grace = getattr(api_client, "clear_startup_probe_grace", None)
+            if callable(clear_startup_probe_grace):
+                clear_startup_probe_grace()
         except Exception:
             pass
         self._append_log("[webui] READY received, refreshing resource lists asynchronously.")
@@ -6154,18 +6243,58 @@ class AppController:
         # PR-HB-003: Set operation label for diagnostics
         self.current_operation_label = "Refreshing WebUI resources"
         self.last_ui_action = "on_webui_ready()"
+        self._webui_resource_refresh_in_progress = True
+
+        def _trigger_deferred_queue_autostart() -> None:
+            try:
+                pipeline_controller = getattr(self, "pipeline_controller", None)
+                job_controller = getattr(pipeline_controller, "_job_controller", None)
+                trigger = getattr(job_controller, "trigger_deferred_autostart", None)
+                if callable(trigger):
+                    trigger()
+            except Exception as exc:
+                logger.debug("[webui] Deferred queue autostart trigger after READY failed: %s", exc)
         
         # PR-HB-003: Spawn worker thread for slow resource fetching
         def _worker():
             try:
-                self.refresh_resources_from_webui()
+                max_attempts = 3
+                clear_runtime_failure_state = getattr(api_client, "clear_runtime_failure_state", None)
+                for attempt in range(1, max_attempts + 1):
+                    if callable(clear_runtime_failure_state):
+                        try:
+                            clear_runtime_failure_state()
+                        except Exception:
+                            logger.debug(
+                                "[webui] Failed to clear cached runtime failure state before resource refresh attempt %d",
+                                attempt,
+                                exc_info=True,
+                            )
+                    resources = self.refresh_resources_from_webui()
+                    if self._has_critical_webui_resources(resources):
+                        break
+                    if attempt >= max_attempts:
+                        self._append_log(
+                            "[webui] Resource refresh completed without models/vaes/samplers/schedulers."
+                        )
+                        logger.warning(
+                            "WebUI READY refresh never returned critical dropdown resources after %d attempts",
+                            max_attempts,
+                        )
+                        break
+                    self._append_log(
+                        f"[webui] Critical dropdown resources still empty after READY; retrying ({attempt}/{max_attempts - 1})."
+                    )
+                    time.sleep(1.5 * attempt)
             except Exception as exc:
                 logger.exception(f"[controller] Error refreshing WebUI resources: {exc}")
                 self._append_log(f"[webui] Resource refresh failed: {exc}")
             finally:
+                self._webui_resource_refresh_in_progress = False
                 # Clear operation label
                 self.current_operation_label = None
                 self.last_ui_action = None
+                _trigger_deferred_queue_autostart()
         
         # Use tracked thread for clean shutdown
         self._spawn_tracked_thread(
@@ -6173,14 +6302,6 @@ class AppController:
             name="WebUIResourceRefresh",
             purpose="Refresh WebUI resources after connection"
         )
-        try:
-            pipeline_controller = getattr(self, "pipeline_controller", None)
-            job_controller = getattr(pipeline_controller, "_job_controller", None)
-            trigger = getattr(job_controller, "trigger_deferred_autostart", None)
-            if callable(trigger):
-                trigger()
-        except Exception as exc:
-            logger.debug("[webui] Deferred queue autostart trigger after READY failed: %s", exc)
 
     def _normalize_resource_map(self, payload: dict[str, Any]) -> dict[str, list[Any]]:
         return normalize_resource_map(payload)

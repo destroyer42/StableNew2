@@ -3,9 +3,20 @@ from __future__ import annotations
 import logging
 from collections.abc import Callable
 from contextlib import nullcontext
+from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+
+
+@dataclass(frozen=True)
+class QueueSubmissionResult:
+    attempted: int = 0
+    submitted: int = 0
+    submitted_record_ids: tuple[str, ...] = ()
+    failed_record_ids: tuple[str, ...] = ()
+    blocked: bool = False
 
 
 class QueueSubmissionService:
@@ -14,6 +25,23 @@ class QueueSubmissionService:
     def __init__(self, *, job_service: Any, logger: logging.Logger | None = None) -> None:
         self._job_service = job_service
         self._logger = logger or logging.getLogger(__name__)
+        self._last_submission_result = QueueSubmissionResult()
+
+    def get_last_submission_result(self) -> QueueSubmissionResult:
+        return self._last_submission_result
+
+    @staticmethod
+    def _attach_submission_batch_id(
+        record: NormalizedJobRecord,
+        submission_batch_id: str,
+    ) -> None:
+        extra_metadata = getattr(record, "extra_metadata", None)
+        if not isinstance(extra_metadata, dict):
+            extra_metadata = {}
+        else:
+            extra_metadata = dict(extra_metadata)
+        extra_metadata["submission_batch_id"] = submission_batch_id
+        record.extra_metadata = extra_metadata
 
     def split_queueable_records(
         self,
@@ -111,15 +139,22 @@ class QueueSubmissionService:
         run_job_payload_factory: Callable[[Any], Callable[[], dict[str, Any]]] | None = None,
     ) -> int:
         if not records or not self._job_service:
+            self._last_submission_result = QueueSubmissionResult(attempted=len(records or []))
             return 0
+        attempted = len(records)
         if str(source).startswith("learning_"):
             allowed, reason = can_enqueue_learning_jobs(len(records))
             if not allowed:
                 self._logger.warning("[QueueSubmissionService] Learning enqueue blocked: %s", reason)
+                self._last_submission_result = QueueSubmissionResult(attempted=attempted)
                 return 0
         if is_queue_submission_blocked():
             self._logger.info(
                 "[QueueSubmissionService] Skipping queue submission because shutdown is in progress"
+            )
+            self._last_submission_result = QueueSubmissionResult(
+                attempted=attempted,
+                blocked=True,
             )
             return 0
 
@@ -128,8 +163,12 @@ class QueueSubmissionService:
         queue = getattr(self._job_service, "job_queue", None)
         coalesce_queue_state = getattr(queue, "coalesce_state_notifications", None)
         submitted = 0
+        submitted_record_ids: list[str] = []
+        failed_record_ids: list[str] = []
+        blocked = False
         run_config_to_use = run_config or last_run_config
         batch_context = nullcontext()
+        submission_batch_id = uuid4().hex
         if callable(coalesce_queue_state):
             candidate_context = coalesce_queue_state()
             if hasattr(candidate_context, "__enter__") and hasattr(candidate_context, "__exit__"):
@@ -139,45 +178,60 @@ class QueueSubmissionService:
         with batch_context:
             for record in records:
                 if is_queue_submission_blocked():
+                    blocked = True
                     self._logger.info(
                         "[QueueSubmissionService] Stopping queue submission after %d/%d jobs because shutdown is in progress",
                         submitted,
                         len(records),
                     )
                     break
-                cfg = record.config
-                prompt_pack_id = cfg.get("prompt_pack_id") if isinstance(cfg, dict) else None
-                if prompt_pack_id and not getattr(record, "prompt_pack_id", None):
-                    try:
-                        record.prompt_pack_id = prompt_pack_id  # type: ignore[attr-defined]
-                    except Exception:
-                        record.prompt_pack_id = prompt_pack_id
-                prompt_pack_name = None
-                if isinstance(cfg, dict):
-                    prompt_pack_name = cfg.get("prompt_pack_name") or cfg.get("pack_name")
-                ensure_record_prompt_pack_metadata(record, prompt_pack_id, prompt_pack_name)
-                job = to_queue_job(
-                    record,
-                    run_mode="queue",
-                    source=source,
-                    prompt_source=prompt_source,
-                    prompt_pack_id=prompt_pack_id,
-                    run_config=run_config_to_use,
-                )
-                if run_job_payload_factory is not None:
-                    job.payload = run_job_payload_factory(job)
-                if not hasattr(job, "_normalized_record") or job._normalized_record is None:
-                    self._logger.warning(
-                        "PR-CORE1-B2: Job submitted without normalized_record in NJR-only mode. Source: %s",
-                        source,
+                record_id = str(getattr(record, "job_id", "") or "")
+                try:
+                    self._attach_submission_batch_id(record, submission_batch_id)
+                    cfg = record.config
+                    prompt_pack_id = cfg.get("prompt_pack_id") if isinstance(cfg, dict) else None
+                    if prompt_pack_id and not getattr(record, "prompt_pack_id", None):
+                        try:
+                            record.prompt_pack_id = prompt_pack_id  # type: ignore[attr-defined]
+                        except Exception:
+                            record.prompt_pack_id = prompt_pack_id
+                    prompt_pack_name = None
+                    if isinstance(cfg, dict):
+                        prompt_pack_name = cfg.get("prompt_pack_name") or cfg.get("pack_name")
+                    ensure_record_prompt_pack_metadata(record, prompt_pack_id, prompt_pack_name)
+                    job = to_queue_job(
+                        record,
+                        run_mode="queue",
+                        source=source,
+                        prompt_source=prompt_source,
+                        prompt_pack_id=prompt_pack_id,
+                        run_config=run_config_to_use,
                     )
-                if callable(submit_job):
-                    try:
-                        submit_job(job, emit_queue_updated=False)
-                    except TypeError:
-                        submit_job(job)
-                log_add_to_queue_event(job.job_id)
+                    if run_job_payload_factory is not None:
+                        job.payload = run_job_payload_factory(job)
+                    if not hasattr(job, "_normalized_record") or job._normalized_record is None:
+                        self._logger.warning(
+                            "PR-CORE1-B2: Job submitted without normalized_record in NJR-only mode. Source: %s",
+                            source,
+                        )
+                    if callable(submit_job):
+                        try:
+                            submit_job(job, emit_queue_updated=False)
+                        except TypeError:
+                            submit_job(job)
+                    log_add_to_queue_event(job.job_id)
+                except Exception as exc:
+                    if record_id:
+                        failed_record_ids.append(record_id)
+                    self._logger.exception(
+                        "[QueueSubmissionService] Failed to queue preview job %s: %s",
+                        record_id or "<missing-job-id>",
+                        exc,
+                    )
+                    continue
                 submitted += 1
+                if record_id:
+                    submitted_record_ids.append(record_id)
 
         if submitted > 0 and callable(emit_queue_updated):
             try:
@@ -187,7 +241,14 @@ class QueueSubmissionService:
                     "[QueueSubmissionService] Failed to emit coalesced queue update after batch submission",
                     exc_info=True,
                 )
+        self._last_submission_result = QueueSubmissionResult(
+            attempted=attempted,
+            submitted=submitted,
+            submitted_record_ids=tuple(submitted_record_ids),
+            failed_record_ids=tuple(failed_record_ids),
+            blocked=blocked,
+        )
         return submitted
 
 
-__all__ = ["QueueSubmissionService"]
+__all__ = ["QueueSubmissionResult", "QueueSubmissionService"]

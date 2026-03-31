@@ -105,6 +105,17 @@ class PreparedQueueRunSubmission:
     run_config: dict[str, Any] | None
 
 
+@dataclass(frozen=True)
+class PreviewQueueSubmissionResult:
+    submitted: int = 0
+    total_records: int = 0
+    submitted_record_ids: tuple[str, ...] = ()
+    failed_record_ids: tuple[str, ...] = ()
+    remaining_record_ids: tuple[str, ...] = ()
+    non_queueable_record_ids: tuple[str, ...] = ()
+    blocked: bool = False
+
+
 class PipelineController(CorePipelineController):
     def _build_njrs_from_pack_bundle(
         self, pack_entries: list[PackJobEntry]
@@ -1212,12 +1223,19 @@ class PipelineController(CorePipelineController):
             self._app_state.set_queue_status("idle")
 
     def _setup_history_callbacks(self) -> None:
+        if self._app_state_queue_updates_managed_externally:
+            _logger.debug(
+                "_setup_history_callbacks: external app-state owner present, skipping duplicate history refresh callbacks"
+            )
+            return
         history_service = self.get_job_history_service()
         if history_service is None:
             return
         history_service.register_callback(self._on_history_entry_updated)
 
     def _on_history_entry_updated(self, entry: JobHistoryEntry) -> None:
+        if self._app_state_queue_updates_managed_externally:
+            return
         status = getattr(entry, "status", None)
         status_value = status.value if hasattr(status, "value") else str(status or "")
         if status_value.lower() not in {"completed", "failed"}:
@@ -1685,9 +1703,18 @@ class PipelineController(CorePipelineController):
             Number of jobs successfully submitted to queue.
         """
         normalized_jobs = records if records is not None else self.get_preview_jobs()
+        self._last_preview_queue_submission_result = PreviewQueueSubmissionResult(
+            total_records=len(normalized_jobs),
+            remaining_record_ids=tuple(
+                str(getattr(record, "job_id", "") or "") for record in normalized_jobs
+            ),
+        )
         if not normalized_jobs:
             return 0
         queueable, non_queueable = self._split_queueable_records(normalized_jobs)
+        non_queueable_ids = tuple(
+            str(getattr(record, "job_id", "") or "") for record in non_queueable
+        )
 
         if run_config is not None:
             self._last_run_config = run_config
@@ -1707,6 +1734,13 @@ class PipelineController(CorePipelineController):
                     "non_queueable": len(non_queueable),
                 },
             )
+            self._last_preview_queue_submission_result = PreviewQueueSubmissionResult(
+                total_records=len(normalized_jobs),
+                remaining_record_ids=tuple(
+                    str(getattr(record, "job_id", "") or "") for record in normalized_jobs
+                ),
+                non_queueable_record_ids=non_queueable_ids,
+            )
             raise ValueError(message)
 
         submitted = self._submit_normalized_jobs(
@@ -1715,7 +1749,30 @@ class PipelineController(CorePipelineController):
             source=source,
             prompt_source=prompt_source,
         )
+        service_result = self._get_queue_submission_service().get_last_submission_result()
+        submitted_ids = tuple(service_result.submitted_record_ids)
+        failed_ids = tuple(service_result.failed_record_ids)
+        submitted_set = set(submitted_ids)
+        remaining_ids = tuple(
+            record_id
+            for record_id in (
+                str(getattr(record, "job_id", "") or "") for record in normalized_jobs
+            )
+            if record_id and record_id not in submitted_set
+        )
+        self._last_preview_queue_submission_result = PreviewQueueSubmissionResult(
+            submitted=submitted,
+            total_records=len(normalized_jobs),
+            submitted_record_ids=submitted_ids,
+            failed_record_ids=failed_ids,
+            remaining_record_ids=remaining_ids,
+            non_queueable_record_ids=non_queueable_ids,
+            blocked=service_result.blocked,
+        )
         return submitted
+
+    def get_last_preview_queue_submission_result(self) -> PreviewQueueSubmissionResult:
+        return getattr(self, "_last_preview_queue_submission_result", PreviewQueueSubmissionResult())
 
     def _split_queueable_records(
         self,

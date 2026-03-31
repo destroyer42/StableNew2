@@ -10,6 +10,7 @@ from dataclasses import asdict
 from datetime import datetime
 from threading import Lock
 from typing import Any, Literal, Protocol
+from uuid import uuid4
 
 from src.config.app_config import get_process_container_config, get_watchdog_config
 from src.controller.job_history_service import JobHistoryService
@@ -467,12 +468,27 @@ class JobService:
         job._normalized_record = record  # type: ignore[attr-defined]
         return job
 
+    @staticmethod
+    def _attach_submission_batch_id(
+        record: NormalizedJobRecord,
+        submission_batch_id: str,
+    ) -> None:
+        extra_metadata = getattr(record, "extra_metadata", None)
+        if not isinstance(extra_metadata, dict):
+            extra_metadata = {}
+        else:
+            extra_metadata = dict(extra_metadata)
+        extra_metadata["submission_batch_id"] = submission_batch_id
+        record.extra_metadata = extra_metadata
+
     def enqueue_njrs(
         self, njrs: list[NormalizedJobRecord], run_request: PipelineRunRequest
     ) -> list[str]:
         """Enqueue a batch of NormalizedJobRecord instances."""
         job_ids: list[str] = []
+        submission_batch_id = uuid4().hex
         for record in njrs[: run_request.max_njr_count]:
+            self._attach_submission_batch_id(record, submission_batch_id)
             job = self._job_from_njr(record, run_request)
             self.submit_job_with_run_mode(job)
             job_ids.append(job.job_id)

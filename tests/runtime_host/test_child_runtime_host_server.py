@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from types import SimpleNamespace
 from typing import Any
 
@@ -11,6 +12,8 @@ from src.runtime_host import (
     build_runtime_host_bootstrap,
     serve_runtime_host_connection,
 )
+from src.services.queue_store_v2 import QueueSnapshotV1, SCHEMA_VERSION
+from tests.helpers.job_helpers import make_test_job_from_njr, make_test_njr
 
 
 class StubPipelineRunner:
@@ -44,6 +47,11 @@ class FakeConnection:
         self.closed = True
 
 
+class BrokenPipeOnSendConnection(FakeConnection):
+    def send(self, value: dict[str, Any]) -> None:
+        raise BrokenPipeError(109, "The pipe has been ended")
+
+
 def test_runtime_host_bootstrap_uses_injected_pipeline_runner(tmp_path) -> None:
     runner = StubPipelineRunner()
 
@@ -73,6 +81,59 @@ def test_runtime_host_job_executor_runs_njr_payloads(tmp_path) -> None:
     assert result["success"] is True
     assert result["run_id"] == "queue-job-1"
     assert result["metadata"]["marker"] == "ok"
+
+
+def test_runtime_host_bootstrap_restores_and_persists_queue_snapshot(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    restored_record = make_test_njr(job_id="restored-job")
+    entry = {
+        "queue_id": "restored-job",
+        "njr_snapshot": {"normalized_job": asdict(restored_record)},
+        "priority": 1,
+        "status": "queued",
+        "created_at": "2025-07-01T12:00:00Z",
+        "queue_schema": SCHEMA_VERSION,
+        "metadata": {"run_mode": "queue", "source": "gui", "prompt_source": "pack"},
+    }
+    saved_snapshots: list[QueueSnapshotV1] = []
+    run_next_calls: list[list[str]] = []
+
+    monkeypatch.setattr(
+        "src.runtime_host.bootstrap.load_queue_snapshot",
+        lambda *_, **__: QueueSnapshotV1(jobs=[entry], auto_run_enabled=True, paused=False),
+    )
+    monkeypatch.setattr(
+        "src.runtime_host.bootstrap.save_queue_snapshot",
+        lambda snapshot, *_, **__: saved_snapshots.append(snapshot) or True,
+    )
+
+    def _record_run_next(self) -> None:
+        run_next_calls.append([job.job_id for job in self.job_queue.list_jobs()])
+
+    monkeypatch.setattr(
+        "src.runtime_host.bootstrap.JobService.run_next_now",
+        _record_run_next,
+    )
+
+    bootstrap = build_runtime_host_bootstrap(
+        history_path=tmp_path / "runtime-host-history.jsonl",
+        pipeline_runner=StubPipelineRunner(),
+    )
+
+    assert [job.job_id for job in bootstrap.job_queue.list_jobs()] == ["restored-job"]
+    assert bootstrap.job_service.auto_run_enabled is True
+    assert run_next_calls == [["restored-job"]]
+    assert saved_snapshots
+    assert saved_snapshots[-1].jobs[0]["queue_id"] == "restored-job"
+
+    bootstrap.job_queue.submit(make_test_job_from_njr(make_test_njr(job_id="new-job")))
+
+    assert any(
+        any(item["queue_id"] == "new-job" for item in snapshot.jobs)
+        for snapshot in saved_snapshots
+    )
 
 
 def test_runtime_host_server_serves_handshake_diagnostics_and_shutdown(tmp_path) -> None:
@@ -167,6 +228,46 @@ def test_runtime_host_server_handles_managed_runtime_commands(tmp_path) -> None:
     assert diagnostics.payload["webui_tail"]["stdout_tail"] == ["ready"]
 
 
+def test_runtime_host_server_persists_auto_run_updates(tmp_path) -> None:
+    bootstrap = build_runtime_host_bootstrap(
+        history_path=tmp_path / "runtime-host-history.jsonl",
+        pipeline_runner=StubPipelineRunner(),
+    )
+    persist_calls: list[str] = []
+    bootstrap.job_service.persist_queue_state = lambda: persist_calls.append("persist")  # type: ignore[attr-defined]
+    server = RuntimeHostServer(bootstrap)
+
+    response = server.handle_message(
+        build_protocol_message("command", "set_auto_run", {"enabled": True}).to_dict()
+    )
+
+    assert response.kind == "response"
+    assert response.payload["enabled"] is True
+    assert persist_calls == ["persist"]
+
+
+def test_runtime_host_server_queue_remove_returns_removed_job_payload(tmp_path) -> None:
+    bootstrap = build_runtime_host_bootstrap(
+        history_path=tmp_path / "runtime-host-history.jsonl",
+        pipeline_runner=StubPipelineRunner(),
+    )
+    bootstrap.job_queue.submit(make_test_job_from_njr(make_test_njr(job_id="job-remove")))
+    server = RuntimeHostServer(bootstrap)
+
+    response = server.handle_message(
+        build_protocol_message(
+            "command",
+            "queue_action",
+            {"action": "remove", "job_id": "job-remove"},
+        ).to_dict()
+    )
+
+    assert response.kind == "response"
+    result = dict(response.payload["result"])
+    assert result["job_id"] == "job-remove"
+    assert result["status"] == "cancelled"
+
+
 def test_runtime_host_server_stops_on_parent_disconnect(tmp_path) -> None:
     bootstrap = build_runtime_host_bootstrap(
         history_path=tmp_path / "runtime-host-history.jsonl",
@@ -186,3 +287,27 @@ def test_runtime_host_server_stops_on_parent_disconnect(tmp_path) -> None:
     assert stop_calls == ["stop"]
     assert owner_stop_calls == ["stop"]
     assert connection.closed is True
+
+
+def test_runtime_host_server_stops_on_send_broken_pipe(tmp_path) -> None:
+    bootstrap = build_runtime_host_bootstrap(
+        history_path=tmp_path / "runtime-host-history.jsonl",
+        pipeline_runner=StubPipelineRunner(),
+    )
+    stop_calls: list[str] = []
+    owner_stop_calls: list[str] = []
+
+    bootstrap.job_service.stop = lambda: stop_calls.append("stop")  # type: ignore[method-assign]
+    bootstrap.managed_runtime_owner.stop = lambda: owner_stop_calls.append("stop")  # type: ignore[method-assign]
+    server = RuntimeHostServer(bootstrap)
+    connection = BrokenPipeOnSendConnection([
+        build_protocol_message("command", "handshake").to_dict(),
+    ])
+
+    serve_runtime_host_connection(connection, server)
+
+    assert server.shutdown_requested is True
+    assert stop_calls == ["stop"]
+    assert owner_stop_calls == ["stop"]
+    assert connection.closed is True
+    assert connection.sent == []

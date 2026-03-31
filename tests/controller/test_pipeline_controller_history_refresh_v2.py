@@ -32,6 +32,7 @@ def _make_controller() -> PipelineController:
     ctrl = PipelineController.__new__(PipelineController)
     ctrl._app_state = AppStateV2()
     ctrl._job_service = _FakeJobService()
+    ctrl._app_state_queue_updates_managed_externally = False
     return ctrl
 
 
@@ -73,4 +74,24 @@ def test_on_history_entry_updated_ignores_non_terminal_statuses() -> None:
         status=JobStatus.QUEUED,
     )
     ctrl._on_history_entry_updated(entry)
+    assert called == []
+
+
+def test_on_history_entry_updated_skips_when_external_owner_manages_app_state() -> None:
+    ctrl = _make_controller()
+    ctrl._app_state_queue_updates_managed_externally = True
+    called: list[bool] = []
+
+    def fake_refresh() -> None:
+        called.append(True)
+
+    ctrl._refresh_app_state_history = fake_refresh  # type: ignore[attr-defined]
+    entry = JobHistoryEntry(
+        job_id="job-delta",
+        created_at=datetime.utcnow(),
+        status=JobStatus.COMPLETED,
+    )
+
+    ctrl._on_history_entry_updated(entry)
+
     assert called == []

@@ -343,16 +343,17 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                             logging.debug(f"WebUI status update: state = {state}")
                             last_logged_state = state
 
+                        if base_generation_refreshed and state in {
+                            WebUIConnectionState.DISCONNECTED,
+                            WebUIConnectionState.ERROR,
+                        }:
+                            base_generation_refreshed = False
+
                         if state == WebUIConnectionState.DISCONNECTED:
                             consecutive_failures += 1
                         else:
                             consecutive_failures = 0
                             error_logged = False
-                            if base_generation_refreshed and state in {
-                                WebUIConnectionState.DISCONNECTED,
-                                WebUIConnectionState.ERROR,
-                            }:
-                                base_generation_refreshed = False
 
                         if consecutive_failures >= 3:
                             try:

@@ -277,6 +277,24 @@ def test_trigger_deferred_queue_autostart_defers_until_webui_ready() -> None:
     assert job_controller.called == 0
 
 
+def test_trigger_deferred_queue_autostart_defers_while_resource_refresh_runs() -> None:
+    job_controller = _StubJobController()
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.pipeline_controller = _StubPipelineController(job_controller)
+    window.app_controller = type(
+        "ControllerStub",
+        (),
+        {
+            "webui_connection_controller": _StubWebUIConnection(True),
+            "_webui_resource_refresh_in_progress": True,
+        },
+    )()
+
+    window._trigger_deferred_queue_autostart()
+
+    assert job_controller.called == 0
+
+
 def test_cleanup_does_not_double_shutdown_webui_when_controller_present() -> None:
     window = MainWindowV2.__new__(MainWindowV2)
     window._disposed = False

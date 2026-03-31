@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job
+from tests.helpers.job_helpers import make_test_njr
 
 
 class DummyJobService(JobService):  # type: ignore[misc]
@@ -94,3 +97,33 @@ def test_enqueue_draft_jobs_reuses_cached_preview_jobs():
     assert submitted == 1
     assert controller._app_state.cleared == 1
     assert controller._app_state.preview_updates[-1] == []
+
+
+def test_submit_preview_jobs_to_queue_tracks_remaining_non_queueable_rows() -> None:
+    controller = object.__new__(DummyPipelineController)
+    controller._job_service = DummyJobService()
+    controller._job_lifecycle_logger = None
+    controller._app_state = SimpleNamespace(job_draft=SimpleNamespace(summary=SimpleNamespace(part_count=0)))
+    controller._run_job = lambda job: {}  # type: ignore[assignment]
+    controller._to_queue_job = lambda rec, **kwargs: Job(
+        job_id=rec.job_id,
+        run_mode=kwargs["run_mode"],
+        source=kwargs["source"],
+        prompt_source=kwargs["prompt_source"],
+        prompt_pack_id=kwargs.get("prompt_pack_id"),
+        config_snapshot=rec.to_queue_snapshot(),
+    )
+
+    submitted = controller.submit_preview_jobs_to_queue(
+        records=[
+            make_test_njr(job_id="job-1", prompt_source="pack", prompt_pack_id="pack-a"),
+            make_test_njr(job_id="job-2", prompt_source="pack", prompt_pack_id=""),
+        ]
+    )
+
+    result = controller.get_last_preview_queue_submission_result()
+
+    assert submitted == 1
+    assert result.submitted_record_ids == ("job-1",)
+    assert result.remaining_record_ids == ("job-2",)
+    assert result.non_queueable_record_ids == ("job-2",)

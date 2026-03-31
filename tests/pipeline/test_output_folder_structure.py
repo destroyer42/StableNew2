@@ -282,12 +282,13 @@ class TestOutputFolderStructure:
 
         assert pack_folder is not None, f"Job ID folder not found. Found: {[f.name for f in output_folders]}"
 
-    def test_multiple_jobs_same_pack_share_folder(
+    def test_multiple_jobs_same_submission_share_folder(
         self, pipeline_runner, temp_output_dir
     ):
         """
-        Test that multiple jobs from the same prompt pack share the same output folder.
+        Test that multiple jobs from the same submission batch share the same output folder.
         """
+        submission_batch_id = "batch-shared-folder"
         # Create 3 NJRs with the same pack name
         njrs = []
         for i in range(3):
@@ -306,6 +307,7 @@ class TestOutputFolderStructure:
                 width=512,
                 height=512,
                 images_per_prompt=1,
+                extra_metadata={"submission_batch_id": submission_batch_id},
                 stage_chain=[
                     StageConfig(stage_type="txt2img", enabled=True),
                 ],
@@ -336,7 +338,7 @@ class TestOutputFolderStructure:
                 if "SharedPack" in folder.name:
                     folder_paths.add(str(folder))
 
-        # All 3 jobs should use the SAME folder (consolidated by pack)
+        # All 3 jobs should use the SAME folder within a single submission batch.
         assert len(folder_paths) == 1, f"Expected 1 shared folder, found {len(folder_paths)}: {folder_paths}"
         
         # Verify the shared folder contains files from all 3 jobs
@@ -430,10 +432,10 @@ class TestOutputFolderStructure:
         assert pack_b_folder is not None, "PackB folder not found"
         assert pack_a_folder != pack_b_folder, "Different packs should have different folders"
 
-    def test_same_pack_folder_reused_after_runner_restart(
+    def test_same_pack_repeat_submission_gets_new_folder_after_runner_restart(
         self, mock_api_client, mock_structured_logger, temp_output_dir
     ):
-        """Folder reuse should survive a fresh runner instance, not only in-memory cache."""
+        """Repeat submissions should get a fresh folder even after a fresh runner instance."""
         PipelineRunner._pack_folder_cache.clear()
         first_runner = PipelineRunner(
             api_client=mock_api_client,
@@ -479,7 +481,65 @@ class TestOutputFolderStructure:
         PipelineRunner._pack_folder_cache.clear()
         second_result = second_runner.run_njr(njr)
         assert second_result.success is True
-        assert first_result.run_id == second_result.run_id
+        assert first_result.run_id != second_result.run_id
+
+    def test_same_pack_different_submission_batches_get_different_folders(
+        self, pipeline_runner, temp_output_dir
+    ):
+        """Distinct submission batches should not reuse the same run folder."""
+        njr1 = NormalizedJobRecord(
+            job_id="batch_job_1",
+            config=dict(self.PIPELINE_CONFIG),
+            path_output_dir=str(temp_output_dir),
+            filename_template="image_{index:04d}",
+            prompt_pack_name="BatchPack",
+            positive_prompt="A scout",
+            negative_prompt="",
+            base_model="sd_xl_base_1.0.safetensors",
+            sampler_name="Euler a",
+            steps=20,
+            cfg_scale=7.5,
+            width=512,
+            height=512,
+            images_per_prompt=1,
+            extra_metadata={"submission_batch_id": "batch-a"},
+            stage_chain=[StageConfig(stage_type="txt2img", enabled=True)],
+        )
+        njr2 = NormalizedJobRecord(
+            job_id="batch_job_2",
+            config=dict(self.PIPELINE_CONFIG),
+            path_output_dir=str(temp_output_dir),
+            filename_template="image_{index:04d}",
+            prompt_pack_name="BatchPack",
+            positive_prompt="A scout again",
+            negative_prompt="",
+            base_model="sd_xl_base_1.0.safetensors",
+            sampler_name="Euler a",
+            steps=20,
+            cfg_scale=7.5,
+            width=512,
+            height=512,
+            images_per_prompt=1,
+            extra_metadata={"submission_batch_id": "batch-b"},
+            stage_chain=[StageConfig(stage_type="txt2img", enabled=True)],
+        )
+
+        mock_result = {
+            "path": f"{temp_output_dir}/txt2img_00.png",
+            "all_paths": [f"{temp_output_dir}/txt2img_00.png"],
+            "name": "txt2img_00",
+            "stage": "txt2img",
+        }
+        pipeline_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_result)
+        first_result = pipeline_runner.run_njr(njr1)
+        assert first_result.success is True
+
+        pipeline_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_result)
+        second_result = pipeline_runner.run_njr(njr2)
+        assert second_result.success is True
+
+        assert first_result.run_id != second_result.run_id
+
 
     def test_njr_output_dir_overrides_runner_base_dir(
         self, mock_api_client, mock_structured_logger, tmp_path

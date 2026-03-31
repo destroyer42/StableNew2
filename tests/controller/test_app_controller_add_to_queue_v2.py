@@ -214,6 +214,9 @@ def test_submit_preview_jobs_to_queue_async_preserves_preview_after_partial_subm
     )
     pipeline_ctrl = SimpleNamespace(
         submit_preview_jobs_to_queue=lambda **kwargs: 1,
+        get_last_preview_queue_submission_result=lambda: SimpleNamespace(
+            remaining_record_ids=("job-2",),
+        ),
     )
     controller = _build_controller(pipeline_controller=pipeline_ctrl, preview_jobs=preview_jobs)
     controller.app_state = app_state
@@ -229,5 +232,5 @@ def test_submit_preview_jobs_to_queue_async_preserves_preview_after_partial_subm
     )
 
     assert controller._queue_submit_in_progress is False
-    assert cleared == []
-    assert any("stopped early" in message for message in messages)
+    assert cleared == ["preview:1"]
+    assert any("1 preview job(s) remain" in message for message in messages)

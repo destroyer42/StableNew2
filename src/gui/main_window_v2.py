@@ -454,7 +454,13 @@ class MainWindowV2:
         """Trigger deferred queue autostart after GUI is fully rendered."""
         logger.info("[STARTUP-PERF] Attempting to trigger deferred queue autostart...")
         try:
-            webui_ctrl = getattr(getattr(self, "app_controller", None), "webui_connection_controller", None)
+            app_controller = getattr(self, "app_controller", None)
+            if bool(getattr(app_controller, "_webui_resource_refresh_in_progress", False)):
+                logger.info(
+                    "[STARTUP-PERF] WebUI resource refresh still running; deferring queue autostart until refresh completes"
+                )
+                return
+            webui_ctrl = getattr(app_controller, "webui_connection_controller", None)
             is_ready = getattr(webui_ctrl, "is_webui_ready_strict", None)
             if callable(is_ready) and not is_ready():
                 logger.info("[STARTUP-PERF] WebUI not strictly ready yet; deferring queue autostart until READY callback")

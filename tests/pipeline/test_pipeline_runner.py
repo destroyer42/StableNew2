@@ -643,6 +643,21 @@ def test_normalize_run_result_preserves_missing_success_as_unknown() -> None:
     assert canonical["error"] is None
 
 
+def test_normalize_run_result_ignores_none_stage_events() -> None:
+    canonical = normalize_run_result(
+        {
+            "run_id": "from-dict",
+            "success": True,
+            "stage_events": [None, {"stage": "txt2img"}],
+        },
+        default_run_id="fallback",
+    )
+
+    assert canonical["run_id"] == "from-dict"
+    assert canonical["success"] is True
+    assert canonical["stage_events"] == [{"stage": "txt2img"}]
+
+
 def test_run_njr_dispatches_animatediff_stage(tmp_path: Path) -> None:
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
     input_path = tmp_path / "seed.png"

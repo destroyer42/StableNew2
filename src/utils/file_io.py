@@ -485,7 +485,7 @@ def get_unique_output_path(
     
     logger = logging.getLogger(__name__)
     logger.warning(
-        "[COLLISION] Output file already exists: %s (this indicates a filename generation bug)",
+        "[COLLISION] Output file already exists: %s (rerun into a reused output folder or duplicate filename; resolving with a copy suffix)",
         base_path
     )
     
@@ -501,7 +501,7 @@ def get_unique_output_path(
     
     raise ValueError(
         f"Could not find unique filename after {max_attempts} attempts for {base_path}. "
-        "This indicates a serious filename generation bug."
+        "This indicates repeated filename collisions in the same output folder."
     )
 
 

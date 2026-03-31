@@ -4,6 +4,7 @@ import logging
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
+from uuid import uuid4
 
 from src.queue.job_model import Job, JobPriority
 from src.utils.snapshot_builder_v2 import build_job_snapshot
@@ -30,6 +31,16 @@ class PipelinePreviewSubmissionService:
         self._job_service = job_service
         self._run_job_callback = run_job_callback
         self._learning_enabled = learning_enabled
+
+    @staticmethod
+    def _attach_submission_batch_id(record: Any, submission_batch_id: str) -> None:
+        extra_metadata = getattr(record, "extra_metadata", None)
+        if not isinstance(extra_metadata, dict):
+            extra_metadata = {}
+        else:
+            extra_metadata = dict(extra_metadata)
+        extra_metadata["submission_batch_id"] = submission_batch_id
+        record.extra_metadata = extra_metadata
 
     def to_queue_job(
         self,
@@ -93,6 +104,7 @@ class PipelinePreviewSubmissionService:
             return None
 
         submitted_count = 0
+        submission_batch_id = uuid4().hex
         effective_prompt_pack_id = prompt_pack_id
         if not effective_prompt_pack_id:
             effective_prompt_pack_id = (last_run_config or {}).get("prompt_pack_id")
@@ -100,6 +112,7 @@ class PipelinePreviewSubmissionService:
         jobs_to_submit: list[Job] = []
         for record in normalized_jobs:
             try:
+                self._attach_submission_batch_id(record, submission_batch_id)
                 job = self.to_queue_job(
                     record,
                     run_mode=run_mode,

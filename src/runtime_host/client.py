@@ -4,6 +4,7 @@ import multiprocessing as mp
 import threading
 import time
 from collections.abc import Callable, Mapping
+from contextlib import AbstractContextManager
 from typing import Any
 
 from src.config.app_config import (
@@ -45,6 +46,9 @@ class RemoteQueueMirror:
 
     def register_state_listener(self, callback: Callable[[], None]) -> None:
         self._state_listeners.append(callback)
+
+    def coalesce_state_notifications(self) -> AbstractContextManager[None]:
+        return self._client._coalesce_remote_refreshes()
 
     def list_jobs(self, status_filter: JobStatus | None = None) -> list[Job]:
         jobs = list(self._client._jobs_by_id.values())
@@ -102,7 +106,9 @@ class RemoteQueueMirror:
         return bool(self._client._queue_action("move_to_back", job_id=job_id))
 
     def remove(self, job_id: str) -> Job | None:
-        removed = bool(self._client._queue_action("remove", job_id=job_id))
+        removed = self._client._queue_action("remove", job_id=job_id)
+        if isinstance(removed, Mapping):
+            return deserialize_job(removed)
         if not removed:
             return None
         return self.get_job(job_id)
@@ -115,6 +121,19 @@ class RemoteHistoryStoreMirror:
     def __init__(self, client: ChildRuntimeHostClient) -> None:
         self._client = client
         self._callbacks: list[Callable[[JobHistoryEntry], None]] = []
+        self._cache_initialized = False
+        self._cache_stale = True
+
+    def _ensure_cache(self, *, history_limit: int) -> None:
+        if self._cache_initialized and not self._cache_stale:
+            return
+        self._client._refresh_from_remote(history_limit=history_limit)
+        self._cache_initialized = True
+        self._cache_stale = False
+
+    def _mark_cache_fresh(self) -> None:
+        self._cache_initialized = True
+        self._cache_stale = False
 
     def list_jobs(
         self,
@@ -122,28 +141,31 @@ class RemoteHistoryStoreMirror:
         limit: int = 50,
         offset: int = 0,
     ) -> list[JobHistoryEntry]:
-        self._client._refresh_from_remote(history_limit=max(limit + offset, 50))
+        self._ensure_cache(history_limit=max(limit + offset, 50))
         entries = list(self._client._history_entries)
         if status is not None:
             entries = [entry for entry in entries if entry.status == status]
         return entries[offset : offset + limit]
 
     def get_job(self, job_id: str) -> JobHistoryEntry | None:
+        if not self._cache_initialized and self._cache_stale:
+            self._ensure_cache(history_limit=50)
         return self._client._history_by_id.get(job_id)
 
     def register_callback(self, callback: Callable[[JobHistoryEntry], None]) -> None:
         self._callbacks.append(callback)
 
     def invalidate_cache(self) -> None:
-        self._client._refresh_from_remote(history_limit=50)
+        self._cache_stale = True
 
     def shutdown(self) -> None:
         return None
 
     def _emit(self, entry: JobHistoryEntry) -> None:
+        self._mark_cache_fresh()
         for callback in list(self._callbacks):
             try:
-                self._client._dispatch(lambda cb=callback, e=entry: cb(e))
+                self._client._dispatch_call(callback, entry)
             except Exception:
                 continue
 
@@ -188,6 +210,11 @@ class ChildRuntimeHostClient(RuntimeHostPort):
         self._handshake_timeout = float(handshake_timeout)
         self._poll_interval = float(poll_interval)
         self._request_lock = threading.RLock()
+        self._refresh_batch_lock = threading.Lock()
+        self._refresh_context = threading.local()
+        self._remote_refresh_suppressed = 0
+        self._remote_refresh_pending = False
+        self._remote_refresh_history_limit = 50
         self._callbacks: dict[str, list[Callable[..., None]]] = {}
         self._status_callbacks: dict[str, Callable[[Job, JobStatus], None]] = {}
         self._completion_handlers: list[Callable[[Any, Any], None]] = []
@@ -224,7 +251,7 @@ class ChildRuntimeHostClient(RuntimeHostPort):
     @auto_run_enabled.setter
     def auto_run_enabled(self, value: bool) -> None:
         self._request("set_auto_run", {"enabled": bool(value)})
-        self._refresh_from_remote()
+        self._schedule_remote_refresh()
 
     def connect(self) -> None:
         response = self._request("handshake", timeout=self._handshake_timeout)
@@ -247,7 +274,7 @@ class ChildRuntimeHostClient(RuntimeHostPort):
     def register_callback(self, event: str, callback: Callable[..., None]) -> None:
         self._callbacks.setdefault(event, []).append(callback)
 
-    def set_status_callback(self, name: str, callback: Callable[..., None]) -> None:
+    def set_status_callback(self, name: str, callback: Callable[[Job, JobStatus], None]) -> None:
         self._status_callbacks[name] = callback
 
     def set_event_dispatcher(self, dispatch_fn: Callable[[Callable[[], None]], None]) -> None:
@@ -271,7 +298,7 @@ class ChildRuntimeHostClient(RuntimeHostPort):
                 "emit_queue_updated": bool(emit_queue_updated),
             },
         )
-        self._refresh_from_remote()
+        self._schedule_remote_refresh()
 
     def submit_queued(self, job: Any, *, emit_queue_updated: bool = True) -> None:
         self.submit_job_with_run_mode(job, emit_queue_updated=emit_queue_updated)
@@ -281,7 +308,7 @@ class ChildRuntimeHostClient(RuntimeHostPort):
 
     def run_now(self, job: Any) -> None:
         self._request("run_now", {"job": serialize_job(job)})
-        self._refresh_from_remote()
+        self._schedule_remote_refresh()
 
     def enqueue_njrs(self, njrs: list[Any], run_request: Any) -> list[str]:
         response = self._request(
@@ -291,28 +318,31 @@ class ChildRuntimeHostClient(RuntimeHostPort):
                 "run_request": serialize_run_request(run_request),
             },
         )
-        self._refresh_from_remote()
-        return [str(job_id) for job_id in response.payload.get("job_ids") or []]
+        self._schedule_remote_refresh()
+        raw_job_ids = response.payload.get("job_ids")
+        if not isinstance(raw_job_ids, list):
+            return []
+        return [str(job_id) for job_id in raw_job_ids]
 
     def run_next_now(self) -> None:
         self._request("run_next_now")
-        self._refresh_from_remote()
+        self._schedule_remote_refresh()
 
     def cancel_current(self, *, return_to_queue: bool = False) -> Any:
         response = self._request(
             "cancel_current",
             {"return_to_queue": bool(return_to_queue)},
         )
-        self._refresh_from_remote()
+        self._schedule_remote_refresh()
         return response.payload.get("job_id")
 
     def pause(self) -> None:
         self._request("pause_queue")
-        self._refresh_from_remote()
+        self._schedule_remote_refresh()
 
     def resume(self) -> None:
         self._request("resume_queue")
-        self._refresh_from_remote()
+        self._schedule_remote_refresh()
 
     def replace_runner(self, value: Any) -> None:
         raise RuntimeError("Child runtime host manages its own runner; replacement is unsupported")
@@ -412,17 +442,23 @@ class ChildRuntimeHostClient(RuntimeHostPort):
         else:
             fn()
 
+    def _dispatch_call(self, callback: Callable[..., None], *args: Any) -> None:
+        def _invoke() -> None:
+            callback(*args)
+
+        self._dispatch(_invoke)
+
     def _emit(self, event: str, *args: Any) -> None:
         for callback in list(self._callbacks.get(event, [])):
             try:
-                self._dispatch(lambda cb=callback, a=args: cb(*a))
+                self._dispatch_call(callback, *args)
             except Exception:
                 continue
 
     def _emit_status_callbacks(self, job: Job, status: JobStatus) -> None:
         for callback in list(self._status_callbacks.values()):
             try:
-                self._dispatch(lambda cb=callback, j=job, s=status: cb(j, s))
+                self._dispatch_call(callback, job, status)
             except Exception:
                 continue
 
@@ -435,7 +471,7 @@ class ChildRuntimeHostClient(RuntimeHostPort):
         }
         for handler in list(self._completion_handlers):
             try:
-                self._dispatch(lambda cb=handler, j=job, p=payload: cb(j, p))
+                self._dispatch_call(handler, job, payload)
             except Exception:
                 continue
 
@@ -471,12 +507,53 @@ class ChildRuntimeHostClient(RuntimeHostPort):
         if job_id is not None:
             payload["job_id"] = job_id
         response = self._request("queue_action", payload)
-        self._refresh_from_remote()
+        self._schedule_remote_refresh()
         return response.payload.get("result")
 
+    def _coalesce_remote_refreshes(self) -> AbstractContextManager[None]:
+        return _RemoteRefreshBatch(self)
+
+    def _schedule_remote_refresh(self, *, history_limit: int = 50) -> None:
+        should_refresh = False
+        with self._refresh_batch_lock:
+            if self._remote_refresh_suppressed > 0:
+                self._remote_refresh_pending = True
+                self._remote_refresh_history_limit = max(
+                    int(history_limit),
+                    int(self._remote_refresh_history_limit),
+                )
+            else:
+                should_refresh = True
+        if should_refresh:
+            self._refresh_from_remote(history_limit=history_limit)
+
+    def _enter_remote_refresh_batch(self) -> None:
+        with self._refresh_batch_lock:
+            self._remote_refresh_suppressed += 1
+
+    def _exit_remote_refresh_batch(self) -> None:
+        history_limit = 50
+        should_refresh = False
+        with self._refresh_batch_lock:
+            self._remote_refresh_suppressed = max(0, self._remote_refresh_suppressed - 1)
+            if self._remote_refresh_suppressed == 0 and self._remote_refresh_pending:
+                should_refresh = True
+                history_limit = int(self._remote_refresh_history_limit)
+                self._remote_refresh_pending = False
+                self._remote_refresh_history_limit = 50
+        if should_refresh:
+            self._refresh_from_remote(history_limit=history_limit)
+
     def _refresh_from_remote(self, *, history_limit: int = 50) -> None:
-        response = self._request("runtime_snapshot", {"history_limit": int(history_limit)})
-        self._apply_runtime_snapshot(dict(response.payload))
+        refresh_context = self._refresh_context
+        if getattr(refresh_context, "active", False):
+            return
+        refresh_context.active = True
+        try:
+            response = self._request("runtime_snapshot", {"history_limit": int(history_limit)})
+            self._apply_runtime_snapshot(dict(response.payload))
+        finally:
+            refresh_context.active = False
 
     def _apply_runtime_snapshot(self, payload: Mapping[str, Any]) -> None:
         previous_jobs = dict(self._jobs_by_id)
@@ -496,6 +573,7 @@ class ChildRuntimeHostClient(RuntimeHostPort):
         self._jobs_by_id = {job.job_id: job for job in jobs}
         self._history_entries = history_entries
         self._history_by_id = {entry.job_id: entry for entry in history_entries}
+        self.history_store._mark_cache_fresh()
         self._queue_state = dict(payload.get("queue") or {})
         self._managed_runtime_state = dict(payload.get("managed_runtimes") or {})
         self._protocol_info.setdefault("host_pid", payload.get("host_pid"))
@@ -552,10 +630,27 @@ class ChildRuntimeHostClient(RuntimeHostPort):
                 self._notify_completion_handlers(finished, False)
 
         for job_id, entry in self._history_by_id.items():
-            previous = previous_history.get(job_id)
-            if previous is not None and previous.status == entry.status and previous.completed_at == entry.completed_at:
+            previous_entry = previous_history.get(job_id)
+            if (
+                previous_entry is not None
+                and previous_entry.status == entry.status
+                and previous_entry.completed_at == entry.completed_at
+            ):
                 continue
             self.history_store._emit(entry)
+
+
+class _RemoteRefreshBatch(AbstractContextManager[None]):
+    def __init__(self, client: ChildRuntimeHostClient) -> None:
+        self._client = client
+
+    def __enter__(self) -> None:
+        self._client._enter_remote_refresh_batch()
+        return None
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        self._client._exit_remote_refresh_batch()
+        return False
 
 
 def launch_child_runtime_host_client(
