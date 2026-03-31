@@ -60,9 +60,21 @@ def _parse_iso_datetime(value: str | None) -> datetime:
 
 
 def _priority_from_value(value: Any) -> JobPriority:
+    if isinstance(value, JobPriority):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return JobPriority.NORMAL
+        try:
+            return JobPriority(int(normalized))
+        except Exception:
+            pass
+        try:
+            return JobPriority[normalized.upper()]
+        except Exception:
+            return JobPriority.NORMAL
     try:
-        if isinstance(value, JobPriority):
-            return value
         return JobPriority(int(value))
     except Exception:
         return JobPriority.NORMAL

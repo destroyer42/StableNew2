@@ -214,3 +214,48 @@ def test_build_from_run_request_train_lora_produces_standalone_njr() -> None:
     assert record.base_model == "sdxl"
     assert record.positive_prompt == "Train LoRA for Ada"
     assert record.config["pipeline"]["train_lora_enabled"] is True
+
+
+def test_build_from_run_request_applies_runtime_loras_to_prompt_and_tags() -> None:
+    builder = JobBuilderV2(id_fn=lambda: "job-lora", time_fn=lambda: 123.0)
+    entry = PackJobEntry(
+        pack_id="pack-lora",
+        pack_name="LoRA Pack",
+        config_snapshot={
+            "txt2img": {
+                "model": "juggernautXL_ragnarokBy.safetensors",
+                "sampler_name": "DPM++ 2M",
+                "steps": 40,
+                "cfg_scale": 6.0,
+                "width": 1216,
+                "height": 832,
+            },
+            "lora_strengths": [
+                {"name": "detailer", "strength": 0.75, "enabled": True},
+                {"name": "muted", "strength": 0.5, "enabled": False},
+            ],
+        },
+        prompt_text="Angelic hero variant",
+        negative_prompt_text="deformed hands",
+        pack_row_index=0,
+        matrix_slot_values={},
+    )
+    request = PipelineRunRequest(
+        prompt_pack_id=entry.pack_id,
+        selected_row_ids=["0"],
+        config_snapshot_id="cfg-lora",
+        run_mode=PipelineRunMode.QUEUE,
+        source=PipelineRunSource.ADD_TO_QUEUE,
+        pack_entries=[entry],
+    )
+
+    jobs = builder.build_from_run_request(request)
+
+    assert len(jobs) == 1
+    record = jobs[0]
+    assert record.positive_prompt == "Angelic hero variant <lora:detailer:0.75>"
+    assert [(tag.name, tag.weight) for tag in record.lora_tags] == [("detailer", 0.75)]
+    assert record.config["txt2img"]["lora_strengths"] == [
+        {"name": "detailer", "strength": 0.75, "enabled": True},
+        {"name": "muted", "strength": 0.5, "enabled": False},
+    ]

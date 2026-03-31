@@ -117,6 +117,8 @@ def test_on_add_job_to_queue_v2_submits_preview_jobs_in_background_and_clears_pr
         pipeline_controller=pipeline_ctrl,
         preview_jobs=preview_jobs,
     )
+    refresh_calls: list[str] = []
+    controller._request_queue_state_refresh = lambda: refresh_calls.append("refresh")
 
     controller.on_add_job_to_queue_v2()
 
@@ -124,6 +126,7 @@ def test_on_add_job_to_queue_v2_submits_preview_jobs_in_background_and_clears_pr
     assert pipeline_ctrl.calls[0]["records"] == preview_jobs
     assert controller.app_state.preview_jobs == []
     assert controller._queue_submit_in_progress is False
+    assert refresh_calls == ["refresh"]
 
 
 def test_on_add_job_to_queue_v2_ignores_requests_during_shutdown() -> None:

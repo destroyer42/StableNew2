@@ -638,3 +638,54 @@ def test_prompt_pack_job_builder_warns_when_pack_level_style_lora_is_unavailable
     assert all(tag.name != "style_cinematic_grit" for tag in record.lora_tags)
     assert record.extra_metadata["style_lora"]["applied"] is False
     assert "missing weight file" in str(record.extra_metadata["style_lora"]["warning"])
+
+
+def test_prompt_pack_job_builder_merges_runtime_loras_into_prompt_and_txt2img_config(
+    tmp_path: Path,
+) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    pack_txt = config_manager.packs_dir / "runtime-lora-pack.txt"
+    pack_txt.write_text(
+        "cinematic quality\nportrait on a rooftop\n<lora:pack_style:0.45> <lora:disabled_pack:0.4>",
+        encoding="utf-8",
+    )
+
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=config_manager,
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+        packs_dir=config_manager.packs_dir,
+    )
+    entry = PackJobEntry(
+        pack_id=pack_txt.name,
+        pack_name="Runtime LoRA Pack",
+        config_snapshot={
+            "lora_strengths": [
+                {"name": "pack_style", "strength": 0.9, "enabled": True},
+                {"name": "runtime_only", "strength": 0.6, "enabled": True},
+                {"name": "disabled_pack", "strength": 0.4, "enabled": False},
+            ]
+        },
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+        matrix_slot_values={},
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert records
+    record = records[0]
+    assert record.positive_prompt.endswith("<lora:pack_style:0.9> <lora:runtime_only:0.6>")
+    assert [(tag.name, tag.weight) for tag in record.lora_tags] == [
+        ("pack_style", 0.9),
+        ("runtime_only", 0.6),
+    ]
+    assert record.config["txt2img"]["loras"] == [
+        {"name": "pack_style", "weight": 0.9},
+        {"name": "runtime_only", "weight": 0.6},
+    ]
+    assert record.config["txt2img"]["lora_strengths"] == [
+        {"name": "pack_style", "strength": 0.9, "enabled": True},
+        {"name": "runtime_only", "strength": 0.6, "enabled": True},
+        {"name": "disabled_pack", "strength": 0.4, "enabled": False},
+    ]

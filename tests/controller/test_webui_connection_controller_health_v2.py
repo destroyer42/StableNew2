@@ -10,8 +10,8 @@ from src.controller.webui_connection_controller import (
 def _build_controller(monkeypatch, results, *, retry_count=1):
     calls = []
 
-    def fake_wait(url, timeout=0, poll_interval=0):
-        calls.append((url, timeout))
+    def fake_wait(url, timeout=0, poll_interval=0, **kwargs):
+        calls.append((url, timeout, poll_interval, dict(kwargs)))
         outcome = results.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
@@ -45,7 +45,7 @@ def _build_controller(monkeypatch, results, *, retry_count=1):
     )
     monkeypatch.setattr(
         "src.controller.webui_connection_controller.app_config.get_webui_health_total_timeout_seconds",
-        lambda: 0.01,
+        lambda: 10.0,
     )
     monkeypatch.setattr(
         "src.controller.webui_connection_controller.time.sleep", lambda *args, **kwargs: None
@@ -97,3 +97,23 @@ def test_ensure_connected_records_timing_snapshot(monkeypatch):
     assert timing["retry_attempts_used"] == 1
     assert timing["fast_probe_elapsed_ms"] >= 0.0
     assert timing["total_elapsed_ms"] >= 0.0
+
+
+def test_ensure_connected_retries_with_patient_probe_and_bypasses_backoff(monkeypatch):
+    ctrl, calls, _fake_pm = _build_controller(
+        monkeypatch,
+        [WebUIHealthCheckTimeout("timeout"), True],
+        retry_count=1,
+    )
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.app_config.get_webui_health_retry_interval_seconds",
+        lambda: 0.25,
+    )
+
+    state = ctrl.ensure_connected(autostart=True)
+
+    assert state == WebUIConnectionState.READY
+    assert calls[0][3]["respect_failure_backoff"] is False
+    assert calls[1][1] == 3.0
+    assert calls[1][2] == 3.0
+    assert calls[1][3]["respect_failure_backoff"] is False

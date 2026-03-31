@@ -9,8 +9,8 @@ from src.controller.webui_connection_controller import (
 def make_controller(monkeypatch, results):
     calls = []
 
-    def fake_wait(url, timeout=0, poll_interval=0):
-        calls.append((url, timeout))
+    def fake_wait(url, timeout=0, poll_interval=0, **kwargs):
+        calls.append((url, timeout, poll_interval, dict(kwargs)))
         outcome = results.pop(0)
         if isinstance(outcome, Exception):
             raise outcome
@@ -29,6 +29,10 @@ def make_controller(monkeypatch, results):
     monkeypatch.setattr(
         "src.controller.webui_connection_controller.app_config.get_webui_autostart_enabled",
         lambda: True,
+    )
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.app_config.get_webui_health_total_timeout_seconds",
+        lambda: 10.0,
     )
     monkeypatch.setattr(
         "src.controller.webui_connection_controller.time.sleep", lambda *args, **kwargs: None

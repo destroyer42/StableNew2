@@ -152,3 +152,28 @@ def test_resolve_from_pack_row_appends_style_trigger_and_style_lora_after_pack_l
     assert result.positive.endswith(
         "<lora:ada_lora:0.9> <lora:pack_style:0.7> <lora:style_cinematic_grit:0.65>"
     )
+
+
+def test_resolve_from_pack_row_runtime_loras_override_and_disable_pack_tags() -> None:
+    row = PackRow(
+        embeddings=(),
+        quality_line="cinematic quality",
+        subject_template="portrait on a rooftop",
+        lora_tags=(("pack_style", 0.45), ("disabled_pack", 0.4)),
+        negative_embeddings=(),
+        negative_phrases=(),
+    )
+    resolver = UnifiedPromptResolver(max_preview_length=200)
+    result = resolver.resolve_from_pack(
+        pack_row=row,
+        runtime_lora_strengths=[
+            {"name": "pack_style", "strength": 0.9, "enabled": True},
+            {"name": "runtime_only", "strength": 0.6, "enabled": True},
+            {"name": "disabled_pack", "strength": 0.4, "enabled": False},
+        ],
+        pack_negative="",
+        global_negative="",
+    )
+
+    assert result.lora_tags == (("pack_style", 0.9), ("runtime_only", 0.6))
+    assert result.positive.endswith("<lora:pack_style:0.9> <lora:runtime_only:0.6>")

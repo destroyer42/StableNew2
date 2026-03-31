@@ -272,7 +272,7 @@ class WebUIProcessManager:
             return False
 
         try:
-            healthy = self.check_health()
+            healthy = self._check_startup_health()
         except Exception:
             healthy = False
         log_with_ctx(
@@ -284,15 +284,22 @@ class WebUIProcessManager:
         )
         return healthy
 
-    def check_health(self) -> bool:
+    def _resolve_base_url(self) -> str:
         if self._config.base_url:
-            url = self._config.base_url
-        else:
-            url = os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
+            return self._config.base_url
+        return os.environ.get("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
+
+    def _probe_health(self, *, timeout: float, poll_interval: float) -> bool:
+        url = self._resolve_base_url()
         from src.api.healthcheck import wait_for_webui_ready
 
         try:
-            return wait_for_webui_ready(url, timeout=15.0, poll_interval=3.0)
+            return wait_for_webui_ready(
+                url,
+                timeout=float(timeout),
+                poll_interval=float(poll_interval),
+                respect_failure_backoff=False,
+            )
         except Exception:
             # PR-PORT-DISCOVERY: If health check failed on expected port, try to discover
             # WebUI on alternate ports in case previous shutdown left orphan on port 7860
@@ -307,14 +314,31 @@ class WebUIProcessManager:
                         "Updating base_url to use discovered port.",
                         discovered_port
                     )
-                    # Update the config to use the discovered port
                     self._config.base_url = f"http://127.0.0.1:{discovered_port}"
-                    # Try health check again with the correct port
-                    return wait_for_webui_ready(self._config.base_url, timeout=5.0, poll_interval=1.0)
+                    retry_timeout = max(min(float(timeout), 10.0), 5.0)
+                    retry_interval = max(min(float(poll_interval), 1.0), 0.5)
+                    return wait_for_webui_ready(
+                        self._config.base_url,
+                        timeout=retry_timeout,
+                        poll_interval=retry_interval,
+                        respect_failure_backoff=False,
+                    )
             except Exception as exc:
                 logger.debug("[PORT-DISCOVERY] Port discovery failed: %s", exc)
-            
+
             return False
+
+    def _check_startup_health(self) -> bool:
+        try:
+            timeout = float(getattr(self._config, "startup_timeout_seconds", 60.0) or 60.0)
+        except Exception:
+            timeout = 60.0
+        timeout = max(timeout, 5.0)
+        poll_interval = max(min(timeout / 20.0, 3.0), 0.5)
+        return self._probe_health(timeout=timeout, poll_interval=poll_interval)
+
+    def check_health(self) -> bool:
+        return self._probe_health(timeout=15.0, poll_interval=3.0)
 
     def start(self) -> subprocess.Popen:
         """Start the WebUI process if not already running."""

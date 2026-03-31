@@ -8,6 +8,7 @@ from src.controller.job_service import JobService
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
 from src.pipeline.job_models_v2 import JobStatusV2, NormalizedJobRecord
 from src.queue.job_model import Job, JobStatus
+from src.utils.snapshot_builder_v2 import build_job_snapshot
 
 
 class FakeJobService:
@@ -172,6 +173,18 @@ def test_queue_controls_delegate_and_update_ui_state() -> None:
     assert controller.app_state.queue_status == "idle"
 
 
+def test_queue_status_change_requests_queue_refresh() -> None:
+    controller, _fake_service = _build_controller()
+    refresh_calls: list[str] = []
+    controller._run_in_gui_thread = lambda fn: fn()
+    controller._request_queue_state_refresh = lambda: refresh_calls.append("refresh")
+
+    controller._on_queue_status_changed("running")
+
+    assert controller.app_state.queue_status == "running"
+    assert refresh_calls == ["refresh"]
+
+
 def test_cancel_and_return_uses_job_service_contract() -> None:
     controller, fake_service = _build_controller()
 
@@ -193,6 +206,19 @@ def test_running_job_summary_uses_live_job_status() -> None:
     assert controller.app_state.running_job.status == "RUNNING"
 
 
+def test_running_job_summary_recovers_njr_from_snapshot() -> None:
+    controller, _fake_service = _build_controller()
+    job = Job(job_id="job-running")
+    job.status = JobStatus.RUNNING
+    job.snapshot = build_job_snapshot(job, _make_njr(job.job_id))
+
+    controller._set_running_job(job)
+
+    assert controller.app_state.running_job is not None
+    assert controller.app_state.running_job.job_id == "job-running"
+    assert controller.app_state.running_job.status == "RUNNING"
+
+
 def test_queue_refresh_uses_live_status_for_njr_jobs() -> None:
     controller, fake_service = _build_controller()
     job = Job(job_id="job-running")
@@ -206,10 +232,59 @@ def test_queue_refresh_uses_live_status_for_njr_jobs() -> None:
     assert controller.app_state.queue_jobs[0].status == "RUNNING"
 
 
+def test_queue_refresh_recovers_njr_from_snapshot() -> None:
+    controller, fake_service = _build_controller()
+    job = Job(job_id="job-running")
+    job.status = JobStatus.RUNNING
+    job.snapshot = build_job_snapshot(job, _make_njr(job.job_id))
+    fake_service.set_jobs([job])
+
+    controller._refresh_app_state_queue()
+
+    assert controller.app_state.queue_jobs
+    assert controller.app_state.queue_jobs[0].job_id == "job-running"
+    assert controller.app_state.queue_jobs[0].status == "RUNNING"
+
+
+def test_job_started_requests_queue_refresh() -> None:
+    controller, _fake_service = _build_controller()
+    refresh_calls: list[str] = []
+    controller._run_in_gui_thread = lambda fn: fn()
+    controller._request_queue_state_refresh = lambda: refresh_calls.append("refresh")
+
+    controller._on_job_started(Job(job_id="job-running"))
+
+    assert refresh_calls == ["refresh"]
+
+
 def test_job_finish_clears_runtime_status() -> None:
     controller, _fake_service = _build_controller()
+    refresh_calls: list[str] = []
+    history_calls: list[str] = []
+    controller._run_in_gui_thread = lambda fn: fn()
+    controller._request_queue_state_refresh = lambda: refresh_calls.append("refresh")
+    controller._refresh_job_history = lambda: history_calls.append("history")
     controller.app_state.set_runtime_status(object())  # type: ignore[arg-type]
 
     controller._on_job_finished(Job(job_id="job-done"))
 
     assert controller.app_state.runtime_status is None
+    assert history_calls == ["history"]
+    assert refresh_calls == ["refresh"]
+
+
+def test_job_failed_requests_queue_refresh() -> None:
+    controller, _fake_service = _build_controller()
+    refresh_calls: list[str] = []
+    history_calls: list[str] = []
+    controller._run_in_gui_thread = lambda fn: fn()
+    controller._request_queue_state_refresh = lambda: refresh_calls.append("refresh")
+    controller._refresh_job_history = lambda: history_calls.append("history")
+    controller._handle_structured_job_failure = lambda _job: None
+    controller.app_state.set_runtime_status(object())  # type: ignore[arg-type]
+
+    controller._on_job_failed(Job(job_id="job-failed"))
+
+    assert controller.app_state.runtime_status is None
+    assert history_calls == ["history"]
+    assert refresh_calls == ["refresh"]

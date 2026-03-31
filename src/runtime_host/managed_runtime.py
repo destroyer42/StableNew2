@@ -20,6 +20,10 @@ from src.video.comfy_process_manager import (
 )
 
 
+BACKGROUND_STARTUP_PROBE_TIMEOUT_SECONDS = 10.0
+BACKGROUND_STARTUP_PROBE_POLL_INTERVAL_SECONDS = 1.0
+
+
 def load_webui_config(
     *,
     build_process_config: Callable[[], Any | None] = build_default_webui_process_config,
@@ -228,10 +232,37 @@ class ManagedRuntimeOwner:
                     ready = bool(manager.ensure_running())
                     state = "ready" if ready else "error"
                 else:
-                    ready = bool(manager.check_health())
+                    try:
+                        ready = bool(manager.check_health())
+                    except Exception as exc:
+                        with self._lock:
+                            self._webui_state = "disconnected"
+                            self._webui_startup_error = str(exc)
+                        self._logger.info(
+                            "Runtime-host WebUI not ready during background bootstrap: %s",
+                            exc,
+                        )
+                        return None
                     state = "ready" if ready else "disconnected"
             elif base_url:
-                ready = bool(wait_for_webui_ready(base_url, timeout=2.0, poll_interval=0.5))
+                try:
+                    ready = bool(
+                        wait_for_webui_ready(
+                            base_url,
+                            timeout=BACKGROUND_STARTUP_PROBE_TIMEOUT_SECONDS,
+                            poll_interval=BACKGROUND_STARTUP_PROBE_POLL_INTERVAL_SECONDS,
+                            respect_failure_backoff=False,
+                        )
+                    )
+                except Exception as exc:
+                    with self._lock:
+                        self._webui_state = "disconnected"
+                        self._webui_startup_error = str(exc)
+                    self._logger.info(
+                        "Runtime-host WebUI not ready during background bootstrap: %s",
+                        exc,
+                    )
+                    return None
                 state = "ready" if ready else "disconnected"
             else:
                 ready = False
@@ -263,10 +294,36 @@ class ManagedRuntimeOwner:
                     ready = bool(manager.ensure_running())
                     state = "ready" if ready else "error"
                 else:
-                    ready = bool(manager.check_health())
+                    try:
+                        ready = bool(manager.check_health())
+                    except Exception as exc:
+                        with self._lock:
+                            self._comfy_state = "disconnected"
+                            self._comfy_startup_error = str(exc)
+                        self._logger.info(
+                            "Runtime-host Comfy not ready during background bootstrap: %s",
+                            exc,
+                        )
+                        return None
                     state = "ready" if ready else "disconnected"
             elif base_url:
-                ready = bool(wait_for_comfy_ready(base_url, timeout=2.0, poll_interval=0.5))
+                try:
+                    ready = bool(
+                        wait_for_comfy_ready(
+                            base_url,
+                            timeout=BACKGROUND_STARTUP_PROBE_TIMEOUT_SECONDS,
+                            poll_interval=BACKGROUND_STARTUP_PROBE_POLL_INTERVAL_SECONDS,
+                        )
+                    )
+                except Exception as exc:
+                    with self._lock:
+                        self._comfy_state = "disconnected"
+                        self._comfy_startup_error = str(exc)
+                    self._logger.info(
+                        "Runtime-host Comfy not ready during background bootstrap: %s",
+                        exc,
+                    )
+                    return None
                 state = "ready" if ready else "disconnected"
             else:
                 ready = False
@@ -296,7 +353,14 @@ class ManagedRuntimeOwner:
                     self._webui_manager = manager
                 ready = bool(manager.ensure_running()) if autostart else bool(manager.check_health())
             else:
-                ready = bool(wait_for_webui_ready(base_url, timeout=5.0, poll_interval=0.5))
+                ready = bool(
+                    wait_for_webui_ready(
+                        base_url,
+                        timeout=BACKGROUND_STARTUP_PROBE_TIMEOUT_SECONDS,
+                        poll_interval=BACKGROUND_STARTUP_PROBE_POLL_INTERVAL_SECONDS,
+                        respect_failure_backoff=False,
+                    )
+                )
             with self._lock:
                 self._webui_state = "ready" if ready else "error"
                 if ready:
@@ -317,7 +381,8 @@ class ManagedRuntimeOwner:
         getter = getattr(manager, "get_recent_output_tail", None)
         if callable(getter):
             try:
-                return getter()
+                payload = getter()
+                return dict(payload) if isinstance(payload, dict) else None
             except Exception:
                 return None
         return None

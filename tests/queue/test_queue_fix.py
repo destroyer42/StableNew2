@@ -1,5 +1,6 @@
-"""Test for queue Remove button fix - verifies notification chain works correctly."""
+"""Tests for AppState queue-job notification behavior."""
 
+from dataclasses import replace
 from datetime import datetime
 from src.gui.app_state_v2 import AppStateV2
 from src.pipeline.job_models_v2 import UnifiedJobSummary
@@ -89,6 +90,23 @@ def test_queue_jobs_no_duplicate_notifications() -> None:
     assert len(notifications) == 1, "Should not notify when jobs haven't changed"
 
     print("[OK] No duplicate notifications test passed!")
+
+
+def test_queue_jobs_notify_when_same_job_changes_visible_queue_state() -> None:
+    """Same queue IDs should still notify when the rendered queue row changes."""
+
+    app_state = AppStateV2()
+
+    notifications: list[str] = []
+    app_state.subscribe("queue_jobs", lambda: notifications.append("notified"))
+
+    queued_job = create_test_job("job-1", "Test")
+    running_job = replace(queued_job, status="RUNNING")
+
+    app_state.set_queue_jobs([queued_job])
+    app_state.set_queue_jobs([running_job])
+
+    assert len(notifications) == 2, "Should notify when queue row content changes for same job ID"
 
 
 if __name__ == "__main__":

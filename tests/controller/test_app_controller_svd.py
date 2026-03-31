@@ -233,6 +233,55 @@ def test_on_webui_ready_retries_until_critical_resources_arrive(monkeypatch) -> 
     assert job_controller.called == 1
 
 
+def test_on_refresh_clicked_uses_safe_resource_refresh_path() -> None:
+    controller = AppController.__new__(AppController)
+    messages: list[str] = []
+    refresh_calls: list[dict[str, object]] = []
+    controller._append_log = lambda text: messages.append(text)
+    controller._start_webui_resource_refresh = lambda **kwargs: refresh_calls.append(kwargs)
+
+    controller.on_refresh_clicked()
+
+    assert messages == ["[controller] Refresh clicked."]
+    assert refresh_calls == [
+        {
+            "source_label": "manual",
+            "log_start_message": "[controller] Refresh started in background...",
+            "trigger_deferred_queue_autostart": False,
+        }
+    ]
+
+
+def test_set_main_window_replays_cached_webui_resources_to_attached_gui() -> None:
+    resources = {
+        "models": ["model-a"],
+        "vaes": ["vae-a"],
+        "samplers": ["Euler a"],
+        "schedulers": ["Karras"],
+        "upscalers": [],
+        "hypernetworks": [],
+        "embeddings": [],
+        "adetailer_models": [],
+        "adetailer_detectors": [],
+    }
+    controller = AppController.__new__(AppController)
+    emitted: list[dict[str, list[object]]] = []
+    controller._bind_app_state_visibility_listener = lambda: None
+    controller._attach_to_gui = lambda: None
+    controller._update_status = lambda *_args, **_kwargs: None
+    controller.load_packs = lambda: None
+    controller._emit_webui_resources_updated = lambda payload: emitted.append(payload)
+
+    main_window = SimpleNamespace(
+        app_state=SimpleNamespace(resources=resources),
+        connect_controller=lambda _controller: None,
+    )
+
+    controller.set_main_window(main_window)
+
+    assert emitted == [resources]
+
+
 def test_send_history_job_image_to_svd_selects_svd_tab(tmp_path) -> None:
     source_path = tmp_path / "source.png"
     source_path.write_bytes(b"png")

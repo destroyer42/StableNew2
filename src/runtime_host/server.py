@@ -12,6 +12,7 @@ from src.runtime_host.serialization import (
     deserialize_run_request,
     serialize_history_entry,
     serialize_job,
+    serialize_runtime_snapshot_job,
 )
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
@@ -57,7 +58,7 @@ def _queue_status_payload(runtime_host: Any) -> dict[str, Any]:
 def _build_runtime_snapshot_payload(
     runtime_host: Any,
     *,
-    history_limit: int = 50,
+    history_job_ids: list[str] | None = None,
     managed_runtimes: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     queue = getattr(runtime_host, "job_queue", None) or getattr(runtime_host, "queue", None)
@@ -65,25 +66,59 @@ def _build_runtime_snapshot_payload(
     jobs = []
     if queue is not None and hasattr(queue, "list_active_jobs_ordered"):
         try:
-            jobs = [serialize_job(job) for job in queue.list_active_jobs_ordered()]
+            jobs = [serialize_runtime_snapshot_job(job) for job in queue.list_active_jobs_ordered()]
         except Exception:
             jobs = []
-    history = []
-    if history_store is not None and hasattr(history_store, "list_jobs"):
+    history_updates: list[dict[str, Any]] = []
+    requested_job_ids = [str(job_id) for job_id in history_job_ids or [] if str(job_id or "").strip()]
+    if requested_job_ids:
+        get_jobs_cached = getattr(history_store, "get_jobs_cached", None)
+        get_job = getattr(history_store, "get_job", None)
+        try:
+            if callable(get_jobs_cached):
+                history_updates = [
+                    serialize_history_entry(entry)
+                    for entry in get_jobs_cached(requested_job_ids)
+                ]
+            elif callable(get_job):
+                entries = []
+                for job_id in requested_job_ids:
+                    entry = get_job(job_id)
+                    if entry is not None:
+                        entries.append(entry)
+                history_updates = [serialize_history_entry(entry) for entry in entries]
+        except Exception:
+            history_updates = []
+    return {
+        "transport": "local-child",
+        "host_pid": os.getpid(),
+        "queue": _queue_status_payload(runtime_host),
+        "jobs": jobs,
+        "history_updates": history_updates,
+        "managed_runtimes": dict(managed_runtimes or {}),
+    }
+
+
+def _build_history_snapshot_payload(
+    runtime_host: Any,
+    *,
+    history_limit: int = 50,
+) -> dict[str, Any]:
+    history_store = getattr(runtime_host, "history_store", None)
+    history: list[dict[str, Any]] = []
+    history_list_jobs = getattr(history_store, "list_jobs", None)
+    if callable(history_list_jobs):
         try:
             history = [
                 serialize_history_entry(entry)
-                for entry in history_store.list_jobs(limit=history_limit)
+                for entry in history_list_jobs(limit=history_limit)
             ]
         except Exception:
             history = []
     return {
         "transport": "local-child",
         "host_pid": os.getpid(),
-        "queue": _queue_status_payload(runtime_host),
-        "jobs": jobs,
         "history": history,
-        "managed_runtimes": dict(managed_runtimes or {}),
     }
 
 
@@ -123,6 +158,7 @@ class RuntimeHostServer:
                     "handshake",
                     "describe_protocol",
                     "runtime_snapshot",
+                    "history_snapshot",
                     "diagnostics_snapshot",
                     "managed_runtime_snapshot",
                     "ensure_webui_ready",
@@ -179,15 +215,30 @@ class RuntimeHostServer:
                 self.build_handshake_payload(),
             )
         if envelope.name == "runtime_snapshot":
-            raw_history_limit = envelope.payload.get("history_limit")
-            history_limit = int(raw_history_limit) if isinstance(raw_history_limit, (str, int, float)) else 50
+            raw_history_job_ids = envelope.payload.get("history_job_ids")
+            history_job_ids = (
+                [str(job_id) for job_id in raw_history_job_ids if job_id]
+                if isinstance(raw_history_job_ids, list)
+                else []
+            )
             return build_protocol_message(
                 "snapshot",
                 "runtime_snapshot",
                 _build_runtime_snapshot_payload(
                     self.runtime_host,
-                    history_limit=history_limit,
+                    history_job_ids=history_job_ids,
                     managed_runtimes=self.managed_runtime_owner.get_snapshot(),
+                ),
+            )
+        if envelope.name == "history_snapshot":
+            raw_history_limit = envelope.payload.get("history_limit")
+            history_limit = int(raw_history_limit) if isinstance(raw_history_limit, (str, int, float)) else 50
+            return build_protocol_message(
+                "snapshot",
+                "history_snapshot",
+                _build_history_snapshot_payload(
+                    self.runtime_host,
+                    history_limit=history_limit,
                 ),
             )
         if envelope.name == "diagnostics_snapshot":

@@ -5,7 +5,10 @@ from datetime import datetime
 from src.controller.pipeline_controller import PipelineController
 from src.gui.app_state_v2 import AppStateV2
 from src.queue.job_history_store import JobHistoryEntry
-from src.queue.job_model import JobStatus
+from src.queue.job_model import Job, JobStatus
+from src.utils.snapshot_builder_v2 import build_job_snapshot
+
+from tests.helpers.job_helpers import make_test_njr
 
 
 class _FakeHistoryStore:
@@ -95,3 +98,39 @@ def test_on_history_entry_updated_skips_when_external_owner_manages_app_state() 
     ctrl._on_history_entry_updated(entry)
 
     assert called == []
+
+
+def test_refresh_app_state_queue_recovers_njr_from_snapshot() -> None:
+    ctrl = _make_controller()
+    job = Job(job_id="job-queued")
+    job.status = JobStatus.RUNNING
+    job.snapshot = build_job_snapshot(job, make_test_njr(job_id=job.job_id))
+    ctrl._list_service_jobs = lambda: [job]  # type: ignore[attr-defined]
+
+    ctrl._refresh_app_state_queue()
+
+    assert ctrl._app_state.queue_jobs
+    assert ctrl._app_state.queue_jobs[0].job_id == "job-queued"
+    assert ctrl._app_state.queue_jobs[0].status == "RUNNING"
+
+
+def test_on_queue_status_changed_skips_when_external_owner_manages_app_state() -> None:
+    ctrl = _make_controller()
+    ctrl._app_state_queue_updates_managed_externally = True
+    statuses: list[str] = []
+    ctrl._app_state.set_queue_status = lambda status: statuses.append(status)  # type: ignore[method-assign]
+
+    ctrl._on_queue_status_changed("running")
+
+    assert statuses == []
+
+
+def test_on_job_started_skips_when_external_owner_manages_app_state() -> None:
+    ctrl = _make_controller()
+    ctrl._app_state_queue_updates_managed_externally = True
+    jobs: list[str] = []
+    ctrl._set_running_job = lambda job: jobs.append(getattr(job, "job_id", "none"))  # type: ignore[method-assign]
+
+    ctrl._on_job_started(Job(job_id="job-running"))
+
+    assert jobs == []

@@ -44,6 +44,49 @@ def _dedupe_lora_tags(tags: Iterable[tuple[str, float]]) -> tuple[tuple[str, flo
     return tuple(deduped)
 
 
+def _filter_lora_tags(
+    tags: Iterable[tuple[str, float]],
+    *,
+    excluded_names: set[str],
+) -> tuple[tuple[str, float], ...]:
+    if not excluded_names:
+        return _dedupe_lora_tags(tags)
+    filtered: list[tuple[str, float]] = []
+    for raw_name, raw_weight in tags:
+        name = str(raw_name or "").strip()
+        if not name or name.lower() in excluded_names:
+            continue
+        filtered.append((name, raw_weight))
+    return _dedupe_lora_tags(filtered)
+
+
+def _runtime_lora_overrides(
+    runtime_lora_strengths: Iterable[Mapping[str, Any]] | None,
+) -> tuple[tuple[tuple[str, float], ...], set[str]]:
+    overrides: list[tuple[str, float]] = []
+    controlled_names: set[str] = set()
+    for raw_entry in list(runtime_lora_strengths or []):
+        if isinstance(raw_entry, Mapping):
+            name = str(raw_entry.get("name") or "").strip()
+            enabled = bool(raw_entry.get("enabled", True))
+            raw_weight = raw_entry.get("strength", raw_entry.get("weight", 1.0))
+        else:
+            name = str(getattr(raw_entry, "name", "") or "").strip()
+            enabled = bool(getattr(raw_entry, "enabled", True))
+            raw_weight = getattr(raw_entry, "strength", getattr(raw_entry, "weight", 1.0))
+        if not name:
+            continue
+        controlled_names.add(name.lower())
+        if not enabled:
+            continue
+        try:
+            weight = float(raw_weight)
+        except (TypeError, ValueError):
+            weight = 1.0
+        overrides.append((name, weight))
+    return _dedupe_lora_tags(overrides), controlled_names
+
+
 def _actor_trigger_phrases(actor_resolutions: Iterable[Mapping[str, Any]] | None) -> tuple[str, ...]:
     phrases: list[str] = []
     seen: set[str] = set()
@@ -99,6 +142,31 @@ def _actor_lora_tags(actor_resolutions: Iterable[Mapping[str, Any]] | None) -> t
             weight = 1.0
         tags.append((lora_name, weight))
     return _dedupe_lora_tags(tags)
+
+
+def merge_lora_tags(
+    *,
+    source_lora_tags: Iterable[tuple[str, float]] | None = None,
+    actor_resolutions: Iterable[Mapping[str, Any]] | None = None,
+    style_lora: Mapping[str, Any] | None = None,
+    runtime_lora_strengths: Iterable[Mapping[str, Any]] | None = None,
+) -> tuple[tuple[str, float], ...]:
+    runtime_tags, controlled_names = _runtime_lora_overrides(runtime_lora_strengths)
+    merged_tags: list[tuple[str, float]] = list(runtime_tags)
+    merged_tags.extend(
+        _filter_lora_tags(_actor_lora_tags(actor_resolutions), excluded_names=controlled_names)
+    )
+    merged_tags.extend(
+        _filter_lora_tags(source_lora_tags or (), excluded_names=controlled_names)
+    )
+    merged_tags.extend(
+        _filter_lora_tags(_style_lora_tags(style_lora), excluded_names=controlled_names)
+    )
+    return _dedupe_lora_tags(merged_tags)
+
+
+def render_lora_tokens(tags: Iterable[tuple[str, float]]) -> str:
+    return " ".join(f"<lora:{name}:{weight}>" for name, weight in tags)
 
 
 @dataclass(frozen=True)
@@ -260,6 +328,7 @@ class UnifiedPromptResolver:
         matrix_slot_values: Mapping[str, str] | None = None,
         actor_resolutions: Iterable[Mapping[str, Any]] | None = None,
         style_lora: Mapping[str, Any] | None = None,
+        runtime_lora_strengths: Iterable[Mapping[str, Any]] | None = None,
         pack_negative: str | None = None,
         global_negative: str = "",
         apply_global_negative: bool = True,
@@ -272,12 +341,13 @@ class UnifiedPromptResolver:
         style_trigger_phrase = _style_trigger_phrase(style_lora)
         if style_trigger_phrase:
             actor_trigger_phrases.append(style_trigger_phrase)
-        merged_lora_tags = _dedupe_lora_tags(
-            list(_actor_lora_tags(actor_resolutions))
-            + list(pack_row.lora_tags)
-            + list(_style_lora_tags(style_lora))
+        merged_lora_tags = merge_lora_tags(
+            source_lora_tags=pack_row.lora_tags,
+            actor_resolutions=actor_resolutions,
+            style_lora=style_lora,
+            runtime_lora_strengths=runtime_lora_strengths,
         )
-        lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in merged_lora_tags)
+        lora_tokens = render_lora_tokens(merged_lora_tags)
         positive_parts: list[str] = []
         # Render embeddings with weights
         if pack_row.embeddings:

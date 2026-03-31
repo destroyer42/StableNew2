@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass, field
@@ -167,6 +168,11 @@ def _load_whole_json_snapshot(state_path: Path) -> dict[str, Any] | None:
     return parsed
 
 
+def _build_temp_queue_state_path(state_path: Path) -> Path:
+    unique_suffix = f"{os.getpid()}.{time.time_ns()}.tmp"
+    return state_path.with_name(f"{state_path.name}.{unique_suffix}")
+
+
 def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = None) -> bool:
     """Save queue state to disk using the strict v2.6 schema."""
     state_path = Path(path) if path else get_queue_state_path()
@@ -193,7 +199,7 @@ def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = Non
             "schema_version": SCHEMA_VERSION,
         }
 
-        temp_path = state_path.with_suffix(state_path.suffix + ".tmp")
+        temp_path = _build_temp_queue_state_path(state_path)
         _QUEUE_CODEC.write_jsonl(temp_path, [data])
         
         # Windows-safe atomic replace with retry
@@ -201,9 +207,7 @@ def save_queue_snapshot(snapshot: QueueSnapshotV1, path: Path | str | None = Non
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                if state_path.exists():
-                    state_path.unlink()
-                temp_path.rename(state_path)
+                temp_path.replace(state_path)
                 break  # Success
             except (OSError, PermissionError) as e:
                 if attempt < max_retries - 1:

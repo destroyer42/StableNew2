@@ -110,10 +110,16 @@ def _probe_progress_endpoint(url: str, timeout: float) -> bool:
     return response.status_code == 200
 
 
-def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: float = 0.5) -> bool:
+def wait_for_webui_ready(
+    base_url: str,
+    timeout: float = 30.0,
+    poll_interval: float = 0.5,
+    *,
+    respect_failure_backoff: bool = True,
+) -> bool:
     logger = get_logger(__name__)
     ctx = LogContext(subsystem="api")
-    cooldown_remaining = _readiness_cooldown_remaining(base_url)
+    cooldown_remaining = _readiness_cooldown_remaining(base_url) if respect_failure_backoff else 0.0
     if cooldown_remaining > 0:
         msg = f"WebUI readiness backoff active for {cooldown_remaining:.1f}s"
         log_with_ctx(
@@ -129,7 +135,12 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
         logging.DEBUG,
         "healthcheck.wait_for_webui_ready",
         ctx=ctx,
-        extra_fields={"base_url": base_url, "timeout": timeout, "poll_interval": poll_interval},
+        extra_fields={
+            "base_url": base_url,
+            "timeout": timeout,
+            "poll_interval": poll_interval,
+            "respect_failure_backoff": respect_failure_backoff,
+        },
     )
 
     deadline = time.time() + max(timeout, 0)
@@ -213,7 +224,8 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
 
     msg = "WebUI did not become ready within allotted time"
     if last_error:
-        _record_readiness_failure(base_url, last_error)
+        if respect_failure_backoff:
+            _record_readiness_failure(base_url, last_error)
         msg = f"{msg}: {last_error}"
         log_with_ctx(
             logger,

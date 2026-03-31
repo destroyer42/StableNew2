@@ -231,11 +231,31 @@ class JSONLJobHistoryStore(JobHistoryStore):
         PR-HISTORY-FIX: Uses cached entries for performance, but cache automatically
         invalidates when file mtime changes (after async writes complete).
         """
-        entries = list(self._load_latest_by_job().values())
-        entries.sort(key=lambda e: e.created_at, reverse=True)
-        if status:
-            entries = [e for e in entries if e.status == status]
-        return entries[offset : offset + limit]
+        return self._slice_entries(
+            self._load_latest_by_job().values(),
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+
+    def list_jobs_cached(
+        self,
+        status: JobStatus | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[JobHistoryEntry]:
+        """List recent history using the in-memory cache when available.
+
+        Runtime-host poll snapshots should stay cache-first so they do not re-read
+        large history files immediately after the same process appends a new entry.
+        Disk-aware callers should continue using list_jobs().
+        """
+        return self._slice_entries(
+            self._load_cached_latest_by_job().values(),
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
 
     def invalidate_cache(self) -> None:
         """Force cache invalidation to reload from disk on next access.
@@ -248,6 +268,20 @@ class JSONLJobHistoryStore(JobHistoryStore):
 
     def get_job(self, job_id: str) -> JobHistoryEntry | None:
         return self._load_latest_by_job().get(job_id)
+
+    def get_jobs_cached(self, job_ids: list[str] | tuple[str, ...]) -> list[JobHistoryEntry]:
+        latest = self._load_cached_latest_by_job()
+        entries: list[JobHistoryEntry] = []
+        seen: set[str] = set()
+        for raw_job_id in job_ids:
+            job_id = str(raw_job_id or "").strip()
+            if not job_id or job_id in seen:
+                continue
+            seen.add(job_id)
+            entry = latest.get(job_id)
+            if entry is not None:
+                entries.append(entry)
+        return entries
 
     def _append(self, entry: JobHistoryEntry) -> None:
         """Append entry to history file.
@@ -277,6 +311,8 @@ class JSONLJobHistoryStore(JobHistoryStore):
         # after the async write completes. Invalidating now causes a race condition
         # where GUI tries to load before write finishes, resulting in stale/empty data.
         with self._lock:
+            if self._cached_entries is not None:
+                self._cached_entries[entry.job_id] = entry
             self._pending_entries[entry.job_id] = entry
         
         # Always emit callback immediately (don't wait for write to complete)
@@ -302,6 +338,26 @@ class JSONLJobHistoryStore(JobHistoryStore):
         merged = dict(entries)
         merged.update(self._pending_entries)
         return merged
+
+    def _load_cached_latest_by_job(self) -> dict[str, JobHistoryEntry]:
+        with self._lock:
+            if self._cached_entries is not None:
+                return self._with_pending_overlay(self._cached_entries)
+        return self._load_latest_by_job()
+
+    def _slice_entries(
+        self,
+        entries: Any,
+        *,
+        status: JobStatus | None,
+        limit: int,
+        offset: int,
+    ) -> list[JobHistoryEntry]:
+        items = list(entries)
+        items.sort(key=lambda entry: entry.created_at, reverse=True)
+        if status:
+            items = [entry for entry in items if entry.status == status]
+        return items[offset : offset + limit]
 
     def _load_latest_by_job(self) -> dict[str, JobHistoryEntry]:
         """Load history entries with file mtime-based caching for performance."""

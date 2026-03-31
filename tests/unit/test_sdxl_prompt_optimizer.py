@@ -46,7 +46,7 @@ def test_optimizer_moves_lora_tokens_to_absolute_end_of_positive_prompt() -> Non
     )
 
     assert result.positive.optimized_prompt == (
-        "beautiful woman, <lora:add-detail-xl:0.3>, <lora:cinematic:0.8>, low angle full body shot, photorealistic"
+        "beautiful woman, low angle full body shot, photorealistic, <lora:add-detail-xl:0.3>, <lora:cinematic:0.8>"
     )
     assert result.positive.buckets["lora_tokens"] == [
         "<lora:add-detail-xl:0.3>",
@@ -109,6 +109,26 @@ def test_optimizer_preserves_negative_embedding_prefix() -> None:
     assert result.negative.buckets["embedding_tokens"] == ["<embedding:SDXLnegXL>"]
 
 
+def test_optimizer_keeps_embeddings_front_and_loras_end_for_mixed_positive_prompt() -> None:
+    service = PromptOptimizerService(PromptOptimizerConfig())
+    result = service.optimize_prompts(
+        "global polish, <embedding:face_refiner>, beautiful woman, golden-hour natural lighting <lora:add-detail-xl:0.3> <lora:cinematic:0.8>",
+        "",
+        pipeline_name="txt2img",
+    )
+
+    assert result.positive.optimized_prompt.startswith("<embedding:face_refiner>, ")
+    assert result.positive.optimized_prompt.endswith(
+        "<lora:add-detail-xl:0.3>, <lora:cinematic:0.8>"
+    )
+    assert "golden-hour natural lighting, <lora:add-detail-xl:0.3>" in result.positive.optimized_prompt
+    assert result.positive.buckets["embedding_tokens"] == ["<embedding:face_refiner>"]
+    assert result.positive.buckets["lora_tokens"] == [
+        "<lora:add-detail-xl:0.3>",
+        "<lora:cinematic:0.8>",
+    ]
+
+
 def test_optimizer_extracts_mixed_positive_embeddings_to_absolute_front() -> None:
     service = PromptOptimizerService(PromptOptimizerConfig())
     result = service.optimize_prompts(
@@ -124,6 +144,20 @@ def test_optimizer_extracts_mixed_positive_embeddings_to_absolute_front() -> Non
         "(<embedding:face_refiner>:0.8)",
         "<embedding:styleA>",
     ]
+
+
+def test_optimizer_extracts_negative_embeddings_to_absolute_front_even_when_text_leads() -> None:
+    service = PromptOptimizerService(PromptOptimizerConfig())
+    result = service.optimize_prompts(
+        "",
+        "weird tongue, tongue sticking out, <embedding:SDXLnegXL>, blurry, watermark",
+        pipeline_name="txt2img",
+    )
+
+    assert result.negative.optimized_prompt == (
+        "<embedding:SDXLnegXL>, weird tongue, tongue sticking out, blurry, watermark"
+    )
+    assert result.negative.buckets["embedding_tokens"] == ["<embedding:SDXLnegXL>"]
 
 
 def test_optimizer_preserves_legacy_bare_embedding_tokens_at_front() -> None:

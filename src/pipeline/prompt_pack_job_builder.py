@@ -532,6 +532,7 @@ class PromptPackNormalizedJobBuilder:
             matrix_slot_values=matrix_values,
             actor_resolutions=resolved_actors,
             style_lora=resolved_style_lora,
+            runtime_lora_strengths=config.get("lora_strengths"),
             pack_negative=negative_prompt,
             global_negative=self._config_manager.get_global_negative_prompt(),
             apply_global_negative=bool(apply_global),
@@ -637,7 +638,22 @@ class PromptPackNormalizedJobBuilder:
         resolved_style_lora: dict[str, Any] | None,
     ) -> dict[str, Any]:
         txt2img = _effective_txt2img_stage_config(merged_config.get("txt2img", {}))
+        txt2img_payload = copy.deepcopy(txt2img)
         pipeline_section = merged_config.get("pipeline", {})
+        runtime_lora_strengths = merged_config.get("lora_strengths")
+        if isinstance(runtime_lora_strengths, list):
+            lora_strengths_payload = copy.deepcopy(runtime_lora_strengths)
+        else:
+            lora_strengths_payload = [
+                {"name": name, "strength": weight, "enabled": True}
+                for name, weight in prompt_resolution.lora_tags
+            ]
+        resolved_lora_entries = [
+            {"name": name, "weight": weight}
+            for name, weight in prompt_resolution.lora_tags
+        ]
+        txt2img_payload["lora_strengths"] = copy.deepcopy(lora_strengths_payload)
+        txt2img_payload["loras"] = copy.deepcopy(resolved_lora_entries)
         payload: dict[str, Any] = {
             "prompt": prompt_resolution.positive,
             "negative_prompt": prompt_resolution.negative,
@@ -675,8 +691,11 @@ class PromptPackNormalizedJobBuilder:
             "tiling": txt2img.get("tiling"),
             "do_not_save_samples": txt2img.get("do_not_save_samples"),
             "do_not_save_grid": txt2img.get("do_not_save_grid"),
+            "lora_strengths": copy.deepcopy(lora_strengths_payload),
+            "loras": copy.deepcopy(resolved_lora_entries),
             # Stage and section references
             "stages": [stage.stage_type for stage in stage_chain if stage.enabled],
+            "txt2img": txt2img_payload,
             "pipeline": pipeline_section,
             "randomization": merged_config.get("randomization"),
             "hires_fix": merged_config.get("hires_fix"),

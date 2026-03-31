@@ -114,12 +114,14 @@ def test_ensure_running_restarts_when_unhealthy(monkeypatch):
     manager._process = DummyProcess()
 
     call_count = {"n": 0}
+    startup_calls = []
 
     def check_health():
         call_count["n"] += 1
-        return call_count["n"] > 1
+        return False
 
     manager.check_health = check_health
+    manager._check_startup_health = lambda: startup_calls.append(True) or True
     stop_mock = mock.Mock()
     start_mock = mock.Mock()
     manager.stop = stop_mock
@@ -128,7 +130,8 @@ def test_ensure_running_restarts_when_unhealthy(monkeypatch):
     assert manager.ensure_running()
     stop_mock.assert_called_once()
     start_mock.assert_called_once()
-    assert call_count["n"] == 2
+    assert call_count["n"] == 1
+    assert startup_calls == [True]
 
 
 def test_ensure_running_checks_health_after_start(monkeypatch):
@@ -143,16 +146,40 @@ def test_ensure_running_checks_health_after_start(monkeypatch):
         return dummy
 
     manager.start = fake_start
-    check_calls = []
+    startup_calls = []
 
-    def fake_check():
-        check_calls.append(True)
+    def fake_check_startup_health():
+        startup_calls.append(True)
         return True
 
-    manager.check_health = fake_check
+    manager._check_startup_health = fake_check_startup_health
 
     assert manager.ensure_running()
-    assert len(check_calls) == 1
+    assert len(startup_calls) == 1
+
+
+def test_ensure_running_uses_configured_startup_timeout_after_start(monkeypatch):
+    cfg = WebUIProcessConfig(
+        command=["python", "webui.py"],
+        startup_timeout_seconds=45.0,
+    )
+    manager = WebUIProcessManager(cfg)
+    manager._process = None
+
+    dummy = DummyProcess()
+
+    def fake_start():
+        manager._process = dummy
+        return dummy
+
+    probe_calls = []
+    manager.start = fake_start
+    manager._probe_health = lambda *, timeout, poll_interval: probe_calls.append(  # type: ignore[method-assign]
+        (timeout, poll_interval)
+    ) or True
+
+    assert manager.ensure_running()
+    assert probe_calls == [(45.0, 2.25)]
 
 
 def test_check_health_uses_retries(monkeypatch):
@@ -160,8 +187,8 @@ def test_check_health_uses_retries(monkeypatch):
     manager = WebUIProcessManager(cfg)
     called = []
 
-    def fake_wait(url, timeout, poll_interval):
-        called.append((url, timeout, poll_interval))
+    def fake_wait(url, timeout, poll_interval, **kwargs):
+        called.append((url, timeout, poll_interval, dict(kwargs)))
         return True
 
     monkeypatch.setattr("src.api.healthcheck.wait_for_webui_ready", fake_wait)
@@ -169,6 +196,7 @@ def test_check_health_uses_retries(monkeypatch):
 
     assert manager.check_health()
     assert called and called[0][1] == 15.0 and called[0][2] == 3.0
+    assert called[0][3]["respect_failure_backoff"] is False
 
 
 def test_start_orphan_monitor_skips_under_test_mode(monkeypatch):

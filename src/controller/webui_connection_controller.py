@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import importlib
 import logging
 import socket
 import time
@@ -7,10 +8,13 @@ from collections.abc import Callable
 from enum import Enum
 from urllib.parse import urlparse
 
-import psutil
 import requests
 
-from src.api.healthcheck import WebUIHealthCheckTimeout, wait_for_webui_ready
+from src.api.healthcheck import (
+    WebUIHealthCheckTimeout,
+    clear_readiness_failure_state,
+    wait_for_webui_ready,
+)
 from src.api.webui_process_manager import (
     WebUIProcessManager,
     build_default_webui_process_config,
@@ -21,6 +25,8 @@ from src.utils import LogContext, log_with_ctx
 STRICT_READY_CACHE_TTL = 2.5
 HEALTH_PROBE_TIMEOUT = (0.25, 1.0)
 READINESS_TIMING_WARN_MS = 1000.0
+MIN_AUTOSTART_RETRY_INTERVAL_SECONDS = 3.0
+psutil = importlib.import_module("psutil")
 
 
 class WebUIConnectionState(Enum):
@@ -151,6 +157,7 @@ class WebUIConnectionController:
         total_timeout = app_config.get_webui_health_total_timeout_seconds()
         autostart_enabled = app_config.get_webui_autostart_enabled()
         overall_started_at = time.monotonic()
+        overall_deadline = overall_started_at + max(total_timeout, 0.0)
         fast_probe_started_at = time.monotonic()
         fast_probe_elapsed_ms = 0.0
         retry_attempts_used = 0
@@ -165,7 +172,10 @@ class WebUIConnectionController:
         self._set_state(WebUIConnectionState.CONNECTING)
         try:
             if wait_for_webui_ready(
-                base_url, timeout=initial_timeout, poll_interval=retry_interval
+                base_url,
+                timeout=initial_timeout,
+                poll_interval=retry_interval,
+                respect_failure_backoff=False,
             ):
                 self._set_state(WebUIConnectionState.READY)
                 self._logger.debug("WebUI models/options are ready at %s", base_url)
@@ -204,6 +214,7 @@ class WebUIConnectionController:
         # attempt autostart
         try:
             autostart_invoked = True
+            clear_readiness_failure_state(base_url)
             autostart_started_at = time.monotonic()
             proc_cfg = build_default_webui_process_config()
             if proc_cfg is None:
@@ -231,14 +242,25 @@ class WebUIConnectionController:
             return self._state
 
         # wait a bit before retries
-        warmup_requested_ms = min(10.0, total_timeout) * 1000.0
-        time.sleep(min(10.0, total_timeout))
+        warmup_seconds = min(10.0, max(overall_deadline - time.monotonic(), 0.0))
+        warmup_requested_ms = warmup_seconds * 1000.0
+        if warmup_seconds > 0:
+            time.sleep(warmup_seconds)
 
+        retry_probe_interval = max(retry_interval, MIN_AUTOSTART_RETRY_INTERVAL_SECONDS)
         for _ in range(max(retry_count, 0)):
+            remaining_timeout = overall_deadline - time.monotonic()
+            if remaining_timeout <= 0:
+                break
             retry_attempts_used += 1
+            attempt_timeout = min(retry_probe_interval, remaining_timeout)
+            attempt_poll_interval = max(min(retry_probe_interval, attempt_timeout), 0.01)
             try:
                 if wait_for_webui_ready(
-                    base_url, timeout=retry_interval, poll_interval=retry_interval
+                    base_url,
+                    timeout=attempt_timeout,
+                    poll_interval=attempt_poll_interval,
+                    respect_failure_backoff=False,
                 ):
                     self._set_state(WebUIConnectionState.READY)
                     self._logger.debug("WebUI models/options are ready at %s", base_url)
@@ -260,7 +282,6 @@ class WebUIConnectionController:
             except Exception as exc:  # pragma: no cover
                 last_error = str(exc)
                 self._logger.debug("WebUI probe failed: %s", exc)
-            time.sleep(retry_interval)
 
         # If still not ready, try to find WebUI on other ports
         self._logger.info("Trying to auto-detect WebUI on other ports...")
@@ -274,7 +295,12 @@ class WebUIConnectionController:
             # Update the base_url_provider to use the detected URL
             self._base_url_provider = lambda: detected_url
             try:
-                if wait_for_webui_ready(detected_url, timeout=5.0, poll_interval=1.0):
+                if wait_for_webui_ready(
+                    detected_url,
+                    timeout=5.0,
+                    poll_interval=1.0,
+                    respect_failure_backoff=False,
+                ):
                     self._set_state(WebUIConnectionState.READY)
                     self._logger.debug("WebUI models/options are ready at %s", detected_url)
                     self._notify_ready()
@@ -339,7 +365,7 @@ class WebUIConnectionController:
         if pid is None:
             return False
         try:
-            alive = psutil.pid_exists(pid)
+            alive = bool(psutil.pid_exists(pid))
         except Exception:
             alive = False
         if not alive:

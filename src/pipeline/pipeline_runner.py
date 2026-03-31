@@ -223,6 +223,62 @@ class PipelineRunner:
         return "".join(c if c.isalnum() or c in ("-", "_") else "_" for c in str(name))
 
     @staticmethod
+    def _resolve_lora_stage_payload(njr: NormalizedJobRecord) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        resolved_tags: list[tuple[str, float]] = []
+        for entry in list(getattr(njr, "lora_tags", []) or []):
+            name = str(getattr(entry, "name", "") or "").strip()
+            if not name:
+                continue
+            try:
+                weight = float(getattr(entry, "weight", 1.0))
+            except (TypeError, ValueError):
+                weight = 1.0
+            resolved_tags.append((name, weight))
+
+        config_dict = dict(getattr(njr, "config", {}) or {}) if isinstance(getattr(njr, "config", None), Mapping) else {}
+        txt2img = dict(config_dict.get("txt2img") or {}) if isinstance(config_dict.get("txt2img"), Mapping) else {}
+
+        if not resolved_tags:
+            raw_loras = txt2img.get("loras") or config_dict.get("loras") or []
+            for entry in list(raw_loras):
+                if isinstance(entry, Mapping):
+                    name = str(entry.get("name") or "").strip()
+                    raw_weight = entry.get("weight", entry.get("strength", 1.0))
+                elif isinstance(entry, (list, tuple)) and entry:
+                    name = str(entry[0] or "").strip()
+                    raw_weight = entry[1] if len(entry) > 1 else 1.0
+                else:
+                    continue
+                if not name:
+                    continue
+                try:
+                    weight = float(raw_weight)
+                except (TypeError, ValueError):
+                    weight = 1.0
+                resolved_tags.append((name, weight))
+
+        if not resolved_tags:
+            raw_strengths = txt2img.get("lora_strengths") or config_dict.get("lora_strengths") or []
+            for entry in list(raw_strengths):
+                if not isinstance(entry, Mapping):
+                    continue
+                name = str(entry.get("name") or "").strip()
+                if not name or not bool(entry.get("enabled", True)):
+                    continue
+                try:
+                    weight = float(entry.get("strength", entry.get("weight", 1.0)))
+                except (TypeError, ValueError):
+                    weight = 1.0
+                resolved_tags.append((name, weight))
+
+        loras = [{"name": name, "weight": weight} for name, weight in resolved_tags]
+        lora_strengths = [
+            {"name": name, "strength": weight, "enabled": True}
+            for name, weight in resolved_tags
+        ]
+        return loras, lora_strengths
+
+    @staticmethod
     def _shorten_model_name(name: str) -> str:
         value = str(name or "")
         for ext in [".safetensors", ".ckpt", ".pt"]:
@@ -1250,6 +1306,12 @@ class PipelineRunner:
                     # Add scheduler if present
                     if njr.scheduler:
                         payload["scheduler"] = njr.scheduler
+
+                    resolved_loras, resolved_lora_strengths = self._resolve_lora_stage_payload(njr)
+                    if resolved_loras:
+                        payload["loras"] = resolved_loras
+                    if resolved_lora_strengths:
+                        payload["lora_strengths"] = resolved_lora_strengths
                     
                     # Add hires fix settings from NJR config if present
                     if njr_config.get("enable_hr"):

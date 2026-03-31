@@ -1,7 +1,7 @@
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import LoRATag, NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult, normalize_run_result
 from src.refinement.subject_scale_policy_service import SubjectScalePolicyService
 from src.video.assembly_models import AssembledVideoResult, ExportReadyOutputBundle
@@ -54,6 +54,32 @@ def test_run_njr_delegates_to_executor() -> None:
     assert result.metadata["replay_descriptor"]["artifact_type"] == "image"
     assert result.metadata["replay_descriptor"]["primary_stage"] == "txt2img"
     assert result.metadata["diagnostics_descriptor"]["output_count"] == 1
+
+
+def test_run_njr_passes_lora_metadata_in_txt2img_stage_config() -> None:
+    runner = PipelineRunner(Mock(), Mock())
+    record = _minimal_normalized_record()
+    record.positive_prompt = "portrait <lora:detailer:0.75>"
+    record.lora_tags = [LoRATag(name="detailer", weight=0.75)]
+    record.config = {
+        "txt2img": {
+            "lora_strengths": [{"name": "detailer", "strength": 0.75, "enabled": True}],
+            "loras": [{"name": "detailer", "weight": 0.75}],
+        }
+    }
+    pipeline = Mock()
+    pipeline.client = Mock()
+    pipeline.run_txt2img_stage.return_value = {"path": "output.png"}
+    runner._pipeline = pipeline
+
+    result = runner.run_njr(record, cancel_token=None)
+
+    assert result.success is True
+    _, _, stage_config, _ = pipeline.run_txt2img_stage.call_args[0]
+    assert stage_config["loras"] == [{"name": "detailer", "weight": 0.75}]
+    assert stage_config["lora_strengths"] == [
+        {"name": "detailer", "strength": 0.75, "enabled": True}
+    ]
 
 
 def test_run_njr_emits_observation_only_adaptive_refinement_metadata() -> None:

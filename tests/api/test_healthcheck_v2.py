@@ -1,4 +1,5 @@
 import logging
+import time
 
 import pytest
 import requests
@@ -85,3 +86,28 @@ def test_wait_for_webui_ready_enters_short_backoff_after_repeated_connection_ref
         wait_for_webui_ready("http://127.0.0.1:7860", timeout=0.05, poll_interval=0.01)
 
     assert "backoff active" in str(excinfo.value)
+
+
+def test_wait_for_webui_ready_can_bypass_cached_backoff(monkeypatch):
+    _READINESS_FAILURE_STATE.clear()
+    _READINESS_FAILURE_STATE["http://127.0.0.1:7860"] = {
+        "hard_failures": 2.0,
+        "cooldown_until": time.monotonic() + 30.0,
+    }
+
+    def fake_get(url, timeout):  # noqa: ARG001
+        assert MODELS_PATH in url
+        return _DummyResponse(200, payload=[{"name": "foo"}])
+
+    monkeypatch.setattr("src.api.healthcheck.requests.get", fake_get)
+
+    assert (
+        wait_for_webui_ready(
+            "http://127.0.0.1:7860",
+            timeout=1.0,
+            poll_interval=0.01,
+            respect_failure_backoff=False,
+        )
+        is True
+    )
+    assert "http://127.0.0.1:7860" not in _READINESS_FAILURE_STATE

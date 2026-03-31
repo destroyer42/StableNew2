@@ -113,6 +113,45 @@ def test_pending_overlay_replaces_stale_cached_status():
             assert updated.error_message == "connection refused"
 
 
+def test_list_jobs_cached_reuses_primed_cache_without_disk_reload(monkeypatch) -> None:
+    """Verify runtime-snapshot cache reads stay in-memory after the cache is primed."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        history_file = Path(tmpdir) / "history.jsonl"
+
+        entry1 = JobHistoryEntry(
+            job_id="job1",
+            created_at=datetime.now(),
+            status=JobStatus.COMPLETED,
+            payload_summary="First job",
+        )
+        history_file.write_text(entry1.to_json() + "\n", encoding="utf-8")
+
+        store = JSONLJobHistoryStore(history_file)
+        assert [job.job_id for job in store.list_jobs()] == ["job1"]
+
+        entry2 = JobHistoryEntry(
+            job_id="job2",
+            created_at=datetime.now(),
+            status=JobStatus.COMPLETED,
+            payload_summary="Second job",
+        )
+
+        with patch("src.services.persistence_worker.get_persistence_worker") as mock_get_worker:
+            mock_worker = Mock()
+            mock_worker.enqueue.return_value = True
+            mock_get_worker.return_value = mock_worker
+            store._append(entry2)
+
+        def _fail_disk_reload() -> None:
+            raise AssertionError("list_jobs_cached should not hit the disk-aware reload path")
+
+        monkeypatch.setattr(store, "_load_latest_by_job", _fail_disk_reload)
+
+        jobs = store.list_jobs_cached()
+
+        assert [job.job_id for job in jobs] == ["job2", "job1"]
+
+
 def test_manual_refresh_invalidates_cache():
     """Verify manual refresh forces cache invalidation."""
     with tempfile.TemporaryDirectory() as tmpdir:

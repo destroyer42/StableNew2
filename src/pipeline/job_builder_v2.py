@@ -15,11 +15,12 @@ The builder is pure pipeline logic: no GUI, no AppState, no Tkinter.
 
 from __future__ import annotations
 
+import re
 import time
 import uuid
 from collections.abc import Callable
 from copy import deepcopy
-from typing import Any
+from typing import Any, Literal, cast
 
 from src.pipeline.config_normalizer import normalize_pipeline_config
 from src.pipeline.config_contract_v26 import (
@@ -34,6 +35,7 @@ from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.pipeline.job_models_v2 import (
     BatchSettings,
     JobStatusV2,
+    LoRATag,
     NormalizedJobRecord,
     OutputSettings,
     PackUsageInfo,
@@ -41,11 +43,15 @@ from src.pipeline.job_models_v2 import (
     StagePromptInfo,
 )
 from src.pipeline.job_requests_v2 import PipelineRunRequest
+from src.pipeline.resolution_layer import merge_lora_tags, render_lora_tokens
 from src.randomizer import (
     RandomizationPlanV2,
     RandomizationSeedMode,
     generate_run_config_variants,
 )
+
+
+_LORA_TOKEN_RE = re.compile(r"<lora:([^:>]+):([^>]+)>", re.IGNORECASE)
 
 
 class JobBuilderV2:
@@ -109,7 +115,7 @@ class JobBuilderV2:
         # Apply defaults
         batch = batch_settings or BatchSettings()
         output = output_settings or OutputSettings()
-        config_plan = config_variant_plan or ConfigVariantPlanV2.single_variant()
+        config_plan: Any = config_variant_plan or ConfigVariantPlanV2.single_variant()
 
         # Step 1: Iterate over config variants (PR-CORE-E)
         jobs: list[NormalizedJobRecord] = []
@@ -233,6 +239,10 @@ class JobBuilderV2:
                 )
                 positive_prompt = entry.prompt_text or ""
                 negative_prompt = entry.negative_prompt_text or ""
+                positive_prompt, resolved_lora_tags = self._resolve_prompt_lora_state(
+                    positive_prompt,
+                    config,
+                )
                 width = int(txt2img_config.get("width") or config.get("width") or 1024)
                 height = int(txt2img_config.get("height") or config.get("height") or 1024)
                 steps = stage.steps or 0
@@ -244,12 +254,13 @@ class JobBuilderV2:
                 base_model = stage.model or ""
                 path_output_dir = output_dir
                 positive_embeddings = list(entry.matrix_slot_values.keys())
+            if is_train_lora:
+                resolved_lora_tags = []
 
-            extra_metadata = {
-                "tags": list(run_request.tags),
-                "selected_row_ids": list(run_request.selected_row_ids),
-                "requested_job_label": run_request.requested_job_label,
-            }
+            extra_metadata: dict[str, Any] = {}
+            extra_metadata["tags"] = list(run_request.tags)
+            extra_metadata["selected_row_ids"] = list(run_request.selected_row_ids)
+            extra_metadata["requested_job_label"] = run_request.requested_job_label
             if is_train_lora:
                 extra_metadata["train_lora"] = dict(config.get("train_lora") or {})
 
@@ -266,7 +277,7 @@ class JobBuilderV2:
                 created_ts=self._time_fn(),
                 randomizer_summary=entry.randomizer_metadata,
                 txt2img_prompt_info=StagePromptInfo(
-                    original_prompt=positive_prompt,
+                    original_prompt=entry.prompt_text or positive_prompt,
                     final_prompt=positive_prompt,
                     original_negative_prompt=negative_prompt,
                     final_negative_prompt=negative_prompt,
@@ -280,7 +291,7 @@ class JobBuilderV2:
                 negative_prompt=negative_prompt,
                 positive_embeddings=positive_embeddings,
                 negative_embeddings=[],
-                lora_tags=[],
+                lora_tags=resolved_lora_tags,
                 matrix_slot_values=dict(entry.matrix_slot_values),
                 steps=steps,
                 cfg_scale=cfg_scale,
@@ -296,8 +307,11 @@ class JobBuilderV2:
                 loop_count=int(config.get("pipeline", {}).get("loop_count", 1)),
                 images_per_prompt=int(config.get("pipeline", {}).get("images_per_prompt", 1)),
                 variant_mode=str(config.get("pipeline", {}).get("variant_mode", "standard")),
-                run_mode=run_request.run_mode.name,
-                queue_source=run_request.source.name,
+                run_mode=cast(Literal["DIRECT", "QUEUE"], run_request.run_mode.name),
+                queue_source=cast(
+                    Literal["RUN_NOW", "ADD_TO_QUEUE"],
+                    run_request.source.name,
+                ),
                 randomization_enabled=bool(config.get("randomization", {}).get("enabled")),
                 matrix_name=str(config.get("randomization", {}).get("matrix_name", "")),
                 matrix_mode=str(config.get("randomization", {}).get("mode", "")),
@@ -333,6 +347,64 @@ class JobBuilderV2:
             )
             jobs.append(record)
         return jobs
+
+    @staticmethod
+    def _extract_prompt_lora_tags(prompt_text: str) -> tuple[tuple[str, float], ...]:
+        tags: list[tuple[str, float]] = []
+        for name, weight_text in _LORA_TOKEN_RE.findall(prompt_text or ""):
+            cleaned_name = str(name or "").strip()
+            if not cleaned_name:
+                continue
+            try:
+                weight = float(weight_text)
+            except (TypeError, ValueError):
+                weight = 1.0
+            tags.append((cleaned_name, weight))
+        return tuple(tags)
+
+    @staticmethod
+    def _extract_config_lora_tags(config: dict[str, Any]) -> tuple[tuple[str, float], ...]:
+        txt2img = dict(config.get("txt2img") or {})
+        raw_entries = txt2img.get("loras") or config.get("loras") or []
+        tags: list[tuple[str, float]] = []
+        for entry in list(raw_entries):
+            if isinstance(entry, dict):
+                name = str(entry.get("name") or "").strip()
+                raw_weight = entry.get("weight", entry.get("strength", 1.0))
+            elif isinstance(entry, (list, tuple)) and entry:
+                name = str(entry[0] or "").strip()
+                raw_weight = entry[1] if len(entry) > 1 else 1.0
+            else:
+                continue
+            if not name:
+                continue
+            try:
+                weight = float(raw_weight)
+            except (TypeError, ValueError):
+                weight = 1.0
+            tags.append((name, weight))
+        return tuple(tags)
+
+    @classmethod
+    def _resolve_prompt_lora_state(
+        cls,
+        prompt_text: str,
+        config: dict[str, Any],
+    ) -> tuple[str, list[LoRATag]]:
+        txt2img = dict(config.get("txt2img") or {})
+        source_lora_tags = cls._extract_config_lora_tags(config) or cls._extract_prompt_lora_tags(
+            prompt_text
+        )
+        resolved_tags = merge_lora_tags(
+            source_lora_tags=source_lora_tags,
+            runtime_lora_strengths=txt2img.get("lora_strengths") or config.get("lora_strengths"),
+        )
+        if not resolved_tags:
+            return prompt_text, []
+        prompt_without_loras = " ".join(_LORA_TOKEN_RE.sub(" ", prompt_text or "").split())
+        lora_tokens = render_lora_tokens(resolved_tags)
+        final_prompt = f"{prompt_without_loras} {lora_tokens}".strip() if prompt_without_loras else lora_tokens
+        return final_prompt, [LoRATag(name=name, weight=weight) for name, weight in resolved_tags]
 
     def _apply_config_overrides(
         self,

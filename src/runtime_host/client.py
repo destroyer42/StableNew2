@@ -19,6 +19,7 @@ from src.runtime_host.port import (
     RUNTIME_HOST_EVENT_JOB_FAILED,
     RUNTIME_HOST_EVENT_JOB_FINISHED,
     RUNTIME_HOST_EVENT_JOB_STARTED,
+    RUNTIME_HOST_EVENT_MANAGED_RUNTIMES_UPDATED,
     RUNTIME_HOST_EVENT_QUEUE_EMPTY,
     RUNTIME_HOST_EVENT_QUEUE_STATUS,
     RUNTIME_HOST_EVENT_QUEUE_UPDATED,
@@ -127,7 +128,7 @@ class RemoteHistoryStoreMirror:
     def _ensure_cache(self, *, history_limit: int) -> None:
         if self._cache_initialized and not self._cache_stale:
             return
-        self._client._refresh_from_remote(history_limit=history_limit)
+        self._client._refresh_history_from_remote(history_limit=history_limit)
         self._cache_initialized = True
         self._cache_stale = False
 
@@ -148,8 +149,12 @@ class RemoteHistoryStoreMirror:
         return entries[offset : offset + limit]
 
     def get_job(self, job_id: str) -> JobHistoryEntry | None:
-        if not self._cache_initialized and self._cache_stale:
-            self._ensure_cache(history_limit=50)
+        if self._cache_initialized and not self._cache_stale:
+            return self._client._history_by_id.get(job_id)
+        snapshot_entry = self._client._snapshot_history_by_id.get(job_id)
+        if snapshot_entry is not None:
+            return snapshot_entry
+        self._ensure_cache(history_limit=50)
         return self._client._history_by_id.get(job_id)
 
     def register_callback(self, callback: Callable[[JobHistoryEntry], None]) -> None:
@@ -162,7 +167,6 @@ class RemoteHistoryStoreMirror:
         return None
 
     def _emit(self, entry: JobHistoryEntry) -> None:
-        self._mark_cache_fresh()
         for callback in list(self._callbacks):
             try:
                 self._client._dispatch_call(callback, entry)
@@ -234,6 +238,7 @@ class ChildRuntimeHostClient(RuntimeHostPort):
         self._jobs_by_id: dict[str, Job] = {}
         self._history_entries: list[JobHistoryEntry] = []
         self._history_by_id: dict[str, JobHistoryEntry] = {}
+        self._snapshot_history_by_id: dict[str, JobHistoryEntry] = {}
         self._managed_runtime_state: dict[str, Any] = {}
         self._connected = False
         self._startup_error: str | None = None
@@ -365,6 +370,9 @@ class ChildRuntimeHostClient(RuntimeHostPort):
         payload = dict(response.payload)
         self._managed_runtime_state = payload
         return payload
+
+    def get_cached_managed_runtime_snapshot(self) -> dict[str, Any]:
+        return dict(self._managed_runtime_state)
 
     def ensure_webui_ready(self, *, autostart: bool = True) -> dict[str, Any]:
         response = self._request(
@@ -550,34 +558,67 @@ class ChildRuntimeHostClient(RuntimeHostPort):
             return
         refresh_context.active = True
         try:
-            response = self._request("runtime_snapshot", {"history_limit": int(history_limit)})
+            response = self._request(
+                "runtime_snapshot",
+                {"history_job_ids": list(self._jobs_by_id)},
+            )
             self._apply_runtime_snapshot(dict(response.payload))
         finally:
             refresh_context.active = False
 
+    def _refresh_history_from_remote(self, *, history_limit: int = 50) -> None:
+        response = self._request("history_snapshot", {"history_limit": int(history_limit)})
+        self._apply_history_snapshot(dict(response.payload))
+
+    def _apply_history_snapshot(self, payload: Mapping[str, Any]) -> None:
+        history_entries = [
+            deserialize_history_entry(item)
+            for item in payload.get("history") or []
+            if isinstance(item, Mapping)
+        ]
+        self._history_entries = history_entries
+        self._history_by_id = {entry.job_id: entry for entry in history_entries}
+        self._snapshot_history_by_id.update(self._history_by_id)
+        self.history_store._mark_cache_fresh()
+
     def _apply_runtime_snapshot(self, payload: Mapping[str, Any]) -> None:
         previous_jobs = dict(self._jobs_by_id)
         previous_history = dict(self._history_by_id)
+        previous_snapshot_history = dict(self._snapshot_history_by_id)
         previous_queue_state = dict(self._queue_state)
+        previous_managed_runtime_state = dict(self._managed_runtime_state)
 
         jobs = [
             deserialize_job(item)
             for item in payload.get("jobs") or []
             if isinstance(item, Mapping)
         ]
-        history_entries = [
+        history_updates = [
             deserialize_history_entry(item)
-            for item in payload.get("history") or []
+            for item in (payload.get("history_updates") or payload.get("history") or [])
             if isinstance(item, Mapping)
         ]
         self._jobs_by_id = {job.job_id: job for job in jobs}
-        self._history_entries = history_entries
-        self._history_by_id = {entry.job_id: entry for entry in history_entries}
-        self.history_store._mark_cache_fresh()
+        for entry in history_updates:
+            self._snapshot_history_by_id[entry.job_id] = entry
+            if self.history_store._cache_initialized:
+                self._history_by_id[entry.job_id] = entry
+        if self.history_store._cache_initialized:
+            self._history_entries = sorted(
+                self._history_by_id.values(),
+                key=lambda entry: entry.created_at,
+                reverse=True,
+            )
         self._queue_state = dict(payload.get("queue") or {})
         self._managed_runtime_state = dict(payload.get("managed_runtimes") or {})
         self._protocol_info.setdefault("host_pid", payload.get("host_pid"))
         self._protocol_info.setdefault("transport", payload.get("transport", "local-child"))
+
+        if previous_managed_runtime_state != self._managed_runtime_state:
+            self._emit(
+                RUNTIME_HOST_EVENT_MANAGED_RUNTIMES_UPDATED,
+                dict(self._managed_runtime_state),
+            )
 
         if previous_queue_state != self._queue_state:
             if callable(self._on_queue_activity):
@@ -613,7 +654,7 @@ class ChildRuntimeHostClient(RuntimeHostPort):
         for job_id, previous in previous_jobs.items():
             if job_id in self._jobs_by_id:
                 continue
-            history_entry = self._history_by_id.get(job_id)
+            history_entry = self._snapshot_history_by_id.get(job_id) or self._history_by_id.get(job_id)
             if history_entry is None:
                 continue
             finished = previous
@@ -629,8 +670,10 @@ class ChildRuntimeHostClient(RuntimeHostPort):
                 self._emit(RUNTIME_HOST_EVENT_JOB_FAILED, finished)
                 self._notify_completion_handlers(finished, False)
 
-        for job_id, entry in self._history_by_id.items():
-            previous_entry = previous_history.get(job_id)
+        previous_known_history = dict(previous_history)
+        previous_known_history.update(previous_snapshot_history)
+        for entry in history_updates:
+            previous_entry = previous_known_history.get(entry.job_id)
             if (
                 previous_entry is not None
                 and previous_entry.status == entry.status

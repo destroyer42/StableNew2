@@ -822,8 +822,7 @@ class QueuePanelV2(ttk.Frame):
 
         # Get queue items from app state
         queue_jobs = getattr(app_state, "queue_jobs", None)
-        if queue_jobs:
-            self.update_jobs(queue_jobs)
+        self.update_jobs(list(queue_jobs or []))
         # Note: queue_items is legacy, we only display UnifiedJobSummary objects now
 
         # Update queue control states

@@ -28,34 +28,83 @@ def _parse_datetime(value: Any) -> datetime | None:
         return None
 
 
+def _parse_job_priority(value: Any) -> JobPriority:
+    if isinstance(value, JobPriority):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip()
+        if not normalized:
+            return JobPriority.NORMAL
+        try:
+            return JobPriority(int(normalized))
+        except Exception:
+            pass
+        try:
+            return JobPriority[normalized.upper()]
+        except Exception:
+            return JobPriority.NORMAL
+    try:
+        return JobPriority(int(value))
+    except Exception:
+        return JobPriority.NORMAL
+
+
 def serialize_normalized_job_snapshot(record: Any) -> dict[str, Any]:
     return {"normalized_job": _serialize_dataclass(record)}
 
 
-def serialize_job(job: Job) -> dict[str, Any]:
+def serialize_job(
+    job: Job,
+    *,
+    include_result: bool = True,
+    include_config_snapshot: bool = True,
+    include_randomizer_metadata: bool = True,
+    include_execution_metadata: bool = True,
+) -> dict[str, Any]:
     data = dict(job.to_dict())
     snapshot = dict(data.get("snapshot") or {})
     record = getattr(job, "_normalized_record", None)
     if record is not None and "normalized_job" not in snapshot:
         snapshot = serialize_normalized_job_snapshot(record)
     data["snapshot"] = snapshot
+    if not include_result:
+        data.pop("result", None)
+    if not include_config_snapshot:
+        data.pop("config_snapshot", None)
+    if not include_randomizer_metadata:
+        data.pop("randomizer_metadata", None)
     data["display_summary"] = job.get_display_summary()
     data["progress"] = float(getattr(job, "progress", 0.0) or 0.0)
     data["eta_seconds"] = getattr(job, "eta_seconds", None)
-    data["execution_metadata"] = {
-        "external_pids": list(job.execution_metadata.external_pids),
-        "retry_attempts": [asdict(attempt) for attempt in job.execution_metadata.retry_attempts],
-        "stage_checkpoints": [asdict(checkpoint) for checkpoint in job.execution_metadata.stage_checkpoints],
-        "last_control_action": job.execution_metadata.last_control_action,
-        "return_to_queue_count": job.execution_metadata.return_to_queue_count,
-    }
+    if include_execution_metadata:
+        data["execution_metadata"] = {
+            "external_pids": list(job.execution_metadata.external_pids),
+            "retry_attempts": [asdict(attempt) for attempt in job.execution_metadata.retry_attempts],
+            "stage_checkpoints": [asdict(checkpoint) for checkpoint in job.execution_metadata.stage_checkpoints],
+            "last_control_action": job.execution_metadata.last_control_action,
+            "return_to_queue_count": job.execution_metadata.return_to_queue_count,
+        }
+    else:
+        data.pop("execution_metadata", None)
+    return data
+
+
+def serialize_runtime_snapshot_job(job: Job) -> dict[str, Any]:
+    data = serialize_job(
+        job,
+        include_result=False,
+        include_config_snapshot=False,
+        include_randomizer_metadata=False,
+        include_execution_metadata=False,
+    )
+    data.pop("learning_enabled", None)
     return data
 
 
 def deserialize_job(data: Mapping[str, Any]) -> Job:
     job = Job(
         job_id=str(data.get("job_id") or ""),
-        priority=JobPriority(int(data.get("priority", JobPriority.NORMAL))),
+        priority=_parse_job_priority(data.get("priority", JobPriority.NORMAL)),
         run_mode=str(data.get("run_mode") or "queue"),
         source=str(data.get("source") or "unknown"),
         prompt_source=str(data.get("prompt_source") or "manual"),
@@ -149,6 +198,7 @@ __all__ = [
     "deserialize_run_request",
     "serialize_history_entry",
     "serialize_job",
+    "serialize_runtime_snapshot_job",
     "serialize_normalized_job_snapshot",
     "serialize_run_request",
 ]

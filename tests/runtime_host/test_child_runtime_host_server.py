@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
 from dataclasses import asdict
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import Mock, patch
 
+from src.queue.job_history_store import JobHistoryEntry, JSONLJobHistoryStore
+from src.queue.job_model import JobStatus
 from src.runtime_host import (
     RuntimeHostProtocolMessage,
     RuntimeHostServer,
@@ -136,6 +140,37 @@ def test_runtime_host_bootstrap_restores_and_persists_queue_snapshot(
     )
 
 
+def test_runtime_host_bootstrap_restores_named_priority_values(tmp_path, monkeypatch) -> None:
+    restored_record = make_test_njr(job_id="restored-job")
+    entry = {
+        "queue_id": "restored-job",
+        "njr_snapshot": {"normalized_job": asdict(restored_record)},
+        "priority": "NORMAL",
+        "status": "queued",
+        "created_at": "2025-07-01T12:00:00Z",
+        "queue_schema": SCHEMA_VERSION,
+        "metadata": {"run_mode": "queue", "source": "gui", "prompt_source": "pack"},
+    }
+
+    monkeypatch.setattr(
+        "src.runtime_host.bootstrap.load_queue_snapshot",
+        lambda *_, **__: QueueSnapshotV1(jobs=[entry], auto_run_enabled=False, paused=False),
+    )
+    monkeypatch.setattr(
+        "src.runtime_host.bootstrap.save_queue_snapshot",
+        lambda *_, **__: True,
+    )
+
+    bootstrap = build_runtime_host_bootstrap(
+        history_path=tmp_path / "runtime-host-history.jsonl",
+        pipeline_runner=StubPipelineRunner(),
+    )
+
+    restored_jobs = bootstrap.job_queue.list_jobs()
+    assert [job.job_id for job in restored_jobs] == ["restored-job"]
+    assert restored_jobs[0].priority == 1
+
+
 def test_runtime_host_server_serves_handshake_diagnostics_and_shutdown(tmp_path) -> None:
     bootstrap = build_runtime_host_bootstrap(
         history_path=tmp_path / "runtime-host-history.jsonl",
@@ -266,6 +301,112 @@ def test_runtime_host_server_queue_remove_returns_removed_job_payload(tmp_path) 
     result = dict(response.payload["result"])
     assert result["job_id"] == "job-remove"
     assert result["status"] == "cancelled"
+
+
+def test_runtime_snapshot_uses_cached_history_listing_when_available(tmp_path, monkeypatch) -> None:
+    history_path = tmp_path / "runtime-host-history.jsonl"
+    entry1 = JobHistoryEntry(
+        job_id="job-1",
+        created_at=datetime.utcnow(),
+        status=JobStatus.COMPLETED,
+        payload_summary="first",
+    )
+    history_path.write_text(entry1.to_json() + "\n", encoding="utf-8")
+
+    bootstrap = build_runtime_host_bootstrap(
+        history_path=history_path,
+        pipeline_runner=StubPipelineRunner(),
+    )
+    store = bootstrap.history_store
+    assert isinstance(store, JSONLJobHistoryStore)
+    assert [entry.job_id for entry in store.list_jobs(limit=20)] == ["job-1"]
+
+    entry2 = JobHistoryEntry(
+        job_id="job-2",
+        created_at=datetime.utcnow(),
+        status=JobStatus.COMPLETED,
+        payload_summary="second",
+    )
+    with patch("src.services.persistence_worker.get_persistence_worker") as mock_get_worker:
+        mock_worker = Mock()
+        mock_worker.enqueue.return_value = True
+        mock_get_worker.return_value = mock_worker
+        store._append(entry2)
+
+    monkeypatch.setattr(
+        store,
+        "list_jobs",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            AssertionError("runtime_snapshot should stay on the cache-first history path")
+        ),
+    )
+    server = RuntimeHostServer(bootstrap)
+
+    response = server.handle_message(
+        build_protocol_message(
+            "command",
+            "runtime_snapshot",
+            {"history_job_ids": ["job-2", "job-1"]},
+        ).to_dict()
+    )
+
+    assert response.kind == "snapshot"
+    assert [entry["job_id"] for entry in response.payload["history_updates"]] == ["job-2", "job-1"]
+
+
+def test_runtime_snapshot_omits_heavy_active_job_fields(tmp_path) -> None:
+    bootstrap = build_runtime_host_bootstrap(
+        history_path=tmp_path / "runtime-host-history.jsonl",
+        pipeline_runner=StubPipelineRunner(),
+    )
+    job = make_test_job_from_njr(make_test_njr(job_id="job-runtime"))
+    job.result = {"images": ["big-payload"]}
+    job.config_snapshot = {"prompt": "should-not-cross-poll"}
+    job.execution_metadata.return_to_queue_count = 2
+    bootstrap.job_queue.submit(job)
+    server = RuntimeHostServer(bootstrap)
+
+    response = server.handle_message(
+        build_protocol_message("command", "runtime_snapshot", {}).to_dict()
+    )
+
+    assert response.kind == "snapshot"
+    payload = response.payload["jobs"][0]
+    assert payload["job_id"] == "job-runtime"
+    assert "result" not in payload
+    assert "config_snapshot" not in payload
+    assert "execution_metadata" not in payload
+
+
+def test_history_snapshot_uses_full_history_listing(tmp_path, monkeypatch) -> None:
+    bootstrap = build_runtime_host_bootstrap(
+        history_path=tmp_path / "runtime-host-history.jsonl",
+        pipeline_runner=StubPipelineRunner(),
+    )
+    store = bootstrap.history_store
+    entries = [
+        JobHistoryEntry(
+            job_id="job-a",
+            created_at=datetime.utcnow(),
+            status=JobStatus.COMPLETED,
+            payload_summary="A",
+        )
+    ]
+
+    monkeypatch.setattr(store, "list_jobs_cached", lambda *args, **kwargs: [])
+    monkeypatch.setattr(store, "list_jobs", lambda *args, **kwargs: list(entries))
+    server = RuntimeHostServer(bootstrap)
+
+    response = server.handle_message(
+        build_protocol_message(
+            "command",
+            "history_snapshot",
+            {"history_limit": 20},
+        ).to_dict()
+    )
+
+    assert response.kind == "snapshot"
+    assert [entry["job_id"] for entry in response.payload["history"]] == ["job-a"]
 
 
 def test_runtime_host_server_stops_on_parent_disconnect(tmp_path) -> None:

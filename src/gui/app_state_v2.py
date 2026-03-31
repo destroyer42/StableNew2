@@ -504,14 +504,27 @@ class AppStateV2:
         self.queue_items = list(items)
         self._notify("queue_items")
 
+    @staticmethod
+    def _queue_job_signature(job: Any) -> tuple[str, str, str]:
+        if job is None:
+            return ("", "", "")
+        job_id = str(getattr(job, "job_id", "") or "")
+        status = str(getattr(job, "status", "") or "")
+        display_summary = ""
+        summary_getter = getattr(job, "get_display_summary", None)
+        if callable(summary_getter):
+            try:
+                display_summary = str(summary_getter() or "")
+            except Exception:
+                display_summary = ""
+        return (job_id, status, display_summary)
+
     def set_queue_jobs(self, jobs: list[UnifiedJobSummary] | None) -> None:
         if jobs is None:
             jobs = []
-        # Always update and notify - fixes Remove button not updating GUI (queue job removal bug)
-        # The comparison self.queue_jobs != jobs might miss updates due to object identity issues
-        changed = len(self.queue_jobs) != len(jobs) or any(
-            old.job_id != new.job_id for old, new in zip(self.queue_jobs, jobs, strict=False)
-        )
+        previous_signature = tuple(self._queue_job_signature(job) for job in self.queue_jobs)
+        next_signature = tuple(self._queue_job_signature(job) for job in jobs)
+        changed = previous_signature != next_signature
         if changed:
             logger.debug(f"set_queue_jobs: Updating from {len(self.queue_jobs)} to {len(jobs)} jobs")
             self.queue_jobs = list(jobs)

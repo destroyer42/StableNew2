@@ -218,13 +218,7 @@ class SDXLPromptOptimizer:
     def _join_positive_buckets(self, buckets: BucketMap) -> str:
         values: list[str] = []
         values.extend([str(item) for item in buckets.get("embedding_tokens", [])])
-        if self.config.preserve_unknown_order or self.config.preserve_lora_relative_order:
-            values.extend(self._ordered_positive_chunks_with_anchors(buckets))
-            return ", ".join(values)
-        for bucket in POSITIVE_BUCKET_ORDER:
-            if bucket == "lora_tokens":
-                continue
-            values.extend(_chunk_text_list(buckets.get(bucket, [])))
+        values.extend(self._ordered_positive_text_chunks(buckets))
         values.extend(_chunk_text_list(buckets.get("lora_tokens", [])))
         return ", ".join(values)
 
@@ -246,6 +240,20 @@ class SDXLPromptOptimizer:
         if self.config.preserve_lora_relative_order:
             anchored_buckets.add("lora_tokens")
         return _rebuild_chunk_order_with_anchors(ordered_chunks, POSITIVE_BUCKET_ORDER, anchored_buckets)
+
+    def _ordered_positive_text_chunks(self, buckets: BucketMap) -> list[str]:
+        ordered_buckets = tuple(bucket for bucket in POSITIVE_BUCKET_ORDER if bucket != "lora_tokens")
+        if self.config.preserve_unknown_order:
+            ordered_chunks = _all_prompt_chunks(buckets, ordered_buckets)
+            return _rebuild_chunk_order_with_anchors(
+                ordered_chunks,
+                ordered_buckets,
+                {"leftover_unknown"},
+            )
+        values: list[str] = []
+        for bucket in ordered_buckets:
+            values.extend(_chunk_text_list(buckets.get(bucket, [])))
+        return values
 
     def _ordered_negative_chunks_with_anchors(self, buckets: BucketMap) -> list[str]:
         ordered_chunks = _all_prompt_chunks(buckets, NEGATIVE_BUCKET_ORDER)

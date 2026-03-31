@@ -77,6 +77,7 @@ from src.utils.error_envelope_v2 import (
     serialize_envelope,
     wrap_exception,
 )
+from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 # Logger for this module
 _logger = logging.getLogger(__name__)
@@ -1180,6 +1181,31 @@ class PipelineController(CorePipelineController):
     # Queue wiring for AppState integration
     # ------------------------------------------------------------------
 
+    def _get_job_normalized_record(self, job: Job | None) -> NormalizedJobRecord | None:
+        if job is None:
+            return None
+        record = getattr(job, "_normalized_record", None)
+        if record is not None:
+            return record
+        snapshot = getattr(job, "snapshot", None)
+        if not isinstance(snapshot, Mapping) or not snapshot:
+            return None
+        try:
+            record = normalized_job_from_snapshot(snapshot)
+        except Exception:
+            _logger.debug(
+                "Failed to reconstruct normalized record from job snapshot",
+                exc_info=True,
+            )
+            return None
+        if record is None:
+            return None
+        try:
+            job._normalized_record = record  # type: ignore[attr-defined]
+        except Exception:
+            pass
+        return record
+
     def _setup_queue_callbacks(self) -> None:
         if not self._job_service:
             return
@@ -1205,20 +1231,30 @@ class PipelineController(CorePipelineController):
         self._refresh_app_state_queue()
 
     def _on_queue_status_changed(self, status: str) -> None:
+        if self._app_state_queue_updates_managed_externally:
+            return
         if not self._app_state:
             return
         self._app_state.set_queue_status(status)
 
     def _on_job_started(self, job: Job) -> None:
+        if self._app_state_queue_updates_managed_externally:
+            return
         self._set_running_job(job)
 
     def _on_job_finished(self, job: Job) -> None:
+        if self._app_state_queue_updates_managed_externally:
+            return
         self._set_running_job(None)
 
     def _on_job_failed(self, job: Job) -> None:
+        if self._app_state_queue_updates_managed_externally:
+            return
         self._set_running_job(None)
 
     def _on_queue_empty(self) -> None:
+        if self._app_state_queue_updates_managed_externally:
+            return
         if self._app_state:
             self._app_state.set_queue_status("idle")
 
@@ -1250,7 +1286,7 @@ class PipelineController(CorePipelineController):
         queue_jobs = []
         summaries = []
         for job in jobs:
-            njr = getattr(job, "_normalized_record", None)
+            njr = self._get_job_normalized_record(job)
             if njr:
                 try:
                     summary = UnifiedJobSummary.from_normalized_record(njr)
@@ -1316,7 +1352,7 @@ class PipelineController(CorePipelineController):
                 self._app_state.set_runtime_status(None)
             return
         # Convert Job to UnifiedJobSummary via NJR
-        njr = getattr(job, "_normalized_record", None)
+        njr = self._get_job_normalized_record(job)
         if njr:
             try:
                 summary = UnifiedJobSummary.from_normalized_record(njr)
@@ -1608,7 +1644,7 @@ class PipelineController(CorePipelineController):
 
         If the record is missing, returns an error dict instead of raising.
         """
-        record = getattr(job, "_normalized_record", None)
+        record = self._get_job_normalized_record(job)
         if record is not None:
             try:
                 result = self.run_njr(record)
@@ -1665,7 +1701,7 @@ class PipelineController(CorePipelineController):
         return result
 
     def _infer_job_stage(self, job: Job) -> str | None:
-        record = getattr(job, "_normalized_record", None)
+        record = self._get_job_normalized_record(job)
         if record and record.stage_chain:
             first_stage = record.stage_chain[0]
             stage_name = getattr(first_stage, "stage_type", None) or getattr(

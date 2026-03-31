@@ -4,11 +4,12 @@ import json
 from datetime import datetime
 from typing import Any
 
-from src.queue.job_model import Job
+from src.queue.job_model import Job, JobPriority
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
 from src.runtime_host import (
     RUNTIME_HOST_EVENT_DISCONNECTED,
+    RUNTIME_HOST_EVENT_MANAGED_RUNTIMES_UPDATED,
     RUNTIME_HOST_EVENT_QUEUE_STATUS,
     ChildRuntimeHostClient,
     RuntimeHostLaunchError,
@@ -95,22 +96,19 @@ def test_remote_history_store_reuses_cache_during_reentrant_refresh() -> None:
     history_entry = JobHistoryEntry(
         job_id="job-1",
         created_at=datetime.utcnow(),
+        status=JobStatus.RUNNING,
+        snapshot={"normalized_job": {"stage_chain": ["txt2img"]}},
+        duration_ms=1200,
+    )
+    finished_entry = JobHistoryEntry(
+        job_id="job-1",
+        created_at=history_entry.created_at,
         status=JobStatus.COMPLETED,
         snapshot={"normalized_job": {"stage_chain": ["txt2img"]}},
         duration_ms=1200,
     )
-    snapshot_payload = {
-        "jobs": [],
+    history_snapshot_payload = {
         "history": [json.loads(history_entry.to_json())],
-        "queue": {
-            "status": "idle",
-            "paused": False,
-            "runner_running": False,
-            "queued_job_ids": [],
-            "current_job_id": None,
-            "auto_run_enabled": False,
-        },
-        "managed_runtimes": {},
         "host_pid": 321,
         "transport": "local-child",
     }
@@ -128,9 +126,9 @@ def test_remote_history_store_reuses_cache_during_reentrant_refresh() -> None:
         timeout: float | None = None,
     ) -> DummyResponse:
         nonlocal request_count
-        assert name == "runtime_snapshot"
+        assert name == "history_snapshot"
         request_count += 1
-        return DummyResponse(snapshot_payload)
+        return DummyResponse(history_snapshot_payload)
 
     client._request = fake_request  # type: ignore[method-assign]
 
@@ -140,6 +138,23 @@ def test_remote_history_store_reuses_cache_during_reentrant_refresh() -> None:
     client.history_store.register_callback(on_history)
 
     entries = client.history_store.list_jobs(limit=20)
+    client._apply_runtime_snapshot(
+        {
+            "jobs": [],
+            "history_updates": [json.loads(finished_entry.to_json())],
+            "queue": {
+                "status": "idle",
+                "paused": False,
+                "runner_running": False,
+                "queued_job_ids": [],
+                "current_job_id": None,
+                "auto_run_enabled": False,
+            },
+            "managed_runtimes": {},
+            "host_pid": 321,
+            "transport": "local-child",
+        }
+    )
 
     assert request_count == 1
     assert [entry.job_id for entry in entries] == ["job-1"]
@@ -160,18 +175,8 @@ def test_remote_history_store_uses_cached_snapshot_until_invalidated() -> None:
         snapshot={"normalized_job": {"stage_chain": ["txt2img"]}},
         duration_ms=1200,
     )
-    snapshot_payload = {
-        "jobs": [],
+    history_snapshot_payload = {
         "history": [json.loads(history_entry.to_json())],
-        "queue": {
-            "status": "idle",
-            "paused": False,
-            "runner_running": False,
-            "queued_job_ids": [],
-            "current_job_id": None,
-            "auto_run_enabled": False,
-        },
-        "managed_runtimes": {},
         "host_pid": 321,
         "transport": "local-child",
     }
@@ -188,9 +193,9 @@ def test_remote_history_store_uses_cached_snapshot_until_invalidated() -> None:
         timeout: float | None = None,
     ) -> DummyResponse:
         nonlocal request_count
-        assert name == "runtime_snapshot"
+        assert name == "history_snapshot"
         request_count += 1
-        return DummyResponse(snapshot_payload)
+        return DummyResponse(history_snapshot_payload)
 
     client._request = fake_request  # type: ignore[method-assign]
 
@@ -293,3 +298,144 @@ def test_remote_queue_remove_deserializes_removed_job_payload() -> None:
     assert removed is not None
     assert removed.job_id == "job-1"
     assert removed.status == JobStatus.CANCELLED
+
+
+def test_child_runtime_host_client_emits_managed_runtime_updates_only_on_change() -> None:
+    client = ChildRuntimeHostClient(
+        process=DummyProcess(),
+        connection=DummyConnection(),
+        handshake_timeout=0.1,
+        poll_interval=0.0,
+    )
+    managed_runtime_events: list[dict[str, Any]] = []
+    client.register_callback(
+        RUNTIME_HOST_EVENT_MANAGED_RUNTIMES_UPDATED,
+        lambda payload: managed_runtime_events.append(dict(payload)),
+    )
+    snapshot_payload = {
+        "jobs": [],
+        "history": [],
+        "queue": {
+            "status": "idle",
+            "paused": False,
+            "runner_running": False,
+            "queued_job_ids": [],
+            "current_job_id": None,
+            "auto_run_enabled": False,
+        },
+        "managed_runtimes": {
+            "webui": {
+                "state": "connecting",
+                "pid": None,
+                "managed": True,
+            }
+        },
+        "host_pid": 321,
+        "transport": "local-child",
+    }
+
+    client._apply_runtime_snapshot(snapshot_payload)
+    client._apply_runtime_snapshot(snapshot_payload)
+    snapshot_payload["managed_runtimes"] = {
+        "webui": {
+            "state": "ready",
+            "pid": 4321,
+            "managed": True,
+        }
+    }
+    client._apply_runtime_snapshot(snapshot_payload)
+
+    assert managed_runtime_events == [
+        {"webui": {"state": "connecting", "pid": None, "managed": True}},
+        {"webui": {"state": "ready", "pid": 4321, "managed": True}},
+    ]
+
+
+def test_child_runtime_host_client_requests_targeted_history_updates_for_active_jobs() -> None:
+    client = ChildRuntimeHostClient(
+        process=DummyProcess(),
+        connection=DummyConnection(),
+        handshake_timeout=0.1,
+        poll_interval=0.0,
+    )
+    client._jobs_by_id = {"job-1": Job(job_id="job-1"), "job-2": Job(job_id="job-2")}
+    requested_payloads: list[dict[str, Any]] = []
+
+    class DummyResponse:
+        def __init__(self, payload: dict[str, Any]) -> None:
+            self.payload = payload
+
+    def fake_request(
+        name: str,
+        payload: dict[str, Any] | None = None,
+        *,
+        timeout: float | None = None,
+    ) -> DummyResponse:
+        assert name == "runtime_snapshot"
+        requested_payloads.append(dict(payload or {}))
+        return DummyResponse(
+            {
+                "jobs": [],
+                "history_updates": [],
+                "queue": {
+                    "status": "idle",
+                    "paused": False,
+                    "runner_running": False,
+                    "queued_job_ids": [],
+                    "current_job_id": None,
+                    "auto_run_enabled": False,
+                },
+                "managed_runtimes": {},
+                "host_pid": 321,
+                "transport": "local-child",
+            }
+        )
+
+    client._request = fake_request  # type: ignore[method-assign]
+
+    client._refresh_from_remote()
+
+    assert requested_payloads == [{"history_job_ids": ["job-1", "job-2"]}]
+
+
+def test_runtime_snapshot_accepts_enum_name_priority_values() -> None:
+    client = ChildRuntimeHostClient(
+        process=DummyProcess(),
+        connection=DummyConnection(),
+        handshake_timeout=0.1,
+        poll_interval=0.0,
+    )
+
+    client._apply_runtime_snapshot(
+        {
+            "jobs": [
+                {
+                    "job_id": "job-1",
+                    "priority": "NORMAL",
+                    "status": "queued",
+                    "created_at": datetime.utcnow().isoformat(),
+                    "updated_at": datetime.utcnow().isoformat(),
+                    "run_mode": "queue",
+                    "source": "gui",
+                    "prompt_source": "manual",
+                    "snapshot": {},
+                    "progress": 0.0,
+                    "eta_seconds": None,
+                }
+            ],
+            "history_updates": [],
+            "queue": {
+                "status": "idle",
+                "paused": False,
+                "runner_running": False,
+                "queued_job_ids": ["job-1"],
+                "current_job_id": None,
+                "auto_run_enabled": False,
+            },
+            "managed_runtimes": {},
+            "host_pid": 321,
+            "transport": "local-child",
+        }
+    )
+
+    assert client._jobs_by_id["job-1"].priority == JobPriority.NORMAL
