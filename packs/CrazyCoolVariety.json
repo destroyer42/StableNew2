@@ -6,6 +6,8 @@
         "index": 0,
         "text": "(masterpiece, best quality, photorealistic)  natural facial proportions, detailed lightly tanned glistening skin, soft facial detail, shy smile, natural light, high fantasy, magical atmosphere, [[number]] [[hair]]-haired perky-huge-breasted, small waist, big butt, sexy athletic beautiful [[eyes]]-eyed woman in late 20s, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, uncanny, straps, shoulder straps. bra straps, fruit",
+        "template_id": "",
+        "template_variables": {},
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1",
@@ -30,13 +32,19 @@
           [
             "DetailedEyes_V3",
             0.8009708737864077
+          ],
+          [
+            "NSFWFilterXL_animagine",
+            0.8
           ]
         ]
       },
       {
-        "index": 0,
+        "index": 1,
         "text": "(masterpiece, best quality, photorealistic) natural facial proportions, detailed lightly tanned glistening skin, soft facial detail shy smile, natural light, high fantasy, magical atmosphere, [[number]] [[hair]]-haired perky-huge-breasted, small waist, sexy athletic beautiful [[eyes]]-eyed woman in late 20s, in [[environment]], wearing only [[clothes]], [[pose]], is [[activity]] in the [[time]], detailed shaved vagina, incredible skin, perspective is [[perspective]]",
         "negative": "deformed hands, twisted wrists, melted faces, face mush, bad proportions, bad anatomy, bad quality, blurry, distorted, low resolution, extra limbs, disfigured, cartoon, anime, illustration, cgi, glowing eyes, straps, shoulder straps, bra straps, strawberry, fruit",
+        "template_id": "",
+        "template_variables": {},
         "positive_embeddings": [
           "stable_yogis_pdxl_positives",
           "stable_yogis_realism_positives_v1",
@@ -63,16 +71,16 @@
             0.75
           ],
           [
-            "babesByStableYogiPony_xlV4",
-            1.0
-          ],
-          [
             "DreamyStyle_xl",
             0.75
           ],
           [
             "DetailedEyes_V3",
             0.721875
+          ],
+          [
+            "finenude_v0_2a",
+            0.8
           ]
         ]
       }
@@ -109,7 +117,10 @@
           "name": "environment",
           "values": [
             "on a beach",
-            "poolside"
+            "poolside",
+            "next to a river",
+            "on an island",
+            "on a couch"
           ]
         },
         {
@@ -155,7 +166,11 @@
         {
           "name": "activity",
           "values": [
-            "inserting fingers violently into vagina"
+            "having sex",
+            "giving a blowjob",
+            "masturbating",
+            "grabbing their boobs",
+            "twerking"
           ]
         }
       ]

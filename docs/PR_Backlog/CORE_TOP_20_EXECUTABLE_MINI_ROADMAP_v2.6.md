@@ -79,7 +79,11 @@ repo-truth status and prioritization guide.
   additional metrics work should be re-specified.
 - `PR-CORE-013`: Re-scope. Canonical config unification and shared app
   bootstrap already landed; only missing CLI or operator seams should remain.
-- `PR-CORE-014`: Active next follow-on after `PR-CORE-002`.
+- `PR-CORE-014`: Completed 2026-03-31. Multi-character support landed: actors
+  survive `intent_config` round-trips, `resolve_actors_safe` skips missing
+  characters with warnings, LoRA ordering convention (primary → secondary →
+  style) is enforced through the existing `resolution_layer`, and a
+  `MultiCharacterSelectorWidget` is available for GUI embedding.
 - `PR-CORE-015`: Largely absorbed by `PR-LEARN-261` through `PR-LEARN-264`.
 - `PR-CORE-016`: Largely absorbed by the completed GUI, UX, responsiveness, and
   consistency tranches.
@@ -93,7 +97,7 @@ repo-truth status and prioritization guide.
 
 ## 4. Recommended Execution Order
 
-1. `PR-CORE-014 - Multi-Character Support`
+1. `PR-CORE-014 - Multi-Character Support`  ✅ Completed 2026-03-31
   Reason: the character asset pipeline now exists, so the next highest-value
   follow-on is multi-character orchestration and prompt-side authoring.
 2. merged `PR-CORE-005` / `PR-CORE-017` camera-control and ControlNet tranche

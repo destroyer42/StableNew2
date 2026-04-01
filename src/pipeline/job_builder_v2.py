@@ -26,6 +26,7 @@ from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
     derive_backend_options,
     extract_adaptive_refinement_intent,
+    extract_actors_intent,
     extract_execution_config,
     extract_secondary_motion_intent,
     validate_train_lora_execution_config,
@@ -253,6 +254,28 @@ class JobBuilderV2:
             if is_train_lora:
                 extra_metadata["train_lora"] = dict(config.get("train_lora") or {})
 
+            # Extract resolved actor LoRA tags from config_snapshot for multi-character jobs.
+            # These are already-resolved entries (lora_name + weight) stored earlier by
+            # PromptPackNormalizedJobBuilder; we simply materialise them as LoRATag instances
+            # so that pipeline_runner has the full LoRA list without re-invoking LoRAManager.
+            actor_lora_tags: list[LoRATag] = []
+            if not is_train_lora:
+                _snapshot_actors = extract_actors_intent(entry.config_snapshot or {})
+                if not _snapshot_actors:
+                    # Fallback: actors stored under metadata key by earlier builder pass
+                    _metadata = (entry.config_snapshot or {}).get("metadata") or {}
+                    if isinstance(_metadata, dict):
+                        _snapshot_actors = extract_actors_intent({"actors": _metadata.get("actors") or []})
+                for _actor in _snapshot_actors:
+                    _lora_name = str(_actor.get("lora_name") or "").strip()
+                    if not _lora_name:
+                        continue
+                    try:
+                        _weight = float(_actor.get("weight") or 1.0)
+                    except (TypeError, ValueError):
+                        _weight = 1.0
+                    actor_lora_tags.append(LoRATag(name=_lora_name, weight=_weight))
+
             record = NormalizedJobRecord(
                 job_id=self._id_fn(),
                 config=config,
@@ -280,7 +303,7 @@ class JobBuilderV2:
                 negative_prompt=negative_prompt,
                 positive_embeddings=positive_embeddings,
                 negative_embeddings=[],
-                lora_tags=[],
+                lora_tags=actor_lora_tags,
                 matrix_slot_values=dict(entry.matrix_slot_values),
                 steps=steps,
                 cfg_scale=cfg_scale,
@@ -322,6 +345,7 @@ class JobBuilderV2:
                         "secondary_motion": extract_secondary_motion_intent(
                             {"secondary_motion": run_request.secondary_motion}
                         ),
+                        "actors": extract_actors_intent(entry.config_snapshot or {}),
                         "config_snapshot_id": run_request.config_snapshot_id,
                         "requested_job_label": run_request.requested_job_label,
                         "selected_row_ids": list(run_request.selected_row_ids),

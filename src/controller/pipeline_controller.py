@@ -1635,7 +1635,7 @@ class PipelineController(CorePipelineController):
             prompt_source=prompt_source,
             run_config=run_config,
         )
-        normalized_jobs = list(request.records) if request.records else self.get_preview_jobs()
+        normalized_jobs = self._resolve_submission_records(request)
         if not normalized_jobs:
             return 0
         queueable, non_queueable = self._split_queueable_records(normalized_jobs)
@@ -1667,6 +1667,46 @@ class PipelineController(CorePipelineController):
             prompt_source=request.prompt_source,
         )
         return submitted
+
+    def _resolve_submission_records(
+        self,
+        request: SubmissionRequest,
+    ) -> list[NormalizedJobRecord]:
+        normalized_jobs = list(request.records) if request.records else self.get_preview_jobs()
+        if not normalized_jobs:
+            return []
+        app_state = getattr(self, "_app_state", None)
+        job_draft = getattr(app_state, "job_draft", None)
+        pack_entries = tuple(getattr(job_draft, "packs", None) or ())
+        if not pack_entries:
+            return normalized_jobs
+        if not self._records_missing_pack_identity(normalized_jobs):
+            return normalized_jobs
+        rebuilt_jobs = self.get_preview_jobs_for_request(
+            PreviewRequest(pack_entries=pack_entries, use_state_fallback=False)
+        )
+        if rebuilt_jobs:
+            _logger.info(
+                "[PipelineController] Rebuilt %d preview job(s) from %d draft pack entry(ies) "
+                "because cached submission records were missing prompt pack identity",
+                len(rebuilt_jobs),
+                len(pack_entries),
+            )
+            preview_setter = getattr(app_state, "set_preview_jobs", None)
+            if callable(preview_setter):
+                try:
+                    preview_setter(rebuilt_jobs)
+                except Exception:
+                    pass
+            return rebuilt_jobs
+        return normalized_jobs
+
+    @staticmethod
+    def _records_missing_pack_identity(records: list[NormalizedJobRecord]) -> bool:
+        for record in records:
+            if not str(getattr(record, "prompt_pack_id", "") or "").strip():
+                return True
+        return False
 
     def _split_queueable_records(
         self,

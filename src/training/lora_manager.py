@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping, Sequence
 import json
 from datetime import datetime
@@ -7,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 _MANIFEST_SCHEMA = "stablenew.lora-manifest.v2.6"
+_logger = logging.getLogger(__name__)
 
 
 def _normalize_optional_text(value: Any) -> str | None:
@@ -112,6 +114,31 @@ class LoRAManager:
         resolved: list[dict[str, Any]] = []
         for actor in self._dedupe_actor_specs(actors):
             resolved.append(self._resolve_normalized_actor(actor))
+        return resolved
+
+    def resolve_actors_safe(self, actors: Any) -> Sequence[dict[str, Any]]:
+        """Resolve actors, logging warnings and skipping unresolvable characters.
+
+        Unlike :meth:`resolve_actors`, this method never raises.  When an actor
+        cannot be resolved (missing trigger_phrase or LoRA identity), a warning
+        is logged and that actor is silently excluded from the result.  This
+        satisfies the PR-CORE-014 guardrail: "If a character is missing, provide
+        a clear error message and skip generation."
+
+        LoRA ordering convention (primary → secondary → style) is preserved from
+        the input list since deduplication maintains insertion order.
+        """
+        resolved: list[dict[str, Any]] = []
+        for actor in self._dedupe_actor_specs(actors):
+            actor_name = str(actor.get("name") or actor.get("character_name") or "").strip()
+            try:
+                resolved.append(self._resolve_normalized_actor(actor))
+            except ValueError as exc:
+                _logger.warning(
+                    "[LoRAManager] Skipping actor '%s': %s",
+                    actor_name or "<unnamed>",
+                    exc,
+                )
         return resolved
 
     def _load_manifest(self) -> dict[str, Any]:

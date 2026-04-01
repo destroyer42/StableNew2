@@ -17,6 +17,7 @@ from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
     derive_backend_options,
     extract_adaptive_refinement_intent,
+    extract_actors_intent,
     extract_secondary_motion_intent,
 )
 from src.pipeline.job_builder_v2 import JobBuilderV2
@@ -483,6 +484,15 @@ class PromptPackNormalizedJobBuilder:
                 intent_payload["plan_origin"] = copy.deepcopy(plan_origin)
             if story_plan:
                 intent_payload["story_plan"] = copy.deepcopy(story_plan)
+            # Persist resolved actors in intent so they survive NJR round-trips and replay.
+            # Also check for actors declared directly in the config_snapshot or pack config
+            # (e.g. from a story planner scene that has not gone through full actor resolution).
+            actors_for_intent = copy.deepcopy(resolved_actors) if resolved_actors else []
+            if not actors_for_intent:
+                # Fall back to raw actor declarations from the pack config or snapshot
+                actors_for_intent = extract_actors_intent(entry.config_snapshot or merged_config)
+            if actors_for_intent:
+                intent_payload["actors"] = actors_for_intent
             record.intent_config = canonicalize_intent_config(intent_payload)
             record.backend_options = derive_backend_options(record.config)
             record.pack_usage = [
@@ -601,7 +611,7 @@ class PromptPackNormalizedJobBuilder:
             return []
         if self._lora_manager is None:
             self._lora_manager = LoRAManager()
-        return cast(list[dict[str, Any]], list(self._lora_manager.resolve_actors(actor_items)))
+        return cast(list[dict[str, Any]], list(self._lora_manager.resolve_actors_safe(actor_items)))
 
     def _build_record_metadata(
         self,

@@ -47,6 +47,7 @@ _EXECUTION_HINT_KEYS = {
     "continuity_link",
     "plan_origin",
     "story_plan",
+    "actors",
 }
 
 _INTENT_TOP_LEVEL_KEYS = (
@@ -58,6 +59,7 @@ _INTENT_TOP_LEVEL_KEYS = (
     "story_plan",
     "adaptive_refinement",
     "secondary_motion",
+    "actors",
     "config_snapshot_id",
     "requested_job_label",
     "selected_row_ids",
@@ -110,6 +112,11 @@ def canonicalize_intent_config(value: Any) -> dict[str, Any]:
             continue
         if isinstance(item, Mapping) and not item:
             continue
+        # actors is a list — skip empty lists but preserve non-empty ones
+        if key == "actors":
+            if isinstance(item, list) and item:
+                normalized[key] = deepcopy(item)
+            continue
         normalized[key] = deepcopy(item)
     return normalized
 
@@ -128,6 +135,60 @@ def extract_secondary_motion_intent(value: Any) -> dict[str, Any]:
     if isinstance(payload, Mapping) and payload:
         return _mapping_dict(payload)
     return {}
+
+
+def extract_actors_intent(value: Any) -> list[dict[str, Any]]:
+    """Extract the actors list from an intent config or layered config.
+
+    Returns a list of actor dicts (validated structure), or an empty list if
+    no actors are present.
+    """
+    intent = canonicalize_intent_config(value)
+    payload = intent.get("actors")
+    if not isinstance(payload, list):
+        return []
+    return validate_multi_character_actors(payload)
+
+
+def validate_multi_character_actors(actors: Any) -> list[dict[str, Any]]:
+    """Validate and normalise an actors array from intent_config or execution_config.
+
+    Each actor must have at least a non-empty ``name`` or ``character_name``.
+    Optional fields ``lora_name``, ``lora_path``, ``trigger_phrase``, and
+    ``weight`` are normalised but not required at validation time (the
+    LoRAManager performs the deeper resolution at job-build time).
+
+    Convention for LoRA ordering:
+      primary characters first, secondary characters next, style LoRA last.
+    The ordering is preserved from the input list.
+    """
+    if not isinstance(actors, list):
+        return []
+    validated: list[dict[str, Any]] = []
+    for item in actors:
+        if not isinstance(item, Mapping):
+            continue
+        name = str(item.get("name") or item.get("character_name") or "").strip()
+        if not name:
+            continue
+        weight_raw = item.get("weight")
+        weight: float | None = None
+        if weight_raw not in (None, ""):
+            try:
+                weight = float(weight_raw)
+            except (TypeError, ValueError):
+                weight = None
+        validated.append(
+            {
+                "name": name,
+                "character_name": str(item.get("character_name") or "").strip() or None,
+                "lora_name": str(item.get("lora_name") or "").strip() or None,
+                "lora_path": str(item.get("lora_path") or "").strip() or None,
+                "trigger_phrase": str(item.get("trigger_phrase") or "").strip() or None,
+                "weight": weight,
+            }
+        )
+    return validated
 
 
 def extract_execution_config(value: Any) -> dict[str, Any]:
