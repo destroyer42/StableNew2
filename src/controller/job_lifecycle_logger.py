@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import datetime
+from typing import Any
 
-from src.gui.app_state_v2 import AppStateV2
 from src.pipeline.job_models_v2 import JobLifecycleLogEvent
 
 
@@ -12,14 +12,14 @@ class JobLifecycleLogger:
 
     def __init__(
         self,
-        app_state: AppStateV2 | None = None,
+        app_state: Any | None = None,
         *,
         clock: Callable[[], datetime] | None = None,
     ) -> None:
         self._app_state = app_state
         self._clock = clock or datetime.utcnow
 
-    def set_app_state(self, app_state: AppStateV2 | None) -> None:
+    def set_app_state(self, app_state: Any | None) -> None:
         self._app_state = app_state
 
     def log_add_to_job(self, *, source: str, draft_size: int) -> None:

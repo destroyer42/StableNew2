@@ -148,6 +148,14 @@ class JobHistoryStore:
     ) -> list[JobHistoryEntry]:  # pragma: no cover - interface
         raise NotImplementedError
 
+    def list_recent_jobs(
+        self,
+        *,
+        statuses: set[JobStatus] | None = None,
+        limit: int = 50,
+    ) -> list[JobHistoryEntry]:  # pragma: no cover - interface
+        raise NotImplementedError
+
     def get_job(self, job_id: str) -> JobHistoryEntry | None:  # pragma: no cover - interface
         raise NotImplementedError
 
@@ -237,6 +245,61 @@ class JSONLJobHistoryStore(JobHistoryStore):
             entries = [e for e in entries if e.status == status]
         return entries[offset : offset + limit]
 
+    def list_recent_jobs(
+        self,
+        *,
+        statuses: set[JobStatus] | None = None,
+        limit: int = 50,
+    ) -> list[JobHistoryEntry]:
+        """Return the most recent unique jobs without rescanning the full history file.
+
+        This is intended for UI history projections where only a small recent
+        window is needed. We scan from the end of the append-only JSONL file and
+        stop once enough unique latest job entries are collected.
+        """
+        if limit <= 0:
+            return []
+
+        results: list[JobHistoryEntry] = []
+        seen_job_ids: set[str] = set()
+        wanted_statuses = set(statuses or ())
+
+        with self._lock:
+            pending_entries = sorted(
+                self._pending_entries.values(),
+                key=lambda entry: entry.created_at,
+                reverse=True,
+            )
+
+        for entry in pending_entries:
+            if entry.job_id in seen_job_ids:
+                continue
+            seen_job_ids.add(entry.job_id)
+            if wanted_statuses and entry.status not in wanted_statuses:
+                continue
+            results.append(entry)
+            if len(results) >= limit:
+                return results
+
+        if not self._path.exists():
+            return results
+
+        for line in self._iter_lines_reverse():
+            try:
+                entry = JobHistoryEntry.from_json(line)
+            except Exception:
+                continue
+            if entry.job_id in seen_job_ids:
+                continue
+            seen_job_ids.add(entry.job_id)
+            if wanted_statuses and entry.status not in wanted_statuses:
+                continue
+            results.append(entry)
+            if len(results) >= limit:
+                break
+
+        return results
+
     def invalidate_cache(self) -> None:
         """Force cache invalidation to reload from disk on next access.
         
@@ -247,6 +310,14 @@ class JSONLJobHistoryStore(JobHistoryStore):
             self._cached_entries = None
 
     def get_job(self, job_id: str) -> JobHistoryEntry | None:
+        with self._lock:
+            pending = self._pending_entries.get(job_id)
+            if pending is not None:
+                return pending
+            if self._cached_entries is not None:
+                cached = self._cached_entries.get(job_id)
+                if cached is not None:
+                    return cached
         return self._load_latest_by_job().get(job_id)
 
     def _append(self, entry: JobHistoryEntry) -> None:
@@ -266,6 +337,7 @@ class JSONLJobHistoryStore(JobHistoryStore):
         task = PersistenceTask(
             task_type="history",
             data={"file_path": str(self._path), "payload": json.loads(line)},
+            callback=lambda entry=entry: self._mark_persisted(entry),
             priority=1,  # Critical - history always processed
         )
         
@@ -278,6 +350,8 @@ class JSONLJobHistoryStore(JobHistoryStore):
         # where GUI tries to load before write finishes, resulting in stale/empty data.
         with self._lock:
             self._pending_entries[entry.job_id] = entry
+            if self._cached_entries is not None:
+                self._cached_entries[entry.job_id] = entry
         
         # Always emit callback immediately (don't wait for write to complete)
         # This allows GUI to update immediately even though file write is async
@@ -303,6 +377,18 @@ class JSONLJobHistoryStore(JobHistoryStore):
         merged.update(self._pending_entries)
         return merged
 
+    def _mark_persisted(self, entry: JobHistoryEntry) -> None:
+        with self._lock:
+            if self._cached_entries is not None:
+                self._cached_entries[entry.job_id] = entry
+            pending = self._pending_entries.get(entry.job_id)
+            if pending == entry:
+                self._pending_entries.pop(entry.job_id, None)
+            try:
+                self._cache_mtime = self._path.stat().st_mtime if self._path.exists() else None
+            except Exception:
+                self._cache_mtime = None
+
     def _load_latest_by_job(self) -> dict[str, JobHistoryEntry]:
         """Load history entries with file mtime-based caching for performance."""
         with self._lock:
@@ -312,11 +398,15 @@ class JSONLJobHistoryStore(JobHistoryStore):
                 return dict(self._cached_entries)
             
             try:
-                # Check if file has been modified since last cache
+                # Check if file has been modified since last cache.
+                # When we already hold newer in-memory pending entries, avoid
+                # re-reading the entire JSONL file on the hot queue/status path.
                 current_mtime = self._path.stat().st_mtime
                 
                 if self._cached_entries is not None and self._cache_mtime == current_mtime:
                     # Cache is valid, but in-memory pending updates still win until disk catches up.
+                    return self._with_pending_overlay(self._cached_entries)
+                if self._cached_entries is not None and self._pending_entries:
                     return self._with_pending_overlay(self._cached_entries)
                 
                 # Cache miss or stale - reload from disk
@@ -346,6 +436,30 @@ class JSONLJobHistoryStore(JobHistoryStore):
                 self._cached_entries = dict(self._pending_entries)
                 self._cache_mtime = None
                 return dict(self._cached_entries)
+
+    def _iter_lines_reverse(self, chunk_size: int = 64 * 1024):
+        """Yield JSONL lines from the end of the file backwards."""
+        with self._path.open("rb") as handle:
+            handle.seek(0, 2)
+            position = handle.tell()
+            buffer = b""
+
+            while position > 0:
+                read_size = min(chunk_size, position)
+                position -= read_size
+                handle.seek(position)
+                chunk = handle.read(read_size)
+                buffer = chunk + buffer
+                lines = buffer.split(b"\n")
+                buffer = lines[0]
+                for raw in reversed(lines[1:]):
+                    raw = raw.rstrip(b"\r")
+                    if raw:
+                        yield raw.decode("utf-8", errors="ignore")
+
+            tail = buffer.rstrip(b"\r\n")
+            if tail:
+                yield tail.decode("utf-8", errors="ignore")
 
     def _summarize_job(self, job: Job) -> str:
         result = getattr(job, "result", None) or {}

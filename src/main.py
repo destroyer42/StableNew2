@@ -667,7 +667,9 @@ def main() -> None:
             auto_exit_seconds = 0.0
     
     root, app_state, app_controller, window = build_v2_app(
-        root=tk.Tk(), webui_manager=webui_manager
+        root=tk.Tk(),
+        webui_manager=webui_manager,
+        threaded=True,
     )
     
     window.set_graceful_exit_handler(

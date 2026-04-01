@@ -1,0 +1,666 @@
+{
+  "3272": {
+    "thread_id": 3272,
+    "name": "DiagBundle-queue_runner_stall",
+    "daemon": false,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 973,
+        "function": "_bootstrap",
+        "line": "self._bootstrap_inner()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 1016,
+        "function": "_bootstrap_inner",
+        "line": "self.run()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 953,
+        "function": "run",
+        "line": "self._target(*self._args, **self._kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\utils\\diagnostics_bundle_v2.py",
+        "lineno": 175,
+        "function": "_worker",
+        "line": "build_crash_bundle("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\utils\\diagnostics_bundle_v2.py",
+        "lineno": 260,
+        "function": "build_crash_bundle",
+        "line": "thread_dump_text, thread_dump_json = _capture_thread_dump()"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\utils\\diagnostics_bundle_v2.py",
+        "lineno": 469,
+        "function": "_capture_thread_dump",
+        "line": "extracted_frames = traceback.extract_stack(frame)"
+      }
+    ]
+  },
+  "41676": {
+    "thread_id": 41676,
+    "name": "progress_poll_0",
+    "daemon": false,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 973,
+        "function": "_bootstrap",
+        "line": "self._bootstrap_inner()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 1016,
+        "function": "_bootstrap_inner",
+        "line": "self.run()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 953,
+        "function": "run",
+        "line": "self._target(*self._args, **self._kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\concurrent\\futures\\thread.py",
+        "lineno": 83,
+        "function": "_worker",
+        "line": "work_item.run()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\concurrent\\futures\\thread.py",
+        "lineno": 58,
+        "function": "run",
+        "line": "result = self.fn(*self.args, **self.kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\pipeline\\executor.py",
+        "lineno": 2421,
+        "function": "_poll_progress_loop",
+        "line": "stop_event.wait(poll_interval)"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 607,
+        "function": "wait",
+        "line": "signaled = self._cond.wait(timeout)"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 324,
+        "function": "wait",
+        "line": "gotit = waiter.acquire(True, timeout)"
+      }
+    ]
+  },
+  "72076": {
+    "thread_id": 72076,
+    "name": "Thread-57",
+    "daemon": false,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 973,
+        "function": "_bootstrap",
+        "line": "self._bootstrap_inner()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 1016,
+        "function": "_bootstrap_inner",
+        "line": "self.run()"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\utils\\watchdog_v2.py",
+        "lineno": 78,
+        "function": "run",
+        "line": "while not self._stop_event.wait(max(0.1, self._config.interval_sec)):"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 604,
+        "function": "wait",
+        "line": "with self._cond:"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 332,
+        "function": "wait",
+        "line": "self._waiters.remove(waiter)"
+      }
+    ]
+  },
+  "2840": {
+    "thread_id": 2840,
+    "name": "QueueWorker",
+    "daemon": false,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 973,
+        "function": "_bootstrap",
+        "line": "self._bootstrap_inner()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 1016,
+        "function": "_bootstrap_inner",
+        "line": "self.run()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 953,
+        "function": "run",
+        "line": "self._target(*self._args, **self._kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\queue\\single_node_runner.py",
+        "lineno": 432,
+        "function": "_worker_loop",
+        "line": "result = self._run_with_webui_retry(job)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\queue\\single_node_runner.py",
+        "lineno": 298,
+        "function": "_run_with_webui_retry",
+        "line": "result = self.run_callable(job)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\controller\\job_execution_controller.py",
+        "lineno": 340,
+        "function": "_run_job_callback",
+        "line": "result = self._replay_engine.replay_njr(record, job=job)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\pipeline\\replay_engine.py",
+        "lineno": 169,
+        "function": "replay_njr",
+        "line": "return self._runner.run_njr("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\controller\\pipeline_controller.py",
+        "lineno": 1584,
+        "function": "run_njr",
+        "line": "result = runner.run_njr("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\pipeline\\pipeline_runner.py",
+        "lineno": 1357,
+        "function": "run_njr",
+        "line": "result = self._pipeline.run_txt2img_stage("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\pipeline\\executor.py",
+        "lineno": 4462,
+        "function": "run_txt2img_stage",
+        "line": "response = self._generate_images_with_progress("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\pipeline\\executor.py",
+        "lineno": 2460,
+        "function": "_generate_images_with_progress",
+        "line": "response = self._generate_images(stage, payload)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\pipeline\\executor.py",
+        "lineno": 2142,
+        "function": "_generate_images",
+        "line": "return self._generate_images_with_recovery(stage, payload, recovery_attempted=False)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\pipeline\\executor.py",
+        "lineno": 2183,
+        "function": "_generate_images_with_recovery",
+        "line": "outcome = self.client.generate_images(stage=stage, payload=payload)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\api\\client.py",
+        "lineno": 1468,
+        "function": "generate_images",
+        "line": "response = self.txt2img(payload, raise_on_error=True)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\api\\client.py",
+        "lineno": 1107,
+        "function": "txt2img",
+        "line": "with self._request_context("
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\contextlib.py",
+        "lineno": 135,
+        "function": "__enter__",
+        "line": "return next(self.gen)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\api\\client.py",
+        "lineno": 737,
+        "function": "_request_context",
+        "line": "response = self._perform_request("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\api\\client.py",
+        "lineno": 530,
+        "function": "_perform_request",
+        "line": "response = self._session.request("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\.venv\\lib\\site-packages\\requests\\sessions.py",
+        "lineno": 589,
+        "function": "request",
+        "line": "resp = self.send(prep, **send_kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\.venv\\lib\\site-packages\\requests\\sessions.py",
+        "lineno": 703,
+        "function": "send",
+        "line": "r = adapter.send(request, **kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\.venv\\lib\\site-packages\\requests\\adapters.py",
+        "lineno": 644,
+        "function": "send",
+        "line": "resp = conn.urlopen("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\.venv\\lib\\site-packages\\urllib3\\connectionpool.py",
+        "lineno": 787,
+        "function": "urlopen",
+        "line": "response = self._make_request("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\.venv\\lib\\site-packages\\urllib3\\connectionpool.py",
+        "lineno": 534,
+        "function": "_make_request",
+        "line": "response = conn.getresponse()"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\.venv\\lib\\site-packages\\urllib3\\connection.py",
+        "lineno": 565,
+        "function": "getresponse",
+        "line": "httplib_response = super().getresponse()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\http\\client.py",
+        "lineno": 1374,
+        "function": "getresponse",
+        "line": "response.begin()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\http\\client.py",
+        "lineno": 318,
+        "function": "begin",
+        "line": "version, status, reason = self._read_status()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\http\\client.py",
+        "lineno": 279,
+        "function": "_read_status",
+        "line": "line = str(self.fp.readline(_MAXLINE + 1), \"iso-8859-1\")"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\socket.py",
+        "lineno": 705,
+        "function": "readinto",
+        "line": "return self._sock.recv_into(b)"
+      }
+    ]
+  },
+  "25000": {
+    "thread_id": 25000,
+    "name": "WebUI-Orphan-Monitor",
+    "daemon": false,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\api\\webui_process_manager.py",
+        "lineno": 101,
+        "function": "<genexpr>",
+        "line": "return any("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\api\\webui_process_manager.py",
+        "lineno": 71,
+        "function": "_normalize_process_path",
+        "line": "return str(Path(value).resolve()).lower().replace(\"\\\\\", \"/\")"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\pathlib.py",
+        "lineno": 1090,
+        "function": "resolve",
+        "line": "return p"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\pathlib.py",
+        "lineno": 1097,
+        "function": "stat",
+        "line": "return self._accessor.stat(self, follow_symlinks=follow_symlinks)"
+      }
+    ]
+  },
+  "54504": {
+    "thread_id": 54504,
+    "name": "WebUI-stderr-reader",
+    "daemon": true,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 973,
+        "function": "_bootstrap",
+        "line": "self._bootstrap_inner()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 1016,
+        "function": "_bootstrap_inner",
+        "line": "self.run()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 953,
+        "function": "run",
+        "line": "self._target(*self._args, **self._kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\api\\webui_process_manager.py",
+        "lineno": 479,
+        "function": "_read_stream",
+        "line": "for line in iter(stream.readline, \"\"):"
+      }
+    ]
+  },
+  "39964": {
+    "thread_id": 39964,
+    "name": "WebUI-stdout-reader",
+    "daemon": true,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 973,
+        "function": "_bootstrap",
+        "line": "self._bootstrap_inner()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 1016,
+        "function": "_bootstrap_inner",
+        "line": "self.run()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 953,
+        "function": "run",
+        "line": "self._target(*self._args, **self._kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\api\\webui_process_manager.py",
+        "lineno": 479,
+        "function": "_read_stream",
+        "line": "for line in iter(stream.readline, \"\"):"
+      }
+    ]
+  },
+  "67520": {
+    "thread_id": 67520,
+    "name": "SystemWatchdogV2",
+    "daemon": false,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 973,
+        "function": "_bootstrap",
+        "line": "self._bootstrap_inner()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 1016,
+        "function": "_bootstrap_inner",
+        "line": "self.run()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 953,
+        "function": "run",
+        "line": "self._target(*self._args, **self._kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\services\\watchdog_system_v2.py",
+        "lineno": 93,
+        "function": "_loop",
+        "line": "time.sleep(self._loop_period)"
+      }
+    ]
+  },
+  "70384": {
+    "thread_id": 70384,
+    "name": "PersistenceWorker",
+    "daemon": true,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 973,
+        "function": "_bootstrap",
+        "line": "self._bootstrap_inner()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 1016,
+        "function": "_bootstrap_inner",
+        "line": "self.run()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 953,
+        "function": "run",
+        "line": "self._target(*self._args, **self._kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\services\\persistence_worker.py",
+        "lineno": 163,
+        "function": "_worker_loop",
+        "line": "priority, task = self._queue.get(timeout=0.5)"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\queue.py",
+        "lineno": 179,
+        "function": "get",
+        "line": "raise Empty"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 332,
+        "function": "wait",
+        "line": "self._waiters.remove(waiter)"
+      }
+    ]
+  },
+  "32256": {
+    "thread_id": 32256,
+    "name": "SingleInstanceLock-Accept",
+    "daemon": true,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 973,
+        "function": "_bootstrap",
+        "line": "self._bootstrap_inner()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 1016,
+        "function": "_bootstrap_inner",
+        "line": "self.run()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\threading.py",
+        "lineno": 953,
+        "function": "run",
+        "line": "self._target(*self._args, **self._kwargs)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\utils\\single_instance.py",
+        "lineno": 64,
+        "function": "_accept_loop",
+        "line": "client_sock, _addr = self._socket.accept()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\socket.py",
+        "lineno": 293,
+        "function": "accept",
+        "line": "fd, addr = self._accept()"
+      }
+    ]
+  },
+  "17024": {
+    "thread_id": 17024,
+    "name": "MainThread",
+    "daemon": false,
+    "alive": true,
+    "stack_frames": [
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\runpy.py",
+        "lineno": 196,
+        "function": "_run_module_as_main",
+        "line": "return _run_code(code, main_globals, None,"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\runpy.py",
+        "lineno": 86,
+        "function": "_run_code",
+        "line": "exec(code, run_globals)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\main.py",
+        "lineno": 711,
+        "function": "<module>",
+        "line": "main()"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\main.py",
+        "lineno": 698,
+        "function": "main",
+        "line": "root.mainloop()"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\tkinter\\__init__.py",
+        "lineno": 1458,
+        "function": "mainloop",
+        "line": "self.tk.mainloop(n)"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\tkinter\\__init__.py",
+        "lineno": 1921,
+        "function": "__call__",
+        "line": "return self.func(*args)"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\tkinter\\__init__.py",
+        "lineno": 839,
+        "function": "callit",
+        "line": "func(*args)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\gui\\gui_invoker.py",
+        "lineno": 90,
+        "function": "_pump",
+        "line": "callback()"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\controller\\job_service.py",
+        "lineno": 1161,
+        "function": "_call",
+        "line": "cb(j, s)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\controller\\app_controller.py",
+        "lineno": 2934,
+        "function": "_on_job_status_for_panels",
+        "line": "self._runtime_projection_coordinator.publish_history_refresh()"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\controller\\app_controller_services\\runtime_projection_coordinator.py",
+        "lineno": 77,
+        "function": "publish_history_refresh",
+        "line": "self._background_tasks.submit("
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\controller\\app_controller_services\\background_task_coordinator.py",
+        "lineno": 78,
+        "function": "submit",
+        "line": "self._start(spec)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\controller\\app_controller_services\\background_task_coordinator.py",
+        "lineno": 94,
+        "function": "_start",
+        "line": "self._run(spec)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\controller\\app_controller_services\\background_task_coordinator.py",
+        "lineno": 107,
+        "function": "_run",
+        "line": "result = spec.work()"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\controller\\app_controller_services\\runtime_projection_coordinator.py",
+        "lineno": 79,
+        "function": "<lambda>",
+        "line": "lambda: self._load_history_entries(limit),"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\controller\\app_controller.py",
+        "lineno": 3082,
+        "function": "_load_history_entries",
+        "line": "entries = store.list_jobs(limit=limit or 20)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\queue\\job_history_store.py",
+        "lineno": 234,
+        "function": "list_jobs",
+        "line": "entries = list(self._load_latest_by_job().values())"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\queue\\job_history_store.py",
+        "lineno": 327,
+        "function": "_load_latest_by_job",
+        "line": "entry = JobHistoryEntry.from_json(line)"
+      },
+      {
+        "filename": "<USER_HOME>\\projects\\StableNew\\src\\queue\\job_history_store.py",
+        "lineno": 74,
+        "function": "from_json",
+        "line": "return JobHistoryEntry("
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\json\\__init__.py",
+        "lineno": 346,
+        "function": "loads",
+        "line": "return _default_decoder.decode(s)"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\json\\decoder.py",
+        "lineno": 341,
+        "function": "decode",
+        "line": "return obj"
+      },
+      {
+        "filename": "<USER_HOME>\\AppData\\Local\\Programs\\Python\\Python310\\lib\\json\\decoder.py",
+        "lineno": 356,
+        "function": "raw_decode",
+        "line": "return obj, end"
+      }
+    ]
+  }
+}

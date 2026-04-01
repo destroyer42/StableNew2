@@ -454,39 +454,45 @@ class MainWindowV2:
         """Trigger deferred queue autostart after GUI is fully rendered."""
         logger.info("[STARTUP-PERF] Attempting to trigger deferred queue autostart...")
         try:
-            webui_ctrl = getattr(getattr(self, "app_controller", None), "webui_connection_controller", None)
-            is_ready = getattr(webui_ctrl, "is_webui_ready_strict", None)
-            if callable(is_ready) and not is_ready():
-                logger.info("[STARTUP-PERF] WebUI not strictly ready yet; deferring queue autostart until READY callback")
-                return
-            # Access JobExecutionController via pipeline_controller
-            if not self.pipeline_controller:
-                logger.warning("[STARTUP-PERF] No pipeline_controller available")
-                return
-            if not hasattr(self.pipeline_controller, '_job_controller'):
-                logger.warning("[STARTUP-PERF] pipeline_controller has no _job_controller attribute")
-                return
-            
-            job_controller = self.pipeline_controller._job_controller
-            if not job_controller:
-                logger.warning("[STARTUP-PERF] _job_controller is None")
-                return
-            if not hasattr(job_controller, 'trigger_deferred_autostart'):
-                logger.warning("[STARTUP-PERF] job_controller has no trigger_deferred_autostart method")
-                return
-            
-            logger.info("[STARTUP-PERF] Calling trigger_deferred_autostart()...")
-            job_controller.trigger_deferred_autostart()
-            logger.info("[STARTUP-PERF] Deferred autostart trigger completed")
+            controller = getattr(self, "app_controller", None)
+            callback = getattr(controller, "on_gui_ready", None)
+            if callable(callback):
+                callback()
         except Exception:
             # Log but don't crash GUI if autostart fails
             logger.exception("[STARTUP-PERF] Failed to trigger deferred queue autostart")
 
     def run_in_main_thread(self, cb: Callable[[], None]) -> None:
         """Schedule the callback on the Tk main thread (safe from any thread)."""
+        invoker = getattr(self, "_invoker", None)
+        invoke = getattr(invoker, "invoke", None)
+        if callable(invoke):
+            try:
+                invoke(cb)
+                return
+            except Exception:
+                pass
         if getattr(self, "root", None) is not None:
             try:
                 self.root.after(0, cb)
+                return
+            except Exception:
+                pass
+        cb()
+
+    def run_in_main_thread_later(self, delay_ms: int, cb: Callable[[], None]) -> None:
+        """Schedule the callback on the Tk main thread after a delay."""
+        invoker = getattr(self, "_invoker", None)
+        invoke_later = getattr(invoker, "invoke_later", None)
+        if callable(invoke_later):
+            try:
+                invoke_later(delay_ms, cb)
+                return
+            except Exception:
+                pass
+        if getattr(self, "root", None) is not None:
+            try:
+                self.root.after(max(0, int(delay_ms or 0)), cb)
                 return
             except Exception:
                 pass
@@ -1118,8 +1124,15 @@ class MainWindowV2:
             self.status_bar_v2.app_state = self.app_state
             if hasattr(self.app_state, "subscribe"):
                 self.app_state.subscribe("status_text", self.status_bar_v2._sync_status_text)
+                self.app_state.subscribe(
+                    "webui_state",
+                    lambda: self.status_bar_v2.update_webui_state(
+                        getattr(self.app_state, "webui_state", None)
+                    ),
+                )
             try:
                 self.status_bar_v2._sync_status_text()
+                self.status_bar_v2.update_webui_state(getattr(self.app_state, "webui_state", None))
             except Exception:
                 pass
         except Exception:

@@ -37,8 +37,10 @@ class FakeResourceService:
 def test_controller_refreshes_adetailer_resources(monkeypatch) -> None:
     controller = AppController(None, threaded=False, pipeline_runner=DummyPipelineRunner())
     controller.app_state = AppStateV2()
+    controller._projection_sink.set_app_state(controller.app_state)
     controller.resource_service = FakeResourceService()
     fake_panel = FakeStageCardsPanel()
+    controller.app_state.add_resource_listener(fake_panel.apply_resource_update)
     controller.main_window = SimpleNamespace(
         pipeline_tab=SimpleNamespace(stage_cards_panel=fake_panel)
     )

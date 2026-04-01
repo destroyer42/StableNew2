@@ -1,8 +1,9 @@
 """
 Test: JobExecutionController and AppController UI dispatcher thread-safety
-Ensures all queue/job-status-driven UI updates are dispatched on the main thread.
+Ensures queue/job-status-driven callbacks request state-driven projections.
 """
 
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -20,29 +21,24 @@ class DummyMainWindow:
         self.app_state = MagicMock()
 
 
-@pytest.mark.parametrize(
-    "status", [JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.COMPLETED, JobStatus.FAILED]
-)
-def test_on_job_status_for_panels_dispatches_to_main_thread(status):
+@pytest.mark.parametrize("status", [JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.COMPLETED, JobStatus.FAILED])
+def test_on_job_status_for_panels_requests_projection_refresh(status):
     mw = DummyMainWindow()
     controller = AppController(main_window=mw)
     job = MagicMock()
     job.job_id = "job-123"
     job.unified_summary = MagicMock()
-    # Patch _run_in_gui_thread to track calls
-    called = []
-
-    def fake_dispatch(fn):
-        called.append(fn)
-        # Simulate immediate call for test
-        fn()
-
-    controller._run_in_gui_thread = fake_dispatch
-    # Should always schedule UI update via dispatcher
+    calls = {"queue": 0, "history": 0}
+    controller._runtime_projection_coordinator = SimpleNamespace(
+        publish_queue_refresh=lambda: calls.__setitem__("queue", calls["queue"] + 1),
+        publish_history_refresh=lambda **_: calls.__setitem__("history", calls["history"] + 1),
+    )
     controller._on_job_status_for_panels(job, status)
-    assert called, "UI dispatcher was not called"
-    # Should update queue/history panels only via dispatcher
-    # (panel methods may or may not be called depending on status)
+    assert calls["queue"] == 1
+    if status in {JobStatus.COMPLETED, JobStatus.FAILED}:
+        assert calls["history"] == 1
+    else:
+        assert calls["history"] == 0
 
 
 def test_run_in_gui_thread_prefers_main_window_dispatch():

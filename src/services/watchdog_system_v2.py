@@ -5,11 +5,8 @@ from collections import defaultdict
 
 class SystemWatchdogV2:
     # Tune these as needed
-    # PR-HEARTBEAT-FIX: Set to 10s for fast failure detection
-    # Rationale: We want to detect true hangs/freezes quickly (fail fast).
-    # BUT during active generation, progress polling updates the heartbeat,
-    # so working-but-slow operations won't trigger false positives.
-    # Result: 10s detects broken/frozen state fast, but active work keeps heartbeat alive.
+    # UI heartbeat must come from the Tk main loop only. Background progress work
+    # can update runner activity, but it must not mask a frozen GUI.
     UI_STALL_S = 10.0
     RUNNER_STALL_S = 10.0
     LOOP_PERIOD_S = 1.0

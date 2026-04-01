@@ -10,7 +10,7 @@ from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable
 
-from PIL import Image
+from PIL import Image, PngImagePlugin
 
 from src.utils.embedding_prompt_utils import (
     normalize_embedding_entries,
@@ -19,6 +19,35 @@ from src.utils.embedding_prompt_utils import (
 from src.utils.prompt_templates import compose_prompt_text
 
 logger = logging.getLogger(__name__)
+
+
+def _build_inline_image_save_kwargs(
+    image: Image.Image,
+    output_path: Path,
+    metadata_builder: Callable[[Image.Image], dict[str, str] | None] | None,
+) -> tuple[dict[str, Any], dict[str, str] | None]:
+    """Build save kwargs that embed metadata during the initial image write.
+
+    PNG is the dominant generation output path. Embedding its metadata inline
+    avoids a second open/save pass per image, which reduces same-process image
+    post-processing pressure while queue work is active.
+    """
+
+    if metadata_builder is None:
+        return {}, None
+    try:
+        metadata_kv = metadata_builder(image)
+    except Exception as exc:
+        logger.debug("Failed to build inline image metadata: %s", exc)
+        return {}, None
+    if not metadata_kv:
+        return {}, None
+    if output_path.suffix.lower() == ".png":
+        info = PngImagePlugin.PngInfo()
+        for key, value in metadata_kv.items():
+            info.add_itxt(str(key), str(value), zip=False)
+        return {"pnginfo": info}, metadata_kv
+    return {}, metadata_kv
 
 
 def save_image_from_base64(
@@ -49,9 +78,6 @@ def save_image_from_base64(
         if "," in base64_str:
             base64_str = base64_str.split(",", 1)[1]
 
-        image_data = base64.b64decode(base64_str)
-        image = Image.open(BytesIO(image_data))
-
         # Ensure parent directory exists
         parent_dir = output_path.parent
         logger.debug(f"Ensuring parent directory exists: {parent_dir}")
@@ -62,13 +88,20 @@ def save_image_from_base64(
             logger.error(f"Failed to create directory: {parent_dir}")
             return None
 
-        image.save(output_path)
-        if metadata_builder is not None:
+        image_data = base64.b64decode(base64_str)
+        with BytesIO(image_data) as image_buffer:
+            with Image.open(image_buffer) as image:
+                inline_save_kwargs, metadata_kv = _build_inline_image_save_kwargs(
+                    image,
+                    output_path,
+                    metadata_builder,
+                )
+                image.save(output_path, **inline_save_kwargs)
+        if metadata_kv and not inline_save_kwargs:
             try:
                 from src.utils.image_metadata import write_image_metadata
-                metadata_kv = metadata_builder(image)
-                if metadata_kv:
-                    write_image_metadata(output_path, metadata_kv)
+
+                write_image_metadata(output_path, metadata_kv)
             except Exception as exc:
                 logger.debug("Failed to embed image metadata: %s", exc)
         logger.info(f"Saved image: {output_path.name}")

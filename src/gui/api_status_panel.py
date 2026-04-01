@@ -107,10 +107,6 @@ class APIStatusPanel(ttk.Frame):
         hex_color = color_map.get(color.lower(), color)
         self.status_indicator.config(foreground=hex_color)
         self.status_label.config(text=text)
-        try:
-            self.update_idletasks()
-        except Exception:
-            pass
         logger.debug("API status set to: %s (%s)", text, color)
 
     def set_webui_state(self, state: WebUIConnectionState | str | None) -> None:

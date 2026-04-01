@@ -7,7 +7,10 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from src.api.client import ProgressInfo, SDWebUIClient, STALL_INTERRUPT_THRESHOLD_SEC
-from src.pipeline.executor import Pipeline, STALL_INTERRUPT_THRESHOLD_BY_STAGE
+from src.pipeline.executor import (
+    Pipeline,
+    STALL_INTERRUPT_THRESHOLD_BY_STAGE,
+)
 from src.prompting.contracts import (
     PromptContext,
     PromptIntentBundle,
@@ -194,6 +197,30 @@ class TestPollProgressLoop(unittest.TestCase):
 
         # Should have recovered and called callback
         assert len(progress_values) >= 1
+
+    def test_poll_progress_loop_emits_status_on_repeated_same_progress(self) -> None:
+        """Healthy polls should keep runtime status alive even if percent is unchanged."""
+        self.pipeline._current_job_id = "job-123"
+        self.pipeline._current_stage_index = 0
+        self.pipeline._current_stage_chain = ["txt2img"]
+        self.pipeline._current_stage_start_time = None
+        self.pipeline._status_callback = Mock()
+
+        self.client.get_progress.return_value = ProgressInfo(
+            1.0, None, 30, 30, None, {}
+        )
+
+        stop_event = threading.Event()
+        thread = threading.Thread(
+            target=self.pipeline._poll_progress_loop,
+            args=(stop_event, 0.05, None, "txt2img"),
+        )
+        thread.start()
+        time.sleep(0.16)
+        stop_event.set()
+        thread.join(timeout=1.0)
+
+        assert self.pipeline._status_callback.call_count >= 2
 
 
 class TestGenerateWithProgress(unittest.TestCase):
@@ -494,6 +521,28 @@ class TestStallInterrupt(unittest.TestCase):
 
         # Many iterations, but interrupt called exactly once
         self.client.interrupt.assert_called_once()
+
+    def test_completion_stall_interrupt_sent_after_completion_threshold(self) -> None:
+        """A request stuck after reaching 100% should still be interrupted."""
+        with (
+            patch("src.pipeline.executor.POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC", 0.0),
+            patch("src.pipeline.executor.PROGRESS_STALL_THRESHOLD_SEC", 9999.0),
+        ):
+            self.client.get_progress.return_value = self._make_frozen_progress(1.0)
+            stop_event = threading.Event()
+            stall_detected_event = threading.Event()
+
+            thread = threading.Thread(
+                target=self.pipeline._poll_progress_loop,
+                args=(stop_event, 0.0, None, "txt2img", stall_detected_event),
+            )
+            thread.start()
+            time.sleep(0.15)
+            stop_event.set()
+            thread.join(timeout=2.0)
+
+        self.client.interrupt.assert_called_once()
+        assert stall_detected_event.is_set()
 
 
 class TestProgressThreadSafety(unittest.TestCase):

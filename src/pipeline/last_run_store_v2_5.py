@@ -5,7 +5,7 @@ import logging
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from src.gui.app_state_v2 import CurrentConfig
+from src.contracts import CurrentConfig
 from src.state.workspace_paths import workspace_paths
 
 LAST_RUN_PATH = workspace_paths.last_run_v2_5()

@@ -121,7 +121,10 @@ def test_refresh_preview_from_state_async_builds_off_thread_and_applies_latest_r
         def __init__(self) -> None:
             self.calls = 0
 
-        def get_preview_jobs(self):
+        def build_preview_request(self):
+            return object()
+
+        def get_preview_jobs_for_request(self, _request):
             self.calls += 1
             return [
                 NormalizedJobRecord(
@@ -134,7 +137,7 @@ def test_refresh_preview_from_state_async_builds_off_thread_and_applies_latest_r
 
     dummy = DummyPreviewController()
     controller = _build_controller(pipeline_controller=dummy)
-    controller._spawn_tracked_thread = lambda target, **kwargs: target()
+    controller._background_tasks._run_inline = True
 
     controller._refresh_preview_from_state_async()
 
@@ -200,12 +203,8 @@ def test_start_run_v2_in_gui_mode_submits_queue_run_off_thread() -> None:
 def test_refresh_app_state_queue_replays_latest_async_projection_request() -> None:
     main_window = SimpleNamespace(app_state=AppStateV2(), root=None)
     controller = _build_controller(main_window=main_window, threaded=True)
-    workers: list[callable] = []
     projections = [(["first"], []), (["second"], [])]
     build_calls = 0
-
-    def _spawn_worker(target, args=(), kwargs=None, **_unused):
-        workers.append(lambda: target(*args, **(kwargs or {})))
 
     def _build_projection():
         nonlocal build_calls
@@ -213,17 +212,11 @@ def test_refresh_app_state_queue_replays_latest_async_projection_request() -> No
         build_calls += 1
         return result
 
-    controller._spawn_tracked_thread = _spawn_worker  # type: ignore[assignment]
-    controller._build_queue_projection = _build_projection  # type: ignore[assignment]
+    controller._background_tasks._run_inline = True
+    controller._runtime_projection_coordinator._build_queue_projection = _build_projection  # type: ignore[attr-defined]
 
     controller._refresh_app_state_queue()
     controller._refresh_app_state_queue()
-
-    assert len(workers) == 1
-    workers.pop(0)()
-
-    assert len(workers) == 1
-    workers.pop(0)()
 
     assert build_calls == 2
     assert controller.app_state.queue_items == ["second"]
@@ -232,23 +225,13 @@ def test_refresh_app_state_queue_replays_latest_async_projection_request() -> No
 def test_refresh_app_state_queue_in_gui_mode_applies_built_queue_jobs() -> None:
     main_window = SimpleNamespace(app_state=AppStateV2(), root=None)
     controller = _build_controller(main_window=main_window, threaded=True)
-    workers: list[callable] = []
     job = Job(job_id="job-running")
     job.status = JobStatus.RUNNING
     job._normalized_record = _make_preview_job(job.job_id)  # type: ignore[attr-defined]
     controller.job_service.queue.submit(job)
-
-    def _spawn_worker(target, args=(), kwargs=None, **_unused):
-        workers.append(lambda: target(*args, **(kwargs or {})))
-
-    controller._spawn_tracked_thread = _spawn_worker  # type: ignore[assignment]
+    controller._background_tasks._run_inline = True
 
     controller._refresh_app_state_queue()
-
-    assert len(workers) == 1
-    assert controller.app_state.queue_jobs == []
-
-    workers.pop(0)()
 
     assert controller.app_state.queue_jobs
     assert controller.app_state.queue_jobs[0].job_id == "job-running"

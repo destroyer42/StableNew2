@@ -38,6 +38,10 @@ def _new_controller_with_main_window(main_window):
     controller._append_log = lambda *_, **__: None
     controller._ui_dispatch = lambda fn: fn()
     controller._ui_thread_id = -1
+    controller._runtime_projection_coordinator = SimpleNamespace(
+        publish_queue_refresh=lambda: None,
+        publish_history_refresh=lambda **_: None,
+    )
     return controller
 
 
@@ -56,22 +60,18 @@ def test_run_in_gui_thread_prefers_main_window_dispatch():
     assert called["ran"], "task should execute via dispatcher"
 
 
-def test_on_job_status_for_panels_uses_gui_dispatcher():
-    queue_panel = DummyQueuePanel()
-    history_panel = DummyHistoryPanel()
-    mw = SimpleNamespace(queue_panel=queue_panel, history_panel=history_panel)
+def test_on_job_status_for_panels_requests_state_projection_refresh():
+    mw = SimpleNamespace()
     controller = _new_controller_with_main_window(mw)
-
-    dispatch_calls = {"count": 0}
-
-    def dispatch(fn):
-        dispatch_calls["count"] += 1
-        fn()
-
-    controller._run_in_gui_thread = dispatch
+    calls = {"queue": 0, "history": 0}
+    controller._runtime_projection_coordinator = SimpleNamespace(
+        publish_queue_refresh=lambda: calls.__setitem__("queue", calls["queue"] + 1),
+        publish_history_refresh=lambda **_: calls.__setitem__("history", calls["history"] + 1),
+    )
 
     job = SimpleNamespace(job_id="job-1", unified_summary=None)
     controller._on_job_status_for_panels(job, JobStatus.RUNNING)
+    controller._on_job_status_for_panels(job, JobStatus.COMPLETED)
 
-    assert dispatch_calls["count"] == 1, "status callbacks must be marshaled to GUI thread"
-    assert queue_panel.upserts, "queue panel should receive an upsert via dispatched callback"
+    assert calls["queue"] == 2
+    assert calls["history"] == 1

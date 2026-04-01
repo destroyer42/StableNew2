@@ -46,6 +46,16 @@ CONTROLLER_DIRECT_WIDGET_MUTATION_PATTERNS = (
     re.compile(r"\bstatus_label\.configure\s*\("),
 )
 
+CONTROLLER_CONCRETE_GUI_IMPORT_PATTERNS = (
+    re.compile(r"^from\s+src\.gui\.(?:panels_v2|views|main_window_v2)\s+import\b", re.MULTILINE),
+    re.compile(r"^import\s+src\.gui\.(?:panels_v2|views|main_window_v2)\b", re.MULTILINE),
+)
+
+CONTROLLER_RAW_THREAD_CREATION_PATTERNS = (
+    re.compile(r"\bthreading\.Thread\s*\("),
+    re.compile(r"\bThread\s*\("),
+)
+
 LEGACY_ADAPTER_PATTERNS = (
     re.compile(r"\blegacy_njr_adapter\b"),
     re.compile(r"\bbuild_njr_from_legacy_pipeline_config\s*\("),
@@ -130,6 +140,27 @@ def test_controller_modules_do_not_mutate_widgets_directly() -> None:
     violations = _find_pattern_hits(controller_files, CONTROLLER_DIRECT_WIDGET_MUTATION_PATTERNS)
     assert violations == [], (
         "Controller modules must not mutate Tk widgets directly:\n"
+        + "\n".join(sorted(violations))
+    )
+
+
+def test_controller_modules_do_not_import_concrete_gui_views_panels_or_dialogs() -> None:
+    controller_files = _iter_python_files(SRC_ROOT / "controller")
+    violations = _find_pattern_hits(controller_files, CONTROLLER_CONCRETE_GUI_IMPORT_PATTERNS)
+    assert violations == [], (
+        "Controller modules must not import concrete GUI views/panels/dialogs directly:\n"
+        + "\n".join(sorted(violations))
+    )
+
+
+def test_app_and_pipeline_controllers_do_not_spawn_raw_threads_directly() -> None:
+    target_files = [
+        SRC_ROOT / "controller" / "app_controller.py",
+        SRC_ROOT / "controller" / "pipeline_controller.py",
+    ]
+    violations = _find_pattern_hits(target_files, CONTROLLER_RAW_THREAD_CREATION_PATTERNS)
+    assert violations == [], (
+        "AppController/PipelineController must route background work through coordinators or tracked-thread helpers:\n"
         + "\n".join(sorted(violations))
     )
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 import time
 
 from src.app.optional_dependency_probes import (
@@ -11,6 +12,8 @@ from src.app.optional_dependency_probes import (
     OptionalDependencySnapshot,
 )
 from src.controller.app_controller import AppController
+from src.queue.job_history_store import JobHistoryEntry
+from src.queue.job_model import JobStatus
 from src.utils.error_envelope_v2 import wrap_exception
 from src.utils.exceptions_v2 import WatchdogViolationError
 
@@ -42,6 +45,46 @@ class DummyWebUIProcessManager:
         return {"stdout_tail": "boot ok", "stderr_tail": ""}
 
 
+def test_load_history_entries_prefers_recent_jobs_api() -> None:
+    class RecentHistoryStore:
+        def __init__(self) -> None:
+            self.recent_called = False
+            self.invalidated = False
+
+        def list_recent_jobs(self, *, statuses, limit: int = 20):
+            self.recent_called = True
+            assert statuses == {JobStatus.COMPLETED, JobStatus.FAILED}
+            return [
+                JobHistoryEntry(
+                    job_id="job-recent",
+                    created_at=time_now(),
+                    status=JobStatus.COMPLETED,
+                )
+            ]
+
+        def invalidate_cache(self) -> None:
+            self.invalidated = True
+
+        def list_jobs(self, limit: int | None = None) -> list[object]:
+            raise AssertionError("full history scan should not be used")
+
+    def time_now():
+        from datetime import datetime
+
+        return datetime.utcnow()
+
+    controller = AppController.__new__(AppController)
+    store = RecentHistoryStore()
+    controller.job_service = SimpleNamespace(history_store=store)
+
+    entries = AppController._load_history_entries(controller, limit=10)
+
+    assert store.recent_called is True
+    assert store.invalidated is False
+    assert len(entries) == 1
+    assert entries[0].job_id == "job-recent"
+
+
 def test_open_debug_hub_uses_app_controller_as_controller(monkeypatch) -> None:
     recorded: dict[str, object] = {}
 
@@ -49,7 +92,7 @@ def test_open_debug_hub_uses_app_controller_as_controller(monkeypatch) -> None:
         recorded.update(kwargs)
         return object()
 
-    monkeypatch.setattr("src.controller.app_controller.DebugHubPanelV2.open", fake_open)
+    monkeypatch.setattr("src.gui.panels_v2.debug_hub_panel_v2.DebugHubPanelV2.open", fake_open)
 
     controller = AppController(
         None,

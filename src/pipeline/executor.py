@@ -163,6 +163,9 @@ POST_RECOVERY_GRACE_WINDOW_SEC = 120.0
 STALL_INTERRUPT_THRESHOLD_BY_STAGE: dict[str, float] = {
     "adetailer": 45.0,
 }
+# If WebUI reports completion progress but the blocking request never returns,
+# treat that as a separate end-of-request stall and interrupt sooner.
+POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC = 20.0
 _ALLOWED_TEXT_CONTROL_CODES = {9, 10}
 
 
@@ -2327,6 +2330,16 @@ class Pipeline:
                         highest_progress = 0.0
                         last_progress_time = time.monotonic()
                 else:
+                    current_progress = max(
+                        highest_progress,
+                        max(0.0, min(1.0, float(getattr(info, "progress", 0.0) or 0.0))),
+                    )
+                    eta_relative = getattr(info, "eta_relative", None)
+                    eta_seconds = (
+                        float(eta_relative)
+                        if eta_relative is not None and eta_relative > 0
+                        else None
+                    )
                     if info.progress > highest_progress:
                         highest_progress = info.progress
                         last_progress_time = time.monotonic()
@@ -2339,78 +2352,108 @@ class Pipeline:
                         # Extract actual seed if available
                         if hasattr(info, 'seed') and info.seed is not None:
                             self._current_actual_seed = info.seed
-                        
-                        # Emit runtime status update
-                        if self._status_callback and self._current_job_id:
-                            elapsed = time.monotonic() - (self._current_stage_start_time.timestamp() if self._current_stage_start_time else time.monotonic())
-                            eta_seconds = info.eta_relative if (hasattr(info, 'eta_relative') and info.eta_relative > 0) else None
-                            
-                            # If no ETA from WebUI, estimate from progress
-                            if eta_seconds is None and highest_progress > 0.01:
-                                total_estimated = elapsed / highest_progress
-                                eta_seconds = max(total_estimated - elapsed, 0.0)
-                            
-                            status_data = {
-                                "job_id": self._current_job_id,
-                                "current_stage": stage_label,
-                                "stage_detail": None,
-                                "stage_index": self._current_stage_index,
-                                "total_stages": len(self._current_stage_chain) if self._current_stage_chain else 1,
-                                "progress": highest_progress,
-                                "eta_seconds": eta_seconds,
-                                "started_at": self._current_stage_start_time,
-                                "actual_seed": self._current_actual_seed,
-                                "current_step": getattr(info, 'current_step', 0),
-                                "total_steps": getattr(info, 'total_steps', 0),
-                            }
-                            self._emit_status_update(status_data)
-                        
+
                         if progress_callback:
                             # Convert 0-1 to percentage
                             percent = highest_progress * 100.0
-                            eta = info.eta_relative if (hasattr(info, 'eta_relative') and info.eta_relative > 0) else None
+                            eta = eta_seconds
                             # Pass step info if available
                             current_step = getattr(info, 'current_step', 0)
                             total_steps = getattr(info, 'total_steps', 0)
                             progress_callback(percent, eta, current_step, total_steps)
-                    
+                            
+                    # Keep runtime activity alive on every healthy progress poll,
+                    # not only when the percent advances.
+                    if self._status_callback and self._current_job_id:
+                        stage_start = self._current_stage_start_time
+                        if isinstance(stage_start, datetime):
+                            elapsed = max(
+                                (datetime.utcnow() - stage_start).total_seconds(),
+                                0.0,
+                            )
+                        else:
+                            elapsed = 0.0
+
+                        # If no ETA from WebUI, estimate from observed progress.
+                        if eta_seconds is None and current_progress > 0.01:
+                            total_estimated = elapsed / current_progress
+                            eta_seconds = max(total_estimated - elapsed, 0.0)
+
+                        status_data = {
+                            "job_id": self._current_job_id,
+                            "current_stage": stage_label,
+                            "stage_detail": None,
+                            "stage_index": self._current_stage_index,
+                            "total_stages": len(self._current_stage_chain) if self._current_stage_chain else 1,
+                            "progress": current_progress,
+                            "eta_seconds": eta_seconds,
+                            "started_at": self._current_stage_start_time,
+                            "actual_seed": self._current_actual_seed,
+                            "current_step": getattr(info, "current_step", 0),
+                            "total_steps": getattr(info, "total_steps", 0),
+                        }
+                        self._emit_status_update(status_data)
+
                     # PR-HARDEN-004: Check for stall (no progress for too long)
                     elapsed_since_progress = time.monotonic() - last_progress_time
-                    if (
+                    progress_stalled = (
                         elapsed_since_progress > PROGRESS_STALL_THRESHOLD_SEC
                         and highest_progress > 0
                         and highest_progress < 0.99
-                    ):
+                    )
+                    completion_stalled = (
+                        elapsed_since_progress > POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC
+                        and highest_progress >= 0.99
+                    )
+                    if progress_stalled or completion_stalled:
                         now = time.monotonic()
                         if stall_first_detected_at is None:
                             stall_first_detected_at = now
 
                         # Throttle log to once per 30s instead of every poll interval
                         if now - last_stall_log_time >= 30.0:
-                            logger.warning(
-                                "PR-HARDEN-004: Generation stall detected for %s - no progress for %.1fs (stuck at %.1f%%)",
-                                stage_label,
-                                elapsed_since_progress,
-                                highest_progress * 100,
-                            )
+                            if completion_stalled:
+                                logger.warning(
+                                    "PR-HARDEN-004: Completion stall detected for %s - waiting %.1fs after %.1f%% progress",
+                                    stage_label,
+                                    elapsed_since_progress,
+                                    highest_progress * 100,
+                                )
+                            else:
+                                logger.warning(
+                                    "PR-HARDEN-004: Generation stall detected for %s - no progress for %.1fs (stuck at %.1f%%)",
+                                    stage_label,
+                                    elapsed_since_progress,
+                                    highest_progress * 100,
+                                )
                             last_stall_log_time = now
 
                         if stall_detected_event:
                             stall_detected_event.set()
 
                         # After hard threshold, interrupt WebUI to unblock the HTTP call.
-                        # Use a per-stage override if present (e.g. shorter for adetailer),
-                        # falling back to the global STALL_INTERRUPT_THRESHOLD_SEC.
-                        _interrupt_threshold = STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(
-                            stage_label, STALL_INTERRUPT_THRESHOLD_SEC
-                        )
+                        # Completion stalls already consumed their threshold, so interrupt
+                        # immediately once we declare the request hung after 100%.
+                        if completion_stalled:
+                            _interrupt_threshold = 0.0
+                        else:
+                            _interrupt_threshold = STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(
+                                stage_label, STALL_INTERRUPT_THRESHOLD_SEC
+                            )
                         stall_duration = now - stall_first_detected_at
                         if stall_duration >= _interrupt_threshold and not interrupt_sent:
-                            logger.error(
-                                "PR-HARDEN-004: Stall for %s exceeded %.0fs — sending interrupt to WebUI",
-                                stage_label,
-                                _interrupt_threshold,
-                            )
+                            if completion_stalled:
+                                logger.error(
+                                    "PR-HARDEN-004: Completion stall for %s exceeded %.0fs — sending interrupt to WebUI",
+                                    stage_label,
+                                    POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC,
+                                )
+                            else:
+                                logger.error(
+                                    "PR-HARDEN-004: Stall for %s exceeded %.0fs — sending interrupt to WebUI",
+                                    stage_label,
+                                    _interrupt_threshold,
+                                )
                             self.client.interrupt()
                             interrupt_sent = True
                         
@@ -2973,9 +3016,18 @@ class Pipeline:
             run_dir=run_dir,
             manifest=metadata,
         )
+        response_images = response.get("images") if isinstance(response, dict) else None
+        image_b64 = response_images[0] if isinstance(response_images, list) and response_images else None
+        if image_b64 is None:
+            logger.error("img2img returned no image payload to save")
+            return None
         actual_path = save_image_from_base64(
-            response["images"][0], image_path, metadata_builder=metadata_builder
+            image_b64, image_path, metadata_builder=metadata_builder
         )
+        if isinstance(response_images, list):
+            response_images[0] = None
+        if isinstance(response, dict):
+            response["images"] = []
         actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
         if actual_path:
             self.logger.save_manifest(run_dir, actual_path.stem, metadata)
@@ -3527,9 +3579,18 @@ class Pipeline:
             run_dir=run_dir,
             manifest=metadata,
         )
+        response_images = response.get("images") if isinstance(response, dict) else None
+        image_b64 = response_images[0] if isinstance(response_images, list) and response_images else None
+        if image_b64 is None:
+            logger.error("adetailer returned no image payload to save")
+            return None
         actual_path = save_image_from_base64(
-            response["images"][0], image_path, metadata_builder=metadata_builder
+            image_b64, image_path, metadata_builder=metadata_builder
         )
+        if isinstance(response_images, list):
+            response_images[0] = None
+        if isinstance(response, dict):
+            response["images"] = []
         actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
         if actual_path:
             # Save manifest in manifests/ subfolder (datetime/pack_name structure)
@@ -4508,6 +4569,9 @@ class Pipeline:
                     }
                 ]
             saved_variants: list[tuple[Path, dict[str, Any]]] = []
+            response_images = response.get("images") if isinstance(response, dict) else None
+            if not isinstance(response_images, list):
+                response_images = list(response.get("images") or [])
             
             for batch_idx in range(num_images_received):
                 # Multiple images: use suffix _batch0, _batch1, etc.
@@ -4540,11 +4604,13 @@ class Pipeline:
                     run_dir=run_dir,
                     manifest=image_metadata,
                 )
+                image_b64 = response_images[batch_idx]
                 actual_path = save_image_from_base64(
-                    response["images"][batch_idx],
+                    image_b64,
                     image_path,
                     metadata_builder=metadata_builder,
                 )
+                response_images[batch_idx] = None
                 if not actual_path:
                     logger.error("Failed to save image %s", image_path)
                     continue
@@ -4554,6 +4620,8 @@ class Pipeline:
                 manifest_dir.mkdir(exist_ok=True, parents=True)
                 variant_manifest_path = manifest_dir / f"{actual_path.stem}.json"
                 saved_variants.append((variant_manifest_path, image_metadata))
+            if isinstance(response, dict):
+                response["images"] = []
             
             # Use the first image for metadata and return value (backward compatibility)
             if saved_paths:
@@ -4884,9 +4952,18 @@ class Pipeline:
                 run_dir=run_dir,
                 manifest=metadata,
             )
+            response_images = response.get("images") if isinstance(response, dict) else None
+            image_b64 = response_images[0] if isinstance(response_images, list) and response_images else None
+            if image_b64 is None:
+                logger.error("img2img returned no image payload to save")
+                return None
             actual_path = save_image_from_base64(
-                response["images"][0], image_path, metadata_builder=metadata_builder
+                image_b64, image_path, metadata_builder=metadata_builder
             )
+            if isinstance(response_images, list):
+                response_images[0] = None
+            if isinstance(response, dict):
+                response["images"] = []
             actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
             if actual_path:
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)
@@ -5752,6 +5829,10 @@ class Pipeline:
             actual_path = save_image_from_base64(
                 image_data, image_path, metadata_builder=metadata_builder
             )
+            if image_key is None:
+                response[response_key] = None
+            elif isinstance(response.get(response_key), list):
+                response[response_key][image_key] = None
             actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
             if actual_path:
                 # Save manifest in manifests/ subfolder (datetime/pack_name structure)

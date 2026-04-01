@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-from src.gui.app_state_v2 import PackJobEntry
+from src.contracts import PackJobEntry
 
 
 class PipelineRunSource(Enum):

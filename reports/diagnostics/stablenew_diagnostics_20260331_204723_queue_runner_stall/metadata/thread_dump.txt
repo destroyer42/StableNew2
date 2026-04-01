@@ -1,0 +1,257 @@
+
+================================================================================
+Thread: DiagBundle-queue_runner_stall (ID: 3272)
+  Daemon: False, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 973, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\rob\projects\StableNew\src\utils\diagnostics_bundle_v2.py", line 175, in _worker
+    build_crash_bundle(
+  File "C:\Users\rob\projects\StableNew\src\utils\diagnostics_bundle_v2.py", line 260, in build_crash_bundle
+    thread_dump_text, thread_dump_json = _capture_thread_dump()
+  File "C:\Users\rob\projects\StableNew\src\utils\diagnostics_bundle_v2.py", line 458, in _capture_thread_dump
+    stack_lines = traceback.format_stack(frame)
+
+
+================================================================================
+Thread: progress_poll_0 (ID: 41676)
+  Daemon: False, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 973, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\concurrent\futures\thread.py", line 83, in _worker
+    work_item.run()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\concurrent\futures\thread.py", line 58, in run
+    result = self.fn(*self.args, **self.kwargs)
+  File "C:\Users\rob\projects\StableNew\src\pipeline\executor.py", line 2421, in _poll_progress_loop
+    stop_event.wait(poll_interval)
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 607, in wait
+    signaled = self._cond.wait(timeout)
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 324, in wait
+    gotit = waiter.acquire(True, timeout)
+
+
+================================================================================
+Thread: Thread-57 (ID: 72076)
+  Daemon: False, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 973, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\rob\projects\StableNew\src\utils\watchdog_v2.py", line 78, in run
+    while not self._stop_event.wait(max(0.1, self._config.interval_sec)):
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 604, in wait
+    with self._cond:
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 332, in wait
+    self._waiters.remove(waiter)
+
+
+================================================================================
+Thread: QueueWorker (ID: 2840)
+  Daemon: False, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 973, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\rob\projects\StableNew\src\queue\single_node_runner.py", line 432, in _worker_loop
+    result = self._run_with_webui_retry(job)
+  File "C:\Users\rob\projects\StableNew\src\queue\single_node_runner.py", line 298, in _run_with_webui_retry
+    result = self.run_callable(job)
+  File "C:\Users\rob\projects\StableNew\src\controller\job_execution_controller.py", line 340, in _run_job_callback
+    result = self._replay_engine.replay_njr(record, job=job)
+  File "C:\Users\rob\projects\StableNew\src\pipeline\replay_engine.py", line 169, in replay_njr
+    return self._runner.run_njr(
+  File "C:\Users\rob\projects\StableNew\src\controller\pipeline_controller.py", line 1584, in run_njr
+    result = runner.run_njr(
+  File "C:\Users\rob\projects\StableNew\src\pipeline\pipeline_runner.py", line 1357, in run_njr
+    result = self._pipeline.run_txt2img_stage(
+  File "C:\Users\rob\projects\StableNew\src\pipeline\executor.py", line 4462, in run_txt2img_stage
+    response = self._generate_images_with_progress(
+  File "C:\Users\rob\projects\StableNew\src\pipeline\executor.py", line 2460, in _generate_images_with_progress
+    response = self._generate_images(stage, payload)
+  File "C:\Users\rob\projects\StableNew\src\pipeline\executor.py", line 2142, in _generate_images
+    return self._generate_images_with_recovery(stage, payload, recovery_attempted=False)
+  File "C:\Users\rob\projects\StableNew\src\pipeline\executor.py", line 2183, in _generate_images_with_recovery
+    outcome = self.client.generate_images(stage=stage, payload=payload)
+  File "C:\Users\rob\projects\StableNew\src\api\client.py", line 1468, in generate_images
+    response = self.txt2img(payload, raise_on_error=True)
+  File "C:\Users\rob\projects\StableNew\src\api\client.py", line 1107, in txt2img
+    with self._request_context(
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\contextlib.py", line 135, in __enter__
+    return next(self.gen)
+  File "C:\Users\rob\projects\StableNew\src\api\client.py", line 737, in _request_context
+    response = self._perform_request(
+  File "C:\Users\rob\projects\StableNew\src\api\client.py", line 530, in _perform_request
+    response = self._session.request(
+  File "C:\Users\rob\projects\StableNew\.venv\lib\site-packages\requests\sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "C:\Users\rob\projects\StableNew\.venv\lib\site-packages\requests\sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "C:\Users\rob\projects\StableNew\.venv\lib\site-packages\requests\adapters.py", line 644, in send
+    resp = conn.urlopen(
+  File "C:\Users\rob\projects\StableNew\.venv\lib\site-packages\urllib3\connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+  File "C:\Users\rob\projects\StableNew\.venv\lib\site-packages\urllib3\connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+  File "C:\Users\rob\projects\StableNew\.venv\lib\site-packages\urllib3\connection.py", line 565, in getresponse
+    httplib_response = super().getresponse()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\http\client.py", line 1374, in getresponse
+    response.begin()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\http\client.py", line 318, in begin
+    version, status, reason = self._read_status()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\http\client.py", line 279, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\socket.py", line 705, in readinto
+    return self._sock.recv_into(b)
+
+
+================================================================================
+Thread: WebUI-Orphan-Monitor (ID: 25000)
+  Daemon: False, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\projects\StableNew\src\api\webui_process_manager.py", line 101, in <genexpr>
+    return any(
+  File "C:\Users\rob\projects\StableNew\src\api\webui_process_manager.py", line 71, in _normalize_process_path
+    return str(Path(value).resolve()).lower().replace("\\", "/")
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\pathlib.py", line 1090, in resolve
+    return p
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\pathlib.py", line 1097, in stat
+    return self._accessor.stat(self, follow_symlinks=follow_symlinks)
+
+
+================================================================================
+Thread: WebUI-stderr-reader (ID: 54504)
+  Daemon: True, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 973, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\rob\projects\StableNew\src\api\webui_process_manager.py", line 479, in _read_stream
+    for line in iter(stream.readline, ""):
+
+
+================================================================================
+Thread: WebUI-stdout-reader (ID: 39964)
+  Daemon: True, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 973, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\rob\projects\StableNew\src\api\webui_process_manager.py", line 479, in _read_stream
+    for line in iter(stream.readline, ""):
+
+
+================================================================================
+Thread: SystemWatchdogV2 (ID: 67520)
+  Daemon: False, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 973, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\rob\projects\StableNew\src\services\watchdog_system_v2.py", line 93, in _loop
+    time.sleep(self._loop_period)
+
+
+================================================================================
+Thread: PersistenceWorker (ID: 70384)
+  Daemon: True, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 973, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\rob\projects\StableNew\src\services\persistence_worker.py", line 163, in _worker_loop
+    priority, task = self._queue.get(timeout=0.5)
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\queue.py", line 179, in get
+    raise Empty
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 332, in wait
+    self._waiters.remove(waiter)
+
+
+================================================================================
+Thread: SingleInstanceLock-Accept (ID: 32256)
+  Daemon: True, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 973, in _bootstrap
+    self._bootstrap_inner()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 1016, in _bootstrap_inner
+    self.run()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\threading.py", line 953, in run
+    self._target(*self._args, **self._kwargs)
+  File "C:\Users\rob\projects\StableNew\src\utils\single_instance.py", line 64, in _accept_loop
+    client_sock, _addr = self._socket.accept()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\socket.py", line 293, in accept
+    fd, addr = self._accept()
+
+
+================================================================================
+Thread: MainThread (ID: 17024)
+  Daemon: False, Alive: True
+--------------------------------------------------------------------------------
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "C:\Users\rob\projects\StableNew\src\main.py", line 711, in <module>
+    main()
+  File "C:\Users\rob\projects\StableNew\src\main.py", line 698, in main
+    root.mainloop()
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1458, in mainloop
+    self.tk.mainloop(n)
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 1921, in __call__
+    return self.func(*args)
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\tkinter\__init__.py", line 839, in callit
+    func(*args)
+  File "C:\Users\rob\projects\StableNew\src\gui\gui_invoker.py", line 90, in _pump
+    callback()
+  File "C:\Users\rob\projects\StableNew\src\controller\job_service.py", line 1161, in _call
+    cb(j, s)
+  File "C:\Users\rob\projects\StableNew\src\controller\app_controller.py", line 2934, in _on_job_status_for_panels
+    self._runtime_projection_coordinator.publish_history_refresh()
+  File "C:\Users\rob\projects\StableNew\src\controller\app_controller_services\runtime_projection_coordinator.py", line 77, in publish_history_refresh
+    self._background_tasks.submit(
+  File "C:\Users\rob\projects\StableNew\src\controller\app_controller_services\background_task_coordinator.py", line 78, in submit
+    self._start(spec)
+  File "C:\Users\rob\projects\StableNew\src\controller\app_controller_services\background_task_coordinator.py", line 94, in _start
+    self._run(spec)
+  File "C:\Users\rob\projects\StableNew\src\controller\app_controller_services\background_task_coordinator.py", line 107, in _run
+    result = spec.work()
+  File "C:\Users\rob\projects\StableNew\src\controller\app_controller_services\runtime_projection_coordinator.py", line 79, in <lambda>
+    lambda: self._load_history_entries(limit),
+  File "C:\Users\rob\projects\StableNew\src\controller\app_controller.py", line 3082, in _load_history_entries
+    entries = store.list_jobs(limit=limit or 20)
+  File "C:\Users\rob\projects\StableNew\src\queue\job_history_store.py", line 234, in list_jobs
+    entries = list(self._load_latest_by_job().values())
+  File "C:\Users\rob\projects\StableNew\src\queue\job_history_store.py", line 327, in _load_latest_by_job
+    entry = JobHistoryEntry.from_json(line)
+  File "C:\Users\rob\projects\StableNew\src\queue\job_history_store.py", line 74, in from_json
+    return JobHistoryEntry(
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\json\__init__.py", line 346, in loads
+    return _default_decoder.decode(s)
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\json\decoder.py", line 341, in decode
+    return obj
+  File "C:\Users\rob\AppData\Local\Programs\Python\Python310\lib\json\decoder.py", line 356, in raw_decode
+    return obj, end

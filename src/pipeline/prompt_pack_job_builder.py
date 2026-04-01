@@ -11,7 +11,7 @@ from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
-from src.gui.app_state_v2 import PackJobEntry
+from src.contracts import PackJobEntry
 from src.pipeline import config_contract_v26
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,

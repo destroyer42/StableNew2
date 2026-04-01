@@ -113,6 +113,132 @@ def test_pending_overlay_replaces_stale_cached_status():
             assert updated.error_message == "connection refused"
 
 
+def test_record_status_change_uses_pending_entry_without_disk_reload():
+    """Hot status transitions must not rescan the history file for the same job."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        history_file = Path(tmpdir) / "history.jsonl"
+        store = JSONLJobHistoryStore(history_file)
+
+        entry = JobHistoryEntry(
+            job_id="job1",
+            created_at=datetime.now(),
+            status=JobStatus.QUEUED,
+            payload_summary="Job 1",
+        )
+
+        with patch("src.services.persistence_worker.get_persistence_worker") as mock_get_worker:
+            mock_worker = Mock()
+            mock_worker.enqueue.return_value = True
+            mock_get_worker.return_value = mock_worker
+            store._append(entry)
+
+            with patch.object(
+                store,
+                "_load_latest_by_job",
+                side_effect=AssertionError("disk reload should not occur"),
+            ):
+                store.record_status_change(entry.job_id, JobStatus.RUNNING, datetime.now())
+
+
+def test_persisted_callback_keeps_cache_current_without_disk_reload():
+    """Persistence completion should advance the cache state without a full reread."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        history_file = Path(tmpdir) / "history.jsonl"
+
+        entry1 = JobHistoryEntry(
+            job_id="job1",
+            created_at=datetime.now(),
+            status=JobStatus.COMPLETED,
+            payload_summary="First job",
+        )
+        history_file.write_text(entry1.to_json() + "\n", encoding="utf-8")
+
+        store = JSONLJobHistoryStore(history_file)
+        jobs = store.list_jobs()
+        assert len(jobs) == 1
+
+        entry2 = JobHistoryEntry(
+            job_id="job2",
+            created_at=datetime.now(),
+            status=JobStatus.COMPLETED,
+            payload_summary="Second job",
+        )
+
+        with patch("src.services.persistence_worker.get_persistence_worker") as mock_get_worker:
+            mock_worker = Mock()
+            mock_worker.enqueue.return_value = True
+            mock_get_worker.return_value = mock_worker
+
+            store._append(entry2)
+
+            with history_file.open("a", encoding="utf-8") as handle:
+                handle.write(entry2.to_json() + "\n")
+            task = mock_worker.enqueue.call_args.args[0]
+            task.callback()
+
+        with patch.object(
+            Path,
+            "read_text",
+            side_effect=AssertionError("disk reload should not occur"),
+        ):
+            jobs = store.list_jobs()
+
+        assert len(jobs) == 2
+        assert {job.job_id for job in jobs} == {"job1", "job2"}
+
+
+def test_list_recent_jobs_returns_latest_unique_terminal_entries():
+    """Recent-history reads should scan from the end and ignore older duplicates."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        history_file = Path(tmpdir) / "history.jsonl"
+        store = JSONLJobHistoryStore(history_file)
+
+        queued = JobHistoryEntry(
+            job_id="job1",
+            created_at=datetime.now(),
+            status=JobStatus.QUEUED,
+            payload_summary="queued",
+        )
+        completed = JobHistoryEntry(
+            job_id="job1",
+            created_at=datetime.now(),
+            status=JobStatus.COMPLETED,
+            payload_summary="completed",
+        )
+        failed = JobHistoryEntry(
+            job_id="job2",
+            created_at=datetime.now(),
+            status=JobStatus.FAILED,
+            payload_summary="failed",
+        )
+        running = JobHistoryEntry(
+            job_id="job3",
+            created_at=datetime.now(),
+            status=JobStatus.RUNNING,
+            payload_summary="running",
+        )
+        history_file.write_text(
+            "\n".join(
+                [
+                    queued.to_json(),
+                    completed.to_json(),
+                    failed.to_json(),
+                    running.to_json(),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        entries = store.list_recent_jobs(
+            limit=5,
+            statuses={JobStatus.COMPLETED, JobStatus.FAILED},
+        )
+
+        assert [entry.job_id for entry in entries] == ["job2", "job1"]
+        assert [entry.status for entry in entries] == [JobStatus.FAILED, JobStatus.COMPLETED]
+
+
 def test_manual_refresh_invalidates_cache():
     """Verify manual refresh forces cache invalidation."""
     with tempfile.TemporaryDirectory() as tmpdir:

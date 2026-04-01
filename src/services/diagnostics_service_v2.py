@@ -50,6 +50,10 @@ class DiagnosticsServiceV2:
     ) -> None:
         # Delegate to central bundle async with repo-specific output_dir.
         external_on_done = kwargs.get("on_done")
+        if extra_context is None:
+            legacy_context = kwargs.get("context")
+            if isinstance(legacy_context, Mapping):
+                extra_context = dict(legacy_context)
 
         def _on_done() -> None:
             with self._lock:

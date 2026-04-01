@@ -16,6 +16,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any
 
+from src.contracts import PackJobEntry, PreviewRequest, SubmissionRequest
 from src.controller.core_pipeline_controller import CorePipelineController
 from src.controller.job_execution_controller import JobExecutionController
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
@@ -40,8 +41,6 @@ from src.controller.webui_connection_controller import (
     WebUIConnectionController,
     WebUIConnectionState,
 )
-from src.gui.app_state_v2 import AppStateV2, PackJobEntry
-from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.history.history_record import HistoryRecord
 from src.learning.model_defaults_resolver import (
     GuiDefaultsResolver,
@@ -365,23 +364,27 @@ class PipelineController(CorePipelineController):
             return dict(payload)
         return None
 
-    def get_preview_jobs(self) -> list[NormalizedJobRecord]:
-        """Return normalized jobs derived from the current GUI state for preview panels."""
+    def build_preview_request(self) -> PreviewRequest:
+        job_draft = getattr(self._app_state, "job_draft", None)
+        pack_entries = tuple(getattr(job_draft, "packs", None) or ())
+        return PreviewRequest(pack_entries=pack_entries)
+
+    def get_preview_jobs_for_request(
+        self,
+        request: PreviewRequest,
+    ) -> list[NormalizedJobRecord]:
         started_at = time.monotonic()
         source = "state"
-        pack_entry_count = 0
+        pack_entry_count = len(request.pack_entries)
         try:
-            job_draft = getattr(self._app_state, "job_draft", None)
-            pack_entries = getattr(job_draft, "packs", None) or []
-            pack_entry_count = len(pack_entries)
-            if pack_entries:
+            if request.pack_entries:
                 source = "pack_bundle"
-                njrs = self._build_njrs_from_pack_bundle(pack_entries)
+                njrs = self._build_njrs_from_pack_bundle(list(request.pack_entries))
                 if njrs:
                     _logger.debug(
                         "Built %d preview jobs from %d prompt pack entries",
                         len(njrs),
-                        len(pack_entries),
+                        len(request.pack_entries),
                     )
                     self._record_preview_build_timing(
                         source=source,
@@ -392,9 +395,17 @@ class PipelineController(CorePipelineController):
                     return njrs
                 source = "state_fallback"
                 _logger.debug(
-                    "Prompt pack preview builder returned no jobs, falling back to empty list"
+                    "Prompt pack preview builder returned no jobs, falling back to state builder"
                 )
-            njrs = self._build_normalized_jobs_from_state()
+            if not request.use_state_fallback:
+                self._record_preview_build_timing(
+                    source=source,
+                    elapsed_ms=(time.monotonic() - started_at) * 1000.0,
+                    job_count=0,
+                    pack_entry_count=pack_entry_count,
+                )
+                return []
+            njrs = self._build_normalized_jobs_from_state(base_config=request.base_config)
             self._record_preview_build_timing(
                 source=source,
                 elapsed_ms=(time.monotonic() - started_at) * 1000.0,
@@ -410,8 +421,12 @@ class PipelineController(CorePipelineController):
                 pack_entry_count=pack_entry_count,
                 error=str(exc),
             )
-            _logger.exception("Failed to build preview jobs - EXCEPTION DETAILS:")
+            _logger.exception("Failed to build preview jobs")
             return []
+
+    def get_preview_jobs(self) -> list[NormalizedJobRecord]:
+        """Return normalized jobs derived from the current GUI state for preview panels."""
+        return self.get_preview_jobs_for_request(self.build_preview_request())
 
     def _to_queue_job(
         self,
@@ -624,7 +639,7 @@ class PipelineController(CorePipelineController):
     def __init__(
         self,
         *,
-        app_state: AppStateV2 | None = None,
+        app_state: Any | None = None,
         learning_record_writer: LearningRecordWriter | None = None,
         on_learning_record: Callable[[LearningRecord], None] | None = None,
         config_assembler: Any | None = None,
@@ -688,10 +703,14 @@ class PipelineController(CorePipelineController):
         self._job_history_service: JobHistoryService | None = None
         self._active_job_id: str | None = None
         self._last_run_config: dict[str, Any] | None = None
-        self._app_state: AppStateV2 | None = app_state
+        self._app_state: Any | None = app_state
         self._app_state_queue_updates_managed_externally = bool(
             getattr(self, "_app_controller", None)
         )
+        self._app_state_runtime_updates_managed_externally = bool(
+            getattr(self, "_app_controller", None)
+        )
+        self._app_state_preview_updates_managed_externally = False
         self._job_lifecycle_logger = job_lifecycle_logger
 
         queue = self._job_controller.get_queue()
@@ -765,7 +784,7 @@ class PipelineController(CorePipelineController):
             except Exception:
                 pass
 
-    def _get_prompt_workspace_state(self) -> PromptWorkspaceState | None:
+    def _get_prompt_workspace_state(self) -> Any | None:
         if self._app_state is not None:
             prompt_state = getattr(self._app_state, "prompt_workspace_state", None)
             if prompt_state is not None:
@@ -1078,10 +1097,14 @@ class PipelineController(CorePipelineController):
     def bind_app_state(self, app_state: Any | None) -> None:
         """Bind an AppStateV2 instance for updating GUI data."""
         self._app_state = app_state
-        self._refresh_app_state_queue()
+        if not self._app_state_queue_updates_managed_externally:
+            self._refresh_app_state_queue()
         try:
             preview_jobs = self.get_preview_jobs()
-            if hasattr(app_state, "set_preview_jobs"):
+            if (
+                not self._app_state_preview_updates_managed_externally
+                and hasattr(app_state, "set_preview_jobs")
+            ):
                 app_state.set_preview_jobs(preview_jobs)
         except Exception:
             pass
@@ -1115,21 +1138,27 @@ class PipelineController(CorePipelineController):
         self._refresh_app_state_queue()
 
     def _on_queue_status_changed(self, status: str) -> None:
-        if not self._app_state:
+        if not self._app_state or self._app_state_runtime_updates_managed_externally:
             return
         self._app_state.set_queue_status(status)
 
     def _on_job_started(self, job: Job) -> None:
+        if self._app_state_runtime_updates_managed_externally:
+            return
         self._set_running_job(job)
 
     def _on_job_finished(self, job: Job) -> None:
+        if self._app_state_runtime_updates_managed_externally:
+            return
         self._set_running_job(None)
 
     def _on_job_failed(self, job: Job) -> None:
+        if self._app_state_runtime_updates_managed_externally:
+            return
         self._set_running_job(None)
 
     def _on_queue_empty(self) -> None:
-        if self._app_state:
+        if self._app_state and not self._app_state_runtime_updates_managed_externally:
             self._app_state.set_queue_status("idle")
 
     def _setup_history_callbacks(self) -> None:
@@ -1139,6 +1168,8 @@ class PipelineController(CorePipelineController):
         history_service.register_callback(self._on_history_entry_updated)
 
     def _on_history_entry_updated(self, entry: JobHistoryEntry) -> None:
+        if self._app_state_queue_updates_managed_externally:
+            return
         status = getattr(entry, "status", None)
         status_value = status.value if hasattr(status, "value") else str(status or "")
         if status_value.lower() not in {"completed", "failed"}:
@@ -1401,6 +1432,8 @@ class PipelineController(CorePipelineController):
 
     def refresh_preview_from_state(self) -> None:
         """Public helper used by the GUI bridge to rebuild preview job records."""
+        if self._app_state_preview_updates_managed_externally:
+            return
         self._refresh_preview_jobs_from_state()
 
     def build_preview_summary(self) -> PreviewSummaryDTO | None:
@@ -1445,7 +1478,8 @@ class PipelineController(CorePipelineController):
         if not entries:
             return
         self._app_state.add_packs_to_job_draft(entries)
-        self.refresh_preview_from_state()
+        if not self._app_state_preview_updates_managed_externally:
+            self.refresh_preview_from_state()
 
     def remove_pack_from_draft(self, pack_id: str) -> None:
         if not self._app_state:
@@ -1454,13 +1488,15 @@ class PipelineController(CorePipelineController):
         if len(filtered) == len(self._app_state.job_draft.packs):
             return
         self._app_state.job_draft.packs = filtered
-        self.refresh_preview_from_state()
+        if not self._app_state_preview_updates_managed_externally:
+            self.refresh_preview_from_state()
 
     def clear_draft(self) -> None:
         if not self._app_state:
             return
         self._app_state.clear_job_draft()
-        self.refresh_preview_from_state()
+        if not self._app_state_preview_updates_managed_externally:
+            self.refresh_preview_from_state()
 
     def submit_run_plan(
         self,
@@ -1593,13 +1629,19 @@ class PipelineController(CorePipelineController):
         Returns:
             Number of jobs successfully submitted to queue.
         """
-        normalized_jobs = records if records is not None else self.get_preview_jobs()
+        request = SubmissionRequest(
+            records=tuple(records or ()),
+            source=source,
+            prompt_source=prompt_source,
+            run_config=run_config,
+        )
+        normalized_jobs = list(request.records) if request.records else self.get_preview_jobs()
         if not normalized_jobs:
             return 0
         queueable, non_queueable = self._split_queueable_records(normalized_jobs)
 
-        if run_config is not None:
-            self._last_run_config = run_config
+        if request.run_config is not None:
+            self._last_run_config = request.run_config
 
         if not queueable:
             message = (
@@ -1620,9 +1662,9 @@ class PipelineController(CorePipelineController):
 
         submitted = self._submit_normalized_jobs(
             queueable,
-            run_config=run_config,
-            source=source,
-            prompt_source=prompt_source,
+            run_config=request.run_config,
+            source=request.source,
+            prompt_source=request.prompt_source,
         )
         return submitted
 

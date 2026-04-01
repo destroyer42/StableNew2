@@ -195,7 +195,9 @@ class CorePipelineController:
     def report_progress(self, stage: str, percent: float, eta: str | None) -> None:
         if self._app_controller is not None:
             try:
-                self._app_controller.last_ui_heartbeat_ts = time.monotonic()
+                notify_runner_activity = getattr(self._app_controller, "notify_runner_activity", None)
+                if callable(notify_runner_activity):
+                    notify_runner_activity()
             except Exception:
                 pass
 

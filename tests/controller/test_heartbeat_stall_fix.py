@@ -2,13 +2,13 @@
 
 Validates that:
 1. `UI_STALL_S` is set to the current fast-fail threshold.
-2. Progress reporting updates the UI heartbeat timestamp.
+2. Progress reporting updates runner activity, not the UI heartbeat.
 """
 
 from __future__ import annotations
 
 import time
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
 
@@ -19,36 +19,26 @@ from src.services.watchdog_system_v2 import SystemWatchdogV2
 
 def test_ui_stall_threshold_is_realistic():
     """Verify UI_STALL_S is set to 10 seconds for fast failure detection."""
-    # 10s is enough to detect true hangs quickly (fail fast)
-    # Progress polling updates heartbeat during active work, preventing false positives
+    # 10s is enough to detect true hangs quickly (fail fast) while the Tk-driven
+    # UI heartbeat keeps the watchdog quiet during responsive runs.
     assert SystemWatchdogV2.UI_STALL_S == 10.0, \
-        "UI_STALL_S should be 10.0 for fast failure detection while progress keeps heartbeat alive"
+        "UI_STALL_S should remain at 10.0 for fast failure detection"
     
     print(f"[OK] UI_STALL_S correctly set to {SystemWatchdogV2.UI_STALL_S}s (fast failure detection)")
 
 
-def test_progress_reporting_updates_heartbeat():
-    """Verify that report_progress updates UI heartbeat timestamp."""
-    # Create a mock AppController instance
+def test_progress_reporting_updates_runner_activity_not_ui_heartbeat():
+    """Verify that report_progress marks runner activity without masking a frozen UI."""
     mock_app_controller = Mock()
-    mock_app_controller.last_ui_heartbeat_ts = 0.0
-    
-    # Create a pipeline controller
-    controller = CorePipelineController()
-    
-    # Patch AppController from the correct module
-    with patch('src.controller.app_controller.AppController') as mock_app_class:
-        mock_app_class._instance = mock_app_controller
-        mock_app_class._instance.last_ui_heartbeat_ts = 0.0
-        
-        # Report progress
-        time.sleep(0.01)  # Small delay
-        controller.report_progress("txt2img", 50.0, "1m 30s")
-        
-        # Heartbeat should have been updated
-        # Note: It's updated with time.monotonic(), so we can't check exact value
-        # But we can verify the code path doesn't crash
-        print("[OK] Progress reporting executed without errors")
+    mock_app_controller.last_ui_heartbeat_ts = 123.0
+
+    controller = CorePipelineController(app_controller=mock_app_controller)
+
+    time.sleep(0.01)
+    controller.report_progress("txt2img", 50.0, "1m 30s")
+
+    mock_app_controller.notify_runner_activity.assert_called_once_with()
+    assert mock_app_controller.last_ui_heartbeat_ts == 123.0
 
 
 def test_app_controller_runner_activity_updates_timestamp():
@@ -58,6 +48,23 @@ def test_app_controller_runner_activity_updates_timestamp():
     AppController.notify_runner_activity(controller)
 
     assert controller.last_runner_activity_ts > 0.0
+
+
+def test_app_controller_has_running_jobs_reads_job_service_queue():
+    controller = AppController.__new__(AppController)
+
+    class _Job:
+        def __init__(self, status):
+            self.status = status
+
+    class _Queue:
+        @staticmethod
+        def list_jobs():
+            return [_Job("queued"), _Job("running")]
+
+    controller.job_service = Mock(job_queue=None, queue=_Queue())
+
+    assert AppController.has_running_jobs(controller) is True
 
 
 def test_watchdog_doesnt_trigger_during_normal_generation():
@@ -83,11 +90,10 @@ def test_watchdog_doesnt_trigger_during_normal_generation():
         # Start watchdog
         watchdog.start()
         
-        # Simulate 5 seconds of "generation" with periodic heartbeat updates
-        # (simulating progress polling updating the heartbeat)
+        # Simulate 5 seconds of responsive GUI main-loop heartbeat ticks.
         for i in range(10):  # 10 iterations * 0.5s = 5 seconds
             time.sleep(0.5)
-            app.last_ui_heartbeat_ts = time.monotonic()  # Progress update
+            app.last_ui_heartbeat_ts = time.monotonic()
         
         # Stop watchdog
         watchdog.stop()
@@ -99,7 +105,7 @@ def test_watchdog_doesnt_trigger_during_normal_generation():
         assert len(diagnostics) == 0, \
             f"Watchdog should not trigger during active generation, but found {len(diagnostics)} diagnostic(s)"
         
-        print("[OK] Watchdog correctly did not trigger during simulated generation with heartbeat updates")
+        print("[OK] Watchdog correctly did not trigger during simulated generation with UI heartbeats")
 
 
 def test_watchdog_still_triggers_on_true_stall():
@@ -152,7 +158,7 @@ def test_watchdog_still_triggers_on_true_stall():
 
 if __name__ == "__main__":
     test_ui_stall_threshold_is_realistic()
-    test_progress_reporting_updates_heartbeat()
+    test_progress_reporting_updates_runner_activity_not_ui_heartbeat()
     test_watchdog_doesnt_trigger_during_normal_generation()
     test_watchdog_still_triggers_on_true_stall()
     print("\n[OK] All heartbeat stall fix tests passed!")

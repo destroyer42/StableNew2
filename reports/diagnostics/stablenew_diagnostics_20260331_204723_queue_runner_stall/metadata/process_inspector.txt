@@ -1,0 +1,2 @@
+[PROC] inspector pid=67028 ppid=68284 name=python.exe cmd="'C:\Users\rob\AppData\Local\Programs\Python\Python310\python.exe' -m src.main" cwd="C:\Users\rob\projects\StableNew" uptime=443s rss_mb=2402.1 env=STABLENEW_RIFE_EXE=C:\Users\rob\projects\rife-ncnn-vulkan-master\rife-ncnn-vulkan.exe
+[PROC] inspector pid=68284 ppid=24624 name=python.exe cmd="'C:\Users\rob\projects\StableNew\.venv\Scripts\python.exe' -m src.main" cwd="C:\Users\rob\projects\StableNew" uptime=443s rss_mb=3.7 env=STABLENEW_RIFE_EXE=C:\Users\rob\projects\rife-ncnn-vulkan-master\rife-ncnn-vulkan.exe

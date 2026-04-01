@@ -51,11 +51,8 @@ from src.controller.webui_connection_controller import (
     WebUIConnectionController,
     WebUIConnectionState,
 )
+from src.contracts import PackJobEntry
 from src.gui.dropdown_loader_v2 import DropdownLoader
-from src.gui.main_window_v2 import MainWindow
-from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
-from src.gui.panels_v2.job_explanation_panel_v2 import JobExplanationPanelV2
-from src.gui.views.error_modal_v2 import ErrorModalV2
 from src.curation.curation_manifest import build_review_chunk_lineage_block
 from src.pipeline.last_run_store_v2_5 import (
     LastRunStoreV2_5,
@@ -87,9 +84,21 @@ from src.controller.app_controller_services.learning_completion_router import (
 from src.controller.ports.default_runtime_ports import DefaultImageRuntimePorts
 from src.controller.ports.runtime_ports import ImageRuntimePorts
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
+from src.controller.app_controller_services.application_runtime_coordinator import (
+    ApplicationRuntimeCoordinator,
+)
+from src.controller.app_controller_services.background_task_coordinator import (
+    BackgroundTaskCoordinator,
+)
+from src.controller.app_controller_services.diagnostics_coordinator import (
+    DiagnosticsCoordinator,
+)
 from src.controller.app_controller_services.gui_config_service import GuiConfigService
 from src.controller.app_controller_services.run_submission_service import (
     QueueRunSubmissionService,
+)
+from src.controller.app_controller_services.runtime_projection_coordinator import (
+    RuntimeProjectionCoordinator,
 )
 from src.app.optional_dependency_probes import OptionalDependencySnapshot
 import logging
@@ -115,7 +124,8 @@ from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerService,
 )
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
-from src.gui.app_state_v2 import AppStateV2, PackJobEntry
+from src.gui.app_state_projection_sink import AppStateProjectionSink
+from src.gui.app_state_v2 import AppStateV2
 from src.learning.model_profiles import get_model_profile_defaults_for_model
 from src.photo_optimize import get_photo_optimize_store
 from src.queue.job_history_store import JSONLJobHistoryStore
@@ -357,7 +367,7 @@ class AppController:
 
     def __init__(
         self,
-        main_window: MainWindow | None,
+        main_window: Any | None,
         pipeline_runner: Any | None = None,
         threaded: bool = True,
         packs_dir: Path | str | None = None,
@@ -423,6 +433,26 @@ class AppController:
             if main_window is not None:
                 main_window.app_state = self.app_state
         self._job_lifecycle_logger = JobLifecycleLogger(app_state=self.app_state)
+        self._background_tasks = BackgroundTaskCoordinator(
+            dispatcher=self._ui_dispatch,
+            thread_registry=self._thread_registry,
+            run_inline=not bool(threaded),
+            logger=logger,
+        )
+        self._projection_sink = AppStateProjectionSink(
+            self.app_state,
+            dispatcher=self._ui_dispatch,
+        )
+        self._runtime_projection_coordinator = RuntimeProjectionCoordinator(
+            sink=self._projection_sink,
+            background_tasks=self._background_tasks,
+            build_queue_projection=self._build_queue_projection,
+            load_history_entries=self._load_history_entries,
+            summarize_running_job=self._build_running_job_summary,
+            logger=logger,
+        )
+        self._diagnostics_coordinator = DiagnosticsCoordinator()
+        self._application_runtime_coordinator: ApplicationRuntimeCoordinator | None = None
         self.state = AppState()
         self.threaded = threaded
         self._config_manager = config_manager or ConfigManager()
@@ -491,7 +521,7 @@ class AppController:
         self._diagnostics_heavy_snapshot_ts = 0.0
         self._diagnostics_heavy_snapshot_refresh_in_progress = False
         self._last_error_envelope: UnifiedErrorEnvelope | None = None
-        self._error_modal: ErrorModalV2 | None = None
+        self._error_modal: Any | None = None
         self._original_excepthook = sys.excepthook
         self._original_threading_excepthook = getattr(threading, "excepthook", None)
         self._original_tk_report_callback_exception: Callable[..., Any] | None = None
@@ -516,6 +546,8 @@ class AppController:
             )
         try:
             setattr(self.pipeline_controller, "_app_state_queue_updates_managed_externally", True)
+            setattr(self.pipeline_controller, "_app_state_runtime_updates_managed_externally", True)
+            setattr(self.pipeline_controller, "_app_state_preview_updates_managed_externally", True)
         except Exception:
             pass
 
@@ -575,6 +607,11 @@ class AppController:
         )
         if self.webui_connection_controller is None:
             self.webui_connection_controller = WebUIConnectionController()
+        self._application_runtime_coordinator = ApplicationRuntimeCoordinator(
+            job_controller=getattr(self.pipeline_controller, "_job_controller", None),
+            webui_connection_controller=self.webui_connection_controller,
+            logger=logger,
+        )
         
         # Override pack config state (for ConfigMergerV2 integration)
         self.override_pack_config_enabled = False
@@ -647,6 +684,11 @@ class AppController:
                 self.main_window.connect_controller(self)
         self._setup_queue_callbacks()
         self._setup_diagnostics_hooks()
+        if self._application_runtime_coordinator is not None:
+            self._application_runtime_coordinator.sync_queue_state(
+                app_state=self.app_state,
+                job_service=self.job_service,
+            )
 
     def shutdown(self) -> None:
         """
@@ -704,20 +746,29 @@ class AppController:
         if ui_thread_id is not None and threading.get_ident() == ui_thread_id:
             fn()
             return
-        scheduler = getattr(self, "_ui_scheduler", None)
-        if callable(scheduler):
-            scheduler(fn)
-            return
         mw = getattr(self, "main_window", None)
         if mw is not None:
             dispatcher = getattr(mw, "run_in_main_thread", None)
             if callable(dispatcher):
-                dispatcher(fn)
+                try:
+                    dispatcher(fn)
+                    return
+                except Exception as exc:
+                    logger.debug("Main window UI dispatcher rejected callback: %s", exc)
+        scheduler = getattr(self, "_ui_scheduler", None)
+        if callable(scheduler):
+            try:
+                scheduler(fn)
                 return
+            except Exception as exc:
+                logger.debug("Bootstrap UI scheduler rejected callback: %s", exc)
         if self._dispatch_via_root_after(0, fn):
             return
-        # fallback: run directly (test mode)
-        fn()
+        if mw is None and not callable(scheduler) and self._get_ui_root() is None:
+            # Headless/test fallback only.
+            fn()
+            return
+        logger.debug("Dropping UI callback because no safe UI dispatcher is available")
 
     def _run_in_gui_thread(self, fn: Callable[[], None]) -> None:
         """Schedule the callable on the Tk main thread, safe from any thread."""
@@ -759,9 +810,22 @@ class AppController:
         if delay == 0:
             self._ui_dispatch(fn)
             return
+        mw = getattr(self, "main_window", None)
+        if mw is not None:
+            dispatcher = getattr(mw, "run_in_main_thread_later", None)
+            if callable(dispatcher):
+                try:
+                    dispatcher(delay, fn)
+                    return
+                except Exception as exc:
+                    logger.debug("Main window delayed UI dispatcher rejected callback: %s", exc)
         if self._dispatch_via_root_after(delay, fn):
             return
-        fn()
+        scheduler = getattr(self, "_ui_scheduler", None)
+        if mw is None and not callable(scheduler) and self._get_ui_root() is None:
+            fn()
+            return
+        logger.debug("Dropping delayed UI callback because no safe UI dispatcher is available")
     
     def _mark_ui_dirty(
         self,
@@ -883,6 +947,7 @@ class AppController:
             try:
                 from src.pipeline.job_models_v2 import RuntimeJobStatus
 
+                self.notify_runner_activity()
                 previous_status = self._get_latest_runtime_status()
                 running_job = getattr(getattr(self, "app_state", None), "running_job", None)
                 fallback_job_id = getattr(running_job, "job_id", None)
@@ -1074,8 +1139,7 @@ class AppController:
 
         if runtime_status is None:
             return
-        if hasattr(self.app_state, "set_runtime_status"):
-            self.app_state.set_runtime_status(runtime_status)
+        self._runtime_projection_coordinator.publish_runtime_status(runtime_status)
 
     def _apply_initial_resource_probe_grace(self) -> None:
         setter = getattr(self._api_client, "set_startup_probe_grace", None)
@@ -1242,6 +1306,26 @@ class AppController:
         import time
 
         self.last_runner_activity_ts = time.monotonic()
+
+    def has_running_jobs(self) -> bool:
+        job_service = getattr(self, "job_service", None)
+        if job_service is None:
+            return False
+        queue = getattr(job_service, "job_queue", None) or getattr(job_service, "queue", None)
+        if queue is None:
+            return False
+        list_jobs = getattr(queue, "list_jobs", None)
+        if not callable(list_jobs):
+            return False
+        try:
+            for job in list_jobs():
+                status = getattr(job, "status", None)
+                status_value = status.value if hasattr(status, "value") else str(status or "")
+                if str(status_value).lower() == "running":
+                    return True
+        except Exception:
+            return False
+        return False
 
     def start_run_v2(self) -> None:
         """
@@ -2561,7 +2645,7 @@ class AppController:
         
         return config
 
-    def set_main_window(self, main_window: MainWindow) -> None:
+    def set_main_window(self, main_window: Any) -> None:
         """Set the main window and wire GUI callbacks."""
         previous_state = getattr(self, "app_state", None)
         previous_listener = getattr(self, "_app_state_visibility_listener", None)
@@ -2576,6 +2660,8 @@ class AppController:
                 pass
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
+        self._projection_sink.set_app_state(self.app_state)
+        self._job_lifecycle_logger.set_app_state(self.app_state)
         self._bind_app_state_visibility_listener()
         self._attach_to_gui()
         if hasattr(self.main_window, "connect_controller"):
@@ -2736,9 +2822,7 @@ class AppController:
             JobService.EVENT_QUEUE_EMPTY, _queue_callback(self._on_queue_empty)
         )
         self._refresh_job_history()
-        # PR-GUI-F3: Load persisted queue state on startup
         self._load_queue_state()
-        # PR-D: Register status callback for queue/history panel sync
         if hasattr(self.job_service, "set_status_callback"):
             try:
                 self.job_service.set_status_callback(
@@ -2750,17 +2834,15 @@ class AppController:
     def _setup_diagnostics_hooks(self) -> None:
         if not self.job_service:
             return
-        try:
-            sys.excepthook = self._handle_uncaught_exception
-        except Exception:
-            pass
-        if hasattr(threading, "excepthook"):
-            self._original_threading_excepthook = threading.excepthook
-            threading.excepthook = self._handle_thread_exception
         root = getattr(self.main_window, "root", None)
         if root and hasattr(root, "report_callback_exception"):
             self._original_tk_report_callback_exception = root.report_callback_exception
-            root.report_callback_exception = self._handle_tk_exception
+        self._diagnostics_coordinator.install(
+            main_window=self.main_window,
+            on_uncaught_exception=self._handle_uncaught_exception,
+            on_thread_exception=self._handle_thread_exception,
+            on_tk_exception=self._handle_tk_exception,
+        )
         self.job_service.register_callback(
             JobService.EVENT_WATCHDOG_VIOLATION,
             self._wrap_ui_callback(self._on_watchdog_violation_event),
@@ -2772,16 +2854,16 @@ class AppController:
 
     def _load_queue_state(self) -> None:
         """Sync queue flags and queue view from JobExecutionController-owned state."""
-        pipeline_controller = getattr(self, "pipeline_controller", None)
-        job_exec = getattr(pipeline_controller, "_job_controller", None)
-        if job_exec is None:
-            return
-        if self.app_state:
-            self.app_state.set_auto_run_queue(bool(getattr(job_exec, "auto_run_enabled", False)))
-            self.app_state.set_is_queue_paused(bool(getattr(job_exec, "is_queue_paused", False)))
-        if self.job_service:
-            self.job_service.auto_run_enabled = bool(getattr(job_exec, "auto_run_enabled", False))
+        if self._application_runtime_coordinator is not None:
+            self._application_runtime_coordinator.sync_queue_state(
+                app_state=self.app_state,
+                job_service=self.job_service,
+            )
         self._refresh_app_state_queue()
+
+    def on_gui_ready(self) -> None:
+        if self._application_runtime_coordinator is not None:
+            self._application_runtime_coordinator.on_gui_ready()
 
     def _save_queue_state(self) -> None:
         """Persist queue state through the JobExecutionController owner."""
@@ -2862,77 +2944,10 @@ class AppController:
     # _run_in_gui_thread is now replaced by _ui_dispatch everywhere
 
     def _on_job_status_for_panels(self, job: Job, status: JobStatus | str) -> None:
-        """Update queue/history panels when job status changes (PR-D callback)."""
-        from src.pipeline.job_models_v2 import JobHistoryItemDTO, JobQueueItemDTO
-
-        if not self.main_window:
-            return
-
-        queue_panel = getattr(self.main_window, "queue_panel", None)
-        history_panel = getattr(self.main_window, "history_panel", None)
         status_value = status.value if hasattr(status, "value") else str(status)
-        summary = getattr(job, "unified_summary", None)
-
-        # Update queue panel
-        queue_upsert_needed = queue_panel and status_value in {"pending", "running", "queued"}
-        queue_remove_needed = queue_panel and status_value in {"completed", "failed", "cancelled"}
-        history_append_needed = history_panel and status_value == "completed"
-        queue_dto = None
-        history_dto = None
-
-        if queue_upsert_needed:
-            created_at = (
-                getattr(summary, "created_at", None)
-                or getattr(job, "created_at", None)
-                or datetime.now()
-            )
-            queue_dto = JobQueueItemDTO(
-                job_id=getattr(summary, "job_id", job.job_id),
-                label=getattr(summary, "model_name", None) or getattr(job, "label", job.job_id),
-                status=status_value,
-                estimated_images=getattr(summary, "num_expected_images", 1),
-                created_at=created_at,
-            )
-
-        if history_append_needed:
-            completed_at = getattr(job, "completed_at", None) or datetime.now()
-            history_dto = JobHistoryItemDTO(
-                job_id=getattr(summary, "job_id", job.job_id),
-                label=getattr(summary, "model_name", None) or getattr(job, "label", job.job_id),
-                completed_at=completed_at,
-                total_images=getattr(summary, "num_expected_images", 0),
-                stages=getattr(summary, "stages", "-"),
-            )
-
-        if not (queue_upsert_needed or queue_remove_needed or history_append_needed):
-            return
-
-        def _apply_panel_updates() -> None:
-            if queue_upsert_needed and queue_dto:
-                upsert_fn = getattr(queue_panel, "upsert_job", None)
-                if callable(upsert_fn):
-                    try:
-                        upsert_fn(queue_dto)
-                    except Exception as exc:
-                        self._append_log(f"[controller] Queue panel upsert error: {exc!r}")
-
-            if queue_remove_needed:
-                remove_fn = getattr(queue_panel, "remove_job", None)
-                if callable(remove_fn):
-                    try:
-                        remove_fn(job.job_id)
-                    except Exception as exc:
-                        self._append_log(f"[controller] Queue panel remove error: {exc!r}")
-
-            if history_append_needed and history_dto:
-                append_fn = getattr(history_panel, "append_history_item", None)
-                if callable(append_fn):
-                    try:
-                        append_fn(history_dto)
-                    except Exception as exc:
-                        self._append_log(f"[controller] History panel append error: {exc!r}")
-
-        self._run_in_gui_thread(_apply_panel_updates)
+        self._runtime_projection_coordinator.publish_queue_refresh()
+        if status_value.lower() in {"completed", "failed", "cancelled"}:
+            self._runtime_projection_coordinator.publish_history_refresh()
 
     def _on_queue_updated(self, summaries: list[str]) -> None:
         if not self.app_state:
@@ -2940,54 +2955,33 @@ class AppController:
         self._mark_ui_dirty(queue=True)
 
     def _on_queue_status_changed(self, status: str) -> None:
-        def _apply() -> None:
-            if not self.app_state:
-                return
-            self.app_state.set_queue_status(status)
-
-        self._run_in_gui_thread(_apply)
+        self._runtime_projection_coordinator.publish_queue_status(status)
 
     def _on_job_started(self, job: Job) -> None:
-        def _apply() -> None:
-            if not self.app_state:
-                return
-            self._clear_runtime_status_cache()
-            self._set_running_job(job)
-
-        self._run_in_gui_thread(_apply)
+        self._clear_runtime_status_cache()
+        self._runtime_projection_coordinator.publish_running_job(job)
+        self._runtime_projection_coordinator.publish_queue_refresh()
 
     def _on_job_finished(self, job: Job) -> None:
-        def _apply() -> None:
-            if self.app_state:
-                self.app_state.set_running_job(None)
-                self._clear_runtime_status_cache()
-                if hasattr(self.app_state, "set_runtime_status"):
-                    self.app_state.set_runtime_status(None)
-            self._refresh_job_history()
-
-        self._run_in_gui_thread(_apply)
+        self._clear_runtime_status_cache()
+        self._runtime_projection_coordinator.publish_running_job(None)
+        self._runtime_projection_coordinator.publish_runtime_status(None)
+        self._runtime_projection_coordinator.publish_history_refresh()
+        self._runtime_projection_coordinator.publish_queue_refresh()
 
     def _on_job_failed(self, job: Job) -> None:
-        def _apply() -> None:
-            if self.app_state:
-                self.app_state.set_running_job(None)
-                self._clear_runtime_status_cache()
-                if hasattr(self.app_state, "set_runtime_status"):
-                    self.app_state.set_runtime_status(None)
-            self._refresh_job_history()
-            try:
-                self._handle_structured_job_failure(job)
-            except Exception:
-                pass
-
-        self._run_in_gui_thread(_apply)
+        self._clear_runtime_status_cache()
+        self._runtime_projection_coordinator.publish_running_job(None)
+        self._runtime_projection_coordinator.publish_runtime_status(None)
+        self._runtime_projection_coordinator.publish_history_refresh()
+        self._runtime_projection_coordinator.publish_queue_refresh()
+        try:
+            self._handle_structured_job_failure(job)
+        except Exception:
+            pass
 
     def _on_queue_empty(self) -> None:
-        def _apply() -> None:
-            if self.app_state:
-                self.app_state.set_queue_status("idle")
-
-        self._run_in_gui_thread(_apply)
+        self._runtime_projection_coordinator.publish_queue_status("idle")
 
     def _handle_structured_job_failure(self, job: Job) -> None:
         if job is None:
@@ -3000,55 +2994,14 @@ class AppController:
         self._last_error_envelope = envelope
         self._log_structured_error(envelope, f"Job {job.job_id} failed")
         self.state.last_error = envelope.message
-        if self.app_state:
-            try:
-                self.app_state.set_last_error(envelope.message)
-            except Exception:
-                pass
+        self._runtime_projection_coordinator.publish_last_error(envelope.message)
         self._append_log(f"[ERROR] job={job.job_id} {envelope.message}")
         self._show_structured_error_modal(envelope)
 
     def _refresh_app_state_queue(self) -> None:
         if not self.app_state or not self.job_service:
             return
-        if self._should_refresh_queue_async():
-            self._queue_refresh_request_id += 1
-            if self._queue_refresh_in_progress:
-                return
-            self._queue_refresh_in_progress = True
-            request_id = self._queue_refresh_request_id
-
-            def _worker() -> None:
-                queue_items: list[str] = []
-                queue_jobs: list[UnifiedJobSummary] = []
-                error: Exception | None = None
-                try:
-                    queue_items, queue_jobs = self._build_queue_projection()
-                except Exception as exc:  # noqa: BLE001
-                    error = exc
-
-                def _apply() -> None:
-                    self._queue_refresh_in_progress = False
-                    if error is not None:
-                        logger.exception("[AppController] Error refreshing queue state: %s", error)
-                    elif request_id == self._queue_refresh_request_id and self.app_state is not None:
-                        self.app_state.set_queue_items(queue_items)
-                        self.app_state.set_queue_jobs(queue_jobs)
-                    if request_id != self._queue_refresh_request_id:
-                        self._refresh_app_state_queue()
-
-                self._ui_dispatch(_apply)
-
-            self._spawn_tracked_thread(
-                target=_worker,
-                name="QueueProjectionRefresh",
-                purpose="Refresh queue summaries off the UI thread",
-            )
-            return
-
-        queue_items, queue_jobs = self._build_queue_projection()
-        self.app_state.set_queue_items(queue_items)
-        self.app_state.set_queue_jobs(queue_jobs)
+        self._runtime_projection_coordinator.publish_queue_refresh()
 
     def _should_refresh_queue_async(self) -> bool:
         return bool(
@@ -3133,6 +3086,21 @@ class AppController:
         )
         return summaries, queue_jobs
 
+    def _load_history_entries(self, limit: int | None = None) -> list[Any]:
+        if not self.job_service:
+            return []
+        store = getattr(self.job_service, "history_store", None)
+        if store is None:
+            return []
+        terminal_states = {JobStatus.COMPLETED, JobStatus.FAILED}
+        try:
+            if hasattr(store, "list_recent_jobs"):
+                return list(store.list_recent_jobs(limit=limit or 20, statuses=terminal_states))
+            entries = store.list_jobs(limit=limit or 20)
+            return [entry for entry in entries if entry.status in terminal_states]
+        except Exception:
+            return []
+
     def _list_service_jobs(self) -> list[Job]:
         queue = getattr(self.job_service, "queue", None)
         if queue and hasattr(queue, "list_active_jobs_ordered"):
@@ -3147,25 +3115,9 @@ class AppController:
                 return []
         return []
 
-    def _set_running_job(self, job: Job | None) -> None:
-        if not self.app_state:
-            return
+    def _build_running_job_summary(self, job: Job | None) -> UnifiedJobSummary | None:
         if job is None:
-            self._clear_runtime_status_cache()
-            self.app_state.set_running_job(None)
-            if hasattr(self.app_state, "set_runtime_status"):
-                self.app_state.set_runtime_status(None)
-            # Also clear running job panel if it exists
-            if hasattr(self, "main_window") and self.main_window:
-                tab_frame = getattr(self.main_window, "pipeline_tab", None)
-                if tab_frame and hasattr(tab_frame, "running_job_panel"):
-                    tab_frame.running_job_panel.update_job_with_summary(None, None, None)
-                if tab_frame and hasattr(tab_frame, "preview_panel"):
-                    tab_frame.preview_panel.update_with_summary(None)
-            return
-        
-        # Convert Job to UnifiedJobSummary via NJR
-        summary = None
+            return None
         njr = getattr(job, "_normalized_record", None)
         if njr:
             try:
@@ -3176,21 +3128,22 @@ class AppController:
                 ).strip()
                 if status_text:
                     summary = replace(summary, status=status_text.upper())
+                return summary
             except Exception as exc:
-                logger.warning(f"Failed to convert running job {job.job_id} to UnifiedJobSummary: {exc}")
+                logger.warning(
+                    "Failed to convert running job %s to UnifiedJobSummary: %s",
+                    getattr(job, "job_id", None),
+                    exc,
+                )
         else:
-            logger.warning(f"Running job {job.job_id} missing NJR, cannot display in GUI")
-        
-        self.app_state.set_running_job(summary)
-        
-        # Update running job panel - pass Job object with runtime tracking, not just summary
-        if hasattr(self, "main_window") and self.main_window:
-            tab_frame = getattr(self.main_window, "pipeline_tab", None)
-            if tab_frame and hasattr(tab_frame, "running_job_panel"):
-                # Pass the actual Job object (with runtime attrs) and summary separately
-                tab_frame.running_job_panel.update_job_with_summary(job, summary, None)
-            if tab_frame and hasattr(tab_frame, "preview_panel"):
-                tab_frame.preview_panel.update_with_summary(summary)
+            logger.warning("Running job %s missing NJR, cannot display in GUI", job.job_id)
+        return None
+
+    def _set_running_job(self, job: Job | None) -> None:
+        self._clear_runtime_status_cache()
+        self._runtime_projection_coordinator.publish_running_job(job)
+        if job is None:
+            self._runtime_projection_coordinator.publish_runtime_status(None)
 
     # ------------------------------------------------------------------
     # PR-203: Queue Manipulation APIs
@@ -3417,25 +3370,7 @@ class AppController:
     def _refresh_job_history(self, limit: int | None = None) -> None:
         if not self.app_state or not self.job_service:
             return
-        store = getattr(self.job_service, "history_store", None)
-        if store is None:
-            return
-        try:
-            # PR-HISTORY-FIX: Force cache invalidation before refresh to ensure we get latest data
-            # This is critical for manual refresh button to work correctly
-            if hasattr(store, "invalidate_cache"):
-                store.invalidate_cache()
-            
-            # Only show completed and failed jobs in history (not queued/running/cancelled)
-            entries = store.list_jobs(limit=limit or 20)
-            # Filter to only show terminal states that made it through the pipeline
-            from src.queue.job_model import JobStatus
-            terminal_states = {JobStatus.COMPLETED, JobStatus.FAILED}
-            filtered_entries = [e for e in entries if e.status in terminal_states]
-            entries = filtered_entries
-        except Exception:
-            entries = []
-        self.app_state.set_history_items(entries)
+        self._runtime_projection_coordinator.publish_history_refresh(limit=limit)
         
         # PR-PIPE-002: Refresh duration stats when history updates
         if hasattr(self, "_duration_stats_service") and self._duration_stats_service:
@@ -3559,9 +3494,7 @@ class AppController:
             self._ui_dispatch(lambda: self._set_lifecycle(new_state, error))
 
     def _update_status(self, text: str) -> None:
-        """Update status bar text if the bottom zone is ready; otherwise cache it."""
-        import threading
-
+        """Update application status through AppState."""
         self._pending_status_text = text
         app_state = getattr(self, "app_state", None)
         status_setter = getattr(app_state, "set_status_text", None)
@@ -3570,30 +3503,9 @@ class AppController:
                 status_setter(text)
             except Exception:
                 pass
-        thread_name = threading.current_thread().name
-        status_bar = getattr(self.main_window, "status_bar_v2", None)
-
-        def do_update():
-            if status_bar and hasattr(status_bar, "update_status"):
-                try:
-                    status_bar.update_status(text=text)
-                except Exception:
-                    pass
-
-        # Only update UI on main thread; otherwise, dispatch via controller scheduler
-        if thread_name != "MainThread":
-            logger.debug(f"[D21] _update_status dispatching to UI thread (from {thread_name})")
-            self._ui_dispatch(do_update)
-        else:
-            do_update()
 
     def _update_webui_state(self, state: str) -> None:
-        status_bar = getattr(self.main_window, "status_bar_v2", None)
-        if status_bar and hasattr(status_bar, "update_webui_state"):
-            try:
-                status_bar.update_webui_state(state)
-            except Exception:
-                pass
+        self._runtime_projection_coordinator.publish_webui_state(state)
 
     def _validate_pipeline_config(self) -> tuple[bool, str]:
         """DEPRECATED (PR-CORE1-12): Legacy validation for pipeline_config panel.
@@ -3637,15 +3549,27 @@ class AppController:
                 pass
 
     def _append_log(self, text: str) -> None:
-        app_state = getattr(self, "app_state", None)
-        append_operator_log_line = getattr(app_state, "append_operator_log_line", None)
-        if callable(append_operator_log_line):
-            try:
-                append_operator_log_line(text)
-            except Exception:
-                logger.debug("AppController._append_log(%s) failed to append operator log", text)
+        appended = False
+        try:
+            projection_coordinator = getattr(self, "_runtime_projection_coordinator", None)
+            if projection_coordinator is not None:
+                projection_coordinator.append_operator_log(text)
+                appended = True
+        except Exception:
+            logger.debug("AppController._append_log(%s) failed to append operator log", text)
+        if not appended:
+            app_state = getattr(self, "app_state", None)
+            append_line = getattr(app_state, "append_operator_log_line", None)
+            if callable(append_line):
+                try:
+                    append_line(str(text))
+                except Exception:
+                    logger.debug(
+                        "AppController._append_log(%s) failed direct app_state append",
+                        text,
+                    )
 
-        trace_panel = getattr(self.main_window, "log_trace_panel_v2", None)
+        trace_panel = getattr(getattr(self, "main_window", None), "log_trace_panel_v2", None)
         schedule_refresh = getattr(trace_panel, "schedule_refresh_soon", None)
         if callable(schedule_refresh):
             try:
@@ -3665,6 +3589,11 @@ class AppController:
         if self.main_window is not None:
             self._ui_dispatch(lambda: self._append_log(text))
 
+    def _clear_active_operation(self, expected_action: str | None = None) -> None:
+        if expected_action is None or self.last_ui_action == expected_action:
+            self.current_operation_label = None
+            self.last_ui_action = None
+
     def generate_diagnostics_bundle_manual(self) -> None:
         """Expose a manual trigger for diagnostics bundles."""
         self._generate_diagnostics_bundle("manual_request")
@@ -3672,6 +3601,8 @@ class AppController:
     def open_debug_hub(self) -> None:
         """Primary entrypoint for the Unified Debug Hub."""
         try:
+            from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
+
             DebugHubPanelV2.open(
                 master=self.main_window.root if self.main_window else None,
                 controller=self,
@@ -3686,6 +3617,8 @@ class AppController:
         if not job_id:
             return
         try:
+            from src.gui.panels_v2.job_explanation_panel_v2 import JobExplanationPanelV2
+
             JobExplanationPanelV2(
                 job_id,
                 master=self.main_window.root if self.main_window else None,
@@ -3830,6 +3763,8 @@ class AppController:
                 pass
             return
         try:
+            from src.gui.views.error_modal_v2 import ErrorModalV2
+
             modal_parent = getattr(self.main_window, "root", None) or self.main_window
             self._error_modal = ErrorModalV2(
                 modal_parent,
@@ -3899,6 +3834,8 @@ class AppController:
                 if isinstance(self._last_queue_projection_timing, Mapping)
                 else None
             ),
+            "projection_coordinator": self._runtime_projection_coordinator.get_metrics_snapshot(),
+            "projection_sink": self._projection_sink.get_metrics_snapshot(),
         }
         pipeline_controller = getattr(self, "pipeline_controller", None)
         preview_timing_getter = getattr(
@@ -5033,18 +4970,16 @@ class AppController:
 
     def on_refresh_clicked(self) -> None:
         self._append_log("[controller] Refresh clicked.")
-        # Run refresh in background thread to avoid GUI freeze
-        import threading
-        
-        def _refresh_worker():
-            try:
-                self.refresh_resources_from_webui()
-            except Exception as exc:
-                logger.warning(f"Background refresh failed: {exc}")
-                self._append_log(f"[controller] Refresh failed: {exc}")
-        
-        thread = threading.Thread(target=_refresh_worker, daemon=True, name="RefreshResourcesWorker")
-        thread.start()
+        self.current_operation_label = "Refreshing WebUI resources"
+        self.last_ui_action = "on_refresh_clicked()"
+        self._background_tasks.submit(
+            "webui:resources",
+            self.refresh_resources_from_webui,
+            on_error=lambda exc: self._append_log(f"[controller] Refresh failed: {exc}"),
+            on_complete=lambda *_: self._clear_active_operation("on_refresh_clicked()"),
+            name="RefreshResourcesWorker",
+            purpose="Manual WebUI resource refresh",
+        )
         self._append_log("[controller] Refresh started in background...")
 
     def stop_all_background_work(self) -> None:
@@ -5073,6 +5008,10 @@ class AppController:
                 self.process_auto_scanner.stop()
         except Exception:
             pass
+        try:
+            self._diagnostics_coordinator.uninstall(main_window=self.main_window)
+        except Exception:
+            pass
 
     def shutdown_app(self, reason: str | None = None) -> None:
         """Centralized shutdown path invoked by GUI teardown or main_finally."""
@@ -5085,12 +5024,12 @@ class AppController:
         
         if self._shutdown_started_at is None:
             self._shutdown_started_at = time.time()
-            self._shutdown_watchdog_thread = threading.Thread(
+            self._shutdown_watchdog_thread = self._spawn_tracked_thread(
                 target=self._shutdown_watchdog,
                 name="ShutdownWatchdog",
                 daemon=True,
+                purpose="Monitor shutdown progress",
             )
-            self._shutdown_watchdog_thread.start()
         
         try:
             logger.info("[controller] Step 1/8: Cancelling active jobs...")
@@ -5819,27 +5758,12 @@ class AppController:
             self._on_webui_resources_updated(resources)
 
     def _on_webui_resources_updated(self, resources: dict[str, list[Any]] | None) -> None:
-        self._run_in_gui_thread(lambda: self._apply_webui_resources(resources))
+        if resources is None:
+            return
+        self._runtime_projection_coordinator.publish_webui_resources(resources)
 
     def _apply_webui_resources(self, resources: dict[str, list[Any]] | None) -> None:
-        pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
-        if pipeline_tab is None:
-            return
-        applier = getattr(pipeline_tab, "apply_webui_resources", None)
-        if callable(applier):
-            try:
-                applier(resources)
-                return
-            except Exception as exc:
-                logger.warning("Failed to apply WebUI resources to pipeline tab: %s", exc)
-        try:
-            self._dropdown_loader.apply(resources, pipeline_tab=pipeline_tab)
-        except Exception:
-            if not self._warned_missing_pipeline_apply:
-                logger.warning(
-                    "Pipeline tab missing apply_webui_resources; skipping dropdown hydration"
-                )
-                self._warned_missing_pipeline_apply = True
+        self._on_webui_resources_updated(resources)
 
     def refresh_resources_from_webui(self) -> dict[str, list[Any]] | None:
         """Refresh resources from WebUI API and update GUI dropdowns.
@@ -5862,40 +5786,28 @@ class AppController:
             return None
 
         normalized = self._normalize_resource_map(payload)
-        
-        # PR-HB-003: Schedule GUI updates on main thread
-        def _update_gui():
-            self.state.resources = normalized
-            if self.app_state is not None:
-                try:
-                    self.app_state.set_resources(normalized)
-                except Exception:
-                    pass
-            self._emit_webui_resources_updated(normalized)
-            
-            counts = tuple(
-                len(normalized[key])
-                for key in (
-                    "models",
-                    "vaes",
-                    "samplers",
-                    "schedulers",
-                    "upscalers",
-                    "hypernetworks",
-                    "embeddings",
-                )
+        self.state.resources = normalized
+        self._emit_webui_resources_updated(normalized)
+
+        counts = tuple(
+            len(normalized[key])
+            for key in (
+                "models",
+                "vaes",
+                "samplers",
+                "schedulers",
+                "upscalers",
+                "hypernetworks",
+                "embeddings",
             )
-            msg = (
-                f"Resource update: {counts[0]} models, {counts[1]} vaes, "
-                f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers, "
-                f"{counts[5]} hypernetworks, {counts[6]} embeddings"
-            )
-            self._append_log(f"[resources] {msg}")
-            logger.debug(msg)
-        
-        # PR-HB-003: Dispatch to main thread for GUI updates
-        self._run_in_gui_thread(_update_gui)
-        
+        )
+        msg = (
+            f"Resource update: {counts[0]} models, {counts[1]} vaes, "
+            f"{counts[2]} samplers, {counts[3]} schedulers, {counts[4]} upscalers, "
+            f"{counts[5]} hypernetworks, {counts[6]} embeddings"
+        )
+        self._append_log(f"[resources] {msg}")
+        logger.debug(msg)
         return normalized
 
     def on_webui_ready(self) -> None:
@@ -5914,33 +5826,17 @@ class AppController:
         # PR-HB-003: Set operation label for diagnostics
         self.current_operation_label = "Refreshing WebUI resources"
         self.last_ui_action = "on_webui_ready()"
-        
-        # PR-HB-003: Spawn worker thread for slow resource fetching
-        def _worker():
-            try:
-                self.refresh_resources_from_webui()
-            except Exception as exc:
-                logger.exception(f"[controller] Error refreshing WebUI resources: {exc}")
-                self._append_log(f"[webui] Resource refresh failed: {exc}")
-            finally:
-                # Clear operation label
-                self.current_operation_label = None
-                self.last_ui_action = None
-        
-        # Use tracked thread for clean shutdown
-        self._spawn_tracked_thread(
-            target=_worker,
+        self._runtime_projection_coordinator.publish_webui_state("connected")
+        self._background_tasks.submit(
+            "webui:resources",
+            self.refresh_resources_from_webui,
+            on_error=lambda exc: self._append_log(f"[webui] Resource refresh failed: {exc}"),
+            on_complete=lambda *_: self._clear_active_operation("on_webui_ready()"),
             name="WebUIResourceRefresh",
-            purpose="Refresh WebUI resources after connection"
+            purpose="Refresh WebUI resources after connection",
         )
-        try:
-            pipeline_controller = getattr(self, "pipeline_controller", None)
-            job_controller = getattr(pipeline_controller, "_job_controller", None)
-            trigger = getattr(job_controller, "trigger_deferred_autostart", None)
-            if callable(trigger):
-                trigger()
-        except Exception as exc:
-            logger.debug("[webui] Deferred queue autostart trigger after READY failed: %s", exc)
+        if self._application_runtime_coordinator is not None:
+            self._application_runtime_coordinator.on_webui_ready()
 
     def _normalize_resource_map(self, payload: dict[str, Any]) -> dict[str, list[Any]]:
         return normalize_resource_map(payload)
@@ -6985,16 +6881,7 @@ class AppController:
 
     def _refresh_preview_from_state(self) -> None:
         """Refresh preview records using the current AppState/job draft."""
-        controller = getattr(self, "pipeline_controller", None)
-        if controller is None:
-            return
-        refresh_fn = getattr(controller, "refresh_preview_from_state", None)
-        if not callable(refresh_fn):
-            return
-        try:
-            refresh_fn()
-        except Exception as exc:
-            self._append_log(f"[controller] Refresh preview error: {exc!r}")
+        self._refresh_preview_from_state_async()
 
     def request_preview_refresh(self) -> None:
         """Request a debounced preview refresh suitable for GUI-triggered draft updates."""
@@ -7007,54 +6894,20 @@ class AppController:
         self._refresh_preview_from_state()
 
     def _refresh_preview_from_state_async(self) -> None:
-        """
-        PR-HB-002: Async version of _refresh_preview_from_state that moves heavy work off UI thread.
-        
-        This spawns a worker thread to call pipeline_controller.refresh_preview_from_state(),
-        which can be slow when processing many pack entries. UI updates are scheduled back
-        to the main thread.
-        """
         controller = getattr(self, "pipeline_controller", None)
         if controller is None:
             return
-        getter = getattr(controller, "get_preview_jobs", None)
-        if not callable(getter):
+        build_request = getattr(controller, "build_preview_request", None)
+        get_preview_jobs_for_request = getattr(controller, "get_preview_jobs_for_request", None)
+        if not callable(build_request) or not callable(get_preview_jobs_for_request):
             return
-        self._preview_refresh_request_id += 1
-        request_id = self._preview_refresh_request_id
-
-        # PR-HB-002: Set operation label for diagnostics
+        request = build_request()
         self.current_operation_label = "Refreshing preview from state"
         self.last_ui_action = "_refresh_preview_from_state_async()"
-
-        def _worker():
-            try:
-                records = list(getter() or [])
-            except Exception as exc:
-                logger.exception(f"[AppController] Error in _refresh_preview_from_state_async: {exc}")
-                self._append_log(f"[controller] Refresh preview error: {exc!r}")
-                records = None
-            finally:
-                def _apply():
-                    if request_id != self._preview_refresh_request_id:
-                        return
-                    if records is not None and self.app_state is not None:
-                        setter = getattr(self.app_state, "set_preview_jobs", None)
-                        if callable(setter):
-                            setter(records)
-                    self.current_operation_label = None
-                    self.last_ui_action = None
-
-                if self.main_window and hasattr(self.main_window, "run_in_main_thread"):
-                    self.main_window.run_in_main_thread(_apply)
-                else:
-                    _apply()
-
-        # PR-HB-002: Use tracked thread for clean shutdown
-        self._spawn_tracked_thread(
-            target=_worker,
-            name="PreviewRefresh",
-            purpose="Refresh preview from state async"
+        self._runtime_projection_coordinator.publish_preview_refresh(
+            request=request,
+            build_preview_jobs=lambda req: list(get_preview_jobs_for_request(req) or []),
+            on_complete=lambda *_: self._clear_active_operation("_refresh_preview_from_state_async()"),
         )
 
     def on_add_job_to_queue(self) -> None:
@@ -7265,8 +7118,12 @@ class AppController:
                 if callable(on_error):
                     self._run_in_gui_thread(lambda: on_error(str(exc)))
 
-        t = threading.Thread(target=_worker, daemon=True, name="movie-clip-builder")
-        t.start()
+        self._spawn_tracked_thread(
+            target=_worker,
+            name="movie-clip-builder",
+            daemon=True,
+            purpose="Build movie clip in background",
+        )
 
     def on_load_movie_clip_source(
         self,
@@ -7298,8 +7155,12 @@ class AppController:
                 if callable(on_error):
                     self._run_in_gui_thread(lambda: on_error(str(exc)))
 
-        t = threading.Thread(target=_worker, daemon=True, name="movie-clip-source-loader")
-        t.start()
+        self._spawn_tracked_thread(
+            target=_worker,
+            name="movie-clip-source-loader",
+            daemon=True,
+            purpose="Load movie clip source metadata in background",
+        )
 
     # ------------------------------------------------------------------
     # Native SVD entrypoints
