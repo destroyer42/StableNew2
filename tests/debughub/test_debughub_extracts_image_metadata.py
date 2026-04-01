@@ -51,3 +51,49 @@ def test_debughub_bundle_includes_image_metadata(tmp_path: Path) -> None:
         assert "artifacts/image_metadata/missing_meta.png.meta.missing.txt" in names
         meta = json.loads(zf.read("artifacts/image_metadata/with_meta.png.meta.json"))
         assert meta["payload"]["job_id"] == "job-1"
+
+
+def test_debughub_bundle_dedupes_colliding_image_metadata_names(tmp_path: Path) -> None:
+    output_root = tmp_path / "output"
+    image_dir_a = output_root / "run-1" / "txt2img"
+    image_dir_b = output_root / "run-2" / "img2img"
+    image_dir_a.mkdir(parents=True)
+    image_dir_b.mkdir(parents=True)
+
+    image_a = image_dir_a / "same_name.png"
+    image_b = image_dir_b / "same_name.png"
+    _write_png(image_a)
+    _write_png(image_b)
+
+    kv_a = build_contract_kv(
+        {"job_id": "job-a", "stage": "txt2img", "image": {"path": "same_name.png"}},
+        job_id="job-a",
+        run_id="run-1",
+        stage="txt2img",
+    )
+    kv_b = build_contract_kv(
+        {"job_id": "job-b", "stage": "img2img", "image": {"path": "same_name.png"}},
+        job_id="job-b",
+        run_id="run-2",
+        stage="img2img",
+    )
+    assert write_image_metadata(image_a, kv_a) is True
+    assert write_image_metadata(image_b, kv_b) is True
+
+    bundle = build_crash_bundle(
+        reason="debughub-meta-dedupe",
+        output_dir=tmp_path,
+        image_roots=[output_root],
+    )
+
+    assert bundle is not None
+    with zipfile.ZipFile(bundle) as zf:
+        names = [
+            name
+            for name in zf.namelist()
+            if name.startswith("artifacts/image_metadata/") and name.endswith(".meta.json")
+        ]
+        assert len(names) == 2
+        assert len(set(names)) == 2
+        payloads = [json.loads(zf.read(name))["payload"]["job_id"] for name in names]
+        assert set(payloads) == {"job-a", "job-b"}

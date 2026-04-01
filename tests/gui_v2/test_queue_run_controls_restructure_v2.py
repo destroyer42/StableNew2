@@ -340,6 +340,40 @@ class TestQueuePanelHasControls:
         finally:
             root.destroy()
 
+    def test_queue_panel_update_from_app_state_clears_last_job_when_queue_is_empty(self):
+        """An empty queue_jobs projection should clear the rendered list."""
+        root = _skip_if_no_tk()
+        try:
+            from types import SimpleNamespace
+
+            from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+            from src.gui.theme_v2 import apply_theme
+
+            apply_theme(root)
+            panel = QueuePanelV2(root)
+            panel.pack()
+
+            queued_job = SimpleNamespace(
+                job_id="queued-1",
+                status="QUEUED",
+                get_display_summary=lambda: "queued-1",
+            )
+            panel.update_jobs([queued_job])
+            assert panel.job_listbox.size() == 1
+
+            class MockAppState:
+                queue_jobs: list[object] = []
+                is_queue_paused = False
+                auto_run_queue = False
+                running_job = None
+
+            panel.update_from_app_state(MockAppState())
+
+            assert panel._jobs == []
+            assert panel.job_listbox.size() == 0
+        finally:
+            root.destroy()
+
 
 class TestNoRunControlsPanel:
     """Test that PipelineRunControlsV2 is not in the layout."""

@@ -154,6 +154,23 @@ def _get_webui_shell_match_reasons(
     return reasons
 
 
+def _classify_webui_crash_hint(stdout_tail: str | None, stderr_tail: str | None) -> str | None:
+    signature = "\n".join(
+        part.strip() for part in (stderr_tail or "", stdout_tail or "") if part and part.strip()
+    ).lower()
+    if not signature:
+        return None
+    if any(marker in signature for marker in ("cuda error: out of memory", "cuda out of memory", "outofmemoryerror")):
+        return "Likely CUDA OOM inside WebUI or one of its extensions."
+    if "upcast_attention_to_float32" in signature:
+        return "Likely WebUI or extension config mismatch involving 'upcast_attention_to_float32'."
+    if "modulenotfounderror" in signature and "animatediff" in signature:
+        return "Likely AnimatedDiff extension import failure during WebUI startup."
+    if "press any key to continue" in signature:
+        return "The WebUI batch wrapper hit an earlier error and dropped to a PAUSE prompt; inspect the preceding stderr/stdout lines."
+    return None
+
+
 @dataclass
 class WebUIProcessConfig:
     command: list[str]
@@ -418,6 +435,7 @@ class WebUIProcessManager:
                 launch_command,
                 cwd=self._config.working_dir or None,
                 env=self._config.build_env(),
+                stdin=subprocess.DEVNULL,
                 stdout=popen_stdout,
                 stderr=popen_stderr,
                 shell=False,
@@ -1156,6 +1174,7 @@ class WebUIProcessManager:
             return
         stdout_tail = "\n".join(self._stdout_tail) if self._stdout_tail else "<empty>"
         stderr_tail = "\n".join(self._stderr_tail) if self._stderr_tail else "<empty>"
+        crash_hint = _classify_webui_crash_hint(stdout_tail, stderr_tail)
         log_fn = logger.error if exit_code != 0 else logger.info
         log_fn(
             "WebUI process exited (code=%s). Recent stdout:\n%s\nRecent stderr:\n%s",
@@ -1163,6 +1182,8 @@ class WebUIProcessManager:
             stdout_tail,
             stderr_tail,
         )
+        if exit_code != 0 and crash_hint:
+            logger.error("WebUI crash hint: %s", crash_hint)
 
     def get_recent_output_tail(self, max_lines: int = 200) -> dict[str, Any]:
         """Return the latest stdout/stderr tail plus process metadata."""
@@ -1185,6 +1206,7 @@ class WebUIProcessManager:
             "launch_profile": self._config.launch_profile,
             "command": list(self._config.command),
             "working_dir": self._config.working_dir or "",
+            "crash_hint": _classify_webui_crash_hint(_join_tail(self._stdout_tail), _join_tail(self._stderr_tail)),
         }
 
     def get_stdout_tail_text(self, max_lines: int = 200) -> str:

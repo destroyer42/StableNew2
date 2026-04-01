@@ -1,9 +1,15 @@
+import subprocess
 import types
 from unittest import mock
 
 import pytest
 
-from src.api.webui_process_manager import WebUIProcessConfig, WebUIProcessManager, WebUIStartupError
+from src.api.webui_process_manager import (
+    WebUIProcessConfig,
+    WebUIProcessManager,
+    WebUIStartupError,
+    _classify_webui_crash_hint,
+)
 from tests.helpers.webui_mocks import DummyProcess
 
 
@@ -49,8 +55,28 @@ def test_start_windows_bat_uses_cmd_wrapper_without_shell(monkeypatch):
     kwargs = popen_mock.call_args.kwargs
     assert args[0][:4] == ["cmd.exe", "/d", "/s", "/c"]
     assert kwargs["shell"] is False
+    assert kwargs["stdin"] is subprocess.DEVNULL
     # Ensure breakaway flag is NOT present (0x01000000)
     assert (kwargs["creationflags"] & 0x01000000) == 0
+
+
+def test_classify_webui_crash_hint_reports_batch_pause_wrapper() -> None:
+    hint = _classify_webui_crash_hint(
+        "Press any key to continue . . .",
+        "Launching Web UI with arguments",
+    )
+
+    assert hint is not None
+    assert "batch wrapper" in hint.lower()
+
+
+def test_classify_webui_crash_hint_prefers_specific_oom_signal() -> None:
+    hint = _classify_webui_crash_hint(
+        "Press any key to continue . . .",
+        "torch.cuda.OutOfMemoryError: CUDA out of memory",
+    )
+
+    assert hint == "Likely CUDA OOM inside WebUI or one of its extensions."
 
 
 def test_start_attaches_pid_to_process_container(monkeypatch):

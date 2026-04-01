@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import logging
 import os
 import sys
@@ -355,11 +356,12 @@ def _include_image_metadata(zf: zipfile.ZipFile, image_roots: list[Path] | None)
     image_paths = _collect_image_paths(roots, limit=25)
     if not image_paths:
         return
+    used_meta_names: set[str] = set()
     for image_path in image_paths:
         try:
             kv = read_image_metadata(image_path)
             payload_result = decode_payload(kv)
-            meta_name = image_path.name
+            meta_name = _build_bundle_image_metadata_name(image_path, used_names=used_meta_names)
             if payload_result.payload is not None:
                 payload = {
                     "status": payload_result.status,
@@ -428,6 +430,31 @@ def _collect_image_paths(roots: list[Path], *, limit: int = 25) -> list[Path]:
                 images.append(path)
     images.sort(key=lambda p: p.stat().st_mtime, reverse=True)
     return images[:limit]
+
+
+def _build_bundle_image_metadata_name(image_path: Path, *, used_names: set[str]) -> str:
+    candidate = image_path.name
+    if candidate not in used_names:
+        used_names.add(candidate)
+        return candidate
+
+    try:
+        path_key = str(image_path.resolve(strict=False))
+    except Exception:
+        path_key = str(image_path)
+    digest = hashlib.sha1(path_key.encode("utf-8")).hexdigest()[:8]
+    candidate = f"{image_path.stem}__{digest}{image_path.suffix}"
+    if candidate not in used_names:
+        used_names.add(candidate)
+        return candidate
+
+    suffix = 2
+    while True:
+        numbered = f"{image_path.stem}__{digest}_{suffix}{image_path.suffix}"
+        if numbered not in used_names:
+            used_names.add(numbered)
+            return numbered
+        suffix += 1
 
 
 def _capture_thread_dump() -> tuple[str, dict]:

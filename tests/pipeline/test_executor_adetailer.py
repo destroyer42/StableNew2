@@ -296,6 +296,42 @@ def test_adetailer_request_local_pinning_opt_in_uses_request_override(monkeypatc
     pipeline.client.set_vae.assert_not_called()
 
 
+def test_adetailer_request_local_pinning_suppresses_model_drift_warning(monkeypatch) -> None:
+    monkeypatch.setenv("STABLENEW_ADETAILER_REQUEST_LOCAL_PINNING", "1")
+    pipeline = Pipeline(Mock(), Mock())
+    pipeline.client.set_model = Mock()
+    pipeline.client.set_vae = Mock()
+    pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
+    pipeline.client.get_current_vae = Mock(return_value="ambient-vae.safetensors")
+
+    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
+         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}), \
+         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
+         patch("builtins.open", MagicMock()):
+
+        config = {
+            "adetailer_enabled": True,
+            "adetailer_model": "face_yolov8n.pt",
+            "adetailer_steps": 20,
+            "model": "base-model.safetensors",
+            "sd_model_checkpoint": "base-model.safetensors",
+            "sd_vae": "base-vae.safetensors",
+        }
+
+        metadata = pipeline.run_adetailer(
+            input_image_path=Path("input.png"),
+            prompt="test prompt",
+            negative_prompt="test negative",
+            config=config,
+            run_dir=Path("output"),
+            image_name="test",
+        )
+
+    assert metadata is not None
+    runtime_warnings = list(metadata.get("runtime_warnings") or [])
+    assert not any(warning.get("type") == "model_drift" for warning in runtime_warnings)
+
+
 def test_adetailer_diagnostics_log_request_payload_fields(monkeypatch, caplog) -> None:
     monkeypatch.setenv("STABLENEW_ADETAILER_REQUEST_LOCAL_PINNING", "1")
     pipeline = Pipeline(Mock(), Mock())

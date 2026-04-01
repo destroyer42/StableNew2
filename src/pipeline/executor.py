@@ -3372,6 +3372,7 @@ class Pipeline:
             stage_name="adetailer",
             requested_model=requested_model,
             when="entry",
+            request_local_override_expected=use_request_local_pinning,
         )
         # Add scheduler if present in config
         payload_scheduler = str(config.get("scheduler") or "").strip()
@@ -3562,6 +3563,7 @@ class Pipeline:
                 stage_name="adetailer",
                 requested_model=requested_model,
                 when="exit",
+                request_local_override_expected=use_request_local_pinning,
             ),
         )
         if adaptive_refinement:
