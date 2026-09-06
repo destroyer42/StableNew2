@@ -112,9 +112,9 @@ rewrite the existing branches.
 
 | Order | PR | Status | Exit outcome |
 |---:|---|---|---|
-| 0 | `PR-ARCH-MVP-001` | Approved; amendments prepared | Reconciled canon and active roadmap are reviewed and committed |
-| 1 | `PR-MVP-000` | Approved; next runtime PR | Recoverable clean baseline with all production source tracked |
-| 2 | `PR-MVP-005` | Planned | Later branch/commit deltas classified as adopt, rewrite, defer, or reject |
+| 0 | `PR-ARCH-MVP-001` | **Implemented; merge review pending** | Reconciled canon committed as `45b8d07` and carried to recovery as `14d1071` |
+| 1 | `PR-MVP-000` | **Completed** | Recoverable clean baseline with all production source tracked and independently verified |
+| 2 | `PR-MVP-005` | **Planned; next** | Later branch/commit deltas classified as adopt, rewrite, defer, or reject |
 | 3 | `PR-MVP-010` | Planned | Trustworthy clean-checkout collection and isolated test harness |
 | 4 | `PR-MVP-020` | Planned | Reduced immutable NJR and complete versioned serialization |
 | 5 | `PR-MVP-030` | Planned | Typed compilers and NJR-only JobService submission contract |
@@ -125,8 +125,9 @@ rewrite the existing branches.
 | 10 | `PR-MVP-080` | Planned | MVP operator UX, setup, diagnostics, and recovery polish |
 | 11 | `PR-MVP-090` | Planned | Clean-machine release candidate and signed acceptance record |
 
-Only `PR-ARCH-MVP-001` and `PR-MVP-000` are currently approved. Later rows
-require their own exact specs and owner approval.
+`PR-ARCH-MVP-001` and `PR-MVP-000` were owner-approved and have been
+implemented. No later runtime PR is approved. Later rows require their own exact
+specs and owner approval.
 
 ## 6. Phase details
 
@@ -147,6 +148,13 @@ docs amendment, correct the ignore rule, audit and track the three required
 
 Exit gate: a clone/worktree containing tracked files only can compile and import
 the application modules covered by the spec.
+
+Completion evidence: the root ignore rule is now `/state/`; three `src/state/`
+modules and two previously hidden focused tests are tracked; the completeness
+guard reports 435 tracked Python source files; and a second tracked-files-only
+worktree passed compile, imports, and 42 focused tests without creating root
+state or changing tracked files. Python 3.11 environment certification remains
+with `PR-MVP-010`; the available run used Python 3.10.6.
 
 #### PR-MVP-005 — Delta disposition
 
@@ -334,5 +342,6 @@ and broad UI redesign do not block MVP.
 
 ## 10. Next action
 
-Review and commit the approved `PR-ARCH-MVP-001` documentation amendment, then
-execute `PR-MVP-000` exactly as specified on a non-destructive recovery branch.
+Generate and approve `PR-MVP-005` to classify the changes in `24063b7`,
+`d452a2a`, and pre-canon `1a9eb49` against the recovered baseline. Adopt no
+later runtime change until that evidence-based disposition is complete.

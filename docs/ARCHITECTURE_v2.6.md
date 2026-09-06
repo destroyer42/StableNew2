@@ -252,17 +252,17 @@ UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 Audit date: 2026-09-05. These gaps mean the target contract is not yet fully
 implemented:
 
-| Gap | Current evidence | Closing roadmap item |
-|---|---|---|
-| Repository completeness | `src/state/` contains production modules hidden by an unanchored `state/` ignore rule | `PR-MVP-000` |
-| NJR scope | Current NJR mixes executable input with mutable status/results and has incomplete serialization | `PR-MVP-020` |
-| Source identity | `JobService` still emits `pack_required` for valid non-pack shapes | `PR-MVP-020` / `PR-MVP-030` |
-| Submission DTO | `PipelineRunRequest` remains pack-shaped and broad | `PR-MVP-030` |
-| Persistence | Queue/history have multiple JSON/JSONL-era stores rather than one SQLite repository | `PR-MVP-040` |
-| PromptPack format | Paired TXT/JSON assumptions remain in docs/code/tests despite unified JSON behavior | `PR-MVP-050` |
-| Test truth | Collection includes script-style failures, broad pollution risk, and stale architecture assertions | `PR-MVP-010` and each contract PR |
-| Video scope | Several video paths exist; only native SVD XT is selected for MVP | `PR-MVP-070` |
-| Release proof | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
+| Gap | Status | Current evidence | Closing roadmap item |
+|---|---|---|---|
+| Repository completeness | **Closed 2026-09-05** | All imported `src/state/` modules and focused tests are tracked; the root ignore rule is anchored; a tracked-files-only worktree passed completeness, compile, import, and 42 focused tests | `PR-MVP-000` |
+| NJR scope | Open | Current NJR mixes executable input with mutable status/results and has incomplete serialization | `PR-MVP-020` |
+| Source identity | Open | `JobService` still emits `pack_required` for valid non-pack shapes | `PR-MVP-020` / `PR-MVP-030` |
+| Submission DTO | Open | `PipelineRunRequest` remains pack-shaped and broad | `PR-MVP-030` |
+| Persistence | Open | Queue/history have multiple JSON/JSONL-era stores rather than one SQLite repository | `PR-MVP-040` |
+| PromptPack format | Open | Paired TXT/JSON assumptions remain in docs/code/tests despite unified JSON behavior | `PR-MVP-050` |
+| Test truth | Open | Collection includes script-style failures, broad pollution risk, stale architecture assertions, and conflicting pytest configuration surfaces | `PR-MVP-010` and each contract PR |
+| Video scope | Open | Several video paths exist; only native SVD XT is selected for MVP | `PR-MVP-070` |
+| Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
 
 Closing a row requires implementation evidence and tests. Updating prose alone
 does not close a gap.

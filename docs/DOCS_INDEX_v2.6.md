@@ -57,10 +57,14 @@ the affected runtime work proceeds.
 ### Tier 4 — Active approved PR specifications
 
 - `docs/PR_Backlog/PR-ARCH-MVP-001-v2.6-Canon-Amendment.md`
-- `docs/PR_Backlog/PR-MVP-000-Recovery-Baseline-and-Repository-Completeness.md`
 
-These are the only approved specs at this update. Later PR IDs in the roadmap
+`PR-ARCH-MVP-001` is implemented and remains here until merge review/closeout.
+There is no approved open runtime PR at this update. Later PR IDs in the roadmap
 are planned placeholders until exact specs are written and approved.
+
+Completed recovery record:
+
+- `docs/CompletedPR/PR-MVP-000-Recovery-Baseline-and-Repository-Completeness.md`
 
 ## 2. Canonical reading order
 
