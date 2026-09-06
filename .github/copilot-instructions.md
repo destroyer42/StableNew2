@@ -1,105 +1,69 @@
-﻿StableNew v2.6 - Copilot / Executor Instructions
+# StableNew v2.6 — Executor Brief
 
-Status: CANONICAL ACTIVE EXECUTOR BRIEF
+Status: Canonical active machine-facing summary
+Updated: 2026-09-05
 
-Read this before making any change in this repository.
+Read `AGENTS.md` before changing this repository. Then read the active canonical
+documents and the approved PR spec. This file summarizes; it does not override
+them.
 
-## Purpose
+## Current architecture
 
-This file is the machine-facing execution brief for Copilot/Codex sessions in StableNew.
-It does not replace the canonical docs. It operationalizes them.
+`Typed Intent -> Compiler -> NJR -> JobService -> Queue/JobRepository -> PipelineRunner.run_njr -> Typed Handler -> Artifacts -> History/Learning/Diagnostics`
 
-Primary authorities:
-
-1. `AGENTS.md`
-2. `docs/ARCHITECTURE_v2.6.md`
-3. `docs/GOVERNANCE_v2.6.md`
-4. `docs/StableNew_Coding_and_Testing_v2.6.md`
-5. `docs/PR_TEMPLATE_v2.6.md`
-
-If this file conflicts with those documents, the canonical docs win.
-
-## Core architecture
-
-StableNew has one valid job path:
-
-Intent Surface -> Builder/Compiler -> NormalizedJobRecord -> Queue -> Runner -> Artifacts -> History/Learning/Diagnostics
-
-Critical invariants:
-
-- PromptPack is the primary image authoring surface, not the only valid intent surface.
-- `AppStateV2` owns runtime draft state.
-- Controllers orchestrate; they do not invent alternate job formats.
-- `NormalizedJobRecord` is the only valid execution payload for new work.
-- Queue and runner are the only execution path.
-- Legacy shims, duplicate job paths, and parallel flows are defects.
-
-## Repository map
-
-- `src/gui*/` contains UI layers and view wiring.
-- `src/controller/` contains orchestration and lifecycle coordination.
-- `src/pipeline/` contains builder/runtime pipeline modules.
-- `src/randomizer/` contains deterministic randomizer logic.
-- `src/queue/` and `src/history/` contain execution persistence/runtime state.
-- `src/learning/` contains post-execution learning logic.
-- `tests/` mirrors runtime domains and must stay deterministic.
-- `.github/agents/` contains specialist agent profiles.
-- `.github/instructions/` contains path-scoped guidance files.
+- NJR is immutable authorized work, not mutable queue/history state.
+- PromptPack identity is conditional on a PromptPack source.
+- Fresh work is queue-only; `Run Now` means immediate-start queue policy.
+- There is one public runner entry and one persistence boundary.
+- MVP execution is same-process; native SVD XT is the only MVP video backend.
+- Architecture target gaps are explicit in `docs/ARCHITECTURE_v2.6.md`; do not
+  mistake them for already-implemented behavior.
 
 ## Execution rules
 
-- Treat approved PR specs as binding.
-- Modify only files inside the approved scope.
-- Stop when instructions are ambiguous or contradictory.
-- Do not preserve legacy code "just in case."
-- Do not add new prompt sources, dict-based runtime configs, or alternate runner entrypoints.
-- Do not move logic into the GUI that belongs in controller/pipeline/randomizer layers.
-- Do not change architecture without an explicit approved plan.
+- Treat owner-approved PR specs as binding.
+- Modify only allowed files and preserve unrelated changes/data.
+- Stop if a required edit, design choice, or migration falls outside the spec.
+- Do not add `DIRECT`, alternate job/runner/persistence paths, universal pack
+  requirements, live legacy fallbacks, or backend payload leakage.
+- Do not use stale tests or completed plans to override active canon.
+- Do not rewrite tests merely to hide missing implementation.
+- Close runtime PRs with tests, clean-checkout evidence, roadmap/gap updates,
+  and one CompletedPR record.
 
-## Build and verification defaults
+## Repository map
 
-Use targeted validation for the files you touch, then broader validation when appropriate.
+- `src/gui*/`: presentation and event wiring
+- `src/controller/`: controller adapters and application coordination
+- `src/pipeline/`: NJR, compilers/builders, runner, and stage orchestration
+- `src/queue/` and `src/history/`: transitional queue/history code converging on
+  the repository boundary
+- `src/state/`: source-owned workspace/output state helpers; must be tracked
+- `src/video/`: typed video handlers/adapters
+- `src/learning/`: post-execution learning consumers
+- `tests/`: isolated unit, contract, integration, GUI, and acceptance tests
+- `docs/`: canonical, subsystem, roadmap, PR, and historical records
 
-Typical commands:
+## Verification defaults
 
-- `python -m compileall src`
-- `pytest -q`
-- `pytest tests/controller -q`
-- `pytest tests/pipeline -q`
-- `pytest tests/gui -q`
-- `pytest tests/randomizer -q`
-- `pytest tests/learning -q`
+Use the project-managed Python 3.11 environment. Run targeted tests first. The
+canonical baseline is being established by `PR-MVP-010`; do not repeat stale
+collection counts as current truth.
 
-Rules:
+Expected gate shape:
 
-- No real network calls in tests.
-- No sleeps unless a test is explicitly timing-related and approved.
-- GUI tests must avoid blocking the UI thread.
-- Prefer deterministic mocks over live WebUI/API behavior.
+```text
+python -m compileall src
+pytest --collect-only -q
+pytest -m "not real_backend and not quarantine" -q
+```
 
-## Instruction layering
+Tests must not call real networks/models at collection time, sleep as a
+correctness mechanism, mutate tracked data, or write GUI widgets from workers.
+Real WebUI/SVD acceptance is opt-in and recorded separately.
 
-When editing files in a scoped area, also follow the matching file under `.github/instructions/`.
+## Scoped instructions
 
-Examples:
-
-- GUI work -> `.github/instructions/gui.instructions.md`
-- Controller work -> `.github/instructions/controller.instructions.md`
-- Pipeline work -> `.github/instructions/pipeline.instructions.md`
-- Randomizer work -> `.github/instructions/randomizer.instructions.md`
-- Tests -> `.github/instructions/tests.instructions.md`
-- Docs -> `.github/instructions/docs.instructions.md`
-
-## Agent usage
-
-Use the canonical agents in `.github/agents/`:
-
-- `controller_lead_engineer.md`
-- `implementer.md`
-- `gui.md`
-- `pipeline_runtime.md`
-- `tester.md`
-- `docs.md`
-- `refactor.md`
-
-Archived or duplicate agent files are reference-only and must not be used for new work.
+Also follow the matching `.github/instructions/*.instructions.md` file for any
+path you edit. The complete inventory and precedence are in
+`.github/INSTRUCTION_SURFACE.md`.

@@ -1,203 +1,112 @@
-PROMPT_PACK_LIFECYCLE_v2.6.md
+# StableNew PromptPack Lifecycle v2.6
 
-(Canonical)
-
-StableNew - PromptPack Lifecycle Specification (v2.6)
-Last Updated: 2026-03-29
 Status: Canonical, Binding
+Updated: 2026-09-05
 
 ## 0. Scope
 
-This document defines the lifecycle of PromptPack-based image authoring in
-StableNew.
+This document governs PromptPack-authored image intent. PromptPack is the
+primary image authoring surface, but it is not the universal identity or input
+format for image edit, reprocess, replay, learning, CLI, video, or training work.
 
-PromptPack is the primary image authoring surface. It is not the only valid
-intent surface in the product. Other surfaces are governed by
-`docs/ARCHITECTURE_v2.6.md` and their own subsystem docs.
+## 1. Canonical representation
 
-This document covers:
+A PromptPack is one versioned JSON document. It contains, as applicable:
 
-- PromptPack structure
-- PromptPack authoring and validation
-- PromptPack selection and draft usage
-- PromptPack resolution through the builder path
-- PromptPack provenance inside NJR, history, replay, and learning
+- schema version and stable pack identity;
+- display name and revision;
+- prompt slots and negative prompts;
+- authoring metadata and variables;
+- deterministic matrix/randomizer definitions;
+- PromptPack-side defaults;
+- provenance needed to migrate or audit the document.
 
-## 1. PromptPack Definition
+TXT and TSV are import/export interchange formats only. They are not paired
+runtime authority, and the absence of a TXT/TSV file does not invalidate a JSON
+PromptPack.
 
-A PromptPack is defined by exactly two files with the same basename:
+Legacy paired TXT/JSON content must be migrated by a backup-first tool. When the
+two sides disagree, migration reports the conflict and requires an explicit
+resolution; it must not silently overwrite either source.
 
-- `{name}.txt` for positive prompt rows
-- `{name}.json` for metadata, matrix values, and defaults
+## 2. Lifecycle
 
-No PromptPack exists without both.
+`Author/Import -> Validate -> Store -> Select -> Draft -> Resolve/Expand -> Compile NJR -> Submit -> Queue -> Run -> Artifacts/History -> Learning`
 
-PromptPack JSON may also carry optional template authoring metadata per slot:
+The authoring document is mutable before compilation. The resulting NJR is an
+immutable execution snapshot.
 
-- `template_id` to reference a curated cinematic prompt template
-- `template_variables` to hold placeholder values used during prompt expansion
+## 3. Authoring and validation
 
-Template metadata is authoring-time input only. The TXT companion remains the
-resolved prompt surface used by the builder path.
+PromptPacks may be created in the editor, imported from TXT/TSV, or edited as
+schema-valid JSON. Validation covers:
 
-## 2. PromptPack Lifecycle
+- schema and supported version;
+- non-empty stable identity and revision rules;
+- slot structure and prompt text;
+- matrix/randomizer references and expansion bounds;
+- legal PromptPack-side defaults;
+- absence of backend-private workflow payloads.
 
-The PromptPack lifecycle is:
+Invalid documents cannot compile new work. Validation errors must identify the
+field and corrective action without partially saving a replacement.
 
-Author -> Validate -> Store -> Select -> Draft -> Resolve -> Expand -> Build NJR -> Queue -> Run -> History -> Learning
+## 4. Draft and compilation
 
-This lifecycle applies only to PromptPack-authored work.
+Selecting a pack loads authoring data into the application draft. User edits to
+the draft do not mutate the stored pack unless the user explicitly saves it.
 
-## 3. Authoring Rules
+The PromptPack compiler:
 
-PromptPacks may be authored or edited through:
+1. validates the selected JSON document;
+2. layers explicit user overrides over pack defaults;
+3. resolves variables, randomizer choices, matrix products, and config sweeps
+   deterministically;
+4. validates supported image stages and models;
+5. emits one immutable NJR per expanded execution;
+6. records `source.kind = "prompt_pack"`, pack identity, revision, and relevant
+   provenance in each NJR.
 
-- the PromptPack builder/editor surface
-- direct file editing when the files remain schema-valid
+All expansion completes before queue submission. The runner does not reopen the
+pack, choose randomizer values, or reconstruct source defaults.
 
-Required rules:
+## 5. Runtime ownership
 
-- rows must be UTF-8 text
-- comments may exist, but executable rows must not be empty
-- JSON must be schema-valid
-- template references must resolve against the prompt template catalog when
-  present
-- matrix slots and placeholders must reconcile cleanly
-- defaults must map to valid PromptPack-side image configuration
+After compilation:
 
-Forbidden at authoring time:
+- `JobService` receives NJR plus submission policy;
+- repository/queue own status and scheduling;
+- runner consumes typed NJR workload/stages;
+- history stores execution state and an NJR snapshot or stable reference;
+- learning consumes artifacts and provenance without rewriting the pack.
 
-- embedding executor logic in prompt rows
-- inventing alternate runtime payloads inside pack files
-- using PromptPack files as a transport for backend workflow JSON
+Pack identity is required only for NJRs whose source kind is `prompt_pack`.
 
-## 4. Selection and Draft Phase
+## 6. Import, export, and migration
 
-The pipeline surface may select:
+- JSON is the only native save format.
+- TXT/TSV export is an explicit interoperability action.
+- Import produces a preview and validation report before save.
+- Migration preserves originals, reports conflicts, and is idempotent.
+- Runtime code never falls back to TXT/TSV when JSON validation or lookup fails.
+- Once a legacy pack is migrated and verified, its originals are retained as
+  recoverable migration inputs according to the runbook, not live authorities.
 
-- pack
-- row subset
-- randomization settings
-- config sweeps
-- runtime overrides allowed by the canonical builder path
+## 7. Forbidden behavior
 
-Selection creates draft state only. It does not execute anything and does not
-mutate the PromptPack.
+- requiring two same-basename files for a valid pack;
+- treating TXT/TSV as execution-time truth;
+- requiring `prompt_pack_id` for a non-PromptPack NJR;
+- loading or mutating PromptPack files from runner code;
+- deferring prompt expansion or randomization until execution;
+- storing Comfy or other backend workflow JSON in a PromptPack;
+- silently resolving migration conflicts;
+- maintaining dual JSON and TXT write paths after cutover.
 
-## 5. Validation Phase
+## 8. Implementation status
 
-PromptPack validation includes:
-
-- file existence
-- TXT row parsing
-- JSON structure
-- matrix slot reconciliation
-- default-value normalization
-- stage legality for the PromptPack image path
-
-Invalid PromptPacks may not be used to build new NJR-backed work.
-
-## 6. Resolution and Expansion Phase
-
-For PromptPack-authored jobs, the builder path performs:
-
-- row selection
-- template expansion
-- matrix substitution
-- randomization expansion
-- config sweep expansion
-- actor provenance carry-through from linked intent surfaces when present
-- prompt-layer resolution
-- stage-ready config normalization
-- final NJR construction
-
-When PromptPack image intent is derived from `story_plan`, scene-level and
-shot-level actor metadata may already be deterministically merged onto
-`plan_origin` before NJR construction. That actor metadata remains canonical
-builder input rather than a separate runtime path.
-
-Prompt resolution may use carried actor provenance to:
-
-- preserve `story_plan` and `plan_origin` metadata through canonical
-  intent/config layering
-- inject resolved actor trigger phrases into the positive prompt
-- prepend resolved actor LoRA tags ahead of pack-authored LoRA tags with stable
-  de-duplication
-
-All PromptPack expansion is complete before queue submission.
-
-## 7. NJR Construction and Ownership
-
-The PromptPack builder path stores PromptPack provenance in the NJR, including:
-
-- pack identity
-- row identity
-- resolved prompt text
-- resolved matrix values
-- normalized execution config
-- carried actor provenance from `plan_origin` when present
-- variant metadata
-
-After NJR creation:
-
-- PromptPack files are no longer consulted during execution
-- execution uses NJR-backed normalized config only
-- carried actor provenance remains part of NJR-backed build output, not
-  runner-side reconstruction
-- the PromptPack remains provenance, not a live runtime dependency
-
-## 8. Queue, Runner, History, and Learning
-
-For PromptPack-authored jobs:
-
-- queue stores NJR-backed jobs only
-- runner executes NJR-backed normalized config only
-- history stores NJR provenance and canonical result summaries
-- learning consumes outputs and ratings from executed results; it does not
-  rewrite PromptPack files directly
-
-## 9. Ownership Rules
-
-PromptPack owns:
-
-- row text
-- matrix definitions
-- pack-local defaults
-- pack-level provenance metadata
-
-The builder pipeline owns:
-
-- resolution
-- expansion
-- normalized execution config
-- NJR creation
-
-Queue and runner own:
-
-- execution lifecycle
-- stage orchestration
-- result and artifact recording
-
-## 10. Forbidden Behaviors
-
-The following are forbidden:
-
-- GUI-side prompt construction outside the canonical builder path
-- modifying PromptPack files during execution
-- resolving pack defaults inside the runner
-- treating PromptPack as the universal input source for non-PromptPack surfaces
-- rebuilding fresh runtime state from PromptPack after NJR submission
-
-## 11. Relationship To Other Intent Surfaces
-
-StableNew also supports:
-
-- reprocess
-- image edit
-- replay
-- learning-generated submissions
-- CLI
-- video workflow
-
-Those are valid intent surfaces, but they do not change PromptPack lifecycle
-rules. They simply have their own builder/compiler entrypoints.
+The repository already contains unified-JSON authoring behavior, while active
+code/tests still carry paired-file and universal pack-identity assumptions.
+`PR-MVP-050` performs the atomic storage/loader/test migration. Until it closes,
+this document is the target contract and the architecture gap register remains
+open.

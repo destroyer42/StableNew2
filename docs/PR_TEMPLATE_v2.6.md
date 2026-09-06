@@ -1,7 +1,7 @@
 # StableNew PR Template v2.6
 
 Status: Canonical
-Updated: 2026-03-19
+Updated: 2026-09-05
 
 ## Purpose
 
@@ -30,6 +30,9 @@ Date: YYYY-MM-DD
 
 Accepted category prefixes used by the current repo:
 
+- `ARCH`
+- `ARCH-MVP`
+- `MVP`
 - `UNIFY`
 - `NJR`
 - `MIG`
@@ -178,13 +181,15 @@ List the immediate next PRs or follow-on tasks.
 
 ## Execution Rules
 
-All PR specs must respect the current canon:
+All PR specs must respect the current active canon:
 
 - `docs/ARCHITECTURE_v2.6.md`
 - `docs/GOVERNANCE_v2.6.md`
 - `docs/StableNew Roadmap v2.6.md`
-- `docs/CompletedPlans/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
-- `docs/CompletedPlans/StableNew_ComfyAware_Backlog_v2.6.md`
+
+Documents in `docs/CompletedPlans/`, `docs/CompletedPR/`, `docs/archive/`, and
+`docs/NeedsReview/` are evidence/history only. An unlisted backlog file is not
+active unless the current roadmap admits it and the owner approves it.
 
 PR specs must not:
 
@@ -193,6 +198,9 @@ PR specs must not:
 - leak backend workflow JSON outside `src/video/`
 - revive archive DTOs as active runtime dependencies
 - leave both old and new paths active
+- require PromptPack identity for a non-PromptPack source
+- place mutable execution state or results in NJR
+- create a second live persistence authority
 
 ## Post-Implementation Summary and Closeout
 

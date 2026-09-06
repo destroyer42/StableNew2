@@ -1,365 +1,278 @@
-ARCHITECTURE_v2.6.md
-(Canonical)
+# StableNew Architecture v2.6
 
-StableNew Core Architecture Specification (v2.6)
-Last Updated: 2026-03-29
 Status: Canonical, Binding
+Updated: 2026-09-05
+Decision: MVP architecture reconciliation
 
-0. Purpose
+## 0. Purpose and truth model
 
-This document defines the only valid target architecture for StableNew's
-runtime, submission path, ownership boundaries, and backend model.
+This document defines the architecture StableNew is converging on for its MVP.
+It is intentionally narrower than earlier v2.6 designs and is grounded in the
+parts of the repository that have demonstrated stable behavior.
 
-It replaces contradictory or narrower descriptions that treated StableNew as:
+Every architectural statement is one of two things:
 
-- PromptPack-only
-- image-only
-- dual-path (`QUEUE` plus `DIRECT`) at runtime
-- controller-assembled around legacy `pipeline_config` DTOs
-- backend-driven rather than StableNew-orchestrated
+- a **preserved invariant**, which new code must obey immediately; or
+- a **target contract**, whose remaining implementation gap is named in this
+  document and scheduled in the active roadmap.
 
-This document is the constitutional source of truth. Migration debt that still
-exists in source or tests is not architecture; it is tracked debt to remove.
+Documentation must never imply that a target contract is already implemented.
+The gap register in section 13 is authoritative until the corresponding PR is
+completed and verified.
 
-1. Non-Negotiable Invariants
+## 1. Architecture decision
 
-1.1 Single outer execution contract
+StableNew will not make the current code the architecture merely because it
+runs, and it will not preserve the earlier PromptPack-only model merely because
+it was documented. The selected approach is an evidence-based amendment:
 
-`NormalizedJobRecord` (NJR) is the only executable outer job contract.
+1. retain the queue-first NJR/runner spine that has worked;
+2. reduce NJR to an immutable execution envelope;
+3. move mutable lifecycle state to queue/history records;
+4. make PromptPack one typed source of intent rather than a universal identity;
+5. keep execution in one process for MVP;
+6. use one repository boundary backed by SQLite;
+7. limit MVP video to native SVD XT;
+8. remove compensating adapters and duplicate paths as each replacement lands.
 
-Fresh execution, replay, reprocess, learning submissions, CLI submissions,
-image edits, and video submissions must all converge to NJR before execution.
+The failed child-runtime-host migration from March 2026 is historical evidence,
+not a foundation to finish. The recovery baseline and exact commit evidence are
+recorded in `docs/StableNew Roadmap v2.6.md` and `PR-MVP-000`.
 
-1.2 Queue-only fresh execution
+## 2. Canonical runtime
 
-Fresh production execution is queue-only.
+The single production path is:
 
-`Run Now` is defined as:
+`Intent Surface -> Typed Intent DTO -> Compiler -> NJR -> JobService -> Queue -> PipelineRunner.run_njr -> Typed Stage Handler -> Artifacts -> History/Learning/Diagnostics`
 
-- submit to `JobService`
-- enqueue NJR-backed work
-- auto-start processing immediately when allowed
+Preserved invariants:
 
-UI code may synchronously watch the queued job, but that is not a second
-execution path.
+- all fresh execution is submitted to the queue;
+- `Run Now` means enqueue with immediate-start policy, not direct execution;
+- `NormalizedJobRecord` (NJR) is the only public executable envelope;
+- `PipelineRunner.run_njr(...)` is the only public production runner entry;
+- StableNew owns orchestration, persistence, artifacts, history, and diagnostics;
+- a backend executes a typed request and does not define a parallel job model;
+- replay and retry re-enter the same NJR/queue/runner path;
+- GUI code captures intent and presents projections; it does not build backend
+  payloads, write queue state, or invoke the runner.
 
-1.3 Single production runner entrypoint
+`DIRECT`, alternate runner entrypoints, raw workflow dictionaries as public
+contracts, and live legacy fallbacks are forbidden.
 
-`PipelineRunner.run_njr(...)` is the only production runner entrypoint.
+## 3. Intent and compiler boundary
 
-No controller, GUI component, compatibility DTO, or backend may define a second
-production execution route.
+An intent surface owns user-facing draft data only. Active source kinds are:
 
-1.4 StableNew is the orchestrator
+- `prompt_pack`
+- `image_edit`
+- `reprocess`
+- `history_replay`
+- `learning`
+- `video_workflow`
+- `cli`
+- `training`
 
-StableNew owns:
+Each surface has a typed intent DTO and a compiler. A compiler validates intent,
+resolves defaults and model references, expands deterministic variants, and
+emits one or more NJRs. A compiler may call shared normalization services, but
+it must not enqueue or execute work itself.
 
-- intent intake
-- builder/compiler logic
-- queue and lifecycle policy
-- runner orchestration
-- artifacts and manifests
-- history and replay
-- learning and diagnostics
+The old pack-shaped `PipelineRunRequest` is not the generic application
+submission contract. It may survive only while its PromptPack compiler callers
+are migrated. The target `JobService` accepts an NJR plus a small submission
+policy such as priority and immediate-start preference.
 
-Backends execute only.
+## 4. NormalizedJobRecord
 
-1.5 No live legacy execution model
+### 4.1 Responsibility
 
-The final runtime must not rely on:
+NJR answers: **what immutable work was authorized?** It does not answer: **what
+happened while that work ran?**
 
-- `pipeline_config` execution
-- archive DTO imports as active runtime dependencies
-- `legacy_njr_adapter` as a live runtime bridge
-- raw backend workflow JSON as a public contract
+The v2.6 MVP NJR core contains:
 
-Old persisted queue/history data is handled by one-time migration tooling, not
-by indefinite live runtime compatibility.
+| Field | Contract |
+|---|---|
+| `schema_version` | Explicit NJR schema version |
+| `job_id` | Stable unique execution identity |
+| `workload_kind` | `image`, `video`, or `training` |
+| `source` | Typed source descriptor |
+| `workload` | Typed, immutable workload execution specification |
+| `stages` | Ordered, validated stage descriptions |
+| `output_plan` | Stable output naming/routing intent, not produced paths |
+| `provenance` | Reproducibility inputs, versions, seeds, and parent lineage |
 
-2. Canonical Runtime Topology
+The source descriptor contains:
 
-The canonical runtime is:
+- `kind` from the supported source-kind set;
+- optional `id` and `revision` appropriate to that kind;
+- optional parent job/artifact references.
 
-`Intent Surface -> Builder/Compiler -> NJR -> JobService Queue -> PipelineRunner -> Stage/Backend Execution -> Canonical Artifacts -> History/Learning/Diagnostics`
+`source.id` is required when `source.kind == "prompt_pack"`. It is not required
+for unrelated source kinds. A generic `prompt_pack_id` requirement is forbidden.
 
-Each layer has one role:
+### 4.2 Immutability and serialization
 
-- intent surfaces collect user or system intent
-- builders/compilers normalize that intent
-- NJR freezes executable state
-- `JobService` owns submission and queue policy
-- `PipelineRunner` owns run orchestration
-- stage executors and video backends perform execution
-- artifacts/manifests persist outputs
-- history, replay, learning, and diagnostics consume canonical results
+An NJR is immutable after submission. Changes create a new NJR with explicit
+lineage. Serialization must round-trip every core and workload-specific field;
+silent omission is a contract failure. Schema upgrades are explicit, tested,
+and one-way at the repository boundary.
 
-There is no second runtime story for image versus video.
+### 4.3 State that is not NJR
 
-3. Intent Surfaces And Builders/Compilers
+The following are mutable runtime facts and belong to queue/history execution
+records, not NJR:
 
-StableNew supports multiple intent surfaces. They are all valid, but they do
-not get separate execution architectures.
+- status and progress;
+- created, queued, started, finished, and updated timestamps;
+- retry count and retry policy state;
+- errors and cancellation state;
+- produced output paths, thumbnails, and result summaries;
+- worker/runtime ownership and transient diagnostics.
 
-Supported surfaces:
+## 5. Queue, repository, and history
 
-- PromptPack image generation
-- character training submissions
-- reprocess
-- image edit / masked edit
-- history replay / restore
-- learning-generated submissions
-- video workflow submissions
-- CLI submissions
+`JobRepository` is the single persistence boundary for jobs and execution
+records. Its canonical MVP backend is SQLite.
 
-PromptPack remains the primary image authoring surface. It is not the sole
-source of valid intent across the whole system.
+- Queue is a projection of repository records in runnable states.
+- History is a projection of terminal execution records.
+- The GUI observes application-level projections; it does not read persistence
+  files directly.
+- Repository transactions own lifecycle transitions and durable results.
+- Queue workers operate in the StableNew process for MVP.
 
-Every intent surface must end at a builder or compiler that emits canonical
-NJR-backed work. Intent surfaces do not own queue, runner, artifact, or
-backend logic.
+Existing JSON/JSONL state is migration input only. The migration is backup-first,
+offline, idempotent, and conflict-reporting. There is no live JSON fallback after
+cutover. Legacy files remain untouched until import validation succeeds, then
+are retained as recoverable backups according to the migration runbook.
 
-4. NJR Contract And Lifecycle
+## 6. Runner and stage execution
 
-NJR is the only outer executable job envelope.
+`PipelineRunner.run_njr(...)` validates the envelope, creates a run plan, and
+delegates to typed internal handlers. One public entrypoint does not require one
+monolithic implementation.
 
-An NJR is responsible for carrying:
+Permitted internal handlers include image, video, and training handlers. They:
 
-- normalized prompts or prompt provenance
-- immutable execution config for enabled stages
-- stage ordering and execution metadata
-- source/provenance information
-- run labeling and output-routing intent
-- replayable context sufficient for canonical execution
+- receive typed input derived from NJR;
+- report progress and results through runner-owned callbacks/contracts;
+- return canonical artifact/result descriptions;
+- do not mutate the NJR;
+- do not own queue state or history persistence;
+- do not accept GUI objects or source-authoring DTOs.
 
-Queue entries, history entries, reprocess jobs, replay jobs, and learning jobs
-must all rely on NJR snapshots or NJR-derived records rather than raw
-`pipeline_config` payloads.
+A child runtime host, daemon, distributed scheduler, or multi-node executor is
+post-MVP work and requires a new architecture decision.
 
-Image and video jobs are both NJR-driven. Video-specific execution details may
-be compiled into internal video requests, but that does not create a second
-outer job model.
+## 7. Image execution and PromptPack
 
-Standalone training jobs are also NJR-driven. A `train_lora` NJR remains queue
-submitted and runner executed; external trainer CLIs are subprocess
-dependencies, not alternate outer job contracts.
+PromptPack is the primary authored image source, not the identity of every job.
+Its canonical storage is one versioned JSON document containing prompts,
+negative prompts, authoring metadata, matrix definitions, and defaults.
 
-5. Queue-Only Submission Model
+TXT and TSV are import/export interchange formats only. They are not paired
+runtime authorities and are never consulted after NJR construction. Migration
+from legacy paired files must report conflicts instead of silently choosing one
+side.
 
-5.1 Fresh submission
+The canonical still-image stage order is:
 
-All fresh submission flows must enter through `JobService` and the queue.
+`txt2img -> optional img2img/refine -> optional adetailer -> optional upscale`
 
-The final `PipelineRunRequest` contract is queue-only for fresh execution.
+Only stages implemented and covered by the MVP golden path may be advertised as
+MVP-supported.
 
-5.2 Run Now semantics
+## 8. Video execution
 
-`Run Now` remains a UX affordance, not a distinct runtime mode. It means:
+Video uses the same outer path and NJR lifecycle as image work. Video-specific
+intent and execution types are legitimate typed boundaries, not NJR substitutes.
 
-- build NJR-backed work
-- submit to queue
-- request immediate processing
-- optionally wait for completion at the UI/service layer
+The MVP video backend is **native Stable Video Diffusion XT (SVD XT) only**.
+The model is not bundled. Setup must provide:
 
-5.3 Replay and recovery
+- an explicit download/install path;
+- license and usage notice;
+- capability and model preflight;
+- memory-conscious defaults, offload, and chunking appropriate for a 12 GB GPU;
+- a deterministic smoke workflow and actionable failure messages.
 
-Replay and resume remain canonical queue/runner consumers. They do not rebuild
-legacy config objects or bypass NJR hydration.
+ComfyUI, LTX, AnimateDiff, multi-shot sequencing, stitching, and secondary-motion
+systems are post-MVP. Existing code for them may remain quarantined during
+recovery but must not be on the MVP execution path or presented as MVP-ready.
 
-6. Runner Ownership And Stage Orchestration
+Raw backend workflow JSON is private to its backend adapter. It must not leak
+into NJR core, controllers, GUI state, queue records, or history as a public
+StableNew contract.
 
-`PipelineRunner` owns:
+## 9. Training execution
 
-- run-plan construction from NJR
-- stage sequencing
-- output layout selection
-- stage-level metadata and checkpoints
-- backend dispatch for video stages
-- recovery coordination and canonical result assembly
+Training is a valid typed NJR workload and may delegate to a runner-owned local
+subprocess. External trainer tools do not define queue records or public job
+models. Training is not an MVP release gate unless the active roadmap is amended
+by the owner.
 
-Preferred still-image chain:
+## 10. Artifacts, replay, and learning
 
-`txt2img -> optional img2img -> optional adetailer -> optional final upscale`
+Artifacts carry stable job identity, workload kind, stage identity, source
+provenance, model/config fingerprints, seeds where applicable, and parentage.
+Produced paths and mutable inspection state live in execution results.
 
-The `train_lora` stage is a valid standalone NJR stage. It must not be mixed
-with still-image or video stages inside the same execution chain.
+Replay creates or hydrates a valid NJR, records parent lineage, and submits it
+through `JobService`. Learning consumes canonical artifacts and history; it does
+not modify PromptPacks or NJRs in place.
 
-Refiner and hires remain supported as advanced `txt2img` metadata, not as a
-parallel job architecture.
+## 11. Application and GUI ownership
 
-Model and option changes are expected at NJR boundaries or explicit stage
-configuration boundaries. Unintentional intra-job model churn is forbidden.
+Application services coordinate compilers, repository operations, queue policy,
+and runner lifecycle. Controllers remain thin adapters between GUI events and
+application services. GUI state may cache display projections but may not become
+a second source of execution truth.
 
-7. Image/Video Backend Model
+The MVP remains a single-process desktop application. Threaded work must marshal
+UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 
-7.1 Image execution
+## 12. Forbidden patterns
 
-Image stages execute through StableNew-owned stage orchestration and executor
-logic. External image runtimes do not own queue, history, or artifacts.
+- requiring PromptPack identity for non-PromptPack jobs;
+- mutable execution/result fields on NJR;
+- queue and history persistence with competing authorities;
+- live dual-read or dual-write migration modes;
+- GUI-built prompts, normalized configs, or backend payloads;
+- direct fresh runner invocation;
+- runner fallback to legacy job/config dictionaries;
+- using video workflow DTOs as alternate executable identities;
+- import-time network calls, worker startup, or repository mutation;
+- untracked production modules hidden by broad `.gitignore` rules;
+- reviving the failed child runtime host during MVP recovery.
 
-7.2 Video execution
+## 13. Current implementation gap register
 
-Video execution uses the `src/video/` backend seam. `VideoExecutionRequest` and
-`VideoExecutionResult` are internal runner-to-backend contracts, not public job
-models.
+Audit date: 2026-09-05. These gaps mean the target contract is not yet fully
+implemented:
 
-7.3 Backend ownership boundary
+| Gap | Current evidence | Closing roadmap item |
+|---|---|---|
+| Repository completeness | `src/state/` contains production modules hidden by an unanchored `state/` ignore rule | `PR-MVP-000` |
+| NJR scope | Current NJR mixes executable input with mutable status/results and has incomplete serialization | `PR-MVP-020` |
+| Source identity | `JobService` still emits `pack_required` for valid non-pack shapes | `PR-MVP-020` / `PR-MVP-030` |
+| Submission DTO | `PipelineRunRequest` remains pack-shaped and broad | `PR-MVP-030` |
+| Persistence | Queue/history have multiple JSON/JSONL-era stores rather than one SQLite repository | `PR-MVP-040` |
+| PromptPack format | Paired TXT/JSON assumptions remain in docs/code/tests despite unified JSON behavior | `PR-MVP-050` |
+| Test truth | Collection includes script-style failures, broad pollution risk, and stale architecture assertions | `PR-MVP-010` and each contract PR |
+| Video scope | Several video paths exist; only native SVD XT is selected for MVP | `PR-MVP-070` |
+| Release proof | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
 
-Backends may own:
+Closing a row requires implementation evidence and tests. Updating prose alone
+does not close a gap.
 
-- backend-local request translation
-- backend-local health/dependency checks
-- backend-local execution polling and result normalization
+## 14. Change control
 
-Backends may not own:
+Architecture changes require an approved PR spec, synchronized amendments to
+all affected canonical documents, verification against repository truth, and
+owner approval. Compatibility bridges must have a named deletion PR and may not
+create a second live execution path.
 
-- queue semantics
-- controller contracts
-- GUI state
-- history schemas
-- artifact governance
-- replay architecture
-
-External training scripts follow the same rule. They may execute as
-runner-owned subprocesses, but they do not define public StableNew job models,
-controller contracts, or artifact governance.
-
-7.4 Comfy-specific rule
-
-Comfy workflow JSON is backend-internal. It must not become a GUI/controller or
-top-level runtime contract.
-
-8. Canonical Config Layering
-
-StableNew uses three config layers:
-
-8.1 Intent config
-
-User-facing or system-facing intent from PromptPacks, reprocess, learning,
-video workflow surfaces, CLI flags, or history replay inputs.
-
-In the live runtime, this is carried as `intent_config` metadata on NJR-backed
-records and in queue/history snapshots.
-
-8.2 Normalized execution config
-
-Immutable, stage-ready config persisted on the NJR and consumed by runner and
-stage execution. This is the only executable config layer.
-
-In the live runtime, this is `NormalizedJobRecord.config`.
-
-8.3 Backend-local options
-
-Executor-specific options that live under backend-owned metadata or compiled
-request payloads. These may influence execution but do not replace NJR as the
-outer contract.
-
-In the live runtime, backend-local options are carried separately from the
-executable config and may be derived into `NormalizedJobRecord.backend_options`
-or compiled backend request payloads.
-
-Presets, UI state, PromptPack JSON defaults, and backend JSON are not
-executable by themselves.
-
-9. Artifacts, History, Learning, And Diagnostics
-
-9.1 Canonical artifacts
-
-Image and video outputs must conform to one canonical artifact model. Stage
-manifests enrich this contract; they do not replace it.
-
-9.2 History
-
-History stores NJR-backed snapshots and canonical result summaries. It must not
-depend on raw `pipeline_config` execution payloads.
-
-9.3 Replay
-
-Replay hydrates NJR-backed records and re-enters the same queue/runner
-architecture. There is no special-case replay executor path.
-
-9.4 Learning
-
-Learning consumes canonical outputs, canonical history, and NJR provenance. It
-must not depend on controller-local or legacy result shapes.
-
-9.5 Diagnostics
-
-Diagnostics bundles, crash bundles, watchdog bundles, and runtime snapshots
-must describe the same queue/runner/artifact truth for both image and video
-workloads.
-
-10. Migration Boundary
-
-The current repo may still contain migration seams. They are debt, not canon.
-
-Examples of tracked debt:
-
-- archive `PipelineConfig` imports
-- `legacy_njr_adapter`
-- `DIRECT`-labeled request and test paths
-- large controller ownership surfaces
-- compatibility-only tests that still define old behavior
-
-The only sanctioned compatibility bridge for old persisted data is one-time
-migration tooling with backup, dry-run, validation, and rollback guidance.
-
-Live runtime compatibility branches are not the end-state.
-
-11. Controller And Service Ownership
-
-11.1 AppController
-
-AppController owns application composition, UI binding, and high-level
-orchestration. It must not remain the long-term owner of legacy config
-assembly, direct execution semantics, or archive DTO bridging.
-
-11.2 PipelineController
-
-PipelineController owns preview/build/submit coordination. It must not remain a
-long-term bridge for archive config DTOs or mixed execution paths.
-
-11.3 Queue/execution services
-
-`JobService`, job execution control, queue persistence, replay, and history
-services own lifecycle behavior and canonical runtime data exchange.
-
-11.4 Video services
-
-Video backend registry, workflow registry/compiler, runtime adapters, and
-dependency probes belong under `src/video/`.
-
-Controller decomposition must follow this ownership map, not ad hoc file
-splitting.
-
-12. Forbidden Patterns And Architecture Enforcement
-
-Forbidden patterns:
-
-- fresh execution outside queue
-- live `DIRECT` runtime path
-- live `pipeline_config` execution
-- archive DTO imports as long-term runtime dependencies
-- GUI or controllers importing backend internals
-- GUI invoking runner entrypoints directly
-- second video job model parallel to NJR
-- backend-owned history or artifact contracts
-- controller-local replay shortcuts
-- duplicate active architecture documents
-
-Architecture enforcement tests must tighten over time until the remaining
-migration seams reach zero.
-
-13. Summary
-
-StableNew is the orchestrator.
-
-NJR is the only outer executable job contract.
-
-Queue is the only fresh submission path.
-
-Runner is the only production execution path.
-
-Backends execute only.
-
-Artifacts, history, learning, replay, and diagnostics all consume the same
-canonical runtime truth.
+This amendment preserves version v2.6 because it corrects the unfinished v2.6
+migration instead of adding a new runner or distributed-execution architecture.

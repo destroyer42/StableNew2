@@ -1,130 +1,77 @@
-Canonical_Document_Ownership_v2.6.md
-Ownership Map, Precedence Table, and Contradiction Rules for StableNew v2.6
+# StableNew Canonical Document Ownership v2.6
 
 Status: Authoritative
-Updated: 2026-03-19
+Updated: 2026-09-05
 
-## 1. Purpose
+## 1. Ownership
 
-This document defines:
+| Document/surface | Tier | Owner | Update trigger |
+|---|---:|---|---|
+| `docs/ARCHITECTURE_v2.6.md` | 1 | Planner + Rob approval | Structural/runtime contract change |
+| `docs/GOVERNANCE_v2.6.md` | 1 | Planner + Rob approval | Process, authority, or safety rule change |
+| `docs/StableNew Roadmap v2.6.md` | 1 | Planner + Rob approval | MVP scope, priority, status, or ordering change |
+| PromptPack lifecycle and builder deep-dive | 2 | Planner | Intent/compiler/PromptPack contract change |
+| Coding/testing standards and golden paths | 2/3 | Planner + test reviewer | Verification or release-gate change |
+| Debug/enforcement docs | 2 | Planner | Diagnostics/enforcement contract change |
+| PR template | 2 | Planner | Planning/approval/closeout process change |
+| Docs index and this ownership map | 2 | Planner | Active file, tier, status, or precedence change |
+| `AGENTS.md`, Copilot brief, instruction manifest | 2 | Planner + Rob approval for rule changes | Agent rule or active instruction-surface change |
+| Tier 3 subsystem references | 3 | Planner/domain reviewer | Subsystem behavior change |
+| Approved PR specs | 4 | Planner; Rob approves | Work enters execution |
 
-- which active docs are canonical
-- which role owns them
-- how contradictions are resolved
-- how the active docs are separated from completed, historical, and
-   needs-review material
-- which older docs remain active references vs archive-only history
+## 2. Precedence
 
-## 2. Active Document Ownership Table
+1. Owner decisions recorded in an approved canonical amendment or PR spec.
+2. Tier 1.
+3. Tier 2.
+4. Tier 3.
+5. Approved Tier 4 PR spec for its bounded implementation details.
+6. Research, completed, needs-review, and archive material as evidence only.
 
-| Document | Tier | Owner | Update Trigger |
-|---|---|---|---|
-| `docs/ARCHITECTURE_v2.6.md` | 1 | Planner | Structural runtime change |
-| `docs/GOVERNANCE_v2.6.md` | 1 | Planner | Process or rule change |
-| `docs/StableNew Roadmap v2.6.md` | 1 | Planner | Priority or roadmap change |
-| `docs/PROMPT_PACK_LIFECYCLE_v2.6.md` | 2 | Planner | PromptPack lifecycle or ownership change |
-| `docs/Builder Pipeline Deep-Dive (v2.6).md` | 2 | Planner | PromptPack builder-path change |
-| `docs/DEBUG HUB v2.6.md` | 2 | Planner | Diagnostics contract change |
-| `docs/StableNew_Coding_and_Testing_v2.6.md` | 2 | Planner | Coding or test policy change |
-| `docs/PR_TEMPLATE_v2.6.md` | 2 | Planner | PR workflow change |
-| `docs/DOCS_INDEX_v2.6.md` | 2 | Planner | Active doc location or status change |
-| `docs/Canonical_Document_Ownership_v2.6.md` | 2 | Planner | Ownership or precedence change |
-| `docs/Subsystems/Learning/Learning_System_Spec_v2.6.md` | 3 | Planner | Learning subsystem behavior change |
-| `docs/Subsystems/GUI/GUI_Ownership_Map_v2.6.md` | 3 | Planner | GUI placement or ownership change |
-| `docs/Subsystems/Video/Movie_Clips_Workflow_v2.6.md` | 3 | Planner | Movie Clips workflow or ownership change |
-| `docs/Architecture/Image_Metadata_Contract_v2.6.md` | 3 | Planner | Image metadata field or policy change |
-| `docs/Subsystems/Testing/KNOWN_PITFALLS_QUEUE_TESTING.md` | 3 | Planner | Queue-testing guidance change |
-| `docs/Subsystems/Testing/E2E_Golden_Path_Test_Matrix_v2.6.md` | 3 | Planner | Golden-path coverage change |
-| `docs/Subsystems/Randomizer/Randomizer_Spec_v2.6.md` | 3 | Planner | Randomizer subsystem behavior change |
+Within a tier, the more specific active document wins. If equally specific
+active docs still conflict, stop affected implementation and synchronize them.
 
-## 3. Active v2.5 Retention Rule
+## 3. Truth-status rule
 
-No v2.5 subsystem specs remain in the active root docs set.
+An active architecture may define a target that code has not reached only when
+it labels that target, lists contrary current evidence in the architecture gap
+register, and assigns a closing roadmap PR. The implementation remains
+incomplete until tests and clean-checkout verification support removal of the
+gap.
 
-`docs/archive/reference/Cluster_Compute_Spec_v2.5.md` and
-`docs/archive/reference/Randomizer_Spec_v2.5.md` are reference-only archive
-material.
+Working code and passing tests do not automatically become canon. Conversely,
+canon must not claim current implementation that evidence disproves.
 
-## 4. Precedence Rules
+## 4. Required synchronization
 
-When documents appear to conflict:
+No PR may knowingly leave active documents contradictory. At minimum:
 
-1. Tier 1 overrides Tier 2.
-2. Tier 2 overrides Tier 3.
-3. Within the same tier, the more specific doc wins over the more general doc.
-4. If the conflict still remains, the newer active revision wins.
-5. If conflict is still unresolved, stop implementation and resolve it through a
-   planner-owned docs update before continuing.
+- NJR/source changes update architecture, governance, builder/lifecycle,
+  coding/testing, relevant golden paths, roadmap, and affected tests;
+- repository changes update architecture, coding/testing, golden paths,
+  migration/runbook material, and roadmap;
+- PromptPack format changes update lifecycle, builder, tests, and migration docs;
+- runner/backend scope changes update architecture, subsystem docs, tests, and
+  roadmap;
+- agent-rule changes update `AGENTS.md`, the Copilot brief, and the instruction
+  manifest when its enumerated surface or precedence changes.
 
-## 5. Contradiction Rules
+## 5. Disposition
 
-No PR may knowingly leave an active contradiction in place.
+- `docs/CompletedPR/`: one final record per completed PR.
+- `docs/CompletedPlans/`: completed multi-PR sequences and retired roadmaps.
+- `docs/NeedsReview/`: applicability uncertain; non-active.
+- `docs/archive/`: superseded/history only.
+- `docs/PR_Backlog/`: open specs/plans; only roadmap-listed, owner-approved specs
+  are executable.
 
-If one active doc is updated in a way that changes runtime truth, the dependent
-active docs must be updated in the same PR or explicitly retired from the
-active set.
+Closing a PR requires roadmap/index/gap updates and removal or relocation of its
+backlog copy. Completion history does not remain an active planning surface.
 
-If a PR intentionally changes Tier 1 or Tier 2 truth, the PR spec and closeout
-must explicitly name the affected canonical docs and validate the new wording
-against the implemented code, tests, or both before merge.
+## 6. Amendment record
 
-## 6. Disposition Rules
-
-Move a document to `docs/archive/` when:
-
-- it is historically useful but no longer active
-- it describes a superseded runtime story
-- it is stale analysis rather than active operating guidance
-- it is a dormant subsystem reference no longer driving current work
-
-Move a document to `docs/CompletedPR/` when:
-
-- it is the single final implementation and validation record for a completed
-   PR
-
-Move a document to `docs/CompletedPlans/` when:
-
-- it is a completed executable roadmap, sweep, or multi-PR sequence record
-- it is no longer an open planning surface but still useful as completion
-   history
-
-Move a document to `docs/NeedsReview/` when:
-
-- its current applicability is unclear
-- it is recent enough that silent archival would be risky
-- it may still need content extraction, splitting, or confirmation before a
-   final archive or active placement decision
-
-## 7. Root Folder Rule
-
-`docs/` root is reserved for Tier 1 and Tier 2 canonical docs only.
-
-Active Tier 3 references belong in `docs/Architecture/`, `docs/Subsystems/`,
-`docs/Research Reports/`, `docs/runbooks/`, or `docs/schemas/`.
-
-Backlog PR specs belong in `docs/PR_Backlog/`.
-Completed PR records belong in `docs/CompletedPR/`.
-Completed sequence docs belong in `docs/CompletedPlans/`.
-Ambiguous material belongs in `docs/NeedsReview/`.
-Historical and reference material belongs in `docs/archive/`.
-
-Do not add new Tier 3 files to the root even if older root placements still
-remain during the transition cleanup.
-
-## 8. Maintenance Checklist
-
-Before merging a docs-changing PR, verify:
-
-- if runtime or product truth changed, the PR explicitly names the affected
-   canonical docs and updates them in the same PR
-- one final `docs/CompletedPR/PR-...md` record exists for each completed PR
-   touched by the work
-- duplicate completed PR specs have been removed from `docs/PR_Backlog/`
-- fully completed sequence docs have been moved to `docs/CompletedPlans/`
-- ambiguous documents are relocated to `docs/NeedsReview/` instead of being
-   left active by default
-- active doc references point to existing files
-- archived or needs-review docs are not still listed as active in
-   `DOCS_INDEX_v2.6.md`
-- no active doc still claims a superseded runtime story
-- retained v2.5 docs are still truly needed
+`PR-ARCH-MVP-001` is the owner-approved September 2026 reconciliation. It
+authorizes the v2.6 amendments that separate typed intent from NJR, immutable
+work from mutable execution state, PromptPack source identity from other
+sources, SQLite repository authority from legacy files, and native SVD MVP
+scope from post-MVP video systems.

@@ -1,1089 +1,338 @@
-StableNew Roadmap v2.6.md
-(Canonical Edition)
+# Finalized MVP Roadmap — StableNew v2.6
+
+Status: **CURRENT AND ACTIVE**
+Owner: Rob
+Updated: 2026-09-05
+Supersedes: all earlier active roadmap, mini-roadmap, and backlog ordering claims
+
+## 0. Roadmap authority
+
+This is the single active execution roadmap for StableNew. Files in
+`docs/CompletedPlans/`, `docs/archive/`, and unlisted files in
+`docs/PR_Backlog/` are historical or untriaged inputs, not competing plans.
+
+Work may enter the active sequence only through an owner-approved amendment to
+this file. PR status claims in older documents do not override repository
+evidence or this roadmap.
+
+## 1. Outcome
+
+Deliver a dependable local desktop MVP that can:
+
+1. start from a clean checkout using documented setup;
+2. create, import, edit, validate, and select one-file JSON PromptPacks;
+3. compile image intent into an immutable NJR;
+4. submit both **Add to Queue** and **Run Now** through one queue path;
+5. execute a basic still-image job against a configured Stable Diffusion WebUI;
+6. persist queue/history state through one SQLite repository;
+7. show progress, actionable errors, artifacts, and history without UI stalls;
+8. replay a completed image job through the same NJR/queue/runner path;
+9. turn a selected image into a short native SVD XT video on the target machine;
+10. survive restart without corrupting job identity, history, or artifacts.
+
+The MVP is a reliable vertical slice, not completion of every existing feature.
+
+## 2. Architectural basis
+
+The canonical runtime is:
+
+`Typed Intent -> Compiler -> NJR -> JobService -> Queue/JobRepository -> PipelineRunner.run_njr -> Typed Handler -> Artifacts -> History/Learning/Diagnostics`
+
+The roadmap preserves the parts of the codebase that have shown stable behavior:
+
+- queue-only fresh execution;
+- a single `run_njr` runner entry;
+- StableNew-owned orchestration;
+- same-process, single-node execution;
+- backend-specific typed handlers behind the runner.
+
+It corrects the migration seams that caused compensating behavior:
+
+- PromptPack identity becomes conditional on a PromptPack source;
+- the broad mutable NJR becomes a small immutable execution envelope;
+- queue/history mutable state moves to a job execution record;
+- pack-shaped generic requests become source-specific DTOs and compilers;
+- queue and history converge on one SQLite repository;
+- unified PromptPack JSON becomes native; TXT/TSV become interchange only;
+- video is narrowed to native SVD XT for MVP.
+
+## 3. Evidence-based recovery point
+
+Repository audit on 2026-09-05 found:
+
+- `f919cb4` (`Finally stable again, small issues left, no GUI stall`) is the best
+  demonstrated behavioral baseline before the later issue/QOL changes;
+- commits `5634849`, `75ffb27`, `303cbdb`, and `fab810b` chronicle the failed
+  child-runtime-host cutover and repeated instability;
+- the current `QOL-Work` branch at `1a9eb49` and `main` at `d452a2a` must be
+  preserved as comparison sources, not overwritten or accepted wholesale;
+- `24063b7` contains later fixes that require individual audit;
+- production imports depend on `src/state/__init__.py`,
+  `src/state/workspace_paths.py`, and `src/state/output_routing.py`, but an
+  unanchored `state/` ignore rule prevents those files from being tracked;
+- current NJR and `JobService` behavior still mixes old and new identity/state
+  assumptions;
+- test collection and execution do not yet provide trustworthy release proof.
+
+Recovery therefore starts from `f919cb4` plus the approved architecture-doc
+commit and explicitly audited recovery files. It does not reset, delete, or
+rewrite the existing branches.
+
+## 4. MVP definition of done
+
+### 4.1 Product acceptance
+
+- A new user can follow one setup guide and launch the application.
+- Missing WebUI, model, ffmpeg, or SVD dependencies produce bounded preflight
+  failures with corrective instructions.
+- A valid JSON PromptPack produces a deterministic one-image queue job.
+- `Run Now` and `Add to Queue` differ only in scheduling policy.
+- Queue state transitions are visible and remain responsive.
+- A completed image appears in artifacts and history with correct NJR lineage.
+- Replay creates a new NJR with a parent reference and uses the same runtime.
+- A selected image can produce the supported native SVD XT smoke clip on the
+  12 GB RTX 4070 Ti target using memory-safe defaults.
+- Restart preserves durable queue/history data without duplicate execution.
+- No MVP flow requires a fabricated PromptPack identity.
 
-Status: Authoritative  
-Updated: 2026-03-29  
-Applies To: Codex, Copilot, ChatGPT Planner, Human Contributors
+### 4.2 Engineering acceptance
 
-## 0. Strategic Objective
+- All production Python modules are tracked and importable in a clean checkout.
+- No fresh path bypasses queue or `PipelineRunner.run_njr`.
+- NJR round-trips every field and contains no mutable execution/result state.
+- One SQLite-backed `JobRepository` owns lifecycle persistence.
+- Legacy JSON/JSONL and paired PromptPack inputs have backup-first, idempotent,
+  conflict-reporting migration tools; there is no live fallback.
+- Test collection has zero unexpected errors and zero import-time side effects.
+- All non-quarantined canonical tests pass from a disposable workspace.
+- Real-backend image and SVD smoke results are recorded on the target machine.
+- The architecture gap register has no open MVP rows.
 
-Turn StableNew into a polished local orchestrator for image and video creation
-with:
+## 5. Active PR sequence
 
-- one architecture
-- one outer job model
-- one queue-first submission path
-- one runner
-- one canonical artifact/history/replay contract
-- one coherent documentation and testing surface
+| Order | PR | Status | Exit outcome |
+|---:|---|---|---|
+| 0 | `PR-ARCH-MVP-001` | Approved; amendments prepared | Reconciled canon and active roadmap are reviewed and committed |
+| 1 | `PR-MVP-000` | Approved; next runtime PR | Recoverable clean baseline with all production source tracked |
+| 2 | `PR-MVP-005` | Planned | Later branch/commit deltas classified as adopt, rewrite, defer, or reject |
+| 3 | `PR-MVP-010` | Planned | Trustworthy clean-checkout collection and isolated test harness |
+| 4 | `PR-MVP-020` | Planned | Reduced immutable NJR and complete versioned serialization |
+| 5 | `PR-MVP-030` | Planned | Typed compilers and NJR-only JobService submission contract |
+| 6 | `PR-MVP-040` | Planned | SQLite JobRepository with verified offline legacy import |
+| 7 | `PR-MVP-050` | Planned | One-file JSON PromptPack and conflict-safe migration |
+| 8 | `PR-MVP-060` | Planned | Reliable image create/queue/run/artifact/history/replay slice |
+| 9 | `PR-MVP-070` | Planned | Native SVD XT image-to-video slice and hardware preflight |
+| 10 | `PR-MVP-080` | Planned | MVP operator UX, setup, diagnostics, and recovery polish |
+| 11 | `PR-MVP-090` | Planned | Clean-machine release candidate and signed acceptance record |
 
-North Star runtime:
+Only `PR-ARCH-MVP-001` and `PR-MVP-000` are currently approved. Later rows
+require their own exact specs and owner approval.
 
-`Intent Surface -> Builder/Compiler -> NJR -> JobService Queue -> PipelineRunner -> Stage/Backend Execution -> Canonical Artifacts -> History/Learning/Diagnostics`
+## 6. Phase details
 
-## 1. What Is Now Done
+### Phase 0 — Canon and recovery control
 
-The original v2.6 unification sequence is complete through `PR-POLISH-214`.
+#### PR-ARCH-MVP-001 — v2.6 canon amendment
 
-Delivered outcomes:
+Synchronize architecture, governance, lifecycle, builder, coding/testing,
+golden paths, agent briefs, docs index, README, and this roadmap. Explicitly
+separate current evidence from target contracts. No runtime files may change.
 
-- fresh execution is queue-only
-- NJR is the outer job contract for both image and video work
-- live archive execution seams are gone
-- canonical config layering exists
-- test taxonomy is normalized
-- diagnostics and replay are unified across image and video
-- the managed Comfy runtime exists
-- one pinned LTX workflow exists
-- the dedicated `Video Workflow` GUI surface exists
-- the last live `submit_direct()` and `PipelineConfigPanel` compatibility seams are gone
+#### PR-MVP-000 — Recovery baseline and repository completeness
 
-Current collection baseline:
+Create a non-destructive recovery branch rooted at `f919cb4`, carry the approved
+docs amendment, correct the ignore rule, audit and track the three required
+`src/state/` modules, and prove imports from a clean disposable worktree. Preserve
+`main`, `QOL-Work`, user state, and all comparison commits.
 
-- `pytest --collect-only -q` -> `2964 collected / 0 skipped`
+Exit gate: a clone/worktree containing tracked files only can compile and import
+the application modules covered by the spec.
 
-## 2. Remaining Structural Debt
+#### PR-MVP-005 — Delta disposition
 
-The biggest remaining cross-cutting debt is now narrower and more product-facing:
+Compare `24063b7`, `d452a2a`, and `1a9eb49` to the recovery branch. Classify each
+MVP-relevant change with tests and architecture rationale. Adopt nothing by bulk
+merge. Any runtime adoption that exceeds an approved allowlist becomes a
+separate spec before implementation.
 
-- `src/controller/app_controller.py` remains about `5658` LOC
-- `src/controller/pipeline_controller.py` remains about `1572` LOC
-- `tests/compat/` still preserves temporary migration behavior that should continue shrinking
-- `AppStateV2.run_config` still exists as a GUI-facing dict projection, even though
-  canonical config layers are now mirrored alongside it
-- adaptive refinement now exists through detector-backed observation,
-  ADetailer-safe actuation, prompt/upscale policy integration, and
-  learning-aware feedback; remaining image-path debt is now mainly product UX
-  cleanup rather than missing refinement foundations
-- Pipeline sidebar and review/reprocess UX still carry product-level cleanup
-  debt around pack discovery, scan roots, and duplicated surfaces
-- StableNew-owned secondary motion now has a shared engine/provenance layer
-  across SVD native, AnimateDiff, and workflow-video, with canonical manifest,
-  replay, and container-summary coverage already landed through
-  `PR-VIDEO-241`; remaining video work is now follow-on UX, metadata
-  inspection, and structural cleanup rather than missing backend rollout
+Exit gate: no unidentified later-branch dependency can surprise the contract
+migration.
 
-## 3. Status of the Older Revised Video Queue
+### Phase 1 — Make verification trustworthy
 
-The earlier `PR-VIDEO-078` to `PR-VIDEO-088` plan has been partially or fully absorbed by the
-unification work:
+#### PR-MVP-010 — Test harness recovery
 
-- `PR-VIDEO-078` completed in substance via the canonical video backend registry and adapters
-- `PR-VIDEO-079` completed via workflow registry/spec work in `src/video/`
-- `PR-VIDEO-080` completed via the managed local Comfy runtime
-- `PR-VIDEO-081` completed via the workflow compiler
-- `PR-VIDEO-082` completed via the first pinned LTX workflow
-- `PR-VIDEO-083` is substantially complete via the dedicated `Video Workflow` GUI tab, but still needs richer workflow/video UX convergence
-- `PR-VIDEO-084` completed in substance via `PR-VIDEO-216` sequence orchestration and segment planning
-- `PR-VIDEO-085` completed in substance via `PR-VIDEO-217` stitch/interpolation/clip-assembly unification
-- `PR-VIDEO-086` is substantially covered by `PR-OBS-212`; future improvements are now follow-on polish, not a blocked foundation item
-- `PR-VIDEO-087` completed in substance via `PR-VIDEO-218` continuity pack foundation
-- `PR-VIDEO-088` completed in substance via `PR-VIDEO-219` story and shot planning foundation
+Remove collection-time script behavior, isolate filesystem and runtime state,
+define test taxonomy/markers, establish deterministic fakes, and add architecture
+guards for repository completeness and the one execution path.
 
-## 4. Revised Post-Unification PR Queue
+Exit gate: `pytest --collect-only -q` succeeds in a disposable workspace; a
+small canonical smoke suite runs without network, GPU, GUI display, or mutation
+of tracked files.
 
-This is the real queue from current repo state, not from an older idealized snapshot.
+### Phase 2 — Repair the core contract
 
-### 1. `PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence`
+#### PR-MVP-020 — NJR core
 
-Status: Completed 2026-03-19
+Introduce the versioned eight-part NJR core, typed source descriptors,
+workload-specific specs, conditional source identity, immutability, complete
+round-trip serialization, and an explicit migration reader. Move mutable facts
+out of NJR types rather than aliasing them indefinitely.
 
-Closed the remaining gap between `video_workflow`, history, manifests, and
-output routing.
+Exit gate: image, video, training, replay, and non-pack source examples validate;
+all NJR fields round-trip; `pack_required` exists only in PromptPack-source
+validation.
 
-Primary outcomes:
+#### PR-MVP-030 — Compilers and submission
 
-- deterministic output routing for workflow-video jobs
-- better recent/history affordances for video workflow outputs
-- cleaner handoff between `Video Workflow`, SVD, and Movie Clips surfaces
-- removal of any remaining stage-specific video UI assumptions that should now be generic
+Create source-specific DTO/compiler seams and change `JobService` to accept NJR
+plus submission policy. Migrate source families in explicit slices and remove
+the pack-shaped generic request when its last caller is gone.
 
-Completion record:
+Exit gate: every enabled MVP source reaches the queue as NJR, and no compiler or
+GUI path invokes the runner.
 
-- `docs/CompletedPR/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
+### Phase 3 — Establish one durable state authority
 
-### 2. `PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning`
+#### PR-MVP-040 — SQLite JobRepository
 
-Status: Completed 2026-03-19
+Implement a transactional SQLite repository for NJR snapshots and mutable job
+execution records. Make queue and history projections use it. Add a backup-first,
+dry-run-capable, idempotent importer for legacy queue/history JSON/JSONL with
+count, identity, checksum, and conflict reporting. Remove live fallback in the
+same cutover.
 
-Implemented the first-class long-form video planning layer.
+Exit gate: restart, failure, cancellation, retry metadata, artifacts, and replay
+survive correctly; rollback to backups is demonstrated in a disposable copy.
 
-Primary outcomes:
+### Phase 4 — Deliver the image vertical slice
 
-- `VideoSequenceJob`
-- `VideoSegmentPlan`
-- deterministic carry-forward rules
-- overlap metadata
-- per-segment provenance in canonical artifacts/manifests
+#### PR-MVP-050 — PromptPack convergence
 
-Completion record:
+Make versioned JSON the only native PromptPack authority. Provide explicit
+TXT/TSV import/export and a conflict-reporting paired-file migration. Remove
+runtime paired-file and universal identity assumptions together.
 
-- `docs/CompletedPR/PR-VIDEO-216-Sequence-Orchestration-and-Segment-Planning.md`
+Exit gate: author/import/save/reload/compile works from JSON alone; conflict and
+rollback fixtures pass.
 
-### 3. `PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification`
+#### PR-MVP-060 — Image golden path
 
-Status: Completed 2026-03-19
+Stabilize one conservative txt2img path first, then add only already-supported
+optional stages that pass deterministic contract tests. Wire artifacts, history,
+replay, progress, cancellation, and actionable WebUI failures end-to-end.
 
-Turned post-video assembly into a StableNew-owned artifact path instead of
-disconnected utilities.
+Exit gate: mocked CI journey passes and a recorded real-WebUI smoke completes
+from the GUI on the target machine.
 
-Primary outcomes:
+### Phase 5 — Deliver the video vertical slice
 
-- stitched-output artifacts
-- interpolated-output artifacts
-- sequence-aware clip/export integration
-- explicit bridge between sequence outputs and Movie Clips
+#### PR-MVP-070 — Native SVD XT
 
-Completion record:
+Keep video behind the NJR runner handler, remove MVP dependence on Comfy/LTX,
+and productize native SVD XT image-to-video with model/license/setup guidance,
+preflight, offload, chunking, cancellation, artifacts, and failure diagnostics.
 
-- `docs/CompletedPR/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
+Exit gate: deterministic contract tests pass and a short real SVD XT clip is
+recorded on the 12 GB target without application or UI failure.
 
-### 4. `PR-VIDEO-218-Continuity-Pack-Foundation`
+### Phase 6 — Productize and release
 
-Status: Completed 2026-03-20
+#### PR-MVP-080 — Operator UX and recovery
 
-Added continuity containers that can survive across jobs and sequences.
+Expose only the MVP-supported paths, add first-run and dependency guidance,
+clarify queue/history/errors, provide safe retry/cancel controls, and remove or
+label non-MVP surfaces. This is workflow polish, not a GUI rewrite.
 
-Primary outcomes:
+#### PR-MVP-090 — Release candidate
 
-- `ContinuityPack`
-- anchor-set linkage
-- character/wardrobe/scene references
-- manifest/history linkage for continuity-aware runs
+Run clean-machine setup, migration rehearsal, canonical tests, real image/video
+smokes, restart/replay, and artifact inspection. Freeze versions and publish one
+acceptance record containing commands, environment, results, known limitations,
+and rollback instructions.
 
-Completion record:
+## 7. Critical review and strengthened controls
 
-- `docs/CompletedPR/PR-VIDEO-218-Continuity-Pack-Foundation.md`
+### Weakness: the chosen baseline may omit valuable later fixes
 
-### 5. `PR-VIDEO-219-Story-and-Shot-Planning-Foundation`
+**Control:** preserve every current branch, recover from `f919cb4`, then use
+`PR-MVP-005` to evaluate later deltas individually. No bulk merge or history
+rewrite is part of recovery.
 
-Status: Completed 2026-03-20
+### Weakness: a “stable” local tree may depend on ignored files
 
-Added manual planning structures above sequence jobs.
+**Control:** `PR-MVP-000` makes repository completeness the first runtime gate.
+All future release verification runs from a tracked-files-only worktree.
 
-Primary outcomes:
+### Weakness: NJR and service migration could become another big-bang rewrite
 
-- `StoryPlan`
-- `ScenePlan`
-- `ShotPlan`
-- `AnchorPlan`
-- deterministic compilation from plan -> sequence jobs
+**Control:** freeze the NJR core first, migrate one typed compiler at a time,
+retain one queue/runner route throughout, and require deletion of the superseded
+branch in the same source-family slice.
 
-Completion record:
+### Weakness: persistence convergence risks user data loss
 
-- `docs/CompletedPR/PR-VIDEO-219-Story-and-Shot-Planning-Foundation.md`
+**Control:** separate import from cutover; require dry-run, backup, checksums,
+counts, conflict reports, idempotence, and rollback rehearsal. Never dual-write
+or delete source files during migration.
 
-### 6. `PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter`
+### Weakness: existing tests can be green for the wrong architecture or can
+damage repository state
 
-Status: Completed 2026-03-20
+**Control:** recover collection and isolation before contract work. Contract
+tests assert responsibilities and forbidden paths, while real-backend tests are
+explicit, bounded, and separate from hermetic CI.
 
-Focus on the user experience of the current product without changing toolkits yet.
+### Weakness: video can consume the roadmap
 
-Primary outcomes:
+**Control:** one backend and one journey only: selected image to short native
+SVD XT clip. Comfy, LTX, AnimateDiff, sequencing, stitching, and secondary
+motion are explicitly post-MVP.
 
-- tighter queue/history/video workflow ergonomics
-- clearer status and result surfaces
-- less modal friction across PromptPack, History, SVD, Video Workflow, and Movie Clips
-- better progressive disclosure and defaults for video workflows
+### Weakness: model availability, license, and 12 GB GPU behavior are external
+risk
 
-Completion record:
+**Control:** the model is not bundled; preflight verifies installation and
+capability. Release proof includes the target RTX 4070 Ti and memory-safe
+settings. Failure remains actionable and does not corrupt queue state.
 
-- `docs/CompletedPR/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
+### Weakness: synchronized documents can drift again
 
-### 7. `PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink`
+**Control:** every target gap has a closing PR. Closeout must update the gap
+register, roadmap, index, and affected Tier 2 docs in the same change. Code is
+not “done” while active docs claim the old behavior.
 
-Status: Completed 2026-03-20
+### Weakness: broad historical scope can prevent an MVP forever
 
-Finish the most visible cross-cutting cleanup that still affects GUI work.
+**Control:** release scope is the definition of done in section 4. Training
+productization, distributed execution, closed-loop learning, backend expansion,
+and broad UI redesign do not block MVP.
 
-Primary outcomes:
+## 8. Release gates by layer
 
-- replace more direct `run_config` dict usage with a dedicated GUI config adapter
-- further reduce `AppController` and `PipelineController`
-- keep UX work from hard-coding against legacy state shape
+| Layer | Required proof |
+|---|---|
+| Repository | Clean tracked-files-only checkout imports and compiles |
+| Contracts | Versioned NJR/source/workload round-trip and forbidden-field tests |
+| Persistence | Transaction, restart, migration, idempotence, and rollback tests |
+| Application | Typed compiler -> JobService -> queue -> runner integration tests |
+| Image | Mocked journey plus recorded real WebUI smoke |
+| Video | Mocked journey plus recorded native SVD XT target-hardware smoke |
+| GUI | Responsive queue/progress/error/replay smoke without worker-thread UI writes |
+| Operations | Setup, dependency preflight, logs, data location, backup, and recovery guide |
+| Documentation | No open MVP gap-register row or contradictory active source |
 
-Delivered outcomes:
+## 9. Explicitly deferred until after MVP
 
-- `AppStateV2` now exposes a dedicated `GuiConfigAdapterV26` facade over
-  canonical config layers
-- GUI-facing config mutation for randomizer and submission projection now routes
-  through `GuiConfigService`
-- history replay/hydration logic moved behind a bounded pipeline-controller
-  handoff service instead of living directly in the top-level controller
+- ComfyUI/LTX and additional video backends;
+- AnimateDiff, secondary motion, multi-shot continuity, and stitching;
+- child runtime host, daemon, cluster, or multi-node scheduling;
+- full training-product UX;
+- automated closed-loop learning decisions;
+- large controller or GUI framework rewrites not required by the vertical slice;
+- broad performance optimization without measured MVP bottlenecks.
 
-Completion record:
+## 10. Next action
 
-- `docs/CompletedPR/PR-CTRL-221-GUI-Config-Adapter-and-Final-Controller-Shrink.md`
-
-### 8. `PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation`
-
-Status: Completed 2026-03-20
-
-Establish the canonical adaptive refinement contract before any behavior change.
-
-Primary outcomes:
-
-- one nested `intent_config["adaptive_refinement"]` contract
-- a StableNew-owned `src/refinement/` package boundary
-- builder and NJR persistence without new job models
-- import-boundary guard tests and a schema document
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-224-Adaptive-Refinement-Contracts-and-Dark-Launch-Foundation.md`
-
-Guiding roadmap:
-
-- `docs/CompletedPlans/ADAPTIVE_REFINEMENT_EXECUTABLE_ROADMAP_v2.6.md`
-
-### 9. `PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture`
-
-Status: Completed 2026-03-20
-
-Add the deterministic observation layer before any output-changing behavior.
-
-Primary outcomes:
-
-- prompt-intent analysis reusing the current prompt subsystem
-- observation-only decision bundles in runner metadata
-- null-detector fallback and no stage mutation
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-225-Prompt-Intent-Analysis-and-Observation-Only-Decision-Capture.md`
-
-### 10. `PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment`
-
-Status: Completed 2026-03-20
-
-Add the first real subject-assessment path without making OpenCV mandatory.
-
-Primary outcomes:
-
-- optional OpenCV detector support
-- threshold versioning for scale-band assessment
-- richer observation bundles with deterministic fallback behavior
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-226-Detector-Boundary-and-Optional-OpenCV-Subject-Assessment.md`
-
-### 11. `PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application`
-
-Status: Completed 2026-03-20
-
-Roll out the first controlled runtime actuation, limited to ADetailer.
-
-Primary outcomes:
-
-- per-image ADetailer-safe overrides
-- explicit rollout modes and rollback path
-- manifest-facing provenance for applied overrides
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-227-Safe-ADetailer-Adaptive-Policy-Application.md`
-
-### 12. `PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration`
-
-Status: Completed 2026-03-20
-
-Complete the runtime portion of adaptive refinement with bounded prompt and
-upscale integration.
-
-Primary outcomes:
-
-- stage-scoped prompt patches with deterministic merge order
-- bounded upscale policy application
-- original-prompt and final-prompt provenance for replay
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-228-Prompt-Patch-and-Upscale-Policy-Integration.md`
-
-### 13. `PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback`
-
-Status: Completed 2026-03-20
-
-Close the loop by making refinement decisions visible to the local learning
-system without weakening evidence-tier safeguards.
-
-Primary outcomes:
-
-- scalar refinement metrics in learning records
-- refinement-aware recommendation context
-- conservative, evidence-tier-respecting feedback for future tuning
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-229-Learning-Loop-and-Recommendation-Aware-Refinement-Feedback.md`
-
-### 14. `PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup`
-
-Status: Completed 2026-03-20
-
-Remove the remaining hidden model-switch ambiguity from the image path.
-
-Primary outcomes:
-
-- explicit SD checkpoint pinning in the actual ADetailer/img2img payload path
-- manifest model precedence hardened to prefer requested stage config over
-  ambient WebUI state
-- removal of the generic ADetailer `model` alias from canonical config merging
-- regression coverage proving txt2img, ADetailer, and upscale stay pinned to
-  the NJR base model by default
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-230-ADetailer-Payload-Checkpoint-Pinning-and-Detector-Model-Key-Cleanup.md`
-
-### 15. `PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit`
-
-Status: Completed 2026-03-20
-
-Remove route confusion from output directory selection and make the base output
-root deterministic.
-
-Primary outcomes:
-
-- `output_dir` means root only, not route-plus-root
-- known legacy route suffixes stripped before route resolution
-- canonical route selection derived from job/stage intent instead of folder-name
-  guesswork
-- regression tests for regular image, AnimateDiff, workflow-video, and
-  discovered-output scanning
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-231-Output-Root-Normalization-and-Route-Classification-Audit.md`
-
-### 16. `PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery`
-
-Status: Completed 2026-03-20
-
-Fix the confusing PromptPack selector UX and make refresh behavior real.
-
-Primary outcomes:
-
-- remove the empty legacy pack text field from the Pipeline sidebar
-- make refresh rediscover actual PromptPack files, including JSON-backed packs
-- align the selector label and empty state with current PromptPack behavior
-- add GUI tests for refresh, discovery, and state persistence
-
-Completion record:
-
-- `docs/CompletedPR/PR-GUI-232-Pack-Selector-Cleanup-and-Real-Pack-Refresh-Discovery.md`
-
-### 17. `PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix`
-
-Status: Completed 2026-03-20
-
-Make discovered-experiment scanning use the same canonical output root as the
-rest of the product.
-
-Primary outcomes:
-
-- remove fallback scanning from ad hoc `app_state.output_dir`
-- use canonical config/engine output root for discovered runs
-- add regression coverage for regular image outputs and routed video outputs
-
-Completion record:
-
-- `docs/CompletedPR/PR-LEARN-233-Canonical-Discovered-Scan-Root-Fix.md`
-
-### 18. `PR-GUI-234-Reprocess-Surface-Consolidation`
-
-Status: Completed 2026-03-20
-
-Reduce duplicated reprocess UX and keep one canonical advanced reprocess
-surface.
-
-Primary outcomes:
-
-- `Review` becomes the canonical advanced reprocess surface
-- sidebar reprocess is reduced to a minimal launcher or removed
-- duplicated behaviors and confusing parallel controls are eliminated
-
-Completion record:
-
-- `docs/CompletedPR/PR-GUI-234-Reprocess-Surface-Consolidation.md`
-
-### 19. `PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX`
-
-Status: Completed
-
-Replace the legacy-feeling `Core Config` surface with a real base-generation
-ownership boundary and readable recipe UX.
-
-Primary outcomes:
-
-- `Core Config` removed from the active v2 path and replaced by `Base Generation`
-- txt2img no longer acts as a second owner for global base-generation fields
-- `Pipeline Presets` become readable `Saved Recipes` with summaries
-- sidebar/controller `core_*` GUI vocabulary is retired in the active v2 path
-- visible precedence between base generation and stage overrides
-
-Completion record:
-
-- `docs/CompletedPR/PR-GUI-235-Core-Config-to-Base-Generation-and-Recipe-Summary-UX.md`
-
-### 19A. `PR-GUI-235A-PresetNaming`
-
-Status: Completed
-
-Clean up the active Pipeline v2 naming after the ownership reset so the live
-sidebar/controller path speaks in `Saved Recipe` terms instead of `Preset`
-terms, while leaving the underlying `ConfigManager` storage contract untouched.
-
-Primary outcomes:
-
-- active sidebar variables and callbacks use `saved_recipe_*` naming
-- active pipeline controller callbacks use `saved_recipe` terminology
-- active GUI tests follow the new names and intent
-- legacy storage still remains under `presets/` until a future storage-contract
-  cleanup PR explicitly changes that boundary
-
-Completion record:
-
-- `docs/CompletedPR/PR-GUI-235A-PresetNaming.md`
-
-### 20. `PR-VIDEO-236-Secondary-Motion-Intent-Contract-and-Observation-Only-Policy-Carrier`
-
-Status: Completed 2026-03-21
-
-Freeze the secondary-motion outer contract before any backend behavior change.
-
-Primary outcomes:
-
-- one nested `intent_config["secondary_motion"]` payload distinct from the
-  existing `motion_profile`
-- runner observation-only motion planning metadata for the existing video
-  stages
-- a StableNew-owned `src/video/motion/` package boundary and schema document
-
-Delivered outcomes:
-
-- `src/video/motion/` now owns the versioned intent and policy carrier
-- `secondary_motion` survives canonicalization and NJR persistence through main,
-  prompt-pack, and CLI builders
-- runner video requests now receive metadata-only
-  `context_metadata["secondary_motion_policy"]`
-- run metadata now records observation-only per-video-stage policies without
-  mutating backend behavior, manifests, or container metadata
-
-Schema reference:
-
-- `docs/Architecture/SECONDARY_MOTION_POLICY_SCHEMA_V1.md`
-
-Guiding roadmap:
-
-- `docs/CompletedPlans/SECONDARY_MOTION_EXECUTABLE_ROADMAP_v2.6.md`
-
-### 21. `PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract`
-
-Status: Completed 2026-03-21
-
-Land the shared deterministic engine and the one canonical provenance contract
-before backend rollout.
-
-Primary outcomes:
-
-- a StableNew-owned shared secondary-motion engine and worker contract
-- compact replay and container-metadata summaries plus detailed manifest helpers
-- no backend wiring yet, only the reusable runtime and summary contract
-
-Completion record:
-
-- `docs/CompletedPR/PR-VIDEO-237-Shared-Secondary-Motion-Engine-and-Provenance-Contract.md`
-
-### 21A. `PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping`
-
-Status: Completed 2026-03-21
-
-Interleaved critical hardening gate before the next runtime-heavy backend
-rollout.
-
-Primary outcomes:
-
-- GPU-pressure risk classification and pre-stage warnings for image pipeline
-  execution
-- managed WebUI launch profiles including an SDXL-guarded low-memory mode
-- failure damping for repeated readiness, watchdog, and diagnostics storms
-- improved diagnostics bundles for stall and pressure incidents
-- explicit warnings when live WebUI model state drifts from requested stage
-  intent
-
-Reason for slotting here:
-
-- current image/runtime instability is significant enough that continuing
-  backend-runtime rollout first would reduce confidence in later video PR
-  validation
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-256-WebUI-Pressure-Guardrails-and-Failure-Damping.md`
-
-Validation note:
-
-- live 10-job validation improved observability but did not materially stabilize
-  the workload on its own
-- the required follow-on hardening pass was delivered by `PR-HARDEN-257`
-- combined outcome: the same workload class later completed successfully under
-  guarded recovery and admission control
-
-### 21B. `PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control`
-
-Status: Implemented 2026-03-21
-
-Follow-on critical hardening gate after `PR-HARDEN-256` real-world validation
-showed that warnings alone are not enough.
-
-Primary outcomes:
-
-- detect poisoned or stale WebUI runtime state before heavy jobs begin
-- force guarded clean restart and readiness recovery when runtime state is not
-  healthy
-- refuse clearly unsafe heavy stage execution instead of timing out deep in
-  WebUI
-- make watchdog and diagnostics single-flight authoritative
-- surface duplicate-process risk and stale-process pressure in logs and
-  diagnostics
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-257-WebUI-State-Recovery-and-Admission-Control.md`
-
-Reason for slotting here:
-
-- `PR-HARDEN-256` reduced blind spots but did not reduce failures enough on its
-  own, so runtime admission and guarded restart behavior had to land before the
-  next runtime-heavy video PR
-
-Validation note:
-
-- heavy rerun using the same `AA LoRA Strength` workload class completed
-  successfully: `10 / 10` complete `txt2img -> adetailer -> upscale` chains,
-  `0` failures, `0` diagnostics bundles, average wall time `117.358s`
-- validation summary: `reports/pr257_validation_summary.json`
-- `PR-VIDEO-238` is now unblocked
-
-### 21C. `PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy`
-
-Status: Implemented 2026-03-21
-
-Non-blocking follow-on to keep the global WebUI default conservative while
-automatically upgrading heavy SDXL image workloads to `sdxl_guarded`.
-
-Primary outcomes:
-
-- retains `standard` as the global default launch profile
-- automatically prefers `sdxl_guarded` for SDXL-heavy geometry and
-  `txt2img -> adetailer/upscale` workload chains
-- uses the managed restart/recovery path instead of ad hoc profile switching
-- treats `low_memory` as an already-guarded profile
-
-Completion record:
-
-- `docs/CompletedPR/PR-HARDEN-258-Workload-Aware-WebUI-Launch-Policy.md`
-
-### 22. `PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration`
-
-Status: Completed 2026-03-24
-
-Use the safest existing postprocess seam to land the first real runtime motion
-path.
-
-Primary outcomes:
-
-- runner-injected transient SVD motion execution config
-- shared-engine application as SVD postprocess stage zero
-- canonical motion provenance in SVD manifest, replay, and container metadata
-
-Completion record:
-
-- `docs/CompletedPR/PR-VIDEO-238-SVD-Native-Secondary-Motion-Postprocess-Integration.md`
-
-### 23. `PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration`
-
-Status: Completed 2026-03-24
-
-Insert the shared engine into the existing AnimateDiff frame pipeline.
-
-Primary outcomes:
-
-- shared-engine application between frame write and video encode
-- skip-safe AnimateDiff motion behavior with stable output-path semantics
-- canonical motion provenance in AnimateDiff manifest, replay, and container metadata
-
-Completion record:
-
-- `docs/CompletedPR/PR-VIDEO-239-AnimateDiff-Secondary-Motion-Frame-Pipeline-Integration.md`
-
-### 24. `PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure`
-
-Status: Completed 2026-03-24
-
-Close the last major backend parity gap for the shared motion carrier.
-
-Primary outcomes:
-
-- StableNew-owned extract/apply/re-encode parity path for workflow-video
-- canonical replay closure without a new custom Comfy node dependency
-- consistent motion summary shape across all three current video backends
-- skip-safe fallback to the original workflow artifact when local prerequisites
-  or re-encode steps are unavailable
-
-Completion record:
-
-- `docs/CompletedPR/PR-VIDEO-240-Workflow-Video-Secondary-Motion-Parity-and-Replay-Closure.md`
-
-### 25. `PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback`
-
-Status: Completed 2026-03-24
-
-Close the loop by making the shared motion carrier visible to learning and
-recommendation flows without weakening evidence-tier safeguards.
-
-Primary outcomes:
-
-- scalar motion metrics in learning records
-- backend-aware and application-path-aware motion recommendation context
-- explicit backend/policy/path/status cohorting for motion evidence
-- no raw frame or dense motion payload retention in centralized learning data
-
-Completion record:
-
-- `docs/CompletedPR/PR-VIDEO-241-Learning-and-Risk-Aware-Secondary-Motion-Feedback.md`
-
-## 4A. Post-`PR-VIDEO-241` Prompt Optimizer Tranche
-
-The next product-facing image/prompt tranche is tracked in:
-
-- `docs/CompletedPlans/PROMPT_OPTIMIZER_EXECUTABLE_ROADMAP_v2.6.md`
-
-It is intentionally queued after the current secondary-motion video sequence
-and before broader lower-leverage cleanup. The planned rollout is:
-
-- `PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening`
-- `PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only`
-- `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
-- `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
-- `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
-
-## 4AA. Learning/Review Staged Curation Tranche
-
-The next Learning/Review product tranche is tracked in:
-
-- `docs/CompletedPlans/STAGED_CURATION_EXECUTABLE_ROADMAP_v2.6.md`
-
-This tranche is accepted in direction, but it is intentionally shaped to fit
-the current product:
-
-- `Learning` becomes the canonical evidence-and-advancement workspace
-- `Review` remains the canonical advanced reprocess workspace
-- no standalone competing curation architecture is introduced
-
-Priority note:
-
-- this tranche is now explicitly prioritized after the image output-route
-  regression is closed and after recognizing `PR-VIDEO-238` through
-  `PR-VIDEO-241` as completed backend/runtime work
-- immediate order:
-  1. close the image output-route regression
-  2. treat `PR-LEARN-259A` as verified baseline
-  3. treat `PR-LEARN-260A` through `PR-LEARN-260C` as completed
-  4. treat `PR-LEARN-260D` as completed
-  5. treat `PR-LEARN-260E` as completed
-  6. treat `PR-LEARN-260F` as completed
-  7. treat `PR-LEARN-261` as completed
-  8. treat `PR-LEARN-262` as completed
-  9. treat `PR-LEARN-263` as completed
-  10. treat `PR-LEARN-264` as completed
-  11. treat `PR-VIDEO-238` as completed
-  12. treat `PR-VIDEO-239` as completed
-  13. treat `PR-VIDEO-240` as completed
-  14. treat `PR-VIDEO-241` as completed
-  15. treat `PR-PROMPT-241A` as completed
-  16. treat `PR-PROMPT-241B` as completed
-  17. treat `PR-PROMPT-241C` as completed
-  18. treat `PR-PROMPT-241D` as completed
-  19. treat `PR-PROMPT-241E` as completed
-  20. treat `PR-UX-265` as completed
-  21. treat `PR-UX-266` as completed
-  22. treat `PR-UX-271` as completed
-  23. treat `PR-UX-267` as completed
-  24. treat `PR-UX-268` as completed
-  25. treat `PR-UX-269` as completed
-  26. treat `PR-UX-270` as completed
-  27. treat `PR-UX-272` as completed
-  28. treat `PR-UX-273` as completed
-  29. treat `PR-UX-274` as completed
-  30. treat `PR-UX-275` as completed
-  31. treat `PR-UX-276` as completed
-  32. treat `PR-UX-277` as completed
-  33. treat `PR-UX-278` as completed
-  34. treat `PR-UX-279` as completed
-
-Planned rollout:
-
-- `PR-PROMPT-241A-Format-Only-Safety-and-Dedupe-Hardening`
-  Completed 2026-03-24
-
-- `PR-PROMPT-241B-Orchestrator-and-Intent-Bundle-Recommend-Only`
-  Completed 2026-03-24
-
-- `PR-PROMPT-241C-Stage-Policy-Engine-and-Auto-Safe-Fill-Missing`
-  Completed 2026-03-24
-
-- `PR-UX-266-Action-Buttons-and-High-Risk-Controls-Explained`
-  Completed 2026-03-24
-
-- `PR-UX-268-Effective-Config-Summaries-and-Why-This-Value-Is-Used`
-  Completed 2026-03-25
-
-- `PR-UX-269-Workflow-Pathway-Guidance-and-Use-Case-Recommendations`
-  Completed 2026-03-25
-
-- `PR-UX-270-Contextual-Help-Mode-and-Inspectable-UI-Language-Polish`
-  Completed 2026-03-25
-
-- `PR-UX-272-GUI-Audit-and-Consistency-Inventory`
-  Completed 2026-03-25
-
-- `PR-UX-273-Shared-Dark-Mode-Tokens-and-Widget-Theme-Discipline`
-  Completed 2026-03-25
-
-- `PR-UX-274-Shared-Layout-Minimums-and-Resize-Discipline`
-  Completed 2026-03-26
-
-- `PR-UX-275-Pipeline-and-Stage-Card-Resilience-Sweep`
-  Completed 2026-03-26
-
-- `PR-UX-276-Prompt-and-LoRA-Row-Usability-Sweep`
-  Completed 2026-03-26
-
-- `PR-UX-277-Review-Learning-and-Video-Panel-Consistency-Sweep`
-  Completed 2026-03-26
-
-- `PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep`
-  Completed 2026-03-26
-
-- `PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist`
-  Completed 2026-03-26
-
-- `PR-PROMPT-241D-Manifest-Schema-v3-and-Replay-Contract`
-  Completed 2026-03-24
-
-- `PR-PROMPT-241E-Learning-Hooks-and-Tuning-Scaffolding`
-  Completed 2026-03-24
-
-- `PR-UX-265-Tab-Overview-Panels-and-Workflow-Explainers`
-  Completed 2026-03-24
-
-- `PR-UX-271-GUI-Layout-Resilience-and-LoRA-Control-Usability`
-  Completed 2026-03-25
-
-- `PR-UX-267-Stage-Card-Settings-Help-and-Config-Intent-Descriptions`
-  Completed 2026-03-25
-
-- `PR-LEARN-259A-Curation-Contracts-Lineage-and-Selection-Events`
-  Completed 2026-03-21
-- `PR-LEARN-259B-Learning-Workspace-Staged-Curation-Mode`
-  Completed 2026-03-21
-- `PR-LEARN-259C-Review-History-Import-and-Large-Compare-Surface`
-  Completed 2026-03-21
-- `PR-LEARN-259D-Derived-Stage-Advancement-and-Face-Triage-Routing`
-  Completed 2026-03-21
-- `PR-LEARN-259E-Learning-Evidence-Bridge-and-Reason-Tag-Analytics`
-  Completed 2026-03-21
-- `PR-LEARN-259F-Replay-Diagnostics-and-Workflow-Summaries`
-  Completed 2026-03-21
-- `PR-LEARN-260A-Staged-Curation-Source-Prompt-Surface-and-Decision-Context`
-  Completed 2026-03-22
-- `PR-LEARN-260B-Staged-Curation-Plan-Build-vs-Enqueue-Seam`
-  Completed 2026-03-22
-- `PR-LEARN-260C-Learning-To-Review-Handoff-and-Review-Draft-Load`
-  Completed 2026-03-23
-- `PR-LEARN-260D-Review-Derived-Config-Inspector-and-Effective-Settings-Summary`
-  Completed 2026-03-23
-- `PR-LEARN-260E-Source-vs-Derived-Outcome-Compare-and-Lineage-Jump`
-  Completed 2026-03-23
-- `PR-LEARN-260F-Queue-Now-vs-Edit-in-Review-UX-Polish-and-Bulk-Selection-Rules`
-  Completed 2026-03-23
-- `PR-LEARN-261-Portable-Review-Metadata-Stamping`
-  Completed 2026-03-23
-- `PR-LEARN-262-Portable-Review-Metadata-Rehydration-and-UI-Surfacing`
-  Completed 2026-03-23
-- `PR-LEARN-263-Artifact-Metadata-Inspector-and-Debug-UI`
-  Completed 2026-03-23
-- `PR-LEARN-264-Canonical-Metadata-Schemas-and-Contracts`
-  Completed 2026-03-23
-
-### Completed follow-on: Content Visibility Safety Tranche
-
-Status: Completed 2026-03-27
-
-This follow-on tranche is now complete for the active prompt, preview, queue,
-history, learning, review, and video-facing GUI surfaces.
-
-Delivered outcomes:
-
-- `PR-CONFIG-271` added the canonical persisted `sfw` / `nsfw` mode contract
-  and app-state notification path
-- `PR-CTRL-272` added the shared resolver and wired filtering/redaction through
-  prompt-pack, LoRA, history, and discovered-review selector paths
-- `PR-GUI-273` added the global shell toggle plus live cross-tab filtering,
-  redaction notices, and refresh wiring across mounted v2 surfaces
-- `PR-TEST-274` added deterministic regression, journey, and learning-path
-  hardening for persistence, live updates, and legacy metadata fallback
-
-Completion records:
-
-- `docs/CompletedPR/PR-CONFIG-271-Content-Visibility-Mode-Contract-and-Persistence.md`
-- `docs/CompletedPR/PR-CTRL-272-Content-Visibility-Resolver-and-Selector-Wiring.md`
-- `docs/CompletedPR/PR-GUI-273-Mode-Toggle-UX-and-Cross-Tab-Filtering.md`
-- `docs/CompletedPR/PR-TEST-274-Content-Visibility-Regression-and-Journey-Hardening.md`
-
-Sequencing note:
-
-- close the current image output-route regression before beginning this tranche,
-  because discovered/imported review quality depends on correct output
-  classification
-
-## 4AB. GUI Responsiveness Closure Tranche
-
-Status: Completed 2026-03-29
-
-This tranche closed the gap between runner/controller architectural separation
-and actual GUI repaint-cadence ownership.
-
-Repo-truth status:
-
-- `PR-GUI-283-AppController-UI-Boundary-Closure-and-Operator-Log-Projection`
-  Completed 2026-03-28
-- `PR-GUI-284-AppState-Batched-Invalidation-and-Flush-Contract`
-  Completed 2026-03-28
-- `PR-GUI-285-Hot-Surface-Refresh-Scheduler-and-Subscription-Ownership`
-  Completed 2026-03-28
-- `PR-GUI-286-Incremental-Projection-Reconciliation-and-Visibility-Gating`
-  Completed 2026-03-29
-- `PR-HARDEN-287-Runtime-Status-Backpressure-GUI-Perf-Journey-and-Architecture-Guards`
-  Completed 2026-03-29
-
-Delivered outcomes:
-
-- `AppController` no longer writes operator-log or bottom-status text directly
-  into Tk widgets
-- `AppStateV2` now batches hot runtime keys and exposes an explicit operator-log
-  buffer plus `flush_now()`
-- `PipelineTabFrameV2` owns hot queue/history/preview refresh scheduling for
-  the pipeline shell
-- hidden pipeline hot surfaces now defer work instead of burning Tk time while
-  unmapped
-- the same visibility-gated deferral now reaches prompt/review/learning/photo-optimize/
-  SVD/movie/video/Debug Hub hot refresh surfaces
-- architecture enforcement now blocks controller-side Tk imports and direct
-  widget mutation patterns
-- the deterministic synthetic busy-run perf journey is now the canonical GUI
-  responsiveness proof, with `p95 <= 35 ms` and `max <= 100 ms`
-
-## 4B. Post-`PR-VIDEO-241` Structural Queue
-
-The structural queue that followed the secondary motion tranche was tracked in:
-
-- `docs/PR_Backlog/TOP_20_VERDICTS_AND_POST_VIDEO241_QUEUE_v2.6.md`
-
-That queue converted the 2026-03-21 deep-research audit into a repo-truth-based
-remediation sequence. The highest-priority follow-on items were:
-
-- `PR-ARCH-242-Controller-GUI-Boundary-Core-Controller-Reset`
-  Completed 2026-03-27
-- `PR-ARCH-243-Archive-Import-Fencing-and-Reference-Relocation`
-  Completed 2026-03-29; live archive Python modules were removed from
-  `src/**/archive/**`, relocated reference-only code now lives under
-  `tools/archive_reference/`, and archive import regressions are fenced by
-  `tests/safety/test_no_archive_python_modules_under_src.py` plus the
-  architecture/taxonomy enforcement suite
-- `PR-HYGIENE-244-Tracked-Runtime-State-Purge-and-Hygiene-Enforcement`
-  Completed 2026-03-29; runtime-state ownership is centralized through
-  `src/state/workspace_paths.py`, tracked-state drift is guarded by
-  `tests/safety/test_runtime_state_hygiene.py`, and the short canonical
-  contract now lives in `docs/runbooks/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md`
-- `PR-CI-245-CI-Truth-Sync-and-Smoke-Suite-Contract`
-  Completed 2026-03-29; CI now runs the named required smoke gate
-  `tools/ci/run_required_smoke.py`, and workflow/docs drift is enforced by
-  `tests/system/test_ci_truth_sync_v2.py`
-- `PR-ARCH-246-Architecture-Enforcement-Expansion-and-Import-Guards`
-  Completed 2026-03-29; the enforcement suite now covers controller-side Tk
-  import bans, direct widget-mutation bans, archive/reference fencing, and
-  backend-runtime imports constrained to the controller port layer
-- `PR-CTRL-247-PipelineController-Service-Extraction-and-Facade-Reduction`
-  Completed 2026-03-29; queue-submission orchestration now lives in
-  `src/controller/pipeline_controller_services/queue_submission_service.py`,
-  reducing `PipelineController` to a thinner facade over bounded submission and
-  history-handoff services
-- `PR-PORTS-248-Backend-Port-Boundaries-for-Image-and-Video-Runtimes`
-  Completed 2026-03-29; controller-owned image-runtime and workflow-registry
-  ports now live in `src/controller/ports/runtime_ports.py`, default concrete
-  adapters are isolated to `src/controller/ports/default_runtime_ports.py`, and
-  `AppController`, `PipelineController`, and `VideoWorkflowController` are
-  wired through that boundary
-- `PR-OBS-249A-Structured-Event-Logging-Contract-and-Ascii-Normalization`
-  Completed 2026-03-21
-- `PR-OBS-249B-Log-Trace-Panel-Severity-Coloring-and-Event-Filters`
-  Completed 2026-03-21
-- `PR-OBS-249C-Repeated-Event-Collapse-and-WebUI-Outage-Dedup`
-  Completed 2026-03-21
-- `PR-OBS-249D-Operator-vs-Trace-Log-Surface-Split`
-  Completed 2026-03-21
-- `PR-REPLAY-250-Replay-Fidelity-Contract-and-Versioned-Validation`
-  Completed 2026-03-29; replay now validates versioned intent contracts and
-  hash closure before hydrating NJR snapshots, with compat coverage for legacy
-  snapshots that lack the new contract
-- `PR-APP-251-Shared-Application-Bootstrap-and-Kernel-Composition`
-  Completed 2026-03-29; GUI and CLI now compose through the shared
-  `src/app/bootstrap.py` `ApplicationKernel`
-- `PR-HARDEN-252-Optional-Dependency-Capabilities-and-Startup-Probes`
-  Completed 2026-03-29; optional dependency readiness is now published through
-  the shared snapshot contract in `src/app/optional_dependency_probes.py` and
-  surfaced via application diagnostics
-- `PR-CI-253-Mypy-Smoke-Gate-and-Whitelist-Expansion`
-  Completed 2026-03-29; CI now runs the bounded typed-seam gate in
-  `tools/ci/run_mypy_smoke.py`
-- `PR-CONTRACT-254-Intent-Artifact-Versioning-and-Hash-Closure`
-  Completed 2026-03-29; intent artifacts now carry explicit schema/version/hash
-  metadata in config layers and job snapshots
-- `PR-VIDEO-255-Workflow-Registry-Governance-and-Pinning-Closure`
-  Completed 2026-03-29; workflow specs now encode governance state and pinned
-  revision, and the canonical registry returns only approved pinned workflows
-
-Recommendation L is now delivered through `PR-OBS-249A` through
-`PR-OBS-249D`. After `PR-OBS-249D`, the bottom log is the operator surface and
-the Debug Hub is the detailed trace surface.
-
-## 4C. Current Remaining Backlog Queue
-
-Status: Rebased 2026-03-29
-
-After validating the current backlog docs against `docs/CompletedPR/`,
-`docs/CompletedPlans/`, live source, and the current test suite baseline, the
-remaining active queue is narrower than several older backlog docs imply.
-
-Repo-truth corrections:
-
-- `PR-UX-278` is already completed; see
-  `docs/CompletedPR/PR-UX-278-Dialog-Inspector-and-Secondary-Surface-Consistency-Sweep.md`.
-- `PR-UX-279` is already completed; see
-  `docs/CompletedPR/PR-UX-279-GUI-Consistency-Regression-Checks-and-Maintenance-Checklist.md`.
-- `PR-TEST-280` is no longer a live blocker: `pytest --collect-only -q` now
-  succeeds with `2964 collected / 0 skipped`, and the stale spec has been
-  retired to `docs/archive/reference/PR-TEST-280-Full-Suite-Collection-Recovery-and-Test-Hygiene.md`.
-- `PR-HARDEN-281` is now closed in substance; see
-  `docs/CompletedPR/PR-HARDEN-281-ADetailer-Stability-Closure-and-Request-Local-Pinning-Rollback.md`.
-  Default ADetailer request-local pinning is off, request-local override
-  remains opt-in, structured `NansException` failures do not trigger restart
-  recovery, and focused closeout validation passed.
-- `PR-POLISH-282` is satisfied by this roadmap rebaseline and should not remain
-  a separate near-term execution item unless fresh cross-doc drift appears; the
-  stale spec has been retired to
-  `docs/archive/reference/PR-POLISH-282-Canonical-Roadmap-Video-Status-Harmonization.md`.
-- `PR-CORE-001` is now complete; the shipped SVD controller/runner/GUI path has
-  dedicated repo-truth closeout coverage via
-  `tests/video/test_svd_integration.py`, focused config/controller/GUI tests,
-  and `docs/CompletedPR/PR-CORE-001-Finalize-Native-SVD-Integration.md`.
-- `PR-CORE-011` is now complete in repo-truth form; the existing golden-path
-  suite already covered broad integration, and the missing native SVD plus
-  workflow-video video-path coverage now lives in
-  `tests/integration/test_video_golden_paths_v26.py` alongside the existing
-  AnimateDiff GP6 coverage.
-- `PR-CORE-004` is now complete; PromptPack authoring ships a curated
-  cinematic template catalog in `data/prompt_templates.json`, template-aware
-  prompt-pack serialization/export, and a thin Prompt tab selector/preview
-  surface without changing the canonical NJR execution path.
-- `PR-CORE-002` is now complete; StableNew ships a canonical queue-backed
-  `train_lora` path through the config contract, stage models, job builder,
-  runner, `src/training/character_embedder.py`, `src/training/lora_manager.py`,
-  and the Character Training tab, while keeping external trainer CLIs behind a
-  runner-owned subprocess seam.
-- older completed or superseded sequence snapshots have been removed from
-  `docs/PR_Backlog/`; completed rollout docs now live in `docs/CompletedPlans/`
-  and stale snapshots live in `docs/archive/reference/`.
-
-Current priority order:
-
-1. `PR-CORE-014 - Multi-Character Support`
-  Reason: the character asset and training pipeline now exists, so the next
-  highest-value follow-on is multi-character orchestration.
-2. merged `PR-CORE-005` / `PR-CORE-017` camera-control and ControlNet tranche
-  Reason: the two current specs overlap heavily and should not be executed as
-  separate parallel proposals.
-3. `PR-CORE-008 - Style Consistency LoRA`
-  Reason: style-control work is valuable, and it is now cleaner once the
-  character training and manifest surfaces are established.
-4. `PR-CORE-018 - Documentation and Usage Examples`
-  Reason: this should explain shipped behavior rather than lead it.
-5. `PR-CORE-019 - Book Ingestion Tool`
-  Reason: it depends on the re-scoped story-planning productization path.
-6. `PR-CORE-020 - Research Spike: 3D and NeRF Exploration`
-  Reason: this remains intentionally exploratory and low priority.
-
-Execution note:
-
-- use `docs/PR_Backlog/CORE_TOP_20_EXECUTABLE_MINI_ROADMAP_v2.6.md` as the
-  active entry point for the split `PR-CORE-001` through `PR-CORE-020` specs
-  now that the old bundled file has been retired
-- do not execute `PR-CORE-003`, `PR-CORE-006`, `PR-CORE-007`, `PR-CORE-009`,
-  `PR-CORE-010`, `PR-CORE-012`, `PR-CORE-013`, `PR-CORE-015`, or
-  `PR-CORE-016` verbatim without re-scoping them against the shipped repo state
-
-## 5. Missing Common Functionality to Fold Into the Queue
-
-These are the important missing capabilities that are not just "nice to have":
-
-- adaptive refinement rollout is complete through prompt-patch,
-  upscale-policy, and learning-aware feedback; remaining work is inspection
-  ergonomics, presentation clarity, and follow-on tuning rather than missing
-  execution slices
-- replay and learning still need clearer operator-facing inspection and
-  summarization of canonical refinement-decision provenance
-- secondary motion backend/runtime rollout is complete through `PR-VIDEO-241`;
-  remaining video debt is now mainly operator UX exposure, inspection clarity,
-  and longer-tail structural cleanup
-- manifests, replay fragments, container metadata, and learning now carry
-  canonical secondary-motion provenance; remaining work is chiefly presentation,
-  inspection ergonomics, and broader contract cleanup rather than missing core
-  provenance paths
-- image/runtime stability now has pressure guardrails, runtime admission
-  control, and workload-aware guarded-launch policy; remaining work is
-  follow-on validation, diagnostics clarity, and longer-tail runtime cleanup
-- content visibility now has a canonical persisted mode, shared resolver, live
-  cross-tab filtering, and regression coverage; remaining work is optional
-  policy strictness tuning rather than missing foundation behavior
-- continuity and story-planning still need richer UX exposure on top of the now-coherent video workspace
-- further controller reduction is still desirable, but no longer blocked on the GUI config adapter seam
-
-## 6. Done Definition for the Next Stage
-
-StableNew's next stage is successful when:
-
-- image and short-form video are both solid under the current queue-first architecture
-- image generation can apply runner-owned adaptive refinement under explicit
-  rollout modes without creating a second execution model
-- video generation can apply runner-owned secondary motion across the existing
-  video backends without creating a new stage or new job model
-- long-form video has a first-class planning/orchestration path
-- post-video outputs are canonical artifacts, not side utilities
-- continuity and shot-planning data can persist through manifests/history
-- manifests, replay fragments, container metadata, and learning records can
-  preserve both adaptive-refinement and secondary-motion provenance
-- the GUI feels intentionally designed around the current workflow set
-
-## 7. Guiding Principle
-
-Prefer doing it right over doing it easy.
-
-At this point, “right” means:
-
-- keep the architecture stable
-- add missing product layers on top of the stable core
-- improve UX before considering a toolkit rewrite
+Review and commit the approved `PR-ARCH-MVP-001` documentation amendment, then
+execute `PR-MVP-000` exactly as specified on a non-destructive recovery branch.

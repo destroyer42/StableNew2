@@ -1,581 +1,177 @@
-#CANONICAL
-E2E_Golden_Path_Test_Matrix_v2.6.md
-End-to-End Validation Suite for StableNew v2.6 (CORE A–E)
+# StableNew MVP Golden-Path Test Matrix v2.6
+
+Status: Canonical Tier 3
+Updated: 2026-09-05
+Scope: active MVP only
+
+## 0. Purpose
 
-Status: Canonical
-Updated: 2026-03-18
-Covers: NJR-first intent surfaces • Deterministic Builder • Queue/Runner Lifecycle • UI Panels • Learning • Debug Hub • Config Sweeps • Global Negative Layering • Multi-Stage Pipelines
+This matrix defines the minimum end-to-end proof for the MVP architecture. It
+replaces the older broad stage-combination matrix as the active release gate.
+Additional feature tests may remain, but they do not expand MVP scope.
 
-1. Overview
+All fresh journeys follow:
 
-The purpose of this document is to define the Golden Path test suite for StableNew v2.6—
-the essential E2E flows that must work flawlessly before any advanced features can be trusted.
+`Visible Intent -> Typed Compiler -> NJR -> JobService -> Queue/Repository -> PipelineRunner.run_njr -> Handler -> Artifact/History Projection`
 
-The Golden Path validates the full canonical execution path:
+## 1. Layer legend
 
-Advanced Prompt Builder
-→ PromptPack TXT + JSON
-→ Pipeline Tab / intent surface
-→ Controller
-→ ConfigMergerV2
-→ RandomizationPlanV2
-→ ConfigVariantPlanV2 (PR-CORE-E)
-→ RandomizerEngineV2
-→ UnifiedPromptResolver
-→ UnifiedConfigResolver
-→ JobBuilderV2
-→ NormalizedJobRecord[]
-→ JobService / Queue
-→ Runner
-→ Outputs
-→ History
-→ Learning
-→ Debug Hub
+| Layer | Proof |
+|---|---|
+| A | Intent/editor and validation |
+| B | Compiler and NJR contract |
+| C | JobService, repository, and queue lifecycle |
+| D | Runner and typed backend handler |
+| E | Artifact, history, replay, and restart |
+| F | GUI responsiveness and operator diagnostics |
+| G | Migration and rollback |
 
+## 2. Active journeys
 
-The scenarios:
+| ID | Journey | Backend | Required layers | Automated | Real acceptance |
+|---|---|---|---|---|---|
+| GP-MVP-01 | Launch with dependencies available | Fake/preflight | A, F | Yes | Yes |
+| GP-MVP-02 | Launch with WebUI unavailable | Fake failure | A, F | Yes | Yes |
+| GP-MVP-03 | Create/save/reload JSON PromptPack | None | A | Yes | Manual smoke |
+| GP-MVP-04 | Import legacy TXT/TSV/paired pack | None | A, G | Yes | Manual smoke |
+| GP-MVP-05 | Compile one deterministic image NJR | None | A, B | Yes | No |
+| GP-MVP-06 | Add one image to queue | Fake image | B, C, F | Yes | No |
+| GP-MVP-07 | Run Now image | Fake image | B, C, D, E, F | Yes | Yes, WebUI |
+| GP-MVP-08 | FIFO two-image queue | Fake image | B, C, D, E, F | Yes | Optional |
+| GP-MVP-09 | Image backend failure and retry | Fake failure | C, D, E, F | Yes | Manual smoke |
+| GP-MVP-10 | Cancel queued/running image | Blocking fake | C, D, E, F | Yes | Manual smoke |
+| GP-MVP-11 | Restart with durable queue/history | Fake image | C, E | Yes | Manual smoke |
+| GP-MVP-12 | Replay completed image | Fake image | B, C, D, E | Yes | Yes, WebUI |
+| GP-MVP-13 | Non-pack reprocess/image-edit identity | Fake image | A, B, C, D, E | Yes | Manual smoke |
+| GP-MVP-14 | Selected image to SVD XT clip | Fake video | A–F | Yes | Yes, native SVD |
+| GP-MVP-15 | Missing SVD model/capability | Fake preflight | A, C, F | Yes | Yes |
+| GP-MVP-16 | Legacy job-store import and rollback | None | C, E, G | Yes | Rehearsal |
+| GP-MVP-17 | Tracked-files-only startup/import | None | A, B, C | Yes | Clean machine |
 
-Begin exclusively from user-visible flows (Pipeline Tab, Queue actions, History restore)
+## 3. Common invariants for every execution journey
 
-Traverse the entire controller → builder → queue → runner → history → learning chain
+- Exactly one NJR is the authorized execution envelope per job.
+- `Run Now` creates a queued execution record before runner invocation.
+- Only `PipelineRunner.run_njr` is called as the public runner entry.
+- Queue/history state changes do not mutate the NJR snapshot.
+- PromptPack identity exists only for PromptPack sources.
+- Errors reach a durable state and do not trigger a legacy fallback.
+- Produced artifacts link to job, attempt, workload, stage, and provenance.
+- GUI updates occur through the GUI-thread/event boundary.
+- Tests use temporary repository and artifact roots.
 
-Assert state in GUI panels (Queue, Running Job, History, Debug Hub)
+## 4. Journey acceptance details
 
-Exercise deterministic expansion rules across:
+### GP-MVP-03 — One-file PromptPack
 
-PromptPack rows
+Create a pack with one prompt and default image settings, save it, restart the
+pack service, and load it from JSON alone. Assert schema version, stable identity,
+prompt text, defaults, and no required sibling TXT/TSV file.
 
-Randomization matrix variants
+### GP-MVP-04 — PromptPack migration
 
-Config sweeps
+Cover matching and conflicting legacy inputs. Dry-run must not write. Commit
+must preserve originals, produce valid JSON, report counts/checksums, and be
+idempotent. Conflicts remain unresolved until explicitly selected.
 
-Batch sizes
+### GP-MVP-05 — Deterministic compilation
 
-Multi-stage SDXL pipelines
+Compile identical intent twice with fixed seed/registry inputs. Compare the
+complete serialized NJRs while excluding only explicitly generated job identity.
+Assert no status, timestamps, progress, errors, results, paths, or retry state.
 
-ADetailer
+### GP-MVP-07 — Run Now image
 
-Global negative application
+From the visible image workflow, submit a valid PromptPack. Assert repository
+creation precedes queue/runner work; lifecycle reaches completed; one canonical
+image artifact and history record appear; queue and UI remain responsive.
 
-Respect the canonical intent rule: image-generation prompt text must originate
-from StableNew-owned intent surfaces, with PromptPack remaining the primary
-image authoring surface and no free-text runner/controller prompting.
+### GP-MVP-09 — Failure and retry
 
-2. High-Level Test Matrix (Updated for v2.6)
+Fail the image handler with a stable error. Assert failed durable state,
+diagnostic projection, no artifact claim, and no fallback. Retry must preserve
+parent/attempt lineage and execute through the same queue path.
 
-Each scenario maps to CORE modules:
+### GP-MVP-11 — Restart
 
-A — CORE-A: UnifiedJobSummary / single source of truth
+Persist queued, running/interrupted, completed, and failed fixtures. Restart
+application services using the same temporary SQLite database. Assert defined
+recovery states, no duplicate execution, intact NJR snapshots, and correct
+history projection.
 
-B — CORE-B: Deterministic builder pipeline
+### GP-MVP-12 — Replay
 
-C — CORE-C: Queue/Runner lifecycle
+Replay a completed history item. Assert a new job/NJR identity, parent lineage,
+equivalent authorized workload, and normal queue/runner execution. No source
+file or legacy config reconstruction occurs in the runner.
 
-D — CORE-D: UI/Preview/History/Debug correctness
+### GP-MVP-13 — Non-pack identity
 
-E — CORE-E: Config sweeps + global negative integration
+Submit reprocess/image-edit intent with its own source descriptor and parent
+artifact. Assert successful validation without `prompt_pack_id` and otherwise
+identical queue/runner ownership.
 
-Updated matrix:
+### GP-MVP-14 — Native SVD XT
 
-ID	Scenario Name	Mode	Randomizer	Sweeps	Stages	CORE Coverage
-GP1	Single Simple Run (No Randomizer)	Run Now (Queue)	Off	Off	txt2img	A, B, C, D
-GP2	Queue-Only Run (Multiple Jobs, FIFO)	Queue	Off	Off	txt2img	A, B, C, D
-GP3	Batch Expansion (N>1)	Run Now (Queue)	Off	Off	txt2img	B, C, D
-GP4	Randomizer Variant Sweep (No Batch)	Run Now (Queue)	On	Off	txt2img	B, C, D
-GP5	Randomizer × Batch Cross Product	Queue	On	Off	txt2img	B, C, D
-GP6	Multi-Stage SDXL (Refiner + Hires + Upscale)	Run Now (Queue)	Off	Off	txt2img → refiner → hires → upscale	B, C, D
-GP7	ADetailer + Multi-Stage Combination	Queue	Off	Off	txt2img → adetailer → refiner → hires	B, C, D
-GP8	Stage Enable/Disable Integrity	Run Now (Queue)	Off	Off	Any stage combination	B, C, D
-GP9	Failure Path (Runner Error)	Run Now (Queue)	Off	Off	txt2img	A, C, D
-GP10	Learning Integration	Queue	Off/On	Off	typical multi-stage	C, D
-GP11	Mixed Queue (Randomized + Non-Randomized)	Queue	Mixed	Off	txt2img / multi-stage	A, B, C, D
-GP12	Restore from History → Re-Run	Run Now (Queue)	Off/On	Off	any	A, B, C, D
-GP13	Config Sweep (PR-CORE-E)	Run Now (Queue)	Off	On	txt2img	A, B, C, D, E
-GP14	Config Sweep × Randomizer Matrix	Queue	On	On	txt2img	B, C, D, E
-GP15	Global Negative Application Integrity	Run Now (Queue)	Off/On	Off	any	B, C, D, E
+Select an image artifact, compile a video NJR, queue it, invoke only the native
+SVD handler, and produce a canonical clip artifact/history result. Real
+acceptance records model revision, license notice, GPU, peak-memory observation,
+offload/chunk settings, duration, and output.
 
-GP13–GP15 are new for v2.6 and validate PR-CORE-E.
+### GP-MVP-15 — Video preflight failure
 
-3. Scenario Details (Updated & Expanded)
+With model or capability absent, assert the app still launches, submission is
+blocked or fails before model load according to the approved contract, the user
+gets corrective instructions, and repository state remains coherent.
 
-Below: Each scenario includes:
+### GP-MVP-16 — Job-store migration
 
-Preconditions
+Import representative queue/history JSON/JSONL into a new database. Verify
+backup, dry-run, counts, stable IDs, statuses, NJR snapshots, errors, artifact
+links, conflicts, two-run idempotence, and rollback in a disposable workspace.
 
-Steps
+### GP-MVP-17 — Repository completeness
 
-Expected results
+Create a disposable worktree from tracked files only. Compile and import the
+approved module set without copying ignored local modules or state. Assert test
+execution leaves `git status --short` unchanged.
 
-Core coverage
+## 5. Test execution classes
 
-Relevant architectural links
+### Hermetic gate
 
-GP1 — Single Simple Run (No Randomizer)
+Runs without display, network, GPU, model download, WebUI, or repository-local
+mutable state. Uses fakes and temporary roots. All journeys except real columns
+must have hermetic coverage where meaningful.
 
-Purpose: Validate the absolute minimum viable loop.
+### GUI gate
 
-Preconditions
+Runs with a controlled GUI environment and fake backends. It verifies visible
+state, scheduling, bounded shutdown/cancel, and no worker-thread widget access.
 
-One PromptPack exists.
+### Real-backend gate
 
-Randomizer disabled.
+Opt-in and bounded. It never runs during collection. WebUI image and native SVD
+acceptance are release requirements and must publish their environment/result
+record; a mock-only result cannot close `PR-MVP-090`.
 
-All optional stages disabled.
+## 6. Failure conditions
 
-Execution mode: queue submit with immediate auto-start (`Run Now` semantics).
+The MVP gate fails on:
 
-Steps
+- any unexpected collection error or hang;
+- missing tracked production imports;
+- direct runner invocation or alternate execution payload;
+- universal PromptPack identity enforcement;
+- NJR mutation or incomplete serialization;
+- live legacy persistence fallback;
+- test mutation of tracked data;
+- unbounded GUI wait or worker-thread GUI write;
+- real-backend crash that leaves a job non-terminal or data inconsistent;
+- missing image or SVD acceptance evidence.
 
-In Pipeline Tab: select PromptPack + ConfigPreset.
+## 7. Post-MVP coverage
 
-Confirm Preview summary correct.
-
-Click Run Now.
-
-Poll JobService → History for completion.
-
-Inspect Queue panel, RunningJob panel, History, Debug Hub.
-
-Expected
-
-Builder emits exactly 1 NormalizedJobRecord.
-
-variant_index=0, batch_index=0.
-
-Queue transitions: SUBMITTED → QUEUED → RUNNING → COMPLETED.
-
-Debug Hub “Explain Job” shows full builder trace (prompt, slot resolution, config).
-
-History entry contains correct UnifiedJobSummary.
-
-Coverage
-
-A, B, C, D
-
-GP2 — Queue-Only Run (Multiple Jobs, FIFO)
-
-Purpose: Validate deterministic queue ordering.
-
-Steps
-
-Build PromptPack job A → “Add to Queue”.
-
-Build PromptPack job B → “Add to Queue”.
-
-Poll until both complete.
-
-Expected
-
-FIFO order: A then B.
-
-Runner processes A fully before starting B.
-
-Queue panel shows predictable status transitions.
-
-Debug Hub logs lifecycle events in correct order.
-
-Coverage
-
-A, B, C, D
-
-GP3 — Batch Expansion (Batch > 1)
-
-Purpose: Validate batch fan-out.
-
-Steps
-
-Set batch size = 3.
-
-Run Now.
-
-Expected
-
-Builder emits 3 records: batch_index=0,1,2.
-
-Prompts identical.
-
-Queue runs 3 jobs.
-
-History contains 3 entries.
-
-Coverage
-
-B, C, D
-
-GP4 — Randomizer Variant Sweep (Single Batch)
-
-Purpose: Validate matrix → variants → substitution.
-
-Preconditions
-
-Pack JSON contains matrix slots (environment, lighting).
-
-Randomizer enabled.
-
-Steps
-
-Select pack with tokens in TXT.
-
-Enable randomizer (e.g., 3 variants).
-
-Run Now.
-
-Expected
-
-Builder produces 3 variants with distinct variant_index.
-
-Prompts contain substituted slot values.
-
-Debug Hub shows substitution steps.
-
-Coverage
-
-B, C, D
-
-GP5 — Randomizer × Batch Cross Product
-
-Purpose: Validate 2D expansion (matrix × batch).
-
-Steps
-
-Enable randomizer (2 variants).
-
-Set batch size = 2.
-
-Add to Queue.
-
-Expected
-
-4 jobs emitted.
-
-Distinct combinations: (variant 0, batch 0‒1), (variant 1, batch 0‒1).
-
-Queue handles everything cleanly.
-
-Coverage
-
-B, C, D
-
-GP6 — Multi-Stage SDXL Pipeline: Refiner + Hires + Upscale
-Steps
-
-Enable Refiner, Hires, Upscale.
-
-Run Now.
-
-Expected
-
-UnifiedConfigResolver builds canonical StageChain.
-
-Runner receives structured stage configurations.
-
-Debug Hub Explain Job shows the full stage chain.
-
-Coverage
-
-B, C, D
-
-GP7 — ADetailer + Multi-Stage
-Steps
-
-Start from GP6 config.
-
-Enable ADetailer.
-
-Add to Queue.
-
-Expected
-
-Stage chain includes AD at correct position.
-
-AD config appears in job record.
-
-Coverage
-
-B, C, D
-
-GP8 — Stage Enable/Disable Integrity
-Steps
-
-Run with all stages enabled.
-
-Disable refiner + hires; rerun.
-
-Expected
-
-New job’s stage chain omits disabled stages.
-
-No stale data persists between runs.
-
-Builder respects StageOverridesBundle.
-
-Coverage
-
-B, C, D
-
-GP9 — Failure Path (Runner Error)
-Steps
-
-Trigger controlled runner error (invalid sampler, etc).
-
-Run Now.
-
-Expected
-
-Job transitions to FAILED.
-
-Queue not stuck.
-
-History contains error details.
-
-Debug Hub shows runner crash logs.
-
-Coverage
-
-A, C, D
-
-GP10 — Learning Integration
-Steps
-
-Run job.
-
-Open Learning Tab.
-
-Rate the output.
-
-Expected
-
-Learning receives full job metadata.
-
-Ratings saved independently of History.
-
-Coverage
-
-C, D
-
-GP11 — Mixed Queue (Randomized + Non-Randomized)
-Steps
-
-Queue job A (simple).
-
-Queue job B (randomized).
-
-Run job C (Run Now).
-
-Allow queue to drain.
-
-Expected
-
-Correct interleaving: A, B-variants, C.
-
-No config contamination.
-
-History clear about variant metadata.
-
-Coverage
-
-A, B, C, D
-
-GP12 — Restore from History → Re-Run
-Steps
-
-Run job.
-
-In History: Restore to Pipeline.
-
-Run again.
-
-Expected
-
-Restored GUI state matches canonical summary.
-
-Second run produces identical prompt & config signature.
-
-Two history entries, same configuration, different timestamp.
-
-Coverage
-
-A, B, C, D
-
-New for PR-CORE-E
-GP13 — Config Sweep (PR-CORE-E)
-
-Purpose: Validate ConfigVariantPlanV2 → builder → queue path.
-
-Preconditions
-
-Sweep Designer enabled.
-
-Multiple cfg/steps/sampler variants defined.
-
-Steps
-
-Create sweep with e.g., cfg=[4.5,7.0,10.0].
-
-Run Now.
-
-Expected
-
-Builder emits N jobs, one per variant.
-
-Prompts identical.
-
-Config differs exactly as defined.
-
-Metadata fields: config_variant_label, config_variant_index, config_variant_overrides.
-
-History entries clearly separate variants.
-
-Coverage
-
-A, B, C, D, E
-
-GP14 — Config Sweep × Matrix Randomizer
-Steps
-
-Enable randomizer: M variants.
-
-Enable config sweep: N variants.
-
-Batch size=1.
-
-Add to Queue.
-
-Expected
-
-Total jobs = N × M.
-
-JobBuilderV2 expands cross-product deterministically.
-
-Learning & History show full metadata for both config-sweep and matrix-variant.
-
-Coverage
-
-B, C, D, E
-
-GP15 — Global Negative Integration
-Preconditions
-
-Global negative defined in app settings.
-
-Per-stage apply flags in pack JSON.
-
-Steps
-
-Enable global negative in Pipeline Tab.
-
-Run Now.
-
-Disable global negative; run again.
-
-Expected
-
-UnifiedPromptResolver produces different final negative prompts depending on toggles.
-
-History and Debug Hub clearly show whether global negative applied.
-
-No mutation of pack JSON.
-
-Coverage
-
-B, C, D, E
-
-4. E2E Testing Guardrails (Required)
-
-These apply to all scenarios:
-
-No direct sleeps
-
-Use JobService/History polling with timeouts.
-
-Never assert on original job object
-
-Always assert on UnifiedJobSummary, History records, Debug Hub logs, or NormalizedJobRecord copies.
-
-Never bypass controller → builder → queue flow
-
-No calling the runner directly.
-No tests that inject unnormalized jobs.
-
-Keep E2E tests small in count but large in coverage
-
-Use matrix expansion rather than dozens of individual tests.
-
-Always use StableNew-owned intent inputs; for image-generation golden paths,
-PromptPack remains the primary authored input surface.
-
-No free-text prompts in Pipeline Tab.
-All prompts come from PromptPack TXT.
-
-5. Artifacts Produced per Run
-
-Each E2E scenario should verify:
-
-History
-
-job_id
-
-prompt_pack_id
-
-variant_index, batch_index
-
-config_variant metadata (if any)
-
-stage chain
-
-final prompts
-
-negative layering
-
-success/failure
-
-timestamp
-
-Debug Hub
-
-lifecycle logs
-
-final resolved payload
-
-explainers (matrix slot substitution & config sweep choice)
-
-Learning
-
-prompt & config signature
-
-metadata for scoring
-
-user ratings
-
-Outputs
-
-correctly named files
-
-metadata in output sidecar JSON
-
-6. Coverage Summary
-
-This E2E matrix covers every CORE module:
-
-CORE	Description	Covered In
-A	UnifiedJobSummary / source-of-truth	GP1, GP2, GP9, GP11, GP12, GP13
-B	Deterministic builder pipeline	GP1–GP15
-C	Queue/Runner lifecycle	GP1–GP15
-D	UI recovery & panel correctness	GP1–GP15
-E	Config sweeps + global negative integration	GP13–GP15
-7. Conclusion
-
-These E2E Golden Path tests define the minimum acceptable functionality for a StableNew v2.6 build.
-If these pass, the system is usable end-to-end.
-If these fail, the system is unstable for real users regardless of how many unit tests pass.
-
-This matrix becomes the benchmark for future regressions, major refactors, and new features.
-
-## Compatibility Addendum
-
-CORE1-D8 introduces versioned fixtures under `tests/data/history_compat_v2/` and `tests/data/queue_compat_v2/` plus suites `tests/compat/test_history_compat_v2.py`, `tests/compat/test_queue_compat_v2.py`, and `tests/compat/test_replay_compat_v2.py`. These guard restoration and replay of V2.0/V2.4/V2.6 history/queue snapshots and ensure any future persistence change adds a new fixture/test before it merges.
-
-## CORE1-D10 (PromptPack NJR Queue Path)
-
-- New suites `tests/pipeline/test_prompt_pack_njr_invariants.py` and `tests/pipeline/test_job_service_njr_validation.py` validate that PromptPack runs emit NJR-backed jobs with pack metadata and that JobService enforces pack identity without crashing.
-- End-to-end queue tests no longer construct jobs with `pipeline_config=`; they wrap NormalizedJobRecord snapshots instead.
+Comfy/LTX, AnimateDiff, secondary motion, multi-shot sequencing, stitching,
+training productization, and broad stage-combination matrices are not active MVP
+gates. They require roadmap admission and their own canonical journeys.

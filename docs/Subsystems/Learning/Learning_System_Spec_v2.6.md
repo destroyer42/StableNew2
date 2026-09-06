@@ -1,7 +1,7 @@
 Learning_System_Spec_v2.6.md
 
 Status: Canonical subsystem reference
-Updated: 2026-03-19
+Updated: 2026-09-05
 
 0. Purpose
 
@@ -16,7 +16,9 @@ It covers:
 
 Learning remains a post-execution subsystem. It consumes outputs and ratings; it
 does not build alternate execution paths and it does not modify the canonical
-`Intent Surface -> Builder/Compiler -> NJR -> Queue -> Runner` architecture.
+`Typed Intent -> Compiler -> NJR -> JobService -> Queue/JobRepository ->
+PipelineRunner.run_njr` architecture. Learning-generated work uses its own
+typed source descriptor and does not fabricate PromptPack identity.
 
 Current scope note:
 

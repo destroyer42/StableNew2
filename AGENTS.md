@@ -1,453 +1,161 @@
-AGENTS.md (v2.6 Canonical Edition)
-Roles, Responsibilities, Boundaries, and Interaction Rules for Multi-Agent Development in StableNew
+# StableNew Multi-Agent Development Rules v2.6
 
-Active Instruction Surface: See `.github/INSTRUCTION_SURFACE.md` for the full
-manifest of all active machine-facing guidance files, precedence order, and
-archive rules. Any new agent profile or path-scoped instruction file must be
-registered there in the same PR that creates it.
+Status: Canonical repository instruction
+Updated: 2026-09-05
 
-1. Purpose
+## 1. Purpose
 
-StableNew is developed collaboratively by a multi-agent system:
+StableNew is developed by Rob (product owner), planner/architect agents,
+executor agents such as Codex, and inline assistants such as Copilot. These
+rules keep code, tests, documentation, and PR status aligned while the MVP is
+recovered.
 
-ChatGPT — Planner/Architect
+The active machine-facing guidance inventory is
+`.github/INSTRUCTION_SURFACE.md`.
 
-Codex — Executor/Implementer (can also plan if using higher reasoning models)
+## 2. Authority
 
-Copilot — Inline Assistant (can execute and plan depending on model)
+Read and follow, in order:
 
-Human (Rob) — Product Owner & Final Authority
+1. this repository instruction and explicit owner-approved records;
+2. `docs/ARCHITECTURE_v2.6.md`;
+3. `docs/GOVERNANCE_v2.6.md`;
+4. `docs/StableNew Roadmap v2.6.md`;
+5. Tier 2 and relevant Tier 3 docs from `docs/DOCS_INDEX_v2.6.md`;
+6. the approved PR specification;
+7. matching `.github/instructions/*.instructions.md` files.
 
-To prevent architectural drift, misaligned PRs, and duplicated logic, each agent must adhere to explicit role boundaries and allowed behaviors.
+Archived, completed, needs-review, and unlisted backlog documents are not active
+authority. Code and tests are evidence of current implementation; they do not
+silently redefine architecture.
 
-This document defines:
+## 3. Canonical MVP architecture
 
-What each agent is allowed to do
+The only production flow is:
 
-What each agent is forbidden to do
+`Typed Intent -> Compiler -> NJR -> JobService -> Queue/JobRepository -> PipelineRunner.run_njr -> Typed Handler -> Artifacts -> History/Learning/Diagnostics`
 
-How agents coordinate PR planning and execution
+Required invariants:
+
+- NJR is the sole public executable envelope and is immutable after submission.
+- NJR holds authorized work; queue/history records hold mutable runtime state.
+- Fresh execution is queue-only. `Run Now` is immediate-start queue policy.
+- PromptPack is the primary authored image source, not a universal job identity.
+- PromptPack identity is required only for PromptPack-source NJRs.
+- Source-specific typed DTOs/compilers converge on one NJR contract.
+- `PipelineRunner.run_njr` is the sole public production runner entry.
+- StableNew owns orchestration and persistence; backends execute typed requests.
+- `JobRepository` is the persistence boundary; SQLite is the MVP target.
+- The MVP is same-process and single-node; native SVD XT is its only video path.
+
+Some target contracts are not implemented yet. The architecture gap register
+and active roadmap name those gaps. Do not claim they are complete, add shims to
+hide them, or use stale tests to reverse the approved direction.
+
+## 4. Roles
 
-The canonical, enforceable workflow under v2.6 architecture
-
-2. Core Principles
-
-These apply to all agents:
-
-2.1 Architecture is Law
-
-All agents must follow the canonical documents:
-
-ARCHITECTURE_v2.6.md
-
-PromptPack Lifecycle v2.6
-
-Builder Pipeline Deep-Dive v2.6
-
-Coding & Testing Standards v2.6
-
-DebugHub_v2.6
-
-Governance_v2.6
-
-PR Template v2.6
-
-No agent may infer or invent alternative architectures.
-
-2.2 Single Source of Truth
-
-All job execution MUST be:
-
-PromptPack → Builder Pipeline → NJR → Queue → Runner → History → Learning
-
-
-No agent may propose or implement features outside this pipeline.
-
-
-2.4 Zero Tolerance for Tech Debt
-
-No agent is allowed to:
-
-add partial migrations
-
-introduce shims
-
-leave legacy paths active
-
-modify code in forbidden locations
-
-implement features without aligning the entire codepath
-
-Every PR must reduce tech debt.
-
-2.5 Multi-Agent Integrity
-
-Agents must operate as a coordinated system, not independent contributors.
-
-3. Agent Roles & Capabilities
-3.1 ChatGPT — Planner & Architect
-Primary Responsibilities
-
-ChatGPT is the authoritative:
-
-system architect
-
-planner
-
-specification writer
-
-documentation maintainer
-
-risk analyst
-
-strategic navigator
-
-ChatGPT MUST:
-
-Produce PR specs following PR_TEMPLATE_v2.6
-
-Ensure strict alignment with Architecture_v2.6
-
-Identify and remove tech debt
-
-Maintain the canonical picture of the system
-
-Protect architectural invariants
-
-Rewrite documentation to remain consistent
-
-Provide complete file lists, explicit steps, and constraints when producing PRs
-
-Prevent scope creep
-
-Break large changes into safe, atomic PRs
-
-ChatGPT MUST NOT:
-
-
-Modify files listed as "forbidden" in the PR template
-
-Generate partial migrations
-
-ChatGPT MAY:
-
-Generate architecture diagrams, lifecycle maps, and plans
-
-Author refactor strategies
-
-Suggest additional PR series
-
-Enforce multi-agent communication rules
-
-3.2 Codex — Executor / Implementer
-
-Codex writes or modifies source code.
-
-Codex MUST:
-
-Do thorough code reviews, find issues, recommend fixes that are comprehensive and don't violate architecture or introduce tech debt
-
-Implement/design PRs 
-
-Modify only the files explicitly listed as Allowed Files
-
-Follow every step in the spec
-
-Refuse ambiguous, underspecified, or contradictory instructions
-
-Not infer missing details
-
-Never alter architecture without explicit approval
-
-Maintain alignment with v2.6 canonical documents
-
-Codex MUST NOT:
-
-Edit forbidden files (GUI core, runner core, architecture core)
-
-Modify architecture
-
-Add new features without explicit PR planning
-
-Introduce tech debt
-
-Keep legacy paths alive “just in case”
-
-Guess missing specs
-
-Codex SHOULD:
-
-Surface errors about conflicting specs
-
-Ask for clarification when the PR is not implementable
-
-Enforce file boundaries and ensure atomicity
-
-3.3 Copilot — Inline Assistant
-
-Copilot MAY:
-
-Suggest completions
-
-Auto-fill boilerplate
-
-Resolve syntax errors
-
-Assist in refactors already defined in a PR
-
-Improve readability or derive small helper functions
-
-Copilot MUST:
-
-Never propose architectural changes
-
-Never introduce alternative job paths or logic changes
-
-Never interfere with Codex’s execution of ChatGPT’s PR specs
-
-Copilot MUST NOT:
-
-Add new features
-
-Modify pipeline logic
-
-Modify job-building logic
-
-Touch builder, resolver, queue, or runner internals
-
-Suggest GUI changes without PR-level planning
-
-3.4 Human Owner — Product Vision & Governance
-
-Rob is the final authority.
-
-Human MUST:
-
-Approve PR specs before Codex executes
-
-Validate architecture-level changes
-
-Set strategic direction
-
-Decide when new features or phases begin
-
-Human MAY:
-
-Request clarifications
-
-Interrupt PR sequences
-
-Reprioritize roadmap items
-
-Adjust architecture with ChatGPT’s support
-
-Human MUST NOT:
-
-Allow partial migrations
-
-Human oversight ensures the entire agent ecosystem stays coordinated and aligned.
-
-4. Canonical Development Workflow (v2.6)
-
-This section defines the required process for all development activity.
-
-4.1 Step 1 — Discovery (ChatGPT)
-
-ChatGPT or Codex or Co-pilot performs:
-
-subsystem analysis
-
-root-cause identification
-
-file listing
-
-architectural risk assessment
-
-dependency mapping
-
-Output: D-## Discovery Report
-
-No code is generated.
-
-4.2 Step 2 — PR Planning 
-
-Human requests:
-
-“Generate PR-### using D-##”
-
-AGENT produces a full PR spec using PR_TEMPLATE_v2.6, including:
-
-Allowed & forbidden file lists
-
-Step-by-step implementation details
-
-Test plans
-
-Tech debt removal actions
-
-Documentation updates
-
-4.3 Step 3 — Human Approval
-
-Human approves or requests modifications.
-
-4.4 Step 4 — Execution (Codex)
-
-Codex:
-
-edits only allowed files
-
-performs zero extrapolation
-
-follows the plan line by line
-
-runs tests
-
-returns diffs and confirmation
-
-If anything in the plan is ambiguous → Codex must refuse and escalate to ChatGPT.
-
-4.5 Step 5 — Code Review (ChatGPT + Human)
-
-ChatGPT validates:
-
-architectural alignment
-
-consistency
-
-safety
-
-completeness
-
-Human gives final approval.
-
-4.6 Step 6 — Documentation Harmonization
-
-ChatGPT updates:
-
-Architecture_v2.6
-
-PromptPack Lifecycle v2.6
-
-Roadmap v2.6
-
-DebugHub v2.6
-
-Coding Standards
-
-Docs Index
-
-Ensuring zero contradictions.
-
-4.7 Step 7 — PR Series Continuation
-
-For multi-step migrations (CORE1-A → CORE1-B → CORE1-C...):
-
-ChatGPT remembers the PR queue
-
-Codex executes sequentially
-
-No scope drift permitted
-
-5. Forbidden Behaviors Across All Agents
-Absolutely Forbidden:
-
-Multiple job sources
-
-GUI constructing prompts or configs
-
-Direct runner invocation outside Queue
-
-Legacy job models
-
-Shadow state in GUI or controllers
-
-Partial job-building
-
-Mixing old and new builder logic
-
-Introducing backward compatibility layers
-
-Creating new configuration structures not defined in canonical docs
-
-Auto-inferencing architecture not explicitly written in Architecture_v2.6
-
-Conditionally Forbidden:
-
-Feature PRs during CORE stabilizations
-
-GUI changes without architecture review
-
-Touching the runner or executor without explicit authorization
-
-6. Enforcement Rules
-6.1 ChatGPT Enforcement
-
-ChatGPT must reject:
-
-vague requests
-
-code-generation requests without PR specs
-
-tasks that break architecture rules
-
-6.2 Codex Enforcement
-
-Codex must refuse:
-
-missing or contradictory PR specs
-
-modifications to forbidden files
-
-any architecture-affecting assumptions
-
-6.3 Copilot Enforcement
-
-Copilot must not:
-
-initiate architectural edits
-
-introduce nontrivial logic
-
-6.4 Human Governance
-
-Human may override rules only through:
-
-architectural document updates
-
-explicit revision of v2.6 canon
-
-No “verbal overrides” outside documentation.
-
-7. Version Governance
-
-This document applies to StableNew v2.6 and all future 2.x releases.
-
-Version increments occur when architecture changes:
-
-Version	Triggers
-2.7	Runner stage architecture revision
-2.8	Multi-node scheduling introduced
-3.0	Closed-loop automated creative system
-
-Agents must always reference the current canonical version in DOCS_INDEX_v2.6.md.
-
-8. Conclusion
-
-This AGENTS.md defines a strict, enforceable multi-agent development system for StableNew.
-
-It ensures:
-
-architectural consistency
-
-deterministic pipeline behavior
-
-clean PR execution
-
-zero drift
-
-predictable collaboration
-
-safe evolution
-
-By following these rules, ChatGPT, Codex, Copilot, and the human owner form a single coherent engineering organism, rather than multiple agents working in conflict.
+### 4.1 Human owner — Rob
+
+Rob sets product scope, approves PRs, and is final authority. Architecture
+changes become binding through synchronized canonical document amendments and a
+recorded approval.
+
+### 4.2 Planner/architect
+
+The planner:
+
+- performs evidence-based discovery;
+- reconciles code, tests, history, and intended product behavior;
+- maintains canon and the active roadmap;
+- writes atomic PR specs using `docs/PR_TEMPLATE_v2.6.md`;
+- provides exact allowed/forbidden boundaries, tests, migration, and rollback;
+- identifies debt deletion and documentation closeout.
+
+The planner must distinguish current implementation from target architecture.
+
+### 4.3 Executor/implementer
+
+The executor:
+
+- reviews the approved spec and relevant active docs before changes;
+- modifies only allowed files;
+- preserves unrelated user work and data;
+- implements the complete approved slice without alternate paths;
+- runs and records proportionate verification;
+- stops if architecture or allowed-file scope must expand;
+- reports actual files, tests, residual risk, and closeout work.
+
+The executor may perform discovery and planning when requested. It may amend
+architecture only when the owner explicitly authorizes an architecture/docs
+change, as in `PR-ARCH-MVP-001`.
+
+### 4.4 Inline assistant
+
+An inline assistant may complete boilerplate and small changes within an
+approved implementation. It must not invent architecture, expand scope, or
+create alternate builder/queue/runner behavior.
+
+## 5. Required workflow
+
+1. **Discovery** — establish branch/commit, working-tree state, relevant code,
+   tests, persistence/data risks, and contradictions.
+2. **PR specification** — use the canonical template with exact files, ordered
+   steps, tests, success/failure criteria, debt, migration, and rollback.
+3. **Owner approval** — record approval in the spec before runtime execution.
+4. **Implementation** — edit only approved files; no architectural inference.
+5. **Verification** — targeted tests, required broad gates, clean-checkout proof,
+   and migration/recovery checks appropriate to risk.
+6. **Review** — compare implementation against spec and canon.
+7. **Closeout** — create one CompletedPR record, update roadmap/index/gap
+   register, and remove or relocate the backlog copy.
+
+A multi-PR migration may use a temporary bridge only when the approved sequence
+names its owner and deletion PR. It may not create two production execution or
+persistence authorities.
+
+## 6. File and worktree boundaries
+
+- Existing changes belong to the user unless proven otherwise.
+- Never reset, delete, overwrite, or bulk-move user work to “clean” a branch.
+- Recovery uses new branches/worktrees and explicit commits, not destructive
+  history rewrites.
+- Production modules must be tracked and available in a clean checkout.
+- Runtime data ignore rules must be anchored and must not hide source packages.
+- Only files listed in an approved PR are editable during its execution.
+- If a needed file is not allowed, stop and revise the spec.
+
+## 7. Forbidden behavior
+
+- `DIRECT` fresh execution or GUI-to-runner calls;
+- a second job model, runner entry, or persistence authority;
+- requiring PromptPack identity for non-PromptPack intent;
+- mutable status/results/progress/output paths in NJR;
+- source resolution, randomization, or source-file reads in the runner;
+- pack-shaped generic requests extended to every intent kind;
+- live legacy fallback, dual-read, or dual-write migration;
+- backend workflow JSON outside its backend boundary;
+- child runtime host, daemon, or distributed scheduling during MVP recovery;
+- partial migrations with no explicit completion/deletion step;
+- tests that call real services during collection or mutate tracked repo data;
+- changing tests only to conceal an implementation gap;
+- claiming a target architecture is implemented without verification evidence;
+- treating historical backlog or completed plans as active work.
+
+## 8. MVP sequencing
+
+`docs/StableNew Roadmap v2.6.md` is the single current roadmap. At this amendment,
+only `PR-ARCH-MVP-001` and `PR-MVP-000` are approved. Later roadmap entries must
+receive exact specs and owner approval before execution.
+
+Feature work outside the MVP definition of done is deferred unless Rob amends
+the roadmap.
+
+## 9. Documentation synchronization
+
+No PR may knowingly leave active docs contradictory. Runtime contract changes
+must update all affected Tier 1/Tier 2 surfaces and tests in the same PR. A gap
+is removed from the architecture only after implementation and clean-checkout
+verification, not when code is merely planned.
+
+New agent profiles or path-scoped instruction files must be registered in
+`.github/INSTRUCTION_SURFACE.md` in the same PR.
