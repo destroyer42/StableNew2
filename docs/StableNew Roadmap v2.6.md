@@ -114,7 +114,7 @@ rewrite the existing branches.
 |---:|---|---|---|
 | 0 | `PR-ARCH-MVP-001` | **Implemented; merge review pending** | Reconciled canon committed as `45b8d07` and carried to recovery as `14d1071` |
 | 1 | `PR-MVP-000` | **Completed** | Recoverable clean baseline with all production source tracked and independently verified |
-| 2 | `PR-MVP-005` | **Planned; next** | Later branch/commit deltas classified as adopt, rewrite, defer, or reject |
+| 2 | `PR-MVP-005` | **Completed** | 115 later changed-file occurrences classified into 17 binding dispositions without runtime adoption |
 | 3 | `PR-MVP-010` | Planned | Trustworthy clean-checkout collection and isolated test harness |
 | 4 | `PR-MVP-020` | Planned | Reduced immutable NJR and complete versioned serialization |
 | 5 | `PR-MVP-030` | Planned | Typed compilers and NJR-only JobService submission contract |
@@ -163,8 +163,24 @@ MVP-relevant change with tests and architecture rationale. Adopt nothing by bulk
 merge. Any runtime adoption that exceeds an approved allowlist becomes a
 separate spec before implementation.
 
+Approved disposition: carry the WebUI startup/error handling, empty-queue UI,
+diagnostic collision, and tracked-probe cleanup behaviors only through their
+named future PRs; rewrite submission acceptance, batch scheduling, preview
+cardinality, and stale-preview handling on the typed compiler/NJR contracts;
+defer ADetailer, multi-character, and learning work unless later roadmap gates
+admit them; reject PromptPack-identity fallbacks, fabricated video prompts,
+generated state, paired-pack fixture mutations, stale completion claims, and
+wholesale pack deletion. The detailed file coverage and owners are binding in
+`docs/CompletedPR/PR-MVP-005-Post-Baseline-Delta-Disposition.md`.
+
 Exit gate: no unidentified later-branch dependency can surprise the contract
 migration.
+
+Completion evidence: all 115 changed-file occurrences are covered by 17 logical
+slices (4 adopt, 4 rewrite, 3 defer, 6 reject); each raw historical snapshot
+reproduced the missing-`src/state` collection failure, and each focused suite
+passed after applying only the `PR-MVP-000` completeness repair. No comparison
+branch or runtime file was changed.
 
 ### Phase 1 — Make verification trustworthy
 
@@ -342,6 +358,7 @@ and broad UI redesign do not block MVP.
 
 ## 10. Next action
 
-Generate and approve `PR-MVP-005` to classify the changes in `24063b7`,
-`d452a2a`, and pre-canon `1a9eb49` against the recovered baseline. Adopt no
-later runtime change until that evidence-based disposition is complete.
+Generate and approve `PR-MVP-010` for trustworthy collection, test isolation,
+pytest configuration consolidation, and removal of the 30 tracked probe
+artifacts. Adopt no later runtime change outside the separately approved owner
+PR named in the completed disposition record.

@@ -65,6 +65,11 @@ are planned placeholders until exact specs are written and approved.
 Completed recovery record:
 
 - `docs/CompletedPR/PR-MVP-000-Recovery-Baseline-and-Repository-Completeness.md`
+- `docs/CompletedPR/PR-MVP-005-Post-Baseline-Delta-Disposition.md`
+
+`PR-MVP-005` is complete. Its dispositions authorize no runtime adoption or
+bulk branch integration; each carry-forward requires the separately approved
+owner PR named in that record.
 
 ## 2. Canonical reading order
 
