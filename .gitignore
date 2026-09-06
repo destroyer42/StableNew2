@@ -99,7 +99,7 @@ data/learning/
 data/photo_optimize/assets/
 
 # PR-CLEANUP-LEARN-045: Mutable runtime state - local only
-state/
+/state/
 
 # Runtime-only history snapshots - local only
 data/job_history.jsonl
