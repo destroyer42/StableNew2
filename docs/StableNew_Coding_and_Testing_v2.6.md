@@ -1,793 +1,234 @@
-StableNew_Coding_and_Testing_v2.6.md
+# StableNew Coding and Testing Standards v2.6
 
-Canonical Engineering Standards & Developer Guide
-Last Updated: 2025-12-09
-Status: Canonical / Required**
+Status: Canonical, Binding
+Updated: 2026-09-05
 
-0. Purpose
+## 0. Purpose
 
-This document defines the coding, testing, validation, and review standards for the StableNew v2.6 architecture. It governs:
+These standards govern implementation and verification during MVP recovery.
+They optimize for reproducibility, clean boundaries, recoverable data, and tests
+that prove the architecture rather than preserve accidental behavior.
 
-How code is written
+## 1. Required runtime shape
 
-How tests must be structured
+Production work follows:
 
-What invariants must be respected
+`Typed Intent DTO -> Compiler -> NJR -> JobService -> JobRepository/Queue -> PipelineRunner.run_njr -> Handler -> Artifacts/History`
 
-What tech-debt cleanup rules must be followed
+Code and tests must enforce:
+
+- NJR is the only public executable envelope;
+- fresh work is queue-only;
+- `Run Now` is immediate-start submission policy;
+- NJR is immutable and contains no status/results/progress/output paths;
+- PromptPack identity is required only for `source.kind == "prompt_pack"`;
+- persistence is reached through `JobRepository`;
+- runner handlers do not own persistence or GUI state;
+- no fallback to legacy dictionaries, `DIRECT`, or alternate runner entries.
 
-How LLM agents (Codex, ChatGPT) operate within strict boundaries
+## 2. Repository completeness and hygiene
 
-Every PR, every refactor, every feature must conform to this.
+- Every imported production module must be tracked by Git and present in a
+  tracked-files-only checkout.
+- Ignore rules for runtime data must be rooted and narrow. A rule such as
+  `state/` that also hides `src/state/` is forbidden; use `/state/` for a
+  repository-root runtime directory.
+- Generated queue/history databases, caches, outputs, logs, model files, and
+  local secrets are not source.
+- Tests write only to temporary workspaces or explicitly injected stores.
+- A test must restore any process-level environment, singleton, working
+  directory, logging handler, or module patch it changes.
+- Importing a production or test module must not start workers, open GUI loops,
+  call the network, probe a GPU, mutate persistence, or parse command-line
+  arguments.
 
-1. The Four Iron Laws of StableNew v2.6
+Repository-completeness and no-import-side-effect checks are release gates.
 
-These laws cannot be violated anywhere in the repo.
+## 3. Contract and model rules
 
-1.1 The No GUI-Owned Prompt Construction Law
+Use typed dataclasses, enums, protocols, or validated schema models at system
+boundaries. Do not pass open-ended dictionaries between GUI, compilers,
+`JobService`, repository, and runner.
 
-PromptPack remains the primary image authoring surface, but StableNew now has
-multiple valid intent surfaces.
+### 3.1 NJR
 
-What remains forbidden is creating fresh executable prompt/config state in GUI
-code or bypassing canonical builders and compilers.
+The NJR core is defined in `ARCHITECTURE_v2.6.md`. Requirements:
 
-Forbidden everywhere:
+- explicit schema version;
+- complete and deterministic serialization;
+- validation on construction and deserialization;
+- immutable nested values after submission;
+- explicit source/workload matching;
+- new record plus lineage for replay or modification;
+- no mutable queue/history fields.
 
-GUI free-text prompt entry becoming execution truth
+Any schema change requires versioned fixtures, migration tests, and synchronized
+canonical docs.
 
-controller-side ad hoc prompt assembly outside canonical builder/compiler flows
+### 3.2 Job execution record
 
-legacy `job_draft.prompt` style execution payloads
+Mutable state belongs to a separate repository-owned record. Lifecycle
+transitions must be explicit, transactional, and validated. Terminal states do
+not transition back to running; retry creates a deliberate new attempt or job
+according to the approved repository contract.
 
-draft-bundle or dict-only runtime payloads
+### 3.3 Intent compilers
 
-If code creates fresh execution prompt/config state outside the canonical
-builder/compiler paths → PR rejected.
+Compilers are deterministic and side-effect-free apart from explicitly injected
+read-only registries. They resolve all authoring choices before submission and
+return structured errors. They do not enqueue, execute, or mutate source files.
 
-1.2 The Single Builder Law
+## 4. Persistence and migration
 
-There is only one job-building path:
+- Application code depends on the `JobRepository` interface, not SQLite calls or
+  JSON files outside the repository implementation.
+- SQLite transactions own multi-field lifecycle updates.
+- Schema version and migration state are explicit.
+- Legacy import is offline and backup-first; it supports dry-run, validation,
+  idempotence, and conflict reports.
+- Migration tests compare record counts, stable identities, important hashes,
+  statuses, NJR snapshots, artifact links, and errors.
+- Live dual-read, dual-write, or silent fallback is forbidden.
+- Destructive cleanup of legacy data is never part of automatic startup.
 
-JobBuilderV2 → produces NormalizedJobRecord (NJR)
+## 5. Error handling and diagnostics
 
-Forbidden:
+Errors crossing a boundary must carry a stable code, a user-safe message, and
+diagnostic context without secrets. Exceptions are handled at the layer that
+can add meaning or recover; broad catch-and-ignore behavior is forbidden.
 
-direct runner payload dicts
+Queue and runner diagnostics must include job identity, workload kind, stage,
+transition, elapsed time when known, and failure code. Logs must not contain
+tokens, full secret-bearing environment dumps, or unbounded backend payloads.
 
-“simple job” helper constructors
+Expected missing dependencies are capability/preflight results, not import-time
+crashes. A failed job reaches a durable terminal state and never falls back to a
+second execution path.
 
-custom wrappers used by old controllers
+## 6. GUI and concurrency
 
-parallel job formats
+- GUI callbacks call controller/application methods, not builders, repositories,
+  or runner methods directly.
+- Workers never mutate widgets. State changes are marshalled through the GUI
+  scheduler/event boundary.
+- Queue submission is non-blocking.
+- Cancellation, timeout, and shutdown behavior are bounded and tested.
+- Polling loops require a termination condition and must not use arbitrary sleep
+  calls as correctness mechanisms.
+- UI projections may be cached for display but are not execution authority.
 
-legacy prompt resolution code
+## 7. Backend rules
 
-Legacy RunPayload/job.payload helpers were removed in PR-CORE1-B5 and must not reappear in new code or tests.
+Backends implement typed runner-facing ports. Network clients, WebUI payloads,
+SVD pipeline objects, subprocess commands, and backend workflow JSON remain
+inside adapters/handlers.
 
-PromptPack-authored image jobs must pass through:
+Tests use deterministic fakes by default. Real WebUI/GPU/model tests are marked,
+opt-in, bounded, and record environment/version evidence. They are required for
+release acceptance but not for hermetic unit CI.
 
-RandomizerEngineV2
-ConfigVariantPlanV2
-UnifiedPromptResolver
-UnifiedConfigResolver
-JobBuilderV2
+For MVP video, only native SVD XT may be on the advertised path. Memory-related
+settings and dependency checks must be explicit and testable without downloading
+or loading a model during normal unit collection.
 
-Other intent surfaces may use different builder/compiler entrypoints, but they
-must still converge to NJR before queue submission.
+## 8. Test taxonomy
 
-1.3 The Immutable Job Law
+### 8.1 Unit
 
-A NormalizedJobRecord:
+Fast, hermetic tests for models, validation, compilers, repository operations,
+and pure services. No real filesystem outside a temp directory, network, GPU,
+subprocess, display, or sleep.
 
-is immutable after creation
+### 8.2 Contract
 
-may not be edited by GUI, controllers, or runner
+Tests that lock system boundaries:
 
-must contain all fields needed for execution
+- NJR round-trip, immutability, and conditional identity;
+- compiler output and side-effect freedom;
+- JobRepository transition semantics;
+- runner port request/result types;
+- artifact and history linkage;
+- migration version behavior.
 
-If metadata must change → build a new NJR.
-Never mutate an NJR.
+### 8.3 Integration
 
-1.4 The Determinism Law
+Multiple real StableNew components with fake external backends and temporary
+persistence. These prove compiler-to-queue-to-runner-to-history behavior.
 
-Given identical input:
+### 8.4 GUI journey
 
-same PromptPack
+User-visible flows with fake backends and controlled GUI scheduling. Assertions
+cover visible state and application outcomes, not private widget implementation.
 
-same matrix selection
+### 8.5 Real-backend acceptance
 
-same config variants
+Explicit manual/opt-in journeys against configured WebUI and native SVD XT on
+the target machine. Each run records app commit, Python/dependency versions,
+backend/model identifiers, hardware, command/workflow, result, and artifacts.
 
-same batch size
+### 8.6 Quarantine
 
-same seed rules
+A quarantined test must have a reason, owner, expiry/deletion PR, and marker. It
+cannot define current architecture or satisfy an MVP gate.
 
-→ the builder must produce byte-for-byte identical NJRs.
+## 9. Required test properties
 
-Any nondeterminism = bug.
+- deterministic inputs, ordering, seeds, and clocks where relevant;
+- no reliance on test execution order;
+- no mutation of tracked repository files;
+- no arbitrary sleeps;
+- no real external call unless explicitly marked;
+- failure assertions include state, error code, and absence of fallback;
+- serialization tests compare the complete supported contract;
+- migration tests run at least twice to prove idempotence;
+- clean-checkout tests run without ignored local source files.
 
-2. Repo Coding Standards
+Tests must not assert `pack_required` for a non-PromptPack source. A test that
+preserves superseded architecture must be removed or rewritten in the same PR
+that implements the replacement contract, not before.
 
-These apply repo-wide.
+## 10. Baseline command policy
 
-2.1 Single Responsibility per Module
+The exact environment commands are pinned by `PR-MVP-010`. Until then, use the
+project's managed Python 3.11 environment and record the interpreter used.
+Canonical gates will include:
 
-Every module must represent exactly one conceptual purpose:
+```text
+python -m compileall src
+pytest --collect-only -q
+pytest -m "not real_backend and not quarantine" -q
+```
 
-Module	Purpose
-config_variant_plan_v2.py	Sweep variant logic
-job_builder_v2.py	NJR construction
-resolution_layer.py	Prompt + config merging
-randomizer_v2.py	Matrix variant expansion
-job_models_v2.py	Strongly-typed DTOs
-pipeline_controller.py	Pipeline orchestration
-webui_connection_controller.py	Backend communication
+Targeted tests run before broader suites. A hang, crash, collection error, or
+tracked-file mutation is a failed test run even if earlier assertions passed.
 
-If a module mixes responsibilities → PR must split it.
+Formatting, lint, and type-check commands must use repository-pinned
+configuration. Existing debt may be baselined only in `PR-MVP-010`; new or
+touched-file violations are not permitted.
 
-2.2 No Dead Code / No Shims / No Legacy Paths
+## 11. PR verification record
 
-Forbidden:
+Every implementation PR records:
 
-DraftBundle, legacy JobDraft, RunPayload
+- exact commands and interpreter;
+- pass/fail/skip counts;
+- relevant fixture or migration versions;
+- whether real backends were used;
+- tracked-file status before and after tests;
+- known failures with owner and closing PR;
+- docs and architecture-gap rows updated.
 
-Legacy UnifiedConfig rules
+“Tests pass” without this context is not adequate closeout evidence.
 
-Old PromptResolver
+## 12. Review checklist
 
-GUI widgets that produce anything except state transitions
-
-“Temporary” shims in controller
-
-Partial refactors that leave alternate paths in place
-
-If it can’t be deleted, it must be explicitly documented in TECH_DEBT.md.
-
-2.3 Explicit Data Models Only
-
-No dict-of-dict-of-dict structures.
-Use explicit data models. In v2.6, Python dataclasses are the preferred choice.
-TypedDicts are acceptable for read-only lookup structures. Pydantic is not
-currently used in the codebase; it may be adopted subsystem-by-subsystem
-if explicitly approved in a PR spec. Do not introduce Pydantic without a plan.
-
-Requirements for all data model types:
-
-Clear schema
-
-Type safety
-
-IDE assistance
-
-Traceability in DebugHub
-
-2.4 No Circular Dependencies
-
-This was one of the largest sources of instability in v2.5.
-
-Rules:
-
-Controllers may depend on pipeline modules
-
-Pipeline modules may never depend on GUI
-
-Runner may depend on NJR, but not controllers
-
-Config and model layers must remain bottom-most
-
-2.5 Logging Standards
-
-Every subsystem produces logs via:
-
-logger = logging.getLogger(__name__)
-
-
-Levels:
-
-Level	Use
-INFO	normal operations
-WARNING	user-fixable issues
-ERROR	run-blocking conditions
-CRITICAL	fatal errors only
-
-Debug logs should include context IDs:
-
-job_id
-
-pack_name
-
-config_variant_label
-
-matrix_variant_index
-
-3. Testing Standards
-
-Testing is structured according to the Builder Pipeline and Golden Path.
-
-3.1 Test Hierarchy
-tests/
-  unit/
-    pipeline/
-    controller/
-    utils/
-  integration/
-    builder/
-    controller/
-    runner/
-  e2e/
-    golden_path/
-
-3.2 Unit Tests (Required for Every PR)
-
-Every function in:
-
-RandomizerEngineV2
-
-ConfigVariantPlanV2
-
-UnifiedPromptResolver
-
-UnifiedConfigResolver
-
-JobBuilderV2
-
-must have:
-
-happy-path test
-
-failure-path test
-
-Examples:
-
-✔ slot substitution
-✔ negative layering
-✔ override merging
-✔ stage chain validation
-✔ seed determinism
-
-Forbidden:
-
-using the runner in unit tests
-
-filesystem UI integration
-
-mocking PromptPack incorrectly
-
-3.3 Integration Tests
-
-Integration tests verify:
-
-3.4 GUI Responsiveness Contract
-
-Hot GUI responsiveness is now a required test surface, not an ad hoc manual
-check.
-
-Required rules:
-
-- controller modules must not import Tk or mutate widgets directly; this is
-  enforced in `tests/system/test_architecture_enforcement_v2.py`
-- hot runtime GUI state must be tested through deterministic cadence/perf
-  harnesses rather than real WebUI availability
-- the canonical synthetic busy-run responsiveness journey is
-  `tests/journeys/test_jt07_large_batch_execution.py`
-
-Current acceptance thresholds for the synthetic busy-run journey:
-
-- p95 Tk timer lag must be `<= 35 ms`
-- max Tk timer lag must be `<= 100 ms`
-
-Any PR that materially changes hot queue/history/preview/runtime update paths
-must update or re-run this journey and the panel-metric tests in
-`tests/gui_v2/test_pipeline_tab_callback_metrics_v2.py` and
-`tests/gui_v2/test_panel_refresh_metrics_v2.py`.
-
-a pack → NJRs
-
-NJRs → queue
-
-queue → runner
-
-Tests must include:
-
-multi-stage pipelines
-
-multi-variant sweeps
-
-multiple matrix combinations
-
-global negative toggle
-
-error conditions
-
-3.4 E2E Golden Path Tests (Mandatory)
-
-All Golden Path tests GP1–GP12 must pass:
-
-ID	Scenario
-GP1	single-row, simple job
-GP2	queue-only FIFO
-GP3	batch expansion
-GP4	randomizer variants
-GP5	randomizer × batch
-GP6	full SDXL multi-stage
-GP7	adetailer integration
-GP8	stage toggle correctness
-GP9	runner failure path
-GP10	learning integration
-GP11	mixed queue
-GP12	history replay
-
-Every PR must state whether it impacts Golden Path.
-If yes → tests must be updated.
-
-3.5 Test Fixtures (Canonical)
-
-Fixtures include:
-
-prompt_pack_fixture()
-
-randomizer_fixture()
-
-config_variant_plan_fixture()
-
-builder_fixture()
-
-runner_stub_fixture()
-
-These fixtures:
-
-never embed UI
-
-always produce deterministic results
-
-return typed objects, not dicts
-
-3.6 Seed Determinism Testing
-
-Seed resolution must satisfy:
-
-fixed seed → identical outputs
-
-no seed → builder assigns random, but logged
-
-sweep variants must not share seed unless specified
-
-Tests must validate these conditions.
-
-4. Tech Debt Elimination Rules
-
-StableNew v2.6 has a strict stance:
-
-No PR is allowed to introduce new tech debt.
-If a PR depends on cleaning tech debt → it must do so immediately.
-
-4.1 Immediate Cleanup Requirement
-
-Every PR must contain:
-
-## TECH-DEBT IMPACT
-- Does this PR remove tech debt?
-- Does this PR introduce new tech debt?
-- If yes, the following cleanup was performed in this PR:
-
-
-Deferred cleanup is not allowed.
-
-4.2 Allowed Exceptions (Only 2)
-
-Exception 1 — Blocking external dependency
-Exception 2 — Requires architectural PR (CORE-level)
-
-Both require:
-
-JUSTIFICATION:
-RATIONALE:
-CLEANUP DEADLINE:
-
-4.3 Removal Requirements
-
-Components that must be removed:
-
-RunPayload
-
-Old Controller JobDraft / DraftBundle
-
-2023 PromptResolver
-
-v1 prompt pack schema loader
-
-Multi-path job creation
-
-GUI → runner direct calls
-
-Legacy “simple_job.py” helpers
-
-Any reference to “manual prompt mode”
-
-Before removal, tests must be updated.
-
-Controller-focused tests must construct controllers without injecting `StateManager`/`GUIState`; GUI state machinery belongs in `tests/gui` (see `tests/gui/test_state_manager_legacy.py` for the legacy coverage removed from controller specs). These tests must also avoid JobBundle/JobBundleSummaryDTO assertions—coverage should rely on AppStateV2.job_draft + `NormalizedJobRecord` outputs instead of legacy bundles.
-Tests must not assert against legacy job DTOs (`JobUiSummary`, `JobQueueItemDTO`, `JobHistoryItemDTO`); controller and history tests should derive summaries via `JobView.from_njr()` (or `JobHistoryService.summarize_history_record()`) and never reconstruct legacy configuration fragments.
-
-5. Controller Integration Rules
-
-Controllers:
-
-may not generate or mutate prompts
-
-may not build config dicts
-
-may not directly interact with runner
-
-must call builder for everything
-
-must accept only canonical DTOs
-
-Controller responsibilities:
-
----
-
-## 8. Runtime Artifact Policy (PR-CLEANUP-LEARN-045)
-
-**Rule: If a file is produced by running the application, it must never be committed to version control.**
-
-The following paths are permanently excluded via `.gitignore`:
-
-| Path | Description |
-|---|---|
-| `data/learning/experiments/` | Active experiment sessions written at runtime |
-| `data/photo_optimize/assets/` | User-uploaded originals and generated outputs |
-| `state/` | All mutable UI/queue/preview runtime state files |
-
-See `docs/runbooks/TRACKED_RUNTIME_STATE_HYGIENE_v2.6.md` for the short canonical runtime-state contract.
-
-### Enforcement
-
-- Add new runtime-produced paths to `.gitignore` **before the first commit** that would touch them.
-- Use `tests/fixtures/` for committed deterministic test data only.
-- Run `git status` before committing learning or state changes to verify no runtime artifacts are staged.
-- Never stage files under the excluded paths even with `git add -f`.
-
-### What belongs in `tests/fixtures/`
-
-Only **static, hand-authored** JSON/JSONL fixtures representing well-formed model objects. Never include files generated by experiment sessions, photo optimization runs, or the queue/runner.
-
-  capture UI state
- 
-  build config variant plans
- 
-  pass context to builder
-  
-  rely on AppStateV2.job_draft + JobBuilderV2; do not maintain `_draft_bundle` or JobBundle state in controllers.
- 
-  enqueue NJRs
-
-Controllers do not:
-
-### 5.1 GUI Responsiveness Contract
-
-The GUI boundary is not only about ownership of execution logic; it is also
-about ownership of repaint cadence.
-
-Required rules:
-
-- Controllers must not mutate Tk widgets directly; they publish state and GUI
-  layers render that state.
-- Runtime-heavy GUI keys must batch via `AppStateV2` invalidation rather than
-  immediate listener fan-out.
-- User-edit and selection keys remain immediate; batching is reserved for hot
-  runtime keys such as queue/history/preview/runtime status and operator log.
-- Pipeline hot-surface refresh ownership belongs to `PipelineTabFrameV2`, which
-  coalesces queue/history/preview/running-panel refreshes into one flush tick.
-- Hidden or unmapped hot surfaces must defer work instead of consuming Tk time.
-
-Minimum required regression coverage for GUI responsiveness changes:
-
-- batched-vs-immediate notification tests
-- controller/UI boundary tests for log and status projection
-- hot-surface scheduler ownership/coalescing tests
-- architecture guard tests that block controller-side Tk imports and direct
-  widget mutation
-
-assemble payloads
-
-execute payload-based jobs (RunPayload / `Job.payload`)
-
-build pipeline configs
-
-merge dictionaries
-
-create stage chains
-- depend on `src/gui.state.StateManager` or `GUIState`; controller tests must use AppStateV2-only fixtures, and GUI state coverage exists in `tests/gui/test_state_manager_legacy.py`
-
-### Controller Event API (PR-CORE1-C4A)
-
-Controller tests must interact with controllers via their explicit event methods (`on_run_now`, `on_add_to_queue`, `on_clear_draft`, `on_update_preview`, etc.) rather than probing for optional handler names with `getattr`/`hasattr`. Dynamic attribute injection and string-based dispatch are forbidden in both implementation and tests, so the tests focus on AppStateV2 + NJR outcomes instead of legacy reflection.
-
-GUI tests must assert that UI actions call these explicit controller hooks; reflection-based wiring or `_invoke_controller` helpers are no longer used.
-
-Controllers also must consume `JobExecutionController` directly for queue execution; introducing façade layers such as a `QueueExecutionController` that merely proxies into `JobExecutionController` is forbidden (PR-CORE1-C5 collapsed that chain).
-
-### 5.1 **NJR-Only Execution Invariants** (PR-CORE1-B2)
-
-New rules for queue execution path after B2:
-
-**Execution Path - NJR-ONLY for New Jobs:**
-
-**REQUIRED:** If a Job has `normalized_record`, the queue execution path MUST use `run_njr` via `_run_job`.
-
-**FORBIDDEN:** Controllers, JobService, and Queue/Runner MUST NOT reference legacy configuration fields on `Job` instances; the queue model removed them in PR-CORE1-C2.
-
-**FORBIDDEN:** If NJR execution fails for an NJR-backed job, the execution path MUST NOT fall back to legacy configuration payloads. The job should be marked as failed.
-
-**PROHIBITED:** No legacy configuration execution branch exists; imported history must be migrated to NJR before enqueueing.
-
-AppController._execute_job MUST check for `_normalized_record` FIRST. If present, use NJR path exclusively.
-
-**Job Construction:**
-
-All jobs created via `PipelineController._to_queue_job` MUST have `_normalized_record` attached.
-
-Legacy configuration fields no longer exist on Job objects created via JobBuilderV2; new jobs rely solely on NJR snapshots (PR-CORE1-C2). Historical configuration blobs are migration-only inputs and must be upgraded to canonical NJR-backed records before normal runtime use.
-
-**PR-CORE1-B4:** `PipelineRunner.run(config)` no longer exists. Tests (both unit and integration) must exercise `run_njr()` exclusively and may rely on the legacy adapter only when replaying archival configuration-only data.
-
-**Testing Requirements:**
-
-All golden-path E2E tests MUST assert NJR execution is used for new queue jobs.
-
-Tests MUST verify that `_run_job` is called when `_normalized_record` is present.
-
-Tests MUST verify that NJR execution failures result in job error status (NO fallback to legacy configuration payloads).
-Tests MUST verify that new queue jobs do not expose legacy configuration fields (PR-CORE1-C2); any legacy coverage should work through history data only.
-Tests covering queue persistence (`tests/queue/test_job_queue_persistence_v2.py`, `tests/queue/test_job_history_store.py`) must inspect `state/queue_state_v2.json` and assert every entry ships with `njr_snapshot` plus queue metadata only (`queue_id`, `priority`, `status`, `created_at`, optional auto-run/paused flags) and that forbidden keys like legacy configuration blobs, `_normalized_record`, or `draft`/`bundle` blobs never survive serialization; this proves queue I/O already matches history’s NJR semantics until D6 unifies the queue file with history’s JSONL codec.
-Tests covering any JSONL persistence must leverage `JSONLCodec` (`src.utils.jsonl_codec`) and the accompanying `tests/utils/test_jsonl_codec.py` helpers to verify deterministic serialization, sorted keys, trailing newlines, and standardized skipping/logging of corrupt lines, instead of reimplementing ad-hoc JSONL readers or writers.
-Tests MUST NOT reference legacy configuration blobs or legacy job dicts in persistence/replay suites; all history-oriented tests hydrate NJRs from snapshots.
-Tests covering history persistence/replay MUST exercise `HistoryMigrationEngine` (legacy → NJR) and assert `history_schema == "2.6"` with no deprecated/draft-bundle fields present in persisted snapshots. History JSONL writes must be deterministic (key ordering stable); tests SHOULD compare `json.dumps(entry, sort_keys=True)` across saves to enforce determinism.
-
-Tests MUST capture logs or use stub runners to verify whether `run_njr` vs `run(config)` was invoked.
-
-### CI Required Smoke Contract
-
-The canonical required CI smoke gate is `python tools/ci/run_required_smoke.py`.
-That script is the single source of truth for the deterministic required pytest
-subset used by `.github/workflows/ci.yml`.
-
-The canonical typed seam gate is `python tools/ci/run_mypy_smoke.py`. That
-script is the single source of truth for the bounded mypy whitelist that covers
-the stabilized architecture seams introduced by the controller ports,
-application kernel/bootstrap, replay contract, and workflow-governance layers.
-
-Do not duplicate the required-smoke pytest ignore list in docs, issue
-templates, or secondary scripts. If the required gate changes, update the
-script and the small set of docs that point to it in the same PR.
-Do not duplicate the mypy target whitelist in secondary scripts; update
-`tools/ci/run_mypy_smoke.py` and the linked docs in the same PR.
-
-### Replay Testing (CORE1-D3)
-
-- Replay tests MUST assert that the replay path builds RunPlan via `build_run_plan_from_njr` and calls `PipelineRunner.run_njr` with that plan.
-- Replay vs fresh runs MUST produce identical RunPlans for the same NJR.
-- Tests MUST NOT construct alternate replay payloads or bypass the unified NJR → RunPlan → Runner path.
-
-Tests for legacy jobs (without NJR) MUST verify they are migrated to NJR or rejected; no legacy configuration branch remains.
-
-6. GUI Integration Rules
-
-GUI V2 only communicates in terms of:
-
-PromptPack IDs
-
-Selected rows
-
-Sweep variants
-
-Stage toggles
-
-Global negative toggle
-
-GUI may never:
-
-construct prompts
-
-construct NJRs
-
-modify config objects
-
-mutate packs
-
-GUI must:
-
-reflect summary state
-
-differentiate “preview” vs “draft”
-
-trigger controller actions only
-
-- Status callbacks must route GUI updates through `_run_in_gui_thread` (or an equivalent Tk dispatcher); tests must ensure worker threads never call queue/history panel methods directly.
-- Queue/runner tests must cover queue worker lifecycle (worker start/stop logs, non-blocking submissions) and ensure failures during worker start/execution are surfaced via structured logs rather than hanging the GUI.
-- `tests/queue/test_single_node_runner.py` now exercises the `SingleNodeJobRunner` loop to confirm jobs keep processing alive after exceptions, and `tests/queue/test_job_service_pipeline_integration_v2.py` includes a regression that asserts `submit_queued()` returns quickly even when a job blocks, ensuring the queue worker instrumentation remains visible.
-- Queue diagnostics coverage must assert the `QUEUE_JOB_*` and `JOB_EXEC_*` log markers appear, history entries gain `duration_ms` plus error details, and queue submissions remain non-blocking so slow/stuck NJR runs surface through logs before any GUI impact.
-- **Compatibility Suite Requirements:** Every schema change must ship with versioned fixtures under `tests/data/history_compat_v2/` and/or `tests/data/queue_compat_v2/`, and each fixture must be consumed by the compatibility suites (`tests/compat/test_history_compat_v2.py`, `tests/compat/test_queue_compat_v2.py`, `tests/compat/test_replay_compat_v2.py`). These tests prove that:
-  - History entries from V2.0–V2.6 hydrate into valid `HistoryRecord` objects paired with canonical `NormalizedJobRecord` snapshots.
-  - Queue snapshots from transitional versions round-trip through `QueueMigrationEngine` and always expose `queue_schema="2.6"`, `njr_snapshot`, and valid `job_id`s.
-  - Replay requests for old entries must pass through the sanctioned migration path before hitting the unified runner path, preventing regressions in `PipelineController.replay_job_from_history`.
-
-7. DebugHub Integration Requirements
-
-DebugHub exposes:
-
-prompt layering
-
-matrix value maps
-
-sweep variants
-
-final config
-
-stage chain
-
-seeds
-
-NJR preview
-
-DebugHub must never:
-
-alter job execution
-
-mutate NJRs
-
-access GUI state
-
-accept arbitrary dicts
-
-It is purely diagnostic.
-
-8. LLM Agent Rules (ChatGPT + Codex)
-8.1 ChatGPT (Planner)
-
-ChatGPT generates:
-
-PR specs
-
-architecture docs
-
-definitions
-
-refactor plans
-
-clean code stubs
-
-test scaffolds
-
-ChatGPT may not:
-
-modify repo directly
-
-execute code
-
-produce delta patches that skip PR requirements
-
-8.2 Codex (Executor)
-
-Codex implements:
-
-PRs exactly as written
-
-test suites
-
-refactors
-
-removals
-
-Codex must:
-
-follow PR template
-
-remove dead code, not preserve it
-
-follow canonical architecture
-
-never create alternate paths
-
-resolve imports properly
-
-Codex may NOT:
-
-add partial features
-
-make design decisions
-
-resurrect legacy paths
-
-9. Quality Gates
-
-Before merging, PRs must:
-
-Pass all unit tests
-
-Pass all integration tests
-
-Pass Golden Path tests
-
-Have no lints
-
-Remove tech debt touched by PR
-
-Comply with Architecture v2.6
-
-Document changes in CHANGELOG
-
-Update any canonical spec files if impacted
-
-If any fail → PR rejected.
-
-10. Example: Valid PR Checklist
-[X] All builder logic passes unit tests
-[X] New sweep parameters validated
-[X] Prompt resolves through the canonical StableNew-owned intent path
-[X] Preview jobs refresh when PromptPack entries exist and their NormalizedJobRecord fields (prompt/model) match the pack data
-[X] NJRs created via JobBuilderV2
-[X] No GUI prompt code added
-[X] Tech debt removed (draftbundle.py deleted)
-[X] Docs updated: Builder Deep Dive v2.6
-[X] Golden Path tests updated and passing
-[X] Codex executor instructions included
-
-### Run Result Canonicalization (CORE1-D7)
-
-- Tests that inspect pipeline/controller run outputs must rely on the canonical `PipelineRunResult` dictionary (`PipelineRunResult.to_dict()` or `normalize_run_result`) instead of legacy `mode`/`status` flags.
-- Fixtures should annotate `metadata.execution_path` and `metadata.job_id` so queue vs. direct runs remain distinguishable.
-- Queue/history persistence tests must assert `HistoryRecord.result` exists and follows the canonical schema (variants, learning_records, stage_events, metadata) each time JSONL entries are written (`tests/pipeline/test_pipeline_runner.py`, `tests/controller/test_core_run_path_v2.py`, `tests/history/test_history_roundtrip.py`, `tests/history/test_history_replay_integration.py`, `tests/queue/test_job_history_store.py`).
-
-### UI Contract Testing Addendum (PR-MAR26-UI-REFRESH-001)
-
-- UI behavior tests should prefer toolkit-agnostic contract tests over widget pixel/state specifics.
-- `src/gui/ui_tokens.py` must be validated by token-shape tests (`tests/gui_v2/test_ui_tokens_contract.py`).
-- `src/gui/view_contracts/*` contract modules must be covered by deterministic unit tests.
-- Extracted non-render UI logic (for example, review payload/diff computation adapters) should be tested directly without Tk root setup.
-- Host-specific tests (Tk rendering) remain useful for smoke/layout checks, but behavior correctness should live in contract/controller tests first.
-
-### PySide6 Migration Testing Gates (PR-GUI-PS6-001)
-
-- Each migration PR must include a parity matrix for affected surfaces:
-  1. State transition parity.
-  2. Controller event parity.
-  3. Persistence/resume parity where applicable.
-- Controller and pipeline tests remain mandatory; GUI migration may not reduce backend coverage.
-- For any PR changing active GUI runtime wiring, the Golden Path integration suite is required before merge.
-- Migration PRs must document rollback conditions and explicit verification commands in their implementation summary.
-- No PR may introduce a permanent dual-runtime compatibility layer in mainline execution paths.
-
-11. Summary
-
-This document exists to ensure:
-
-no regressions
-
-no alternate paths
-
-no silent merges
-
-no prompt drift
-
-no legacy job formats
-
-no accidental mutations
-
-StableNew v2.6 requires:
-
-Single prompt source
-
-Single builder path
-
-Deterministic NJR creation
-
-Immutable job records
-
-Clear boundaries between GUI → Controller → Builder → Runner
-
-Everything in StableNew depends on these rules being enforced.
-
-END — StableNew_Coding_and_Testing_v2.6 (Canonical Edition)
+- Does the change use the single intent/NJR/queue/runner path?
+- Are DTOs and ownership boundaries typed?
+- Is NJR immutable and free of runtime results?
+- Is source identity conditional and valid?
+- Is persistence transactional and recoverable?
+- Does a clean checkout include every production dependency?
+- Are tests isolated, deterministic, and architecture-current?
+- Are external dependencies preflighted rather than imported eagerly?
+- Are user data and unrelated work preserved?
+- Are canonical docs, roadmap, and PR closeout synchronized?

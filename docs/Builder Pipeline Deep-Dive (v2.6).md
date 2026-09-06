@@ -1,173 +1,144 @@
-BUILDER PIPELINE DEEP-DIVE (v2.6).md
+# StableNew Builder and Compiler Pipeline Deep-Dive v2.6
 
-StableNew - PromptPack Builder and NJR Construction Deep-Dive
-Last Updated: 2026-03-29
-Status: Canonical
+Status: Canonical, Binding
+Updated: 2026-09-05
 
 ## 0. Scope
 
-This document is the deep-dive for the PromptPack builder path.
+This document defines how typed user/system intent becomes the immutable NJR
+execution envelope. It replaces the assumption that every job must pass through
+a PromptPack-shaped request.
 
-It explains how PromptPack-authored image intent becomes deterministic
-`NormalizedJobRecord` instances ready for queue-first execution.
+## 1. Canonical compiler model
 
-It does not describe every intent surface in the product. Reprocess, image
-edit, replay, learning, CLI, and video workflow have their own intake paths,
-but they must still converge to NJR before execution.
+`Typed Intent DTO -> Intent Validator -> Source Compiler -> Shared Normalizers -> Deterministic Expansion -> NJR Builder -> NJR Validation`
 
-## 1. PromptPack Builder Overview
+There may be multiple source compilers. There is one NJR contract.
 
-For PromptPack-authored work, the canonical path is:
+Supported compiler families are:
 
-PromptPack -> Validation -> Randomizer / matrix expansion -> Config sweeps ->
-Prompt resolution -> Config normalization -> JobBuilder -> NJR list
+- PromptPack image generation;
+- image edit and reprocess;
+- history replay;
+- learning-generated work;
+- video workflow;
+- CLI;
+- training.
 
-There is no alternate PromptPack execution path.
+A compiler is an application boundary, not a runner or persistence boundary.
 
-## 2. Responsibilities
+## 2. Responsibility split
 
-The PromptPack builder path is responsible for:
+### 2.1 Intent DTO
 
-- row selection
-- matrix substitution
-- prompt resolution
-- config sweep expansion
-- normalized execution config construction
-- variant metadata creation
-- immutable NJR creation
+Carries source-specific draft input and explicit user choices. It must not carry
+queue status, execution results, backend client objects, or GUI widgets.
 
-It is not responsible for:
+### 2.2 Source compiler
 
-- queue policy
-- runner policy
-- artifact writing
-- history storage
-- backend execution
+Validates source identity, resolves source defaults, calls shared normalizers,
+performs deterministic expansion, and supplies typed workload/stage data to the
+NJR builder.
 
-## 3. Deterministic Expansion Dimensions
+### 2.3 Shared normalizers
 
-PromptPack-authored jobs may expand across:
+Resolve model references, stage settings, output intent, seeds, and common
+configuration into typed values. They do not enqueue, persist, or execute.
 
-1. selected rows
-2. matrix variants
-3. config sweep variants
-4. images-per-prompt or batch behavior represented in the normalized config
-5. seed assignment rules
+### 2.4 NJR builder
 
-Expansion must be deterministic for identical inputs.
+Constructs and validates the eight-part NJR core defined by
+`ARCHITECTURE_v2.6.md`. It rejects source/workload mismatches and does not add
+mutable runtime fields.
 
-## 4. Canonical PromptPack Builder Components
+### 2.5 JobService
 
-### 4.1 Validation
+Accepts a valid NJR and small submission policy. It creates the mutable job
+execution record through `JobRepository`, enqueues it, and optionally requests
+immediate start. `Run Now` is policy, not an execution mode stored in NJR.
 
-Validation ensures:
+## 3. PromptPack compiler
 
-- pack files exist
-- row text is usable
-- metadata is schema-valid
-- matrix placeholders reconcile
-- pack defaults are legal
+For PromptPack work only:
 
-### 4.2 Randomizer and matrix resolution
+`PromptPack JSON -> Validation -> Variable/Randomizer Resolution -> Matrix and Sweep Expansion -> Image Normalization -> NJR list`
 
-Matrix and randomizer logic operate before queueing and before execution.
+The compiler records a typed PromptPack source descriptor. Given identical pack
+revision, explicit overrides, environment-independent model registry inputs,
+and seed material, it must produce structurally identical NJRs apart from
+explicitly excluded generated identity fields.
 
-The builder must not defer randomization to the runner.
+## 4. Other compilers
 
-### 4.3 Prompt resolution
+Non-PromptPack compilers provide their own source descriptors and must not forge
+pack identity to satisfy validation. Video workflow types may contain
+video-specific authoring data and compile it into an NJR video workload. They do
+not become alternate executable records.
 
-Prompt resolution combines:
+Replay either validates a persisted NJR under the current supported schema or
+migrates it at the repository boundary before submitting a new NJR with parent
+lineage. Runner-side compatibility reconstruction is forbidden.
 
-- selected row text
-- matrix substitutions
-- applicable global negative behavior
-- carried actor provenance from linked intent surfaces when present
-- allowed PromptPack-side metadata
+## 5. Expansion and determinism
 
-For PromptPack work derived from `story_plan` intent, scene-level and shot-
-level actor metadata may arrive pre-merged on `plan_origin` before NJR
-construction. Prompt resolution may use that carried provenance to inject actor
-trigger phrases into the positive prompt and prepend resolved actor LoRA tags
-ahead of pack-authored LoRAs with stable de-duplication.
+All fan-out occurs before submission. The compiler must:
 
-The builder produces final prompt text and final LoRA prompt ordering stored on
-the NJR-backed job.
+- define stable expansion order;
+- enforce a configured expansion limit;
+- persist selected/randomized values in provenance;
+- assign one job identity per execution;
+- report invalid combinations before partial queue submission unless an
+  explicitly approved atomic-batch policy says otherwise.
 
-### 4.4 Config normalization
+The runner never makes authoring choices.
 
-The builder path produces stage-ready normalized execution config from:
+## 6. Output and errors
 
-- pack defaults
-- user overrides
-- sweep variants
-- allowed stage toggles and per-stage settings
+Successful compilation returns NJRs. Validation returns structured source-level
+errors. Queue identifiers, status, timestamps, progress, output paths, and
+runtime errors are not compiler output and are not NJR fields.
 
-The result is executable config, not a draft blob and not a live
-`pipeline_config` execution object.
+## 7. Migration boundary
 
-### 4.5 JobBuilder
+The existing `PipelineRunRequest` is pack-shaped and may be used only by the
+legacy PromptPack intake while `PR-MVP-030` migrates callers. It may not be
+extended into a union of every intent type. The migration order is:
 
-`JobBuilder` produces immutable NJR-backed records with:
+1. land the reduced NJR contract and validators;
+2. add typed compiler/application interfaces;
+3. migrate one source family at a time;
+4. remove obsolete pack-shaped generic branches in the same sequence;
+5. enforce import and architecture guards.
 
-- PromptPack provenance
-- resolved prompt text
-- normalized execution config
-- variant metadata
-- output-routing intent
-- replayable context
+At no point may a source bypass NJR or the queue.
 
-## 5. Builder Output Contract
+## 8. Test contract
 
-The builder output for PromptPack work is:
+Each compiler requires tests for:
 
-- one or more NJR-backed jobs
-- each carrying deterministic execution-ready config
-- no fresh-execution `PipelineConfig` dependency
-- no GUI-owned prompt/config assembly after build time
+- valid source-to-NJR compilation;
+- invalid source identity and workload mismatch;
+- deterministic expansion and limits;
+- complete NJR serialization round-trip;
+- conditional PromptPack identity;
+- absence of mutable execution fields;
+- queue submission through `JobService` only;
+- no runner or persistence side effects during compilation.
 
-## 6. Queue-First Runtime Relationship
+## 9. Forbidden patterns
 
-Once PromptPack-derived NJRs are built:
+- one generic DTO with PromptPack-required fields for every source;
+- dictionaries passed across compiler, service, and runner boundaries;
+- GUI construction of normalized workloads or stage configs;
+- compiler-owned queue writes;
+- runner-owned source resolution or randomization;
+- `DIRECT` or implied direct modes;
+- adapters retained without a named deletion step;
+- partial serialization of an otherwise accepted NJR.
 
-- they are submitted to `JobService`
-- fresh execution is queue-only
-- `PipelineRunner` consumes NJR-backed normalized config
-- history stores NJR-backed provenance and canonical result summaries
+## 10. Implementation status
 
-Any actor-aware prompt or LoRA augmentation is complete before queue
-submission. The builder does not own execution or result recording.
-
-## 7. Invariants
-
-The PromptPack builder path must preserve:
-
-- immutable NJR output
-- deterministic expansion
-- carried actor provenance through canonical intent/config layering when
-  present
-- no GUI prompt construction
-- no runtime randomization
-- no direct runner invocation for fresh execution
-
-## 8. Forbidden Patterns
-
-The following are defects:
-
-- building fresh execution payloads directly in GUI code
-- rebuilding execution config inside the runner
-- storing draft-only config as executable runtime truth
-- treating PromptPack as the only valid intent surface across the entire product
-
-## 9. Relationship To Other Intent Surfaces
-
-Other surfaces may build NJR-backed work without PromptPack:
-
-- replay
-- reprocess
-- image edit
-- learning-generated submissions
-- CLI
-- video workflow
-
-That does not weaken the PromptPack builder path. It simply means this document
-is the deep-dive for one canonical builder family, not the whole product.
+The current repository has a working builder/runner spine but a broad mutable
+NJR, a pack-shaped submission request, and validators that reject non-pack
+identities. `PR-MVP-020` and `PR-MVP-030` close these gaps. This section must be
+updated only after their verification criteria pass.

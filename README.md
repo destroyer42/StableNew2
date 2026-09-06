@@ -1,79 +1,49 @@
 # StableNew
 
-StableNew is a local image and video orchestrator built around a single outer
-job contract, a queue-first runtime, canonical artifacts, history, replay, and
-learning-oriented metadata.
+StableNew is a local desktop orchestrator for reproducible image and video jobs,
+with queueing, artifacts, history, replay, diagnostics, and learning-ready
+provenance.
 
-Version: v2.6  
-Status: post-unification, entering video productization and UX polish  
-Canonical docs entrypoint: `docs/DOCS_INDEX_v2.6.md`
+Version: v2.6
+Status: MVP recovery in progress
+Active roadmap: `docs/StableNew Roadmap v2.6.md`
 
-## Canonical Runtime
+## Architecture
 
-StableNew's canonical runtime is:
+The canonical target runtime is:
 
-`Intent Surface -> Builder/Compiler -> NormalizedJobRecord -> JobService Queue -> PipelineRunner -> Stage/Backend Execution -> Canonical Artifacts -> History/Learning/Diagnostics`
+`Typed Intent -> Compiler -> NJR -> JobService -> Queue/JobRepository -> PipelineRunner.run_njr -> Typed Handler -> Artifacts -> History/Learning/Diagnostics`
 
-Non-negotiable runtime rules:
+Key rules:
 
-- Fresh execution is queue-only.
-- `Run Now` means queue submit + immediate auto-start.
-- NJR is the outer execution contract for image generation, video generation,
-  replay, reprocess, learning, CLI, and image edit.
-- StableNew owns orchestration, queueing, artifacts, history, replay, and
-  diagnostics. Image and video backends execute only.
+- all fresh execution is queue-only;
+- NJR is the immutable executable envelope;
+- queue/history records own mutable status and results;
+- PromptPack is the primary image authoring source, not a universal identity;
+- StableNew owns orchestration; image/video backends execute typed requests;
+- MVP is a same-process desktop app with WebUI image generation and native SVD
+  XT image-to-video.
 
-Preferred still-image stage chain:
+This is a target with named implementation gaps. See section 13 of
+`docs/ARCHITECTURE_v2.6.md`; do not assume every contract above is complete in
+the current branch.
 
-`txt2img -> optional img2img -> optional adetailer -> optional final upscale`
+## Current repository state
 
-## Intent Surfaces
+The September 2026 audit found a usable queue/NJR/runner spine but also an
+unfinished architecture migration:
 
-StableNew currently supports these active intent surfaces:
+- current NJR is broader and more mutable than the target;
+- non-PromptPack work can be rejected by pack-oriented validation;
+- queue/history persistence has not converged on one SQLite repository;
+- production `src/state/` modules are hidden by an overly broad ignore rule;
+- the test suite does not yet provide a trustworthy clean-checkout MVP gate;
+- several video paths exist, while only native SVD XT is selected for MVP.
 
-- PromptPack-driven image generation
-- Reprocess and image-edit submissions
-- History replay and restore
-- Learning-generated submissions
-- Video workflow submissions
-- CLI-driven submissions
+The active recovery sequence starts with approved `PR-ARCH-MVP-001` and
+`PR-MVP-000`. Older completion ledgers and backlogs do not supersede it.
 
-PromptPack remains the primary image authoring surface, but it is not the only
-valid source of user intent in the modern architecture.
-
-## Current Repo Reality
-
-The repo already has the backbone required for the end-state:
-
-- NJR-first queue/runner execution
-- canonical artifact and manifest contracts
-- replay and reprocess substrate
-- a real `src/video/` backend seam for video execution
-- a managed local Comfy runtime and one pinned LTX workflow routed through NJR,
-  queue, runner, artifacts, history, and replay
-
-The remaining follow-on product debt is now narrower:
-
-- oversized controller ownership in `app_controller.py` and `pipeline_controller.py`
-- compat-only tests still preserve some migration behavior under `tests/compat/`
-- GUI-facing config state still exposes a dict projection, although
-  `AppStateV2` now mirrors canonical `intent_config`, `execution_config`, and
-  `backend_options`
-- the Tk workspace now has cross-surface handoff and source-summary polish
-  across History, Video Workflow, and Movie Clips, but it still needs the
-  dedicated GUI config adapter/final controller shrink pass
-- longer-form video sequencing, stitching, continuity, and story-planning
-  layers are still future work
-
-Current sequencing is tracked in:
-
-- `docs/PR_Backlog/MIGRATION_CLOSURE_EXECUTABLE_BACKLOG_v2.6-1.md`
-- `docs/PR_Backlog/StableNew_ComfyAware_Backlog_v2.6.md`
-- `docs/StableNew Roadmap v2.6.md`
-
-## Start Here
-
-Read these first:
+## Start here
 
 1. `docs/DOCS_INDEX_v2.6.md`
 2. `docs/ARCHITECTURE_v2.6.md`
@@ -81,55 +51,48 @@ Read these first:
 4. `docs/StableNew Roadmap v2.6.md`
 5. `docs/PR_TEMPLATE_v2.6.md`
 
-Useful subsystem docs:
+Workflow references:
 
 - `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
 - `docs/Builder Pipeline Deep-Dive (v2.6).md`
-- `docs/DEBUG HUB v2.6.md`
 - `docs/StableNew_Coding_and_Testing_v2.6.md`
+- `docs/Subsystems/Testing/E2E_Golden_Path_Test_Matrix_v2.6.md`
 
-## Running StableNew
+## Running
 
-Prerequisites:
+The intended entrypoint remains:
 
-- Python 3.10+
-- Local or reachable Stable Diffusion WebUI for image stages
-- Required local models and external tools for the workflows you use
-
-Start the app:
-
-```bash
+```text
 python -m src.main
 ```
 
+The MVP setup and clean-machine procedure are not yet certified. Use the
+repository-managed Python 3.11 environment and expect configured external
+dependencies for the flow under test. `PR-MVP-080` and `PR-MVP-090` close setup
+and release documentation.
+
 ## Testing
 
-Common commands:
+Do not rely on old collection counts. `PR-MVP-010` will establish the canonical
+test environment and baseline. During recovery, run targeted tests in a
+disposable workspace and verify that tracked files remain unchanged.
 
-```bash
+Expected final gate shape:
+
+```text
+python -m compileall src
 pytest --collect-only -q
-pytest tests/pipeline -q
-pytest tests/controller -q
-pytest tests/gui_v2 -q
-pytest tests/video -q
+pytest -m "not real_backend and not quarantine" -q
 ```
 
-Testing policy:
+Real WebUI and native SVD tests are opt-in acceptance gates, never collection
+side effects.
 
-- canonical runtime suites come first
-- compat-migration suites are temporary and must shrink over time
-- quarantine suites must be explicit and not silently define architecture
+## Documentation status
 
-Current collection baseline:
-
-- `pytest --collect-only -q` -> `2534 collected / 0 skipped`
-
-## Notes
-
-- `docs/archive/` is reference-only.
-- `docs/CompletedPR/` stores completed PR records.
-- `docs/PR_Backlog/` stores active and historical backlog-driving PR materials.
-- `docs/archive/superseded/StableNew_Architecture_v2.6.md` is not an active
-  architecture source; `docs/ARCHITECTURE_v2.6.md` is the canonical
-  architecture document.
-- If `README.md` and a canonical v2.6 doc disagree, the canonical doc wins.
+- `docs/` root contains Tier 1/Tier 2 canon.
+- `docs/PR_Backlog/` contains open specs; only roadmap-listed, approved specs are
+  executable.
+- `docs/CompletedPR/` and `docs/CompletedPlans/` are history.
+- `docs/archive/` and `docs/NeedsReview/` are non-active.
+- If this README conflicts with active canon, active canon wins.

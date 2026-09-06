@@ -2,7 +2,7 @@ DEBUG HUB v2.6.md
 Canonical Diagnostic Surface Reference
 
 Status: Active canonical reference
-Last Updated: 2026-03-19
+Last Updated: 2026-09-05
 
 ## 0. Purpose
 
@@ -45,14 +45,21 @@ At minimum, Debug Hub should let an operator inspect:
 - diagnostics bundle linkage
 - failure context
 
+MVP ownership clarification:
+
+- NJR diagnostics describe immutable authorized work and provenance.
+- Mutable status, progress, attempts, errors, timestamps, and produced paths are
+  read from the repository-owned execution record/history projection.
+- Debug Hub must not reconstruct a universal PromptPack identity, read legacy
+  queue/history files as a live fallback, or become an execution authority.
+
 ## 3. Image and Video Scope
 
 Debug Hub is not image-only.
 
-It must work with:
+For MVP it must work with still-image and native SVD XT jobs. The broader
+post-MVP diagnostic design also covers:
 
-- still-image jobs
-- SVD jobs
 - workflow-video jobs
 - future sequence and assembled-video jobs
 

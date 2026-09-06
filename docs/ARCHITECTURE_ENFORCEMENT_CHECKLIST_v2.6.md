@@ -1,323 +1,136 @@
-ARCHITECTURE_ENFORCEMENT_CHECKLIST_v2.6
-Canonical — Mandatory for ALL PRs
-
-Updated: 2025-12-09
-
-0. Purpose of This Checklist
-
-The purpose of this document is to guarantee that no PR — whether written by ChatGPT, Codex, or a human — can violate the canonical StableNew architecture.
-
-All PRs must include this checklist at the end, with explicit YES/NO answers and explanations for each item.
-A PR cannot be merged unless all applicable items are marked YES, or a governance-approved waiver is attached.
-
-This checklist protects:
-
-determinism
-
-architectural purity
-
-subsystem boundaries
-
-long-term maintainability
-
-the canonical intent-source rule
-
-the NJR-only runtime rule
-
-the builder resolver pipeline
-
-the GUI→Controller→Builder→Runner pipeline
-
-test coverage
-
-removal of tech debt
-
-SECTION 1 — Prompt & Config Source of Truth
-1.1 StableNew-owned prompt sourcing
-
- Does prompt text come from StableNew-owned intent surfaces, with PromptPack remaining the primary image authoring surface?
-
- Is there no GUI prompt textbox, legacy prompt field, or controller-created prompt?
-
- Are no prompts constructed inside GUI, controller, runner, preview panel, or config loader?
-
-1.2 UnifiedPromptResolver-only resolution
-
- Is prompt resolution performed only inside UnifiedPromptResolver?
-
- Are global negative and pack-level negatives layered in the correct order?
-
- Are stage-level apply_global_negative flags respected?
-
-1.3 No Prompt Mutation
-
- Does the PR avoid mutating PromptPack files?
-
- Are PromptPack rows treated as immutable input objects?
-
-SECTION 2 — Job Model Integrity
-2.1 NJR-only (NormalizedJobRecord-only) execution
-
- Does execution exclusively use NJR objects?
-
- Are legacy job structures (RunPayload, DraftBundle, CallStagePayload, etc.) avoided and/or removed?
-
-2.2 UnifiedJobSummary-only for UI
-
- Does the GUI display only what the controller passes via UnifiedJobSummary?
-
- Does the GUI avoid reading PromptPack files directly?
-
- Does the GUI avoid reading configs or building them internally?
-
-2.3 No Partial/Hybrid Job Objects
-
- Does the PR remove or avoid mixtures of V1/V1.5/V2 job formats?
-
- Are there no leftover stubs or adapters bridging old paths?
-
-SECTION 3 — Pipeline Purity & Determinism
-3.1 Builder-only job construction
-
- Is the Builder (JobBuilderV2) the only module creating NJRs?
-
- Is there no job creation in:
-
-controllers
-
-GUI
-
-runner
-
-webui adapters
-
-debug tools
-
-3.2 Deterministic enumeration
-
- Does job enumeration follow strictly:
-
-Rows × ConfigVariants × MatrixVariants × Batches
-
-
-with no variability?
-
-3.3 Deterministic config layering
-
- Is config layering performed in exactly this order:
-
-Base SDXL Defaults
-→ Config Snapshot (Pipeline Tab)
-→ Pack JSON Stage Overrides
-→ ConfigVariant Overrides (Sweeps)
-→ Global Toggles
-
-3.4 No non-deterministic behavior introduced
-
- Seeds?
-
- Ordering?
-
- Randomization slots?
-
- Sweep variant ordering?
-
-Everything must be deterministic.
-
-SECTION 4 — Controller Responsibilities
-4.1 Controller does NOT build jobs
-
- Does the controller strictly orchestrate (GUI → Builder → Runner → History)?
-
- Are no prompts or configs constructed or mutated in controllers?
-
-4.2 Correct pack-to-job flow
-
- Does the PR use only on_pipeline_add_packs_to_job + start_pipeline_with_pack_based_draft?
-
- Are all legacy draft paths deleted or updated (DraftBundle, legacy add-to-job methods, etc.)?
-
-4.3 Correct lifecycle emission
-
- Does the controller correctly send job_lifecycle_event messages?
-
-SECTION 5 — Runner Responsibilities
-5.1 Runner does NOT build or mutate jobs
-
- Runner only executes the NJR exactly as given.
-
- Runner does not:
-
-resolve prompts
-
-merge configs
-
-reorder stages
-
-inject random values
-
-5.2 No legacy executor code paths remain
-
- Old pipelines must be deleted:
-
-StageExecutorV1/V1.5
-
-Legacy run_payload
-
-Legacy call_stage
-
-AI21/InvokeAI adapters
-
-SECTION 6 — GUI Responsibilities
-6.1 GUI does NOT generate logic or objects
-
- GUI never builds prompts
-
- GUI never builds configs
-
- GUI never builds job objects
-
- GUI calls controllers only
-
-6.2 GUI reflects the NJR/UnifiedJobSummary
-
- Preview Panel reads from controller-provided summary
-
- Queue Panel shows lifecycle updates
-
- Running Job Panel shows controller→runner events
-
- History Panel reads NJR-only data
-
-6.3 Sweep Designer UI compliance
-
- Sweep variants produce only config overrides
-
- No prompt modifications
-
- No pipeline-building logic in GUI
-
-SECTION 7 — DebugHub Responsibilities
-7.1 DebugHub is read-only
-
- DebugHub does NOT mutate prompts or jobs
-
- DebugHub displays the NJR + internal state only
-
- DebugHub does not modify execution
-
-SECTION 8 — Subsystem Isolation
-8.1 Each layer must depend downward only
-
-GUI depends on controller
-
-Controller depends on builder
-
-Builder depends on resolvers
-
-Runner depends on NJR output
-
-No upward dependencies allowed.
-
-SECTION 9 — Tech Debt Removal
-
-Every PR must answer:
-
- Did you identify any dead code in the modified subsystem?
-
- Did you delete it?
-(If not: attach a PR-DEBT follow-up at the bottom of the PR)
-
- Did you remove partial migrations?
-
- Did you remove any shim layers or compatibility bridges?
-
- Did you remove unused DTOs or legacy objects?
-
- Did you consolidate multiple code paths into the v2.6 canonical path?
-
-SECTION 10 — Testing Requirements
-10.1 Unit Tests
-
- Updated or created new unit tests?
-
- Do they assert architecture invariants?
-
-10.2 Integration Tests
-
- Do builder, controller, runner, and GUI integration tests still pass?
-
-10.3 Golden Path Tests
-
- Does the PR maintain GP1–GP15?
-
- Did you add new Golden Path tests if the PR introduces new user flows?
-
-10.4 Regression Tests
-
- Were regressions identified?
-
- Were tests added to prevent recurrence?
-
-SECTION 11 — Documentation Requirements
-11.1 Documentation updated?
-
- Architecture_v2.6
-
- PromptPack Lifecycle v2.6
-
- Builder Deep Dive v2.6
-
- DebugHub_v2.6
-
- Coding & Testing Standards
-
- Docs Index
-
-11.2 PR Template section completed
-
- “Architectural Impact” section
-
- “Tech Debt Impact” section
-
- “Canonical Document Updates Needed”
-
-SECTION 12 — Final Merge Conditions
-
-A PR may merge only if:
-
- ALL applicable items above are YES
-
- No architectural violations remain
-
- Tests pass
-
- Codex implementation matches ChatGPT spec
-
- Documentation is current
-
-If any violation remains → PR must be rejected.
-
-SUMMARY
-
-This checklist is the gatekeeper for the entire project.
-
-It ensures:
-
-One execution path
-
-One job format
-
-One builder
-
-One prompt source
-
-One architectural truth
-
-No ambiguity, no drift, no legacy confusion
-
-Every PR must pass this checklist.
-Every agent must respect it.
-Every contributor must adopt it.
-
-StableNew becomes easier, faster, safer, and more joyful to develop — once the architecture is protected by discipline.
+# StableNew Architecture Enforcement Checklist v2.6
+
+Status: Canonical, Binding
+Updated: 2026-09-05
+
+Use this checklist for every runtime or contract PR. A checked target item does
+not mean the current branch already implements it; consult the architecture gap
+register and active roadmap first.
+
+## 1. PR authority and truth
+
+- [ ] Is the PR listed in the active roadmap or explicitly approved by Rob?
+- [ ] Is there an exact PR spec using `PR_TEMPLATE_v2.6.md`?
+- [ ] Are allowed and forbidden files explicit?
+- [ ] Does the spec identify current code/test evidence separately from target
+      behavior?
+- [ ] Are unrelated user changes and runtime data preserved?
+- [ ] Does the closeout update roadmap, index, architecture gaps, and one
+      CompletedPR record?
+
+## 2. Intent and compiler boundary
+
+- [ ] Does each source enter through a typed intent DTO/compiler?
+- [ ] Does every compiler emit NJR before submission?
+- [ ] Is PromptPack identity required only for `source.kind == "prompt_pack"`?
+- [ ] Are source choices, defaults, randomization, matrices, and sweeps resolved
+      before queue submission?
+- [ ] Are compilers free of queue, runner, GUI, and persistence side effects?
+- [ ] Is the pack-shaped `PipelineRunRequest` being reduced rather than extended
+      as a universal request?
+
+## 3. NJR contract
+
+- [ ] Is NJR the only public executable envelope?
+- [ ] Does it contain the versioned core: job ID, workload kind, source,
+      workload, stages, output plan, and provenance?
+- [ ] Is it immutable after submission?
+- [ ] Does serialization round-trip every accepted field?
+- [ ] Are status, timestamps, progress, errors, retry state, result summaries,
+      thumbnails, and produced paths absent from NJR?
+- [ ] Do replay/modification create a new identity with parent lineage?
+- [ ] Are schema migrations explicit, versioned, and tested?
+
+## 4. Submission, queue, and repository
+
+- [ ] Does `JobService` accept NJR plus a small submission policy?
+- [ ] Does `Run Now` enqueue before execution and differ only by immediate-start
+      policy?
+- [ ] Is queue lifecycle state owned by a mutable job execution record?
+- [ ] Does application code use one `JobRepository` boundary?
+- [ ] Are lifecycle transitions transactional and validated?
+- [ ] Are queue and history projections of the same authority?
+- [ ] Is legacy import offline, backup-first, dry-run-capable, idempotent, and
+      conflict-reporting?
+- [ ] Is there no live dual-read, dual-write, or fallback?
+
+## 5. Runner and backends
+
+- [ ] Is `PipelineRunner.run_njr(...)` the only public production entry?
+- [ ] Does the runner derive a typed run plan without mutating NJR?
+- [ ] Do internal handlers receive typed requests and return typed results?
+- [ ] Are progress/results persisted through runner/application contracts rather
+      than placed in NJR?
+- [ ] Is there no fallback to a legacy config/dict execution branch?
+- [ ] Does backend workflow JSON stay inside its adapter?
+- [ ] Does MVP remain same-process and single-node?
+- [ ] If video is advertised for MVP, is it native SVD XT only?
+
+## 6. GUI and application ownership
+
+- [ ] Does GUI code capture intent and render projections only?
+- [ ] Do controllers call application services rather than builder/repository/
+      runner internals?
+- [ ] Are queue submissions non-blocking?
+- [ ] Are all widget changes marshalled onto the GUI thread?
+- [ ] Is display cache/projection state prevented from becoming execution truth?
+- [ ] Are unsupported/post-MVP surfaces hidden or clearly labeled?
+
+## 7. PromptPack
+
+- [ ] Is one versioned JSON document the native authority?
+- [ ] Are TXT/TSV explicit import/export formats only?
+- [ ] Does migration preserve originals and surface conflicts?
+- [ ] Does the runner avoid loading or changing PromptPack files?
+- [ ] Does PromptPack JSON avoid backend-private workflow payloads?
+- [ ] Is JSON-only author/save/load/compile covered?
+
+## 8. Repository and test hygiene
+
+- [ ] Are all imported production modules tracked in a clean checkout?
+- [ ] Are ignore patterns rooted narrowly so they cannot hide source packages?
+- [ ] Do imports avoid workers, GUI loops, network, GPU/model loads, and writes?
+- [ ] Do tests use temporary repository/artifact/state roots?
+- [ ] Does collection complete without unexpected errors or side effects?
+- [ ] Are unit/contract/integration/GUI/real-backend tests classified?
+- [ ] Are real WebUI/SVD tests opt-in, bounded, and recorded?
+- [ ] Is every quarantine explicit, owned, and time-bounded?
+- [ ] Is `git status --short` unchanged after tests, apart from approved edits?
+
+## 9. Data and rollback
+
+- [ ] Are backups created before migration writes?
+- [ ] Are counts, identities, hashes, statuses, artifacts, and conflicts checked?
+- [ ] Is a second migration run idempotent?
+- [ ] Is rollback rehearsed in a disposable copy?
+- [ ] Is automatic startup forbidden from destructively deleting legacy data?
+
+## 10. Documentation synchronization
+
+- [ ] NJR/source changes update architecture, governance, builder/lifecycle,
+      testing standards, golden paths, and roadmap.
+- [ ] Repository changes update architecture, testing, golden paths, and a
+      migration/recovery runbook.
+- [ ] PromptPack changes update lifecycle, builder, migration tests, and roadmap.
+- [ ] Backend/MVP-scope changes update architecture, subsystem references,
+      golden paths, README, and roadmap.
+- [ ] Agent-rule changes update `AGENTS.md`, Copilot brief, and instruction
+      manifest as applicable.
+- [ ] No archived/completed/unlisted backlog file is cited as active authority.
+
+## 11. Automatic rejection conditions
+
+Reject or revise the PR if it introduces:
+
+- `DIRECT` fresh execution;
+- a second executable job, runner entry, or persistence authority;
+- universal PromptPack identity;
+- mutable execution state in NJR;
+- GUI-built normalized/backend payloads;
+- runner source resolution or legacy fallback;
+- live legacy data fallback or dual-write;
+- an untracked production dependency;
+- import-time external activity;
+- child runtime host/distributed execution during MVP;
+- Comfy/LTX/AnimateDiff as an MVP requirement;
+- a target-complete claim without clean-checkout evidence.

@@ -1,7 +1,7 @@
 # Movie Clips Workflow v2.6
 
-Status: Active subsystem reference
-Updated: 2026-03-29
+Status: Retained subsystem reference; post-MVP except native SVD XT handoff
+Updated: 2026-09-05
 
 ## 1. Purpose
 
@@ -94,6 +94,11 @@ Quickstart:
 | Low-level export | `src/pipeline/video.py`, `src/video/video_export.py` | FFmpeg-facing helpers |
 
 ## 5. Current Product Direction
+
+For the active MVP, only the `SVD Img2Vid` native SVD XT handoff is a release
+path. Movie Clips assembly/export, workflow-video handoff, multi-anchor flows,
+stitching, and other video-workspace convergence remain post-MVP even where code
+or completed PR records exist. This document does not expand the active roadmap.
 
 Movie Clips is no longer just an isolated MVP. It is now one part of the
 broader video workspace alongside:
