@@ -36,3 +36,25 @@ def test_manual_job_without_pack_id_runs() -> None:
     # Manual jobs without pack metadata are rejected under pack-only model
     assert job.status == JobStatus.FAILED
     assert job.result and job.result.get("code") == "pack_required"
+
+
+def test_enqueue_njrs_returns_no_job_ids_when_submission_is_rejected() -> None:
+    queue = JobQueue()
+    service = _job_service_with_stub_runner(queue)
+    njr = make_test_njr(prompt_pack_id="", prompt_source="pack")
+
+    job_ids = service.enqueue_njrs(
+        [njr],
+        run_request=type(
+            "RunRequest",
+            (),
+            {
+                "max_njr_count": 1,
+                "run_mode": type("RunMode", (), {"value": "queue"})(),
+                "source": type("RunSource", (), {"value": "add_to_queue"})(),
+                "prompt_pack_id": "",
+            },
+        )(),
+    )
+
+    assert job_ids == []

@@ -78,6 +78,33 @@ def test_submit_video_workflow_job_builds_queue_backed_reprocess_njr(tmp_path: P
     assert "video_workflow" in request.tags
 
 
+def test_submit_video_workflow_job_supplies_fallback_prompt_when_blank(tmp_path: Path) -> None:
+    source = tmp_path / "source.png"
+    end = tmp_path / "end.png"
+    for path in (source, end):
+        path.write_bytes(b"png")
+
+    job_service = _JobServiceStub()
+    controller = VideoWorkflowController(
+        app_controller=SimpleNamespace(job_service=job_service, output_dir=str(tmp_path / "output"))
+    )
+
+    job_id = controller.submit_video_workflow_job(
+        source_image_path=source,
+        form_data={
+            "workflow_id": "ltx_multiframe_anchor_v1",
+            "workflow_version": "1.0.0",
+            "end_anchor_path": str(end),
+            "prompt": "",
+            "negative_prompt": "",
+        },
+    )
+
+    assert job_id == "job-video-queued"
+    njr = job_service.calls[0][0][0]
+    assert "Video workflow source:" in njr.positive_prompt
+
+
 def test_conditioned_video_workflow_requires_depth_input_mode(tmp_path: Path) -> None:
     source = tmp_path / "source.png"
     end = tmp_path / "end.png"

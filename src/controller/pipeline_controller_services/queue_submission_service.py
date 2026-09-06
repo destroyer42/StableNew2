@@ -129,6 +129,9 @@ class QueueSubmissionService:
         coalesce_queue_state = getattr(queue, "coalesce_state_notifications", None)
         submitted = 0
         run_config_to_use = run_config or last_run_config
+        raw_auto_run_enabled = getattr(self._job_service, "auto_run_enabled", False)
+        auto_run_enabled = raw_auto_run_enabled if isinstance(raw_auto_run_enabled, bool) else False
+        run_next_now = getattr(self._job_service, "run_next_now", None)
         batch_context = nullcontext()
         if callable(coalesce_queue_state):
             candidate_context = coalesce_queue_state()
@@ -136,48 +139,72 @@ class QueueSubmissionService:
                 batch_context = candidate_context
 
         records = sort_jobs_by_model(records)
-        with batch_context:
-            for record in records:
-                if is_queue_submission_blocked():
-                    self._logger.info(
-                        "[QueueSubmissionService] Stopping queue submission after %d/%d jobs because shutdown is in progress",
-                        submitted,
-                        len(records),
+        if auto_run_enabled:
+            try:
+                self._job_service.auto_run_enabled = False
+            except Exception:
+                auto_run_enabled = False
+
+        try:
+            with batch_context:
+                for record in records:
+                    if is_queue_submission_blocked():
+                        self._logger.info(
+                            "[QueueSubmissionService] Stopping queue submission after %d/%d jobs because shutdown is in progress",
+                            submitted,
+                            len(records),
+                        )
+                        break
+                    cfg = record.config
+                    prompt_pack_id = cfg.get("prompt_pack_id") if isinstance(cfg, dict) else None
+                    if prompt_pack_id and not getattr(record, "prompt_pack_id", None):
+                        try:
+                            record.prompt_pack_id = prompt_pack_id  # type: ignore[attr-defined]
+                        except Exception:
+                            record.prompt_pack_id = prompt_pack_id
+                    prompt_pack_name = None
+                    if isinstance(cfg, dict):
+                        prompt_pack_name = cfg.get("prompt_pack_name") or cfg.get("pack_name")
+                    ensure_record_prompt_pack_metadata(record, prompt_pack_id, prompt_pack_name)
+                    job = to_queue_job(
+                        record,
+                        run_mode="queue",
+                        source=source,
+                        prompt_source=prompt_source,
+                        prompt_pack_id=prompt_pack_id,
+                        run_config=run_config_to_use,
                     )
-                    break
-                cfg = record.config
-                prompt_pack_id = cfg.get("prompt_pack_id") if isinstance(cfg, dict) else None
-                if prompt_pack_id and not getattr(record, "prompt_pack_id", None):
-                    try:
-                        record.prompt_pack_id = prompt_pack_id  # type: ignore[attr-defined]
-                    except Exception:
-                        record.prompt_pack_id = prompt_pack_id
-                prompt_pack_name = None
-                if isinstance(cfg, dict):
-                    prompt_pack_name = cfg.get("prompt_pack_name") or cfg.get("pack_name")
-                ensure_record_prompt_pack_metadata(record, prompt_pack_id, prompt_pack_name)
-                job = to_queue_job(
-                    record,
-                    run_mode="queue",
-                    source=source,
-                    prompt_source=prompt_source,
-                    prompt_pack_id=prompt_pack_id,
-                    run_config=run_config_to_use,
-                )
-                if run_job_payload_factory is not None:
-                    job.payload = run_job_payload_factory(job)
-                if not hasattr(job, "_normalized_record") or job._normalized_record is None:
-                    self._logger.warning(
-                        "PR-CORE1-B2: Job submitted without normalized_record in NJR-only mode. Source: %s",
-                        source,
-                    )
-                if callable(submit_job):
-                    try:
-                        submit_job(job, emit_queue_updated=False)
-                    except TypeError:
-                        submit_job(job)
-                log_add_to_queue_event(job.job_id)
-                submitted += 1
+                    if run_job_payload_factory is not None:
+                        job.payload = run_job_payload_factory(job)
+                    if not hasattr(job, "_normalized_record") or job._normalized_record is None:
+                        self._logger.warning(
+                            "PR-CORE1-B2: Job submitted without normalized_record in NJR-only mode. Source: %s",
+                            source,
+                        )
+
+                    accepted = True
+                    if callable(submit_job):
+                        try:
+                            result = submit_job(job, emit_queue_updated=False)
+                        except TypeError:
+                            result = submit_job(job)
+                        accepted = result is not False
+
+                    if not accepted:
+                        self._logger.warning(
+                            "[QueueSubmissionService] Job %s was rejected during queue submission",
+                            getattr(job, "job_id", None),
+                        )
+                        continue
+
+                    log_add_to_queue_event(job.job_id)
+                    submitted += 1
+        finally:
+            if auto_run_enabled:
+                try:
+                    self._job_service.auto_run_enabled = True
+                except Exception:
+                    pass
 
         if submitted > 0 and callable(emit_queue_updated):
             try:
@@ -185,6 +212,14 @@ class QueueSubmissionService:
             except Exception:
                 self._logger.exception(
                     "[QueueSubmissionService] Failed to emit coalesced queue update after batch submission",
+                    exc_info=True,
+                )
+        if submitted > 0 and auto_run_enabled and callable(run_next_now) and not is_queue_submission_blocked():
+            try:
+                run_next_now()
+            except Exception:
+                self._logger.exception(
+                    "[QueueSubmissionService] Failed to start queue worker after batch submission",
                     exc_info=True,
                 )
         return submitted

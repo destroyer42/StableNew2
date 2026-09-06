@@ -292,6 +292,11 @@ class PreviewPanelV2(ttk.Frame):
             prompt_pack_name=getattr(job, "prompt_pack_name", ""),
             thumbnail_path=getattr(job, "thumbnail_path", None),
             output_paths=list(getattr(job, "output_paths", []) or []),
+            estimated_images=(
+                getattr(ui_summary, "estimated_images", None)
+                or getattr(unified, "estimated_image_count", None)
+                or max(1, int(getattr(job, "estimated_image_count", lambda: 1)()))
+            ),
             source_job=job,
         )
 
@@ -341,6 +346,7 @@ class PreviewPanelV2(ttk.Frame):
                     steps=config.get("steps"),
                     cfg_scale=config.get("cfg_scale"),
                     seed=config.get("seed"),
+                    estimated_images=self._estimate_images_from_config(config),
                 )
             )
 
@@ -440,7 +446,43 @@ class PreviewPanelV2(ttk.Frame):
             cfg_scale=cfg_scale,
             seed=seed,
             base_model=model,
+            estimated_images=self._estimate_images_from_config(config),
         )
+
+    @staticmethod
+    def _estimate_images_from_config(config: dict[str, Any] | None) -> int:
+        config_dict = config if isinstance(config, dict) else {}
+        pipeline_cfg = config_dict.get("pipeline")
+        if not isinstance(pipeline_cfg, dict):
+            pipeline_cfg = config_dict
+        images_per_prompt = PreviewPanelV2._coerce_int(
+            pipeline_cfg.get("images_per_prompt", pipeline_cfg.get("batch_size", 1))
+        ) or 1
+        loop_count = PreviewPanelV2._coerce_int(
+            pipeline_cfg.get("loop_count", pipeline_cfg.get("n_iter", 1))
+        ) or 1
+        return max(1, images_per_prompt * loop_count)
+
+    @staticmethod
+    def _summary_estimated_images(summary: Any | None) -> int:
+        if summary is None:
+            return 0
+        estimated = PreviewPanelV2._coerce_int(getattr(summary, "estimated_images", None))
+        if estimated and estimated > 0:
+            return estimated
+        source_job = getattr(summary, "source_job", None)
+        if source_job is not None:
+            estimated_from_job = getattr(source_job, "estimated_image_count", None)
+            if callable(estimated_from_job):
+                try:
+                    return max(1, int(estimated_from_job()))
+                except Exception:
+                    return 1
+        return 1
+
+    def _total_estimated_images(self, summaries: list[Any]) -> int:
+        total = sum(self._summary_estimated_images(summary) for summary in summaries or [])
+        return max(total, 0)
 
     @staticmethod
     def _truncate_text(value: str, limit: int) -> str:
@@ -575,10 +617,12 @@ class PreviewPanelV2(ttk.Frame):
 
     def _build_render_signature(self, summary: Any | None, total: int) -> tuple[Any, ...]:
         summary_obj = self._normalize_summary(summary)
+        total_images = self._total_estimated_images(self._job_summaries)
         if summary_obj is None:
             return (
                 "empty",
                 int(total),
+                int(total_images),
                 self._content_visibility_mode,
                 bool(self._show_preview_var.get()),
             )
@@ -586,6 +630,7 @@ class PreviewPanelV2(ttk.Frame):
         return (
             "summary",
             int(total),
+            int(total_images),
             self._content_visibility_mode,
             bool(self._show_preview_var.get()),
             str(getattr(summary_obj, "job_id", "") or ""),
@@ -668,7 +713,10 @@ class PreviewPanelV2(ttk.Frame):
             self._record_refresh_metric("_render_summary", elapsed_ms)
             return
 
-        job_text = f"Job: {total}" if total == 1 else f"Jobs: {total}"
+        total_images = self._total_estimated_images(self._job_summaries)
+        job_label = "Job" if total == 1 else "Jobs"
+        image_label = "image" if total_images == 1 else "images"
+        job_text = f"{job_label}: {total} | {image_label.capitalize()}: {total_images}"
         logger.debug(f"[PreviewPanel] Setting job_count_label to: {job_text}")
         self._set_label_text(self.job_count_label, job_text)
 

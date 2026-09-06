@@ -148,6 +148,43 @@ def test_pipeline_tab_hot_surface_scheduler_coalesces_dirty_updates() -> None:
     assert tab._hot_surface_flush_metrics["count"] == 1
 
 
+def test_pipeline_tab_uses_job_draft_when_preview_jobs_are_stale() -> None:
+    stale_job = type(
+        "PreviewJob",
+        (),
+        {"prompt_pack_id": "pack-old", "prompt_pack_row_index": 0},
+    )()
+    draft_pack = type("DraftPack", (), {"pack_id": "pack-new", "pack_row_index": 0})()
+    tab = PipelineTabFrame.__new__(PipelineTabFrame)
+    tab.app_state = type(
+        "State",
+        (),
+        {
+            "preview_jobs": [stale_job],
+            "job_draft": type("Draft", (), {"packs": [draft_pack]})(),
+        },
+    )()
+    tab.queue_panel = _FakeQueuePanel()
+    tab.running_job_panel = _FakeRunningPanel()
+    tab.history_panel = _FakeHistoryPanel()
+    tab.preview_panel = _FakePreviewPanel()
+    tab._hot_surface_dirty = {"preview"}
+    tab._hot_surface_flush_scheduled = False
+    tab._hot_surface_flush_metrics = {
+        "count": 0,
+        "total_ms": 0.0,
+        "max_ms": 0.0,
+        "last_ms": 0.0,
+        "slow_count": 0,
+    }
+
+    tab._flush_hot_surfaces()
+
+    assert tab.preview_panel.preview_calls == 0
+    assert tab.preview_panel.draft_calls == 1
+    assert tab.preview_panel.app_state_calls == 1
+
+
 def test_pipeline_tab_defers_hidden_hot_surfaces_until_visible() -> None:
     tab = PipelineTabFrame.__new__(PipelineTabFrame)
     tab.app_state = type("State", (), {"preview_jobs": ["job-1"], "job_draft": object()})()

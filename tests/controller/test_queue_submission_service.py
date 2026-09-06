@@ -128,3 +128,59 @@ def test_submit_normalized_jobs_blocks_learning_source_over_cap() -> None:
 
     assert submitted == 0
     job_service.submit_job_with_run_mode.assert_not_called()
+
+
+def test_submit_normalized_jobs_defers_auto_run_until_batch_finishes() -> None:
+    batch_entries: list[str] = []
+
+    class _QueueBatchSpy:
+        def coalesce_state_notifications(self):
+            class _Context:
+                def __enter__(self_inner):
+                    batch_entries.append("enter")
+                    return self_inner
+
+                def __exit__(self_inner, exc_type, exc, tb):
+                    batch_entries.append("exit")
+                    return False
+
+            return _Context()
+
+        def list_jobs(self):
+            return []
+
+    job_service = Mock()
+    job_service.job_queue = _QueueBatchSpy()
+    job_service.auto_run_enabled = True
+    auto_run_states: list[bool] = []
+
+    def _submit(_job, emit_queue_updated=False):
+        auto_run_states.append(job_service.auto_run_enabled)
+        return True
+
+    job_service.submit_job_with_run_mode.side_effect = _submit
+    service = QueueSubmissionService(job_service=job_service)
+
+    submitted = service.submit_normalized_jobs(
+        [
+            make_test_njr(prompt_source="manual", prompt_pack_id="pack-a"),
+            make_test_njr(prompt_source="manual", prompt_pack_id="pack-b"),
+        ],
+        run_config=None,
+        source="gui",
+        prompt_source="manual",
+        last_run_config=None,
+        can_enqueue_learning_jobs=lambda count: (True, ""),
+        is_queue_submission_blocked=lambda: False,
+        sort_jobs_by_model=lambda rows: rows,
+        ensure_record_prompt_pack_metadata=lambda *_args: None,
+        to_queue_job=Mock(side_effect=[Mock(payload=None), Mock(payload=None)]),
+        log_add_to_queue_event=lambda _job_id: None,
+        run_job_payload_factory=lambda job: (lambda j=job: {"job_id": j.job_id}),
+    )
+
+    assert submitted == 2
+    assert batch_entries == ["enter", "exit"]
+    assert auto_run_states == [False, False]
+    job_service.run_next_now.assert_called_once_with()
+    assert job_service.auto_run_enabled is True

@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import time
 import tkinter as tk
+from collections import Counter
 from tkinter import ttk
 from typing import Any
 
@@ -614,6 +615,44 @@ class PipelineTabFrame(ttk.Frame):
         except Exception:
             return True
 
+    @staticmethod
+    def _preview_jobs_cover_job_draft(job_draft: Any, preview_jobs: list[Any]) -> bool:
+        packs = list(getattr(job_draft, "packs", None) or [])
+        if not packs:
+            return bool(preview_jobs)
+
+        expected: Counter[tuple[str, int | None]] = Counter()
+        for pack in packs:
+            pack_id = str(getattr(pack, "pack_id", "") or "").strip()
+            if not pack_id:
+                return False
+            row_index = getattr(pack, "pack_row_index", None)
+            try:
+                normalized_row = int(row_index) if row_index is not None else None
+            except (TypeError, ValueError):
+                normalized_row = None
+            expected[(pack_id, normalized_row)] += 1
+
+        actual: Counter[tuple[str, int | None]] = Counter()
+        for job in preview_jobs or []:
+            pack_id = str(getattr(job, "prompt_pack_id", "") or "").strip()
+            if not pack_id:
+                continue
+            row_index = getattr(job, "prompt_pack_row_index", None)
+            try:
+                normalized_row = int(row_index) if row_index is not None else None
+            except (TypeError, ValueError):
+                normalized_row = None
+            actual[(pack_id, normalized_row)] += 1
+
+        if not actual:
+            return False
+
+        for key, count in expected.items():
+            if actual.get(key, 0) < count:
+                return False
+        return True
+
     def _flush_hot_surfaces(self) -> None:
         self._ensure_hot_surface_state()
         dirty = set(self._hot_surface_dirty)
@@ -654,10 +693,11 @@ class PipelineTabFrame(ttk.Frame):
                 if self._surface_is_visible(self.preview_panel):
                     try:
                         preview_jobs = list(getattr(app_state, "preview_jobs", None) or [])
-                        if preview_jobs:
+                        job_draft = getattr(app_state, "job_draft", None)
+                        if preview_jobs and self._preview_jobs_cover_job_draft(job_draft, preview_jobs):
                             self.preview_panel.set_preview_jobs(preview_jobs)
                         else:
-                            self.preview_panel.update_from_job_draft(getattr(app_state, "job_draft", None))
+                            self.preview_panel.update_from_job_draft(job_draft)
                         self.preview_panel.update_from_app_state(app_state)
                     except Exception:
                         pass

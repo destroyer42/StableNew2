@@ -70,6 +70,15 @@ class TestPreviewPanelSummary:
 
         assert "Jobs: 3" in preview_panel.job_count_label.cget("text")
 
+    def test_renders_total_estimated_images(self, preview_panel):
+        summaries = [
+            make_ui_summary(job_id="job-a", estimated_images=8),
+            make_ui_summary(job_id="job-b", estimated_images=4),
+        ]
+        preview_panel.set_job_summaries(summaries)
+
+        assert "Images: 12" in preview_panel.job_count_label.cget("text")
+
     def test_renders_prompt(self, preview_panel):
         summary = make_ui_summary(positive_preview="A beautiful sunset")
         preview_panel.set_job_summaries([summary])

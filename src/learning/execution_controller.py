@@ -206,11 +206,28 @@ class LearningExecutionController:
                 experiment_name=experiment_name,
                 variable_under_test=variable_under_test,
             )
-            self.job_service.enqueue_njrs([record], run_request)
+            job_ids = list(self.job_service.enqueue_njrs([record], run_request) or [])
+            if not job_ids:
+                self._job_to_variant.pop(record.job_id, None)
+                self._job_contexts.pop(record.job_id, None)
+                _logger.warning(
+                    "[LearningExecutionController] Job was not accepted into the queue: %s",
+                    record.job_id,
+                )
+                return False
+            accepted_job_id = str(job_ids[0] or "").strip() or record.job_id
+            if accepted_job_id != record.job_id:
+                variant_ref = self._job_to_variant.pop(record.job_id, None)
+                context = self._job_contexts.pop(record.job_id, None)
+                if variant_ref is not None:
+                    self._job_to_variant[accepted_job_id] = variant_ref
+                if context is not None:
+                    context.job_id = accepted_job_id
+                    self._job_contexts[accepted_job_id] = context
             
             _logger.info(
                 f"[LearningExecutionController] Submitted job: "
-                f"job_id={record.job_id}, experiment={experiment_name}, "
+                f"job_id={accepted_job_id}, experiment={experiment_name}, "
                 f"variant={variant.param_value}"
             )
             

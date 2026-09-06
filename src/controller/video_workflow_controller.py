@@ -298,6 +298,9 @@ class VideoWorkflowController:
             output_route = OUTPUT_ROUTE_REPROCESS
 
         prompt = str(form_data.get("prompt") or "").strip()
+        if not prompt:
+            source_name = Path(source_image_path).stem.replace("_", " ").strip() or "selected image"
+            prompt = f"Video workflow source: {source_name}"
         negative_prompt = str(form_data.get("negative_prompt") or "").strip()
         motion_profile = str(form_data.get("motion_profile") or "").strip()
         camera_intent = self._normalize_camera_intent(form_data)

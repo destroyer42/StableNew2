@@ -111,3 +111,36 @@ def test_execution_controller_submits_learning_variant_via_enqueue_njrs() -> Non
     assert run_request.prompt_pack_id == "learning_Test"
     assert run_request.requested_job_label == "Learning: Test"
     assert run_request.tags == ["learning", "txt2img"]
+
+
+def test_execution_controller_rejects_learning_variant_when_enqueue_returns_no_jobs() -> None:
+    job_service = SimpleNamespace(
+        enqueue_njrs=lambda *_args, **_kwargs: [],
+        register_callback=lambda *_args, **_kwargs: None,
+    )
+    execution = LearningExecutionController(
+        learning_state=LearningState(),
+        job_service=job_service,
+    )
+    variant = LearningVariant(param_value=9.0, planned_images=1)
+    record = NormalizedJobRecord(
+        job_id="learning-job-rejected",
+        config={"txt2img": {"cfg_scale": 9.0}},
+        path_output_dir="runs/learning",
+        filename_template="{seed}",
+        prompt_pack_id="learning_Test",
+        prompt_pack_name="Test",
+        positive_prompt="portrait",
+        stage_chain=[],
+    )
+
+    success = execution.submit_variant_job(
+        record=record,
+        variant=variant,
+        experiment_name="Test",
+        variable_under_test="CFG Scale",
+    )
+
+    assert success is False
+    assert execution._job_to_variant == {}
+    assert execution._job_contexts == {}

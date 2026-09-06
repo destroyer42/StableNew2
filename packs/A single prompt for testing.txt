@@ -1,5 +1,0 @@
-<embedding:Stable_Yogis_Anatomy_Positives_V1> <embedding:Stable_Yogis_General_Positives_V1> <embedding:Stable_Yogis_PDXL_Positives> <embedding:Stable_Yogis_PDXL_Positives2>
-portrait of a gorgeous athletic porn star, sultrily lying back on a bed making direct eye contact with the camera, [[activity]]
-<lora:add-detail-xl:0.2967032967032967> <lora:CinematicStyle_v1:0.8> <lora:WITCHERS_BY_STX:0.2802197802197802>
-neg: <embedding:SDXLnegXL> <embedding:Stable_Yogis_PDXL_Negatives2-neg> <embedding:Stable_Yogis_Anatomy_Negatives_V1-neg> <embedding:sdxl_cyberrealistic_simpleneg-neg>
-neg: blurry, low resolution, bad anatomy, mishapen, extra limbs, weird angles, weird bodies, cgi, cartoon, anime, crossed eyes

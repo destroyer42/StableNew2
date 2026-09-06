@@ -372,8 +372,14 @@ class JobService:
         if not self.runner.is_running():
             self.runner.start()
 
-    def submit_job_with_run_mode(self, job: Job, *, emit_queue_updated: bool = True) -> None:
-        """Submit a job respecting its configured run_mode."""
+    def submit_job_with_run_mode(self, job: Job, *, emit_queue_updated: bool = True) -> bool:
+        """Submit a job respecting its configured run_mode.
+
+        Returns:
+            True when the job passed immediate submission validation and entered
+            the queue lifecycle. False when it was rejected during submission
+            and failed immediately.
+        """
         mode = (job.run_mode or "queue").lower()
         if mode != PipelineRunMode.QUEUE.value:
             log_with_ctx(
@@ -400,8 +406,9 @@ class JobService:
             if emit_queue_updated:
                 self._emit_queue_updated()
             self._handle_job_status_change(job, JobStatus.FAILED)
-            return
+            return False
         self.submit_queued(job, emit_queue_updated=emit_queue_updated)
+        return True
 
     def _prepare_job_for_submission(self, job: Job) -> NormalizedJobRecord | None:
         """Ensure normalized metadata is present and log previews as needed."""
@@ -474,8 +481,9 @@ class JobService:
         job_ids: list[str] = []
         for record in njrs[: run_request.max_njr_count]:
             job = self._job_from_njr(record, run_request)
-            self.submit_job_with_run_mode(job)
-            job_ids.append(job.job_id)
+            accepted = self.submit_job_with_run_mode(job)
+            if accepted:
+                job_ids.append(job.job_id)
         return job_ids
 
     def submit_queued(self, job: Job, *, emit_queue_updated: bool = True) -> None:
