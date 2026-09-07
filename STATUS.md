@@ -7,7 +7,7 @@ Updated: 2026-09-07
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Product name: StableNew
 - Default branch: `main`
-- Current release line: v2.6 MVP convergence
+- Current release line: v2.6 MVP recovery (converged baseline)
 - Authoritative branch: `main`
 
 `main` is the consolidated product baseline. It contains the reconciled
