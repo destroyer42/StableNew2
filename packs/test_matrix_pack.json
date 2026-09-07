@@ -117,8 +117,8 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "babesByStableYogiPony_xlV4.safetensors [c75622b71d]",
-      "model_name": "babesByStableYogiPony_xlV4.safetensors [c75622b71d]",
+      "model": "batchCOREALISMXLSFW_v80.safetensors [881e9f7ddf]",
+      "model_name": "batchCOREALISMXLSFW_v80.safetensors [881e9f7ddf]",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
@@ -138,7 +138,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.27,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "babesByStableYogiPony_xlV4.safetensors [c75622b71d]"
+      "hr_checkpoint_name": "batchCOREALISMXLSFW_v80.safetensors [881e9f7ddf]"
     },
     "img2img": {
       "model": "",
