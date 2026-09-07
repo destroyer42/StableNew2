@@ -22,15 +22,6 @@ from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
-from src.pipeline.config_contract_v26 import (
-    canonicalize_intent_config,
-    derive_backend_options,
-    extract_adaptive_refinement_intent,
-    extract_execution_config,
-    extract_secondary_motion_intent,
-    validate_train_lora_execution_config,
-)
-from src.pipeline.config_normalizer import normalize_pipeline_config
 from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.pipeline.job_models_v2 import (
     CURRENT_NJR_SCHEMA_VERSION,
@@ -45,10 +36,8 @@ from src.pipeline.job_models_v2 import (
     SourceKind,
     StageConfig,
     StagePromptInfo,
-    TrainingWorkloadSpec,
     WorkloadKind,
 )
-from src.pipeline.job_requests_v2 import PipelineRunRequest
 from src.randomizer import (
     RandomizationPlanV2,
     RandomizationSeedMode,
@@ -191,173 +180,6 @@ class JobBuilderV2:
                     )
                     jobs.append(job)
 
-        return jobs
-
-    def build_from_run_request(self, run_request: PipelineRunRequest) -> list[NormalizedJobRecord]:
-        """Build normalized jobs directly from a PipelineRunRequest."""
-        entries = list(run_request.pack_entries or [])
-        if not entries:
-            return []
-        jobs: list[NormalizedJobRecord] = []
-        output_dir = run_request.explicit_output_dir or "output"
-        filename_template = "{seed}"
-        for _index, entry in enumerate(entries[: run_request.max_njr_count]):
-            raw_config = extract_execution_config(entry.config_snapshot or {}) or dict(
-                entry.config_snapshot or {}
-            )
-            raw_train_lora = raw_config.get("train_lora") if isinstance(raw_config, dict) else None
-            is_train_lora = isinstance(raw_train_lora, dict) and bool(
-                raw_train_lora.get("enabled", True)
-            )
-
-            if is_train_lora:
-                config = validate_train_lora_execution_config(raw_config)
-                train_lora_config = dict(config.get("train_lora") or {})
-                seed_val = None
-                stage = StageConfig(
-                    stage_type="train_lora",
-                    enabled=bool(train_lora_config.get("enabled", True)),
-                    model=str(train_lora_config.get("base_model") or ""),
-                    extra=dict(train_lora_config),
-                )
-                positive_prompt = entry.prompt_text or (
-                    f"Train LoRA for {train_lora_config.get('character_name', '').strip()}"
-                )
-                negative_prompt = entry.negative_prompt_text or ""
-                path_output_dir = str(train_lora_config.get("output_dir") or output_dir)
-                positive_embeddings: list[str] = []
-            else:
-                config = normalize_pipeline_config(raw_config)
-                txt2img_config = config.get("txt2img", {})
-                seed = self._extract_config_value(config, "seed") or txt2img_config.get("seed")
-                seed_val = int(seed) if seed is not None else None
-                stage = StageConfig(
-                    stage_type="txt2img",
-                    enabled=True,
-                    steps=int(txt2img_config.get("steps") or config.get("steps") or 20),
-                    cfg_scale=float(
-                        txt2img_config.get("cfg_scale") or config.get("cfg_scale") or 7.5
-                    ),
-                    sampler_name=txt2img_config.get("sampler_name")
-                    or config.get("sampler")
-                    or "DPM++ 2M",
-                    scheduler=txt2img_config.get("scheduler") or config.get("scheduler") or "ddim",
-                    model=txt2img_config.get("model") or config.get("model") or "unknown",
-                    vae=txt2img_config.get("vae"),
-                    extra={},
-                )
-                positive_prompt = entry.prompt_text or ""
-                negative_prompt = entry.negative_prompt_text or ""
-                path_output_dir = output_dir
-                positive_embeddings = list(entry.matrix_slot_values.keys())
-
-            extra_metadata = {
-                "tags": list(run_request.tags),
-                "selected_row_ids": list(run_request.selected_row_ids),
-                "requested_job_label": run_request.requested_job_label,
-            }
-            if is_train_lora:
-                extra_metadata["train_lora"] = dict(config.get("train_lora") or {})
-
-            workload = (
-                TrainingWorkloadSpec(
-                    positive_prompt=positive_prompt,
-                    negative_prompt=negative_prompt,
-                    config=config,
-                    intent_config=canonicalize_intent_config(
-                        {
-                            "run_mode": run_request.run_mode.value,
-                            "source": run_request.source.value,
-                            "prompt_source": "training",
-                            "config_snapshot_id": run_request.config_snapshot_id,
-                            "requested_job_label": run_request.requested_job_label,
-                            "selected_row_ids": list(run_request.selected_row_ids),
-                            "tags": list(run_request.tags),
-                        }
-                    ),
-                    backend_options=derive_backend_options(config),
-                    metadata=extra_metadata,
-                )
-                if is_train_lora
-                else ImageWorkloadSpec(
-                    positive_prompt=positive_prompt,
-                    negative_prompt=negative_prompt,
-                    config=config,
-                    images_per_prompt=int(config.get("pipeline", {}).get("images_per_prompt", 1)),
-                    loop_type=config.get("pipeline", {}).get("loop_type", "pipeline"),
-                    loop_count=int(config.get("pipeline", {}).get("loop_count", 1)),
-                    variant_mode=str(config.get("pipeline", {}).get("variant_mode", "standard")),
-                    intent_config=canonicalize_intent_config(
-                        {
-                            "run_mode": run_request.run_mode.value,
-                            "source": run_request.source.value,
-                            "prompt_source": "pack",
-                            "prompt_pack_id": run_request.prompt_pack_id,
-                            "adaptive_refinement": extract_adaptive_refinement_intent(
-                                {"adaptive_refinement": run_request.adaptive_refinement}
-                            ),
-                            "secondary_motion": extract_secondary_motion_intent(
-                                {"secondary_motion": run_request.secondary_motion}
-                            ),
-                            "config_snapshot_id": run_request.config_snapshot_id,
-                            "requested_job_label": run_request.requested_job_label,
-                            "selected_row_ids": list(run_request.selected_row_ids),
-                            "tags": list(run_request.tags),
-                        }
-                    ),
-                    backend_options=derive_backend_options(config),
-                    metadata=extra_metadata,
-                )
-            )
-            record = NormalizedJobRecord(
-                schema_version=CURRENT_NJR_SCHEMA_VERSION,
-                job_id=self._id_fn(),
-                workload_kind=(WorkloadKind.TRAINING if is_train_lora else WorkloadKind.IMAGE),
-                source=(
-                    SourceDescriptor(kind=SourceKind.TRAINING, display_name=entry.pack_name)
-                    if is_train_lora
-                    else SourceDescriptor(
-                        kind=SourceKind.PROMPT_PACK,
-                        id=run_request.prompt_pack_id,
-                        display_name=entry.pack_name,
-                        row_index=entry.pack_row_index,
-                    )
-                ),
-                workload=workload,
-                stages=(stage,),
-                output_plan=OutputPlan(
-                    base_output_dir=path_output_dir,
-                    filename_template=filename_template,
-                ),
-                provenance=NJRProvenance(
-                    seed=seed_val,
-                    randomizer_summary=entry.randomizer_metadata,
-                    txt2img_prompt_info=StagePromptInfo(
-                        original_prompt=positive_prompt,
-                        final_prompt=positive_prompt,
-                        original_negative_prompt=negative_prompt,
-                        final_negative_prompt=negative_prompt,
-                        global_negative_applied=False,
-                    ),
-                    pack_usage=tuple(self._build_pack_usage(config)),
-                    positive_embeddings=tuple(positive_embeddings),
-                    matrix_slot_values=dict(entry.matrix_slot_values),
-                    matrix_name=str(config.get("randomization", {}).get("matrix_name", "")) or None,
-                    matrix_mode=str(config.get("randomization", {}).get("mode", "")) or None,
-                    matrix_prompt_mode=str(config.get("randomization", {}).get("prompt_mode", ""))
-                    or None,
-                    aesthetic_enabled=bool(config.get("aesthetic", {}).get("enabled")),
-                    aesthetic_weight=config.get("aesthetic", {}).get("weight"),
-                    aesthetic_text=config.get("aesthetic", {}).get("text"),
-                    aesthetic_embedding=config.get("aesthetic", {}).get("embedding"),
-                    metadata={
-                        **extra_metadata,
-                        "legacy_run_mode": run_request.run_mode.name,
-                        "legacy_queue_source": run_request.source.name,
-                    },
-                ),
-            )
-            jobs.append(record)
         return jobs
 
     def _apply_config_overrides(

@@ -5,6 +5,7 @@ from typing import Any, Callable
 
 from src.history.history_record import HistoryRecord
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 
@@ -66,7 +67,7 @@ class HistoryHandoffService:
         njr = self.hydrate_njr_from_snapshot(record.njr_snapshot)
         if njr is None:
             return 0
-        records = [njr]
+        records = [compile_replay_intent(ReplayIntent(njr))]
         setter = getattr(app_state, "set_preview_jobs", None)
         if callable(setter):
             try:

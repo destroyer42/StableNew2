@@ -15,11 +15,7 @@ from typing import Any
 from src.gui.learning_state import LearningState, LearningVariant
 from src.pipeline.artifact_contract import extract_artifact_paths
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.pipeline.job_requests_v2 import (
-    PipelineRunMode,
-    PipelineRunRequest,
-    PipelineRunSource,
-)
+from src.controller.submission_policy_v26 import SubmissionPolicy
 
 _logger = logging.getLogger(__name__)
 
@@ -186,8 +182,8 @@ class LearningExecutionController:
         if not self.job_service:
             _logger.error("[LearningExecutionController] No JobService available")
             return False
-        if not hasattr(self.job_service, "enqueue_njrs"):
-            _logger.error("[LearningExecutionController] JobService missing enqueue_njrs()")
+        if not hasattr(self.job_service, "submit_njrs"):
+            _logger.error("[LearningExecutionController] JobService missing submit_njrs()")
             return False
         
         try:
@@ -201,12 +197,7 @@ class LearningExecutionController:
                 job_id=record.job_id,
             )
             
-            run_request = self._build_run_request(
-                record=record,
-                experiment_name=experiment_name,
-                variable_under_test=variable_under_test,
-            )
-            self.job_service.enqueue_njrs([record], run_request)
+            self.job_service.submit_njrs([record], SubmissionPolicy())
             
             _logger.info(
                 f"[LearningExecutionController] Submitted job: "
@@ -222,29 +213,6 @@ class LearningExecutionController:
             _logger.exception(f"[LearningExecutionController] Failed to submit job: {exc}")
             return False
 
-    def _build_run_request(
-        self,
-        *,
-        record: NormalizedJobRecord,
-        experiment_name: str,
-        variable_under_test: str,
-    ) -> PipelineRunRequest:
-        stage_name = "txt2img"
-        if record.stage_chain:
-            stage_name = str(record.stage_chain[0].stage_type or "txt2img")
-        prompt_pack_id = str(record.prompt_pack_id or f"learning_{experiment_name}")
-        return PipelineRunRequest(
-            prompt_pack_id=prompt_pack_id,
-            selected_row_ids=[record.job_id],
-            config_snapshot_id=f"learning_{experiment_name}_{variable_under_test}",
-            run_mode=PipelineRunMode.QUEUE,
-            source=PipelineRunSource.ADD_TO_QUEUE,
-            explicit_output_dir=str(record.path_output_dir or "") or None,
-            tags=["learning", stage_name],
-            requested_job_label=f"Learning: {experiment_name}",
-            max_njr_count=1,
-        )
-    
     def on_job_completed(self, job_id: str, result: dict[str, Any]) -> None:
         """Handle job completion.
         

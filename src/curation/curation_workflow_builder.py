@@ -162,13 +162,6 @@ class CurationWorkflowBuilder:
             ),
         )
 
-    def build_run_request(self, jobs: list[Any], *, target_stage: DerivedStage):
-        return self._builder.build_run_request(
-            jobs,
-            source=f"staged_curation_{target_stage}",
-            requested_job_label=f"Staged Curation: {self._TARGET_TO_LABEL[target_stage]}",
-        )
-
     def _build_reprocess_item_for_target(
         self,
         *,

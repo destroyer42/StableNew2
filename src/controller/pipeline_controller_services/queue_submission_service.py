@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Callable
-from contextlib import nullcontext
 from typing import Any
 
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 
@@ -32,19 +32,6 @@ class QueueSubmissionService:
             else:
                 non_queueable.append(record)
         return queueable, non_queueable
-
-    def ensure_record_prompt_pack_metadata(
-        self,
-        record: NormalizedJobRecord,
-        prompt_pack_id: str | None,
-        prompt_pack_name: str | None,
-    ) -> None:
-        if not prompt_pack_id:
-            return
-        if record.prompt_pack_id != prompt_pack_id:
-            raise ValueError("submission PromptPack identity does not match immutable NJR")
-        if prompt_pack_name and record.prompt_pack_name != prompt_pack_name:
-            raise ValueError("submission PromptPack name does not match immutable NJR")
 
     def sort_jobs_by_model(
         self,
@@ -97,24 +84,18 @@ class QueueSubmissionService:
         self,
         records: list[NormalizedJobRecord],
         *,
-        run_config: dict[str, Any] | None,
-        source: str,
-        prompt_source: str,
-        last_run_config: dict[str, Any] | None,
+        policy: SubmissionPolicy | None = None,
         can_enqueue_learning_jobs: Callable[[int], tuple[bool, str]],
         is_queue_submission_blocked: Callable[[], bool],
         sort_jobs_by_model: Callable[[list[NormalizedJobRecord]], list[NormalizedJobRecord]],
-        ensure_record_prompt_pack_metadata: Callable[
-            [NormalizedJobRecord, str | None, str | None], None
-        ],
-        to_queue_job: Callable[..., Any],
-        log_add_to_queue_event: Callable[[str], None],
-        run_job_payload_factory: Callable[[Any], Callable[[], dict[str, Any]]] | None = None,
     ) -> int:
         if not records or not self._job_service:
             return 0
-        if str(source).startswith("learning_"):
-            allowed, reason = can_enqueue_learning_jobs(len(records))
+        learning_count = sum(
+            1 for record in records if record.source.kind.value == "learning"
+        )
+        if learning_count:
+            allowed, reason = can_enqueue_learning_jobs(learning_count)
             if not allowed:
                 self._logger.warning(
                     "[QueueSubmissionService] Learning enqueue blocked: %s", reason
@@ -126,63 +107,14 @@ class QueueSubmissionService:
             )
             return 0
 
-        submit_job = getattr(self._job_service, "submit_job_with_run_mode", None)
-        emit_queue_updated = getattr(self._job_service, "_emit_queue_updated", None)
-        queue = getattr(self._job_service, "job_queue", None)
-        coalesce_queue_state = getattr(queue, "coalesce_state_notifications", None)
-        submitted = 0
-        run_config_to_use = run_config or last_run_config
-        batch_context = nullcontext()
-        if callable(coalesce_queue_state):
-            candidate_context = coalesce_queue_state()
-            if hasattr(candidate_context, "__enter__") and hasattr(candidate_context, "__exit__"):
-                batch_context = candidate_context
-
         records = sort_jobs_by_model(records)
-        with batch_context:
-            for record in records:
-                if is_queue_submission_blocked():
-                    self._logger.info(
-                        "[QueueSubmissionService] Stopping queue submission after %d/%d jobs because shutdown is in progress",
-                        submitted,
-                        len(records),
-                    )
-                    break
-                prompt_pack_id = record.prompt_pack_id or None
-                prompt_pack_name = record.prompt_pack_name or None
-                ensure_record_prompt_pack_metadata(record, prompt_pack_id, prompt_pack_name)
-                job = to_queue_job(
-                    record,
-                    run_mode="queue",
-                    source=source,
-                    prompt_source=record.prompt_source,
-                    prompt_pack_id=prompt_pack_id,
-                    run_config=run_config_to_use,
-                )
-                if run_job_payload_factory is not None:
-                    job.payload = run_job_payload_factory(job)
-                if not hasattr(job, "_normalized_record") or job._normalized_record is None:
-                    self._logger.warning(
-                        "PR-CORE1-B2: Job submitted without normalized_record in NJR-only mode. Source: %s",
-                        source,
-                    )
-                if callable(submit_job):
-                    try:
-                        submit_job(job, emit_queue_updated=False)
-                    except TypeError:
-                        submit_job(job)
-                log_add_to_queue_event(job.job_id)
-                submitted += 1
-
-        if submitted > 0 and callable(emit_queue_updated):
-            try:
-                emit_queue_updated()
-            except Exception:
-                self._logger.exception(
-                    "[QueueSubmissionService] Failed to emit coalesced queue update after batch submission",
-                    exc_info=True,
-                )
-        return submitted
+        if is_queue_submission_blocked():
+            self._logger.info(
+                "[QueueSubmissionService] Skipping queue submission because shutdown is in progress"
+            )
+            return 0
+        job_ids = self._job_service.submit_njrs(records, policy or SubmissionPolicy())
+        return len(job_ids)
 
 
 __all__ = ["QueueSubmissionService"]

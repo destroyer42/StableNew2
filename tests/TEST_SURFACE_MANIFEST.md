@@ -142,7 +142,7 @@ labels describe grouping only.
 
 - NJR and serialization assertions: completed by `PR-MVP-020`.
 - Direct-mode, broad submission, queue/controller compatibility, and related
-  duplicate tests: `PR-MVP-030`.
+  duplicate tests: completed by `PR-MVP-030`.
 - JSON/JSONL persistence coverage: `PR-MVP-040`.
 - Paired PromptPack coverage: `PR-MVP-050`.
 - Image GUI/integration promotion: `PR-MVP-060`.

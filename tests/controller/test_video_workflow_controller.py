@@ -10,8 +10,8 @@ class _JobServiceStub:
     def __init__(self) -> None:
         self.calls = []
 
-    def enqueue_njrs(self, njrs, request):
-        self.calls.append((list(njrs), request))
+    def submit_njrs(self, njrs, policy):
+        self.calls.append((list(njrs), policy))
         return ["job-video-queued"]
 
 
@@ -61,21 +61,20 @@ def test_submit_video_workflow_job_builds_queue_backed_reprocess_njr(tmp_path: P
 
     assert job_id == "job-video-queued"
     assert len(job_service.calls) == 1
-    njrs, request = job_service.calls[0]
+    njrs, policy = job_service.calls[0]
     assert len(njrs) == 1
     njr = njrs[0]
     assert njr.start_stage == "video_workflow"
-    assert njr.input_image_paths == [str(source)]
+    assert njr.input_image_paths == (str(source),)
     assert njr.config["video_workflow"]["workflow_id"] == "ltx_multiframe_anchor_v1"
     assert njr.config["video_workflow"]["end_anchor_path"] == str(end)
     assert njr.config["video_workflow"]["mid_anchor_paths"] == [str(mid)]
     assert njr.config["video_workflow"]["motion_profile"] == "balanced"
     assert njr.config["pipeline"]["output_route"] == "Testing"
     assert njr.config["metadata"]["continuity"]["pack_id"] == "cont-001"
-    assert njr.extra_metadata["continuity"]["pack_id"] == "cont-001"
+    assert njr.extra_metadata["continuity_link"]["pack_id"] == "cont-001"
     assert njr.continuity_link["pack_id"] == "cont-001"
-    assert request.prompt_pack_id == "video_workflow"
-    assert "video_workflow" in request.tags
+    assert policy.start_when_idle is False
 
 
 def test_conditioned_video_workflow_requires_depth_input_mode(tmp_path: Path) -> None:

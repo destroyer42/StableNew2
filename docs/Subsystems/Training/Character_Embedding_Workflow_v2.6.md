@@ -1,7 +1,7 @@
 Character_Embedding_Workflow_v2.6.md
 
 Status: Active subsystem reference; post-MVP release scope
-Updated: 2026-09-05
+Updated: 2026-09-07
 
 ## 0. Purpose
 
@@ -20,9 +20,10 @@ is:
 
 `Character Training Intent -> Training Compiler -> training NJR -> JobService -> Queue/JobRepository -> PipelineRunner.run_njr -> Training Handler -> CharacterEmbedder subprocess -> LoRAManager manifest`
 
-The current implementation still routes this surface through the pack-shaped
-`PipelineRunRequest`. That is a known `PR-MVP-030` compiler-migration gap, not a
-second canonical contract. Training productization is not an MVP release gate.
+The current implementation uses the explicit `TrainingIntent`/
+`compile_training_intent` compiler and submits the resulting training NJR
+through `JobService.submit_njrs`. It does not require or fabricate PromptPack
+identity. Training productization is not an MVP release gate.
 
 ## 1. Prerequisites
 

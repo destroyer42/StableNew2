@@ -79,9 +79,9 @@ emits one or more NJRs. A compiler may call shared normalization services, but
 it must not enqueue or execute work itself.
 
 The old pack-shaped `PipelineRunRequest` is not the generic application
-submission contract. It may survive only while its PromptPack compiler callers
-are migrated. The target `JobService` accepts an NJR plus a small submission
-policy such as priority and immediate-start preference.
+submission contract and was removed by `PR-MVP-030`. `JobService.submit_njrs`
+accepts complete NJRs plus the small `SubmissionPolicy` (priority and optional
+immediate-start preference).
 
 ## 4. NormalizedJobRecord
 
@@ -256,8 +256,8 @@ implemented:
 |---|---|---|---|
 | Repository completeness | **Closed 2026-09-05** | All imported `src/state/` modules and focused tests are tracked; the root ignore rule is anchored; a tracked-files-only worktree passed completeness, compile, import, and 42 focused tests | `PR-MVP-000` |
 | NJR scope | **Closed 2026-09-07** | `NormalizedJobRecord` is a frozen eight-field value; nested JSON is recursively frozen; canonical serialization is complete; explicit legacy reads discard lifecycle and output facts; builders, replay, snapshots, services, and runner no longer mutate NJR | `PR-MVP-020` |
-| Source identity | Open | Core and `JobService` now require identity only for `source.kind == "prompt_pack"`; remaining callers still cross the pack-shaped `PipelineRunRequest`/submission seam | `PR-MVP-030` |
-| Submission DTO | Open | `PipelineRunRequest` remains pack-shaped and broad | `PR-MVP-030` |
+| Source identity | **Closed 2026-09-07** | All enabled source families emit complete NJRs; only `source.kind == "prompt_pack"` carries PromptPack identity, while replay, reprocess, learning, SVD, video, and training preserve their typed source metadata | `PR-MVP-030` |
+| Submission DTO | **Closed 2026-09-07** | `JobService.submit_njrs(records, policy)` is the fresh submission boundary; the pack-shaped `PipelineRunRequest`, generic builder branch, and callback-heavy preview adapter are removed | `PR-MVP-030` |
 | Persistence | Open | Queue/history have multiple JSON/JSONL-era stores rather than one SQLite repository | `PR-MVP-040` |
 | PromptPack format | Open | Paired TXT/JSON assumptions remain in docs/code/tests despite unified JSON behavior | `PR-MVP-050` |
 | Test truth | **Closed 2026-09-06** | One strict pytest authority, isolated collection/smoke runners, a positive required list, and a Ruff 0.14.9 non-increasing baseline gate pass on supported interpreters | `PR-MVP-010` |

@@ -6,7 +6,6 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from src.controller.svd_controller import SVDController
-from src.pipeline.job_requests_v2 import PipelineRunRequest
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.state.output_routing import OUTPUT_ROUTE_TESTING
 
@@ -14,11 +13,11 @@ from src.state.output_routing import OUTPUT_ROUTE_TESTING
 class _RecordingJobService:
     def __init__(self) -> None:
         self.njrs = []
-        self.request: PipelineRunRequest | None = None
+        self.policy = None
 
-    def enqueue_njrs(self, njrs, request: PipelineRunRequest):
+    def submit_njrs(self, njrs, policy):
         self.njrs = list(njrs)
-        self.request = request
+        self.policy = policy
         return ["job-svd-integration"]
 
 

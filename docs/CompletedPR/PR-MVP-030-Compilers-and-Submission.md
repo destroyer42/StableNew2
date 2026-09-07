@@ -1,6 +1,6 @@
 # PR-MVP-030 - Typed Compilers and NJR-only Submission
 
-Status: Approved
+Status: Completed
 Priority: CRITICAL
 Effort: LARGE
 Phase: Phase 2 - Repair the application boundary
@@ -85,6 +85,13 @@ No compiler owns queue, runner, GUI, or persistence side effects.
 - `src/pipeline/reprocess_builder.py`
 - `src/pipeline/job_requests_v2.py`
 - `tests/controller/test_queue_submission_service.py`
+- `tests/controller/test_app_controller_photo_optimize.py`
+- `tests/controller/test_app_controller_reprocess_review_tab.py`
+- `tests/controller/test_learning_controller_integration.py`
+- `tests/controller/test_learning_completion_resume_regressions.py`
+- `tests/controller/test_preview_queue_history_flow_v2.py`
+- `tests/controller/test_runtime_backend_port_wiring.py`
+- `tests/controller/test_job_construction_b3.py`
 - `tests/controller/test_svd_controller.py`
 - `tests/controller/test_video_workflow_controller.py`
 - `tests/controller/test_pipeline_preview_to_queue_v2.py`
@@ -96,13 +103,33 @@ No compiler owns queue, runner, GUI, or persistence side effects.
 - `tests/pipeline/test_job_builder_v2.py`
 - `tests/pipeline/test_txt2img_path_closeout_invariants.py`
 - `tests/integration/test_video_golden_paths_v26.py`
+- `tests/integration/test_learning_review_recommendation_e2e.py`
 - `tests/video/test_svd_integration.py`
 - `tests/controller/test_svd_controller.py`
 - `tests/gui_v2/test_discovered_review_inbox.py`
+- `tests/test_queue_persistence_pr_queue_001.py`
 - `tests/helpers/job_service_di_test_helpers.py`
 - `tests/controller/conftest.py`
 - `tests/TEST_SURFACE_MANIFEST.md`
+- `docs/CompletedPR/PR-MVP-030-Compilers-and-Submission.md` (moved from the
+  approved backlog location at closeout)
 - `tests/system/test_architecture_enforcement_v2.py`
+- `.github/copilot-instructions.md`
+- `docs/ARCHITECTURE_v2.6.md`
+- `docs/ARCHITECTURE_ENFORCEMENT_CHECKLIST_v2.6.md`
+- `docs/Builder Pipeline Deep-Dive (v2.6).md`
+- `docs/GOVERNANCE_v2.6.md`
+- `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
+- `docs/StableNew_Coding_and_Testing_v2.6.md`
+- `docs/Subsystems/Testing/E2E_Golden_Path_Test_Matrix_v2.6.md`
+- `docs/Subsystems/Training/Character_Embedding_Workflow_v2.6.md`
+- `docs/StableNew Roadmap v2.6.md`
+- `docs/DOCS_INDEX_v2.6.md`
+- `tests/TEST_SURFACE_MANIFEST.md`
+
+The canonical documentation files above are the closeout synchronization
+surface. They may only be updated with implementation evidence from this PR;
+they are not an invitation to broaden runtime scope.
 
 ### Delete
 
@@ -194,6 +221,10 @@ Executor: Codex
 Reviewer: Rob (Human Owner)
 Approval Status: Approved
 
+Amendment: the canonical documentation synchronization surface above was
+approved as part of implementation closeout. The implementation remains one
+atomic code/test/documentation commit after all gates pass.
+
 The owner’s instruction to generate, approve, and implement the next roadmap
 PR authorizes this exact allowlist and ordered plan. Any additional file or
 behavior requires a written amendment before change.
@@ -203,3 +234,18 @@ behavior requires a written amendment before change.
 Revert the single implementation commit. No queue/history data is rewritten;
 the old generic request is removed only from source, not from persisted NJR
 snapshots.
+
+## 10. Closeout evidence
+
+Implementation completed on `recovery/mvp-baseline` in one atomic commit after
+the approved planning commit. The focused PR-MVP-030 suite passed 31 tests.
+Strict collection passed with 3,096 tests and two explicitly optional OpenCV
+skips. The required positive smoke passed 75 tests on Python 3.11 and 3.12;
+the bounded mypy smoke passed in the supported 3.12 environment; and the
+pinned Ruff 0.14.9 non-increasing gate passed at 1,860 findings versus the
+2,208 baseline. The repository completeness and diff hygiene gates passed
+after staging the newly tracked compiler modules and deletions.
+
+The next runtime dependency is `PR-MVP-040`: durable SQLite repository
+authority and backup-first offline legacy import. This record authorizes no
+PromptPack storage migration or real-backend acceptance work.

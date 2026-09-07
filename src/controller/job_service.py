@@ -14,6 +14,7 @@ from typing import Any, Literal, Protocol
 from src.config.app_config import get_process_container_config, get_watchdog_config
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
     JobView,
@@ -21,10 +22,9 @@ from src.pipeline.job_models_v2 import (
     SourceKind,
     UnifiedJobSummary,
 )
-from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest
 from src.pipeline.result_contract_v26 import build_diagnostics_descriptor
 from src.queue.job_history_store import JobHistoryStore
-from src.queue.job_model import Job, JobExecutionMetadata, JobPriority, JobStatus, RetryAttempt
+from src.queue.job_model import Job, JobExecutionMetadata, JobStatus, RetryAttempt
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.utils import LogContext, log_with_ctx
@@ -358,7 +358,7 @@ class JobService:
             self._emit_queue_updated()
 
     def run_now(self, job: Job) -> None:
-        job.run_mode = PipelineRunMode.QUEUE.value
+        job.run_mode = "queue"
         self.enqueue(job)
         try:
             self.run_next_now()
@@ -370,7 +370,7 @@ class JobService:
     def submit_job_with_run_mode(self, job: Job, *, emit_queue_updated: bool = True) -> None:
         """Submit a job respecting its configured run_mode."""
         mode = (job.run_mode or "queue").lower()
-        if mode != PipelineRunMode.QUEUE.value:
+        if mode != "queue":
             log_with_ctx(
                 logger,
                 logging.INFO,
@@ -378,7 +378,7 @@ class JobService:
                 ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
                 extra_fields={"requested_run_mode": mode, "normalized_run_mode": "queue"},
             )
-            mode = PipelineRunMode.QUEUE.value
+            mode = "queue"
             job.run_mode = mode
         log_with_ctx(
             logger,
@@ -423,9 +423,8 @@ class JobService:
     def _job_from_njr(
         self,
         record: NormalizedJobRecord,
-        run_request: PipelineRunRequest,
         *,
-        priority: JobPriority = JobPriority.NORMAL,
+        policy: SubmissionPolicy,
     ) -> Job:
         # PR-CORE1-B3/C2: NJR-backed jobs are purely NJR-only and don't store pipeline_config.
         extra_metadata = getattr(record, "extra_metadata", None)
@@ -436,14 +435,14 @@ class JobService:
                 reprocess_meta = extra_metadata.get("reprocess")
                 if isinstance(reprocess_meta, dict):
                     source_override = reprocess_meta.get("source")
-        prompt_source = str(getattr(record, "prompt_source", "") or "").lower()
-        if not prompt_source:
-            prompt_source = "pack" if (record.prompt_pack_id or "") else "manual"
+        source_kind = record.source.kind
+        source = str(source_override or source_kind.value)
+        prompt_source = "pack" if source_kind is SourceKind.PROMPT_PACK else source_kind.value
         job = Job(
             job_id=record.job_id,
-            priority=priority,
-            run_mode=run_request.run_mode.value,
-            source=str(source_override or run_request.source.value),
+            priority=policy.priority,
+            run_mode="queue",
+            source=source,
             prompt_source=prompt_source,
             prompt_pack_id=record.prompt_pack_id or None,
             randomizer_metadata=record.randomizer_summary,
@@ -462,15 +461,39 @@ class JobService:
         job._normalized_record = record  # type: ignore[attr-defined]
         return job
 
-    def enqueue_njrs(
-        self, njrs: list[NormalizedJobRecord], run_request: PipelineRunRequest
+    def submit_njrs(
+        self,
+        records: list[NormalizedJobRecord] | tuple[NormalizedJobRecord, ...],
+        policy: SubmissionPolicy | None = None,
     ) -> list[str]:
-        """Enqueue a batch of NormalizedJobRecord instances."""
-        job_ids: list[str] = []
-        for record in njrs[: run_request.max_njr_count]:
-            job = self._job_from_njr(record, run_request)
-            self.submit_job_with_run_mode(job)
-            job_ids.append(job.job_id)
+        """Validate and enqueue a complete batch of immutable NJRs atomically."""
+        submission_policy = policy or SubmissionPolicy()
+        batch = tuple(records)
+        if not batch:
+            return []
+        if any(not isinstance(record, NormalizedJobRecord) for record in batch):
+            raise TypeError("JobService.submit_njrs accepts only NormalizedJobRecord values")
+        job_ids = [record.job_id for record in batch]
+        if len(set(job_ids)) != len(job_ids):
+            raise ValueError("JobService.submit_njrs rejects duplicate job identities")
+        for record in batch:
+            ok, details = self._validate_normalized_record(record)
+            if not ok:
+                raise ValueError(details.get("message", "Invalid normalized job record"))
+        jobs = [self._job_from_njr(record, policy=submission_policy) for record in batch]
+        queue = self.job_queue
+        coalesce = getattr(queue, "coalesce_state_notifications", None)
+        context = coalesce() if callable(coalesce) else None
+        if context is None or not hasattr(context, "__enter__"):
+            from contextlib import nullcontext
+
+            context = nullcontext()
+        with context:
+            for job in jobs:
+                self.submit_queued(job, emit_queue_updated=False)
+        self._emit_queue_updated()
+        if submission_policy.start_when_idle and not self.runner.is_running():
+            self.run_next_now()
         return job_ids
 
     def submit_queued(self, job: Job, *, emit_queue_updated: bool = True) -> None:

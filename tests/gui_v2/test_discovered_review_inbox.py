@@ -674,7 +674,7 @@ def test_controller_submit_staged_curation_advancement_enqueues_face_triage_job(
 
     pipeline_controller = MagicMock()
     job_service = MagicMock()
-    job_service.enqueue_njrs = MagicMock(return_value=["job-queued-1"])
+    job_service.submit_njrs = MagicMock(return_value=["job-queued-1"])
     pipeline_controller._job_service = job_service
     pipeline_controller._config_manager = None
     ctrl = LearningController(
@@ -745,8 +745,8 @@ def test_controller_submit_staged_curation_advancement_enqueues_face_triage_job(
         submitted = ctrl.submit_staged_curation_advancement("disc-face", "face_triage")
 
     assert submitted == 1
-    assert job_service.enqueue_njrs.called
-    submitted_records, run_request = job_service.enqueue_njrs.call_args[0]
+    assert job_service.submit_njrs.called
+    submitted_records, policy = job_service.submit_njrs.call_args[0]
     assert len(submitted_records) == 1
     record = submitted_records[0]
     assert record.start_stage == "adetailer"
@@ -754,7 +754,7 @@ def test_controller_submit_staged_curation_advancement_enqueues_face_triage_job(
     assert record.config["adetailer"]["adetailer_denoise"] == 0.34
     assert record.extra_metadata["curation"]["candidate_id"] == "cand-1"
     assert record.extra_metadata["selection_event"]["decision"] == "advanced_to_face_triage"
-    assert run_request.requested_job_label == "Staged Curation: Face Triage"
+    assert policy.start_when_idle is False
 
 
 def test_controller_build_staged_curation_advancement_plan_preserves_source_details(tmp_path) -> None:
@@ -763,7 +763,7 @@ def test_controller_build_staged_curation_advancement_plan_preserves_source_deta
 
     pipeline_controller = MagicMock()
     job_service = MagicMock()
-    job_service.enqueue_njrs = MagicMock(return_value=["job-queued-1"])
+    job_service.submit_njrs = MagicMock(return_value=["job-queued-1"])
     pipeline_controller._job_service = job_service
     pipeline_controller._config_manager = None
     ctrl = LearningController(
@@ -841,7 +841,7 @@ def test_controller_build_staged_curation_advancement_plan_preserves_source_deta
     assert len(plan.selection_events) == 1
     assert plan.selection_events[0].decision == "advanced_to_face_triage"
     assert len(plan.jobs) == 1
-    assert job_service.enqueue_njrs.called is False
+    assert job_service.submit_njrs.called is False
 
 
 def test_controller_build_staged_curation_review_handoff_preserves_review_inputs(tmp_path) -> None:
@@ -850,7 +850,7 @@ def test_controller_build_staged_curation_review_handoff_preserves_review_inputs
 
     pipeline_controller = MagicMock()
     job_service = MagicMock()
-    job_service.enqueue_njrs = MagicMock(return_value=["job-queued-1"])
+    job_service.submit_njrs = MagicMock(return_value=["job-queued-1"])
     pipeline_controller._job_service = job_service
     pipeline_controller._config_manager = None
     ctrl = LearningController(
@@ -929,7 +929,7 @@ def test_controller_build_staged_curation_review_handoff_preserves_review_inputs
     assert handoff.stage_adetailer is True
     assert handoff.stage_upscale is False
     assert handoff.source_candidate_ids == ["cand-1"]
-    assert job_service.enqueue_njrs.called is False
+    assert job_service.submit_njrs.called is False
 
 
 def test_controller_build_staged_curation_review_handoff_can_filter_single_candidate(tmp_path) -> None:
@@ -938,7 +938,7 @@ def test_controller_build_staged_curation_review_handoff_can_filter_single_candi
 
     pipeline_controller = MagicMock()
     job_service = MagicMock()
-    job_service.enqueue_njrs = MagicMock(return_value=["job-queued-1"])
+    job_service.submit_njrs = MagicMock(return_value=["job-queued-1"])
     pipeline_controller._job_service = job_service
     pipeline_controller._config_manager = None
     ctrl = LearningController(
@@ -1049,7 +1049,7 @@ def test_controller_build_staged_curation_review_handoff_can_filter_single_candi
     assert handoff.source_candidate_ids == ["cand-2"]
     assert handoff.base_prompt == "prompt b"
     assert handoff.base_negative_prompt == "negative b"
-    assert job_service.enqueue_njrs.called is False
+    assert job_service.submit_njrs.called is False
 
 
 def test_controller_build_staged_curation_review_handoff_repairs_stale_absolute_output_route(tmp_path) -> None:
@@ -1058,7 +1058,7 @@ def test_controller_build_staged_curation_review_handoff_repairs_stale_absolute_
 
     pipeline_controller = MagicMock()
     job_service = MagicMock()
-    job_service.enqueue_njrs = MagicMock(return_value=["job-queued-1"])
+    job_service.submit_njrs = MagicMock(return_value=["job-queued-1"])
     pipeline_controller._job_service = job_service
     pipeline_controller._config_manager = None
     ctrl = LearningController(
@@ -1140,4 +1140,4 @@ def test_controller_build_staged_curation_review_handoff_repairs_stale_absolute_
 
     assert handoff is not None
     assert [str(path) for path in handoff.image_paths] == [str(actual_image.resolve())]
-    assert job_service.enqueue_njrs.called is False
+    assert job_service.submit_njrs.called is False

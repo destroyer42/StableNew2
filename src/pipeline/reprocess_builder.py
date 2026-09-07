@@ -35,7 +35,6 @@ from src.pipeline.job_models_v2 import (
     VideoWorkloadSpec,
     WorkloadKind,
 )
-from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, PipelineRunSource
 
 REPROCESS_SCHEMA_VERSION = "stablenew.reprocess.v2.6"
 IMAGE_EDIT_SCHEMA_VERSION = "stablenew.image_edit.v2.6"
@@ -1079,30 +1078,6 @@ class ReprocessJobBuilder:
                     )
                 )
         return ReprocessJobPlan(jobs=jobs, group_count=len(grouped))
-
-    def build_run_request(
-        self,
-        njrs: list[NormalizedJobRecord],
-        *,
-        source: str,
-        requested_job_label: str | None = None,
-    ) -> PipelineRunRequest:
-        if not njrs:
-            raise ValueError("At least one reprocess NJR is required")
-        output_dirs = {str(getattr(record, "path_output_dir", "") or "") for record in njrs}
-        shared_output_dir = next(iter(output_dirs)) if len(output_dirs) == 1 else None
-        prompt_pack_id = str(getattr(njrs[0], "prompt_pack_id", "") or f"reprocess_{source}")
-        return PipelineRunRequest(
-            prompt_pack_id=prompt_pack_id,
-            selected_row_ids=[str(source or "reprocess")],
-            config_snapshot_id=f"reprocess_{source}",
-            run_mode=PipelineRunMode.QUEUE,
-            source=PipelineRunSource.ADD_TO_QUEUE,
-            explicit_output_dir=shared_output_dir,
-            tags=["reprocess", str(source or "reprocess")],
-            requested_job_label=requested_job_label or "Reprocess",
-            max_njr_count=max(1, len(njrs)),
-        )
 
 
 def extract_reprocess_output_paths(record: Any, result: Any) -> list[str]:

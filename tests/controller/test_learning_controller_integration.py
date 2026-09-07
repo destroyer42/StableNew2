@@ -108,7 +108,7 @@ def test_learning_controller_handles_missing_execution_controller():
     # Create mock pipeline controller
     mock_pipeline_ctrl = MagicMock()
     mock_job_service = MagicMock()
-    mock_job_service.enqueue_njrs = MagicMock(return_value=["learning-job-1"])
+    mock_job_service.submit_njrs = MagicMock(return_value=["learning-job-1"])
     mock_job_service.register_callback = MagicMock()
     mock_pipeline_ctrl._job_service = mock_job_service
 
@@ -123,7 +123,7 @@ def test_learning_controller_handles_missing_execution_controller():
     controller.run_plan()
 
     assert controller.execution_controller is not None
-    assert mock_job_service.enqueue_njrs.called
+    assert mock_job_service.submit_njrs.called
 
 
 def test_learning_execution_controller_can_run_plan():

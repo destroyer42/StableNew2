@@ -189,9 +189,11 @@ def test_queue_jobs_have_normalized_record_b2(tmp_path: Path) -> None:
         tmp_history=tmp_path / "job_history.json",
     )
 
-    # Create NJR and convert to queue job via pipeline_controller
+    # Submit the compiled NJR through the application boundary.
     njr = _make_dummy_record()
-    queue_job = controller.pipeline_controller._to_queue_job(njr)
+    controller.job_service.submit_njrs([njr])
+    queue_job = controller.job_service.job_queue.get_job(njr.job_id)
+    assert queue_job is not None
 
     # PR-CORE1-B2: Queue jobs created from NJR must have _normalized_record attached
     assert hasattr(queue_job, "_normalized_record")
@@ -214,7 +216,7 @@ def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None
     start_event = threading.Event()
     release_event = threading.Event()
     njr = _make_dummy_record()
-    queue_job = controller.pipeline_controller._to_queue_job(njr)
+    queue_job_id = njr.job_id
 
     class ControlledAsyncRunner:
         def __init__(self, job_queue, target_job_id: str) -> None:
@@ -266,14 +268,14 @@ def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None
         def current_job(self) -> Job | None:
             return self._current_job
 
-    runner = ControlledAsyncRunner(controller.job_service.job_queue, queue_job.job_id)
+    runner = ControlledAsyncRunner(controller.job_service.job_queue, queue_job_id)
     controller.pipeline_controller.replace_queue_runner(runner)
     assert controller.job_service.runner is runner
     assert controller.pipeline_controller.get_job_execution_controller().get_runner() is runner
     controller.job_service.auto_run_enabled = True  # Enable auto-run for this test
 
     start = time.monotonic()
-    controller.job_service.submit_queued(queue_job)
+    controller.job_service.submit_njrs([njr])
     duration = time.monotonic() - start
     assert duration < 0.2
 

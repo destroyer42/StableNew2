@@ -1,59 +1,51 @@
 from __future__ import annotations
 
+from unittest.mock import Mock
+
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.queue.job_model import Job
+from tests.helpers.job_helpers import make_test_njr
 
 
 class DummyJobService(JobService):  # type: ignore[misc]
     def __init__(self) -> None:
-        self.submitted: list[Job] = []
+        self.submitted: list[NormalizedJobRecord] = []
 
-    def submit_job_with_run_mode(self, job: Job) -> None:
-        self.submitted.append(job)
+    def submit_njrs(self, records, policy=None):
+        self.submitted.extend(records)
+        return [record.job_id for record in records]
 
 
 class DummyPipelineController(PipelineController):
     def __init__(self) -> None:
-        # Avoid calling PipelineController.__init__ by bypassing initializer
         pass
 
 
-def test_submit_preview_jobs_to_queue_submits_jobs():
+def _controller() -> DummyPipelineController:
     controller = object.__new__(DummyPipelineController)
     controller._job_service = DummyJobService()
+    controller._last_run_config = None
+    controller._app_controller = None
+    controller.can_enqueue_learning_jobs = lambda _count: (True, "")
+    controller._is_queue_submission_blocked = lambda: False
+    controller._sort_jobs_by_model = lambda rows: rows
+    return controller
 
-    record = NormalizedJobRecord(
-        job_id="job-1",
-        config={"model": "md", "prompt": "p", "seed": 42},
-        path_output_dir="out",
-        filename_template="{seed}",
-        seed=42,
-    )
+
+def test_submit_preview_jobs_to_queue_submits_njrs() -> None:
+    controller = _controller()
+    record = make_test_njr(job_id="job-1", prompt_source="manual", prompt_pack_id="")
     controller.get_preview_jobs = lambda: [record]  # type: ignore[assignment]
-    controller._to_queue_job = lambda rec, **kwargs: Job(
-        job_id=rec.job_id,
-        run_mode=kwargs["run_mode"],
-        source=kwargs["source"],
-        prompt_source=kwargs["prompt_source"],
-        prompt_pack_id=kwargs.get("prompt_pack_id"),
-        config_snapshot=rec.to_queue_snapshot(),
-    )
-    controller._run_job = lambda job: {}  # type: ignore[assignment]
 
     submitted = controller.submit_preview_jobs_to_queue()
 
     assert submitted == 1
-    assert len(controller._job_service.submitted) == 1
-    job = controller._job_service.submitted[0]
-    assert job.run_mode == "queue"
-    assert job.source == "gui"
+    assert controller._job_service.submitted == [record]
 
 
-def test_submit_preview_jobs_to_queue_returns_zero_when_no_jobs():
-    controller = object.__new__(DummyPipelineController)
-    controller._job_service = DummyJobService()
+def test_submit_preview_jobs_to_queue_returns_zero_when_no_jobs() -> None:
+    controller = _controller()
     controller.get_preview_jobs = lambda: []
 
     submitted = controller.submit_preview_jobs_to_queue()
@@ -62,7 +54,7 @@ def test_submit_preview_jobs_to_queue_returns_zero_when_no_jobs():
     assert not controller._job_service.submitted
 
 
-def test_enqueue_draft_jobs_reuses_cached_preview_jobs():
+def test_enqueue_draft_jobs_reuses_cached_preview_jobs() -> None:
     class DummyAppState:
         def __init__(self) -> None:
             self.preview_jobs: list[NormalizedJobRecord] = []
@@ -76,17 +68,11 @@ def test_enqueue_draft_jobs_reuses_cached_preview_jobs():
             self.preview_updates.append(list(jobs))
             self.preview_jobs = list(jobs)
 
-    controller = object.__new__(DummyPipelineController)
+    controller = _controller()
     controller._app_state = DummyAppState()
-    record = NormalizedJobRecord(
-        job_id="job-cached",
-        config={"model": "md", "prompt": "p", "seed": 42},
-        path_output_dir="out",
-        filename_template="{seed}",
-        seed=42,
-    )
+    record = make_test_njr(job_id="job-cached", prompt_source="manual", prompt_pack_id="")
     controller._app_state.preview_jobs = [record]
-    controller.submit_preview_jobs_to_queue = lambda **kwargs: 1
+    controller.submit_preview_jobs_to_queue = Mock(return_value=1)
     controller.get_preview_jobs = lambda: (_ for _ in ()).throw(AssertionError("should not rebuild preview"))
 
     submitted = controller.enqueue_draft_jobs(run_config={"run_mode": "queue"})

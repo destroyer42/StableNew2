@@ -6,7 +6,7 @@ from typing import Any
 
 from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
 from src.controller.ports.runtime_ports import WorkflowRegistryPort
-from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, PipelineRunSource
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import (
     OUTPUT_ROUTE_MOVIE_CLIPS,
@@ -383,17 +383,7 @@ class VideoWorkflowController:
         if job_service is None:
             raise RuntimeError("App controller is missing job_service")
 
-        request = PipelineRunRequest(
-            prompt_pack_id="video_workflow",
-            selected_row_ids=[workflow_id],
-            config_snapshot_id=workflow_id,
-            run_mode=PipelineRunMode.QUEUE,
-            source=PipelineRunSource.ADD_TO_QUEUE,
-            requested_job_label=f"Video Workflow: {spec.display_name}",
-            explicit_output_dir=str(output_dir),
-            tags=["video_workflow", workflow_id],
-        )
-        job_ids = job_service.enqueue_njrs([njr], request)
+        job_ids = job_service.submit_njrs([njr], SubmissionPolicy())
         if not job_ids:
             raise RuntimeError("Failed to enqueue video workflow job")
         return job_ids[0]

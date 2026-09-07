@@ -12,6 +12,7 @@ from src.controller.pipeline_controller import PipelineController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job, JobPriority
 from src.services.queue_store_v2 import QueueSnapshotV1
+from tests.helpers.job_helpers import make_test_njr
 
 
 def _make_normalized_record(job_id: str) -> NormalizedJobRecord:
@@ -157,40 +158,27 @@ class TestQueuePersistenceIntegrity:
 class TestQueueSubmissionLimits:
     def test_submit_large_batch_of_jobs(self) -> None:
         controller = object.__new__(PipelineController)
-        submitted_jobs: list[Job] = []
+        submitted_records = []
+
+        def submit_njrs(records, _policy):
+            submitted_records.extend(records)
+            return [record.job_id for record in records]
+
         controller._job_service = SimpleNamespace(
-            submit_job_with_run_mode=lambda job, emit_queue_updated=False: submitted_jobs.append(job),
-            _emit_queue_updated=lambda: None,
-            job_queue=None,
+            submit_njrs=submit_njrs,
         )
         controller._last_run_config = None
         controller._sort_jobs_by_model = MethodType(lambda self, records: list(records), controller)
-        controller._ensure_record_prompt_pack_metadata = MethodType(
-            lambda self, record, prompt_pack_id, prompt_pack_name: None,
-            controller,
-        )
-        controller._log_add_to_queue_event = MethodType(lambda self, job_id: None, controller)
-        controller._run_job = MethodType(lambda self, job: {}, controller)
-        controller._to_queue_job = MethodType(
-            lambda self, record, **kwargs: Job(
-                job_id=record.job_id,
-                priority=JobPriority.NORMAL,
-                run_mode=kwargs["run_mode"],
-                source=kwargs["source"],
-                prompt_source=kwargs["prompt_source"],
-                prompt_pack_id=kwargs.get("prompt_pack_id"),
-                config_snapshot=record.to_queue_snapshot(),
-            ),
-            controller,
-        )
+        controller._is_queue_submission_blocked = lambda: False
+        controller.can_enqueue_learning_jobs = lambda _count: (True, "")
 
-        records = [_make_normalized_record(f"job-{index}") for index in range(20)]
+        records = [make_test_njr(job_id=f"job-{index}") for index in range(20)]
 
         submitted = controller.submit_preview_jobs_to_queue(records=records)
 
         assert submitted == 20
-        assert len(submitted_jobs) == 20
-        assert [job.job_id for job in submitted_jobs] == [f"job-{index}" for index in range(20)]
+        assert len(submitted_records) == 20
+        assert [record.job_id for record in submitted_records] == [f"job-{index}" for index in range(20)]
 
 
 class TestQueueSubmissionErrorHandling:

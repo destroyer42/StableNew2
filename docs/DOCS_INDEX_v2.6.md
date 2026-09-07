@@ -57,11 +57,10 @@ the affected runtime work proceeds.
 ### Tier 4 — Active approved PR specifications
 
 - `docs/PR_Backlog/PR-ARCH-MVP-001-v2.6-Canon-Amendment.md`
-- `docs/PR_Backlog/PR-MVP-030-Compilers-and-Submission.md`
 
 `PR-ARCH-MVP-001` is implemented and remains here until merge review/closeout.
-`PR-MVP-030` is owner-approved and is the only active runtime implementation
-spec after the completed NJR core.
+No runtime implementation spec is active after completed `PR-MVP-030`; the
+next specification to generate is `PR-MVP-040`.
 
 Completed recovery record:
 
@@ -69,11 +68,13 @@ Completed recovery record:
 - `docs/CompletedPR/PR-MVP-005-Post-Baseline-Delta-Disposition.md`
 - `docs/CompletedPR/PR-MVP-010-Test-Harness-Recovery.md`
 - `docs/CompletedPR/PR-MVP-020-NJR-Core.md`
+- `docs/CompletedPR/PR-MVP-030-Compilers-and-Submission.md`
 
-`PR-MVP-005`, `PR-MVP-010`, and `PR-MVP-020` are complete. The former authorizes no runtime
-adoption or bulk branch integration; each carry-forward requires the separately
-approved owner PR named in that record. The latter records the authoritative
-isolated test gates and non-increasing Ruff debt baseline.
+`PR-MVP-005`, `PR-MVP-010`, `PR-MVP-020`, and `PR-MVP-030` are complete. The
+former authorizes no runtime adoption or bulk branch integration; each
+carry-forward requires the separately approved owner PR named in that record.
+The latter records the authoritative isolated test gates, non-increasing Ruff
+debt baseline, immutable NJR core, and typed submission cutover.
 
 ## 2. Canonical reading order
 

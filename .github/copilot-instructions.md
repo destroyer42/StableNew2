@@ -1,7 +1,7 @@
 # StableNew v2.6 — Executor Brief
 
 Status: Canonical active machine-facing summary
-Updated: 2026-09-05
+Updated: 2026-09-07
 
 Read `AGENTS.md` before changing this repository. Then read the active canonical
 documents and the approved PR spec. This file summarizes; it does not override
@@ -12,14 +12,15 @@ them.
 `Typed Intent -> Compiler -> NJR -> JobService -> Queue/JobRepository -> PipelineRunner.run_njr -> Typed Handler -> Artifacts -> History/Learning/Diagnostics`
 
 - NJR is immutable authorized work, not mutable queue/history state.
-- The immutable eight-part NJR core is implemented; do not restore flat or
-  mutable construction. Compiler/submission cutover is the active core gap.
+- The immutable eight-part NJR core and typed compiler/submission cutover are
+  implemented; do not restore flat or mutable construction. The next active
+  runtime gap is durable SQLite repository authority (`PR-MVP-040`).
 - PromptPack identity is conditional on a PromptPack source.
 - Fresh work is queue-only; `Run Now` means immediate-start queue policy.
 - There is one public runner entry and one persistence boundary.
 - MVP execution is same-process; native SVD XT is the only MVP video backend.
 - Architecture target gaps are explicit in `docs/ARCHITECTURE_v2.6.md`; do not
-  mistake them for already-implemented behavior.
+  mistake repository durability or real-backend acceptance for completed work.
 
 ## Execution rules
 

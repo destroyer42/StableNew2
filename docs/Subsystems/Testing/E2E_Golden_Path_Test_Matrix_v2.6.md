@@ -51,8 +51,10 @@ All fresh journeys follow:
 PR-MVP-020 closes the reusable NJR-core portion of layer B: exact eight-field
 shape, recursive immutability, typed workload/source validation, complete
 round-trip serialization, conditional PromptPack identity, explicit legacy
-migration, and runner non-mutation are automated. Source-specific compiler and
-submission proof for GP-MVP-05/06 remains open under PR-MVP-030.
+migration, and runner non-mutation are automated. PR-MVP-030 closes the
+source-specific compiler and submission proof for GP-MVP-05/06: enabled sources
+submit complete NJRs through `JobService.submit_njrs` and Run Now remains
+queue-first. Repository durability and real-backend acceptance remain open.
 
 ## 3. Common invariants for every execution journey
 

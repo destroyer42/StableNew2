@@ -62,15 +62,15 @@ def test_execution_controller_extract_image_refs_deduplicates() -> None:
     assert refs == ["out/a.png", "out/b.png", "out/c.png"]
 
 
-def test_execution_controller_submits_learning_variant_via_enqueue_njrs() -> None:
+def test_execution_controller_submits_learning_variant_via_submit_njrs() -> None:
     submitted: list[tuple[list[NormalizedJobRecord], object]] = []
 
-    def _enqueue_njrs(records, request):
-        submitted.append((records, request))
+    def _submit_njrs(records, policy):
+        submitted.append((records, policy))
         return [record.job_id for record in records]
 
     job_service = SimpleNamespace(
-        enqueue_njrs=_enqueue_njrs,
+        submit_njrs=_submit_njrs,
         register_callback=lambda *_args, **_kwargs: None,
     )
     execution = LearningExecutionController(

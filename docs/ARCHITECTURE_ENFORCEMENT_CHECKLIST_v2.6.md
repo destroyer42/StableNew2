@@ -4,12 +4,15 @@ Status: Canonical, Binding
 Updated: 2026-09-07
 
 Use this checklist for every runtime or contract PR. A checked target item does
-not mean the current branch already implements it; consult the architecture gap
+not mean every later roadmap item is complete; consult the architecture gap
 register and active roadmap first.
 
 PR-MVP-020 evidence (2026-09-07): all section 3 NJR-core items are enforced by
-contract tests and an AST mutation guard. Section 2 source-compiler items and
-the first two section 4 submission-policy items remain assigned to PR-MVP-030.
+contract tests and an AST mutation guard. PR-MVP-030 evidence (2026-09-07):
+source compilers and the first two section 4 submission-policy items are now
+implemented and guarded by focused tests plus required smoke on Python 3.11 and
+3.12. SQLite repository ownership and PromptPack storage migration remain open
+for PR-MVP-040 and PR-MVP-050.
 
 ## 1. PR authority and truth
 
@@ -24,13 +27,13 @@ the first two section 4 submission-policy items remain assigned to PR-MVP-030.
 
 ## 2. Intent and compiler boundary
 
-- [ ] Does each source enter through a typed intent DTO/compiler?
-- [ ] Does every compiler emit NJR before submission?
-- [ ] Is PromptPack identity required only for `source.kind == "prompt_pack"`?
+- [x] Does each source enter through a typed intent DTO/compiler?
+- [x] Does every compiler emit NJR before submission?
+- [x] Is PromptPack identity required only for `source.kind == "prompt_pack"`?
 - [ ] Are source choices, defaults, randomization, matrices, and sweeps resolved
       before queue submission?
-- [ ] Are compilers free of queue, runner, GUI, and persistence side effects?
-- [ ] Is the pack-shaped `PipelineRunRequest` being reduced rather than extended
+- [x] Are compilers free of queue, runner, GUI, and persistence side effects?
+- [x] Is the pack-shaped `PipelineRunRequest` being reduced rather than extended
       as a universal request?
 
 ## 3. NJR contract
@@ -47,8 +50,8 @@ the first two section 4 submission-policy items remain assigned to PR-MVP-030.
 
 ## 4. Submission, queue, and repository
 
-- [ ] Does `JobService` accept NJR plus a small submission policy?
-- [ ] Does `Run Now` enqueue before execution and differ only by immediate-start
+- [x] Does `JobService` accept NJR plus a small submission policy?
+- [x] Does `Run Now` enqueue before execution and differ only by immediate-start
       policy?
 - [ ] Is queue lifecycle state owned by a mutable job execution record?
 - [ ] Does application code use one `JobRepository` boundary?

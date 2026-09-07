@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest, PipelineRunSource
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import OUTPUT_ROUTE_SVD
 from src.video.svd_capabilities import apply_recommended_svd_defaults, get_svd_postprocess_capabilities
@@ -118,17 +118,7 @@ class SVDController:
         if job_service is None:
             raise RuntimeError("App controller is missing job_service")
 
-        request = PipelineRunRequest(
-            prompt_pack_id="svd_native",
-            selected_row_ids=["svd_native"],
-            config_snapshot_id="svd_native",
-            run_mode=PipelineRunMode.QUEUE,
-            source=PipelineRunSource.ADD_TO_QUEUE,
-            requested_job_label="SVD Img2Vid",
-            explicit_output_dir=str(output_dir),
-            tags=["svd_native"],
-        )
-        job_ids = job_service.enqueue_njrs([njr], request)
+        job_ids = job_service.submit_njrs([njr], SubmissionPolicy())
         if not job_ids:
             raise RuntimeError("Failed to enqueue SVD job")
         return job_ids[0]

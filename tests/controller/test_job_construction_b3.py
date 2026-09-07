@@ -1,36 +1,12 @@
 from __future__ import annotations
 
-import pytest
-
-from src.controller.pipeline_controller import PipelineController
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from tests.helpers.job_helpers import make_test_njr
 
 
-def _make_test_record() -> NormalizedJobRecord:
-    return NormalizedJobRecord(
-        job_id="b3-test-job",
-        config={"prompt": "test", "model": "sdxl"},
-        path_output_dir="output",
-        filename_template="{seed}",
-        seed=12345,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=1000.0,
-    )
-
-
-def test_to_queue_job_requires_normalized_record() -> None:
-    controller = PipelineController()
-    with pytest.raises(ValueError, match="NormalizedJobRecord"):
-        controller._to_queue_job(None)  # type: ignore[arg-type]
-
-
-def test_to_queue_job_creates_njr_only_job() -> None:
-    controller = PipelineController()
-    record = _make_test_record()
-    job = controller._to_queue_job(record)
-    assert hasattr(job, "_normalized_record")
-    assert job._normalized_record is record
-    assert getattr(job, "pipeline_config", None) is None
+def test_source_compilers_return_njr_values_before_submission() -> None:
+    record = make_test_njr(prompt_source="manual", prompt_pack_id="")
+    assert isinstance(record, NormalizedJobRecord)
+    assert record.source.kind.value == "cli"
+    assert SubmissionPolicy().start_when_idle is False

@@ -233,11 +233,13 @@ tests. The collection runners reported 3,083 tests with two explicit
 optional-OpenCV skips and left repository contents unchanged.
 
 PR-MVP-020 validation on Python 3.11.16 added immutable NJR contract and
-mutation-enforcement coverage. Its focused set passed 69 tests, isolated
-collection reported 3,094 tests with the same two optional-OpenCV skips, and
-the required positive smoke increased to 75 passing tests. Formatting the
-touched legacy-heavy files reduced the raw Ruff debt from 2,208 to 1,866
-without changing the approved ceiling.
+mutation-enforcement coverage. PR-MVP-030 then migrated all enabled source
+families to typed compiler/NJR submission, added replay/training compiler
+coverage, and removed the superseded generic request path. Its focused set
+passed 31 tests; isolated collection reported 3,096 tests with the same two
+optional-OpenCV skips; the required positive smoke passed 75 tests on both
+Python 3.11 and 3.12; bounded mypy smoke passed; and the pinned Ruff debt fell
+to 1,860 findings without increasing the approved ceiling.
 
 ## 11. PR verification record
 

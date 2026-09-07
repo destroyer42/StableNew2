@@ -21,12 +21,12 @@ def _build_controller() -> AppController:
         controller = AppController.__new__(AppController)
     enqueue_calls: list[tuple[list[object], object]] = []
 
-    def _enqueue_njrs(njrs, request):
-        enqueue_calls.append((list(njrs), request))
+    def _submit_njrs(njrs, policy):
+        enqueue_calls.append((list(njrs), policy))
         return [record.job_id for record in njrs]
 
     controller.job_service = SimpleNamespace(
-        enqueue_njrs=Mock(side_effect=_enqueue_njrs),
+        submit_njrs=Mock(side_effect=_submit_njrs),
         _enqueue_calls=enqueue_calls,
     )
     controller._append_log = Mock()

@@ -105,11 +105,11 @@ Pack identity is required only for NJRs whose source kind is `prompt_pack`.
 
 ## 8. Implementation status
 
-`PR-MVP-020` removed universal pack identity from NJR and JobService: a
-PromptPack NJR now carries a typed `prompt_pack` source with required identity,
-while CLI, reprocess, replay, learning, video, and training sources do not forge
-one. Complete PromptPack compiler/submission separation remains with
-`PR-MVP-030`.
+`PR-MVP-020` removed universal pack identity from NJR and JobService. PR-MVP-030
+completed the application cutover: PromptPack compilation remains source-specific,
+and `JobService.submit_njrs(records, policy)` receives complete NJRs from every
+enabled source family. A `prompt_pack` source requires its typed identity;
+non-pack sources never acquire a fabricated PromptPack ID.
 
 The repository still carries paired-file storage assumptions. `PR-MVP-050`
 performs the atomic one-file JSON storage/loader/test migration; no claim in

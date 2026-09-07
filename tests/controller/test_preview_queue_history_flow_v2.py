@@ -36,8 +36,7 @@ class MockPipelineState:
 def mock_job_service():
     service = Mock(spec=JobService)
     service._status_callbacks = {}
-    service.enqueue_njrs = Mock(return_value=["njr-job-1"])
-    service.submit_job_with_run_mode = Mock()
+    service.submit_njrs = Mock(return_value=["njr-job-1"])
 
     def set_callback(name: str, callback: callable):
         service._status_callbacks[name] = callback

@@ -16,32 +16,29 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, replace
 from typing import Any
 
-from src.contracts import PackJobEntry, PreviewRequest, SubmissionRequest
+from src.config.app_config import is_queue_execution_enabled
+from src.contracts import PackJobEntry, PreviewRequest
 from src.controller.core_pipeline_controller import CorePipelineController
 from src.controller.job_execution_controller import JobExecutionController
+from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service import JobService
+from src.controller.pipeline_controller_services.history_handoff_service import (
+    HistoryHandoffService,
+)
 from src.controller.pipeline_controller_services.queue_submission_service import (
     QueueSubmissionService,
 )
 from src.controller.ports.default_runtime_ports import DefaultImageRuntimePorts
 from src.controller.ports.runtime_ports import ImageRuntimePorts
 from src.controller.runtime_state import GUIState, PipelineState
-from src.learning.learning_record import LearningRecord, LearningRecordWriter
-from src.pipeline.pipeline_runner import PipelineRunResult
-from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
-from src.queue.job_model import Job, JobPriority, JobStatus
-from src.config.app_config import is_queue_execution_enabled
-from src.controller.job_history_service import JobHistoryService
-from src.controller.pipeline_controller_services.history_handoff_service import (
-    HistoryHandoffService,
-)
-from src.controller.pipeline_submission_service import PipelinePreviewSubmissionService
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.webui_connection_controller import (
     WebUIConnectionController,
     WebUIConnectionState,
 )
 from src.history.history_record import HistoryRecord
+from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.model_defaults_resolver import (
     GuiDefaultsResolver,
     ModelDefaultsContext,
@@ -54,10 +51,11 @@ from src.pipeline.job_models_v2 import (
     OutputSettings,
     UnifiedJobSummary,
 )
-
+from src.pipeline.pipeline_runner import PipelineRunResult
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
-from src.pipeline.run_plan import RunPlan
+from src.pipeline.stage_sequencer import StageExecutionPlan, build_stage_execution_plan
 from src.queue.job_history_store import JobHistoryEntry
+from src.queue.job_model import Job, JobPriority, JobStatus
 from src.utils import LogContext, StructuredLogger, log_with_ctx
 from src.utils.config import ConfigManager
 from src.utils.error_envelope_v2 import (
@@ -428,33 +426,6 @@ class PipelineController(CorePipelineController):
         """Return normalized jobs derived from the current GUI state for preview panels."""
         return self.get_preview_jobs_for_request(self.build_preview_request())
 
-    def _to_queue_job(
-        self,
-        record: NormalizedJobRecord,
-        *,
-        run_mode: str = "queue",
-        source: str = "gui",
-        prompt_source: str = "manual",
-        prompt_pack_id: str | None = None,
-        run_config: dict[str, Any] | None = None,
-    ) -> Job:
-        """Convert a NormalizedJobRecord into the Job model used by JobService.
-
-        This adapter preserves all metadata from the normalized record
-        while producing a Job compatible with the existing queue system.
-
-        PR-CORE1-B3: NJR-backed jobs MUST NOT carry pipeline_config. The field may
-        exist for legacy records, but new v2.6 jobs rely solely on NJR snapshots.
-        """
-        return self._get_preview_submission_service().to_queue_job(
-            record,
-            run_mode=run_mode,
-            source=source,
-            prompt_source=prompt_source,
-            prompt_pack_id=prompt_pack_id,
-            last_run_config=run_config or self._last_run_config,
-        )
-
     def start_pipeline_v2(
         self,
         *,
@@ -520,47 +491,34 @@ class PipelineController(CorePipelineController):
                 on_error(exc)
             return False
 
-        effective_prompt_pack_id = prompt_pack_id
-        if not effective_prompt_pack_id:
-            last_run_config = getattr(self, "_last_run_config", None) or {}
-            effective_prompt_pack_id = last_run_config.get("prompt_pack_id")
-
         if not normalized_jobs:
             _logger.warning("No preview jobs available to submit")
             return False
 
-        submission = self._get_preview_submission_service().submit_preview_jobs(
-            normalized_jobs,
-            run_mode=run_mode,
-            source=source,
-            prompt_source=prompt_source,
-            prompt_pack_id=effective_prompt_pack_id,
-            last_run_config=getattr(self, "_last_run_config", None),
-            on_error=on_error,
-        )
-        if submission is None:
+        try:
+            submitted_jobs = self.submit_preview_jobs_to_queue(
+                records=normalized_jobs,
+                source=source,
+                prompt_source=prompt_source,
+            )
+        except Exception as exc:
+            if on_error:
+                on_error(exc)
             return False
 
         self._safe_gui_transition(GUIState.RUNNING)
         _logger.info(
             "Submitted %d preview job(s) via canonical controller path",
-            submission.submitted_jobs,
+            submitted_jobs,
         )
         if on_complete:
             on_complete(
                 {
-                    "submitted_jobs": submission.submitted_jobs,
-                    "run_mode": submission.run_mode,
+                    "submitted_jobs": submitted_jobs,
+                    "run_mode": run_mode,
                 }
             )
         return True
-
-    def _get_preview_submission_service(self) -> PipelinePreviewSubmissionService:
-        return PipelinePreviewSubmissionService(
-            job_service=self._job_service,
-            run_job_callback=self._run_job,
-            learning_enabled=self._learning_enabled,
-        )
 
     def _get_history_handoff_service(self) -> HistoryHandoffService:
         return HistoryHandoffService()
@@ -1202,14 +1160,14 @@ class PipelineController(CorePipelineController):
             else:
                 _logger.debug(f"Job {job.job_id} missing NJR, cannot display in GUI")
                 summaries.append(job.job_id)
-        
+
         _logger.debug(f"_refresh_app_state_queue: Setting {len(queue_jobs)} jobs")
         self._app_state.set_queue_items(summaries)
         setter = getattr(self._app_state, "set_queue_jobs", None)
         if callable(setter):
             try:
                 setter(queue_jobs)
-                _logger.debug(f"_refresh_app_state_queue: set_queue_jobs called successfully")
+                _logger.debug("_refresh_app_state_queue: set_queue_jobs called successfully")
             except Exception as exc:
                 _logger.error(f"_refresh_app_state_queue: set_queue_jobs failed: {exc}", exc_info=True)
 
@@ -1498,33 +1456,6 @@ class PipelineController(CorePipelineController):
         if not self._app_state_preview_updates_managed_externally:
             self.refresh_preview_from_state()
 
-    def submit_run_plan(
-        self,
-        run_plan: RunPlan,
-        pipeline_state: PipelineState,
-        app_state: Any,
-    ) -> None:
-        """Submit jobs from a RunPlan to the executor."""
-        if not run_plan.jobs:
-            self._log("RunPlan has no jobs to submit", "WARNING")
-            return
-
-        for planned_job in run_plan.jobs:
-            # Create Job
-            from src.queue.job_model import Job, JobPriority
-
-            run_mode = self._normalize_run_mode(pipeline_state)
-            job = Job(
-                job_id=str(uuid.uuid4()),
-                priority=JobPriority.NORMAL,
-                lora_settings=planned_job.lora_settings,
-                randomizer_metadata=planned_job.randomizer_metadata,
-                run_mode=run_mode,
-            )
-            job.payload = lambda job=job: self._run_job(job)
-
-            self._job_service.submit_job_with_run_mode(job)
-
     def _run_job(self, job: Job) -> dict[str, Any]:
         """Run a single job using NJR-only execution (PR-CORE1-B1/C2).
 
@@ -1619,29 +1550,23 @@ class PipelineController(CorePipelineController):
         run_config: dict[str, Any] | None = None,
     ) -> int:
         """Submit preview jobs as queue jobs using NormalizedJobRecord data.
-        
+
         Args:
             records: Optional pre-fetched records to submit. If None, calls get_preview_jobs().
             source: Source identifier for job tracking.
             prompt_source: Prompt source type ("pack", "manual", etc).
             run_config: Optional runtime configuration overrides.
-            
+
         Returns:
             Number of jobs successfully submitted to queue.
         """
-        request = SubmissionRequest(
-            records=tuple(records or ()),
-            source=source,
-            prompt_source=prompt_source,
-            run_config=run_config,
-        )
-        normalized_jobs = list(request.records) if request.records else self.get_preview_jobs()
+        normalized_jobs = list(records or ()) if records else self.get_preview_jobs()
         if not normalized_jobs:
             return 0
         queueable, non_queueable = self._split_queueable_records(normalized_jobs)
 
-        if request.run_config is not None:
-            self._last_run_config = request.run_config
+        if run_config is not None:
+            self._last_run_config = dict(run_config)
 
         if not queueable:
             message = (
@@ -1662,9 +1587,10 @@ class PipelineController(CorePipelineController):
 
         submitted = self._submit_normalized_jobs(
             queueable,
-            run_config=request.run_config,
-            source=request.source,
-            prompt_source=request.prompt_source,
+            run_config=run_config,
+            source=source,
+            prompt_source=prompt_source,
+            policy=SubmissionPolicy(start_when_idle=source in {"run_now", "run_now_button"}),
         )
         return submitted
 
@@ -1673,18 +1599,6 @@ class PipelineController(CorePipelineController):
         records: list[NormalizedJobRecord],
     ) -> tuple[list[NormalizedJobRecord], list[NormalizedJobRecord]]:
         return self._get_queue_submission_service().split_queueable_records(records)
-
-    def _ensure_record_prompt_pack_metadata(
-        self,
-        record: NormalizedJobRecord,
-        prompt_pack_id: str | None,
-        prompt_pack_name: str | None,
-    ) -> None:
-        self._get_queue_submission_service().ensure_record_prompt_pack_metadata(
-            record,
-            prompt_pack_id,
-            prompt_pack_name,
-        )
 
     def _sort_jobs_by_model(self, records: list[NormalizedJobRecord]) -> list[NormalizedJobRecord]:
         """Sort jobs by model+VAE to minimize expensive WebUI state switches."""
@@ -1712,6 +1626,7 @@ class PipelineController(CorePipelineController):
         run_config: dict[str, Any] | None = None,
         source: str = "gui",
         prompt_source: str = "pack",
+        policy: SubmissionPolicy | None = None,
     ) -> int:
         _logger.info(
             "[PipelineController] _submit_normalized_jobs called with %d NormalizedJobRecord(s)",
@@ -1719,17 +1634,10 @@ class PipelineController(CorePipelineController):
         )
         submitted = self._get_queue_submission_service().submit_normalized_jobs(
             records,
-            run_config=run_config,
-            source=source,
-            prompt_source=prompt_source,
-            last_run_config=getattr(self, "_last_run_config", None),
+            policy=policy or SubmissionPolicy(start_when_idle=source in {"run_now", "run_now_button"}),
             can_enqueue_learning_jobs=self.can_enqueue_learning_jobs,
             is_queue_submission_blocked=self._is_queue_submission_blocked,
             sort_jobs_by_model=self._sort_jobs_by_model,
-            ensure_record_prompt_pack_metadata=self._ensure_record_prompt_pack_metadata,
-            to_queue_job=self._to_queue_job,
-            log_add_to_queue_event=self._log_add_to_queue_event,
-            run_job_payload_factory=lambda job: (lambda j=job: self._run_job(j)),
         )
         _logger.info("[PipelineController] Successfully submitted %d jobs to queue", submitted)
         return submitted

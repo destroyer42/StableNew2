@@ -110,7 +110,7 @@ class TestLearningControllerNJR:
         
         # Mock job service
         job_service = Mock()
-        job_service.enqueue_njrs = Mock(return_value=["learning-job-1"])
+        job_service.submit_njrs = Mock(return_value=["learning-job-1"])
         job_service.register_callback = Mock()
         pipeline_controller._job_service = job_service
         return pipeline_controller
@@ -224,7 +224,7 @@ class TestLearningControllerNJR:
         assert record.learning_context.variant_index == 1
 
     def test_submit_variant_job_uses_job_service(self, controller, learning_state, mock_pipeline_controller):
-        """Test 3: Job submission uses canonical enqueue_njrs path."""
+        """Test 3: Job submission uses canonical NJR submission path."""
         variant = LearningVariant(param_value=7.0, planned_images=1)
         learning_state.plan.append(variant)
         
@@ -233,8 +233,8 @@ class TestLearningControllerNJR:
         
         # Verify JobService was called
         job_service = mock_pipeline_controller._job_service
-        assert job_service.enqueue_njrs.called
-        submitted_records, run_request = job_service.enqueue_njrs.call_args[0]
+        assert job_service.submit_njrs.called
+        submitted_records, policy = job_service.submit_njrs.call_args[0]
         assert len(submitted_records) == 1
         record = submitted_records[0]
         assert isinstance(record, NormalizedJobRecord)
@@ -242,8 +242,7 @@ class TestLearningControllerNJR:
         # Verify config propagation
         assert record.base_model == "test_model.safetensors"
         assert record.vae == "test_vae.safetensors"
-        assert run_request.prompt_pack_id == record.prompt_pack_id
-        assert "learning" in run_request.tags
+        assert policy.start_when_idle is False
         
         # Verify variant status updated
         assert variant.status == "queued"
@@ -257,7 +256,7 @@ class TestLearningControllerNJR:
         controller._submit_variant_job(variant)
         
         job_service = mock_pipeline_controller._job_service
-        submitted_records, _run_request = job_service.enqueue_njrs.call_args[0]
+        submitted_records, _policy = job_service.submit_njrs.call_args[0]
         record = submitted_records[0]
         
         # Verify complete config chain

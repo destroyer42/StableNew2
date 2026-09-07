@@ -100,13 +100,13 @@ runtime errors are not compiler output and are not NJR fields.
 
 ## 7. Migration boundary
 
-The existing `PipelineRunRequest` is pack-shaped and may be used only by the
-legacy PromptPack intake while `PR-MVP-030` migrates callers. It may not be
-extended into a union of every intent type. The migration order is:
+The former `PipelineRunRequest` was pack-shaped and was removed by
+`PR-MVP-030`; it must not be reintroduced or extended into a union of every
+intent type. The completed migration order was:
 
 1. land the reduced NJR contract and validators;
 2. add typed compiler/application interfaces;
-3. migrate one source family at a time;
+3. migrate each enabled source family to a typed compiler and NJR boundary;
 4. remove obsolete pack-shaped generic branches in the same sequence;
 5. enforce import and architecture guards.
 
@@ -144,6 +144,10 @@ workloads, complete canonical serialization, conditional PromptPack identity,
 and an explicit one-way legacy reader. Current builders emit that core and the
 runner returns artifacts without writing them back into NJR.
 
-The remaining gap is the compiler/application boundary: callers still use the
-pack-shaped `PipelineRunRequest` and callback-heavy submission adapter.
-`PR-MVP-030` owns that atomic cutover and deletion of superseded generic paths.
+`PR-MVP-030` closed the compiler/application boundary on 2026-09-07. Source
+families now reach `JobService.submit_njrs(records, SubmissionPolicy)` with
+complete NJRs; replay and training have explicit compiler DTOs, and the
+pack-shaped `PipelineRunRequest`, generic builder branch, and callback-heavy
+preview submission adapter are deleted. Queue/runner/persistence side effects
+remain outside compilers. Durable repository authority is the next gap under
+`PR-MVP-040`.

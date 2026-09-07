@@ -111,8 +111,8 @@ def test_video_workflow_controller_accepts_registry_port(tmp_path: Path) -> None
         def __init__(self) -> None:
             self.calls = []
 
-        def enqueue_njrs(self, njrs, request):
-            self.calls.append((list(njrs), request))
+        def submit_njrs(self, njrs, policy):
+            self.calls.append((list(njrs), policy))
             return ["job-video-queued"]
 
     job_service = _JobServiceStub()

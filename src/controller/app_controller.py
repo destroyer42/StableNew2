@@ -63,12 +63,8 @@ from src.pipeline.config_contract_v26 import (
     validate_svd_native_execution_config,
     validate_train_lora_execution_config,
 )
-from src.pipeline.job_builder_v2 import JobBuilderV2
-from src.pipeline.job_requests_v2 import (
-    PipelineRunMode,
-    PipelineRunRequest,
-    PipelineRunSource,
-)
+from src.controller.submission_policy_v26 import SubmissionPolicy
+from src.pipeline.training_njr_compiler import TrainingIntent, compile_training_intent
 from src.pipeline.reprocess_builder import (
     ImageEditSpec,
     ReprocessEffectiveSettingsPreview,
@@ -1558,7 +1554,7 @@ class AppController:
                     self._append_log("[controller] Run submission already in progress; ignoring duplicate request.")
                     return False
                 run_config = self._build_run_config(mode, source)
-                prepared = prepare(run_config=run_config, source="gui")
+                prepared = prepare(run_config=run_config, source=source.value)
                 if prepared is None:
                     return False
                 self._last_run_config = dict(prepared.run_config or {})
@@ -2479,13 +2475,7 @@ class AppController:
             raise RuntimeError("Job service not available")
         if not njrs:
             return 0
-        builder = ReprocessJobBuilder()
-        request = builder.build_run_request(
-            njrs,
-            source=source,
-            requested_job_label="Photo Optimize" if source == "photo_optimize_tab" else "Reprocess",
-        )
-        job_ids = self.job_service.enqueue_njrs(njrs, request)
+        job_ids = self.job_service.submit_njrs(njrs, SubmissionPolicy())
         return len(job_ids)
     
     def _build_reprocess_config(self, stages: list[str]) -> dict[str, Any]:
@@ -7217,8 +7207,6 @@ class AppController:
         character_key = "".join(
             ch.lower() if ch.isalnum() else "-" for ch in character_name
         ).strip("-") or "character"
-        prompt_text = f"Train LoRA for {character_name}"
-        prompt_pack_id = f"character-training:{character_key}"
         execution_config = {
             "train_lora": dict(train_lora_config),
             "pipeline": {
@@ -7229,32 +7217,15 @@ class AppController:
                 "character_name": character_name,
             },
         }
-        entry = PackJobEntry(
-            pack_id=prompt_pack_id,
-            pack_name=f"Character Training: {character_name}",
-            config_snapshot=execution_config,
-            prompt_text=prompt_text,
-            negative_prompt_text="",
-            stage_flags={"train_lora": True},
-            pack_row_index=0,
+        njr = compile_training_intent(
+            TrainingIntent(
+                config=execution_config,
+                character_name=character_name,
+                character_key=character_key,
+                output_dir=str(train_lora_config.get("output_dir") or "output"),
+            )
         )
-        request = PipelineRunRequest(
-            prompt_pack_id=prompt_pack_id,
-            selected_row_ids=[character_key],
-            config_snapshot_id=f"train-lora-{uuid.uuid4().hex}",
-            run_mode=PipelineRunMode.QUEUE,
-            source=PipelineRunSource.ADD_TO_QUEUE,
-            explicit_output_dir=str(train_lora_config.get("output_dir") or "output"),
-            tags=["train_lora", "character_training", character_key],
-            requested_job_label="Character Training",
-            max_njr_count=1,
-            pack_entries=[entry],
-        )
-        builder = JobBuilderV2()
-        njrs = builder.build_from_run_request(request)
-        if not njrs:
-            raise RuntimeError("Character training request did not produce an NJR.")
-        job_ids = self.job_service.enqueue_njrs(njrs, request)
+        job_ids = self.job_service.submit_njrs([njr], SubmissionPolicy())
         if not job_ids:
             raise RuntimeError("Character training job was not enqueued.")
         job_id = job_ids[0]

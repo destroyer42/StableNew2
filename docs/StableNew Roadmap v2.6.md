@@ -117,7 +117,7 @@ rewrite the existing branches.
 | 2 | `PR-MVP-005` | **Completed** | 115 later changed-file occurrences classified into 17 binding dispositions without runtime adoption |
 | 3 | `PR-MVP-010` | **Completed** | Trustworthy isolated test gates plus a pinned non-increasing lint baseline |
 | 4 | `PR-MVP-020` | **Completed** | Reduced immutable NJR and complete versioned serialization |
-| 5 | `PR-MVP-030` | **Approved; implementation in progress** | Typed compilers and NJR-only JobService submission contract |
+| 5 | `PR-MVP-030` | **Completed 2026-09-07** | Typed compilers and NJR-only JobService submission contract |
 | 6 | `PR-MVP-040` | Planned | SQLite JobRepository with verified offline legacy import |
 | 7 | `PR-MVP-050` | Planned | One-file JSON PromptPack and conflict-safe migration |
 | 8 | `PR-MVP-060` | Planned | Reliable image create/queue/run/artifact/history/replay slice |
@@ -127,8 +127,12 @@ rewrite the existing branches.
 
 `PR-ARCH-MVP-001` and `PR-MVP-000` were owner-approved and have been
 implemented. `PR-MVP-005`, `PR-MVP-010`, and `PR-MVP-020` are complete.
-`PR-MVP-030` is owner-approved under its exact allowlist and is the active
-implementation. Later rows require their own exact specs and owner approval.
+`PR-MVP-030` is complete. Its implementation migrated enabled source families
+to NJR-only submission, removed the superseded generic request/preview adapter,
+and passed the focused suite, 3,096-test collection, 75-test required smoke on
+Python 3.11 and 3.12, bounded mypy smoke, repository completeness after staging,
+and the pinned Ruff gate (1,860 findings, down from the 2,208 baseline). Later
+rows require their own exact specs and owner approval.
 
 ## 6. Phase details
 
@@ -255,8 +259,8 @@ Create source-specific DTO/compiler seams and change `JobService` to accept NJR
 plus submission policy. Migrate source families in explicit slices and remove
 the pack-shaped generic request when its last caller is gone.
 
-Exit gate: every enabled MVP source reaches the queue as NJR, and no compiler or
-GUI path invokes the runner.
+Exit gate met: every enabled source reaches the queue as NJR, no compiler or GUI
+path invokes the runner, and the old pack-shaped request path is gone.
 
 ### Phase 3 — Establish one durable state authority
 
@@ -400,7 +404,7 @@ and broad UI redesign do not block MVP.
 
 ## 10. Next action
 
-Execute the approved `PR-MVP-030` specification against the verified immutable
-NJR core. It must migrate source callers atomically, remove superseded
-pack-shaped submission behavior, leave touched files clean, and adopt no
-unrelated later-branch change.
+Generate and approve the exact `PR-MVP-040` specification. Implement the
+SQLite `JobRepository` and backup-first offline legacy importer before adding
+the one-file PromptPack migration or claiming restart/replay durability. Keep
+the repository cutover atomic: no live dual-read, dual-write, or fallback.
