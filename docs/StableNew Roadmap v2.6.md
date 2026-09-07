@@ -116,7 +116,7 @@ rewrite the existing branches.
 | 1 | `PR-MVP-000` | **Completed** | Recoverable clean baseline with all production source tracked and independently verified |
 | 2 | `PR-MVP-005` | **Completed** | 115 later changed-file occurrences classified into 17 binding dispositions without runtime adoption |
 | 3 | `PR-MVP-010` | **Completed** | Trustworthy isolated test gates plus a pinned non-increasing lint baseline |
-| 4 | `PR-MVP-020` | Planned | Reduced immutable NJR and complete versioned serialization |
+| 4 | `PR-MVP-020` | **In progress; owner-approved** | Reduced immutable NJR and complete versioned serialization |
 | 5 | `PR-MVP-030` | Planned | Typed compilers and NJR-only JobService submission contract |
 | 6 | `PR-MVP-040` | Planned | SQLite JobRepository with verified offline legacy import |
 | 7 | `PR-MVP-050` | Planned | One-file JSON PromptPack and conflict-safe migration |
@@ -391,8 +391,8 @@ and broad UI redesign do not block MVP.
 
 ## 10. Next action
 
-Generate and execute `PR-MVP-020` followed by `PR-MVP-030`. Each must use
-its own approved exact
+Execute approved `PR-MVP-020`, then generate and execute `PR-MVP-030`. Each
+must use its own approved exact
 allowlist, remove lint findings from touched files, and leave no partial
 migration. Adopt no later runtime change outside the separately approved owner
 PR named in the completed disposition record.

@@ -57,10 +57,11 @@ the affected runtime work proceeds.
 ### Tier 4 — Active approved PR specifications
 
 - `docs/PR_Backlog/PR-ARCH-MVP-001-v2.6-Canon-Amendment.md`
+- `docs/PR_Backlog/PR-MVP-020-NJR-Core.md`
 
 `PR-ARCH-MVP-001` is implemented and remains here until merge review/closeout.
-Later PR IDs in the roadmap are planned placeholders until exact specs are
-written and approved.
+`PR-MVP-020` is owner-approved and in progress. Later PR IDs in the roadmap
+are planned placeholders until exact specs are written and approved.
 
 Completed recovery record:
 
