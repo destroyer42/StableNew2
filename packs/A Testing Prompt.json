@@ -4,12 +4,19 @@
     "slots": [
       {
         "index": 0,
-        "text": "(masterpiece, best quality) photorealistic medium full shot, 85mm portrait lens, from knees up, subject filling the frame, a busty beautiful adult female wearing nothing, kneeling on the ground, POV shot, in a [[environment]], face clearly visible, detailed facial features, sharp [[eye color]] eyes, detailed irises, defined pupils, subtle catchlights, natural eyelashes, natural skin texture, realistic hair strands, crisp focus on the subject, soft cinematic daylight, shallow depth of field",
+        "text": "(masterpiece, best quality) a 3/4 body shot of an adult male wearing an outfit of a [[job]] [[pose]] in a [[environment]], face clearly visible, detailed facial features, sharp eyes, detailed irises, defined pupils, subtle catchlights, natural eyelashes, natural skin texture, realistic hair strands, crisp focus on the subject, soft cinematic daylight, shallow depth of field",
         "negative": "low quality, lowres, blurry, bad anatomy, malformed hands, extra fingers, missing fingers, fused fingers, text, watermark, signature, logo, waxy skin, plastic skin, oversmoothed skin, distorted face",
         "template_id": "",
         "template_variables": {},
-        "positive_embeddings": [],
-        "negative_embeddings": [],
+        "positive_embeddings": [
+          "Stable_Yogis_PDXL_Positives2",
+          "Stable-Yogis-Makeup-Enhancer-XL",
+          "Stable_Yogis_General_Positives_V1"
+        ],
+        "negative_embeddings": [
+          "NEGATIVE_HANDS",
+          "DeepNegative_xl_v1"
+        ],
         "loras": [
           [
             "DetailedEyes_V3",
@@ -27,47 +34,34 @@
       },
       {
         "index": 1,
-        "text": "(masterpiece, best quality) photorealistic medium full shot, 85mm portrait lens, from knees up, subject filling the frame, a busty beautiful adult female wearing nothing, bent over a railing, looking over her shoulder, in a [[environment]] face clearly visible, detailed facial features, sharp [[eye color]] eyes, detailed irises, defined pupils, subtle catchlights, natural eyelashes, natural skin texture, realistic hair strands, crisp focus on the subject, soft cinematic daylight, shallow depth of field",
+        "text": "(masterpiece, best quality) a 3/4 body shot of an adult male wearing an outfit of a [[job]] [[pose]] in a [[environment]] face clearly visible, detailed facial features, sharp eyes, detailed irises, defined pupils, subtle catchlights, natural eyelashes, natural skin texture, realistic hair strands, crisp focus on the subject, soft cinematic daylight, shallow depth of field",
         "negative": "low quality, lowres, blurry, bad anatomy, malformed hands, extra fingers, missing fingers, fused fingers, text, watermark, signature, logo, waxy skin, plastic skin, oversmoothed skin, distorted face",
         "template_id": "",
         "template_variables": {},
-        "positive_embeddings": [],
-        "negative_embeddings": [],
+        "positive_embeddings": [
+          "Stable_Yogis_Anatomy_Positives_V1",
+          "Stable_Yogis_PDXL_Positives2",
+          "Stable-Yogis-Makeup-Enhancer-XL",
+          "Stable_Yogis_General_Positives_V1"
+        ],
+        "negative_embeddings": [
+          "NEGATIVE_HANDS",
+          "DeepNegative_xl_v1",
+          "easynegative",
+          "bad_prompt"
+        ],
         "loras": [
           [
             "ArmorSentinelV2",
-            0.6
+            0.8
           ],
           [
             "DetailedEyes_V3",
-            0.52
+            0.8
           ],
           [
             "Realism Lora By Stable Yogi_V3_Lite",
-            0.24
-          ]
-        ]
-      },
-      {
-        "index": 2,
-        "text": "(masterpiece, best quality) photorealistic medium full shot, 85mm portrait lens, from knees up, subject filling the frame, a busty beautiful adult female wearing nothing  arching back, pulling her vagina wide with her hands, in a [[environment]] face clearly visible, detailed facial features, sharp [[eye color]] eyes, detailed irises, defined pupils, subtle catchlights, natural eyelashes, natural skin texture, realistic hair strands, crisp focus on the subject, soft cinematic daylight, shallow depth of field",
-        "negative": "low quality, lowres, blurry, bad anatomy, malformed hands, extra fingers, missing fingers, fused fingers, text, watermark, signature, logo, waxy skin, plastic skin, oversmoothed skin, distorted face",
-        "template_id": "",
-        "template_variables": {},
-        "positive_embeddings": [],
-        "negative_embeddings": [],
-        "loras": [
-          [
-            "ArmorSentinelV2",
-            0.6
-          ],
-          [
-            "DetailedEyes_V3",
-            0.52
-          ],
-          [
-            "Realism Lora By Stable Yogi_V3_Lite",
-            0.24
+            0.8
           ]
         ]
       }
@@ -81,8 +75,7 @@
           "name": "job",
           "values": [
             "wizard",
-            "knight",
-            "sorceress"
+            "knight"
           ]
         },
         {
@@ -96,19 +89,8 @@
           "name": "pose",
           "values": [
             "standing",
-            "lounging",
             "running",
             "jumping"
-          ]
-        },
-        {
-          "name": "eye color",
-          "values": [
-            "brown",
-            "blue",
-            "green",
-            "sky blue",
-            "electric blue"
           ]
         }
       ]
@@ -117,16 +99,16 @@
   },
   "preset_data": {
     "txt2img": {
-      "model": "batchCOREALISMXLSFW_v80.safetensors [881e9f7ddf]",
-      "model_name": "batchCOREALISMXLSFW_v80.safetensors [881e9f7ddf]",
+      "model": "juggernautXL_ragnarokBy",
+      "model_name": "juggernautXL_ragnarokBy",
       "vae": "",
       "vae_name": "",
       "sampler_name": "DPM++ 2M",
       "scheduler": "Karras",
       "steps": 34,
       "cfg_scale": 6.1,
-      "width": 832,
-      "height": 1216,
+      "width": 768,
+      "height": 1024,
       "clip_skip": 1,
       "seed": -1,
       "subseed": -1,
@@ -138,7 +120,7 @@
       "hr_second_pass_steps": 12,
       "denoising_strength": 0.27,
       "hires_use_base_model": true,
-      "hr_checkpoint_name": "batchCOREALISMXLSFW_v80.safetensors [881e9f7ddf]"
+      "hr_checkpoint_name": "Use base model"
     },
     "img2img": {
       "model": "",
@@ -156,12 +138,12 @@
       "upscale_mode": "batch",
       "steps": 15,
       "denoising_strength": 0.2,
-      "upscaling_resize": 1.5,
+      "upscaling_resize": 2.0,
       "tile_size": 512,
       "face_restore": false,
       "face_restore_method": "CodeFormer",
-      "sampler_name": "DPM++ 2M",
-      "scheduler": "karras"
+      "sampler_name": "Euler a",
+      "scheduler": "Normal"
     },
     "adetailer": {
       "adetailer_checkpoint_model": "",
@@ -191,8 +173,8 @@
       "ad_inpaint_only_masked_padding": 32,
       "adetailer_padding": 32,
       "ad_use_inpaint_width_height": true,
-      "ad_inpaint_width": 832,
-      "ad_inpaint_height": 1216,
+      "ad_inpaint_width": 768,
+      "ad_inpaint_height": 1024,
       "mask_filter_method": "Area",
       "ad_mask_filter_method": "Area",
       "mask_k_largest": 1,

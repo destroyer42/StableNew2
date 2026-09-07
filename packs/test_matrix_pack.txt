@@ -1,5 +1,11 @@
-<embedding:positive_embed>
-(masterpiece, best quality) [[job]] in [[environment]]
-<lora:add-detail-xl:0.65>
-neg: <embedding:negative_hands>
-neg: bad quality, blurry
+(masterpiece, best quality) photorealistic medium full shot, 85mm portrait lens, from knees up, subject filling the frame, a busty beautiful adult female wearing nothing, kneeling on the ground, POV shot, in a [[environment]], face clearly visible, detailed facial features, sharp [[eye color]] eyes, detailed irises, defined pupils, subtle catchlights, natural eyelashes, natural skin texture, realistic hair strands, crisp focus on the subject, soft cinematic daylight, shallow depth of field
+<lora:DetailedEyes_V3:0.6> <lora:Realism Lora By Stable Yogi_V3_Lite:0.52> <lora:add-detail-xl:0.24>
+neg: low quality, lowres, blurry, bad anatomy, malformed hands, extra fingers, missing fingers, fused fingers, text, watermark, signature, logo, waxy skin, plastic skin, oversmoothed skin, distorted face
+
+(masterpiece, best quality) photorealistic medium full shot, 85mm portrait lens, from knees up, subject filling the frame, a busty beautiful adult female wearing nothing, bent over a railing, looking over her shoulder, in a [[environment]] face clearly visible, detailed facial features, sharp [[eye color]] eyes, detailed irises, defined pupils, subtle catchlights, natural eyelashes, natural skin texture, realistic hair strands, crisp focus on the subject, soft cinematic daylight, shallow depth of field
+<lora:ArmorSentinelV2:0.6> <lora:DetailedEyes_V3:0.52> <lora:Realism Lora By Stable Yogi_V3_Lite:0.24>
+neg: low quality, lowres, blurry, bad anatomy, malformed hands, extra fingers, missing fingers, fused fingers, text, watermark, signature, logo, waxy skin, plastic skin, oversmoothed skin, distorted face
+
+(masterpiece, best quality) photorealistic medium full shot, 85mm portrait lens, from knees up, subject filling the frame, a busty beautiful adult female wearing nothing  arching back, pulling her vagina wide with her hands, in a [[environment]] face clearly visible, detailed facial features, sharp [[eye color]] eyes, detailed irises, defined pupils, subtle catchlights, natural eyelashes, natural skin texture, realistic hair strands, crisp focus on the subject, soft cinematic daylight, shallow depth of field
+<lora:ArmorSentinelV2:0.6> <lora:DetailedEyes_V3:0.52> <lora:Realism Lora By Stable Yogi_V3_Lite:0.24>
+neg: low quality, lowres, blurry, bad anatomy, malformed hands, extra fingers, missing fingers, fused fingers, text, watermark, signature, logo, waxy skin, plastic skin, oversmoothed skin, distorted face

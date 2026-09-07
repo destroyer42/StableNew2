@@ -7,13 +7,15 @@ Updated: 2026-09-07
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Product name: StableNew
 - Default branch: `main`
-- Current release line: v2.6 MVP recovery
-- Current recovery baseline: `recovery/mvp-baseline` at `9f1be49`
+- Current release line: v2.6 MVP convergence
+- Authoritative branch: `main`
 
-The recovery branch is ahead of `main` with the reconciled architecture,
-repository-completeness repair, test-harness recovery, immutable NJR core, and
-typed compiler/submission cutover. It intentionally did not bulk-merge the two
-later `main` commits; their relevant deltas were dispositioned separately.
+`main` is the consolidated product baseline. It contains the reconciled
+architecture, repository-completeness repair, trustworthy test harness,
+immutable NJR core, typed compiler/submission cutover, repository simplification,
+and the selected QOL PromptPack updates used by the verified image-generation
+baseline. Superseded main/QOL deltas were dispositioned rather than merged into
+the working tree wholesale.
 
 ## Product state
 
@@ -36,11 +38,10 @@ vertical slices lack clean-machine real-backend acceptance.
 
 ## Current work
 
-Repository simplification is being performed on
-`repo/simplification-and-hygiene`, based on `9f1be49`. Its purpose is to reduce
-instructions, historical documentation, generated artifacts, and obsolete
-maintenance clutter without changing runtime behavior. After review/merge,
-delete the short-lived branch and update this section.
+Repository convergence and simplification are complete. New work starts from
+`main` on one short-lived outcome branch. The next outcome is transactional job
+persistence; do not revive the recovery, hygiene, or QOL branches as alternate
+sources of truth.
 
 ## Highest-value debt
 
@@ -54,11 +55,7 @@ delete the short-lived branch and update this section.
 
 ## Now / next / later
 
-**Now**
-
-- Complete and review repository simplification.
-
-**Next**
+**Now / Next**
 
 - `PR-MVP-040`: implement transactional SQLite `JobRepository` plus a
   backup-first, dry-run-capable, idempotent legacy importer.
@@ -73,7 +70,7 @@ delete the short-lived branch and update this section.
 
 ## Verification state
 
-Latest verified baseline including this repository-hygiene change:
+Latest verified baseline for the converged product state:
 
 - repository completeness: 429 tracked Python source files;
 - strict collection: 3,086 tests plus 2 optional-OpenCV module skips on the
@@ -83,9 +80,15 @@ Latest verified baseline including this repository-hygiene change:
 - Ruff 0.14.9 baseline: 1,859 findings against a maximum of 2,208.
 
 A Python 3.11 broad diagnostic stopped at the configured first 10 failures
-after 215 passes and 2 optional-OpenCV skips. The failures are in unchanged
-legacy CLI/compatibility/migration tests whose expectations predate the typed
-NJR cutover; they are not part of the required green gate.
+after 215 passes and 2 optional-OpenCV skips. The same tests and failure modes
+occurred at both the pre-hygiene recovery baseline and the hygiene baseline.
+They are legacy CLI/compatibility/migration expectations that predate the typed
+NJR cutover and are not part of the required green gate.
+
+The local WebUI image path has completed a fixed-seed queue-to-runner smoke.
+Occasional runner stalls and queue errors have been observed outside that
+controlled run and remain known operational instability; convergence did not
+claim to resolve them.
 
 Run the commands in `docs/StableNew_Coding_and_Testing_v2.6.md` rather than
 copying these numbers elsewhere. Update this section only after a comparable
