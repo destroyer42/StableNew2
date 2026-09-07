@@ -188,19 +188,23 @@ def test_queue_jobs_have_normalized_record_b2(tmp_path: Path) -> None:
         threaded=False,
         tmp_history=tmp_path / "job_history.json",
     )
+    controller.job_service.auto_run_enabled = False
 
-    # Submit the compiled NJR through the application boundary.
-    njr = _make_dummy_record()
-    controller.job_service.submit_njrs([njr])
-    queue_job = controller.job_service.job_queue.get_job(njr.job_id)
-    assert queue_job is not None
+    try:
+        # Submit the compiled NJR through the application boundary.
+        njr = _make_dummy_record()
+        controller.job_service.submit_njrs([njr])
+        queue_job = controller.job_service.job_queue.get_job(njr.job_id)
+        assert queue_job is not None
 
-    # PR-CORE1-B2: Queue jobs created from NJR must have _normalized_record attached
-    assert hasattr(queue_job, "_normalized_record")
-    assert queue_job._normalized_record is not None
-    assert queue_job._normalized_record == njr
-    assert queue_job.job_id == njr.job_id
-    assert getattr(queue_job, "pipeline_config", None) is None
+        # PR-CORE1-B2: Queue jobs created from NJR must have _normalized_record attached
+        assert hasattr(queue_job, "_normalized_record")
+        assert queue_job._normalized_record is not None
+        assert queue_job._normalized_record == njr
+        assert queue_job.job_id == njr.job_id
+        assert getattr(queue_job, "pipeline_config", None) is None
+    finally:
+        controller.job_service.stop()
 
 
 def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None:

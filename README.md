@@ -1,83 +1,59 @@
 # StableNew
 
-StableNew is a local desktop orchestrator for reproducible image and video jobs,
-with queueing, artifacts, history, replay, diagnostics, and learning-ready
-provenance.
+StableNew is a local desktop orchestrator for reproducible image and video
+generation. It compiles user intent into immutable jobs, runs them through one
+queue, and records artifacts, history, replay lineage, diagnostics, and
+learning-ready provenance.
 
-Version: v2.6
-Status: MVP recovery in progress
-Active roadmap: `docs/StableNew Roadmap v2.6.md`
+- Product version: v2.6
+- Project state: MVP recovery
+- Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
+- Default branch: `main`
 
-## Architecture
-
-The canonical target runtime is:
-
-`Typed Intent -> Compiler -> NJR -> JobService -> Queue/JobRepository -> PipelineRunner.run_njr -> Typed Handler -> Artifacts -> History/Learning/Diagnostics`
-
-Key rules:
-
-- all fresh execution is queue-only;
-- NJR is the immutable executable envelope;
-- queue/history records own mutable status and results;
-- PromptPack is the primary image authoring source, not a universal identity;
-- StableNew owns orchestration; image/video backends execute typed requests;
-- MVP is a same-process desktop app with WebUI image generation and native SVD
-  XT image-to-video.
-
-This is a target with named implementation gaps. See section 13 of
-`docs/ARCHITECTURE_v2.6.md`; do not assume every contract above is complete in
-the current branch.
-
-## Current repository state
-
-The September 2026 audit found a usable queue/NJR/runner spine but also an
-unfinished architecture migration:
-
-- current NJR is broader and more mutable than the target;
-- non-PromptPack work can be rejected by pack-oriented validation;
-- queue/history persistence has not converged on one SQLite repository;
-- production `src/state/` modules are hidden by an overly broad ignore rule;
-- the test suite does not yet provide a trustworthy clean-checkout MVP gate;
-- several video paths exist, while only native SVD XT is selected for MVP.
-
-The active recovery sequence starts with approved `PR-ARCH-MVP-001` and
-`PR-MVP-000`. Older completion ledgers and backlogs do not supersede it.
+The repository is named StableNew even though the historical GitHub remote is
+named `StableNew2`.
 
 ## Start here
 
-1. `docs/DOCS_INDEX_v2.6.md`
-2. `docs/ARCHITECTURE_v2.6.md`
-3. `docs/GOVERNANCE_v2.6.md`
-4. `docs/StableNew Roadmap v2.6.md`
-5. `docs/PR_TEMPLATE_v2.6.md`
+1. `STATUS.md` — current product/repository state and immediate priorities.
+2. `docs/ARCHITECTURE_v2.6.md` — runtime contracts and open architecture gaps.
+3. `docs/StableNew Roadmap v2.6.md` — the active MVP sequence.
+4. `docs/StableNew_Coding_and_Testing_v2.6.md` — development and verification.
+5. `AGENTS.md` — concise operating contract for Codex and contributors.
 
-Workflow references:
+Subsystem details live under `docs/Subsystems/`. Operational recovery material
+lives under `docs/runbooks/`, and stable data contracts live under
+`docs/schemas/`. Old plans and completed implementation records are available
+from Git history rather than duplicated in the working tree.
 
-- `docs/PROMPT_PACK_LIFECYCLE_v2.6.md`
-- `docs/Builder Pipeline Deep-Dive (v2.6).md`
-- `docs/StableNew_Coding_and_Testing_v2.6.md`
-- `docs/Subsystems/Testing/E2E_Golden_Path_Test_Matrix_v2.6.md`
+## Runtime
 
-## Running
+The canonical path is:
 
-The intended entrypoint remains:
+`Intent -> Compiler -> NJR -> JobService -> Queue/Repository -> PipelineRunner.run_njr -> Handler -> Artifacts/History`
+
+Fresh work always enters the queue. NJR is immutable authorized work;
+queue/history records own mutable lifecycle and result state. PromptPack is one
+typed source, not a universal job identity.
+
+## Install and run
+
+Use Python 3.11 or 3.12 in a virtual environment:
 
 ```text
-python -m src.main
+python -m venv .venv
+.venv\Scripts\python -m pip install -r requirements.txt
+.venv\Scripts\python -m src.main
 ```
 
-The MVP setup and clean-machine procedure are not yet certified. Use the
-repository-managed Python 3.11 environment and expect configured external
-dependencies for the flow under test. `PR-MVP-080` and `PR-MVP-090` close setup
-and release documentation.
+Image generation requires a configured Stable Diffusion WebUI. Native SVD XT
+video has additional dependencies in `requirements-svd.txt` and is not yet
+clean-machine certified. Missing external dependencies should fail with an
+actionable message; they are not installed or downloaded at import time.
 
-## Testing
+## Verify changes
 
-Do not rely on historical collection counts. `pyproject.toml` is the only
-pytest authority, and the named runners isolate pytest in a disposable working
-directory and fail on repository pollution.
-
-Required gate:
+`pyproject.toml` is the only pytest configuration authority. Run:
 
 ```text
 python tools/ci/check_repository_completeness.py
@@ -87,19 +63,18 @@ python tools/ci/run_collection_gate.py
 python tools/ci/run_required_smoke.py
 ```
 
-The required smoke runner is a positive allowlist, not the full historical
-suite. Real WebUI and native SVD tests require explicit opt-in and are never
-collection side effects.
+The required smoke suite is hermetic and positively selected. Real WebUI/SVD
+acceptance tests are opt-in and are never collection-time side effects.
 
-Ruff is pinned to 0.14.9. The lint command is a non-increasing ratchet over
-2,208 recorded pre-existing source findings: new or increased debt fails, while
-the MVP roadmap removes the baseline by PR-MVP-090.
+## Repository hygiene
 
-## Documentation status
+Runtime outputs, diagnostics, inventories, snapshots, caches, and temporary
+test artifacts are local/generated state and are not committed. Generate an
+inventory on demand with:
 
-- `docs/` root contains Tier 1/Tier 2 canon.
-- `docs/PR_Backlog/` contains open specs; only roadmap-listed, approved specs are
-  executable.
-- `docs/CompletedPR/` and `docs/CompletedPlans/` are history.
-- `docs/archive/` and `docs/NeedsReview/` are non-active.
-- If this README conflicts with active canon, active canon wins.
+```text
+python -m tools.inventory_repo
+```
+
+Use Git history for superseded plans, old code, completed PR narratives, and
+historical diagnostic evidence.

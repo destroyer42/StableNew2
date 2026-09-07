@@ -1,161 +1,156 @@
-# StableNew Multi-Agent Development Rules v2.6
+# StableNew repository operating contract
 
-Status: Canonical repository instruction
-Updated: 2026-09-05
+This is the authoritative instruction file for work in this repository.
 
-## 1. Purpose
+## Product and repository
 
-StableNew is developed by Rob (product owner), planner/architect agents,
-executor agents such as Codex, and inline assistants such as Copilot. These
-rules keep code, tests, documentation, and PR status aligned while the MVP is
-recovered.
+StableNew is a local desktop application for reproducible image and video
+generation. It owns intent compilation, queueing, execution orchestration,
+artifacts, history, replay, diagnostics, and learning-ready provenance.
 
-The active machine-facing guidance inventory is
-`.github/INSTRUCTION_SURFACE.md`.
+- Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
+- Product/repository name: StableNew
+- Default long-lived branch: `main`
+- Current release line: v2.6 MVP recovery
+- Current state and immediate priorities: `STATUS.md`
+- Architecture: `docs/ARCHITECTURE_v2.6.md`
+- Roadmap: `docs/StableNew Roadmap v2.6.md`
+- Testing: `docs/StableNew_Coding_and_Testing_v2.6.md`
 
-## 2. Authority
+Git history preserves old plans and completed work. Archived, deleted, or
+historical material is not active guidance and should be consulted only for a
+specific historical question.
 
-Read and follow, in order:
+## Runtime invariants
 
-1. this repository instruction and explicit owner-approved records;
-2. `docs/ARCHITECTURE_v2.6.md`;
-3. `docs/GOVERNANCE_v2.6.md`;
-4. `docs/StableNew Roadmap v2.6.md`;
-5. Tier 2 and relevant Tier 3 docs from `docs/DOCS_INDEX_v2.6.md`;
-6. the approved PR specification;
-7. matching `.github/instructions/*.instructions.md` files.
+The canonical outer path is:
 
-Archived, completed, needs-review, and unlisted backlog documents are not active
-authority. Code and tests are evidence of current implementation; they do not
-silently redefine architecture.
+`Intent -> Compiler -> NJR -> JobService -> Queue/Repository -> PipelineRunner.run_njr -> Handler -> Artifacts/History`
 
-## 3. Canonical MVP architecture
+- Fresh work is always queued. Run Now means enqueue with immediate-start
+  policy; it is not a direct execution path.
+- `NormalizedJobRecord` is the immutable, versioned executable envelope.
+- `JobService.submit_njrs` is the application submission boundary.
+- `PipelineRunner.run_njr` is the only public production runner entry.
+- Queue/history own mutable status, progress, retry, error, and result state.
+- Replay creates a new NJR identity with parent lineage and uses the same path.
+- PromptPack identity exists only for PromptPack-sourced work.
+- GUI code captures intent and renders projections. It does not build backend
+  payloads, mutate queue persistence, or call the runner.
+- Controllers coordinate application services; pipeline modules compile and
+  execute typed work; backend details stay behind adapters.
+- MVP execution is same-process and single-node. Native SVD XT is the only MVP
+  video backend.
+- Do not create parallel job models, runner entrypoints, live legacy fallbacks,
+  or compatibility layers without a named removal condition.
+- Prefer deleting proven-obsolete compatibility code over preserving it
+  indefinitely.
 
-The only production flow is:
+Material changes to these invariants require Rob's approval and an architecture
+update in the same coherent change.
 
-`Typed Intent -> Compiler -> NJR -> JobService -> Queue/JobRepository -> PipelineRunner.run_njr -> Typed Handler -> Artifacts -> History/Learning/Diagnostics`
+## Working relationship
 
-Required invariants:
+Rob defines desired product behavior, priorities, constraints, and approval of
+material architecture changes.
 
-- NJR is the sole public executable envelope and is immutable after submission.
-- NJR holds authorized work; queue/history records hold mutable runtime state.
-- Fresh execution is queue-only. `Run Now` is immediate-start queue policy.
-- PromptPack is the primary authored image source, not a universal job identity.
-- PromptPack identity is required only for PromptPack-source NJRs.
-- Source-specific typed DTOs/compilers converge on one NJR contract.
-- `PipelineRunner.run_njr` is the sole public production runner entry.
-- StableNew owns orchestration and persistence; backends execute typed requests.
-- `JobRepository` is the persistence boundary; SQLite is the MVP target.
-- The MVP is same-process and single-node; native SVD XT is its only video path.
+Codex determines the implementation implications from repository evidence,
+including the relevant files, normal refactors, low-level technical choices,
+and tests required to deliver the requested outcome.
 
-Some target contracts are not implemented yet. The architecture gap register
-and active roadmap name those gaps. Do not claim they are complete, add shims to
-hide them, or use stale tests to reverse the approved direction.
+Normal outcome-first requests are sufficient authorization to inspect and
+implement within their stated scope. Rob does not need to provide an internal
+file list or prescribe a mechanical PR sequence. Stop and ask when a missing
+choice would materially change product behavior, data safety, or architecture.
 
-## 4. Roles
+## How Codex works here
 
-### 4.1 Human owner — Rob
+1. Inspect the current branch, worktree, relevant code, tests, and documentation
+   before editing.
+2. Understand the requested product outcome and explain material architectural
+   tradeoffs or contradictions.
+3. Choose the smallest coherent change that fully delivers the outcome.
+4. Preserve unrelated user changes and avoid mixing independent work.
+5. Remove obsolete code when dependency evidence supports removal.
+6. Add or update deterministic tests for changed behavior.
+7. Run validation proportional to risk, starting targeted and expanding to the
+   repository gates where practical.
+8. Update `STATUS.md` when repository direction, active work, or verified state
+   materially changes.
+9. Report the branch, final commit/state, validation, known limitations, and
+   recommended next action.
 
-Rob sets product scope, approves PRs, and is final authority. Architecture
-changes become binding through synchronized canonical document amendments and a
-recorded approval.
+Do not reject ordinary product-owner language merely because it lacks an exact
+file allowlist. Do not invent a broader product change under the cover of a
+refactor or cleanup.
 
-### 4.2 Planner/architect
+## Code ownership boundaries
 
-The planner:
+- `src/gui/` owns Tk presentation and event wiring.
+- `src/gui_v2/` contains toolkit-neutral GUI adapters and view models.
+- `src/controller/` owns application coordination and lifecycle adapters.
+- `src/pipeline/` owns intent compilation, NJR contracts, runner, and stage
+  orchestration.
+- `src/queue/` and `src/history/` own execution-state projections while they
+  converge on the repository boundary.
+- `src/video/` owns typed video execution adapters.
+- `src/learning/` consumes post-execution records; it does not create a second
+  runtime path.
+- `src/state/` is source code and must remain tracked.
+- `tools/` and `scripts/` are maintenance/operational utilities, not homes for
+  application logic.
 
-- performs evidence-based discovery;
-- reconciles code, tests, history, and intended product behavior;
-- maintains canon and the active roadmap;
-- writes atomic PR specs using `docs/PR_TEMPLATE_v2.6.md`;
-- provides exact allowed/forbidden boundaries, tests, migration, and rollback;
-- identifies debt deletion and documentation closeout.
+Keep GUI work non-blocking and marshal widget updates onto the GUI thread.
+Avoid import-time network, process, GPU/model, GUI-loop, or filesystem side
+effects. Keep randomization and compilers deterministic for fixed inputs.
 
-The planner must distinguish current implementation from target architecture.
+## Validation defaults
 
-### 4.3 Executor/implementer
+`pyproject.toml` is the only pytest configuration authority. The standard local
+gate is:
 
-The executor:
+```text
+python tools/ci/check_repository_completeness.py
+python tools/ci/run_ruff_baseline.py
+python tools/ci/run_mypy_smoke.py
+python tools/ci/run_collection_gate.py
+python tools/ci/run_required_smoke.py
+```
 
-- reviews the approved spec and relevant active docs before changes;
-- modifies only allowed files;
-- preserves unrelated user work and data;
-- implements the complete approved slice without alternate paths;
-- runs and records proportionate verification;
-- stops if architecture or allowed-file scope must expand;
-- reports actual files, tests, residual risk, and closeout work.
+Use targeted tests first. Tests must use temporary state/artifact roots and
+must not require real networks, WebUI, models, GPUs, or GUI displays unless they
+are explicitly marked as opt-in acceptance tests.
 
-The executor may perform discovery and planning when requested. It may amend
-architecture only when the owner explicitly authorizes an architecture/docs
-change, as in `PR-ARCH-MVP-001`.
+Ruff is pinned. New or increased lint debt fails. Leave touched source files
+clean even while the bounded legacy baseline exists.
 
-### 4.4 Inline assistant
+## Git and repository hygiene
 
-An inline assistant may complete boilerplate and small changes within an
-approved implementation. It must not invent architecture, expand scope, or
-create alternate builder/queue/runner behavior.
+- Inspect status before changing files.
+- Use a short-lived branch for a coherent outcome; do not work directly on an
+  unrelated dirty branch.
+- Never discard, reset, or overwrite uncommitted user work.
+- Keep generated reports, inventories, diagnostics, caches, and runtime outputs
+  out of Git.
+- Prefer Git history to checked-in copies of obsolete plans or code.
+- Do not delete branches with unique work. Delete merged short-lived branches
+  after the owner accepts the result.
+- Do not push, merge, rewrite history, or delete remote state unless the task
+  authorizes that external change.
 
-## 5. Required workflow
+## Repo compass
 
-1. **Discovery** — establish branch/commit, working-tree state, relevant code,
-   tests, persistence/data risks, and contradictions.
-2. **PR specification** — use the canonical template with exact files, ordered
-   steps, tests, success/failure criteria, debt, migration, and rollback.
-3. **Owner approval** — record approval in the spec before runtime execution.
-4. **Implementation** — edit only approved files; no architectural inference.
-5. **Verification** — targeted tests, required broad gates, clean-checkout proof,
-   and migration/recovery checks appropriate to risk.
-6. **Review** — compare implementation against spec and canon.
-7. **Closeout** — create one CompletedPR record, update roadmap/index/gap
-   register, and remove or relocate the backlog copy.
+When asked for orientation, report only what is useful:
 
-A multi-PR migration may use a temporary bridge only when the approved sequence
-names its owner and deletion PR. It may not create two production execution or
-persistence authorities.
+```text
+Repo / branch / HEAD / tracking branch
+Ahead or behind main
+Working-tree state
+Current branch objective
+Relevant recent changes
+Verified test state
+Top risks
+Recommended next action
+```
 
-## 6. File and worktree boundaries
-
-- Existing changes belong to the user unless proven otherwise.
-- Never reset, delete, overwrite, or bulk-move user work to “clean” a branch.
-- Recovery uses new branches/worktrees and explicit commits, not destructive
-  history rewrites.
-- Production modules must be tracked and available in a clean checkout.
-- Runtime data ignore rules must be anchored and must not hide source packages.
-- Only files listed in an approved PR are editable during its execution.
-- If a needed file is not allowed, stop and revise the spec.
-
-## 7. Forbidden behavior
-
-- `DIRECT` fresh execution or GUI-to-runner calls;
-- a second job model, runner entry, or persistence authority;
-- requiring PromptPack identity for non-PromptPack intent;
-- mutable status/results/progress/output paths in NJR;
-- source resolution, randomization, or source-file reads in the runner;
-- pack-shaped generic requests extended to every intent kind;
-- live legacy fallback, dual-read, or dual-write migration;
-- backend workflow JSON outside its backend boundary;
-- child runtime host, daemon, or distributed scheduling during MVP recovery;
-- partial migrations with no explicit completion/deletion step;
-- tests that call real services during collection or mutate tracked repo data;
-- changing tests only to conceal an implementation gap;
-- claiming a target architecture is implemented without verification evidence;
-- treating historical backlog or completed plans as active work.
-
-## 8. MVP sequencing
-
-`docs/StableNew Roadmap v2.6.md` is the single current roadmap. At this amendment,
-only `PR-ARCH-MVP-001` and `PR-MVP-000` are approved. Later roadmap entries must
-receive exact specs and owner approval before execution.
-
-Feature work outside the MVP definition of done is deferred unless Rob amends
-the roadmap.
-
-## 9. Documentation synchronization
-
-No PR may knowingly leave active docs contradictory. Runtime contract changes
-must update all affected Tier 1/Tier 2 surfaces and tests in the same PR. A gap
-is removed from the architecture only after implementation and clean-checkout
-verification, not when code is merely planned.
-
-New agent profiles or path-scoped instruction files must be registered in
-`.github/INSTRUCTION_SURFACE.md` in the same PR.
+Keep this answer concise and derive it from current Git/repository evidence.

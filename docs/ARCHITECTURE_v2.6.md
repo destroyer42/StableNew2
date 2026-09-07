@@ -1,7 +1,7 @@
 # StableNew Architecture v2.6
 
 Status: Canonical, Binding
-Updated: 2026-09-05
+Updated: 2026-09-07
 Decision: MVP architecture reconciliation
 
 ## 0. Purpose and truth model
@@ -37,7 +37,7 @@ it was documented. The selected approach is an evidence-based amendment:
 
 The failed child-runtime-host migration from March 2026 is historical evidence,
 not a foundation to finish. The recovery baseline and exact commit evidence are
-recorded in `docs/StableNew Roadmap v2.6.md` and `PR-MVP-000`.
+recorded in the active roadmap and Git history for `PR-MVP-000`.
 
 ## 2. Canonical runtime
 
@@ -269,10 +269,11 @@ does not close a gap.
 
 ## 14. Change control
 
-Architecture changes require an approved PR spec, synchronized amendments to
-all affected canonical documents, verification against repository truth, and
-owner approval. Compatibility bridges must have a named deletion PR and may not
-create a second live execution path.
+Material architecture changes require Rob's approval, an update to this file,
+and verification against repository truth. Codex determines the concrete file
+scope and implementation details from the approved outcome. Compatibility
+bridges must have a removal condition and may not create a second live
+execution path.
 
 This amendment preserves version v2.6 because it corrects the unfinished v2.6
 migration instead of adding a new runner or distributed-execution architecture.

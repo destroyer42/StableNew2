@@ -63,14 +63,20 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Pre-commit
 .pre-commit-cache/
 
-# Snapshot helpers
+# Generated repository evidence (regenerate on demand)
+/inventory/
+/reports/
+/snapshots/
 tools/last_change.diff
-snapshots/*.zip
 scripts/snapshots/
+
+# Root-level review sidecars are generated runtime/test artifacts
+/*.review.json
 
 # PR-CLEANUP-001: Better temporary file exclusion
 # Test outputs and temporary test files

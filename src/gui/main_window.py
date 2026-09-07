@@ -1,18 +1,17 @@
-# Minimal V2-only shim for GUI entrypoint.
-# Legacy StableNewGUI implementation has been archived under archive/gui_v1/.
+# V2 GUI entrypoint compatibility shim. Superseded implementations remain in
+# Git history rather than an active archive tree.
 
 import sys
-import tkinter as tk  # noqa: WPS300  (We only alias tkinter for legacy tests)
+import tkinter as tk
 from tkinter import ttk
 
-import src.gui.main_window_v2 as main_window_v2_module
 from src.gui.main_window_v2 import MainWindowV2
 from src.utils import StructuredLogger
 
 
 # Compatibility aliases for old entrypoint / tests
 class StableNewGUI(MainWindowV2):
-    """Legacy entrypoint wrapper that adds compatibility helpers."""
+    """Entrypoint wrapper retaining helpers used by current tests."""
 
     def __init__(
         self,
@@ -80,7 +79,6 @@ class StableNewGUI(MainWindowV2):
 
 ENTRYPOINT_GUI_CLASS = MainWindowV2
 
-# Note: The monkeypatch of main_window_v2_module.MainWindowV2 has been removed.
 # StableNewGUI remains as a compatibility shim for tests that construct it
 # directly (via gui_app_factory), but it no longer overwrites MainWindowV2
 # in the v2 module namespace (PR-048).

@@ -6,7 +6,7 @@ NullHistoryService to prevent real SD/WebUI execution during controller tests.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 
 import pytest
 
@@ -70,7 +70,9 @@ def job_service_with_stubs(
 
 
 @pytest.fixture
-def job_service_with_stub_runner_factory() -> tuple[JobService, JobQueue, NullHistoryService]:
+def job_service_with_stub_runner_factory() -> Generator[
+    tuple[JobService, JobQueue, NullHistoryService], None, None
+]:
     """Create JobService using runner_factory DI pattern.
 
     Returns tuple of (service, queue, history) for assertions.
@@ -82,4 +84,7 @@ def job_service_with_stub_runner_factory() -> tuple[JobService, JobQueue, NullHi
         runner_factory=stub_runner_factory,
         history_service=history,
     )
-    return service, queue, history
+    try:
+        yield service, queue, history
+    finally:
+        service.stop()

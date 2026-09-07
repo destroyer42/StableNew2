@@ -116,12 +116,8 @@ The recent convergence work delivered:
       dedicated controller-to-runner integration coverage and canonical docs
       alignment
 
-Those were delivered in:
-
-- `docs/CompletedPR/PR-VIDEO-215-Workflow-Video-Output-Routing-and-History-Convergence.md`
-- `docs/CompletedPR/PR-VIDEO-217-Stitching-Interpolation-and-Clip-Assembly-Unification.md`
-- `docs/CompletedPR/PR-GUI-220-UX-First-Workspace-Polish-on-Tkinter.md`
-- `docs/CompletedPR/PR-CORE-001-Finalize-Native-SVD-Integration.md`
+The implementation history for those changes remains available in Git history;
+completed PR narratives are not active runtime documentation.
 
 ## 6. Testing Surface
 

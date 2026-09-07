@@ -1,8 +1,8 @@
 # GUI Ownership Map v2.6
 
 **Status:** Canonical active reference  
-**Authority tier:** Tier 3 (Subsystem Reference) — see [Canonical_Document_Ownership_v2.6.md](../../Canonical_Document_Ownership_v2.6.md)  
-**Enforced by:** AGENTS.md, `.github/instructions/gui.instructions.md`
+**Authority:** Subsystem reference subordinate to `AGENTS.md` and architecture
+**Enforced by:** `AGENTS.md` and architecture tests
 
 ---
 
@@ -133,7 +133,5 @@ The following patterns are defects regardless of which directory they appear in:
 
 | Document | Relationship |
 |---|---|
-| [ARCHITECTURE_v2.6.md](../../ARCHITECTURE_v2.6.md) — §8 GUI Architecture | Canonical behavioural rules; this doc is the file-placement companion |
-| `.github/instructions/gui.instructions.md` | Executor-level rules for Copilot/Codex when editing GUI files |
-| [Canonical_Document_Ownership_v2.6.md](../../Canonical_Document_Ownership_v2.6.md) | Tier assignment and update governance for this document |
-| `AGENTS.md` | Forbids GUI prompt construction, job-dict building, and direct runner calls at the agent level |
+| [ARCHITECTURE_v2.6.md](../../ARCHITECTURE_v2.6.md) | Canonical GUI/application ownership rules; this doc is the file-placement companion |
+| `AGENTS.md` | Repository operating contract and GUI ownership boundary |

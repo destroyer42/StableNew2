@@ -1,197 +1,58 @@
-# StableNew Coding and Testing Standards v2.6
+# StableNew coding and testing v2.6
 
-Status: Canonical, Binding
-Updated: 2026-09-05
+Status: Active
+Updated: 2026-09-07
 
-## 0. Purpose
+This file is the concise development and verification authority. Architecture
+rules live in `ARCHITECTURE_v2.6.md`; current priorities live in `STATUS.md` and
+the active roadmap.
 
-These standards govern implementation and verification during MVP recovery.
-They optimize for reproducibility, clean boundaries, recoverable data, and tests
-that prove the architecture rather than preserve accidental behavior.
+## Coding principles
 
-## 1. Required runtime shape
+- Deliver coherent product outcomes, not disconnected file edits.
+- Preserve the canonical path:
+  `Intent -> Compiler -> NJR -> JobService -> Queue/Repository -> PipelineRunner.run_njr -> Handler`.
+- Use typed DTOs at architectural boundaries. Avoid open-ended dictionaries as
+  public compiler, controller, service, or runner contracts.
+- Keep NJRs immutable and free of status, errors, progress, retries, timestamps,
+  and produced artifact paths.
+- Keep GUI presentation thin, non-blocking, and GUI-thread safe.
+- Keep controllers focused on coordination rather than backend payload building.
+- Keep compilers deterministic and free of queue, runner, GUI, persistence, or
+  network side effects.
+- Keep backend-specific payloads inside backend adapters.
+- Remove superseded compatibility paths when replacement behavior is proven.
+- Avoid import-time network, process, model/GPU, GUI-loop, or repository writes.
+- Preserve unrelated working-tree changes.
 
-Production work follows:
+## Supported Python
 
-`Typed Intent DTO -> Compiler -> NJR -> JobService -> JobRepository/Queue -> PipelineRunner.run_njr -> Handler -> Artifacts/History`
+Use Python 3.11 or 3.12. Create a local virtual environment and install the
+project requirements before validation. CI pins tool versions in
+`pyproject.toml` and workflow configuration.
 
-Code and tests must enforce:
+## Test configuration
 
-- NJR is the only public executable envelope;
-- fresh work is queue-only;
-- `Run Now` is immediate-start submission policy;
-- NJR is immutable and contains no status/results/progress/output paths;
-- PromptPack identity is required only for `source.kind == "prompt_pack"`;
-- persistence is reached through `JobRepository`;
-- runner handlers do not own persistence or GUI state;
-- no fallback to legacy dictionaries, `DIRECT`, or alternate runner entries.
+`pyproject.toml` is the only pytest configuration authority. Do not add a
+second `pytest.ini`, `tox.ini`, or setup-file pytest configuration.
 
-## 2. Repository completeness and hygiene
+Tests are grouped by purpose:
 
-- Every imported production module must be tracked by Git and present in a
-  tracked-files-only checkout.
-- Ignore rules for runtime data must be rooted and narrow. A rule such as
-  `state/` that also hides `src/state/` is forbidden; use `/state/` for a
-  repository-root runtime directory.
-- Generated queue/history databases, caches, outputs, logs, model files, and
-  local secrets are not source.
-- Tests write only to temporary workspaces or explicitly injected stores.
-- A test must restore any process-level environment, singleton, working
-  directory, logging handler, or module patch it changes.
-- Importing a production or test module must not start workers, open GUI loops,
-  call the network, probe a GPU, mutate persistence, or parse command-line
-  arguments.
+- unit/contract tests for models, validation, compilers, serializers, and pure
+  services;
+- integration tests for compiler-to-queue-to-runner-to-history behavior;
+- headless GUI tests for view/controller wiring and thread boundaries;
+- system/safety tests for architecture, repository completeness, CI truth, and
+  runtime-state hygiene;
+- opt-in real-backend journeys for WebUI, SVD, models, and hardware.
 
-Repository-completeness and no-import-side-effect checks are release gates.
+Every test must be deterministic for fixed inputs. Use temporary state,
+artifact, cache, and output roots. Do not use real networks, WebUI, models,
+GPUs, persistent user data, or GUI displays in the required gate.
 
-## 3. Contract and model rules
+## Standard gate
 
-Use typed dataclasses, enums, protocols, or validated schema models at system
-boundaries. Do not pass open-ended dictionaries between GUI, compilers,
-`JobService`, repository, and runner.
-
-### 3.1 NJR
-
-The NJR core is defined in `ARCHITECTURE_v2.6.md`. Requirements:
-
-- explicit schema version;
-- complete and deterministic serialization;
-- validation on construction and deserialization;
-- immutable nested values after submission;
-- explicit source/workload matching;
-- new record plus lineage for replay or modification;
-- no mutable queue/history fields.
-
-Any schema change requires versioned fixtures, migration tests, and synchronized
-canonical docs.
-
-### 3.2 Job execution record
-
-Mutable state belongs to a separate repository-owned record. Lifecycle
-transitions must be explicit, transactional, and validated. Terminal states do
-not transition back to running; retry creates a deliberate new attempt or job
-according to the approved repository contract.
-
-### 3.3 Intent compilers
-
-Compilers are deterministic and side-effect-free apart from explicitly injected
-read-only registries. They resolve all authoring choices before submission and
-return structured errors. They do not enqueue, execute, or mutate source files.
-
-## 4. Persistence and migration
-
-- Application code depends on the `JobRepository` interface, not SQLite calls or
-  JSON files outside the repository implementation.
-- SQLite transactions own multi-field lifecycle updates.
-- Schema version and migration state are explicit.
-- Legacy import is offline and backup-first; it supports dry-run, validation,
-  idempotence, and conflict reports.
-- Migration tests compare record counts, stable identities, important hashes,
-  statuses, NJR snapshots, artifact links, and errors.
-- Live dual-read, dual-write, or silent fallback is forbidden.
-- Destructive cleanup of legacy data is never part of automatic startup.
-
-## 5. Error handling and diagnostics
-
-Errors crossing a boundary must carry a stable code, a user-safe message, and
-diagnostic context without secrets. Exceptions are handled at the layer that
-can add meaning or recover; broad catch-and-ignore behavior is forbidden.
-
-Queue and runner diagnostics must include job identity, workload kind, stage,
-transition, elapsed time when known, and failure code. Logs must not contain
-tokens, full secret-bearing environment dumps, or unbounded backend payloads.
-
-Expected missing dependencies are capability/preflight results, not import-time
-crashes. A failed job reaches a durable terminal state and never falls back to a
-second execution path.
-
-## 6. GUI and concurrency
-
-- GUI callbacks call controller/application methods, not builders, repositories,
-  or runner methods directly.
-- Workers never mutate widgets. State changes are marshalled through the GUI
-  scheduler/event boundary.
-- Queue submission is non-blocking.
-- Cancellation, timeout, and shutdown behavior are bounded and tested.
-- Polling loops require a termination condition and must not use arbitrary sleep
-  calls as correctness mechanisms.
-- UI projections may be cached for display but are not execution authority.
-
-## 7. Backend rules
-
-Backends implement typed runner-facing ports. Network clients, WebUI payloads,
-SVD pipeline objects, subprocess commands, and backend workflow JSON remain
-inside adapters/handlers.
-
-Tests use deterministic fakes by default. Real WebUI/GPU/model tests are marked,
-opt-in, bounded, and record environment/version evidence. They are required for
-release acceptance but not for hermetic unit CI.
-
-For MVP video, only native SVD XT may be on the advertised path. Memory-related
-settings and dependency checks must be explicit and testable without downloading
-or loading a model during normal unit collection.
-
-## 8. Test taxonomy
-
-### 8.1 Unit
-
-Fast, hermetic tests for models, validation, compilers, repository operations,
-and pure services. No real filesystem outside a temp directory, network, GPU,
-subprocess, display, or sleep.
-
-### 8.2 Contract
-
-Tests that lock system boundaries:
-
-- NJR round-trip, immutability, and conditional identity;
-- compiler output and side-effect freedom;
-- JobRepository transition semantics;
-- runner port request/result types;
-- artifact and history linkage;
-- migration version behavior.
-
-### 8.3 Integration
-
-Multiple real StableNew components with fake external backends and temporary
-persistence. These prove compiler-to-queue-to-runner-to-history behavior.
-
-### 8.4 GUI journey
-
-User-visible flows with fake backends and controlled GUI scheduling. Assertions
-cover visible state and application outcomes, not private widget implementation.
-
-### 8.5 Real-backend acceptance
-
-Explicit manual/opt-in journeys against configured WebUI and native SVD XT on
-the target machine. Each run records app commit, Python/dependency versions,
-backend/model identifiers, hardware, command/workflow, result, and artifacts.
-
-### 8.6 Quarantine
-
-A quarantined test must have a reason, owner, expiry/deletion PR, and marker. It
-cannot define current architecture or satisfy an MVP gate.
-
-## 9. Required test properties
-
-- deterministic inputs, ordering, seeds, and clocks where relevant;
-- no reliance on test execution order;
-- no mutation of tracked repository files;
-- no arbitrary sleeps;
-- no real external call unless explicitly marked;
-- failure assertions include state, error code, and absence of fallback;
-- serialization tests compare the complete supported contract;
-- migration tests run at least twice to prove idempotence;
-- clean-checkout tests run without ignored local source files.
-
-Tests must not assert `pack_required` for a non-PromptPack source. A test that
-preserves superseded architecture must be removed or rewritten in the same PR
-that implements the replacement contract, not before.
-
-## 10. Baseline command policy
-
-`pyproject.toml` is the only pytest configuration authority. Use a supported
-Python 3.11 or 3.12 environment and record the interpreter. The required gate
-is the following ordered command set:
+Run targeted tests first, then:
 
 ```text
 python tools/ci/check_repository_completeness.py
@@ -201,69 +62,97 @@ python tools/ci/run_collection_gate.py
 python tools/ci/run_required_smoke.py
 ```
 
-The required pytest runner uses an explicit positive target list. It must not
-start with the full suite and subtract exclusions. Collection and required
-smoke run from a disposable working directory with no-WebUI/test-mode defaults,
-bytecode/cache suppression, temporary pytest paths, and repository-content
-snapshots. A hang, crash, collection error, real backend call, or repository
-mutation is a failed run even if earlier assertions passed.
+Use `python -m pytest -q <targets>` for focused behavior. Run the broadest
+practical suite when runtime code changes, but do not claim a full green suite
+when environment-dependent tests were not executed.
 
-Default collection includes active development, integration, journey, and
-headless-safe GUI v2 modules. It excludes archive, quarantine, manual scripts,
-legacy GUI, and legacy-only directories. Collection does not make a test
-canonical or required. Real WebUI/SVD acceptance requires the `real_backend`
-marker, explicit operator opt-in, and a separate recorded target-machine run.
+## Repository completeness
 
-Formatting, lint, and type-check commands must use repository-pinned
-configuration. Existing contract-test debt is assigned to its owning MVP PR in
-`tests/TEST_SURFACE_MANIFEST.md`; new or touched-file violations are not
-permitted.
+Every imported production module must be tracked in Git. Source packages may
+not be hidden by broad ignore patterns. The completeness gate compares tracked
+and working-tree source and fails on missing or untracked Python modules.
 
-Ruff is pinned to 0.14.9. `tools/ci/ruff_baseline.json` records 2,208
-pre-existing findings by source path and rule; the required baseline runner
-fails a version mismatch, any new key, or any increased count. Decreases do not
-require snapshot regeneration. MVP runtime PRs leave every touched source file
-clean, PR-MVP-080 owns bounded cleanup of untouched findings, and PR-MVP-090
-deletes the baseline only after raw `ruff check src` succeeds.
+## Collection and smoke
 
-PR-MVP-010 validation used disposable Python 3.11.16 and 3.12.14 environments.
-Both passed repository completeness, the Ruff baseline gate, the bounded mypy
-gate, strict isolated collection, and all 73 positively selected required
-tests. The collection runners reported 3,083 tests with two explicit
-optional-OpenCV skips and left repository contents unchanged.
+Collection runs in an isolated disposable directory and must not change the
+repository. The required smoke runner uses an exact positive list covering:
 
-PR-MVP-020 validation on Python 3.11.16 added immutable NJR contract and
-mutation-enforcement coverage. PR-MVP-030 then migrated all enabled source
-families to typed compiler/NJR submission, added replay/training compiler
-coverage, and removed the superseded generic request path. Its focused set
-passed 31 tests; isolated collection reported 3,096 tests with the same two
-optional-OpenCV skips; the required positive smoke passed 75 tests on both
-Python 3.11 and 3.12; bounded mypy smoke passed; and the pinned Ruff debt fell
-to 1,860 findings without increasing the approved ceiling.
+- repository completeness and architecture enforcement;
+- CI configuration truth;
+- runtime-state hygiene and workspace routing;
+- the queue-first core run path;
+- queued execution and error handling.
 
-## 11. PR verification record
+Adding a test to required smoke is a deliberate reliability decision, not a
+way to approximate the entire historical suite.
 
-Every implementation PR records:
+## Lint and types
 
-- exact commands and interpreter;
+Ruff 0.14.9 is pinned. `tools/ci/run_ruff_baseline.py` is a non-increasing
+file/rule-count ratchet over legacy debt. A new bucket or increased count fails.
+Every touched source file should be left clean. `PR-MVP-080` owns bounded
+cleanup of untouched findings; `PR-MVP-090` removes the baseline after raw Ruff
+is clean.
+
+`tools/ci/run_mypy_smoke.py` checks the typed architecture seams. A broad mypy
+run is useful diagnostic evidence but is not yet a repository-wide green gate.
+New typed seams should not add to that debt.
+
+## Runtime and GUI testing
+
+- Fake runtime ports must match the production protocol.
+- Queue tests assert enqueue-before-run and stable NJR snapshots.
+- Replay tests assert a new job identity and parent lineage.
+- Failure tests assert durable terminal state and no legacy fallback.
+- GUI tests must be headless-safe, non-blocking, and free of worker-thread
+  widget mutation.
+- Replace timing sleeps with events, fakes, bounded polling, or explicit state
+  transitions.
+- Close threads, clients, loggers, temporary servers, and process handles.
+
+## Real-backend acceptance
+
+Real WebUI/SVD tests require explicit opt-in and must record:
+
+- command and interpreter;
+- relevant dependency/model versions;
+- target hardware and memory settings;
 - pass/fail/skip counts;
-- relevant fixture or migration versions;
-- whether real backends were used;
-- tracked-file status before and after tests;
-- known failures with owner and closing PR;
-- docs and architecture-gap rows updated.
+- artifact location and inspected metadata;
+- timeout/cancellation behavior;
+- any environment blocker.
 
-“Tests pass” without this context is not adequate closeout evidence.
+Real-backend checks never run during collection and never silently download
+models or alter user data.
 
-## 12. Review checklist
+## Verified baseline
 
-- Does the change use the single intent/NJR/queue/runner path?
-- Are DTOs and ownership boundaries typed?
-- Is NJR immutable and free of runtime results?
-- Is source identity conditional and valid?
-- Is persistence transactional and recoverable?
-- Does a clean checkout include every production dependency?
-- Are tests isolated, deterministic, and architecture-current?
-- Are external dependencies preflighted rather than imported eagerly?
-- Are user data and unrelated work preserved?
-- Are canonical docs, roadmap, and PR closeout synchronized?
+The latest comparable verification including repository-hygiene cleanup reported:
+
+- 429 tracked Python source files;
+- 3,086 collected tests plus 2 optional-OpenCV module skips on the supported
+  Python 3.11 and 3.12 environments;
+- 74 required smoke tests passing on Python 3.11 and 3.12;
+- bounded mypy smoke passing;
+- 1,859 Ruff findings against the maximum baseline of 2,208.
+
+The broad suite is not a green gate yet. A Python 3.11 diagnostic stopped after
+10 failures, 215 passes, and 2 optional-OpenCV skips. The first failures are in
+legacy CLI submission, compatibility-mode execution, and queue/history
+migration expectations that predate the typed NJR cutover.
+
+Update this section and `STATUS.md` together only after running the comparable
+commands. Do not repeat counts in other active documents.
+
+## Change review
+
+Before completion, verify:
+
+- the requested behavior is actually delivered;
+- architecture ownership remains clear;
+- obsolete code/tests/docs were removed where safe;
+- migration and rollback are safe when data changes;
+- targeted and standard gates were run as applicable;
+- the working tree contains only intended changes;
+- `STATUS.md` reflects any material direction or verification change;
+- known failures and environment blockers are reported precisely.

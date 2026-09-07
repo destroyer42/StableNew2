@@ -53,6 +53,7 @@ To move a test out of quarantine:
 2. Add a `pytest.mark.gui` marker if Tk is still required (these are selected
    only when `$DISPLAY` is available).
 3. Move the file to the appropriate canonical test directory.
-4. Update `tests/TEST_SURFACE_MANIFEST.md` to reflect the move.
+4. Update `pyproject.toml` or the active testing guide only if collection or
+   marker policy changes.
 
 Quarantine is a holding state, not a permanent home.
