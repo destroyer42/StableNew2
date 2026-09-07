@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.replay_engine import ReplayEngine
 from src.pipeline.run_plan import build_run_plan_from_njr
 from src.queue.job_model import Job, StageCheckpoint
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class StubRunner:
@@ -34,11 +36,9 @@ class StubRunner:
 
 
 def _make_njr() -> NormalizedJobRecord:
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="replay-001",
         config={"prompt": "castle", "model": "v1-5"},
-        path_output_dir="out",
-        filename_template="{seed}",
         seed=123,
         positive_prompt="castle",
         negative_prompt="fog",
@@ -47,14 +47,9 @@ def _make_njr() -> NormalizedJobRecord:
                 stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler"
             )
         ],
-        steps=20,
-        cfg_scale=7.5,
-        width=512,
-        height=512,
-        sampler_name="Euler",
-        scheduler="ddim",
         base_model="v1-5",
         images_per_prompt=1,
+        path_output_dir="out",
     )
 
 
@@ -90,11 +85,14 @@ def test_replay_engine_resumes_from_last_valid_checkpoint(tmp_path: Path) -> Non
     checkpoint_file = tmp_path / "txt2img.png"
     checkpoint_file.write_bytes(b"png")
     njr = _make_njr()
-    njr.stage_chain = [
-        StageConfig(stage_type="txt2img", enabled=True),
-        StageConfig(stage_type="adetailer", enabled=True),
-        StageConfig(stage_type="upscale", enabled=True),
-    ]
+    njr = replace(
+        njr,
+        stages=(
+            StageConfig(stage_type="txt2img", enabled=True),
+            StageConfig(stage_type="adetailer", enabled=True),
+            StageConfig(stage_type="upscale", enabled=True),
+        ),
+    )
     job = Job(job_id=njr.job_id, prompt_pack_id="test-pack")
     job.execution_metadata.stage_checkpoints.append(
         StageCheckpoint(stage_name="adetailer", output_paths=[str(checkpoint_file)])
@@ -105,8 +103,10 @@ def test_replay_engine_resumes_from_last_valid_checkpoint(tmp_path: Path) -> Non
     engine.replay_njr(njr, job=job)
 
     resumed = runner.calls[0]["njr"]
+    assert resumed.job_id != njr.job_id
+    assert resumed.source.parent_job_id == njr.job_id
     assert resumed.start_stage == "upscale"
-    assert resumed.input_image_paths == [str(checkpoint_file)]
+    assert resumed.input_image_paths == (str(checkpoint_file),)
 
 
 def test_replay_engine_checkpoint_callback_updates_job_metadata() -> None:

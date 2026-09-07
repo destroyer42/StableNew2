@@ -1,15 +1,51 @@
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import (
+    NormalizedJobRecord,
+    SourceDescriptor,
+    SourceKind,
+    StageConfig,
+    migrate_legacy_njr,
+)
 from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult, normalize_run_result
 from src.refinement.subject_scale_policy_service import SubjectScalePolicyService
-from src.video.assembly_models import AssembledVideoResult, ExportReadyOutputBundle
 from src.video import VideoBackendCapabilities, VideoBackendRegistry, VideoExecutionResult
+from src.video.assembly_models import AssembledVideoResult, ExportReadyOutputBundle
+
+
+def _record_from_legacy_kwargs(**values: object) -> NormalizedJobRecord:
+    """Keep runner fixtures concise while crossing the explicit legacy boundary."""
+
+    stages = values.get("stage_chain") or ()
+    if any(getattr(stage, "stage_type", "") == "txt2img" for stage in stages):
+        config = values.get("config")
+        has_prompt = isinstance(config, dict) and bool(config.get("prompt"))
+        if not values.get("positive_prompt") and not has_prompt:
+            values["positive_prompt"] = "runner test prompt"
+    return migrate_legacy_njr(values)
+
+
+def _with_workload(
+    record: NormalizedJobRecord,
+    *,
+    positive_prompt: str | None = None,
+    negative_prompt: str | None = None,
+    intent_config: dict[str, object] | None = None,
+) -> NormalizedJobRecord:
+    changes: dict[str, object] = {}
+    if positive_prompt is not None:
+        changes["positive_prompt"] = positive_prompt
+    if negative_prompt is not None:
+        changes["negative_prompt"] = negative_prompt
+    if intent_config is not None:
+        changes["intent_config"] = intent_config
+    return replace(record, workload=replace(record.workload, **changes))
 
 
 def _minimal_normalized_record() -> NormalizedJobRecord:
-    return NormalizedJobRecord(
+    return _record_from_legacy_kwargs(
         job_id="runner-test",
         config={},
         path_output_dir="output",
@@ -59,21 +95,29 @@ def test_run_njr_delegates_to_executor() -> None:
 def test_run_njr_emits_observation_only_adaptive_refinement_metadata() -> None:
     runner = PipelineRunner(Mock(), Mock())
     record = _minimal_normalized_record()
-    record.positive_prompt = "full body portrait, profile, woman, detailed face"
-    record.negative_prompt = "bad anatomy"
-    record.prompt_pack_id = "pack-001"
-    record.prompt_pack_name = "Pack 001"
-    record.intent_config = {
-        "adaptive_refinement": {
-            "schema": "stablenew.adaptive-refinement.v1",
-            "enabled": True,
-            "mode": "observe",
-            "profile_id": "auto_v1",
-            "detector_preference": "null",
-            "record_decisions": True,
-            "algorithm_version": "v1",
-        }
-    }
+    record = replace(
+        _with_workload(
+            record,
+            positive_prompt="full body portrait, profile, woman, detailed face",
+            negative_prompt="bad anatomy",
+            intent_config={
+                "adaptive_refinement": {
+                    "schema": "stablenew.adaptive-refinement.v1",
+                    "enabled": True,
+                    "mode": "observe",
+                    "profile_id": "auto_v1",
+                    "detector_preference": "null",
+                    "record_decisions": True,
+                    "algorithm_version": "v1",
+                }
+            },
+        ),
+        source=SourceDescriptor(
+            kind=SourceKind.PROMPT_PACK,
+            id="pack-001",
+            display_name="Pack 001",
+        ),
+    )
     pipeline = Mock()
     pipeline.client = Mock()
     pipeline.run_txt2img_stage.return_value = {"path": "output.png"}
@@ -95,13 +139,16 @@ def test_run_njr_emits_observation_only_adaptive_refinement_metadata() -> None:
 def test_run_njr_does_not_emit_adaptive_refinement_metadata_when_disabled() -> None:
     runner = PipelineRunner(Mock(), Mock())
     record = _minimal_normalized_record()
-    record.intent_config = {
-        "adaptive_refinement": {
-            "schema": "stablenew.adaptive-refinement.v1",
-            "enabled": False,
-            "mode": "observe",
-        }
-    }
+    record = _with_workload(
+        record,
+        intent_config={
+            "adaptive_refinement": {
+                "schema": "stablenew.adaptive-refinement.v1",
+                "enabled": False,
+                "mode": "observe",
+            }
+        },
+    )
     pipeline = Mock()
     pipeline.client = Mock()
     pipeline.run_txt2img_stage.return_value = {"path": "output.png"}
@@ -118,18 +165,21 @@ def test_run_njr_caches_refinement_assessment_per_output_path(tmp_path: Path) ->
     output_path = tmp_path / "output.png"
     output_path.write_bytes(b"png")
     record = _minimal_normalized_record()
-    record.positive_prompt = "portrait woman"
-    record.intent_config = {
-        "adaptive_refinement": {
-            "schema": "stablenew.adaptive-refinement.v1",
-            "enabled": True,
-            "mode": "observe",
-            "profile_id": "auto_v1",
-            "detector_preference": "opencv",
-            "record_decisions": True,
-            "algorithm_version": "v1",
-        }
-    }
+    record = _with_workload(
+        record,
+        positive_prompt="portrait woman",
+        intent_config={
+            "adaptive_refinement": {
+                "schema": "stablenew.adaptive-refinement.v1",
+                "enabled": True,
+                "mode": "observe",
+                "profile_id": "auto_v1",
+                "detector_preference": "opencv",
+                "record_decisions": True,
+                "algorithm_version": "v1",
+            }
+        },
+    )
 
     class _ServiceStub:
         def __init__(self) -> None:
@@ -184,7 +234,14 @@ def test_run_njr_caches_refinement_assessment_per_output_path(tmp_path: Path) ->
     assert service.calls == [str(output_path)]
     assert result.metadata["adaptive_refinement"]["decision_bundle"]["detector_id"] == "opencv"
     assert result.metadata["adaptive_refinement"]["detector_notes"] == ["opencv_requested"]
-    assert len(result.metadata["adaptive_refinement"]["decision_bundle"]["observation"]["image_assessments"]) == 2
+    assert (
+        len(
+            result.metadata["adaptive_refinement"]["decision_bundle"]["observation"][
+                "image_assessments"
+            ]
+        )
+        == 2
+    )
 
 
 def test_run_njr_records_detector_fallback_notes(tmp_path: Path) -> None:
@@ -192,20 +249,26 @@ def test_run_njr_records_detector_fallback_notes(tmp_path: Path) -> None:
     output_path = tmp_path / "output.png"
     output_path.write_bytes(b"png")
     record = _minimal_normalized_record()
-    record.positive_prompt = "portrait woman"
-    record.intent_config = {
-        "adaptive_refinement": {
-            "schema": "stablenew.adaptive-refinement.v1",
-            "enabled": True,
-            "mode": "observe",
-            "profile_id": "auto_v1",
-            "detector_preference": "opencv",
-            "record_decisions": True,
-            "algorithm_version": "v1",
-        }
-    }
+    record = _with_workload(
+        record,
+        positive_prompt="portrait woman",
+        intent_config={
+            "adaptive_refinement": {
+                "schema": "stablenew.adaptive-refinement.v1",
+                "enabled": True,
+                "mode": "observe",
+                "profile_id": "auto_v1",
+                "detector_preference": "opencv",
+                "record_decisions": True,
+                "algorithm_version": "v1",
+            }
+        },
+    )
     runner._resolve_refinement_policy_service = (  # type: ignore[method-assign]
-        lambda _pref: (SubjectScalePolicyService(), ["opencv_requested_but_unavailable_fell_back_to_null"])
+        lambda _pref: (
+            SubjectScalePolicyService(),
+            ["opencv_requested_but_unavailable_fell_back_to_null"],
+        )
     )
     pipeline = Mock()
     pipeline.client = Mock()
@@ -271,7 +334,7 @@ def test_run_njr_executes_train_lora_and_returns_weight_artifact(tmp_path: Path)
     pipeline = Mock()
     pipeline.client = Mock()
     runner._pipeline = pipeline
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="train-job",
         config={
             "train_lora": {
@@ -313,46 +376,47 @@ def test_run_njr_rejects_mixed_train_lora_stage_plan(tmp_path: Path) -> None:
     pipeline = Mock()
     pipeline.client = Mock()
     runner._pipeline = pipeline
-    record = NormalizedJobRecord(
-        job_id="train-mixed",
-        config={
-            "train_lora": {
-                "enabled": True,
-                "character_name": "Ada",
-                "image_dir": str(tmp_path / "images"),
-                "output_dir": str(tmp_path),
-                "epochs": 10,
-                "learning_rate": 0.0001,
-            },
-            "pipeline": {
-                "train_lora_enabled": True,
-                "txt2img_enabled": True,
-            },
-            "txt2img": {
-                "enabled": True,
-                "model": "sdxl",
-                "sampler_name": "Euler",
-                "steps": 20,
-                "cfg_scale": 7.0,
-            },
-        },
-        path_output_dir=str(tmp_path),
-        filename_template="{seed}",
-        created_ts=0.0,
-        prompt_pack_id="character-training:ada",
-        positive_prompt="Train LoRA for Ada",
-        stage_chain=[
-            StageConfig(stage_type="txt2img", enabled=True, model="sdxl"),
-            StageConfig(stage_type="train_lora", enabled=True),
-        ],
-    )
-
     try:
-        runner.run_njr(record, cancel_token=None)
+        _record_from_legacy_kwargs(
+            job_id="train-mixed",
+            config={
+                "train_lora": {
+                    "enabled": True,
+                    "character_name": "Ada",
+                    "image_dir": str(tmp_path / "images"),
+                    "output_dir": str(tmp_path),
+                    "epochs": 10,
+                    "learning_rate": 0.0001,
+                },
+                "pipeline": {
+                    "train_lora_enabled": True,
+                    "txt2img_enabled": True,
+                },
+                "txt2img": {
+                    "enabled": True,
+                    "model": "sdxl",
+                    "sampler_name": "Euler",
+                    "steps": 20,
+                    "cfg_scale": 7.0,
+                },
+            },
+            path_output_dir=str(tmp_path),
+            filename_template="{seed}",
+            created_ts=0.0,
+            prompt_pack_id="character-training:ada",
+            positive_prompt="Train LoRA for Ada",
+            stage_chain=[
+                StageConfig(stage_type="txt2img", enabled=True, model="sdxl"),
+                StageConfig(stage_type="train_lora", enabled=True),
+            ],
+        )
     except ValueError as exc:
-        assert "train_lora must be the only enabled stage" in str(exc)
+        assert "incompatible stages" in str(exc)
     else:
         raise AssertionError("Expected train_lora mixed plan to be rejected")
+
+    # Invalid authorized work never reaches the runner.
+    assert pipeline.mock_calls == []
 
 
 def test_pipeline_runner_keeps_character_embedder_lazy(monkeypatch) -> None:
@@ -378,7 +442,7 @@ def test_run_njr_applies_per_image_adetailer_refinement_without_leakage(tmp_path
     input_b.write_bytes(b"b")
     output_a = tmp_path / "output_a.png"
     output_b = tmp_path / "output_b.png"
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-adetailer-refine",
         config={},
         path_output_dir="output",
@@ -393,18 +457,21 @@ def test_run_njr_applies_per_image_adetailer_refinement_without_leakage(tmp_path
         input_image_paths=[str(input_a), str(input_b)],
         start_stage="adetailer",
     )
-    record.positive_prompt = "profile portrait with detailed face"
-    record.intent_config = {
-        "adaptive_refinement": {
-            "schema": "stablenew.adaptive-refinement.v1",
-            "enabled": True,
-            "mode": "adetailer",
-            "profile_id": "auto_v1",
-            "detector_preference": "null",
-            "record_decisions": True,
-            "algorithm_version": "v1",
-        }
-    }
+    record = _with_workload(
+        record,
+        positive_prompt="profile portrait with detailed face",
+        intent_config={
+            "adaptive_refinement": {
+                "schema": "stablenew.adaptive-refinement.v1",
+                "enabled": True,
+                "mode": "adetailer",
+                "profile_id": "auto_v1",
+                "detector_preference": "null",
+                "record_decisions": True,
+                "algorithm_version": "v1",
+            }
+        },
+    )
 
     class _ServiceStub:
         def build_bundle(self, *, mode, prompt_intent, image_path, extra_observation=None):
@@ -425,7 +492,10 @@ def test_run_njr_applies_per_image_adetailer_refinement_without_leakage(tmp_path
                 "detector_id": "null",
                 "observation": {
                     "prompt_intent": dict(prompt_intent),
-                    "subject_assessment": {"detector_id": "null", "scale_band": "micro" if applied else "large"},
+                    "subject_assessment": {
+                        "detector_id": "null",
+                        "scale_band": "micro" if applied else "large",
+                    },
                 },
                 "applied_overrides": applied,
                 "prompt_patch": {},
@@ -452,7 +522,16 @@ def test_run_njr_applies_per_image_adetailer_refinement_without_leakage(tmp_path
 
     captured_configs: list[dict[str, object]] = []
 
-    def _run_adetailer_stage(*, input_image_path, config, output_dir, image_name, prompt=None, negative_prompt=None, cancel_token=None):
+    def _run_adetailer_stage(
+        *,
+        input_image_path,
+        config,
+        output_dir,
+        image_name,
+        prompt=None,
+        negative_prompt=None,
+        cancel_token=None,
+    ):
         captured_configs.append(dict(config))
         output_path = output_a if str(input_image_path).endswith("input_a.png") else output_b
         return {
@@ -478,7 +557,9 @@ def test_run_njr_applies_per_image_adetailer_refinement_without_leakage(tmp_path
     assert "adetailer_padding" not in captured_configs[1]
     assert len(result.metadata["adaptive_refinement"]["image_decisions"]) == 2
     assert (
-        result.metadata["adaptive_refinement"]["image_decisions"][0]["decision_bundle"]["applied_overrides"]["ad_confidence"]
+        result.metadata["adaptive_refinement"]["image_decisions"][0]["decision_bundle"][
+            "applied_overrides"
+        ]["ad_confidence"]
         == 0.22
     )
 
@@ -491,7 +572,7 @@ def test_run_njr_applies_full_mode_upscale_refinement_without_leakage(tmp_path: 
     input_b.write_bytes(b"b")
     output_a = tmp_path / "upscaled_a.png"
     output_b = tmp_path / "upscaled_b.png"
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-upscale-refine",
         config={},
         path_output_dir="output",
@@ -502,23 +583,28 @@ def test_run_njr_applies_full_mode_upscale_refinement_without_leakage(tmp_path: 
         batch_index=0,
         batch_total=1,
         created_ts=0.0,
-        stage_chain=[StageConfig(stage_type="upscale", enabled=True, extra={"upscale_mode": "img2img"})],
+        stage_chain=[
+            StageConfig(stage_type="upscale", enabled=True, extra={"upscale_mode": "img2img"})
+        ],
         input_image_paths=[str(input_a), str(input_b)],
         start_stage="upscale",
     )
-    record.positive_prompt = "portrait woman, soft face"
-    record.negative_prompt = "blurry"
-    record.intent_config = {
-        "adaptive_refinement": {
-            "schema": "stablenew.adaptive-refinement.v1",
-            "enabled": True,
-            "mode": "full",
-            "profile_id": "auto_v1",
-            "detector_preference": "null",
-            "record_decisions": True,
-            "algorithm_version": "v1",
-        }
-    }
+    record = _with_workload(
+        record,
+        positive_prompt="portrait woman, soft face",
+        negative_prompt="blurry",
+        intent_config={
+            "adaptive_refinement": {
+                "schema": "stablenew.adaptive-refinement.v1",
+                "enabled": True,
+                "mode": "full",
+                "profile_id": "auto_v1",
+                "detector_preference": "null",
+                "record_decisions": True,
+                "algorithm_version": "v1",
+            }
+        },
+    )
 
     class _ServiceStub:
         def build_bundle(self, *, mode, prompt_intent, image_path, extra_observation=None):
@@ -531,12 +617,13 @@ def test_run_njr_applies_full_mode_upscale_refinement_without_leakage(tmp_path: 
                 "detector_id": "null",
                 "observation": {
                     "prompt_intent": dict(prompt_intent),
-                    "subject_assessment": {"detector_id": "null", "scale_band": "small" if is_first else "large"},
+                    "subject_assessment": {
+                        "detector_id": "null",
+                        "scale_band": "small" if is_first else "large",
+                    },
                 },
                 "applied_overrides": (
-                    {"upscale_steps": 18, "upscale_denoising_strength": 0.18}
-                    if is_first
-                    else {}
+                    {"upscale_steps": 18, "upscale_denoising_strength": 0.18} if is_first else {}
                 ),
                 "prompt_patch": (
                     {
@@ -592,13 +679,17 @@ def test_run_njr_applies_full_mode_upscale_refinement_without_leakage(tmp_path: 
     assert captured_configs[0]["denoising_strength"] == 0.18
     assert captured_configs[0]["prompt"] == "portrait woman, soft face"
     assert captured_configs[0]["negative_prompt"] == "blurry"
-    assert captured_configs[0]["adaptive_refinement"]["decision_bundle"]["prompt_patch"]["add_positive"] == ["clear irises"]
+    assert captured_configs[0]["adaptive_refinement"]["decision_bundle"]["prompt_patch"][
+        "add_positive"
+    ] == ["clear irises"]
     assert captured_configs[1]["steps"] is None
     assert captured_configs[1]["denoising_strength"] is None
     assert len(result.metadata["adaptive_refinement"]["image_decisions"]) == 2
     assert result.metadata["adaptive_refinement"]["image_decisions"][0]["stage_name"] == "upscale"
     assert (
-        result.metadata["adaptive_refinement"]["image_decisions"][0]["decision_bundle"]["applied_overrides"]["upscale_steps"]
+        result.metadata["adaptive_refinement"]["image_decisions"][0]["decision_bundle"][
+            "applied_overrides"
+        ]["upscale_steps"]
         == 18
     )
 
@@ -647,7 +738,7 @@ def test_run_njr_dispatches_animatediff_stage(tmp_path: Path) -> None:
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
     input_path = tmp_path / "seed.png"
     input_path.write_bytes(b"seed")
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-animatediff",
         config={},
         path_output_dir="output",
@@ -687,8 +778,13 @@ def test_run_njr_dispatches_animatediff_stage(tmp_path: Path) -> None:
     assert result.success is True
     assert result.metadata["animatediff_artifact"]["count"] == 1
     assert result.metadata["animatediff_artifact"]["primary_path"] == str(tmp_path / "clip.mp4")
-    assert result.metadata["animatediff_artifact"]["manifest_paths"] == [str(tmp_path / "clip.json")]
-    assert result.metadata["animatediff_artifact"]["artifacts"][0]["schema"] == "stablenew.artifact.v2.6"
+    assert result.metadata["animatediff_artifact"]["manifest_paths"] == [
+        str(tmp_path / "clip.json")
+    ]
+    assert (
+        result.metadata["animatediff_artifact"]["artifacts"][0]["schema"]
+        == "stablenew.artifact.v2.6"
+    )
     assert result.metadata["video_artifacts"]["animatediff"]["backend_id"] == "animatediff"
     assert result.metadata["video_primary_artifact"]["stage"] == "animatediff"
     assert result.metadata["video_primary_artifact"]["primary_path"] == str(tmp_path / "clip.mp4")
@@ -703,7 +799,7 @@ def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
     output_video = tmp_path / "svd.mp4"
     manifest = tmp_path / "svd.json"
     preview = tmp_path / "preview.png"
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-svd-native",
         config={},
         path_output_dir="output",
@@ -746,14 +842,17 @@ def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
     assert result.success is True
     assert result.metadata["svd_native_artifact"]["count"] == 1
     assert result.metadata["svd_native_artifact"]["primary_path"] == str(output_video)
-    assert result.metadata["svd_native_artifact"]["artifacts"][0]["schema"] == "stablenew.artifact.v2.6"
+    assert (
+        result.metadata["svd_native_artifact"]["artifacts"][0]["schema"]
+        == "stablenew.artifact.v2.6"
+    )
     assert result.metadata["video_artifacts"]["svd_native"]["backend_id"] == "svd_native"
     assert result.metadata["video_primary_artifact"]["stage"] == "svd_native"
     assert result.metadata["video_primary_artifact"]["primary_path"] == str(output_video)
     assert result.metadata["video_backend_results"]["svd_native"]["backend_id"] == "svd_native"
     assert result.variants[0]["video_backend_id"] == "svd_native"
-    assert record.thumbnail_path == str(preview)
-    assert record.output_paths == [str(output_video)]
+    assert not hasattr(record, "thumbnail_path")
+    assert not hasattr(record, "output_paths")
 
 
 def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
@@ -812,7 +911,7 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
     registry = VideoBackendRegistry()
     registry.register(_WorkflowBackend())
     runner._video_backends = registry
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-video-workflow",
         config={},
         path_output_dir="output",
@@ -837,13 +936,19 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
         input_image_paths=[str(input_path)],
         start_stage="video_workflow",
     )
-    record.continuity_link = {
-        "pack_id": "cont-001",
-        "pack_summary": {
-            "pack_id": "cont-001",
-            "display_name": "Hero Pack",
-        },
-    }
+    record = replace(
+        record,
+        workload=replace(
+            record.workload,
+            continuity_link={
+                "pack_id": "cont-001",
+                "pack_summary": {
+                    "pack_id": "cont-001",
+                    "display_name": "Hero Pack",
+                },
+            },
+        ),
+    )
     pipeline = Mock()
     runner._pipeline = pipeline
 
@@ -858,7 +963,10 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
     assert result.metadata["replay_descriptor"]["artifact_type"] == "video"
     assert result.metadata["replay_descriptor"]["primary_stage"] == "video_workflow"
     assert result.metadata["replay_descriptor"]["backends"][0]["backend_id"] == "comfy"
-    assert result.metadata["replay_descriptor"]["backends"][0]["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert (
+        result.metadata["replay_descriptor"]["backends"][0]["workflow_id"]
+        == "ltx_multiframe_anchor_v1"
+    )
     assert result.metadata["diagnostics_descriptor"]["primary_stage"] == "video_workflow"
     # PR-VIDEO-215: stage-specific key for video_workflow must be stamped
     assert "video_workflow_artifact" in result.metadata
@@ -869,7 +977,10 @@ def test_run_njr_dispatches_video_workflow_stage(tmp_path: Path) -> None:
     assert result.metadata["video_workflow_artifact"]["source_image_path"] == str(input_path)
     assert result.metadata["continuity"]["pack_id"] == "cont-001"
     assert result.metadata["video_workflow_artifact"]["continuity"]["pack_id"] == "cont-001"
-    assert result.metadata["video_backend_results"]["video_workflow"]["continuity"]["pack_id"] == "cont-001"
+    assert (
+        result.metadata["video_backend_results"]["video_workflow"]["continuity"]["pack_id"]
+        == "cont-001"
+    )
 
 
 def test_run_njr_emits_secondary_motion_policy_for_video_stage(tmp_path: Path) -> None:
@@ -917,7 +1028,7 @@ def test_run_njr_emits_secondary_motion_policy_for_video_stage(tmp_path: Path) -
     registry = VideoBackendRegistry()
     registry.register(_WorkflowBackend())
     runner._video_backends = registry
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-secondary-motion",
         config={},
         path_output_dir="output",
@@ -942,21 +1053,24 @@ def test_run_njr_emits_secondary_motion_policy_for_video_stage(tmp_path: Path) -
         input_image_paths=[str(input_path)],
         start_stage="video_workflow",
     )
-    record.positive_prompt = "portrait woman with flowing hair"
-    record.negative_prompt = "camera shake"
-    record.intent_config = {
-        "secondary_motion": {
-            "schema": "stablenew.secondary-motion.v1",
-            "enabled": True,
-            "mode": "observe",
-            "intent": "micro_sway",
-            "regions": ["hair", "fabric"],
-            "allow_prompt_bias": False,
-            "allow_native_backend": False,
-            "record_decisions": True,
-            "algorithm_version": "v1",
-        }
-    }
+    record = _with_workload(
+        record,
+        positive_prompt="portrait woman with flowing hair",
+        negative_prompt="camera shake",
+        intent_config={
+            "secondary_motion": {
+                "schema": "stablenew.secondary-motion.v1",
+                "enabled": True,
+                "mode": "observe",
+                "intent": "micro_sway",
+                "regions": ["hair", "fabric"],
+                "allow_prompt_bias": False,
+                "allow_native_backend": False,
+                "record_decisions": True,
+                "algorithm_version": "v1",
+            }
+        },
+    )
 
     runner._pipeline = Mock()
 
@@ -1024,7 +1138,7 @@ def test_run_njr_injects_apply_mode_secondary_motion_and_collects_summary(tmp_pa
     registry = VideoBackendRegistry()
     registry.register(_WorkflowBackend())
     runner._video_backends = registry
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-secondary-motion-apply",
         config={},
         path_output_dir="output",
@@ -1045,25 +1159,31 @@ def test_run_njr_injects_apply_mode_secondary_motion_and_collects_summary(tmp_pa
         input_image_paths=[str(input_path)],
         start_stage="video_workflow",
     )
-    record.positive_prompt = "portrait woman with flowing hair"
-    record.negative_prompt = "camera shake"
-    record.intent_config = {
-        "secondary_motion": {
-            "schema": "stablenew.secondary-motion.v1",
-            "enabled": True,
-            "mode": "apply",
-            "intent": "micro_sway",
-            "regions": ["hair"],
-            "allow_native_backend": False,
-            "algorithm_version": "v1",
-        }
-    }
+    record = _with_workload(
+        record,
+        positive_prompt="portrait woman with flowing hair",
+        negative_prompt="camera shake",
+        intent_config={
+            "secondary_motion": {
+                "schema": "stablenew.secondary-motion.v1",
+                "enabled": True,
+                "mode": "apply",
+                "intent": "micro_sway",
+                "regions": ["hair"],
+                "allow_native_backend": False,
+                "algorithm_version": "v1",
+            }
+        },
+    )
     runner._pipeline = Mock()
 
     result = runner.run_njr(record, cancel_token=None)
 
     assert result.metadata["secondary_motion"]["summary"]["status"] == "applied"
-    assert result.metadata["secondary_motion"]["summary"]["application_path"] == "shared_postprocess_engine"
+    assert (
+        result.metadata["secondary_motion"]["summary"]["application_path"]
+        == "shared_postprocess_engine"
+    )
 
 
 def test_run_njr_injects_apply_mode_secondary_motion_under_svd_postprocess(tmp_path: Path) -> None:
@@ -1129,7 +1249,7 @@ def test_run_njr_injects_apply_mode_secondary_motion_under_svd_postprocess(tmp_p
     registry = VideoBackendRegistry()
     registry.register(_SVDBackend())
     runner._video_backends = registry
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-svd-secondary-motion-apply",
         config={},
         path_output_dir="output",
@@ -1150,19 +1270,22 @@ def test_run_njr_injects_apply_mode_secondary_motion_under_svd_postprocess(tmp_p
         input_image_paths=[str(input_path)],
         start_stage="svd_native",
     )
-    record.positive_prompt = "portrait woman with flowing hair"
-    record.negative_prompt = "camera shake"
-    record.intent_config = {
-        "secondary_motion": {
-            "schema": "stablenew.secondary-motion.v1",
-            "enabled": True,
-            "mode": "apply",
-            "intent": "micro_sway",
-            "regions": ["hair"],
-            "allow_native_backend": False,
-            "algorithm_version": "v1",
-        }
-    }
+    record = _with_workload(
+        record,
+        positive_prompt="portrait woman with flowing hair",
+        negative_prompt="camera shake",
+        intent_config={
+            "secondary_motion": {
+                "schema": "stablenew.secondary-motion.v1",
+                "enabled": True,
+                "mode": "apply",
+                "intent": "micro_sway",
+                "regions": ["hair"],
+                "allow_native_backend": False,
+                "algorithm_version": "v1",
+            }
+        },
+    )
     original_extra = dict(record.stage_chain[0].extra or {})
     runner._pipeline = Mock()
 
@@ -1171,7 +1294,10 @@ def test_run_njr_injects_apply_mode_secondary_motion_under_svd_postprocess(tmp_p
     assert result.success is True
     assert record.stage_chain[0].extra == original_extra
     assert result.metadata["secondary_motion"]["summary"]["status"] == "applied"
-    assert result.metadata["secondary_motion"]["summary"]["application_path"] == "frame_directory_worker"
+    assert (
+        result.metadata["secondary_motion"]["summary"]["application_path"]
+        == "frame_directory_worker"
+    )
 
 
 def test_run_njr_injects_apply_mode_secondary_motion_into_animatediff_stage(tmp_path: Path) -> None:
@@ -1245,7 +1371,7 @@ def test_run_njr_injects_apply_mode_secondary_motion_into_animatediff_stage(tmp_
     registry = VideoBackendRegistry()
     registry.register(_AnimateDiffBackend())
     runner._video_backends = registry
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-animatediff-secondary-motion-apply",
         config={},
         path_output_dir="output",
@@ -1256,23 +1382,28 @@ def test_run_njr_injects_apply_mode_secondary_motion_into_animatediff_stage(tmp_
         batch_index=0,
         batch_total=1,
         created_ts=0.0,
-        stage_chain=[StageConfig(stage_type="animatediff", enabled=True, extra={"enabled": True, "fps": 12})],
+        stage_chain=[
+            StageConfig(stage_type="animatediff", enabled=True, extra={"enabled": True, "fps": 12})
+        ],
         input_image_paths=[str(input_path)],
         start_stage="animatediff",
     )
-    record.positive_prompt = "portrait woman with flowing hair"
-    record.negative_prompt = "camera shake"
-    record.intent_config = {
-        "secondary_motion": {
-            "schema": "stablenew.secondary-motion.v1",
-            "enabled": True,
-            "mode": "apply",
-            "intent": "micro_sway",
-            "regions": ["hair"],
-            "allow_native_backend": False,
-            "algorithm_version": "v1",
-        }
-    }
+    record = _with_workload(
+        record,
+        positive_prompt="portrait woman with flowing hair",
+        negative_prompt="camera shake",
+        intent_config={
+            "secondary_motion": {
+                "schema": "stablenew.secondary-motion.v1",
+                "enabled": True,
+                "mode": "apply",
+                "intent": "micro_sway",
+                "regions": ["hair"],
+                "allow_native_backend": False,
+                "algorithm_version": "v1",
+            }
+        },
+    )
     original_extra = dict(record.stage_chain[0].extra or {})
     runner._pipeline = Mock()
 
@@ -1281,36 +1412,42 @@ def test_run_njr_injects_apply_mode_secondary_motion_into_animatediff_stage(tmp_
     assert result.success is True
     assert record.stage_chain[0].extra == original_extra
     assert result.metadata["secondary_motion"]["summary"]["status"] == "applied"
-    assert result.metadata["secondary_motion"]["summary"]["application_path"] == "frame_directory_worker"
-
-
-def test_run_njr_fails_when_final_enabled_stage_produces_no_outputs(tmp_path: Path) -> None:
-    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
-    record = NormalizedJobRecord(
-        job_id="runner-final-stage-failure",
-        config={},
-        path_output_dir="output",
-        filename_template="{seed}",
-        seed=42,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=0.0,
-        stage_chain=[
-            StageConfig(stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a"),
-            StageConfig(stage_type="animatediff", enabled=True, extra={"enabled": True}),
-        ],
+    assert (
+        result.metadata["secondary_motion"]["summary"]["application_path"]
+        == "frame_directory_worker"
     )
-    pipeline = Mock()
-    pipeline.run_txt2img_stage.return_value = {"path": str(tmp_path / "image.png"), "all_paths": [str(tmp_path / "image.png")]}
-    pipeline.run_animatediff_stage.return_value = None
-    runner._pipeline = pipeline
 
-    result = runner.run_njr(record, cancel_token=None)
 
-    assert result.success is False
-    assert result.error == "No images were generated successfully"
+def test_mixed_image_and_video_stage_plan_is_rejected_before_runner(
+    tmp_path: Path,
+) -> None:
+    try:
+        _record_from_legacy_kwargs(
+            job_id="runner-final-stage-failure",
+            config={},
+            path_output_dir="output",
+            filename_template="{seed}",
+            seed=42,
+            created_ts=0.0,
+            stage_chain=[
+                StageConfig(
+                    stage_type="txt2img",
+                    enabled=True,
+                    steps=20,
+                    cfg_scale=7.5,
+                    sampler_name="Euler a",
+                ),
+                StageConfig(
+                    stage_type="animatediff",
+                    enabled=True,
+                    extra={"enabled": True},
+                ),
+            ],
+        )
+    except ValueError as exc:
+        assert "incompatible stages" in str(exc)
+    else:
+        raise AssertionError("Expected mixed image/video stages to be rejected")
 
 
 def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path) -> None:
@@ -1369,7 +1506,7 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
     registry.register(_WorkflowBackend())
     runner._video_backends = registry
 
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-video-sequence",
         config={},
         path_output_dir="output",
@@ -1399,13 +1536,19 @@ def test_run_njr_executes_sequence_plan_for_video_workflow_stage(tmp_path: Path)
         input_image_paths=[str(input_path)],
         start_stage="video_workflow",
     )
-    record.continuity_link = {
-        "pack_id": "cont-seq-001",
-        "pack_summary": {
-            "pack_id": "cont-seq-001",
-            "display_name": "Sequence Pack",
-        },
-    }
+    record = replace(
+        record,
+        workload=replace(
+            record.workload,
+            continuity_link={
+                "pack_id": "cont-seq-001",
+                "pack_summary": {
+                    "pack_id": "cont-seq-001",
+                    "display_name": "Sequence Pack",
+                },
+            },
+        ),
+    )
 
     pipeline = Mock()
     runner._pipeline = pipeline
@@ -1514,7 +1657,7 @@ def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(
     registry.register(_WorkflowBackend())
     runner._video_backends = registry
 
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-video-sequence-assembly",
         config={},
         path_output_dir="output",
@@ -1557,9 +1700,13 @@ def test_run_njr_sequence_assembly_stamps_assembled_video_artifact(
     assert result.success is True
     assert call_count[0] == 2
     assert result.metadata["assembled_video_artifact"]["primary_path"] == str(assembled_video)
-    assert result.metadata["video_artifacts"]["assembled_video"]["primary_path"] == str(assembled_video)
+    assert result.metadata["video_artifacts"]["assembled_video"]["primary_path"] == str(
+        assembled_video
+    )
     assert result.metadata["assembled_video_result"]["success"] is True
-    assert result.metadata["sequence_artifact"]["assembled_video"]["clip_name"] == "assembled_sequence"
+    assert (
+        result.metadata["sequence_artifact"]["assembled_video"]["clip_name"] == "assembled_sequence"
+    )
 
 
 def test_run_njr_sequence_plan_stamps_plan_origin_metadata(tmp_path: Path) -> None:
@@ -1609,7 +1756,7 @@ def test_run_njr_sequence_plan_stamps_plan_origin_metadata(tmp_path: Path) -> No
     registry.register(_WorkflowBackend())
     runner._video_backends = registry
 
-    record = NormalizedJobRecord(
+    record = _record_from_legacy_kwargs(
         job_id="runner-video-plan-origin",
         config={},
         path_output_dir="output",

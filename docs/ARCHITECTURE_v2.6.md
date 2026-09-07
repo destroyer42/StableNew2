@@ -249,18 +249,18 @@ UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 
 ## 13. Current implementation gap register
 
-Audit date: 2026-09-05. These gaps mean the target contract is not yet fully
+Audit date: 2026-09-07. These gaps mean the target contract is not yet fully
 implemented:
 
 | Gap | Status | Current evidence | Closing roadmap item |
 |---|---|---|---|
 | Repository completeness | **Closed 2026-09-05** | All imported `src/state/` modules and focused tests are tracked; the root ignore rule is anchored; a tracked-files-only worktree passed completeness, compile, import, and 42 focused tests | `PR-MVP-000` |
-| NJR scope | Open | Current NJR mixes executable input with mutable status/results and has incomplete serialization | `PR-MVP-020` |
-| Source identity | Open | `JobService` still emits `pack_required` for valid non-pack shapes | `PR-MVP-020` / `PR-MVP-030` |
+| NJR scope | **Closed 2026-09-07** | `NormalizedJobRecord` is a frozen eight-field value; nested JSON is recursively frozen; canonical serialization is complete; explicit legacy reads discard lifecycle and output facts; builders, replay, snapshots, services, and runner no longer mutate NJR | `PR-MVP-020` |
+| Source identity | Open | Core and `JobService` now require identity only for `source.kind == "prompt_pack"`; remaining callers still cross the pack-shaped `PipelineRunRequest`/submission seam | `PR-MVP-030` |
 | Submission DTO | Open | `PipelineRunRequest` remains pack-shaped and broad | `PR-MVP-030` |
 | Persistence | Open | Queue/history have multiple JSON/JSONL-era stores rather than one SQLite repository | `PR-MVP-040` |
 | PromptPack format | Open | Paired TXT/JSON assumptions remain in docs/code/tests despite unified JSON behavior | `PR-MVP-050` |
-| Test truth | Open | Collection includes script-style failures, broad pollution risk, stale architecture assertions, and conflicting pytest configuration surfaces | `PR-MVP-010` and each contract PR |
+| Test truth | **Closed 2026-09-06** | One strict pytest authority, isolated collection/smoke runners, a positive required list, and a Ruff 0.14.9 non-increasing baseline gate pass on supported interpreters | `PR-MVP-010` |
 | Video scope | Open | Several video paths exist; only native SVD XT is selected for MVP | `PR-MVP-070` |
 | Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
 

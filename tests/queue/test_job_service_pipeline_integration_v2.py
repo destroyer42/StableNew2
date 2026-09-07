@@ -32,6 +32,7 @@ from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
+from tests.helpers.njr_factory import make_pipeline_njr
 
 # ---------------------------------------------------------------------------
 # Test Helpers
@@ -47,17 +48,10 @@ def make_normalized_record(
     cfg_scale: float = 7.0,
 ) -> NormalizedJobRecord:
     """Create a NormalizedJobRecord for testing."""
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id=job_id,
         config={"prompt": prompt, "model": model, "steps": steps},
-        path_output_dir="output",
-        filename_template="{seed}",
         seed=12345,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=1000.0,
         prompt_pack_id="test-pack",
         prompt_pack_name="test pack",
         positive_prompt=prompt,
@@ -71,15 +65,7 @@ def make_normalized_record(
                 sampler_name="Euler a",
             )
         ],
-        steps=steps,
-        cfg_scale=cfg_scale,
-        width=512,
-        height=512,
-        sampler_name="Euler a",
-        scheduler="ddim",
         base_model=model,
-        queue_source="ADD_TO_QUEUE",
-        run_mode="QUEUE",
     )
 
 

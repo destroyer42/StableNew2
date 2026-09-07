@@ -138,7 +138,12 @@ Each compiler requires tests for:
 
 ## 10. Implementation status
 
-The current repository has a working builder/runner spine but a broad mutable
-NJR, a pack-shaped submission request, and validators that reject non-pack
-identities. `PR-MVP-020` and `PR-MVP-030` close these gaps. This section must be
-updated only after their verification criteria pass.
+`PR-MVP-020` closed the NJR-core half of this contract on 2026-09-07. The
+repository now has one frozen eight-part NJR, typed image/video/training
+workloads, complete canonical serialization, conditional PromptPack identity,
+and an explicit one-way legacy reader. Current builders emit that core and the
+runner returns artifacts without writing them back into NJR.
+
+The remaining gap is the compiler/application boundary: callers still use the
+pack-shaped `PipelineRunRequest` and callback-heavy submission adapter.
+`PR-MVP-030` owns that atomic cutover and deletion of superseded generic paths.

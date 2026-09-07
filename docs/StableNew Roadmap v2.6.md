@@ -2,7 +2,7 @@
 
 Status: **CURRENT AND ACTIVE**
 Owner: Rob
-Updated: 2026-09-06
+Updated: 2026-09-07
 Supersedes: all earlier active roadmap, mini-roadmap, and backlog ordering claims
 
 ## 0. Roadmap authority
@@ -116,8 +116,8 @@ rewrite the existing branches.
 | 1 | `PR-MVP-000` | **Completed** | Recoverable clean baseline with all production source tracked and independently verified |
 | 2 | `PR-MVP-005` | **Completed** | 115 later changed-file occurrences classified into 17 binding dispositions without runtime adoption |
 | 3 | `PR-MVP-010` | **Completed** | Trustworthy isolated test gates plus a pinned non-increasing lint baseline |
-| 4 | `PR-MVP-020` | **In progress; owner-approved** | Reduced immutable NJR and complete versioned serialization |
-| 5 | `PR-MVP-030` | Planned | Typed compilers and NJR-only JobService submission contract |
+| 4 | `PR-MVP-020` | **Completed** | Reduced immutable NJR and complete versioned serialization |
+| 5 | `PR-MVP-030` | **Next; specification required** | Typed compilers and NJR-only JobService submission contract |
 | 6 | `PR-MVP-040` | Planned | SQLite JobRepository with verified offline legacy import |
 | 7 | `PR-MVP-050` | Planned | One-file JSON PromptPack and conflict-safe migration |
 | 8 | `PR-MVP-060` | Planned | Reliable image create/queue/run/artifact/history/replay slice |
@@ -126,8 +126,8 @@ rewrite the existing branches.
 | 11 | `PR-MVP-090` | Planned | Clean-machine release candidate and signed acceptance record |
 
 `PR-ARCH-MVP-001` and `PR-MVP-000` were owner-approved and have been
-implemented. `PR-MVP-005` and `PR-MVP-010` are complete. Later rows require
-their own exact specs and owner approval.
+implemented. `PR-MVP-005`, `PR-MVP-010`, and `PR-MVP-020` are complete. Later
+rows require their own exact specs and owner approval.
 
 ## 6. Phase details
 
@@ -239,6 +239,14 @@ out of NJR types rather than aliasing them indefinitely.
 Exit gate: image, video, training, replay, and non-pack source examples validate;
 all NJR fields round-trip; `pack_required` exists only in PromptPack-source
 validation.
+
+Completion evidence: one recursively frozen eight-field model now represents
+image, video, and training work; snapshots use its single complete serializer;
+the explicit legacy reader drops status/error/output facts; builders, replay,
+submission, and runner do not mutate NJR; non-pack work validates without
+PromptPack identity. The focused contract/integration set passed 69 tests,
+isolated collection found 3,094 tests with two optional-OpenCV skips, required
+smoke passed 75 tests, and the Ruff 0.14.9 raw count fell from 2,208 to 1,866.
 
 #### PR-MVP-030 — Compilers and submission
 
@@ -391,8 +399,7 @@ and broad UI redesign do not block MVP.
 
 ## 10. Next action
 
-Execute approved `PR-MVP-020`, then generate and execute `PR-MVP-030`. Each
-must use its own approved exact
-allowlist, remove lint findings from touched files, and leave no partial
-migration. Adopt no later runtime change outside the separately approved owner
-PR named in the completed disposition record.
+Generate, approve, and execute `PR-MVP-030` against the verified immutable NJR
+core. It must use its own exact allowlist, migrate source callers atomically,
+remove superseded pack-shaped submission behavior, leave touched files clean,
+and adopt no unrelated later-branch change.

@@ -1,6 +1,6 @@
 # PR-MVP-020 - Immutable Eight-Part NJR Core
 
-Status: In Progress
+Status: Completed
 Priority: CRITICAL
 Effort: LARGE
 Phase: Phase 2 - Repair the core contract
@@ -71,6 +71,7 @@ replace the pack-shaped submission API after this core is stable.
 ### Files to Create
 
 - `docs/PR_Backlog/PR-MVP-020-NJR-Core.md`
+- `src/pipeline/njr_core_v26.py`
 - `tests/pipeline/test_njr_core_v26.py`
 
 ### Files to Modify
@@ -90,6 +91,7 @@ replace the pack-shaped submission API after this core is stable.
 - `src/controller/video_workflow_controller.py`
 - `src/gui/controllers/learning_controller.py`
 - `src/migrations/queue_history_migrator_v26.py`
+- `src/cli.py`
 - `tests/helpers/njr_factory.py`
 - `tests/helpers/job_helpers.py`
 - `tests/controller/test_app_controller_njr_exec.py`
@@ -102,6 +104,8 @@ replace the pack-shaped submission API after this core is stable.
 - `tests/pipeline/test_pipeline_runner.py`
 - `tests/pipeline/test_replay_run_plan_v2.py`
 - `tests/queue/test_queue_njr_path.py`
+- `tests/queue/test_job_service_pipeline_integration_v2.py`
+- `tests/state/test_output_routing.py`
 - `tests/utils/test_snapshot_builder_v2.py`
 - `tests/system/test_architecture_enforcement_v2.py`
 - `tests/system/test_ci_truth_sync_v2.py`
@@ -355,3 +359,20 @@ file requires a written amendment before it changes.
 1. Implement and close PR-MVP-020.
 2. Generate, approve, and implement PR-MVP-030 on the verified immutable core.
 3. Preserve the non-increasing lint ratchet throughout.
+
+## 15. Closeout Evidence
+
+Completed on 2026-09-07. The implementation introduced one recursively frozen
+eight-field NJR, typed image/video/training workloads and source descriptors,
+complete serialization, an explicit legacy migration reader, immutable replay
+lineage, and no runner/submission/snapshot mutation. Two required-smoke fixtures
+(`tests/state/test_output_routing.py` and
+`tests/queue/test_job_service_pipeline_integration_v2.py`) were added to the
+allowlist when the isolated gate identified their direct use of the retired
+constructor.
+
+Python 3.11.16 evidence: 69 focused tests passed; the complete runner module
+passed 26 tests; isolated collection reported 3,094 tests with two optional
+OpenCV skips; required smoke passed 75 tests; mypy smoke passed; and the Ruff
+0.14.9 gate passed at 1,866 findings against the unchanged 2,208 ceiling. No
+network, display, GPU, model, WebUI, or user-data migration was used.

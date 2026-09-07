@@ -4,16 +4,34 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal
 
+from src.pipeline.njr_core_v26 import (
+    CURRENT_NJR_SCHEMA_VERSION,
+    ImageWorkloadSpec,
+    LearningJobContext,
+    LoRATag,
+    NJRProvenance,
+    NormalizedJobRecord,
+    OutputPlan,
+    PackUsageInfo,
+    SourceDescriptor,
+    SourceKind,
+    StageConfig,
+    StagePromptInfo,
+    TrainingWorkloadSpec,
+    VideoWorkloadSpec,
+    WorkloadKind,
+    migrate_legacy_njr,
+    read_njr,
+)
 from src.pipeline.resolution_layer import (
     ResolvedPipelineConfig,
     ResolvedPrompt,
 )
-from src.pipeline.config_contract_v26 import build_config_layers
 
 if TYPE_CHECKING:
     from src.queue.job_model import Job
@@ -74,29 +92,6 @@ def _format_batch_label(index: int, total: int) -> str | None:
     if total > 1:
         return f"[b{index + 1}/{total}]"
     return None
-
-
-@dataclass(frozen=True)
-class LearningJobContext:
-    """Metadata for jobs that are part of a learning experiment.
-    
-    PR-LEARN-003: This context is attached to NJRs for learning experiments
-    so completion handlers can route results back to the learning subsystem.
-    """
-    experiment_id: str
-    experiment_name: str
-    variant_index: int
-    variable_under_test: str
-    variant_value: Any
-    
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "experiment_id": self.experiment_id,
-            "experiment_name": self.experiment_name,
-            "variant_index": self.variant_index,
-            "variable_under_test": self.variable_under_test,
-            "variant_value": self.variant_value,
-        }
 
 
 @dataclass(frozen=True)
@@ -166,7 +161,16 @@ class JobStatusV2(str, Enum):
     FAILED = "failed"
 
 
-StageType = Literal["txt2img", "img2img", "adetailer", "upscale", "animatediff", "svd_native", "video_workflow", "train_lora"]
+StageType = Literal[
+    "txt2img",
+    "img2img",
+    "adetailer",
+    "upscale",
+    "animatediff",
+    "svd_native",
+    "video_workflow",
+    "train_lora",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -174,51 +178,9 @@ StageType = Literal["txt2img", "img2img", "adetailer", "upscale", "animatediff",
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class StagePromptInfo:
-    """Prompt-level metadata captured for a pipeline stage."""
-
-    original_prompt: str
-    final_prompt: str
-    original_negative_prompt: str
-    final_negative_prompt: str
-    global_negative_applied: bool
-    global_negative_terms: str | None = None
-
-
-@dataclass
-class PackUsageInfo:
-    """Describes how a prompt pack contributed to a job."""
-
-    pack_name: str
-    pack_path: str | None = None
-    prompt_index: int | None = None
-    used_for_stage: str = "txt2img"
-
-
 # ---------------------------------------------------------------------------
 # Job Builder Data Classes (PR-204B)
 # ---------------------------------------------------------------------------
-
-
-@dataclass(frozen=True)
-class LoRATag:
-    name: str
-    weight: float
-
-
-@dataclass
-class StageConfig:
-    stage_type: StageType
-    enabled: bool = False
-    steps: int | None = None
-    cfg_scale: float | None = None
-    denoising_strength: float | None = None
-    sampler_name: str | None = None
-    scheduler: str | None = None
-    model: str | None = None
-    vae: str | None = None
-    extra: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -320,7 +282,14 @@ class UnifiedJobSummary:
         return value if len(value) <= 120 else value[:120] + "..."
 
     @classmethod
-    def from_normalized_record(cls, record: NormalizedJobRecord) -> UnifiedJobSummary:
+    def from_normalized_record(
+        cls,
+        record: NormalizedJobRecord,
+        *,
+        status: JobStatusV2 = JobStatusV2.QUEUED,
+        created_at: datetime | None = None,
+        completed_at: datetime | None = None,
+    ) -> UnifiedJobSummary:
         return cls(
             job_id=record.job_id,
             prompt_pack_id=record.prompt_pack_id,
@@ -347,9 +316,9 @@ class UnifiedJobSummary:
             config_variant_label=record.config_variant_label,
             config_variant_index=record.config_variant_index,
             estimated_image_count=record.estimated_image_count(),
-            status=record.status.value.upper(),
-            created_at=record.created_at,
-            completed_at=record.completed_at,
+            status=status.value.upper(),
+            created_at=created_at or datetime.utcnow(),
+            completed_at=completed_at,
         )
 
     @classmethod
@@ -388,12 +357,12 @@ class UnifiedJobSummary:
 
     def get_display_summary(self) -> str:
         """Get a short display string for the job.
-        
+
         Shows: Pack Name [row=X, v=Y/Z, b=A/B] | estimated images | resolution | steps
         """
         # Primary label is pack name or model
         primary_label = self.prompt_pack_name if self.prompt_pack_name else self.base_model
-        
+
         # Build identifying info: prompt row, variant, batch
         id_parts = []
         # Always show row number (0-based in data, show as 1-based)
@@ -407,30 +376,31 @@ class UnifiedJobSummary:
         # Add config variant if not base
         if self.config_variant_label and self.config_variant_label != "base":
             id_parts.append(self.config_variant_label)
-        
+
         id_info = f" [{', '.join(id_parts)}]" if id_parts else ""
-        
+
         # Image count info
         if self.estimated_image_count > 1:
             image_info = f" | {self.estimated_image_count} imgs"
         else:
             image_info = " | 1 img"
-        
+
         # Resolution and settings
-        settings_info = f" | {self.width}×{self.height} | {self.steps}s"
-        
+        settings_info = f" | {self.width}Ã—{self.height} | {self.steps}s"
+
         return f"{primary_label}{id_info}{image_info}{settings_info}"
 
 
 @dataclass
 class RuntimeJobStatus:
     """Runtime execution status for the currently running job.
-    
+
     This dataclass contains dynamic execution state that changes during job execution.
     It's separate from UnifiedJobSummary (which contains static NJR-derived data).
-    
+
     Populated by SingleNodeJobRunner during execution and consumed by RunningJobPanelV2.
     """
+
     job_id: str
     current_stage: str  # e.g., "txt2img", "img2img", "upscale"
     stage_index: int  # 0-based current stage index
@@ -442,7 +412,7 @@ class RuntimeJobStatus:
     current_step: int  # Current step within stage (for progress bar)
     total_steps: int  # Total steps for current stage
     stage_detail: str | None = None  # Optional finer-grained phase within the current stage
-    
+
     def get_stage_label(self) -> str:
         """Get formatted stage label like '2/3 img2img'."""
         return f"{self.stage_index + 1}/{self.total_stages} {self.current_stage}"
@@ -453,21 +423,21 @@ class RuntimeJobStatus:
         if self.stage_detail:
             return f"{label} - {self.stage_detail}"
         return label
-    
+
     def get_progress_percentage(self) -> int:
         """Get progress as integer percentage (0-100)."""
         return int(self.progress * 100)
-    
+
     def get_eta_display(self) -> str:
         """Get formatted ETA string like '2m 30s' or 'calculating...'."""
         if self.eta_seconds is None:
             return "calculating..."
         if self.eta_seconds < 0:
             return "unknown"
-        
+
         minutes = int(self.eta_seconds // 60)
         seconds = int(self.eta_seconds % 60)
-        
+
         if minutes > 0:
             return f"{minutes}m {seconds}s"
         return f"{seconds}s"
@@ -544,7 +514,7 @@ class OutputSettings:
 
     Attributes:
         base_output_dir: Base directory for job outputs.
-    
+
     Note:
         Filenames are generated by the runner using a hardcoded convention that prevents
         collisions across matrix variants, batch indices, prompt rows, and variants.
@@ -552,390 +522,6 @@ class OutputSettings:
     """
 
     base_output_dir: str = "output"
-
-
-@dataclass
-class NormalizedJobRecord:
-    """Canonical job record for preview, queue display, and history (CORE1 hybrid state).
-
-    This is the single source of truth for:
-    - Job construction via JobBuilderV2
-    - Preview/queue/history display via UnifiedJobSummary
-    - Job snapshots and provenance tracking
-
-    NormalizedJobRecord is the "read model" - used for building and displaying jobs.
-
-    PR-CORE1-12: pipeline_config is DEPRECATED and removed from runtime execution.
-    During early CORE1-A/B hybrid state, Job.pipeline_config was the execution payload,
-    but PR-CORE1-B3 guarantees new v2.6 jobs never populate this field.
-    Full NJR-only execution is enforced for all new jobs; pipeline_config is
-    legacy-only (always None for v2.6 jobs) and will be fully removed in future cleanup.
-    PR-CORE1-B5 removed the old Job.payload-driven execution path in favor of NJRs.
-
-    All fields are explicit - no hidden defaults or missing values.
-
-    Attributes:
-        job_id: Unique identifier for this job.
-        config: Fully merged pipeline config (PipelineConfig or dict).
-        path_output_dir: Resolved output directory for this job.
-        filename_template: Filename template for outputs.
-        seed: Seed value (may be adjusted by seed mode).
-        variant_index: Index within randomizer variants (0-based).
-        variant_total: Total number of variants.
-        batch_index: Index within batch runs (0-based).
-        batch_total: Total number of batch runs.
-        created_ts: Timestamp when job was created.
-        randomizer_summary: Optional summary of randomization applied.
-    For jobs where `prompt_source == "pack"`, `prompt_pack_id` must be non-empty and
-    `prompt_pack_name` should be populated when available so downstream services can
-    attribute the job to the correct PromptPack.
-    """
-
-    job_id: str
-    config: Any  # PipelineConfig or dict - fully merged
-    path_output_dir: str
-    filename_template: str
-    seed: int | None = None
-    variant_index: int = 0
-    variant_total: int = 1
-    batch_index: int = 0
-    batch_total: int = 1
-    created_ts: float = 0.0
-    randomizer_summary: dict[str, Any] | None = None
-    txt2img_prompt_info: StagePromptInfo | None = None
-    img2img_prompt_info: StagePromptInfo | None = None
-    pack_usage: list[PackUsageInfo] = field(default_factory=list)
-    prompt_pack_id: str = ""
-    prompt_pack_name: str = ""
-    prompt_pack_row_index: int = 0
-    prompt_pack_version: str | None = None
-    positive_prompt: str = ""
-    negative_prompt: str = ""
-    positive_embeddings: list[str] = field(default_factory=list)
-    negative_embeddings: list[str] = field(default_factory=list)
-    lora_tags: list[LoRATag] = field(default_factory=list)
-    matrix_slot_values: dict[str, str] = field(default_factory=dict)
-    steps: int = 0
-    cfg_scale: float = 0.0
-    width: int = 0
-    height: int = 0
-    sampler_name: str = ""
-    scheduler: str = ""
-    clip_skip: int = 0
-    base_model: str = ""
-    vae: str | None = None
-    stage_chain: list[StageConfig] = field(default_factory=list)
-    loop_type: Literal["pipeline", "prompt", "image"] = "pipeline"
-    loop_count: int = 1
-    images_per_prompt: int = 1
-    variant_mode: str = "standard"
-    run_mode: Literal["DIRECT", "QUEUE"] = "QUEUE"
-    queue_source: Literal["RUN_NOW", "ADD_TO_QUEUE"] = "ADD_TO_QUEUE"
-    randomization_enabled: bool = False
-    matrix_name: str | None = None
-    matrix_mode: str | None = None
-    matrix_prompt_mode: str | None = None
-    config_variant_label: str = "base"
-    config_variant_index: int = 0
-    config_variant_overrides: dict[str, Any] = field(default_factory=dict)
-    aesthetic_enabled: bool = False
-    aesthetic_weight: float | None = None
-    aesthetic_text: str | None = None
-    aesthetic_embedding: str | None = None
-    extra_metadata: dict[str, Any] = field(default_factory=dict)
-    intent_config: dict[str, Any] = field(default_factory=dict)
-    backend_options: dict[str, Any] = field(default_factory=dict)
-    output_paths: list[str] = field(default_factory=list)
-    thumbnail_path: str | None = None
-    completed_at: datetime | None = None
-    status: JobStatusV2 = JobStatusV2.QUEUED
-    error_message: str | None = None
-    # Reprocessing support: provide input images to skip txt2img
-    input_image_paths: list[str] = field(default_factory=list)
-    # Start stage for reprocessing: skip stages before this one
-    # Options: "txt2img", "img2img", "adetailer", "upscale", "animatediff", "svd_native", "video_workflow", "train_lora"
-    start_stage: str | None = None
-    # PR-LEARN-003: Learning experiment context for completion routing
-    learning_context: LearningJobContext | None = None
-    # PR-VIDEO-216: Sequence intent for multi-segment video_workflow jobs.
-    # Serialized VideoSequenceJob dict when the runner detects sequence execution.
-    sequence_intent: dict[str, Any] | None = None
-    # PR-VIDEO-218: Optional continuity-pack linkage for continuity-aware jobs.
-    continuity_link: dict[str, Any] | None = None
-
-    @property
-    def created_at(self) -> datetime:
-        return datetime.fromtimestamp(self.created_ts) if self.created_ts else datetime.utcnow()
-
-    @property
-    def num_parts(self) -> int:
-        return len(self.pack_usage) if self.pack_usage else 1
-
-    @property
-    def num_expected_images(self) -> int:
-        total = self.variant_total * self.batch_total
-        return total if total > 0 else 1
-
-    def _config_value(self, *keys: str) -> Any:
-        for key in keys:
-            value = None
-            if isinstance(self.config, dict):
-                value = self.config.get(key)
-            else:
-                value = getattr(self.config, key, None)
-            if value not in (None, "", []):
-                return value
-        return None
-
-    def _extract_prompt_field(self, attr_name: str, *fallback_keys: str) -> str:
-        if self.txt2img_prompt_info:
-            info_value = getattr(self.txt2img_prompt_info, attr_name, None)
-            if info_value:
-                return str(info_value)
-        fallback = self._config_value(*fallback_keys)
-        return str(fallback) if fallback is not None else ""
-
-    def _extract_stage_names(self) -> list[str]:
-        stages = self._config_value("stages")
-        if isinstance(stages, list):
-            return [str(stage) for stage in stages if stage]
-        flags = []
-        for stage in ("txt2img", "img2img", "upscale", "adetailer", "animatediff", "svd_native", "video_workflow", "train_lora"):
-            enabled = self._config_value(f"stage_{stage}_enabled", stage)
-            if enabled or (isinstance(enabled, bool) and enabled):
-                flags.append(stage)
-        return flags or ["txt2img"]
-
-    def _extract_model_name(self) -> str:
-        value = self._config_value("model", "model_name")
-        return str(value or "unknown")
-
-    @property
-    def stage_chain_labels(self) -> list[str]:
-        if self.stage_chain:
-            # Only return labels for enabled stages
-            return [stage.stage_type for stage in self.stage_chain if stage.enabled]
-        return ["txt2img"]
-
-    def matrix_slot_values_preview(self) -> str:
-        if not self.matrix_slot_values:
-            return ""
-        return "; ".join(f"{key}={value}" for key, value in self.matrix_slot_values.items())
-
-    @property
-    def lora_preview(self) -> str:
-        return ", ".join(f"{tag.name}({tag.weight})" for tag in self.lora_tags)
-
-    def estimated_image_count(self) -> int:
-        return max(1, self.images_per_prompt * self.loop_count)
-
-    def get_display_summary(self) -> str:
-        """Get a short display string for the job.
-        
-        Shows: Pack Name | batch_size×n_iter (X images) | seed | variant/batch info
-        """
-        config = self.config
-        
-        # Get pack name or model
-        pack_name = self.prompt_pack_name or ""
-        if isinstance(config, dict):
-            model = config.get("model", "unknown")
-            batch_size = config.get("batch_size", 1)
-            n_iter = config.get("n_iter", 1)
-        else:
-            model = getattr(config, "model", "unknown")
-            batch_size = getattr(config, "batch_size", 1)
-            n_iter = getattr(config, "n_iter", 1)
-        
-        primary_label = pack_name if pack_name else model
-        
-        # Build batch display
-        total_images = batch_size * n_iter
-        if batch_size > 1 or n_iter > 1:
-            batch_info = f" | {batch_size}×{n_iter} ({total_images} images)"
-        else:
-            batch_info = " | (1 image)"
-
-        seed_str = str(self.seed) if self.seed is not None else "?"
-
-        # PR-CORE-E: Add config variant label
-        config_variant_info = ""
-        if self.config_variant_label and self.config_variant_label != "base":
-            config_variant_info = f" [{self.config_variant_label}]"
-
-        variant_info = ""
-        if self.variant_total > 1:
-            variant_info = f" [v{self.variant_index + 1}/{self.variant_total}]"
-        batch_info_suffix = ""
-        if self.batch_total > 1:
-            batch_info_suffix = f" [b{self.batch_index + 1}/{self.batch_total}]"
-
-        return f"{primary_label}{batch_info} | seed={seed_str}{config_variant_info}{variant_info}{batch_info_suffix}"
-
-    def to_unified_summary(self) -> UnifiedJobSummary:
-        """Create a canonical summary for UI/queue/history consumers."""
-        return UnifiedJobSummary.from_normalized_record(self)
-
-    def to_ui_summary(self) -> JobUiSummary:
-        """Build a JobUiSummary derived from this normalized record."""
-        return JobUiSummary.from_job_view(self.to_job_view())
-
-    def to_job_view(
-        self,
-        *,
-        status: str | None = None,
-        created_at: str | None = None,
-        started_at: str | None = None,
-        completed_at: str | None = None,
-        is_active: bool = False,
-        last_error: str | None = None,
-        worker_id: str | None = None,
-        result: dict[str, Any] | None = None,
-    ) -> JobView:
-        """Return a presentation-focused JobView derived from this NJR."""
-        normalized_status = status or str(
-            self.status.value if hasattr(self.status, "value") else self.status
-        )
-        return JobView.from_njr(
-            self,
-            status=normalized_status,
-            created_at=created_at or _coerce_iso_timestamp(self.created_ts),
-            started_at=started_at,
-            completed_at=completed_at or _coerce_iso_datetime(self.completed_at),
-            is_active=is_active,
-            last_error=last_error or self.error_message,
-            worker_id=worker_id,
-            result=result,
-        )
-
-    @staticmethod
-    def _coerce_int(value: Any) -> int | None:
-        try:
-            return int(value)
-        except (TypeError, ValueError):
-            return None
-
-    @property
-    def is_pack_job(self) -> bool:
-        """Return True if this normalized job originated from a prompt pack."""
-        return (getattr(self, "prompt_source", "") or "").lower() == "pack"
-
-    @staticmethod
-    def _coerce_float(value: Any) -> float | None:
-        try:
-            return float(value)
-        except (TypeError, ValueError):
-            return None
-
-    @staticmethod
-    def _format_randomizer_summary(summary: dict[str, Any] | None) -> str | None:
-        if not summary:
-            return None
-        parts: list[str] = []
-        max_variants = summary.get("max_variants")
-        if isinstance(max_variants, int) and max_variants > 1:
-            parts.append(f"{max_variants} variants")
-        if isinstance(summary.get("model_choices"), int) and summary["model_choices"] > 1:
-            parts.append(f"{summary['model_choices']} models")
-        if isinstance(summary.get("sampler_choices"), int) and summary["sampler_choices"] > 1:
-            parts.append(f"{summary['sampler_choices']} samplers")
-        if isinstance(summary.get("cfg_scale_values"), int) and summary["cfg_scale_values"] > 1:
-            parts.append(f"{summary['cfg_scale_values']} CFG")
-        if isinstance(summary.get("steps_values"), int) and summary["steps_values"] > 1:
-            parts.append(f"{summary['steps_values']} steps")
-        seed_mode = summary.get("seed_mode")
-        if seed_mode:
-            parts.append(f"{seed_mode.replace('_', ' ').lower()} seed")
-        return " � ".join(parts) if parts else None
-
-    def to_queue_snapshot(self) -> dict[str, Any]:
-        """Convert to a dict snapshot suitable for queue Job.config_snapshot.
-
-        This produces a complete, serializable representation of the job
-        for queue/history persistence.
-        """
-        config = self.config
-
-        # Extract common fields from config (dict or object)
-        if isinstance(config, dict):
-            prompt = config.get("prompt", "")
-            negative_prompt = config.get("negative_prompt", "")
-            model = config.get("model", config.get("model_name", ""))
-            steps = config.get("steps")
-            cfg_scale = config.get("cfg_scale")
-            width = config.get("width")
-            height = config.get("height")
-            sampler = config.get("sampler", config.get("sampler_name", ""))
-            vae = config.get("vae", config.get("vae_name", ""))
-        else:
-            prompt = getattr(config, "prompt", "")
-            negative_prompt = getattr(config, "negative_prompt", "")
-            model = getattr(config, "model", "") or getattr(config, "model_name", "")
-            steps = getattr(config, "steps", None)
-            cfg_scale = getattr(config, "cfg_scale", None)
-            width = getattr(config, "width", None)
-            height = getattr(config, "height", None)
-            sampler = getattr(config, "sampler", "") or getattr(config, "sampler_name", "")
-            vae = getattr(config, "vae", "") or getattr(config, "vae_name", "")
-
-        snapshot: dict[str, Any] = {
-            "job_id": self.job_id,
-            "prompt": prompt,
-            "negative_prompt": negative_prompt,
-            "model": model,
-            "steps": steps,
-            "cfg_scale": cfg_scale,
-            "width": width,
-            "height": height,
-            "sampler": sampler,
-            "vae": vae,
-            "seed": self.seed,
-            "output_dir": self.path_output_dir,
-            "filename_template": self.filename_template,
-            "variant_index": self.variant_index,
-            "variant_total": self.variant_total,
-            "batch_index": self.batch_index,
-            "batch_total": self.batch_total,
-            "created_ts": self.created_ts,
-        }
-
-        if self.randomizer_summary:
-            snapshot["randomizer_summary"] = self.randomizer_summary
-
-        snapshot["prompt_pack_id"] = self.prompt_pack_id
-        snapshot["prompt_pack_name"] = self.prompt_pack_name
-        snapshot["prompt_pack_row_index"] = self.prompt_pack_row_index
-        snapshot["stage_chain"] = [stage.stage_type for stage in self.stage_chain]
-        snapshot["images_per_prompt"] = self.images_per_prompt
-        snapshot["loop_type"] = self.loop_type
-        snapshot["loop_count"] = self.loop_count
-        snapshot["variant_mode"] = self.variant_mode
-        snapshot["randomization_enabled"] = self.randomization_enabled
-        snapshot["matrix_slot_values"] = dict(self.matrix_slot_values)
-        snapshot["lora_tags"] = [asdict(tag) for tag in self.lora_tags]
-        snapshot["queue_source"] = self.queue_source
-        snapshot["run_mode"] = self.run_mode
-        snapshot["status"] = (
-            self.status.value if hasattr(self.status, "value") else str(self.status)
-        )
-        snapshot["intent_config"] = dict(self.intent_config or {})
-        snapshot["backend_options"] = dict(self.backend_options or {})
-        snapshot["config_layers"] = build_config_layers(
-            intent_config=self.intent_config,
-            execution_config=self.config,
-            backend_options=self.backend_options,
-        ).to_dict()
-        if self.continuity_link:
-            snapshot["continuity_link"] = dict(self.continuity_link)
-
-        if self.txt2img_prompt_info:
-            snapshot["txt2img_prompt_info"] = asdict(self.txt2img_prompt_info)
-        if self.img2img_prompt_info:
-            snapshot["img2img_prompt_info"] = asdict(self.img2img_prompt_info)
-        if self.pack_usage:
-            snapshot["pack_usage"] = [asdict(info) for info in self.pack_usage]
-
-        return snapshot
 
 
 @dataclass(frozen=True)
@@ -1008,10 +594,8 @@ class JobView:
         if batch_label:
             label += f" {batch_label}"
 
-        status_value = status or str(
-            record.status.value if hasattr(record.status, "value") else record.status
-        )
-        created_iso = created_at or _coerce_iso_timestamp(record.created_ts)
+        status_value = status or "queued"
+        created_iso = created_at or _coerce_iso_timestamp(None)
         return cls(
             job_id=record.job_id,
             status=status_value,
@@ -1045,16 +629,28 @@ class JobView:
 
 
 __all__ = [
+    "CURRENT_NJR_SCHEMA_VERSION",
     "JobStatusV2",
     "BatchSettings",
-    "OutputSettings",
+    "ImageWorkloadSpec",
+    "LearningJobContext",
+    "LoRATag",
+    "NJRProvenance",
     "NormalizedJobRecord",
+    "OutputSettings",
+    "OutputPlan",
+    "PackUsageInfo",
+    "SourceDescriptor",
+    "SourceKind",
+    "StageConfig",
+    "StagePromptInfo",
+    "TrainingWorkloadSpec",
+    "VideoWorkloadSpec",
+    "WorkloadKind",
     "JobUiSummary",
     "UnifiedJobSummary",
-    "StagePromptInfo",
-    "StageConfig",
-    "LoRATag",
-    "PackUsageInfo",
     "JobLifecycleLogEvent",
     "JobView",
+    "migrate_legacy_njr",
+    "read_njr",
 ]

@@ -12,7 +12,12 @@ from typing import Any
 
 from src.history.history_record import HistoryRecord
 from src.history.job_history_store import JobHistoryStore
-from src.pipeline.job_models_v2 import JobStatusV2, LoRATag, NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import (
+    LoRATag,
+    NormalizedJobRecord,
+    StageConfig,
+    migrate_legacy_njr,
+)
 from src.queue.job_model import Job, JobPriority
 from src.services.queue_store_v2 import (
     SCHEMA_VERSION,
@@ -147,7 +152,11 @@ def _read_json_or_jsonl(path: Path) -> Any:
 
 
 def detect_queue_schema(data_or_path: Path | str | dict[str, Any] | None) -> str | None:
-    data = _read_json_or_jsonl(Path(data_or_path)) if isinstance(data_or_path, (str, Path)) else data_or_path
+    data = (
+        _read_json_or_jsonl(Path(data_or_path))
+        if isinstance(data_or_path, (str, Path))
+        else data_or_path
+    )
     if data is None:
         return None
     if isinstance(data, dict):
@@ -167,8 +176,14 @@ def detect_queue_schema(data_or_path: Path | str | dict[str, Any] | None) -> str
     return "legacy"
 
 
-def detect_history_schema(path_or_entries: Path | str | list[dict[str, Any]] | dict[str, Any] | None) -> str | None:
-    data = _read_json_or_jsonl(Path(path_or_entries)) if isinstance(path_or_entries, (str, Path)) else path_or_entries
+def detect_history_schema(
+    path_or_entries: Path | str | list[dict[str, Any]] | dict[str, Any] | None,
+) -> str | None:
+    data = (
+        _read_json_or_jsonl(Path(path_or_entries))
+        if isinstance(path_or_entries, (str, Path))
+        else path_or_entries
+    )
     if data is None:
         return None
     entries = data if isinstance(data, list) else [data]
@@ -278,69 +293,60 @@ def _build_migrated_njr(raw: dict[str, Any], source_schema: str) -> NormalizedJo
     negative = str(raw.get("negative_prompt") or config.get("negative_prompt") or "")
     created_at = raw.get("created_at") or raw.get("timestamp") or raw.get("recorded_at")
 
-    outputs = raw.get("outputs")
-    output_paths: list[str] = []
-    if isinstance(outputs, dict):
-        output_paths = [str(path) for path in outputs.get("image_paths") or [] if path]
-
     batch_size = max(1, _coerce_int(config.get("batch_size"), 1))
     n_iter = max(1, _coerce_int(config.get("n_iter"), 1))
     batch_index = max(0, _coerce_int(config.get("batch_index"), 0))
     variant_index = max(0, _coerce_int(config.get("variant_index"), 0))
 
-    return NormalizedJobRecord(
-        job_id=str(raw.get("job_id") or raw.get("id") or f"migrated-{int(time.time())}"),
-        config=config,
-        path_output_dir=str(raw.get("path_output_dir") or raw.get("output_dir") or "output"),
-        filename_template=str(raw.get("filename_template") or "{seed}"),
-        seed=_coerce_int(config.get("seed"), 0),
-        variant_index=variant_index,
-        variant_total=max(1, _coerce_int(config.get("variant_total"), 1)),
-        batch_index=batch_index,
-        batch_total=max(1, _coerce_int(config.get("batch_total"), 1)),
-        created_ts=_to_epoch(created_at),
-        randomizer_summary={"migrated_from_schema": source_schema},
-        prompt_pack_id=str(metadata.get("prompt_pack_id") or raw.get("prompt_pack_id") or ""),
-        prompt_pack_name=str(metadata.get("prompt_pack_name") or raw.get("prompt_pack_name") or ""),
-        prompt_pack_row_index=max(0, _coerce_int(metadata.get("prompt_pack_row_index"), 0)),
-        positive_prompt=prompt,
-        negative_prompt=negative,
-        positive_embeddings=list(config.get("positive_embeddings") or []),
-        negative_embeddings=list(config.get("negative_embeddings") or []),
-        lora_tags=_lora_tags_from_config(config),
-        matrix_slot_values=dict(config.get("matrix_slot_values") or {}),
-        steps=_coerce_int(config.get("steps"), 20),
-        cfg_scale=_coerce_float(config.get("cfg_scale"), 7.0),
-        width=_coerce_int(config.get("width"), 512),
-        height=_coerce_int(config.get("height"), 512),
-        sampler_name=str(config.get("sampler") or config.get("sampler_name") or "Euler a"),
-        scheduler=str(config.get("scheduler") or ""),
-        clip_skip=_coerce_int(config.get("clip_skip"), 0),
-        base_model=str(config.get("model") or config.get("model_name") or "unknown"),
-        vae=str(config.get("vae") or "") or None,
-        stage_chain=_build_stage_chain(config),
-        loop_type="pipeline",
-        loop_count=n_iter,
-        images_per_prompt=batch_size,
-        variant_mode="migrated_legacy",
-        run_mode="QUEUE",
-        queue_source="ADD_TO_QUEUE",
-        randomization_enabled=bool(config.get("randomization_enabled", False)),
-        matrix_name=config.get("matrix_name"),
-        matrix_mode=config.get("matrix_mode"),
-        matrix_prompt_mode=config.get("matrix_prompt_mode"),
-        config_variant_label="migrated",
-        config_variant_index=variant_index,
-        config_variant_overrides={},
-        aesthetic_enabled=bool(config.get("aesthetic_enabled", False)),
-        aesthetic_weight=config.get("aesthetic_weight"),
-        aesthetic_text=config.get("aesthetic_text"),
-        aesthetic_embedding=config.get("aesthetic_embedding"),
-        extra_metadata={"migration_tool": "PR-MIG-203", "migrated_from_schema": source_schema, **metadata},
-        output_paths=output_paths,
-        thumbnail_path=None,
-        status=JobStatusV2.QUEUED,
-        error_message=raw.get("error_message"),
+    return migrate_legacy_njr(
+        {
+            "job_id": str(raw.get("job_id") or raw.get("id") or f"migrated-{int(time.time())}"),
+            "config": config,
+            "path_output_dir": str(raw.get("path_output_dir") or raw.get("output_dir") or "output"),
+            "filename_template": str(raw.get("filename_template") or "{seed}"),
+            "seed": _coerce_int(config.get("seed"), 0),
+            "variant_index": variant_index,
+            "variant_total": max(1, _coerce_int(config.get("variant_total"), 1)),
+            "batch_index": batch_index,
+            "batch_total": max(1, _coerce_int(config.get("batch_total"), 1)),
+            "created_ts": _to_epoch(created_at),
+            "randomizer_summary": {"migrated_from_schema": source_schema},
+            "prompt_source": (
+                "pack" if metadata.get("prompt_pack_id") or raw.get("prompt_pack_id") else "cli"
+            ),
+            "prompt_pack_id": str(
+                metadata.get("prompt_pack_id") or raw.get("prompt_pack_id") or ""
+            ),
+            "prompt_pack_name": str(
+                metadata.get("prompt_pack_name") or raw.get("prompt_pack_name") or ""
+            ),
+            "prompt_pack_row_index": max(0, _coerce_int(metadata.get("prompt_pack_row_index"), 0)),
+            "positive_prompt": prompt,
+            "negative_prompt": negative,
+            "positive_embeddings": list(config.get("positive_embeddings") or []),
+            "negative_embeddings": list(config.get("negative_embeddings") or []),
+            "lora_tags": [asdict(tag) for tag in _lora_tags_from_config(config)],
+            "matrix_slot_values": dict(config.get("matrix_slot_values") or {}),
+            "stage_chain": [asdict(stage) for stage in _build_stage_chain(config)],
+            "loop_type": "pipeline",
+            "loop_count": n_iter,
+            "images_per_prompt": batch_size,
+            "variant_mode": "migrated_legacy",
+            "matrix_name": config.get("matrix_name"),
+            "matrix_mode": config.get("matrix_mode"),
+            "matrix_prompt_mode": config.get("matrix_prompt_mode"),
+            "config_variant_label": "migrated",
+            "config_variant_index": variant_index,
+            "aesthetic_enabled": bool(config.get("aesthetic_enabled", False)),
+            "aesthetic_weight": config.get("aesthetic_weight"),
+            "aesthetic_text": config.get("aesthetic_text"),
+            "aesthetic_embedding": config.get("aesthetic_embedding"),
+            "extra_metadata": {
+                "migration_tool": "PR-MIG-203",
+                "migrated_from_schema": source_schema,
+                **metadata,
+            },
+        }
     )
 
 
@@ -349,7 +355,9 @@ def _serialized_njr_snapshot(record: NormalizedJobRecord) -> dict[str, Any]:
     return {"normalized_job": snapshot["normalized_job"]}
 
 
-def _migrate_queue_entry(raw: dict[str, Any], source_schema: str, report: FileMigrationReport) -> dict[str, Any] | None:
+def _migrate_queue_entry(
+    raw: dict[str, Any], source_schema: str, report: FileMigrationReport
+) -> dict[str, Any] | None:
     if raw.get("queue_schema") == SCHEMA_VERSION and isinstance(raw.get("njr_snapshot"), dict):
         valid, _ = validate_queue_item(raw)
         if valid:
@@ -388,13 +396,19 @@ def _migrate_queue_entry(raw: dict[str, Any], source_schema: str, report: FileMi
     return migrated
 
 
-def _migrate_history_entry(raw: dict[str, Any], source_schema: str, report: FileMigrationReport) -> HistoryRecord:
-    if raw.get("history_schema") == TARGET_HISTORY_SCHEMA and isinstance(raw.get("njr_snapshot"), dict):
+def _migrate_history_entry(
+    raw: dict[str, Any], source_schema: str, report: FileMigrationReport
+) -> HistoryRecord:
+    if raw.get("history_schema") == TARGET_HISTORY_SCHEMA and isinstance(
+        raw.get("njr_snapshot"), dict
+    ):
         report.preserved_entries += 1
         return HistoryRecord.from_dict(raw)
 
     record = _build_migrated_njr(raw, source_schema)
-    execution_metadata = raw.get("execution_metadata") if isinstance(raw.get("execution_metadata"), dict) else {}
+    execution_metadata = (
+        raw.get("execution_metadata") if isinstance(raw.get("execution_metadata"), dict) else {}
+    )
     runtime = {
         "started_at": _to_iso_timestamp(
             execution_metadata.get("start_time") or raw.get("started_at") or raw.get("timestamp")
@@ -480,7 +494,9 @@ def migrate_queue_state_file(
         if migrated is not None:
             migrated_jobs.append(migrated)
 
-    changed = report.migrated_entries > 0 or report.skipped_entries > 0 or source_schema != SCHEMA_VERSION
+    changed = (
+        report.migrated_entries > 0 or report.skipped_entries > 0 or source_schema != SCHEMA_VERSION
+    )
     report.changed = changed
     if dry_run or not changed:
         return report

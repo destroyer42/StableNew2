@@ -2,19 +2,20 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Mapping
-from copy import deepcopy
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
-from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.intent_artifact_contract import (
     INTENT_ARTIFACT_SCHEMA_V1,
     INTENT_ARTIFACT_VERSION_V1,
     compute_intent_hash,
     validate_intent_artifact_contract,
 )
+from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceDescriptor, SourceKind
 from src.pipeline.run_plan import build_run_plan_from_njr
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
@@ -37,9 +38,13 @@ def validate_replay_snapshot(snapshot: Mapping[str, Any]) -> tuple[bool, list[st
         intent_config = config_layers.get("intent_config")
         intent_hash = str(config_layers.get("intent_hash") or "")
         if schema != INTENT_ARTIFACT_SCHEMA_V1:
-            errors.append(f"config_layers.intent_artifact_schema must be {INTENT_ARTIFACT_SCHEMA_V1}")
+            errors.append(
+                f"config_layers.intent_artifact_schema must be {INTENT_ARTIFACT_SCHEMA_V1}"
+            )
         if version != INTENT_ARTIFACT_VERSION_V1:
-            errors.append(f"config_layers.intent_artifact_version must be {INTENT_ARTIFACT_VERSION_V1}")
+            errors.append(
+                f"config_layers.intent_artifact_version must be {INTENT_ARTIFACT_VERSION_V1}"
+            )
         if not isinstance(intent_config, Mapping):
             errors.append("config_layers.intent_config must be a mapping")
         else:
@@ -47,7 +52,9 @@ def validate_replay_snapshot(snapshot: Mapping[str, Any]) -> tuple[bool, list[st
             if not intent_hash:
                 errors.append("config_layers.intent_hash is required")
             elif intent_hash != expected_hash:
-                errors.append("config_layers.intent_hash does not match config_layers.intent_config")
+                errors.append(
+                    "config_layers.intent_hash does not match config_layers.intent_config"
+                )
 
     contract = snapshot.get("intent_contract")
     if contract is None and config_layers is None:
@@ -78,7 +85,9 @@ def _build_resumed_record(
 
     for checkpoint in reversed(checkpoints):
         stage_name = str(getattr(checkpoint, "stage_name", "") or "").strip()
-        output_paths = [str(path) for path in (getattr(checkpoint, "output_paths", None) or []) if path]
+        output_paths = [
+            str(path) for path in (getattr(checkpoint, "output_paths", None) or []) if path
+        ]
         if stage_name not in stage_sequence or not output_paths:
             continue
         if not all(Path(path).exists() for path in output_paths):
@@ -94,13 +103,26 @@ def _build_resumed_record(
         next_index = current_index + 1
         if next_index >= len(stage_sequence):
             return njr, None
-        resumed = deepcopy(njr)
-        resumed.input_image_paths = list(output_paths)
-        resumed.start_stage = stage_sequence[next_index]
-        resumed.output_paths = []
-        resumed.extra_metadata = dict(getattr(njr, "extra_metadata", {}) or {})
-        resumed.extra_metadata["resumed_from_stage"] = stage_name
-        resumed.extra_metadata["resume_input_count"] = len(output_paths)
+        metadata = {
+            **njr.extra_metadata,
+            "resumed_from_stage": stage_name,
+            "resume_input_count": len(output_paths),
+        }
+        resumed = replace(
+            njr,
+            job_id=uuid4().hex,
+            source=SourceDescriptor(
+                kind=SourceKind.HISTORY_REPLAY,
+                parent_job_id=njr.job_id,
+                metadata={"original_source_kind": njr.source.kind.value},
+            ),
+            workload=replace(
+                njr.workload,
+                input_image_paths=tuple(output_paths),
+                start_stage=stage_sequence[next_index],
+            ),
+            provenance=replace(njr.provenance, metadata=metadata),
+        )
         return resumed, {
             "from_stage": stage_name,
             "to_stage": stage_sequence[next_index],
@@ -159,7 +181,9 @@ class ReplayEngine:
                     metadata=dict(metadata or {}),
                 )
                 existing = [
-                    cp for cp in execution_metadata.stage_checkpoints if cp.stage_name != checkpoint.stage_name
+                    cp
+                    for cp in execution_metadata.stage_checkpoints
+                    if cp.stage_name != checkpoint.stage_name
                 ]
                 existing.append(checkpoint)
                 execution_metadata.stage_checkpoints = existing[-10:]

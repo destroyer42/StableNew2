@@ -19,12 +19,13 @@ def test_snapshot_preserves_pack_metadata() -> None:
     assert reconstructed.prompt_pack_name == "Pack ABC"
 
 
-def test_legacy_snapshot_mode_flag() -> None:
-    njr = make_test_njr(prompt_pack_id="", prompt_source="pack")
-    job = make_test_job_from_njr(njr, prompt_source="pack")
+def test_non_pack_snapshot_does_not_enter_legacy_mode() -> None:
+    njr = make_test_njr(prompt_pack_id="", prompt_source="manual")
+    job = make_test_job_from_njr(njr, prompt_source="manual")
 
     snapshot = build_job_snapshot(job, njr, run_config={"prompt_source": "pack"})
     reconstructed = normalized_job_from_snapshot(snapshot)
 
     assert reconstructed is not None
-    assert reconstructed.extra_metadata.get("legacy_snapshot_mode") in {True, False}
+    assert snapshot["legacy_snapshot_mode"] is False
+    assert "legacy_snapshot_mode" not in reconstructed.extra_metadata

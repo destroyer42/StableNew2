@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import ast
 import re
+from dataclasses import fields
 from pathlib import Path
 
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 ROOT = Path(__file__).resolve().parents[2]
 SRC_ROOT = ROOT / "src"
@@ -17,12 +20,8 @@ ARCHIVE_IMPORT_PATTERNS = (
     re.compile(r"\bfrom\s+src\.controller\.archive\.pipeline_config_assembler\s+import\b"),
     re.compile(r"\bimport\s+src\.controller\.archive\.pipeline_config_types\b"),
     re.compile(r"\bimport\s+src\.controller\.archive\.pipeline_config_assembler\b"),
-    re.compile(
-        r"\bfrom\s+tools\.archive_reference(?:\.[A-Za-z_][A-Za-z0-9_]*)+\s+import\b"
-    ),
-    re.compile(
-        r"\bimport\s+tools\.archive_reference(?:\.[A-Za-z_][A-Za-z0-9_]*)+\b"
-    ),
+    re.compile(r"\bfrom\s+tools\.archive_reference(?:\.[A-Za-z_][A-Za-z0-9_]*)+\s+import\b"),
+    re.compile(r"\bimport\s+tools\.archive_reference(?:\.[A-Za-z_][A-Za-z0-9_]*)+\b"),
 )
 
 GUI_PIPELINE_IMPORT_PATTERNS = (
@@ -70,6 +69,41 @@ CONTROLLER_BACKEND_IMPORT_PATTERNS = (
     re.compile(r"\bfrom\s+src\.video\.workflow_registry\s+import\s+WorkflowRegistry\b"),
 )
 
+NJR_RUNTIME_MUTATION_TARGETS = (
+    SRC_ROOT / "pipeline" / "job_builder_v2.py",
+    SRC_ROOT / "pipeline" / "prompt_pack_job_builder.py",
+    SRC_ROOT / "pipeline" / "reprocess_builder.py",
+    SRC_ROOT / "pipeline" / "cli_njr_builder.py",
+    SRC_ROOT / "pipeline" / "replay_engine.py",
+    SRC_ROOT / "pipeline" / "pipeline_runner.py",
+    SRC_ROOT / "controller" / "job_service.py",
+    SRC_ROOT / "controller" / "pipeline_controller_services" / "queue_submission_service.py",
+    SRC_ROOT / "controller" / "video_workflow_controller.py",
+    SRC_ROOT / "gui" / "controllers" / "learning_controller.py",
+    SRC_ROOT / "utils" / "snapshot_builder_v2.py",
+)
+
+FORBIDDEN_NJR_ASSIGNMENTS = {
+    "status",
+    "created_at",
+    "created_ts",
+    "completed_at",
+    "error_message",
+    "output_paths",
+    "thumbnail_path",
+    "prompt_pack_id",
+    "prompt_pack_name",
+    "prompt_source",
+    "positive_prompt",
+    "negative_prompt",
+    "stage_chain",
+    "input_image_paths",
+    "start_stage",
+    "extra_metadata",
+    "learning_context",
+    "continuity_link",
+}
+
 
 def _iter_python_files(root: Path) -> list[Path]:
     files: list[Path] = []
@@ -103,8 +137,7 @@ def test_only_allowlisted_source_modules_import_legacy_pipeline_config_archive()
                 violations.append(str(rel))
 
     assert violations == [], (
-        "Unexpected source imports of archive/reference modules:\n"
-        + "\n".join(sorted(violations))
+        "Unexpected source imports of archive/reference modules:\n" + "\n".join(sorted(violations))
     )
 
 
@@ -121,17 +154,15 @@ def test_gui_modules_do_not_call_runner_entrypoints_directly() -> None:
     gui_files = _iter_python_files(SRC_ROOT / "gui")
     violations = _find_pattern_hits(gui_files, GUI_DIRECT_RUN_PATTERNS)
     assert violations == [], (
-        "GUI modules must not invoke runner entrypoints directly:\n"
-        + "\n".join(sorted(violations))
+        "GUI modules must not invoke runner entrypoints directly:\n" + "\n".join(sorted(violations))
     )
 
 
 def test_controller_modules_do_not_import_tkinter_directly() -> None:
     controller_files = _iter_python_files(SRC_ROOT / "controller")
     violations = _find_pattern_hits(controller_files, CONTROLLER_TK_IMPORT_PATTERNS)
-    assert violations == [], (
-        "Controller modules must not import tkinter directly:\n"
-        + "\n".join(sorted(violations))
+    assert violations == [], "Controller modules must not import tkinter directly:\n" + "\n".join(
+        sorted(violations)
     )
 
 
@@ -139,8 +170,7 @@ def test_controller_modules_do_not_mutate_widgets_directly() -> None:
     controller_files = _iter_python_files(SRC_ROOT / "controller")
     violations = _find_pattern_hits(controller_files, CONTROLLER_DIRECT_WIDGET_MUTATION_PATTERNS)
     assert violations == [], (
-        "Controller modules must not mutate Tk widgets directly:\n"
-        + "\n".join(sorted(violations))
+        "Controller modules must not mutate Tk widgets directly:\n" + "\n".join(sorted(violations))
     )
 
 
@@ -201,3 +231,42 @@ def test_source_does_not_reference_legacy_njr_adapter_outside_legacy_module() ->
 
 def test_legacy_njr_adapter_module_is_deleted() -> None:
     assert not (ROOT / "src" / "pipeline" / "legacy_njr_adapter.py").exists()
+
+
+def test_njr_contract_has_exactly_eight_authorized_work_fields() -> None:
+    assert tuple(field.name for field in fields(NormalizedJobRecord)) == (
+        "schema_version",
+        "job_id",
+        "workload_kind",
+        "source",
+        "workload",
+        "stages",
+        "output_plan",
+        "provenance",
+    )
+    assert NormalizedJobRecord.__dataclass_params__.frozen is True
+
+
+def test_njr_builders_services_and_runner_do_not_mutate_records() -> None:
+    violations: list[str] = []
+    for path in NJR_RUNTIME_MUTATION_TARGETS:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        for node in ast.walk(tree):
+            targets: list[ast.expr] = []
+            if isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+                raw_targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+                targets.extend(raw_targets)
+            for target in targets:
+                if not isinstance(target, ast.Attribute):
+                    continue
+                if not isinstance(target.value, ast.Name):
+                    continue
+                if target.value.id not in {"njr", "record", "normalized_job"}:
+                    continue
+                if target.attr not in FORBIDDEN_NJR_ASSIGNMENTS:
+                    continue
+                violations.append(
+                    f"{path.relative_to(ROOT)}:{target.lineno}: {target.value.id}.{target.attr}"
+                )
+
+    assert violations == [], "NJR mutation is forbidden:\n" + "\n".join(violations)

@@ -48,6 +48,12 @@ All fresh journeys follow:
 | GP-MVP-16 | Legacy job-store import and rollback | None | C, E, G | Yes | Rehearsal |
 | GP-MVP-17 | Tracked-files-only startup/import | None | A, B, C | Yes | Clean machine |
 
+PR-MVP-020 closes the reusable NJR-core portion of layer B: exact eight-field
+shape, recursive immutability, typed workload/source validation, complete
+round-trip serialization, conditional PromptPack identity, explicit legacy
+migration, and runner non-mutation are automated. Source-specific compiler and
+submission proof for GP-MVP-05/06 remains open under PR-MVP-030.
+
 ## 3. Common invariants for every execution journey
 
 - Exactly one NJR is the authorized execution envelope per job.

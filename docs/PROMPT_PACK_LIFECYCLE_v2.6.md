@@ -105,8 +105,12 @@ Pack identity is required only for NJRs whose source kind is `prompt_pack`.
 
 ## 8. Implementation status
 
-The repository already contains unified-JSON authoring behavior, while active
-code/tests still carry paired-file and universal pack-identity assumptions.
-`PR-MVP-050` performs the atomic storage/loader/test migration. Until it closes,
-this document is the target contract and the architecture gap register remains
-open.
+`PR-MVP-020` removed universal pack identity from NJR and JobService: a
+PromptPack NJR now carries a typed `prompt_pack` source with required identity,
+while CLI, reprocess, replay, learning, video, and training sources do not forge
+one. Complete PromptPack compiler/submission separation remains with
+`PR-MVP-030`.
+
+The repository still carries paired-file storage assumptions. `PR-MVP-050`
+performs the atomic one-file JSON storage/loader/test migration; no claim in
+this section closes that separate gap.

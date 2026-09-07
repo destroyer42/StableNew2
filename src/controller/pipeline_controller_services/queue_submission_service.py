@@ -41,11 +41,10 @@ class QueueSubmissionService:
     ) -> None:
         if not prompt_pack_id:
             return
-        record.prompt_source = "pack"
-        if not getattr(record, "prompt_pack_id", None):
-            record.prompt_pack_id = prompt_pack_id
-        if prompt_pack_name and not getattr(record, "prompt_pack_name", None):
-            record.prompt_pack_name = prompt_pack_name
+        if record.prompt_pack_id != prompt_pack_id:
+            raise ValueError("submission PromptPack identity does not match immutable NJR")
+        if prompt_pack_name and record.prompt_pack_name != prompt_pack_name:
+            raise ValueError("submission PromptPack name does not match immutable NJR")
 
     def sort_jobs_by_model(
         self,
@@ -105,7 +104,9 @@ class QueueSubmissionService:
         can_enqueue_learning_jobs: Callable[[int], tuple[bool, str]],
         is_queue_submission_blocked: Callable[[], bool],
         sort_jobs_by_model: Callable[[list[NormalizedJobRecord]], list[NormalizedJobRecord]],
-        ensure_record_prompt_pack_metadata: Callable[[NormalizedJobRecord, str | None, str | None], None],
+        ensure_record_prompt_pack_metadata: Callable[
+            [NormalizedJobRecord, str | None, str | None], None
+        ],
         to_queue_job: Callable[..., Any],
         log_add_to_queue_event: Callable[[str], None],
         run_job_payload_factory: Callable[[Any], Callable[[], dict[str, Any]]] | None = None,
@@ -115,7 +116,9 @@ class QueueSubmissionService:
         if str(source).startswith("learning_"):
             allowed, reason = can_enqueue_learning_jobs(len(records))
             if not allowed:
-                self._logger.warning("[QueueSubmissionService] Learning enqueue blocked: %s", reason)
+                self._logger.warning(
+                    "[QueueSubmissionService] Learning enqueue blocked: %s", reason
+                )
                 return 0
         if is_queue_submission_blocked():
             self._logger.info(
@@ -145,22 +148,14 @@ class QueueSubmissionService:
                         len(records),
                     )
                     break
-                cfg = record.config
-                prompt_pack_id = cfg.get("prompt_pack_id") if isinstance(cfg, dict) else None
-                if prompt_pack_id and not getattr(record, "prompt_pack_id", None):
-                    try:
-                        record.prompt_pack_id = prompt_pack_id  # type: ignore[attr-defined]
-                    except Exception:
-                        record.prompt_pack_id = prompt_pack_id
-                prompt_pack_name = None
-                if isinstance(cfg, dict):
-                    prompt_pack_name = cfg.get("prompt_pack_name") or cfg.get("pack_name")
+                prompt_pack_id = record.prompt_pack_id or None
+                prompt_pack_name = record.prompt_pack_name or None
                 ensure_record_prompt_pack_metadata(record, prompt_pack_id, prompt_pack_name)
                 job = to_queue_job(
                     record,
                     run_mode="queue",
                     source=source,
-                    prompt_source=prompt_source,
+                    prompt_source=record.prompt_source,
                     prompt_pack_id=prompt_pack_id,
                     run_config=run_config_to_use,
                 )

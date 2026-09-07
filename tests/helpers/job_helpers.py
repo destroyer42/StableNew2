@@ -5,10 +5,11 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceKind, StageConfig
 from src.pipeline.stage_models import StageType
 from src.queue.job_model import Job
 from src.utils.snapshot_builder_v2 import build_job_snapshot
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def make_test_stage() -> StageConfig:
@@ -35,29 +36,23 @@ def make_test_njr(
     """Build a NormalizedJobRecord with sane defaults for queue tests."""
     if job_id is None:
         job_id = f"job-{uuid.uuid4()}"
-    stage_chain = [make_test_stage()]
-    record = NormalizedJobRecord(
+    source_alias = {
+        "pack": SourceKind.PROMPT_PACK.value,
+        "manual": SourceKind.CLI.value,
+        "cli": SourceKind.CLI.value,
+        "reprocess": SourceKind.REPROCESS.value,
+        "learning": SourceKind.LEARNING.value,
+    }
+    return make_pipeline_njr(
         job_id=job_id,
         config=config or {"model": base_model, "prompt": prompt, "prompt_pack_id": prompt_pack_id},
-        path_output_dir="output",
-        filename_template="{seed}",
-        seed=42,
         positive_prompt=prompt,
-        negative_prompt="",
         base_model=base_model,
-        sampler_name="Euler a",
-        steps=20,
-        cfg_scale=7.5,
-        width=512,
-        height=512,
-        stage_chain=stage_chain,
+        stage_chain=(make_test_stage(),),
+        source_kind=source_alias.get(prompt_source, SourceKind.CLI.value),
+        prompt_pack_id=prompt_pack_id if prompt_source == "pack" else None,
+        prompt_pack_name=prompt_pack_name if prompt_source == "pack" else None,
     )
-    if prompt_source:
-        record.prompt_source = prompt_source  # type: ignore[attr-defined]
-    if prompt_source == "pack":
-        record.prompt_pack_id = prompt_pack_id  # type: ignore[attr-defined]
-        record.prompt_pack_name = prompt_pack_name  # type: ignore[attr-defined]
-    return record
 
 
 def make_test_job_from_njr(

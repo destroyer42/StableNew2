@@ -2,20 +2,18 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def _sample_record() -> NormalizedJobRecord:
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="unify-001",
         config={"prompt": "aurora", "model": "sdxl"},
-        path_output_dir="out",
-        filename_template="{seed}",
         seed=42,
-        variant_total=1,
-        batch_total=1,
         base_model="sdxl-model",
         positive_prompt="aurora over the mountains",
         negative_prompt="bad anatomy",
@@ -43,10 +41,16 @@ def test_job_view_from_normalized_record() -> None:
 
 def test_job_view_includes_variant_and_batch_labels() -> None:
     record = _sample_record()
-    record.variant_total = 3
-    record.variant_index = 1
-    record.batch_total = 2
-    record.batch_index = 0
+    record = replace(
+        record,
+        provenance=replace(
+            record.provenance,
+            variant_total=3,
+            variant_index=1,
+            batch_total=2,
+            batch_index=0,
+        ),
+    )
 
     view = record.to_job_view(status="queued", created_at="2025-01-01T00:00:00Z")
     assert "[v2/3]" in view.label

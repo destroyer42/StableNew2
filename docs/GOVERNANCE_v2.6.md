@@ -34,6 +34,9 @@ legacy test, or currently working workaround cannot silently override canon.
   queue policy.
 - `PipelineRunner.run_njr(...)` is the sole public production runner entry.
 - NJR owns immutable authorized work; queue/history own mutable execution state.
+- Since PR-MVP-020, the eight-field NJR and recursive immutability are enforced
+  in code; source compilers and the reduced submission policy remain governed
+  by PR-MVP-030.
 - PromptPack identity is conditional on a PromptPack source.
 - `JobRepository` is the sole persistence boundary; SQLite is the MVP target.
 - Migration is backup-first and offline, with no live legacy fallback.

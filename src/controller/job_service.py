@@ -18,6 +18,7 @@ from src.pipeline.job_models_v2 import (
     JobStatusV2,
     JobView,
     NormalizedJobRecord,
+    SourceKind,
     UnifiedJobSummary,
 )
 from src.pipeline.job_requests_v2 import PipelineRunMode, PipelineRunRequest
@@ -245,7 +246,7 @@ class JobService:
                 job_queue,
                 run_callable=run_callable,
                 poll_interval=0.05,
-                is_paused=lambda: getattr(self, '_queue_status', 'idle') == 'paused',
+                is_paused=lambda: getattr(self, "_queue_status", "idle") == "paused",
             )
         self._runner = selected_runner
         log_with_ctx(
@@ -299,26 +300,20 @@ class JobService:
 
     def register_callback(self, event: str, callback: Callable[..., None]) -> None:
         self._listeners.setdefault(event, []).append(callback)
-    
-    def register_completion_handler(
-        self, 
-        handler: Callable[[Job, Any], None]
-    ) -> None:
+
+    def register_completion_handler(self, handler: Callable[[Job, Any], None]) -> None:
         """Register a callback to be invoked when jobs complete.
-        
+
         PR-LEARN-003: Completion handlers are called after job finishes
         (success or failure) to notify subsystems like learning experiments.
         """
         with self._callback_lock:
             if handler not in self._completion_handlers:
                 self._completion_handlers.append(handler)
-    
-    def unregister_completion_handler(
-        self,
-        handler: Callable[[Job, Any], None]
-    ) -> None:
+
+    def unregister_completion_handler(self, handler: Callable[[Job, Any], None]) -> None:
         """Remove a completion handler.
-        
+
         PR-LEARN-003: Unregister learning completion callbacks.
         """
         with self._callback_lock:
@@ -450,7 +445,7 @@ class JobService:
             run_mode=run_request.run_mode.value,
             source=str(source_override or run_request.source.value),
             prompt_source=prompt_source,
-            prompt_pack_id=record.prompt_pack_id or run_request.prompt_pack_id,
+            prompt_pack_id=record.prompt_pack_id or None,
             randomizer_metadata=record.randomizer_summary,
             variant_index=record.variant_index,
             variant_total=record.variant_total,
@@ -491,7 +486,7 @@ class JobService:
         )
         self.enqueue(job, emit_queue_updated=emit_queue_updated)
         self._notify_job_submitted(job)
-        
+
         # Start runner if auto-run is enabled and runner isn't running
         if self.auto_run_enabled:
             if not self.runner.is_running():
@@ -545,9 +540,9 @@ class JobService:
         """Basic validation of normalized job metadata before queue acceptance."""
         if not record.job_id:
             return False, {"code": "missing_job_id", "message": "Normalized job is missing job_id."}
-        prompt_source = getattr(record, "prompt_source", None) or ""
-        prompt_pack_id = getattr(record, "prompt_pack_id", "") or ""
-        if not prompt_pack_id:
+        prompt_source = record.prompt_source
+        prompt_pack_id = record.prompt_pack_id
+        if record.source.kind is SourceKind.PROMPT_PACK and not prompt_pack_id:
             log_with_ctx(
                 logger,
                 logging.ERROR,
@@ -564,15 +559,14 @@ class JobService:
                 "code": "pack_required",
                 "message": f"Normalized job '{record.job_id}' must declare a prompt_pack_id (prompt_source={prompt_source}).",
             }
-        if not record.positive_prompt or not record.positive_prompt.strip():
+        if (
+            record.workload_kind.value == "image"
+            and "txt2img" in record.stage_chain_labels
+            and not record.positive_prompt.strip()
+        ):
             return False, {
                 "code": "missing_prompt",
                 "message": f"Normalized job '{record.job_id}' must include a positive prompt.",
-            }
-        if record.config is None:
-            return False, {
-                "code": "missing_config",
-                "message": f"Normalized job '{record.job_id}' lacks a merged config payload.",
             }
         if not record.stage_chain:
             return False, {
@@ -846,7 +840,10 @@ class JobService:
 
     def get_diagnostics_snapshot(self) -> dict[str, Any]:
         """Return diagnostics data surfaced to GUI/diagnostic tooling."""
-        def _result_summary(result: dict[str, Any] | None, *, njr_snapshot: dict[str, Any] | None = None) -> dict[str, Any]:
+
+        def _result_summary(
+            result: dict[str, Any] | None, *, njr_snapshot: dict[str, Any] | None = None
+        ) -> dict[str, Any]:
             if not isinstance(result, dict):
                 return {}
             return build_diagnostics_descriptor(result, njr_snapshot=njr_snapshot)
@@ -877,7 +874,8 @@ class JobService:
                         asdict(attempt) for attempt in job.execution_metadata.retry_attempts
                     ],
                     "stage_checkpoints": [
-                        asdict(checkpoint) for checkpoint in job.execution_metadata.stage_checkpoints
+                        asdict(checkpoint)
+                        for checkpoint in job.execution_metadata.stage_checkpoints
                     ],
                     "last_control_action": job.execution_metadata.last_control_action,
                     "return_to_queue_count": job.execution_metadata.return_to_queue_count,
@@ -922,7 +920,7 @@ class JobService:
 
     def run_next_now(self) -> None:
         """Start the runner to process queued jobs.
-        
+
         This starts the background worker which will continuously process jobs
         from the queue. Used by "Send Job" button and manual queue execution.
         """
@@ -992,13 +990,17 @@ class JobService:
             self._log_job_finished(job.job_id, "cancelled", job.error_message or "Job cancelled.")
             self._emit(self.EVENT_JOB_FAILED, job)
             # PR-LEARN-003: Notify completion handlers
-            self._notify_completion(job, {"success": False, "status": status, "error": job.error_message})
+            self._notify_completion(
+                job, {"success": False, "status": status, "error": job.error_message}
+            )
         elif status == JobStatus.FAILED:
             self._log_job_finished(job.job_id, "failed", job.error_message or "Job failed.")
             self._emit(self.EVENT_JOB_FAILED, job)
             self._record_job_history(job, status)
             # PR-LEARN-003: Notify completion handlers
-            self._notify_completion(job, {"success": False, "status": status, "error": job.error_message})
+            self._notify_completion(
+                job, {"success": False, "status": status, "error": job.error_message}
+            )
         if status in {JobStatus.COMPLETED, JobStatus.CANCELLED, JobStatus.FAILED}:
             self._stop_watchdog(job.job_id)
             self.cleanup_external_processes(job.job_id, reason=status.value.lower())
@@ -1101,12 +1103,12 @@ class JobService:
                 event,
                 len(callbacks),
             )
-        
+
         for callback in callbacks:
             try:
                 if event == self.EVENT_JOB_FINISHED:
                     logger.debug("[job_service/events] calling callback=%s", callback)
-                
+
                 if self._event_dispatcher:
                     # schedule via dispatcher to preserve caller thread
                     def _call(cb=callback, a=args):
@@ -1122,10 +1124,10 @@ class JobService:
             except Exception:
                 # Preserve existing behavior: swallow listener exceptions
                 continue
-    
+
     def _notify_completion(self, job: Job, result: Any) -> None:
         """Notify all registered completion handlers of job completion.
-        
+
         PR-LEARN-003: Called after job completes (success or failure) to
         notify subsystems like learning experiments of job outcomes.
         """
@@ -1182,10 +1184,6 @@ class JobService:
         record = normalized_job_from_snapshot(getattr(job, "snapshot", {}) or {})
 
         if record is not None:
-            record.status = normalized_status
-            if status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
-                if completed_iso:
-                    record.completed_at = job.completed_at
             view = record.to_job_view(
                 status=normalized_status.value,
                 created_at=created_iso,
@@ -1196,7 +1194,12 @@ class JobService:
                 worker_id=getattr(job, "worker_id", None),
                 result=getattr(job, "result", None),
             )
-            summary = record.to_unified_summary()
+            summary = UnifiedJobSummary.from_normalized_record(
+                record,
+                status=normalized_status,
+                created_at=job.created_at,
+                completed_at=job.completed_at,
+            )
             job.unified_summary = summary
             return view
 

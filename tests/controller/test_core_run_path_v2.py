@@ -16,11 +16,12 @@ import pytest
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceKind, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunResult
 from src.queue.job_model import Job
 from src.queue.stub_runner import StubRunner
 from src.utils.logger import StructuredLogger, close_all_structured_loggers
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 @pytest.fixture(autouse=True)
@@ -56,36 +57,22 @@ class RecordingAppController(AppController):
 
 
 def _make_dummy_record() -> NormalizedJobRecord:
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="test-dummy",
         config={"prompt": "stub prompt", "model": "sdxl"},
-        path_output_dir="output",
-        filename_template="{seed}",
         seed=11111,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=1000.0,
         prompt_pack_id="test-pack-core",
         prompt_pack_name="test pack",
         positive_prompt="stub prompt",
         negative_prompt="neg: bad",
         positive_embeddings=["stub"],
+        source_kind=SourceKind.PROMPT_PACK.value,
         stage_chain=[
             StageConfig(
                 stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a"
             )
         ],
-        steps=20,
-        cfg_scale=7.5,
-        width=512,
-        height=512,
-        sampler_name="Euler a",
-        scheduler="ddim",
         base_model="sdxl",
-        queue_source="ADD_TO_QUEUE",
-        run_mode="QUEUE",
     )
 
 
@@ -256,7 +243,9 @@ def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None
                 )
                 self._current_job = None
 
-            self._worker = threading.Thread(target=_worker, name="ControlledAsyncRunner", daemon=True)
+            self._worker = threading.Thread(
+                target=_worker, name="ControlledAsyncRunner", daemon=True
+            )
             self._worker.start()
 
         def stop(self) -> None:

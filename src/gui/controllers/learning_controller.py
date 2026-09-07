@@ -3,28 +3,15 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
+import json
 import uuid
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, cast
 
-from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
-from src.gui.models.prompt_metadata import build_prompt_metadata
-from src.gui.prompt_workspace_state import PromptWorkspaceState
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
-from src.review.artifact_metadata_inspector import ArtifactMetadataInspector
-from src.review.review_metadata_service import (
-    INTERNAL_REVIEW_SUMMARY_SCHEMA,
-    PortableReviewSummary,
-    ReviewMetadataService,
-)
-from src.gui_v2.adapters.learning_adapter_v2 import (
-    list_recent_learning_records,
-    update_record_feedback,
-)
 from src.curation.curation_workflow_builder import (
     CurationAdvancementPlan,
     CurationSourceSelection,
@@ -35,34 +22,64 @@ from src.curation.learning_bridge import (
     CurationLearningBridge,
     CurationLearningContext,
 )
+from src.curation.models import CurationCandidate, CurationWorkflow, SelectionEvent
 from src.curation.workflow_summary import (
     build_candidate_replay_entry,
-    find_latest_derived_descendant,
     build_workflow_summary,
+    find_latest_derived_descendant,
 )
-from src.curation.models import CurationCandidate, CurationWorkflow, SelectionEvent
-from src.learning.learning_record import LearningRecord, LearningRecordWriter
+from src.gui.controllers.review_workflow_adapter import (
+    ReviewWorkflowAdapter,
+    ReviewWorkspaceHandoff,
+)
+from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
+from src.gui.models.prompt_metadata import build_prompt_metadata
+from src.gui.prompt_workspace_state import PromptWorkspaceState
+from src.gui_v2.adapters.learning_adapter_v2 import (
+    list_recent_learning_records,
+    update_record_feedback,
+)
 from src.learning.discovered_review_models import (
     DiscoveredReviewExperiment,
     DiscoveredReviewItem,
 )
-from src.learning.recommendation_engine import RecommendationEngine
-from src.learning.stage_capabilities import get_stage_capability
 from src.learning.learning_controller_services.experiment_persistence import (
     build_resume_payload,
-    validate_resume_payload,
     extract_workflow_state,
+    validate_resume_payload,
 )
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
-from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
+from src.learning.learning_record import LearningRecord, LearningRecordWriter
+from src.learning.recommendation_engine import RecommendationEngine
+from src.learning.stage_capabilities import get_stage_capability
+from src.learning.variable_selection_contract import normalize_resource_entries
 from src.pipeline.artifact_contract import extract_artifact_paths
+from src.pipeline.job_models_v2 import (
+    CURRENT_NJR_SCHEMA_VERSION,
+    ImageWorkloadSpec,
+    LearningJobContext,
+    LoRATag,
+    NJRProvenance,
+    NormalizedJobRecord,
+    OutputPlan,
+    SourceDescriptor,
+    SourceKind,
+    StageConfig,
+    WorkloadKind,
+)
+from src.pipeline.reprocess_builder import ReprocessJobBuilder, ReprocessSourceItem
+from src.review.artifact_metadata_inspector import ArtifactMetadataInspector
+from src.review.review_metadata_service import (
+    INTERNAL_REVIEW_SUMMARY_SCHEMA,
+    PortableReviewSummary,
+    ReviewMetadataService,
+)
 from src.state.output_routing import get_output_root, resolve_output_artifact_path
+from src.utils.config import ConfigManager
 from src.utils.image_metadata import (
     extract_embedded_metadata,
     resolve_model_vae_fields,
     resolve_prompt_fields,
 )
-from src.utils.config import ConfigManager
 
 
 class LearningController:
@@ -84,10 +101,12 @@ class LearningController:
         self.learning_state = learning_state
         self.prompt_workspace_state = prompt_workspace_state
         self.pipeline_state = pipeline_state
-        
+
         self.pipeline_controller = pipeline_controller
         self.app_controller = app_controller  # Store app_controller for stage card access
-        self.execution_controller = execution_controller or self._build_execution_controller()  # PR-LEARN-073
+        self.execution_controller = (
+            execution_controller or self._build_execution_controller()
+        )  # PR-LEARN-073
         self._plan_table = plan_table
         self._review_panel = review_panel
         self._learning_record_writer = learning_record_writer
@@ -109,7 +128,7 @@ class LearningController:
         self._recommendation_engine: RecommendationEngine | None = None
         if learning_record_writer:
             self._recommendation_engine = RecommendationEngine(learning_record_writer.records_path)
-        
+
         # PR-LEARN-012: Set up execution controller callbacks
         if self.execution_controller:
             self.execution_controller.set_completion_callback(self._on_variant_job_completed)
@@ -139,6 +158,7 @@ class LearningController:
         if job_service is None:
             return None
         from src.learning.execution_controller import LearningExecutionController
+
         return LearningExecutionController(
             learning_state=self.learning_state,
             job_service=job_service,
@@ -146,16 +166,14 @@ class LearningController:
 
     def update_experiment_design(self, experiment_data: dict[str, Any]) -> None:
         """Update the current experiment design from form data.
-        
+
         PR-LEARN-020: Updated to store variable specs in metadata field.
         """
-        from src.learning.variable_metadata import get_variable_metadata
-        
         # Determine prompt text based on prompt_source
         prompt_text = ""
         prompt_source = experiment_data.get("prompt_source", "custom")
         negative_prompt_text = ""
-        
+
         if prompt_source == "custom":
             prompt_text = experiment_data.get("custom_prompt", "")
         elif prompt_source == "pack":
@@ -164,11 +182,9 @@ class LearningController:
         elif prompt_source == "current" and self.prompt_workspace_state:
             prompt_text = self.prompt_workspace_state.get_current_prompt_text() or ""
             negative_prompt_text = self.prompt_workspace_state.get_current_negative_text() or ""
-        
-        # Look up variable metadata
+
         variable_name = experiment_data.get("variable_under_test", "")
-        meta = get_variable_metadata(variable_name)
-        
+
         # Build metadata dict with value specifications
         metadata = {
             # Numeric range params
@@ -194,7 +210,7 @@ class LearningController:
             "selected_prompt_negative_text": negative_prompt_text,
             "selected_prompt_loras": list(experiment_data.get("selected_prompt_loras", []) or []),
         }
-        
+
         # Create LearningExperiment from form data
         experiment = LearningExperiment(
             name=experiment_data.get("name", ""),
@@ -225,43 +241,52 @@ class LearningController:
 
     def _generate_variant_values(self, experiment: LearningExperiment) -> list[Any]:
         """Generate values using variable metadata.
-        
+
         PR-LEARN-020: Metadata-driven value generation for all variable types.
-        
+
         Args:
             experiment: Learning experiment with metadata field containing value specs
-        
+
         Returns:
             List of values (numeric, strings, or dicts depending on variable type)
         """
         import logging
+
         from src.learning.variable_metadata import get_variable_metadata
         from src.learning.variable_selection_contract import normalize_resource_entries
-        
+
         logger = logging.getLogger(__name__)
-        
+
         # Look up metadata for this variable
         meta = get_variable_metadata(experiment.variable_under_test)
         if not meta:
             raise ValueError(f"Unknown variable: {experiment.variable_under_test}")
-        
-        logger.info(f"[LearningController] Generating values for {meta.display_name} (type: {meta.value_type})")
-        
+
+        logger.info(
+            f"[LearningController] Generating values for {meta.display_name} (type: {meta.value_type})"
+        )
+
         # Generate values based on type
         if meta.value_type == "numeric":
             # Numeric range - use metadata from experiment
-            start = float(experiment.metadata.get("start_value", meta.constraints.get("default_start", 1.0)))
-            end = float(experiment.metadata.get("end_value", meta.constraints.get("default_end", 10.0)))
+            start = float(
+                experiment.metadata.get("start_value", meta.constraints.get("default_start", 1.0))
+            )
+            end = float(
+                experiment.metadata.get("end_value", meta.constraints.get("default_end", 10.0))
+            )
             step = float(experiment.metadata.get("step_value", meta.constraints.get("step", 1.0)))
-            
+
             values = self._generate_values_from_range(start, end, step)
-            logger.info(f"[LearningController]   Generated {len(values)} numeric values: {start} to {end}, step {step}")
+            logger.info(
+                f"[LearningController]   Generated {len(values)} numeric values: {start} to {end}, step {step}"
+            )
             return values
-        
+
         elif meta.value_type in ["discrete", "resource"]:  # PR-LEARN-021: Handle resource type
             # Discrete choice or resource selection - use selected_items from metadata
             selected = experiment.metadata.get("selected_items", [])
-            
+
             if not selected and meta.resource_key:
                 # Fallback: get available items from app state resources
                 if self.app_controller and hasattr(self.app_controller, "_app_state"):
@@ -269,72 +294,94 @@ class LearningController:
                     if hasattr(app_state, "resources"):
                         available = app_state.resources.get(meta.resource_key, [])
                         _, mapping = normalize_resource_entries(list(available or []))
-                        normalized = list(mapping.values()) if mapping else [str(item) for item in available]
+                        normalized = (
+                            list(mapping.values()) if mapping else [str(item) for item in available]
+                        )
                         selected = normalized[:5] if normalized else []  # Use first 5 as fallback
                         logger.warning(
                             f"[LearningController]   No items selected, using first {len(selected)} "
                             f"available {meta.resource_key}"
                         )
-            
+
             if not selected:
                 raise ValueError(
                     f"No items selected for {meta.display_name}. "
                     "Please select at least one item from the checklist."
                 )
-            
+
             # PR-LEARN-021: Validate resource variables
             if meta.value_type == "resource" and meta.resource_key:
-                is_valid, error_msg = self._validate_selected_resources(selected, meta, meta.resource_key)
+                is_valid, error_msg = self._validate_selected_resources(
+                    selected, meta, meta.resource_key
+                )
                 if not is_valid:
                     raise ValueError(error_msg)
-            
+
             logger.info(f"[LearningController]   Using {len(selected)} discrete/resource values")
             return selected
-        
+
         elif meta.value_type == "composite":
             # PR-LEARN-022: Composite variable (LoRA Strength)
-            
+
             # Determine mode: strength sweep or LoRA comparison
             comparison_mode = experiment.metadata.get("comparison_mode", False)
-            
+
             if comparison_mode:
                 # Mode 2: Compare different LoRAs at fixed strength
                 selected_loras = experiment.metadata.get("selected_loras", [])
                 fixed_strength = float(experiment.metadata.get("fixed_strength", 1.0))
-                
+
                 if not selected_loras:
                     # Get all enabled LoRAs from stage card
                     available_loras = self._get_current_loras()
-                    selected_loras = [l["name"] for l in available_loras]
-                
+                    selected_loras = [entry["name"] for entry in available_loras]
+
                 values = [{"name": lora, "weight": fixed_strength} for lora in selected_loras]
-                logger.info(f"[LearningController]   Generated {len(values)} LoRA comparison variants at strength {fixed_strength}")
-            
+                logger.info(
+                    f"[LearningController]   Generated {len(values)} LoRA comparison variants at strength {fixed_strength}"
+                )
+
             else:
                 # Mode 1: Test single LoRA at multiple strengths
                 lora_name = experiment.metadata.get("lora_name")
-                
+
                 if not lora_name:
                     # Try to get first enabled LoRA
                     available_loras = self._get_current_loras()
                     if available_loras:
                         lora_name = available_loras[0]["name"]
-                        logger.warning(f"[LearningController]   No LoRA specified, using first enabled: {lora_name}")
+                        logger.warning(
+                            f"[LearningController]   No LoRA specified, using first enabled: {lora_name}"
+                        )
                     else:
                         raise ValueError("No LoRA specified and no enabled LoRAs in stage card")
-                
+
                 # Generate strength range
-                start = float(experiment.metadata.get("strength_start", meta.constraints.get("min_strength", 0.5)))
-                end = float(experiment.metadata.get("strength_end", meta.constraints.get("max_strength", 1.5)))
-                step = float(experiment.metadata.get("strength_step", meta.constraints.get("default_step", 0.1)))
-                
+                start = float(
+                    experiment.metadata.get(
+                        "strength_start", meta.constraints.get("min_strength", 0.5)
+                    )
+                )
+                end = float(
+                    experiment.metadata.get(
+                        "strength_end", meta.constraints.get("max_strength", 1.5)
+                    )
+                )
+                step = float(
+                    experiment.metadata.get(
+                        "strength_step", meta.constraints.get("default_step", 0.1)
+                    )
+                )
+
                 strengths = self._generate_values_from_range(start, end, step)
-                
+
                 values = [{"name": lora_name, "weight": s} for s in strengths]
-                logger.info(f"[LearningController]   Generated {len(values)} strength variants for {lora_name}")
-            
+                logger.info(
+                    f"[LearningController]   Generated {len(values)} strength variants for {lora_name}"
+                )
+
             return values
-        
+
         else:
             raise ValueError(f"Unsupported variable type: {meta.value_type}")
 
@@ -360,25 +407,32 @@ class LearningController:
             get_current_slot=lambda: slot,
             get_current_prompt_text=lambda: prompt_text,
             get_current_negative_text=lambda: negative_text,
-            get_current_prompt_metadata=lambda: build_prompt_metadata(f"{prompt_text}\n{negative_text}"),
+            get_current_prompt_metadata=lambda: build_prompt_metadata(
+                f"{prompt_text}\n{negative_text}"
+            ),
         )
 
-    def _get_current_loras(self, *, prompt_workspace_state_override: Any | None = None) -> list[dict[str, Any]]:
+    def _get_current_loras(
+        self, *, prompt_workspace_state_override: Any | None = None
+    ) -> list[dict[str, Any]]:
         """Get currently selected LoRAs from stage card state.
-        
+
         PR-LEARN-022: Retrieves enabled LoRAs from baseline config for LoRA variable.
-        
+
         Returns:
             List of LoRA dicts: [{"name": "...", "strength": ..., "enabled": True}, ...]
         """
         import logging
+
         from src.learning.lora_variable_service import collect_available_loras
 
         logger = logging.getLogger(__name__)
 
         try:
             baseline = self._get_baseline_config()
-            app_state = getattr(self.app_controller, "_app_state", None) if self.app_controller else None
+            app_state = (
+                getattr(self.app_controller, "_app_state", None) if self.app_controller else None
+            )
             prompt_workspace_state = (
                 prompt_workspace_state_override
                 or self._build_prompt_workspace_state_from_experiment()
@@ -400,26 +454,24 @@ class LearningController:
             return []
 
     def _validate_selected_resources(
-        self,
-        selected: list[str],
-        meta,
-        resource_key: str
+        self, selected: list[str], meta, resource_key: str
     ) -> tuple[bool, str]:
         """Validate that selected resources exist in WebUI.
-        
+
         PR-LEARN-021: Validates resource variables against available resources.
-        
+
         Args:
             selected: List of selected resource names
             meta: Variable metadata
             resource_key: Resource key in app_state (e.g., "models", "vaes")
-        
+
         Returns:
             (is_valid, error_message)
         """
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         # Get available resources from app_state
         available = []
         if self.app_controller and hasattr(self.app_controller, "_app_state"):
@@ -433,30 +485,36 @@ class LearningController:
             available = [str(item) for item in available]
 
         if not available:
-            return False, f"No {meta.display_name} available in WebUI. Please check WebUI connection."
-        
+            return (
+                False,
+                f"No {meta.display_name} available in WebUI. Please check WebUI connection.",
+            )
+
         # Check each selected resource
         missing = []
         for resource in selected:
             if resource not in available:
                 missing.append(resource)
-        
+
         if missing:
             error = f"Selected {meta.display_name} not found in WebUI: {', '.join(missing[:3])}"
             if len(missing) > 3:
                 error += f" and {len(missing) - 3} more"
             logger.error(f"[LearningController] Resource validation failed: {error}")
             return False, error
-        
-        logger.info(f"[LearningController] Resource validation passed: {len(selected)} {meta.display_name} selected")
+
+        logger.info(
+            f"[LearningController] Resource validation passed: {len(selected)} {meta.display_name} selected"
+        )
         return True, ""
 
     def build_plan(self, experiment: LearningExperiment) -> None:
         """Build a learning plan from experiment definition.
-        
+
         PR-LEARN-020: Updated to use metadata-driven value generation.
         """
         import logging
+
         from src.gui.learning_state import LearningVariant
 
         logger = logging.getLogger(__name__)
@@ -469,7 +527,7 @@ class LearningController:
 
         # Clear any existing plan
         self.learning_state.plan = []
-        
+
         # PR-LEARN-020: Generate values using metadata-driven system
         try:
             values = self._generate_variant_values(experiment)
@@ -517,9 +575,7 @@ class LearningController:
             return
 
         experiment_id = self.learning_state.current_experiment.name
-        self._rating_cache = self._learning_record_writer.get_ratings_for_experiment(
-            experiment_id
-        )
+        self._rating_cache = self._learning_record_writer.get_ratings_for_experiment(experiment_id)
 
     def get_rating_for_image(self, image_path: str) -> int | None:
         """Get the rating for an image if it exists."""
@@ -554,13 +610,18 @@ class LearningController:
     def run_plan(self) -> None:
         """Execute the current learning plan."""
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         logger.info("[LearningController] run_plan() called")
         logger.info(f"[LearningController]   Plan exists: {bool(self.learning_state.plan)}")
-        logger.info(f"[LearningController]   Plan length: {len(self.learning_state.plan) if self.learning_state.plan else 0}")
-        logger.info(f"[LearningController]   Pipeline controller: {self.pipeline_controller is not None}")
-        
+        logger.info(
+            f"[LearningController]   Plan length: {len(self.learning_state.plan) if self.learning_state.plan else 0}"
+        )
+        logger.info(
+            f"[LearningController]   Pipeline controller: {self.pipeline_controller is not None}"
+        )
+
         if not self.learning_state.plan:
             logger.warning("[LearningController] No plan exists, exiting run_plan()")
             self._set_workflow_state("idle")
@@ -570,8 +631,10 @@ class LearningController:
             logger.error("[LearningController] No pipeline controller, exiting run_plan()")
             self._set_workflow_state("planned")
             return
-        
-        logger.info(f"[LearningController] Starting to submit {len(self.learning_state.plan)} variants")
+
+        logger.info(
+            f"[LearningController] Starting to submit {len(self.learning_state.plan)} variants"
+        )
 
         # Clear all highlights before starting
         if self._plan_table and hasattr(self._plan_table, "clear_highlights"):
@@ -580,9 +643,11 @@ class LearningController:
         # Submit jobs for each variant
         for variant in self.learning_state.plan:
             if variant.status == "pending":
-                logger.info(f"[LearningController] Submitting pending variant: {variant.param_value}")
+                logger.info(
+                    f"[LearningController] Submitting pending variant: {variant.param_value}"
+                )
                 self._submit_variant_job(variant)
-                
+
                 # Clear job draft after each submission to avoid duplicates
                 app_state = getattr(self.pipeline_controller, "_app_state", None)
                 if app_state and hasattr(app_state, "clear_job_draft"):
@@ -597,33 +662,36 @@ class LearningController:
 
     def _submit_variant_job(self, variant: LearningVariant) -> None:
         """Submit a learning job via LearningExecutionController.
-        
+
         PR-LEARN-010: Replaces PackJobEntry path with direct NJR building,
         ensuring proper config propagation to run_metadata.json.
-        
+
         PR-LEARN-011: Enhanced with comprehensive logging.
-        
+
         PR-LEARN-013: Fixed to delegate to LearningExecutionController so that
         _job_to_variant mapping is populated for callback tracking.
         """
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         if not self.learning_state.current_experiment:
             logger.error("[LearningController] Cannot submit: missing experiment")
             variant.status = "failed"
             return
-        
+
         experiment = self.learning_state.current_experiment
-        
+
         # PR-LEARN-011: Log submission attempt
-        logger.info(f"[LearningController] Submitting variant job: experiment={experiment.name}, variant={variant.param_value}, variable={experiment.variable_under_test}")
+        logger.info(
+            f"[LearningController] Submitting variant job: experiment={experiment.name}, variant={variant.param_value}, variable={experiment.variable_under_test}"
+        )
 
         try:
             # PR-LEARN-010: Build NJR directly with explicit config fields
             record = self._build_variant_njr(variant, experiment)
             logger.info(f"[LearningController] Built NJR for variant: {variant.param_value}")
-            
+
             if not self.execution_controller:
                 raise RuntimeError("Learning execution controller unavailable")
             success = self.execution_controller.submit_variant_job(
@@ -632,14 +700,18 @@ class LearningController:
                 experiment_name=experiment.name,
                 variable_under_test=experiment.variable_under_test,
             )
-            
+
             if success:
                 # PR-LEARN-011: Log successful submission
-                logger.info(f"[LearningController] ✓ Successfully submitted job via LearningExecutionController: {record.job_id}")
+                logger.info(
+                    f"[LearningController] ✓ Successfully submitted job via LearningExecutionController: {record.job_id}"
+                )
                 logger.info(f"[LearningController]   Experiment: {experiment.name}")
-                logger.info(f"[LearningController]   Variable: {experiment.variable_under_test} = {variant.param_value}")
-                logger.info(f"[LearningController]   Status: queued")
-                
+                logger.info(
+                    f"[LearningController]   Variable: {experiment.variable_under_test} = {variant.param_value}"
+                )
+                logger.info("[LearningController]   Status: queued")
+
                 # Update variant status
                 variant.status = "queued"
                 variant_index = self._get_variant_index(variant)
@@ -647,7 +719,9 @@ class LearningController:
                     self._update_variant_status(variant_index, "queued")
                     self._highlight_variant(variant_index, True)
             else:
-                raise RuntimeError("LearningExecutionController.submit_variant_job() returned False")
+                raise RuntimeError(
+                    "LearningExecutionController.submit_variant_job() returned False"
+                )
 
         except Exception as exc:
             logger.exception(f"[LearningController] Error submitting variant job: {exc}")
@@ -660,29 +734,31 @@ class LearningController:
         self, variant: LearningVariant, experiment: LearningExperiment
     ) -> NormalizedJobRecord:
         """Build NormalizedJobRecord with explicit config from stage cards.
-        
+
         PR-LEARN-010: Constructs NJR directly with all config fields populated,
         bypassing PackJobEntry to ensure proper config propagation.
-        
+
         PR-LEARN-011: Enhanced with validation and comprehensive logging.
         """
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         # Get baseline config from stage cards
         baseline = self._get_baseline_config()
-        
+
         # PR-LEARN-011: Validate baseline config
         is_valid, error_msg = self._validate_baseline_config(baseline)
         if not is_valid:
             logger.error(f"[LearningController] Baseline config validation failed: {error_msg}")
             raise ValueError(f"Invalid baseline config: {error_msg}")
-        
+
         # PR-LEARN-020: Apply variant override using metadata system
         import copy
+
         final_config = copy.deepcopy(baseline)
         self._apply_variant_override_with_metadata(final_config, variant.param_value, experiment)
-        
+
         # Add learning context metadata
         final_config["learning_experiment_id"] = experiment.name
         final_config["learning_variant_value"] = variant.param_value
@@ -694,7 +770,7 @@ class LearningController:
         variant_total = max(1, len(self.learning_state.plan) or len(experiment.values) or 1)
 
         txt2img_final = final_config.get("txt2img", {})
-        
+
         # Extract explicit config values
         model = txt2img_final.get("model", "")
         vae = txt2img_final.get("vae", "")
@@ -702,22 +778,22 @@ class LearningController:
         scheduler = txt2img_final.get("scheduler", "normal")
         steps = int(txt2img_final.get("steps", 20))
         cfg_scale = float(txt2img_final.get("cfg_scale", 7.0))
-        width = int(txt2img_final.get("width", 512))
-        height = int(txt2img_final.get("height", 512))
         seed = int(txt2img_final.get("seed", -1))
         clip_skip = int(txt2img_final.get("clip_skip", 2))
-        
+
         # Debug logging for seed value
         logger.info(f"[LearningController]   seed from config: {seed} (default=-1)")
         if seed == -1:
-            logger.warning(f"[LearningController]   WARNING: Seed is -1 (random), check if stage card has seed set")
-        
+            logger.warning(
+                "[LearningController]   WARNING: Seed is -1 (random), check if stage card has seed set"
+            )
+
         # Subseed parameters
         subseed = int(txt2img_final.get("subseed", -1))
         subseed_strength = float(txt2img_final.get("subseed_strength", 0.0))
         seed_resize_from_h = int(txt2img_final.get("seed_resize_from_h", 0))
         seed_resize_from_w = int(txt2img_final.get("seed_resize_from_w", 0))
-        
+
         # Get prompt from experiment or current prompt workspace
         prompt = experiment.prompt_text
         if not prompt:
@@ -727,15 +803,18 @@ class LearningController:
         if not prompt:
             # Final fallback
             prompt = "a test prompt"
-        
+
         # Get negative prompt from experiment or current prompt workspace
         negative_prompt = (
-            getattr(experiment, "negative_prompt_text", "") or ""
-            or str(getattr(experiment, "metadata", {}).get("selected_prompt_negative_text", "") or "")
+            getattr(experiment, "negative_prompt_text", "")
+            or ""
+            or str(
+                getattr(experiment, "metadata", {}).get("selected_prompt_negative_text", "") or ""
+            )
         )
         if not negative_prompt and self.prompt_workspace_state:
             negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
-        
+
         # PR-LEARN-011: Comprehensive logging of final config
         logger.info(f"[LearningController] Building NJR for variant {variant.param_value}")
         logger.info(f"[LearningController]   model: {model}")
@@ -745,11 +824,15 @@ class LearningController:
         logger.info(f"[LearningController]   steps: {steps}")
         logger.info(f"[LearningController]   cfg_scale: {cfg_scale}")
         logger.info(f"[LearningController]   seed: {seed}")
-        logger.info(f"[LearningController]   prompt: {prompt[:50]}..." if len(prompt) > 50 else f"[LearningController]   prompt: {prompt}")
-        
+        logger.info(
+            f"[LearningController]   prompt: {prompt[:50]}..."
+            if len(prompt) > 50
+            else f"[LearningController]   prompt: {prompt}"
+        )
+
         # Generate job ID
         job_id = f"learning_{experiment.name}_{variant.param_value}_{uuid.uuid4().hex[:8]}"
-        
+
         # Build stage_chain (required for job validation)
         txt2img_stage = StageConfig(
             stage_type="txt2img",
@@ -762,9 +845,8 @@ class LearningController:
             vae=vae,
             extra={},
         )
-        
+
         # Build learning context for tracking and metadata
-        from src.pipeline.job_models_v2 import LearningJobContext
         learning_ctx = LearningJobContext(
             experiment_id=experiment.name,
             experiment_name=experiment.name,
@@ -778,6 +860,23 @@ class LearningController:
             stage_name=stage_name,
             final_config=final_config,
         )
+        selected_loras: dict[str, LoRATag] = {}
+        for entry in list(getattr(experiment, "metadata", {}).get("selected_prompt_loras") or []):
+            if not isinstance(entry, dict):
+                continue
+            name = str(entry.get("name", "") or "").strip()
+            if name:
+                selected_loras[name] = LoRATag(
+                    name=name,
+                    weight=float(entry.get("weight", entry.get("strength", 1.0)) or 1.0),
+                )
+        lora_override = final_config.get("lora_override")
+        if isinstance(lora_override, dict):
+            lora_name = str(lora_override["name"])
+            selected_loras[lora_name] = LoRATag(
+                name=lora_name,
+                weight=float(lora_override["weight"]),
+            )
 
         if stage_name != "txt2img":
             capability = get_stage_capability(stage_name)
@@ -803,102 +902,60 @@ class LearningController:
                 source="learning",
                 extra_metadata=learning_metadata,
             )
-            record.prompt_pack_id = f"learning_{experiment.name}"
-            record.prompt_pack_name = experiment.name
-            record.variant_index = variant_index
-            record.variant_total = variant_total
-            record.learning_context = learning_ctx
-            prompt_source = str(getattr(experiment, "metadata", {}).get("prompt_source", "manual") or "manual")
-            record.prompt_source = "pack" if prompt_source == "pack" else "manual"  # type: ignore[attr-defined]
-            selected_prompt_loras = list(getattr(experiment, "metadata", {}).get("selected_prompt_loras") or [])
-            if selected_prompt_loras:
-                from src.pipeline.job_models_v2 import LoRATag
-
-                for entry in selected_prompt_loras:
-                    if not isinstance(entry, dict):
-                        continue
-                    name = str(entry.get("name", "") or "").strip()
-                    if not name:
-                        continue
-                    weight = float(entry.get("weight", entry.get("strength", 1.0)) or 1.0)
-                    if all(tag.name != name for tag in record.lora_tags):
-                        record.lora_tags.append(LoRATag(name=name, weight=weight))
-            return record
+            return replace(
+                record,
+                job_id=job_id,
+                provenance=replace(
+                    record.provenance,
+                    variant_index=variant_index,
+                    variant_total=variant_total,
+                    learning_context=learning_ctx,
+                    lora_tags=tuple(selected_loras.values()),
+                    metadata=learning_metadata,
+                ),
+            )
 
         # Build NormalizedJobRecord
         record = NormalizedJobRecord(
+            schema_version=CURRENT_NJR_SCHEMA_VERSION,
             job_id=job_id,
-            config=final_config,
-            path_output_dir=output_dir,
-            filename_template=filename_template,
-            variant_index=variant_index,
-            variant_total=variant_total,
-            positive_prompt=prompt,
-            negative_prompt=negative_prompt,
-            base_model=model,
-            vae=vae,
-            sampler_name=sampler,
-            scheduler=scheduler,
-            steps=steps,
-            cfg_scale=cfg_scale,
-            width=width,
-            height=height,
-            seed=seed,
-            clip_skip=clip_skip,
-            prompt_pack_id=f"learning_{experiment.name}",
-            prompt_pack_name=experiment.name,
-            stage_chain=[txt2img_stage],  # Required: at least one stage
-            images_per_prompt=max(1, int(experiment.images_per_value or 1)),
-            run_mode="QUEUE",
-            queue_source="ADD_TO_QUEUE",
-            learning_context=learning_ctx,  # For metadata and tracking
-            extra_metadata={
-                **learning_metadata,
-                "subseed": subseed,
-                "subseed_strength": subseed_strength,
-                "seed_resize_from_h": seed_resize_from_h,
-                "seed_resize_from_w": seed_resize_from_w,
-            },
+            workload_kind=WorkloadKind.IMAGE,
+            source=SourceDescriptor(
+                kind=SourceKind.LEARNING,
+                display_name=experiment.name,
+            ),
+            workload=ImageWorkloadSpec(
+                positive_prompt=prompt,
+                negative_prompt=negative_prompt,
+                config=final_config,
+                images_per_prompt=max(1, int(experiment.images_per_value or 1)),
+                metadata=learning_metadata,
+            ),
+            stages=(txt2img_stage,),
+            output_plan=OutputPlan(
+                base_output_dir=output_dir or "output",
+                filename_template=filename_template,
+            ),
+            provenance=NJRProvenance(
+                seed=seed,
+                variant_index=variant_index,
+                variant_total=variant_total,
+                learning_context=learning_ctx,
+                lora_tags=tuple(selected_loras.values()),
+                metadata={
+                    **learning_metadata,
+                    "subseed": subseed,
+                    "subseed_strength": subseed_strength,
+                    "seed_resize_from_h": seed_resize_from_h,
+                    "seed_resize_from_w": seed_resize_from_w,
+                    "clip_skip": clip_skip,
+                },
+            ),
         )
-        prompt_source = str(getattr(experiment, "metadata", {}).get("prompt_source", "manual") or "manual")
-        record.prompt_source = "pack" if prompt_source == "pack" else "manual"  # type: ignore[attr-defined]
 
-        selected_prompt_loras = list(getattr(experiment, "metadata", {}).get("selected_prompt_loras") or [])
-        if selected_prompt_loras:
-            from src.pipeline.job_models_v2 import LoRATag
-
-            for entry in selected_prompt_loras:
-                if not isinstance(entry, dict):
-                    continue
-                name = str(entry.get("name", "") or "").strip()
-                if not name:
-                    continue
-                weight = float(entry.get("weight", entry.get("strength", 1.0)) or 1.0)
-                if all(tag.name != name for tag in record.lora_tags):
-                    record.lora_tags.append(LoRATag(name=name, weight=weight))
-        
-        # PR-LEARN-022: Apply LoRA override if present
-        lora_override = final_config.get("lora_override")
-        if lora_override and isinstance(lora_override, dict):
-            from src.pipeline.job_models_v2 import LoRATag
-            
-            lora_name = lora_override["name"]
-            lora_weight = float(lora_override["weight"])
-            
-            logger.info(f"[LearningController] Applying LoRA override to NJR: {lora_name} @ {lora_weight}")
-            
-            # Remove any existing tag with same name
-            record.lora_tags = [tag for tag in record.lora_tags if tag.name != lora_name]
-            
-            # Add new tag with override weight
-            new_tag = LoRATag(name=lora_name, weight=lora_weight)
-            record.lora_tags.append(new_tag)
-            
-            logger.info(f"[LearningController]   NJR lora_tags: {[f'{t.name}@{t.weight}' for t in record.lora_tags]}")
-        
         # PR-LEARN-011: Confirm NJR construction
         logger.info(f"[LearningController] Successfully built NJR: job_id={record.job_id}")
-        
+
         return record
 
     def _resolve_learning_output_dir(self, config: dict[str, Any]) -> str:
@@ -943,37 +1000,40 @@ class LearningController:
 
     def _validate_baseline_config(self, config: dict[str, Any]) -> tuple[bool, str]:
         """Validate baseline config structure and required fields.
-        
+
         PR-LEARN-011: Validates config before NJR construction.
-        
+
         Returns:
             (is_valid, error_message)
         """
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         # Check top-level structure
         if not config:
             return False, "Baseline config is empty"
-        
+
         if "txt2img" not in config:
             return False, "Baseline config missing 'txt2img' section"
-        
+
         if "pipeline" not in config:
-            logger.warning("[LearningController] Baseline config missing 'pipeline' section, will use defaults")
-        
+            logger.warning(
+                "[LearningController] Baseline config missing 'pipeline' section, will use defaults"
+            )
+
         # Validate txt2img section
         is_valid, error = self._validate_txt2img_config(config["txt2img"])
         if not is_valid:
             return False, f"txt2img validation failed: {error}"
-        
+
         return True, ""
 
     def _validate_txt2img_config(self, txt2img: dict[str, Any]) -> tuple[bool, str]:
         """Validate txt2img config has all required fields.
-        
+
         PR-LEARN-011: Validates required fields before NJR construction.
-        
+
         Returns:
             (is_valid, error_message)
         """
@@ -987,77 +1047,78 @@ class LearningController:
             "width": "Image width",
             "height": "Image height",
         }
-        
-        # Optional fields (checked but not required to be non-empty)
-        optional_fields = {
-            "vae": "VAE name",  # Optional - models can have baked VAE
-        }
-        
+
         missing = []
         empty = []
-        
+
         for field, description in required_fields.items():
             if field not in txt2img:
                 missing.append(description)
             elif not txt2img[field]:
                 empty.append(description)
-        
+
         if missing:
             return False, f"Missing required fields: {', '.join(missing)}"
-        
+
         if empty:
             return False, f"Empty required fields: {', '.join(empty)}"
-        
+
         return True, ""
 
     def _log_baseline_config(self, config: dict[str, Any], source: str = "unknown") -> None:
         """Log baseline config details for debugging.
-        
+
         PR-LEARN-011: Provides diagnostic output for config issues.
-        
+
         Args:
             config: The baseline config dict
             source: Where the config came from (e.g., "stage_cards", "fallback")
         """
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         logger.info(f"[LearningController] Baseline config from {source}")
         logger.info(f"[LearningController]   Top-level keys: {list(config.keys())}")
-        
+
         if "txt2img" in config:
             txt2img = config["txt2img"]
             logger.info(f"[LearningController]   txt2img keys: {list(txt2img.keys())}")
             logger.info(f"[LearningController]   model: {txt2img.get('model', 'MISSING')}")
             logger.info(f"[LearningController]   vae: {txt2img.get('vae', 'MISSING')}")
-            logger.info(f"[LearningController]   sampler_name: {txt2img.get('sampler_name', 'MISSING')}")
+            logger.info(
+                f"[LearningController]   sampler_name: {txt2img.get('sampler_name', 'MISSING')}"
+            )
             logger.info(f"[LearningController]   scheduler: {txt2img.get('scheduler', 'MISSING')}")
             logger.info(f"[LearningController]   steps: {txt2img.get('steps', 'MISSING')}")
             logger.info(f"[LearningController]   cfg_scale: {txt2img.get('cfg_scale', 'MISSING')}")
             logger.info(f"[LearningController]   seed: {txt2img.get('seed', 'MISSING')}")
         else:
             logger.error("[LearningController]   txt2img section MISSING")
-        
+
         if "pipeline" in config:
             pipeline = config["pipeline"]
             logger.info(f"[LearningController]   pipeline keys: {list(pipeline.keys())}")
-            logger.info(f"[LearningController]   batch_size: {pipeline.get('batch_size', 'MISSING')}")
+            logger.info(
+                f"[LearningController]   batch_size: {pipeline.get('batch_size', 'MISSING')}"
+            )
         else:
             logger.warning("[LearningController]   pipeline section MISSING")
 
     def _get_baseline_config(self) -> dict[str, Any]:
         """Get baseline configuration from current GUI state.
-        
+
         BUGFIX: Get the full nested config structure from stage cards,
         not just the app_state.current_config which may have empty model/VAE.
-        
+
         PR-LEARN-011: Enhanced with logging.
         """
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         baseline = {}
-        
+
         # Try to get full config from app_controller's stage cards
         if self.app_controller and hasattr(self.app_controller, "_get_stage_cards_panel"):
             try:
@@ -1074,14 +1135,26 @@ class LearningController:
                         if not isinstance(card_config, dict):
                             continue
                         for key, value in card_config.items():
-                            if key in {"txt2img", "img2img", "adetailer", "upscale", "pipeline"} and isinstance(value, dict):
+                            if key in {
+                                "txt2img",
+                                "img2img",
+                                "adetailer",
+                                "upscale",
+                                "pipeline",
+                            } and isinstance(value, dict):
                                 merged_config.setdefault(key, {}).update(value)
                             elif key not in merged_config:
                                 merged_config[key] = value
                     txt2img_section = merged_config.get("txt2img", {})
-                    logger.info(f"[LearningController] Got stage card config: keys={list(merged_config.keys())}")
-                    logger.info(f"[LearningController] txt2img section keys: {list(txt2img_section.keys())}")
-                    logger.info(f"[LearningController] txt2img model={txt2img_section.get('model')}, vae={txt2img_section.get('vae')}")
+                    logger.info(
+                        f"[LearningController] Got stage card config: keys={list(merged_config.keys())}"
+                    )
+                    logger.info(
+                        f"[LearningController] txt2img section keys: {list(txt2img_section.keys())}"
+                    )
+                    logger.info(
+                        f"[LearningController] txt2img model={txt2img_section.get('model')}, vae={txt2img_section.get('vae')}"
+                    )
 
                     # BUGFIX: Accept config if model exists (VAE can be empty for baked VAE models)
                     if txt2img_section.get("model") or txt2img_section.get("model_name"):
@@ -1111,17 +1184,25 @@ class LearningController:
                                 "adetailer_enabled": False,
                                 "upscale_enabled": False,
                             }
-                        logger.info("[LearningController] Successfully loaded baseline config from stage cards")
+                        logger.info(
+                            "[LearningController] Successfully loaded baseline config from stage cards"
+                        )
                         return baseline
                     logger.warning("[LearningController] Stage card has no model/VAE, falling back")
             except Exception as exc:
                 logger.exception(f"[LearningController] Failed to get stage card config: {exc}")
         else:
-            logger.warning(f"[LearningController] No app_controller or _get_stage_cards_panel method")
-        
+            logger.warning(
+                "[LearningController] No app_controller or _get_stage_cards_panel method"
+            )
+
         # Fallback: Try to get config from app_state
-        logger.warning(f"[LearningController] Using fallback baseline config")
-        app_state = getattr(self.pipeline_controller, "_app_state", None) if self.pipeline_controller else None
+        logger.warning("[LearningController] Using fallback baseline config")
+        app_state = (
+            getattr(self.pipeline_controller, "_app_state", None)
+            if self.pipeline_controller
+            else None
+        )
         if app_state and hasattr(app_state, "current_config"):
             current_config = app_state.current_config
             # Build nested config structure
@@ -1157,13 +1238,13 @@ class LearningController:
                     "steps": 20,
                 },
             }
-        
+
         return baseline
-    
+
     def _build_stage_flags_for_experiment(self, experiment: LearningExperiment) -> dict[str, bool]:
         """Build stage flags based on experiment stage."""
         stage = experiment.stage.lower()
-        
+
         return {
             "txt2img": stage == "txt2img" or stage == "txt2img_enabled",
             "img2img": stage == "img2img" or stage == "img2img_enabled",
@@ -1177,7 +1258,7 @@ class LearningController:
         self, variant: LearningVariant, experiment: LearningExperiment
     ) -> dict[str, Any]:
         """Build pipeline overrides for a learning variant.
-        
+
         Returns a dict with the parameter name and value.
         The _apply_overrides_to_config method will place it in the correct config section.
         """
@@ -1210,18 +1291,22 @@ class LearningController:
         overrides["learning_variable"] = variable
 
         return overrides
-    
+
     def _apply_overrides_to_config(
-        self, baseline_config: dict[str, Any], overrides: dict[str, Any], experiment: LearningExperiment
+        self,
+        baseline_config: dict[str, Any],
+        overrides: dict[str, Any],
+        experiment: LearningExperiment,
     ) -> dict[str, Any]:
         """Apply variant overrides to the correct nested config sections.
-        
+
         BUGFIX: Overrides must be applied to txt2img/upscale/etc sections,
         not at the top level, for the builder to use them correctly.
         """
         import copy
+
         config = copy.deepcopy(baseline_config)
-        
+
         # Determine which stage section to apply overrides to
         stage = experiment.stage.lower()
         if stage == "txt2img" or stage == "txt2img_enabled":
@@ -1234,11 +1319,11 @@ class LearningController:
             stage_key = "adetailer"
         else:
             stage_key = "txt2img"  # Default
-        
+
         # Ensure stage section exists
         if stage_key not in config:
             config[stage_key] = {}
-        
+
         # Apply parameter overrides to the stage section
         for key, value in overrides.items():
             # Skip learning metadata - those go at top level
@@ -1247,44 +1332,46 @@ class LearningController:
             else:
                 # Apply to stage section
                 config[stage_key][key] = value
-        
+
         return config
 
     def _apply_variant_override_with_metadata(
-        self,
-        config: dict[str, Any],
-        value: Any,
-        experiment: LearningExperiment
+        self, config: dict[str, Any], value: Any, experiment: LearningExperiment
     ) -> None:
         """Apply variant override using metadata config_path.
-        
+
         PR-LEARN-020: Metadata-driven override application.
         PR-LEARN-022: Special handling for composite LoRA variables.
-        
+
         Args:
             config: Config dict to modify (in-place)
             value: The variant value to apply
             experiment: Current experiment for context
         """
         import logging
+
         from src.learning.variable_metadata import get_variable_metadata
-        
+
         logger = logging.getLogger(__name__)
-        
+
         # Get metadata for variable
         meta = get_variable_metadata(experiment.variable_under_test)
         if not meta:
-            logger.error(f"[LearningController] No metadata for variable: {experiment.variable_under_test}")
+            logger.error(
+                f"[LearningController] No metadata for variable: {experiment.variable_under_test}"
+            )
             return
-        
+
         # PR-LEARN-022: Special handling for composite LoRA variable
         if meta.value_type == "composite" and isinstance(value, dict):
             # value = {"name": "CharacterLoRA", "weight": 0.8}
             # Store in lora_override for later NJR application
             config.setdefault("lora_override", {}).update(value)
-            logger.info(f"[LearningController] Applied LoRA override: {value['name']} @ {value['weight']}")
+            logger.info(
+                f"[LearningController] Applied LoRA override: {value['name']} @ {value['weight']}"
+            )
             return
-        
+
         # Standard config path application
         # Parse config_path (e.g., "txt2img.cfg_scale" -> ["txt2img", "cfg_scale"])
         keys = meta.config_path.split(".")
@@ -1300,7 +1387,7 @@ class LearningController:
             if key not in target:
                 target[key] = {}
             target = target[key]
-        
+
         # Set the final value
         final_key = keys[-1]
         target[final_key] = value
@@ -1308,14 +1395,15 @@ class LearningController:
 
     def _on_variant_job_completed(self, variant: LearningVariant, result: dict[str, Any]) -> None:
         """Handle completion of a variant job.
-        
+
         PR-LEARN-004: Updates variant status and refreshes UI table.
         PR-LEARN-005: Extracts and links output images to variant.
         """
         import logging
+
         logger = logging.getLogger(__name__)
         logger.debug(f"Variant {variant.param_value} completed")
-        
+
         variant.status = "completed"
 
         # PR-LEARN-005: Extract image references from result
@@ -1328,7 +1416,7 @@ class LearningController:
                 image_paths.extend(result["output_paths"])
             elif "image_paths" in result:
                 image_paths.extend(result["image_paths"])
-        
+
         # Add image references to variant
         for image_path in image_paths:
             if image_path and image_path not in variant.image_refs:
@@ -1469,8 +1557,10 @@ class LearningController:
             self._recompute_workflow_state_from_plan()
 
         selected_variant = self.learning_state.selected_variant
-        if selected_variant is not None and self._review_panel and hasattr(
-            self._review_panel, "display_variant_results"
+        if (
+            selected_variant is not None
+            and self._review_panel
+            and hasattr(self._review_panel, "display_variant_results")
         ):
             try:
                 self._review_panel.display_variant_results(
@@ -1626,13 +1716,13 @@ class LearningController:
 
         # Write the record
         self._learning_record_writer.append_record(record)
-        
+
         # Update rating cache
         self._rating_cache[image_ref] = rating
-        
+
         # Refresh recommendations with new data
         self.refresh_recommendations()
-        
+
         # Update plan table with new average rating
         self._update_variant_ratings()
         if self._is_review_complete():
@@ -1665,16 +1755,12 @@ class LearningController:
             if self._review_panel and hasattr(self._review_panel, "update_recommendations"):
                 self._review_panel.update_recommendations(recommendations)
 
-    def on_job_completed_callback(
-        self, 
-        job: Any, 
-        result: Any
-    ) -> None:
+    def on_job_completed_callback(self, job: Any, result: Any) -> None:
         """Handle job completion events from the pipeline.
-        
+
         PR-LEARN-003: This is registered as a callback with JobService to receive
         notifications when learning-related jobs complete.
-        
+
         Args:
             job: Job object (contains snapshot with NJR)
             result: Result dict with 'success', 'status', 'error' fields
@@ -1683,32 +1769,40 @@ class LearningController:
         njr = getattr(job, "snapshot", None)
         if not njr:
             return
-        
+
         # Check if this is a learning job
         learning_ctx = getattr(njr, "learning_context", None)
         if not learning_ctx:
             return
-        
+
         # Check if it belongs to our current experiment
         if not self.learning_state.current_experiment:
             return
-        
+
         if learning_ctx.experiment_id != self.learning_state.current_experiment.name:
             return
-        
+
         # Find the variant by index
         variant_index = learning_ctx.variant_index
         if variant_index < 0 or variant_index >= len(self.learning_state.plan):
             return
-        
+
         variant = self.learning_state.plan[variant_index]
-        
+
         # Update variant based on result
-        success = result.get("success", False) if isinstance(result, dict) else getattr(result, "success", False)
+        success = (
+            result.get("success", False)
+            if isinstance(result, dict)
+            else getattr(result, "success", False)
+        )
         if success:
             self._on_variant_job_completed(variant, result)
         else:
-            error_msg = result.get("error", "Unknown error") if isinstance(result, dict) else getattr(result, "error", "Unknown error")
+            error_msg = (
+                result.get("error", "Unknown error")
+                if isinstance(result, dict)
+                else getattr(result, "error", "Unknown error")
+            )
             error = Exception(str(error_msg))
             self._on_variant_job_failed(variant, error)
 
@@ -1737,18 +1831,17 @@ class LearningController:
         """Update all variant rows with their average ratings."""
         if not self._learning_record_writer or not self.learning_state.current_experiment:
             return
-        
+
         experiment_id = self.learning_state.current_experiment.name
-        
+
         for i, variant in enumerate(self.learning_state.plan):
             avg = self._learning_record_writer.get_average_rating_for_variant(
-                experiment_id, 
-                variant.param_value
+                experiment_id, variant.param_value
             )
-            
+
             if self._plan_table and hasattr(self._plan_table, "update_row_rating"):
                 self._plan_table.update_row_rating(i, avg)
-    
+
     def refresh_recommendations(self) -> None:
         """Force refresh of recommendations, clearing any cache."""
         if self._recommendation_engine:
@@ -2078,7 +2171,11 @@ class LearningController:
                 negative_prompt_delta=str(row.get("negative_prompt_delta") or ""),
                 prompt_mode=str(row.get("prompt_mode") or ""),
                 negative_prompt_mode=str(row.get("negative_prompt_mode") or ""),
-                stages=[str(stage) for stage in list(row.get("stages") or []) if str(stage or "").strip()],
+                stages=[
+                    str(stage)
+                    for stage in list(row.get("stages") or [])
+                    if str(stage or "").strip()
+                ],
                 review_context=dict(row.get("review_context") or {}),
                 review_record_id=str(row.get("run_id") or ""),
             )
@@ -2106,7 +2203,7 @@ class LearningController:
                     variant, self.learning_state.current_experiment
                 )
             self._notify_resume_state_changed()
-    
+
     def apply_recommendations_to_pipeline(self, recommendations: Any) -> bool:
         """Apply recommendations to the pipeline stage cards.
 
@@ -2152,7 +2249,7 @@ class LearningController:
                 value = rec.get("value")
             else:
                 continue
-            
+
             if self._apply_single_recommendation(
                 stage_cards,
                 param,
@@ -2221,18 +2318,18 @@ class LearningController:
                 continue
         self._automation_snapshot = {}
         return restored > 0
-    
+
     def _apply_single_recommendation(
-        self, 
-        stage_cards: Any, 
-        param: str, 
+        self,
+        stage_cards: Any,
+        param: str,
         value: Any,
         *,
         snapshot: dict[tuple[str, str], Any] | None = None,
     ) -> bool:
         """Apply a single recommendation to stage cards."""
         param_lower = param.lower().replace(" ", "_")
-        
+
         # Map parameter names to stage card attributes
         param_map = {
             "cfg_scale": ("txt2img_card", "cfg_var"),
@@ -2253,22 +2350,22 @@ class LearningController:
             "adetailer_cfg": ("adetailer_card", "cfg_var"),
             "upscale_factor": ("upscale_card", "factor_var"),
         }
-        
+
         mapping = param_map.get(param_lower)
         if not mapping:
             return False
-        
+
         card_name, var_name = mapping
-        
+
         try:
             card = getattr(stage_cards, card_name, None)
             if not card:
                 return False
-            
+
             var = getattr(card, var_name, None)
             if not var:
                 return False
-            
+
             if snapshot is not None and hasattr(var, "get"):
                 snap_key = (card_name, var_name)
                 if snap_key not in snapshot:
@@ -2291,7 +2388,7 @@ class LearningController:
             except Exception:
                 return False, "queue capacity check failed"
         return True, ""
-    
+
     def _find_stage_cards_panel(self) -> Any:
         """Find stage cards panel through various paths."""
         # Try via pipeline_state
@@ -2299,15 +2396,15 @@ class LearningController:
             cards = getattr(self.pipeline_state, "stage_cards_panel", None)
             if cards:
                 return cards
-        
+
         # Try via app reference (if available)
         if hasattr(self, "_app_ref"):
             pipeline_tab = getattr(self._app_ref, "pipeline_tab", None)
             if pipeline_tab:
                 return getattr(pipeline_tab, "stage_cards_panel", None)
-        
+
         return None
-    
+
     def _extract_rec_list(self, recommendations: Any) -> list:
         """Extract list of recommendations from various formats."""
         if hasattr(recommendations, "recommendations"):
@@ -2390,9 +2487,7 @@ class LearningController:
 
         store = self._get_discovered_store()
         if status == "active":
-            return store.list_handles_by_status(
-                {STATUS_WAITING_REVIEW, STATUS_IN_REVIEW}
-            )
+            return store.list_handles_by_status({STATUS_WAITING_REVIEW, STATUS_IN_REVIEW})
         return store.list_handles(status=status)
 
     def load_discovered_group(self, group_id: str):
@@ -2573,14 +2668,20 @@ class LearningController:
             for item in list(getattr(experiment, "items", []) or [])
         }
         history_entries = []
-        app_state = getattr(self.app_controller, "app_state", None) if self.app_controller is not None else None
+        app_state = (
+            getattr(self.app_controller, "app_state", None)
+            if self.app_controller is not None
+            else None
+        )
         if app_state is not None:
             history_entries = list(getattr(app_state, "history_items", []) or [])
         for candidate in candidates:
             if str(getattr(candidate, "candidate_id", "") or "") != str(candidate_id or ""):
                 continue
             item = item_by_id.get(str(candidate_id or ""))
-            latest_derived = find_latest_derived_descendant(history_entries, str(candidate_id or ""))
+            latest_derived = find_latest_derived_descendant(
+                history_entries, str(candidate_id or "")
+            )
             return build_candidate_replay_entry(
                 candidate,
                 item,
@@ -2589,7 +2690,9 @@ class LearningController:
             )
         return None
 
-    def get_staged_curation_candidate_latest_descendant(self, candidate_id: str) -> dict[str, Any] | None:
+    def get_staged_curation_candidate_latest_descendant(
+        self, candidate_id: str
+    ) -> dict[str, Any] | None:
         """Return the newest derived descendant artifact for one staged-curation candidate."""
         if not self.app_controller:
             return None
@@ -2628,13 +2731,17 @@ class LearningController:
             )
             source_prompt = str(replay_summary.get("positive_prompt") or "")
             source_negative_prompt = str(replay_summary.get("negative_prompt") or "")
-            source_model = str(replay_summary.get("source_model") or replay_summary.get("model") or "")
+            source_model = str(
+                replay_summary.get("source_model") or replay_summary.get("model") or ""
+            )
             baseline: dict[str, Any] = {}
             if item is not None and (
                 not source_prompt or not source_negative_prompt or not source_model
             ):
                 image_path = Path(
-                    resolve_output_artifact_path(str(getattr(item, "artifact_path", "") or "").strip())
+                    resolve_output_artifact_path(
+                        str(getattr(item, "artifact_path", "") or "").strip()
+                    )
                 )
                 if image_path.exists():
                     baseline = self._extract_reprocess_baseline_from_image(image_path)
@@ -2645,7 +2752,9 @@ class LearningController:
                     source_model = source_model or str(baseline.get("model") or "")
             elif item is not None:
                 image_path = Path(
-                    resolve_output_artifact_path(str(getattr(item, "artifact_path", "") or "").strip())
+                    resolve_output_artifact_path(
+                        str(getattr(item, "artifact_path", "") or "").strip()
+                    )
                 )
                 if image_path.exists():
                     baseline = self._extract_reprocess_baseline_from_image(image_path)
@@ -2680,7 +2789,9 @@ class LearningController:
                         source_baseline_label="staged curation source baseline",
                         fallback_source_label="target-stage preset",
                     )
-                    effective_settings_summary = ReviewWorkflowAdapter().format_effective_settings_summary(preview)
+                    effective_settings_summary = (
+                        ReviewWorkflowAdapter().format_effective_settings_summary(preview)
+                    )
             return {
                 "source_prompt": source_prompt,
                 "source_negative_prompt": source_negative_prompt,
@@ -2873,7 +2984,9 @@ class LearningController:
         return CurationCandidate(
             candidate_id=str(getattr(item, "item_id", "") or ""),
             workflow_id=f"curation:{getattr(experiment, 'group_id', '')}",
-            stage=self._map_discovered_stage_to_curation_stage(str(getattr(item, "stage", "") or "")),
+            stage=self._map_discovered_stage_to_curation_stage(
+                str(getattr(item, "stage", "") or "")
+            ),
             artifact_id=str(getattr(item, "artifact_path", "") or ""),
             job_id=str(getattr(item, "extra_fields", {}).get("job_id", "") or ""),
             njr_id=str(getattr(item, "extra_fields", {}).get("njr_id", "") or ""),
@@ -2984,7 +3097,9 @@ class LearningController:
             return None
         baseline = self._extract_reprocess_baseline_from_image(image_path)
         positive_prompt = str(baseline.get("prompt") or getattr(item, "positive_prompt", "") or "")
-        negative_prompt = str(baseline.get("negative_prompt") or getattr(item, "negative_prompt", "") or "")
+        negative_prompt = str(
+            baseline.get("negative_prompt") or getattr(item, "negative_prompt", "") or ""
+        )
         model = baseline.get("model") or getattr(item, "model", "") or None
         vae = baseline.get("vae")
         config = baseline.get("config") if isinstance(baseline.get("config"), dict) else {}
@@ -3075,7 +3190,9 @@ class LearningController:
         if not path_obj.exists():
             return None
         result = extract_embedded_metadata(path_obj)
-        payload = result.payload if result.status == "ok" and isinstance(result.payload, dict) else {}
+        payload = (
+            result.payload if result.status == "ok" and isinstance(result.payload, dict) else {}
+        )
         stage_manifest = payload.get("stage_manifest", {}) if isinstance(payload, dict) else {}
         if not isinstance(stage_manifest, dict):
             stage_manifest = {}
@@ -3089,10 +3206,7 @@ class LearningController:
         model_name, _vae_name = resolve_model_vae_fields(payload)
         stage_name = str(stage_manifest.get("stage") or payload.get("stage") or "txt2img")
         seed_value = (
-            stage_manifest.get("final_seed")
-            or generation.get("seed")
-            or config.get("seed")
-            or -1
+            stage_manifest.get("final_seed") or generation.get("seed") or config.get("seed") or -1
         )
         portable_review_summary = self._review_metadata_service.read_review_summary(path_obj)
         extra_fields: dict[str, Any] = {
@@ -3108,7 +3222,12 @@ class LearningController:
             manifest_path=str(stage_manifest.get("manifest_path") or ""),
             stage=stage_name,
             model=str(model_name or ""),
-            sampler=str(config.get("sampler_name") or config.get("sampler") or generation.get("sampler_name") or ""),
+            sampler=str(
+                config.get("sampler_name")
+                or config.get("sampler")
+                or generation.get("sampler_name")
+                or ""
+            ),
             scheduler=str(config.get("scheduler") or generation.get("scheduler") or ""),
             steps=int(config.get("steps") or generation.get("steps") or 0),
             cfg_scale=float(config.get("cfg_scale") or generation.get("cfg_scale") or 0.0),
@@ -3174,7 +3293,12 @@ class LearningController:
             return []
         paths: list[str] = []
         for candidate in sorted(root.rglob("*")):
-            if candidate.is_file() and candidate.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}:
+            if candidate.is_file() and candidate.suffix.lower() in {
+                ".png",
+                ".jpg",
+                ".jpeg",
+                ".webp",
+            }:
                 paths.append(str(candidate))
         return paths
 
@@ -3186,9 +3310,7 @@ class LearningController:
         job_id = str(getattr(entry, "job_id", "") or "history")
         return f"History Import - {job_id[:8]}"
 
-    def trigger_background_scan(
-        self, output_root: str, on_complete: "Any | None" = None
-    ) -> None:
+    def trigger_background_scan(self, output_root: str, on_complete: Any | None = None) -> None:
         """Run an incremental output scan in a background thread.
 
         Parameters

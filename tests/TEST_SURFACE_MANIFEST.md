@@ -65,6 +65,11 @@ findings by source path and rule. New or increased debt fails. Every MVP PR must
 leave its touched source files clean; PR-MVP-080 owns bounded cleanup of
 untouched findings, and PR-MVP-090 requires the baseline to reach zero.
 
+PR-MVP-020 left every touched Python file clean and reduced the current raw
+count to 1,866 while retaining 2,208 as the non-increasing ceiling. Its isolated
+collection found 3,094 tests with two optional-OpenCV skips; the required smoke
+now passes 75 tests.
+
 ### 3.2 Collected active-development coverage
 
 Subsystem directories such as `api/`, `controller/`, `data/`, `debughub/`,
@@ -135,7 +140,7 @@ labels describe grouping only.
 
 ## 7. Deferred cleanup ownership
 
-- NJR and serialization assertions: `PR-MVP-020`.
+- NJR and serialization assertions: completed by `PR-MVP-020`.
 - Direct-mode, broad submission, queue/controller compatibility, and related
   duplicate tests: `PR-MVP-030`.
 - JSON/JSONL persistence coverage: `PR-MVP-040`.

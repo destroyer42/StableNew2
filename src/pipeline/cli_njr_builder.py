@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from time import time
 from uuid import uuid4
 
 from src.pipeline.config_contract_v26 import (
@@ -9,7 +8,17 @@ from src.pipeline.config_contract_v26 import (
     extract_adaptive_refinement_intent,
     extract_secondary_motion_intent,
 )
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import (
+    CURRENT_NJR_SCHEMA_VERSION,
+    ImageWorkloadSpec,
+    NJRProvenance,
+    NormalizedJobRecord,
+    OutputPlan,
+    SourceDescriptor,
+    SourceKind,
+    StageConfig,
+    WorkloadKind,
+)
 
 _TXT2IMG_INACTIVE_HIRES_KEYS = (
     "hr_scale",
@@ -92,45 +101,37 @@ def build_cli_njr(
         )
 
     return NormalizedJobRecord(
+        schema_version=CURRENT_NJR_SCHEMA_VERSION,
         job_id=job_id,
-        config=_flatten_txt2img_config(full_config),
-        path_output_dir="output",
-        filename_template="{seed}",
-        seed=int(txt2img.get("seed", -1) or -1),
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=time(),
-        positive_prompt=prompt,
-        negative_prompt=str(txt2img.get("negative_prompt", "") or ""),
-        steps=int(txt2img.get("steps", 20) or 20),
-        cfg_scale=float(txt2img.get("cfg_scale", 7.0) or 7.0),
-        width=int(txt2img.get("width", 512) or 512),
-        height=int(txt2img.get("height", 512) or 512),
-        sampler_name=str(txt2img.get("sampler_name", "Euler a") or "Euler a"),
-        scheduler=str(txt2img.get("scheduler", "") or ""),
-        clip_skip=int(txt2img.get("clip_skip", 0) or 0),
-        base_model=str(
-            txt2img.get("model", "") or txt2img.get("sd_model_checkpoint", "") or "unknown"
+        workload_kind=WorkloadKind.IMAGE,
+        source=SourceDescriptor(kind=SourceKind.CLI, display_name=run_name),
+        workload=ImageWorkloadSpec(
+            positive_prompt=prompt,
+            negative_prompt=str(txt2img.get("negative_prompt", "") or ""),
+            config=_flatten_txt2img_config(full_config),
+            images_per_prompt=max(1, int(batch_size or 1)),
+            intent_config=canonicalize_intent_config(
+                {
+                    "run_mode": "queue",
+                    "source": "cli",
+                    "prompt_source": "cli",
+                    "requested_job_label": run_name,
+                    "adaptive_refinement": extract_adaptive_refinement_intent(full_config),
+                    "secondary_motion": extract_secondary_motion_intent(full_config),
+                }
+            ),
+            metadata={
+                "execution_source": "cli",
+                **({"run_name": run_name} if run_name else {}),
+            },
         ),
-        vae=str(txt2img.get("vae", "") or "") or None,
-        stage_chain=stage_chain,
-        images_per_prompt=max(1, int(batch_size or 1)),
-        run_mode="QUEUE",
-        queue_source="RUN_NOW",
-        intent_config=canonicalize_intent_config(
-            {
-                "run_mode": "queue",
-                "source": "cli",
-                "prompt_source": "cli",
-                "requested_job_label": run_name,
-                "adaptive_refinement": extract_adaptive_refinement_intent(full_config),
-                "secondary_motion": extract_secondary_motion_intent(full_config),
-            }
+        stages=tuple(stage_chain),
+        output_plan=OutputPlan(),
+        provenance=NJRProvenance(
+            seed=int(txt2img.get("seed", -1) or -1),
+            metadata={
+                "execution_source": "cli",
+                **({"run_name": run_name} if run_name else {}),
+            },
         ),
-        extra_metadata={
-            "execution_source": "cli",
-            **({"run_name": run_name} if run_name else {}),
-        },
     )

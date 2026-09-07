@@ -11,21 +11,18 @@ import time
 from datetime import datetime
 from pathlib import Path
 
-import pytest
-
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def _make_dummy_njr() -> NormalizedJobRecord:
     """Create a minimal NormalizedJobRecord for testing."""
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="test-njr-1",
         config={"prompt": "test", "model": "sdxl"},
-        path_output_dir="output",
-        filename_template="{seed}",
         seed=42,
         positive_prompt="test prompt",
         base_model="sdxl",

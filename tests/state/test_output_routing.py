@@ -8,16 +8,17 @@ from src.state.output_routing import (
     classify_njr_output_route,
     resolve_output_artifact_path,
 )
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def _build_njr(**kwargs) -> NormalizedJobRecord:
-    return NormalizedJobRecord(
+    pack_name = kwargs.get("prompt_pack_name", "")
+    return make_pipeline_njr(
         job_id=kwargs.get("job_id", "njr-test"),
-        config=kwargs.get("config", {}),
-        path_output_dir="output",
-        filename_template="{seed}",
+        config=kwargs.get("config") or None,
         seed=1,
-        prompt_pack_name=kwargs.get("prompt_pack_name", ""),
+        prompt_pack_id=pack_name or None,
+        prompt_pack_name=pack_name or None,
         intent_config=kwargs.get("intent_config", {}),
     )
 

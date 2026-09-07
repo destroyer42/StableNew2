@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 
 from .app.bootstrap import build_cli_kernel
-from .pipeline import PipelineRunner, VideoCreator
+from .pipeline import VideoCreator
 from .pipeline.cli_njr_builder import build_cli_njr
 from .utils import ConfigManager, StructuredLogger, find_webui_api_port, setup_logging
 
@@ -166,7 +166,7 @@ def main():
         logger.info(f"  Run directory: {output_dir}")
         logger.info(f"  Run ID: {result.run_id}")
         logger.info(f"  Variant records: {len(variants)}")
-        logger.info(f"  Final outputs: {len(njr.output_paths)}")
+        logger.info(f"  Final outputs: {len(_collect_video_source_paths(variants))}")
         logger.info("=" * 60)
 
         # Create video if requested

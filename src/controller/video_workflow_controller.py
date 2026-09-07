@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Mapping
+from pathlib import Path
 from typing import Any
 
 from src.controller.ports.default_runtime_ports import DefaultWorkflowRegistryPort
@@ -60,7 +60,9 @@ class VideoWorkflowController:
                     "governance_state": spec.governance_state,
                     "pinned_revision": spec.pinned_revision,
                     "capability_tags": list(spec.capability_tags),
-                    "dependency_specs": [dependency.to_dict() for dependency in spec.dependency_specs],
+                    "dependency_specs": [
+                        dependency.to_dict() for dependency in spec.dependency_specs
+                    ],
                 }
             )
         return records
@@ -122,7 +124,10 @@ class VideoWorkflowController:
 
     def _normalize_camera_intent(self, form_data: Mapping[str, Any]) -> dict[str, Any]:
         payload = self._mapping_dict(form_data.get("camera_intent"))
-        preset = str(payload.get("preset") or form_data.get("camera_preset") or "none").strip().lower() or "none"
+        preset = (
+            str(payload.get("preset") or form_data.get("camera_preset") or "none").strip().lower()
+            or "none"
+        )
         if preset not in _VALID_CAMERA_PRESETS:
             allowed = ", ".join(sorted(_VALID_CAMERA_PRESETS))
             raise ValueError(f"camera_intent.preset must be one of: {allowed}")
@@ -140,7 +145,10 @@ class VideoWorkflowController:
 
     def _normalize_controlnet(self, form_data: Mapping[str, Any]) -> dict[str, Any]:
         payload = self._mapping_dict(form_data.get("controlnet"))
-        model = str(payload.get("model") or form_data.get("controlnet_model") or "depth").strip() or "depth"
+        model = (
+            str(payload.get("model") or form_data.get("controlnet_model") or "depth").strip()
+            or "depth"
+        )
         weight = self._parse_float(
             payload.get("weight", form_data.get("controlnet_weight", 1.0)),
             field_name="controlnet.weight",
@@ -169,11 +177,16 @@ class VideoWorkflowController:
 
     def _normalize_depth_input(self, form_data: Mapping[str, Any]) -> dict[str, Any]:
         payload = self._mapping_dict(form_data.get("depth_input"))
-        mode = str(payload.get("mode") or form_data.get("depth_mode") or "none").strip().lower() or "none"
+        mode = (
+            str(payload.get("mode") or form_data.get("depth_mode") or "none").strip().lower()
+            or "none"
+        )
         if mode not in _VALID_DEPTH_INPUT_MODES:
             allowed = ", ".join(sorted(_VALID_DEPTH_INPUT_MODES))
             raise ValueError(f"depth_input.mode must be one of: {allowed}")
-        path = str(payload.get("path") or payload.get("upload_path") or form_data.get("depth_path") or "").strip()
+        path = str(
+            payload.get("path") or payload.get("upload_path") or form_data.get("depth_path") or ""
+        ).strip()
         return {
             "mode": mode,
             "path": path,
@@ -232,8 +245,8 @@ class VideoWorkflowController:
             return False, str(exc)
 
         try:
-            camera_intent = self._normalize_camera_intent(form_data)
-            controlnet = self._normalize_controlnet(form_data)
+            self._normalize_camera_intent(form_data)
+            self._normalize_controlnet(form_data)
             depth_input = self._normalize_depth_input(form_data)
         except ValueError as exc:
             return False, str(exc)
@@ -262,7 +275,10 @@ class VideoWorkflowController:
             depth_path = Path(depth_input["path"])
             if not depth_path.exists() or not depth_path.is_file():
                 return False, f"Depth input image does not exist: {depth_path}"
-        if self._continuity_form_supplied(form_data) and self._build_continuity_link(form_data) is None:
+        if (
+            self._continuity_form_supplied(form_data)
+            and self._build_continuity_link(form_data) is None
+        ):
             return False, (
                 "Continuity pack metadata requires a valid pack_id. Please provide continuity_pack_id or "
                 "ensure continuity_pack_summary contains a pack_id."
@@ -286,14 +302,21 @@ class VideoWorkflowController:
         workflow_id = str(form_data.get("workflow_id") or "").strip()
         workflow_version = str(form_data.get("workflow_version") or "").strip() or None
         spec = self._workflow_registry.get(workflow_id, workflow_version)
-        end_anchor_path = str(Path(str(form_data.get("end_anchor_path") or "").strip()).expanduser())
+        end_anchor_path = str(
+            Path(str(form_data.get("end_anchor_path") or "").strip()).expanduser()
+        )
 
         raw_mid_anchors = form_data.get("mid_anchor_paths") or []
         if isinstance(raw_mid_anchors, str):
             raw_mid_anchors = [item.strip() for item in raw_mid_anchors.split(";") if item.strip()]
-        mid_anchor_paths = [str(Path(str(item)).expanduser()) for item in raw_mid_anchors if str(item).strip()]
+        mid_anchor_paths = [
+            str(Path(str(item)).expanduser()) for item in raw_mid_anchors if str(item).strip()
+        ]
 
-        output_route = str(form_data.get("output_route") or OUTPUT_ROUTE_REPROCESS).strip() or OUTPUT_ROUTE_REPROCESS
+        output_route = (
+            str(form_data.get("output_route") or OUTPUT_ROUTE_REPROCESS).strip()
+            or OUTPUT_ROUTE_REPROCESS
+        )
         if output_route not in _DEFAULT_OUTPUT_ROUTES:
             output_route = OUTPUT_ROUTE_REPROCESS
 
@@ -342,7 +365,7 @@ class VideoWorkflowController:
             }
         }
         if continuity_link:
-            extra_metadata["continuity"] = dict(continuity_link)
+            extra_metadata["continuity_link"] = dict(continuity_link)
 
         builder = ReprocessJobBuilder()
         njr = builder.build_reprocess_job(
@@ -356,9 +379,6 @@ class VideoWorkflowController:
             source="video_workflow",
             extra_metadata=extra_metadata,
         )
-        if continuity_link:
-            njr.continuity_link = dict(continuity_link)
-
         job_service = getattr(self._app_controller, "job_service", None)
         if job_service is None:
             raise RuntimeError("App controller is missing job_service")

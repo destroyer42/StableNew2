@@ -3,10 +3,16 @@ from __future__ import annotations
 import pytest
 
 from src.controller.job_service import JobService
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import (
+    NormalizedJobRecord,
+    SourceDescriptor,
+    SourceKind,
+    StageConfig,
+)
 from src.pipeline.stage_models import StageType
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class DummyRunner:
@@ -37,19 +43,18 @@ def _make_stage() -> StageConfig:
 
 
 def _make_record(prompt_source: str, prompt_pack_id: str | None) -> NormalizedJobRecord:
-    stage = _make_stage()
-    record = NormalizedJobRecord(
+    source_kind = {
+        "pack": SourceKind.PROMPT_PACK,
+        "reprocess": SourceKind.REPROCESS,
+    }.get(prompt_source, SourceKind.CLI)
+    return make_pipeline_njr(
         job_id="record",
         config={"prompt": "test"},
-        path_output_dir="output",
-        filename_template="{seed}",
-        stage_chain=[stage],
-        randomizer_summary=None,
+        positive_prompt="test",
+        stage_chain=[_make_stage()],
+        source_kind=source_kind.value,
+        prompt_pack_id=prompt_pack_id,
     )
-    record.positive_prompt = "test"
-    record.prompt_source = prompt_source
-    record.prompt_pack_id = prompt_pack_id or ""
-    return record
 
 
 def _make_job(record: NormalizedJobRecord, prompt_source: str, prompt_pack_id: str | None) -> Job:
@@ -72,28 +77,29 @@ def service() -> JobService:
     return JobService(queue, runner)
 
 
-def test_pack_job_missing_prompt_pack_id_raises(service: JobService) -> None:
-    record = _make_record(prompt_source="pack", prompt_pack_id=None)
-    job = _make_job(record, prompt_source="pack", prompt_pack_id=None)
-    service._prepare_job_for_submission(job)
-    assert job.status == JobStatus.FAILED
-    assert job.result and job.result.get("code") == "pack_required"
+def test_pack_job_missing_prompt_pack_id_is_unconstructable(service: JobService) -> None:
+    del service
+    with pytest.raises(ValueError, match="requires source.id"):
+        SourceDescriptor(kind=SourceKind.PROMPT_PACK)
 
 
 def test_manual_job_missing_prompt_pack_id_allowed(service: JobService) -> None:
     record = _make_record(prompt_source="manual", prompt_pack_id=None)
     job = _make_job(record, prompt_source="manual", prompt_pack_id=None)
     service._prepare_job_for_submission(job)
-    assert job.status == JobStatus.FAILED
-    assert job.result and job.result.get("code") == "pack_required"
+    assert job.status == JobStatus.QUEUED
+    assert job.result is None
 
 
 def test_job_from_njr_preserves_reprocess_source_and_prompt_source(service: JobService) -> None:
-    record = _make_record(prompt_source="reprocess", prompt_pack_id="reprocess_pack")
-    record.extra_metadata = {
-        "submission_source": "review_tab",
-        "reprocess": {"source": "review_tab"},
-    }
+    record = make_pipeline_njr(
+        job_id="record",
+        source_kind=SourceKind.REPROCESS.value,
+        extra_metadata={
+            "submission_source": "review_tab",
+            "reprocess": {"source": "review_tab"},
+        },
+    )
     job = service._job_from_njr(
         record,
         run_request=type(

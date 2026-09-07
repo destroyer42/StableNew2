@@ -12,6 +12,8 @@ them.
 `Typed Intent -> Compiler -> NJR -> JobService -> Queue/JobRepository -> PipelineRunner.run_njr -> Typed Handler -> Artifacts -> History/Learning/Diagnostics`
 
 - NJR is immutable authorized work, not mutable queue/history state.
+- The immutable eight-part NJR core is implemented; do not restore flat or
+  mutable construction. Compiler/submission cutover is the active core gap.
 - PromptPack identity is conditional on a PromptPack source.
 - Fresh work is queue-only; `Run Now` means immediate-start queue policy.
 - There is one public runner entry and one persistence boundary.

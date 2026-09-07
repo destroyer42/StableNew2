@@ -21,12 +21,19 @@ from src.pipeline.config_contract_v26 import (
 )
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import (
+    CURRENT_NJR_SCHEMA_VERSION,
     BatchSettings,
+    ImageWorkloadSpec,
     LoRATag,
+    NJRProvenance,
     NormalizedJobRecord,
+    OutputPlan,
     OutputSettings,
     PackUsageInfo,
+    SourceDescriptor,
+    SourceKind,
     StageConfig,
+    WorkloadKind,
 )
 from src.pipeline.prompt_pack_parser import PackRow, parse_prompt_pack_text
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
@@ -98,7 +105,9 @@ class PromptPackNormalizedJobBuilder:
     def build_jobs(self, entries: Iterable[PackJobEntry]) -> list[NormalizedJobRecord]:
         # Convert to list to avoid consuming iterator and to enable length check
         entries_list = list(entries)
-        _logger.info(f"[PromptPackNormalizedJobBuilder] build_jobs() called with {len(entries_list)} entries")
+        _logger.info(
+            f"[PromptPackNormalizedJobBuilder] build_jobs() called with {len(entries_list)} entries"
+        )
         records: list[NormalizedJobRecord] = []
         entry_count = 0
         for entry in entries_list:
@@ -106,25 +115,29 @@ class PromptPackNormalizedJobBuilder:
             if not entry.pack_id:
                 _logger.warning("Pack entry missing pack_id, skipping")
                 continue
-            
+
             # Expand entry by matrix combinations from pack JSON
             expanded_entries = self._expand_entry_by_matrix(entry)
-            _logger.info(f"[PromptPackNormalizedJobBuilder] Entry {entry_count} ({entry.pack_id}) expanded to {len(expanded_entries)} variant(s)")
-            
+            _logger.info(
+                f"[PromptPackNormalizedJobBuilder] Entry {entry_count} ({entry.pack_id}) expanded to {len(expanded_entries)} variant(s)"
+            )
+
             # Track jobs per prompt to renumber variant indices correctly
             jobs_for_this_prompt: list[NormalizedJobRecord] = []
-            
+
             for expanded_entry in expanded_entries:
                 jobs = self._build_jobs_for_entry(expanded_entry)
                 if jobs:
-                    _logger.info(f"[PromptPackNormalizedJobBuilder] Expanded entry produced {len(jobs)} NJR(s)")
+                    _logger.info(
+                        f"[PromptPackNormalizedJobBuilder] Expanded entry produced {len(jobs)} NJR(s)"
+                    )
                     jobs_for_this_prompt.extend(jobs)
-            
+
             # Renumber variant indices sequentially across all matrix combinations
             if jobs_for_this_prompt:
                 self._renumber_variant_indices(jobs_for_this_prompt, len(expanded_entries))
                 records.extend(jobs_for_this_prompt)
-        
+
         _logger.info(f"[PromptPackNormalizedJobBuilder] Total NJRs generated: {len(records)}")
         return records
 
@@ -132,11 +145,11 @@ class PromptPackNormalizedJobBuilder:
         self, jobs: list[NormalizedJobRecord], matrix_combinations_count: int
     ) -> None:
         """Renumber variant indices sequentially across matrix combinations.
-        
+
         When matrix expansion creates multiple combinations, each combination produces
         jobs with variant_index starting at 0. This method renumbers them sequentially
         so that matrix combination 1 gets v01-v0N, combination 2 gets v(N+1)-v(2N), etc.
-        
+
         Args:
             jobs: List of NJRs to renumber (modified in place)
             matrix_combinations_count: Number of matrix combinations that were expanded
@@ -144,53 +157,61 @@ class PromptPackNormalizedJobBuilder:
         if matrix_combinations_count <= 1:
             # No matrix expansion, variants are already numbered correctly
             return
-        
+
         # Group jobs by their original variant_index to preserve batch grouping
         # Jobs are ordered: [matrix1_variant0_batch0, matrix1_variant0_batch1, ..., matrix2_variant0_batch0, ...]
         jobs_per_combination = len(jobs) // matrix_combinations_count
-        
+
         # Renumber: each matrix combination gets sequential variant indices
         for i, job in enumerate(jobs):
             matrix_combo_index = i // jobs_per_combination
             job.variant_index = matrix_combo_index
             job.variant_total = matrix_combinations_count
-            _logger.debug(f"[Variant Renumber] Job {i}: variant_index={job.variant_index}, variant_total={job.variant_total}")
+            _logger.debug(
+                f"[Variant Renumber] Job {i}: variant_index={job.variant_index}, variant_total={job.variant_total}"
+            )
 
     def _expand_entry_by_matrix(self, entry: PackJobEntry) -> list[PackJobEntry]:
         """Expand a single entry into multiple entries based on pack JSON matrix slots.
-        
+
         If the pack has matrix slots defined in its JSON metadata:
         1. Load pack JSON metadata
         2. Extract matrix slots (e.g., {"job": ["wizard", "knight"], "env": ["forest", "castle"]})
         3. Generate all combinations (Cartesian product)
         4. Create one entry per combination with matrix_slot_values set
-        
+
         If no matrix or matrix disabled, returns [entry] unchanged.
-        
+
         Args:
             entry: Original PackJobEntry
-            
+
         Returns:
             List of PackJobEntry, one per matrix combination
         """
         # Resolve pack path
         pack_path = self._resolve_pack_text_path(entry.pack_id)
         if not pack_path:
-            _logger.debug(f"[Matrix Expansion] No pack path found for {entry.pack_id}, skipping expansion")
+            _logger.debug(
+                f"[Matrix Expansion] No pack path found for {entry.pack_id}, skipping expansion"
+            )
             return [entry]
-        
+
         # Load pack JSON metadata
         metadata = self._load_pack_metadata_cached(pack_path)
         if not metadata:
-            _logger.debug(f"[Matrix Expansion] No JSON metadata for {entry.pack_id}, skipping expansion")
+            _logger.debug(
+                f"[Matrix Expansion] No JSON metadata for {entry.pack_id}, skipping expansion"
+            )
             return [entry]
-        
+
         # Extract matrix slots
         matrix_slots_dict = get_matrix_slots_dict(metadata)
         if not matrix_slots_dict:
-            _logger.debug(f"[Matrix Expansion] No matrix slots in {entry.pack_id}, skipping expansion")
+            _logger.debug(
+                f"[Matrix Expansion] No matrix slots in {entry.pack_id}, skipping expansion"
+            )
             return [entry]
-        
+
         # Check matrix config for mode
         pack_data = metadata.get("pack_data", {})
         matrix_config = pack_data.get("matrix", {})
@@ -203,9 +224,13 @@ class PromptPackNormalizedJobBuilder:
 
         # Generate combinations based on mode
         if matrix_mode == "random":
-            target_count = min(total_combinations, limit) if limit > 0 else min(
-                total_combinations,
-                _DEFAULT_MATRIX_EXPANSION_LIMIT,
+            target_count = (
+                min(total_combinations, limit)
+                if limit > 0
+                else min(
+                    total_combinations,
+                    _DEFAULT_MATRIX_EXPANSION_LIMIT,
+                )
             )
             combinations = self._sample_random_matrix_combinations(
                 slot_values_lists,
@@ -223,7 +248,9 @@ class PromptPackNormalizedJobBuilder:
             )
         else:
             effective_limit = min(total_combinations, limit) if limit > 0 else total_combinations
-            combinations = list(itertools.islice(itertools.product(*slot_values_lists), effective_limit))
+            combinations = list(
+                itertools.islice(itertools.product(*slot_values_lists), effective_limit)
+            )
             if total_combinations > effective_limit:
                 _logger.info(
                     "[Matrix Expansion] Limited combinations to %s (from %s total) for %s",
@@ -239,13 +266,13 @@ class PromptPackNormalizedJobBuilder:
                 slot_names,
                 total_combinations,
             )
-        
+
         # Create one entry per combination
         expanded_entries = []
         for combo in combinations:
             # Build matrix_slot_values dict for this combination
-            matrix_values = {name: value for name, value in zip(slot_names, combo)}
-            
+            matrix_values = dict(zip(slot_names, combo, strict=False))
+
             # Create a copy of the entry with matrix_slot_values set
             expanded_entry = PackJobEntry(
                 pack_id=entry.pack_id,
@@ -259,7 +286,7 @@ class PromptPackNormalizedJobBuilder:
                 randomizer_metadata=entry.randomizer_metadata,
             )
             expanded_entries.append(expanded_entry)
-        
+
         return expanded_entries
 
     def _estimate_matrix_combinations(self, slot_values_lists: list[list[str]]) -> int:
@@ -324,7 +351,10 @@ class PromptPackNormalizedJobBuilder:
 
         sampled_indexes = random.sample(range(total_combinations), target_count)
         sampled_indexes.sort()
-        return [self._decode_matrix_combination_index(index, slot_values_lists) for index in sampled_indexes]
+        return [
+            self._decode_matrix_combination_index(index, slot_values_lists)
+            for index in sampled_indexes
+        ]
 
     def _decode_matrix_combination_index(
         self,
@@ -342,7 +372,7 @@ class PromptPackNormalizedJobBuilder:
 
     def _build_jobs_for_entry(self, entry: PackJobEntry) -> list[NormalizedJobRecord]:
         pack_config = self._load_pack_config(entry.pack_id)
-        
+
         # BUGFIX: Allow learning experiments without pack config if config_snapshot is provided
         if pack_config is None:
             # Check if this is a learning experiment with full config_snapshot
@@ -398,7 +428,7 @@ class PromptPackNormalizedJobBuilder:
 
         randomizer_plan = self._build_randomizer_plan(entry, merged_config)
         batch_settings = self._build_batch_settings(merged_config)
-        
+
         # Output settings: just specify directory, filenames are handled by runner
         pipeline_section = merged_config.get("pipeline", {})
         base_output_dir = pipeline_section.get("output_dir", "output")
@@ -414,56 +444,23 @@ class PromptPackNormalizedJobBuilder:
         pipeline_section = merged_config.get("pipeline", {})
         aesthetic_section = merged_config.get("aesthetic", {})
         matrix_section = merged_config.get("randomization", {}).get("matrix", {})
-        txt2img = merged_config.get("txt2img", {})
         pack_path = self._resolve_pack_text_path(entry.pack_id)
 
+        finalized_jobs: list[NormalizedJobRecord] = []
         for record in jobs:
-            record.prompt_pack_id = entry.pack_id
-            record.prompt_pack_name = entry.pack_name or entry.pack_id
-            record.prompt_pack_row_index = entry.pack_row_index or 0
-            record.prompt_pack_version = pack_config.get("version")
-            record.positive_prompt = prompt_resolution.positive
-            record.negative_prompt = prompt_resolution.negative
-            record.positive_embeddings = [
+            positive_embeddings = tuple(
                 render_embedding_reference(name, weight)
                 for name, weight in prompt_resolution.positive_embeddings
-            ]
-            record.negative_embeddings = [
+            )
+            negative_embeddings = tuple(
                 render_embedding_reference(name, weight)
                 for name, weight in prompt_resolution.negative_embeddings
-            ]
-            record.lora_tags = [
-                LoRATag(name=name, weight=weight) for name, weight in prompt_resolution.lora_tags
-            ]
-            record.matrix_slot_values = dict(entry.matrix_slot_values or {})
-            record.stage_chain = copy.deepcopy(stage_chain)
-            record.steps = int(txt2img.get("steps") or 0)
-            record.cfg_scale = float(txt2img.get("cfg_scale") or 0.0)
-            record.width = int(txt2img.get("width") or 0)
-            record.height = int(txt2img.get("height") or 0)
-            record.sampler_name = txt2img.get("sampler_name") or txt2img.get("sampler") or ""
-            record.scheduler = txt2img.get("scheduler") or ""
-            record.clip_skip = int(txt2img.get("clip_skip") or 0)
-            record.base_model = txt2img.get("model") or ""
-            record.vae = txt2img.get("vae") or None
-            record.images_per_prompt = int(pipeline_section.get("images_per_prompt", 1))
-            record.loop_type = pipeline_section.get("loop_type", "pipeline")
-            record.loop_count = int(pipeline_section.get("loop_count", 1) or 1)
-            record.variant_mode = pipeline_section.get("variant_mode", "standard") or "standard"
-            record.randomization_enabled = bool(
-                randomizer_metadata.get("enabled")
-                or merged_config.get("randomization", {}).get("enabled")
             )
-            record.matrix_mode = matrix_section.get("mode")
-            record.matrix_prompt_mode = matrix_section.get("prompt_mode")
-            record.matrix_name = matrix_section.get("name")
-            record.aesthetic_enabled = bool(aesthetic_section.get("enabled"))
-            record.aesthetic_weight = aesthetic_section.get("weight")
-            record.aesthetic_text = aesthetic_section.get("text")
-            record.aesthetic_embedding = aesthetic_section.get("embedding")
-            record.extra_metadata = copy.deepcopy(record_metadata)
+            lora_tags = tuple(
+                LoRATag(name=name, weight=weight) for name, weight in prompt_resolution.lora_tags
+            )
             intent_payload = {
-                "run_mode": record.run_mode.lower(),
+                "run_mode": "queue",
                 "source": str(entry.learning_metadata.get("submission_source"))
                 if isinstance(entry.learning_metadata, dict)
                 and entry.learning_metadata.get("submission_source")
@@ -483,22 +480,83 @@ class PromptPackNormalizedJobBuilder:
                 intent_payload["plan_origin"] = copy.deepcopy(plan_origin)
             if story_plan:
                 intent_payload["story_plan"] = copy.deepcopy(story_plan)
-            record.intent_config = canonicalize_intent_config(intent_payload)
-            record.backend_options = derive_backend_options(record.config)
-            record.pack_usage = [
-                PackUsageInfo(
-                    pack_name=record.prompt_pack_name,
-                    pack_path=str(pack_path) if pack_path else None,
-                    prompt_index=record.prompt_pack_row_index,
+            finalized_jobs.append(
+                NormalizedJobRecord(
+                    schema_version=CURRENT_NJR_SCHEMA_VERSION,
+                    job_id=record.job_id,
+                    workload_kind=WorkloadKind.IMAGE,
+                    source=SourceDescriptor(
+                        kind=SourceKind.PROMPT_PACK,
+                        id=entry.pack_id,
+                        revision=pack_config.get("version"),
+                        display_name=entry.pack_name or entry.pack_id,
+                        row_index=entry.pack_row_index or 0,
+                    ),
+                    workload=ImageWorkloadSpec(
+                        positive_prompt=prompt_resolution.positive,
+                        negative_prompt=prompt_resolution.negative,
+                        config=record.config,
+                        images_per_prompt=int(pipeline_section.get("images_per_prompt", 1)),
+                        loop_type=pipeline_section.get("loop_type", "pipeline"),
+                        loop_count=int(pipeline_section.get("loop_count", 1) or 1),
+                        variant_mode=(
+                            pipeline_section.get("variant_mode", "standard") or "standard"
+                        ),
+                        intent_config=canonicalize_intent_config(intent_payload),
+                        backend_options=derive_backend_options(record.config),
+                        metadata=copy.deepcopy(record_metadata),
+                    ),
+                    stages=tuple(copy.deepcopy(stage_chain)),
+                    output_plan=OutputPlan(
+                        base_output_dir=base_output_dir,
+                        filename_template="{seed}",
+                    ),
+                    provenance=NJRProvenance(
+                        seed=record.seed,
+                        variant_index=record.variant_index,
+                        variant_total=record.variant_total,
+                        batch_index=record.batch_index,
+                        batch_total=record.batch_total,
+                        randomizer_summary={
+                            "enabled": bool(
+                                randomizer_metadata.get("enabled")
+                                or merged_config.get("randomization", {}).get("enabled")
+                            ),
+                            "max_variants": randomizer_plan.max_variants,
+                            "seed_mode": (
+                                randomizer_plan.seed_mode.value
+                                if randomizer_plan.seed_mode
+                                else None
+                            ),
+                            "base_seed": randomizer_plan.base_seed,
+                        },
+                        matrix_slot_values=dict(entry.matrix_slot_values or {}),
+                        matrix_mode=matrix_section.get("mode"),
+                        matrix_prompt_mode=matrix_section.get("prompt_mode"),
+                        matrix_name=matrix_section.get("name"),
+                        config_variant_label=record.config_variant_label,
+                        config_variant_index=record.config_variant_index,
+                        config_variant_overrides=record.config_variant_overrides,
+                        positive_embeddings=positive_embeddings,
+                        negative_embeddings=negative_embeddings,
+                        lora_tags=lora_tags,
+                        pack_usage=(
+                            PackUsageInfo(
+                                pack_name=entry.pack_name or entry.pack_id,
+                                pack_path=str(pack_path) if pack_path else None,
+                                prompt_index=entry.pack_row_index or 0,
+                            ),
+                        ),
+                        txt2img_prompt_info=record.txt2img_prompt_info,
+                        aesthetic_enabled=bool(aesthetic_section.get("enabled")),
+                        aesthetic_weight=aesthetic_section.get("weight"),
+                        aesthetic_text=aesthetic_section.get("text"),
+                        aesthetic_embedding=aesthetic_section.get("embedding"),
+                        metadata=copy.deepcopy(record_metadata),
+                    ),
                 )
-            ]
-            record.randomizer_summary = {
-                "enabled": randomizer_plan.enabled,
-                "max_variants": randomizer_plan.max_variants,
-                "seed_mode": randomizer_plan.seed_mode.value if randomizer_plan.seed_mode else None,
-                "base_seed": randomizer_plan.base_seed,
-            }
-        return jobs
+            )
+        return finalized_jobs
 
     def _resolve_prompt(
         self,
@@ -542,11 +600,15 @@ class PromptPackNormalizedJobBuilder:
         if not isinstance(raw_style_lora, Mapping):
             return None
         try:
-            normalized = config_contract_v26.validate_style_lora_execution_config({"style_lora": raw_style_lora})
+            normalized = config_contract_v26.validate_style_lora_execution_config(
+                {"style_lora": raw_style_lora}
+            )
             style_payload = _mapping_dict(normalized.get("style_lora"))
         except ValueError as exc:
             return {
-                "style_id": str(raw_style_lora.get("style_id") or raw_style_lora.get("name") or "").strip(),
+                "style_id": str(
+                    raw_style_lora.get("style_id") or raw_style_lora.get("name") or ""
+                ).strip(),
                 "applied": False,
                 "available": False,
                 "warning": str(exc),
@@ -555,11 +617,14 @@ class PromptPackNormalizedJobBuilder:
             return None
         if self._style_lora_manager is None:
             self._style_lora_manager = StyleLoRAManager()
-        base_model = str(
-            _mapping_dict(merged_config.get("txt2img")).get("model")
-            or merged_config.get("model")
-            or ""
-        ).strip() or None
+        base_model = (
+            str(
+                _mapping_dict(merged_config.get("txt2img")).get("model")
+                or merged_config.get("model")
+                or ""
+            ).strip()
+            or None
+        )
         resolved = self._style_lora_manager.resolve_selection(style_payload, base_model=base_model)
         if resolved is None:
             return None
@@ -611,8 +676,12 @@ class PromptPackNormalizedJobBuilder:
     ) -> dict[str, Any]:
         data = _mapping_dict(merged_config)
         metadata = copy.deepcopy(_mapping_dict(data.get("metadata")))
-        plan_origin = _mapping_dict(data.get("plan_origin")) or _mapping_dict(metadata.get("plan_origin"))
-        story_plan = _mapping_dict(data.get("story_plan")) or _mapping_dict(metadata.get("story_plan"))
+        plan_origin = _mapping_dict(data.get("plan_origin")) or _mapping_dict(
+            metadata.get("plan_origin")
+        )
+        story_plan = _mapping_dict(data.get("story_plan")) or _mapping_dict(
+            metadata.get("story_plan")
+        )
 
         if resolved_actors:
             metadata["actors"] = copy.deepcopy(resolved_actors)
@@ -663,9 +732,14 @@ class PromptPackNormalizedJobBuilder:
             "hr_checkpoint_name": txt2img.get("hr_checkpoint_name"),
             # Add refiner settings only if use_refiner is True
             "use_refiner": txt2img.get("use_refiner", False),
-            **({"refiner_checkpoint": txt2img.get("refiner_checkpoint"),
-                "refiner_switch_at": txt2img.get("refiner_switch_at")}
-               if txt2img.get("use_refiner") else {}),
+            **(
+                {
+                    "refiner_checkpoint": txt2img.get("refiner_checkpoint"),
+                    "refiner_switch_at": txt2img.get("refiner_switch_at"),
+                }
+                if txt2img.get("use_refiner")
+                else {}
+            ),
             # Add other txt2img settings
             "subseed": txt2img.get("subseed"),
             "subseed_strength": txt2img.get("subseed_strength"),
@@ -686,7 +760,9 @@ class PromptPackNormalizedJobBuilder:
             "animatediff": merged_config.get("animatediff"),
             "video_workflow": merged_config.get("video_workflow"),
             "aesthetic": merged_config.get("aesthetic"),
-            "style_lora": copy.deepcopy(resolved_style_lora) if resolved_style_lora else merged_config.get("style_lora"),
+            "style_lora": copy.deepcopy(resolved_style_lora)
+            if resolved_style_lora
+            else merged_config.get("style_lora"),
             "metadata": copy.deepcopy(record_metadata),
         }
         actors = record_metadata.get("actors") or []
@@ -724,7 +800,14 @@ class PromptPackNormalizedJobBuilder:
             "video_workflow": merged_config.get("video_workflow", {}),
         }
         chain: list[StageConfig] = []
-        for stage in ("txt2img", "img2img", "adetailer", "upscale", "animatediff", "video_workflow"):
+        for stage in (
+            "txt2img",
+            "img2img",
+            "adetailer",
+            "upscale",
+            "animatediff",
+            "video_workflow",
+        ):
             data = stage_sections.get(stage, {}) or {}
             enabled = bool(stage_flags.get(stage, stage == "txt2img"))
             extra: dict[str, Any] = {}
@@ -804,7 +887,7 @@ class PromptPackNormalizedJobBuilder:
                 stage_model = data.get("model")
                 stage_vae = data.get("vae")
                 stage_scheduler = data.get("scheduler")
-              
+
             stage_cfg = StageConfig(
                 stage_type=stage,
                 enabled=enabled,
@@ -834,16 +917,16 @@ class PromptPackNormalizedJobBuilder:
         randomization_enabled = merged_config.get("randomization_enabled", False)
         if not randomization_enabled:
             return RandomizationPlanV2(enabled=False, max_variants=1)
-        
+
         # Extract randomization parameters from config
         max_variants = merged_config.get("max_variants", 1)
         base_seed = merged_config.get("seed")
-        
+
         # Determine seed mode
         seed_mode = RandomizationSeedMode.NONE
         if base_seed is not None:
             seed_mode = RandomizationSeedMode.PER_VARIANT
-        
+
         return RandomizationPlanV2(
             enabled=True,
             max_variants=max_variants,
@@ -946,7 +1029,7 @@ class PromptPackNormalizedJobBuilder:
         # Get img2img value without default - calculate before dictionary construction
         img2img_val = pipeline_section.get("img2img_enabled")
         img2img_enabled = bool(img2img_val) if img2img_val is not None else False
-        
+
         defaults = {
             "txt2img": bool(pipeline_section.get("txt2img_enabled", True)),
             "img2img": img2img_enabled,

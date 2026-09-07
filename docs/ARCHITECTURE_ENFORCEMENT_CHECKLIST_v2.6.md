@@ -1,11 +1,15 @@
 # StableNew Architecture Enforcement Checklist v2.6
 
 Status: Canonical, Binding
-Updated: 2026-09-05
+Updated: 2026-09-07
 
 Use this checklist for every runtime or contract PR. A checked target item does
 not mean the current branch already implements it; consult the architecture gap
 register and active roadmap first.
+
+PR-MVP-020 evidence (2026-09-07): all section 3 NJR-core items are enforced by
+contract tests and an AST mutation guard. Section 2 source-compiler items and
+the first two section 4 submission-policy items remain assigned to PR-MVP-030.
 
 ## 1. PR authority and truth
 

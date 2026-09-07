@@ -1,8 +1,16 @@
 from __future__ import annotations
 
+import pytest
+
 from src.controller.pipeline_controller import PipelineController
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import (
+    NormalizedJobRecord,
+    SourceDescriptor,
+    SourceKind,
+    StageConfig,
+)
 from src.pipeline.stage_models import StageType
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def _make_stage() -> StageConfig:
@@ -16,16 +24,16 @@ def _make_stage() -> StageConfig:
 
 
 def _make_record(prompt_source: str, prompt_pack_id: str | None) -> NormalizedJobRecord:
-    record = NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="test-njr",
         config={"prompt": "test prompt"},
-        path_output_dir="output",
-        filename_template="{seed}",
+        positive_prompt="test prompt",
         stage_chain=[_make_stage()],
+        source_kind=(
+            SourceKind.PROMPT_PACK.value if prompt_source == "pack" else SourceKind.CLI.value
+        ),
+        prompt_pack_id=prompt_pack_id,
     )
-    record.prompt_source = prompt_source
-    record.prompt_pack_id = prompt_pack_id or ""
-    return record
 
 
 def test_is_pack_job_property_true_for_pack() -> None:
@@ -33,10 +41,16 @@ def test_is_pack_job_property_true_for_pack() -> None:
     assert record.is_pack_job
 
 
-def test_split_queueable_records_filters_pack_source_without_pack_id() -> None:
+def test_split_queueable_records_accepts_only_constructable_records() -> None:
     controller = PipelineController.__new__(PipelineController)
     pack_record = _make_record(prompt_source="pack", prompt_pack_id="pack-id")
-    packless_pack_record = _make_record(prompt_source="pack", prompt_pack_id=None)
-    queueable, non_queueable = controller._split_queueable_records([pack_record, packless_pack_record])
+    manual_record = _make_record(prompt_source="manual", prompt_pack_id=None)
+    queueable, non_queueable = controller._split_queueable_records([pack_record, manual_record])
     assert pack_record in queueable
-    assert packless_pack_record in non_queueable
+    assert manual_record in queueable
+    assert non_queueable == []
+
+
+def test_pack_source_without_identity_is_rejected_at_construction() -> None:
+    with pytest.raises(ValueError, match="requires source.id"):
+        SourceDescriptor(kind=SourceKind.PROMPT_PACK)

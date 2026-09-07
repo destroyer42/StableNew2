@@ -17,6 +17,7 @@ from src.controller.app_controller import AppController
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import PipelineRunResult
 from src.queue.job_model import Job, JobPriority
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 @pytest.fixture
@@ -33,11 +34,9 @@ def mock_app_controller():
 @pytest.fixture
 def dummy_njr() -> NormalizedJobRecord:
     """Create a dummy NormalizedJobRecord for testing."""
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="test-njr-123",
         config={"prompt": "test prompt", "model": "sdxl"},
-        path_output_dir="output",
-        filename_template="{seed}",
         seed=12345,
         positive_prompt="test prompt",
         base_model="sdxl",
