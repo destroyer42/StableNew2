@@ -1,12 +1,28 @@
-"""Pytest fixtures for journey tests (CI mode support)."""
+"""Pytest fixtures for deterministic and explicitly real journey tests."""
 
 import os
+
 import pytest
 
 
-def is_ci_mode() -> bool:
-    """Check if running in CI environment."""
-    return os.getenv("CI", "").lower() in ("true", "1", "yes")
+def real_backend_enabled() -> bool:
+    """Return whether this invocation explicitly opted into real backends."""
+
+    return os.getenv("STABLENEW_REAL_BACKEND_TESTS", "").lower() in (
+        "true",
+        "1",
+        "yes",
+    )
+
+
+def pytest_collection_modifyitems(items):
+    """Mark journey items when the invocation enables real backend access."""
+
+    if not real_backend_enabled():
+        return
+    for item in items:
+        if item.nodeid.replace("\\", "/").startswith("tests/journeys/"):
+            item.add_marker(pytest.mark.real_backend)
 
 
 @pytest.fixture(scope="function")
@@ -14,24 +30,22 @@ def webui_client():
     """
     Provide WebUIClient for journey tests.
 
-    - In CI: Returns MockWebUIClient (no real WebUI needed)
-    - In self-hosted: Returns real WebUIClient
+    - By default: returns MockWebUIClient (no real WebUI needed)
+    - With STABLENEW_REAL_BACKEND_TESTS=1: returns real WebUIClient
 
     Journey tests use this fixture and work in both modes.
     """
-    if is_ci_mode():
-        # CI mode: use mock
-        from tests.mocks.webui_mock_server import get_mock_server
+    if not real_backend_enabled():
         from tests.mocks.webui_mock_client import MockWebUIClient
+        from tests.mocks.webui_mock_server import get_mock_server
 
         mock_server = get_mock_server()
         mock_server.reset()  # Clean state for each test
         return MockWebUIClient()
-    else:
-        # Self-hosted mode: use real client
-        from src.core.webui_client import WebUIClient
 
-        return WebUIClient(base_url=os.getenv("WEBUI_URL", "http://localhost:7860"))
+    from src.core.webui_client import WebUIClient
+
+    return WebUIClient(base_url=os.getenv("WEBUI_URL", "http://localhost:7860"))
 
 
 @pytest.fixture(scope="function")
@@ -49,8 +63,8 @@ def pipeline_runner(webui_client):
 
 @pytest.fixture(autouse=True, scope="function")
 def reset_mock_state():
-    """Reset mock server state between tests (CI mode only)."""
-    if is_ci_mode():
+    """Reset mock server state around deterministic journey tests."""
+    if not real_backend_enabled():
         from tests.mocks.webui_mock_server import get_mock_server
 
         mock_server = get_mock_server()
@@ -59,7 +73,7 @@ def reset_mock_state():
     yield
 
     # Cleanup after test
-    if is_ci_mode():
+    if not real_backend_enabled():
         from tests.mocks.webui_mock_server import get_mock_server
 
         mock_server = get_mock_server()

@@ -1,30 +1,34 @@
-"""Run the required deterministic smoke test gate used by CI."""
+"""Run the required positive-list deterministic smoke gate used by CI."""
 
 from __future__ import annotations
 
-import subprocess
-import sys
+from run_collection_gate import repository_test_target, run_pytest_gate
 
-
-REQUIRED_SMOKE_ARGS = [
-    "tests/",
-    "--ignore=tests/gui/",
-    "--ignore=tests/gui_v2/",
-    "--ignore=tests/journey/",
-    "--ignore=tests/journeys/",
-    "--ignore=tests/integration/",
-    "-x",
-    "-q",
-    "--disable-warnings",
-]
+REQUIRED_SMOKE_TARGETS = (
+    "tests/system/test_repository_completeness_v2.py",
+    "tests/system/test_architecture_enforcement_v2.py",
+    "tests/system/test_ci_truth_sync_v2.py",
+    "tests/safety/test_runtime_state_hygiene.py",
+    "tests/state/test_workspace_paths.py",
+    "tests/state/test_output_routing.py",
+    "tests/controller/test_core_run_path_v2.py",
+    "tests/queue/test_job_service_pipeline_integration_v2.py::TestQueuedModeExecution",
+    "tests/queue/test_job_service_pipeline_integration_v2.py::TestQueueErrorHandling",
+)
 
 
 def build_command() -> list[str]:
-    return [sys.executable, "-m", "pytest", *REQUIRED_SMOKE_ARGS]
+    """Return the pytest arguments after resolving repo-relative node IDs."""
+
+    return [
+        "-x",
+        "-q",
+        *(repository_test_target(target) for target in REQUIRED_SMOKE_TARGETS),
+    ]
 
 
 def main() -> int:
-    return subprocess.run(build_command(), check=False).returncode
+    return run_pytest_gate(build_command())
 
 
 if __name__ == "__main__":

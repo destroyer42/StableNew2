@@ -73,20 +73,27 @@ and release documentation.
 
 ## Testing
 
-Do not rely on old collection counts. `PR-MVP-010` will establish the canonical
-test environment and baseline. During recovery, run targeted tests in a
-disposable workspace and verify that tracked files remain unchanged.
+Do not rely on historical collection counts. `pyproject.toml` is the only
+pytest authority, and the named runners isolate pytest in a disposable working
+directory and fail on repository pollution.
 
-Expected final gate shape:
+Required gate:
 
 ```text
-python -m compileall src
-pytest --collect-only -q
-pytest -m "not real_backend and not quarantine" -q
+python tools/ci/check_repository_completeness.py
+python tools/ci/run_ruff_baseline.py
+python tools/ci/run_mypy_smoke.py
+python tools/ci/run_collection_gate.py
+python tools/ci/run_required_smoke.py
 ```
 
-Real WebUI and native SVD tests are opt-in acceptance gates, never collection
-side effects.
+The required smoke runner is a positive allowlist, not the full historical
+suite. Real WebUI and native SVD tests require explicit opt-in and are never
+collection side effects.
+
+Ruff is pinned to 0.14.9. The lint command is a non-increasing ratchet over
+2,208 recorded pre-existing source findings: new or increased debt fails, while
+the MVP roadmap removes the baseline by PR-MVP-090.
 
 ## Documentation status
 

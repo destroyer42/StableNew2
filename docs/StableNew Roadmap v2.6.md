@@ -115,7 +115,7 @@ rewrite the existing branches.
 | 0 | `PR-ARCH-MVP-001` | **Implemented; merge review pending** | Reconciled canon committed as `45b8d07` and carried to recovery as `14d1071` |
 | 1 | `PR-MVP-000` | **Completed** | Recoverable clean baseline with all production source tracked and independently verified |
 | 2 | `PR-MVP-005` | **Completed** | 115 later changed-file occurrences classified into 17 binding dispositions without runtime adoption |
-| 3 | `PR-MVP-010` | **Approved; next** | One strict pytest authority, clean collection, positive smoke allowlist, isolated state, and removal of tracked probe debris |
+| 3 | `PR-MVP-010` | **Completed** | Trustworthy isolated test gates plus a pinned non-increasing lint baseline |
 | 4 | `PR-MVP-020` | Planned | Reduced immutable NJR and complete versioned serialization |
 | 5 | `PR-MVP-030` | Planned | Typed compilers and NJR-only JobService submission contract |
 | 6 | `PR-MVP-040` | Planned | SQLite JobRepository with verified offline legacy import |
@@ -126,8 +126,8 @@ rewrite the existing branches.
 | 11 | `PR-MVP-090` | Planned | Clean-machine release candidate and signed acceptance record |
 
 `PR-ARCH-MVP-001` and `PR-MVP-000` were owner-approved and have been
-implemented. `PR-MVP-010` is the only approved open implementation PR. Later
-rows require their own exact specs and owner approval.
+implemented. `PR-MVP-005` and `PR-MVP-010` are complete. Later rows require
+their own exact specs and owner approval.
 
 ## 6. Phase details
 
@@ -197,8 +197,8 @@ behavior the default; redirect cache and log writes to temporary paths; make
 collection and smoke fail on repository pollution; remove three import-executed
 root scripts; untrack the machine-local WebUI cache; and delete the 30 tracked
 files under the five `tmp_prompt_pack_probe*` roots. The exact allowlist and
-acceptance gates are binding in
-`docs/PR_Backlog/PR-MVP-010-Test-Harness-Recovery.md`.
+acceptance gates and evidence are preserved in
+`docs/CompletedPR/PR-MVP-010-Test-Harness-Recovery.md`.
 
 Audit evidence: the active `pytest.ini` path collected 3,092 tests while warning
 that it ignored `pyproject.toml`. Forcing the stricter configuration collected
@@ -207,6 +207,20 @@ smoke selected 2,413 tests, failed after 87.70 seconds in legacy compatibility
 coverage, modified tracked `data/webui_cache.json`, created root `output/`, and
 ran backend emergency cleanup. These counts document the broken baseline; they
 are not future count assertions.
+
+Completion evidence: disposable Python 3.11.16 and 3.12.14 environments each
+pass repository completeness for 435 tracked Python source files, the Ruff
+0.14.9 baseline gate over 2,208 findings, the 10-file mypy smoke, strict
+collection of 3,083 tests with two explicit optional-OpenCV skips, and all 73
+required smoke tests without repository pollution. The repaired regression
+module passes its three tests, and a synthetic new Ruff bucket is rejected.
+
+Approved amendment: repair only the duplicate plugin registration in the one
+regression test and replace the impossible raw Ruff command with a Ruff 0.14.9
+file/rule-count ratchet over all 2,208 existing findings. New or increased lint
+debt fails immediately. Every later runtime PR must leave touched files at zero
+Ruff findings; `PR-MVP-080` owns remaining mechanical cleanup and `PR-MVP-090`
+requires an empty baseline before release certification.
 
 Exit gate: `pytest --collect-only -q` succeeds in a disposable workspace; a
 small positively selected canonical smoke suite runs without network, backend,
@@ -377,8 +391,8 @@ and broad UI redesign do not block MVP.
 
 ## 10. Next action
 
-Commit the approved `PR-MVP-010` planning documents as one documentation-only
-commit, then execute the frozen specification on `recovery/mvp-baseline`.
-Record Python 3.11/3.12 clean-checkout evidence and close it before generating
-`PR-MVP-020`. Adopt no later runtime change outside the separately approved
-owner PR named in the completed disposition record.
+Generate and execute `PR-MVP-020` followed by `PR-MVP-030`. Each must use
+its own approved exact
+allowlist, remove lint findings from touched files, and leave no partial
+migration. Adopt no later runtime change outside the separately approved owner
+PR named in the completed disposition record.

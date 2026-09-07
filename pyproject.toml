@@ -23,7 +23,7 @@ dev = [
     "pytest>=7.4.0",
     "pytest-cov>=4.1.0",
     "requests-mock>=1.11.0",
-    "ruff>=0.1.0",
+    "ruff==0.14.9",
     "black>=23.0.0",
     "mypy>=1.0.0",
     "types-requests>=2.31.0",
@@ -110,7 +110,7 @@ ignore_errors = true
 
 [tool.pytest.ini_options]
 minversion = "7.0"
-testpaths = ["tests", "tests/gui_v2"]
+testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
@@ -119,18 +119,48 @@ addopts = [
     "--strict-markers",
     "--strict-config",
     "--showlocals",
+    "--import-mode=importlib",
+    "--ignore=tests/gui",
+    "--ignore=tests/gui_v1_legacy",
+    "--ignore=tests/legacy",
+    "--ignore=tests/quarantine",
+    "--ignore=tests/scripts",
 ]
 norecursedirs = [
-    "tests/gui_v1_legacy",
-    "tests/legacy",
+    "archive",
+    "ARCHIVE",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]
 markers = [
-    "integration: marks tests as integration tests (may require external services)",
-    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
-    "gui: marks tests that require GUI/display (may not run in CI)",
+    "compat: compatibility or migration behavior; not target architecture",
+    "core_e: core end-to-end path coverage",
+    "golden_path: golden-path coverage",
+    "gp1: golden-path step 1",
+    "gp2: golden-path step 2",
+    "gp3: golden-path step 3",
+    "gp4: golden-path step 4",
+    "gp5: golden-path step 5",
+    "gp6: golden-path step 6",
+    "gp7: golden-path step 7",
+    "gp8: golden-path step 8",
+    "gp9: golden-path step 9",
+    "gp10: golden-path step 10",
+    "gp11: golden-path step 11",
+    "gp12: golden-path step 12",
+    "gp13: golden-path step 13",
+    "gp14: golden-path step 14",
+    "gp15: golden-path step 15",
+    "gui: tests that require or validate a GUI surface",
+    "integration: cross-subsystem integration coverage",
+    "journey: high-level product journey coverage",
+    "legacy: retained legacy behavior; not target architecture",
+    "real_backend: opt-in test that may contact an external backend",
+    "slow: long-running coverage excluded from fast feedback",
+    "smoke: bounded smoke coverage",
+    "snapshot_regression: snapshot-based regression coverage",
+    "summary: summary or reporting coverage",
     "timeout: marks tests that rely on pytest-timeout for execution limits",
 ]
 

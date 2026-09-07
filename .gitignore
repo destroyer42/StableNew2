@@ -103,3 +103,13 @@ data/photo_optimize/assets/
 
 # Runtime-only history snapshots - local only
 data/job_history.jsonl
+
+# Machine-local WebUI discovery cache - local only
+/data/webui_cache.json
+
+# Generated PromptPack audit probes - never source
+/tmp_prompt_pack_probe/
+/tmp_prompt_pack_probe2/
+/tmp_prompt_pack_probe3/
+/tmp_prompt_pack_probe4/
+/tmp_prompt_pack_probe5/

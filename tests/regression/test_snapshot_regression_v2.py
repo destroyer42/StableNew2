@@ -7,8 +7,6 @@ import pytest
 
 from src.controller.pipeline_controller import PipelineController
 
-pytest_plugins = ["tests.controller.conftest"]
-
 SNAPSHOT_DIR = Path("tests/data/snapshots")
 
 
@@ -23,8 +21,8 @@ def snapshot_loader():
 
 
 @pytest.fixture
-def pipeline_controller_with_stubs(job_service_with_stub_runner_factory):
-    service, _, _ = job_service_with_stub_runner_factory
+def pipeline_controller_with_stubs(stubbed_job_service_with_queue):
+    service, _, _ = stubbed_job_service_with_queue
     controller = object.__new__(PipelineController)
     controller._job_service = service
     controller._app_state = None

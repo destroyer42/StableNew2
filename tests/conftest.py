@@ -1,6 +1,7 @@
 import os
 import time
 import tkinter as tk
+from pathlib import Path
 
 import pytest
 
@@ -45,12 +46,24 @@ def tk_pump(tk_root):
 
 
 @pytest.fixture(autouse=True)
-def _mock_webui_discovery(monkeypatch):
+def _mock_webui_discovery(monkeypatch, tmp_path: Path):
     """Prevent tests from launching or probing real WebUI services.
 
     This avoids background threads calling Tkinter/after() which crash on Windows CI.
     """
     monkeypatch.setenv("STABLENEW_NO_WEBUI", "1")
+    monkeypatch.setenv("STABLENEW_TEST_MODE", "1")
+
+    try:
+        import src.api.webui_process_manager as webui_process_manager  # type: ignore
+
+        monkeypatch.setattr(
+            webui_process_manager,
+            "_WEBUI_CACHE_FILE",
+            tmp_path / "webui_cache.json",
+        )
+    except Exception:
+        pass
 
     try:
         import src.utils.webui_discovery as wd  # type: ignore
@@ -94,14 +107,6 @@ def _mock_webui_discovery(monkeypatch):
         )
     except Exception:
         pass
-
-
-# Preserve existing tmp_path fixture override
-@pytest.fixture
-def tmp_path(tmp_path_factory):
-    """Provide a temporary directory for tests"""
-    return tmp_path_factory.mktemp("test_data")
-
 
 # ---------------------------------------------------------------------------
 # PR-0114C-Ty: DI fixtures for JobService/Runner/History

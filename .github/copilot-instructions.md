@@ -47,20 +47,27 @@ them.
 ## Verification defaults
 
 Use the project-managed Python 3.11 environment. Run targeted tests first. The
-canonical baseline is being established by `PR-MVP-010`; do not repeat stale
-collection counts as current truth.
+single pytest authority is `pyproject.toml`; do not repeat stale collection
+counts as current truth.
 
-Expected gate shape:
+Required gate:
 
 ```text
-python -m compileall src
-pytest --collect-only -q
-pytest -m "not real_backend and not quarantine" -q
+python tools/ci/check_repository_completeness.py
+python tools/ci/run_ruff_baseline.py
+python tools/ci/run_mypy_smoke.py
+python tools/ci/run_collection_gate.py
+python tools/ci/run_required_smoke.py
 ```
 
 Tests must not call real networks/models at collection time, sleep as a
-correctness mechanism, mutate tracked data, or write GUI widgets from workers.
-Real WebUI/SVD acceptance is opt-in and recorded separately.
+correctness mechanism, mutate repository data, or write GUI widgets from
+workers. Required smoke is an exact positive list. Real WebUI/SVD acceptance is
+explicitly opt-in and recorded separately.
+
+Ruff 0.14.9 is pinned. The baseline runner rejects every new path/rule key or
+increased finding count. A touched source file must be left with zero Ruff
+findings; never regenerate the baseline upward.
 
 ## Scoped instructions
 

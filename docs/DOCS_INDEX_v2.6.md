@@ -57,22 +57,21 @@ the affected runtime work proceeds.
 ### Tier 4 — Active approved PR specifications
 
 - `docs/PR_Backlog/PR-ARCH-MVP-001-v2.6-Canon-Amendment.md`
-- `docs/PR_Backlog/PR-MVP-010-Test-Harness-Recovery.md`
 
 `PR-ARCH-MVP-001` is implemented and remains here until merge review/closeout.
-`PR-MVP-010` is approved as the only open implementation PR; it may change only
-the allowlisted test harness, CI, generated-state tracking, and synchronized
-documentation. Later PR IDs in the roadmap are planned placeholders until exact
-specs are written and approved.
+Later PR IDs in the roadmap are planned placeholders until exact specs are
+written and approved.
 
 Completed recovery record:
 
 - `docs/CompletedPR/PR-MVP-000-Recovery-Baseline-and-Repository-Completeness.md`
 - `docs/CompletedPR/PR-MVP-005-Post-Baseline-Delta-Disposition.md`
+- `docs/CompletedPR/PR-MVP-010-Test-Harness-Recovery.md`
 
-`PR-MVP-005` is complete. Its dispositions authorize no runtime adoption or
-bulk branch integration; each carry-forward requires the separately approved
-owner PR named in that record.
+`PR-MVP-005` and `PR-MVP-010` are complete. The former authorizes no runtime
+adoption or bulk branch integration; each carry-forward requires the separately
+approved owner PR named in that record. The latter records the authoritative
+isolated test gates and non-increasing Ruff debt baseline.
 
 ## 2. Canonical reading order
 

@@ -189,22 +189,48 @@ that implements the replacement contract, not before.
 
 ## 10. Baseline command policy
 
-The exact environment commands are pinned by `PR-MVP-010`. Until then, use the
-project's managed Python 3.11 environment and record the interpreter used.
-Canonical gates will include:
+`pyproject.toml` is the only pytest configuration authority. Use a supported
+Python 3.11 or 3.12 environment and record the interpreter. The required gate
+is the following ordered command set:
 
 ```text
-python -m compileall src
-pytest --collect-only -q
-pytest -m "not real_backend and not quarantine" -q
+python tools/ci/check_repository_completeness.py
+python tools/ci/run_ruff_baseline.py
+python tools/ci/run_mypy_smoke.py
+python tools/ci/run_collection_gate.py
+python tools/ci/run_required_smoke.py
 ```
 
-Targeted tests run before broader suites. A hang, crash, collection error, or
-tracked-file mutation is a failed test run even if earlier assertions passed.
+The required pytest runner uses an explicit positive target list. It must not
+start with the full suite and subtract exclusions. Collection and required
+smoke run from a disposable working directory with no-WebUI/test-mode defaults,
+bytecode/cache suppression, temporary pytest paths, and repository-content
+snapshots. A hang, crash, collection error, real backend call, or repository
+mutation is a failed run even if earlier assertions passed.
+
+Default collection includes active development, integration, journey, and
+headless-safe GUI v2 modules. It excludes archive, quarantine, manual scripts,
+legacy GUI, and legacy-only directories. Collection does not make a test
+canonical or required. Real WebUI/SVD acceptance requires the `real_backend`
+marker, explicit operator opt-in, and a separate recorded target-machine run.
 
 Formatting, lint, and type-check commands must use repository-pinned
-configuration. Existing debt may be baselined only in `PR-MVP-010`; new or
-touched-file violations are not permitted.
+configuration. Existing contract-test debt is assigned to its owning MVP PR in
+`tests/TEST_SURFACE_MANIFEST.md`; new or touched-file violations are not
+permitted.
+
+Ruff is pinned to 0.14.9. `tools/ci/ruff_baseline.json` records 2,208
+pre-existing findings by source path and rule; the required baseline runner
+fails a version mismatch, any new key, or any increased count. Decreases do not
+require snapshot regeneration. MVP runtime PRs leave every touched source file
+clean, PR-MVP-080 owns bounded cleanup of untouched findings, and PR-MVP-090
+deletes the baseline only after raw `ruff check src` succeeds.
+
+PR-MVP-010 validation used disposable Python 3.11.16 and 3.12.14 environments.
+Both passed repository completeness, the Ruff baseline gate, the bounded mypy
+gate, strict isolated collection, and all 73 positively selected required
+tests. The collection runners reported 3,083 tests with two explicit
+optional-OpenCV skips and left repository contents unchanged.
 
 ## 11. PR verification record
 

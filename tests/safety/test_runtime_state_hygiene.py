@@ -3,12 +3,17 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 
 TRACKED_RUNTIME_PATHS = (
     "state",
     "src/state/queue_state_v2.json",
+    "data/webui_cache.json",
+    "tmp_prompt_pack_probe",
+    "tmp_prompt_pack_probe2",
+    "tmp_prompt_pack_probe3",
+    "tmp_prompt_pack_probe4",
+    "tmp_prompt_pack_probe5",
 )
 
 

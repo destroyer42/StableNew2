@@ -1,119 +1,149 @@
-# TEST_SURFACE_MANIFEST.md
 # Active Test Surface for StableNew v2.6
 
 Status: Authoritative
-Updated: 2026-03-29
-
----
+Updated: 2026-09-06
 
 ## 1. Purpose
 
-This manifest classifies the test surface into canonical, compat, and excluded
-areas so CI and developers can tell which suites define current runtime truth.
+This manifest separates tests that block an MVP change from tests that are
+merely collectable, optional, compatible with older behavior, manually invoked,
+quarantined, or archived. Test presence and a green assertion do not make a
+behavior canonical. Architecture authority comes from the active canon and the
+Finalized MVP Roadmap.
 
-Canonical suites validate the active v2.6 architecture. Compat suites validate
-temporary migration or legacy-compat behavior. Quarantine and archive do not
-define architecture.
+## 2. Pytest authority and default collection
 
----
+`pyproject.toml` is the only pytest configuration. Default collection is strict,
+uses importlib mode, and starts at `tests/`.
 
-## 2. Active Test Directories
+These paths are excluded by default:
 
-All directories below are under `tests/`. They remain maintained surfaces, but
-they do not all have the same authority.
-
-| Directory | Subsystem | Notes |
+| Path | Classification | Reason |
 |---|---|---|
-| `tests/ai_v2/` | AI pipeline v2 | Canonical |
-| `tests/api/` | WebUI API client | Canonical |
-| `tests/app/` | Application-level smoke | Canonical |
-| `tests/cluster/` | Cluster compute | Canonical |
-| `tests/compat/` | Compatibility and migration validation | Temporary; not canonical runtime truth |
-| `tests/controller/` | AppController, job service, heartbeat | Canonical |
-| `tests/data/` | Data access and cache | Canonical |
-| `tests/debughub/` | DebugHub diagnostics | Canonical |
-| `tests/history/` | Job history and cache | Canonical |
-| `tests/integration/` | Cross-subsystem integration | Canonical integration only; optional/full-suite CI |
-| `tests/journey/` | End-to-end journey | Canonical journey; optional/full-suite CI |
-| `tests/journeys/` | Additional journey tests | Canonical journey; optional/full-suite CI |
-| `tests/learning/` | Learning subsystem | Canonical learning tests and hooks |
-| `tests/learning_v2/` | v2.6 learning subsystem | Canonical; priority |
-| `tests/photo_optimize/` | Photo optimize workflow | Canonical |
-| `tests/pipeline/` | Builder pipeline, VAE, NJR | Canonical |
-| `tests/queue/` | Queue, persistence, remove | Canonical |
-| `tests/randomizer/` | Randomizer determinism | Canonical |
-| `tests/regression/` | Regression cases | Canonical |
-| `tests/safety/` | Safety guard tests | Canonical |
-| `tests/services/` | Background services | Canonical |
-| `tests/state/` | State persistence and workspace paths | Canonical |
-| `tests/system/` | Architecture and surface enforcement | Canonical |
-| `tests/utils/` | Utility functions | Canonical |
-| `tests/video/` | Video workflow | Canonical |
-| `tests/gui_v2/` | GUI v2 integration | Canonical GUI integration; optional/full-suite CI |
+| every `archive/` or `ARCHIVE/` tree | Archive | Historical evidence only |
+| `tests/gui/` | Optional legacy GUI | Requires a live display and does not define GUI v2 |
+| `tests/gui_v1_legacy/` | Legacy GUI | Superseded surface |
+| `tests/legacy/` | Legacy | Superseded behavior |
+| `tests/quarantine/` | Quarantine | Known unsafe, display-bound, or unresolved coverage |
+| `tests/scripts/` | Manual | Diagnostic scripts, not pytest tests |
 
----
+`tests/gui_v2/` remains collectable. A GUI v2 test must skip safely when its
+display dependency is unavailable. Integration and journey suites are
+collectable, but collection is not permission to contact an external service.
 
-## 3. CI Gate Mapping
+## 3. Surface classifications
 
-The CI policy is intentionally tiered:
+### 3.1 Required merge gate
 
-| Surface | Coverage |
-|---|---|
-| Required canonical gate | `python tools/ci/run_required_smoke.py` |
-| Required typed seam gate | `python tools/ci/run_mypy_smoke.py` |
-| Optional/full-suite CI | `tests/gui_v2/`, `tests/integration/`, `tests/journey/`, `tests/journeys/`, and the broader suite under a GUI-capable environment |
-| Compat gate | `tests/compat/` and explicitly marked migration or legacy-compat checks |
+The required pytest subset is the positive list in
+`tools/ci/run_required_smoke.py`. It covers repository completeness,
+architecture enforcement, CI/configuration truth, runtime-state hygiene,
+workspace/output isolation, the current controller-to-queue seam, queued
+execution, and queue error handling.
 
-Canonical gates should prefer current queue-first, NJR-first runtime truth.
-Compat coverage exists to constrain temporary migration behavior and must shrink
-over time.
-The required smoke contract is the exact pytest subset encoded in
-`tools/ci/run_required_smoke.py`; CI and docs must point to that script rather
-than duplicating the ignore list ad hoc. The typed architecture seam contract is
-the exact target list encoded in `tools/ci/run_mypy_smoke.py`.
+The list deliberately omits legacy direct-mode compatibility. It must never be
+implemented as all tests minus an ignore list. Any change to the list must also
+update this manifest, `tests/system/test_ci_truth_sync_v2.py`, and
+`docs/StableNew_Coding_and_Testing_v2.6.md`.
 
----
+Required CI commands are:
 
-## 4. Excluded by Default Collection Policy
+```text
+python tools/ci/check_repository_completeness.py
+python tools/ci/run_ruff_baseline.py
+python tools/ci/run_mypy_smoke.py
+python tools/ci/run_collection_gate.py
+python tools/ci/run_required_smoke.py
+```
 
-| Path | Reason | How to Run Locally |
-|---|---|---|
-| `tests/gui/` | Requires a live Tk display | `pytest tests/gui/ -v` |
-| `tests/quarantine/` | Tk-dependent or manual scripts | See `tests/quarantine/README.md` |
-| `tests/tmp_executor/` | Temp or scratch | Evaluate and promote or delete |
-| `tests/legacy/` | Pre-v2.6 tests | Reference only |
+The collection and smoke runners use a disposable working directory,
+deterministic no-WebUI/test-mode environment, and repository-content comparison.
+A passing pytest return code with repository pollution is a failed gate.
 
----
+The required lint gate pins Ruff 0.14.9 and ratchets 2,208 pre-existing
+findings by source path and rule. New or increased debt fails. Every MVP PR must
+leave its touched source files clean; PR-MVP-080 owns bounded cleanup of
+untouched findings, and PR-MVP-090 requires the baseline to reach zero.
 
-## 5. Placement Rules
+### 3.2 Collected active-development coverage
 
-- New unit tests for `src/X/y.py` go in `tests/X/test_y.py` or the nearest matching canonical directory above.
-- Controller integration tests go in `tests/controller/`.
-- Learning analytics tests go in `tests/learning_v2/` unless they exercise existing learning hooks in `tests/learning/`.
-- Queue and persistence tests go in `tests/queue/`.
-- GUI tests that still need a live Tk display go in `tests/quarantine/` until rewritten with mock fixtures.
-- Fixture files belong in `tests/fixtures/` only. No runtime artifacts in fixtures.
-- Archive DTO or legacy submission semantics belong in `tests/compat/`, not in canonical subsystem directories.
+Subsystem directories such as `api/`, `controller/`, `data/`, `debughub/`,
+`history/`, `pipeline/`, `queue/`, `randomizer/`, `regression/`, `safety/`,
+`services/`, `state/`, `system/`, and `utils/` are collected development
+coverage. Individual tests may still encode current implementation debt. Only
+the exact required subset blocks every PR.
 
----
+### 3.3 Optional integration and journey coverage
 
-## 6. Naming Conventions
+`integration/`, `journey/`, `journeys/`, and `gui_v2/` provide broader
+cross-subsystem feedback. They run in the non-blocking broad CI job while the
+MVP contract migrations are active. Journey fixtures use fakes by default.
 
-- Pure unit tests: `test_<module_name>.py`
-- Contract tests: `test_<area>_contract.py`
-- Integration tests: `test_<feature>_integration.py`
-- Regression cases: `test_<ticket_or_pr>_<description>.py`
+### 3.4 Compatibility coverage
 
----
+`compat/` and tests marked `compat` or `legacy` constrain temporary behavior.
+They cannot overrule canon or block deletion of an obsolete path in its owning
+approved migration PR.
 
-## 7. Maintenance Rules
+### 3.5 Post-MVP or not-yet-promoted coverage
 
-- If a new test directory is added under `tests/`, update Section 2 in the same PR.
-- If a test is moved between canonical, compat, quarantine, or archive buckets, update Sections 2 and 3 in the same PR.
-- Do not add tests directly to the repository root; use canonical subdirectories.
-- Canonical suites must not import archive runtime DTOs. If legacy coverage is still needed, move it to `tests/compat/`.
+Cluster, broad learning/product-training, photo optimization, non-native video,
+and other post-MVP feature suites do not become release gates by being
+collectable. `PR-MVP-060` through `PR-MVP-090` own exact promotion, quarantine,
+or removal decisions.
 
----
+### 3.6 Real-backend acceptance
 
-Document Status: CANONICAL
-Last Updated: 2026-03-29
+Real WebUI and native SVD tests are explicit acceptance work, marked
+`real_backend`, run separately on the target machine, and never enter required
+CI. Journey fixtures construct a real client only when
+`STABLENEW_REAL_BACKEND_TESTS=1` is set explicitly.
+
+## 4. Placement rules
+
+- New tests go in the nearest subsystem directory, never directly under
+  `tests/`.
+- Unit tests for `src/X/y.py` normally go in `tests/X/test_y.py`.
+- Cross-subsystem tests go in `tests/integration/`; product journeys go in a
+  journey directory.
+- Live-display tests stay out of required CI until made headless-safe.
+- Manual executable probes go under `tests/scripts/` and must use a main guard.
+- Fixture files belong under `tests/fixtures/`; runtime artifacts are not
+  fixtures.
+- Legacy semantics belong under `tests/compat/` and need a named deletion PR.
+- No test may write user packs or mutable state into the repository.
+
+## 5. Marker policy
+
+Every custom marker must be registered in `pyproject.toml`. Registration is a
+collection contract, not a statement of authority. `real_backend` requires
+explicit operator opt-in. `compat` and `legacy` never satisfy an MVP architecture
+gate. Step markers `gp1` through `gp15`, `golden_path`, `journey`, and similar
+labels describe grouping only.
+
+## 6. Isolation rules
+
+- Tests default to `STABLENEW_NO_WEBUI=1` and `STABLENEW_TEST_MODE=1`.
+- WebUI discovery cache, logs, output, history, and temporary data use pytest
+  temporary paths.
+- Required tests use fakes and deterministic event/poll synchronization.
+- Collection performs no assertions, pack rewrites, backend launches, or root
+  artifact creation.
+- Test completion closes threads, clients, loggers, and temporary resources.
+- The standard pytest `tmp_path` fixture is not overridden.
+- Tracked runtime/cache/probe files fail the hygiene guard.
+
+## 7. Deferred cleanup ownership
+
+- NJR and serialization assertions: `PR-MVP-020`.
+- Direct-mode, broad submission, queue/controller compatibility, and related
+  duplicate tests: `PR-MVP-030`.
+- JSON/JSONL persistence coverage: `PR-MVP-040`.
+- Paired PromptPack coverage: `PR-MVP-050`.
+- Image GUI/integration promotion: `PR-MVP-060`.
+- Video surface quarantine/native SVD proof: `PR-MVP-070`.
+- Learning, cluster, and post-MVP operator quarantine: `PR-MVP-080`.
+- Final required/optional inventory and remaining harmless duplicates:
+  `PR-MVP-090`.
+
+No new root test or compatibility shim may be added while this debt is open.

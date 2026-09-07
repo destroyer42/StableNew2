@@ -7,7 +7,7 @@ on:
     branches: [ "**" ]
 
 jobs:
-  # Required gate: lint + fast deterministic tests.
+  # Required gate: repository truth + lint/types + isolated deterministic tests.
   # This job MUST pass. Failures are not masked.
   required:
     runs-on: ubuntu-latest
@@ -29,19 +29,32 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install pytest ruff mypy types-requests
+        pip install pytest ruff==0.14.9 mypy types-requests
+
+    - name: Verify repository completeness
+      run: |
+        python tools/ci/check_repository_completeness.py
 
     - name: Lint (Ruff) — required
       run: |
-        ruff check src
-
-    - name: Run required deterministic smoke gate
-      run: |
-        python tools/ci/run_required_smoke.py
+        python tools/ci/run_ruff_baseline.py
 
     - name: Run mypy smoke gate
       run: |
         python tools/ci/run_mypy_smoke.py
+
+    - name: Collect the active test surface in isolation
+      run: |
+        python tools/ci/run_collection_gate.py
+
+    - name: Run required positive-list smoke gate
+      run: |
+        python tools/ci/run_required_smoke.py
+
+    - name: Verify the checkout remains clean
+      run: |
+        git diff --exit-code
+        test -z "$(git status --porcelain --untracked-files=all)"
 
     - name: Upload test results
       uses: actions/upload-artifact@v4
@@ -51,8 +64,8 @@ jobs:
         path: |
           .pytest_cache/
 
-  # Optional gate: full suite including GUI (requires Tk/Xvfb) and journey tests.
-  # Failures here are reported but do not block merges.
+  # Optional gate: the broader configured suite, including headless-safe GUI v2
+  # and fake-backend journeys. Failures are reported but do not block merges.
   full-suite:
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -79,13 +92,13 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install pytest pytest-xvfb ruff
+        pip install pytest pytest-xvfb ruff==0.14.9
 
-    - name: Run full test suite (Xvfb)
+    - name: Run broader configured suite (Xvfb)
       uses: GabrielBB/xvfb-action@v1
       with:
         run: |
-          pytest -vv --maxfail=5 --disable-warnings --showlocals
+          python -m pytest -vv --maxfail=5 --showlocals
 
     - name: Upload full test results
       uses: actions/upload-artifact@v4

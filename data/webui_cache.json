@@ -1,9 +1,0 @@
-{
-  "workdir": "C:\\Users\\rob\\stable-diffusion-webui",
-  "command": [
-    "webui-user.bat",
-    "--api",
-    "--xformers"
-  ],
-  "timestamp": 1775011055.4017677
-}

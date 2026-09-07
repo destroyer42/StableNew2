@@ -1,6 +1,6 @@
 # PR-MVP-010 - Test Harness Recovery
 
-Status: Specification
+Status: Completed
 Priority: HIGH
 Effort: MEDIUM
 Phase: Phase 1 - Make verification trustworthy
@@ -99,6 +99,8 @@ because a historical test passes. It is governed by
 ### Files to Create
 
 - `tools/ci/run_collection_gate.py`
+- `tools/ci/run_ruff_baseline.py`
+- `tools/ci/ruff_baseline.json`
 - `docs/CompletedPR/PR-MVP-010-Test-Harness-Recovery.md` (closeout only)
 
 ### Files to Modify
@@ -114,6 +116,7 @@ because a historical test passes. It is governed by
 - `tests/controller/test_core_run_path_v2.py`
 - `tests/safety/test_runtime_state_hygiene.py`
 - `tests/system/test_ci_truth_sync_v2.py`
+- `tests/regression/test_snapshot_regression_v2.py`
 - `tests/TEST_SURFACE_MANIFEST.md`
 - `docs/StableNew_Coding_and_Testing_v2.6.md`
 - `docs/StableNew Roadmap v2.6.md`
@@ -228,12 +231,34 @@ Extend `tests/safety/test_runtime_state_hygiene.py` so tracking any probe root,
 `data/webui_cache.json`, root `state/`, or
 `src/state/queue_state_v2.json` fails.
 
-### Step 6 - Make CI state the real gate
+### Step 6 - Ratchet existing lint debt without hiding it
+
+Pin Ruff `0.14.9` in the development and CI environment. Record the 2,208
+existing findings in `tools/ci/ruff_baseline.json` as counts keyed by
+repository-relative source path and rule code. Add
+`tools/ci/run_ruff_baseline.py` to run Ruff JSON output and fail when:
+
+1. Ruff's version differs from the baseline version;
+2. a new path/rule key appears;
+3. any existing path/rule count increases; or
+4. Ruff cannot complete or its output cannot be parsed.
+
+Counts may decrease without regenerating the baseline. Baseline regeneration
+requires an approved PR and may never raise a count. This ratchet replaces the
+impossible raw `ruff check src` required command; it does not call the findings
+acceptable.
+
+Repair `tests/regression/test_snapshot_regression_v2.py` by removing its
+duplicate `pytest_plugins` registration and consuming the existing root
+`stubbed_job_service_with_queue` fixture. Do not change snapshot assertions or
+production behavior.
+
+### Step 7 - Make CI state the real gate
 
 Update `.github/workflows/ci.yml` so the required Python 3.11/3.12 matrix runs:
 
 1. repository completeness;
-2. Ruff and the existing mypy smoke;
+2. `python tools/ci/run_ruff_baseline.py` and the existing mypy smoke;
 3. `python tools/ci/run_collection_gate.py`;
 4. `python tools/ci/run_required_smoke.py`;
 5. a final clean-tree assertion.
@@ -241,7 +266,7 @@ Update `.github/workflows/ci.yml` so the required Python 3.11/3.12 matrix runs:
 The broader suite may remain non-blocking during migration, but must consume
 the same configuration and must not be called authoritative or real-backend.
 
-### Step 7 - Synchronize docs and close out
+### Step 8 - Synchronize docs and close out
 
 Update `tests/TEST_SURFACE_MANIFEST.md` to distinguish required, collected,
 optional, compatibility, real-backend, manual, quarantine, and archive
@@ -271,6 +296,7 @@ python -m pytest -q tests/controller/test_core_run_path_v2.py
 
 ```powershell
 python tools/ci/check_repository_completeness.py
+python tools/ci/run_ruff_baseline.py
 python tools/ci/run_collection_gate.py
 python tools/ci/run_required_smoke.py
 python tools/ci/run_mypy_smoke.py
@@ -384,6 +410,20 @@ if an excluded suite is later proven MVP-critical.
 - Final release inventory and remaining harmless duplicate cleanup:
   `PR-MVP-090`.
 
+### Ruff debt burn-down plan
+
+1. `PR-MVP-010` freezes the 2,208-finding file/rule baseline and blocks every
+   increase.
+2. `PR-MVP-020` and `PR-MVP-030` remove all Ruff findings in every NJR,
+   compiler, submission, and related test file they touch; their baseline
+   counts must decrease.
+3. `PR-MVP-040` through `PR-MVP-070` apply the same touched-file-zero rule to
+   persistence, PromptPack, image, and video slices.
+4. `PR-MVP-080` owns bounded mechanical cleanup of untouched source findings,
+   split by subsystem if a single review would become unsafe.
+5. `PR-MVP-090` may not certify release while any baseline count is nonzero.
+   The baseline is deleted only with a clean raw `ruff check src` result.
+
 ## 11. Documentation Updates
 
 - `docs/StableNew_Coding_and_Testing_v2.6.md`: implement single-config,
@@ -420,13 +460,38 @@ Reviewer: Rob (Human Owner)
 Approval Status: Approved
 
 The request to generate and approve `PR-MVP-010` records owner approval. It
-authorizes only this allowlist; implementation has not started.
+authorizes only this allowlist.
+
+Completion evidence on 2026-09-06: the allowlisted configuration, isolation,
+positive smoke, generated-state cleanup, CI, documentation, regression repair,
+and Ruff ratchet are implemented. Repository completeness passes for 435
+tracked Python source files. Ruff 0.14.9 verifies exactly 2,208 baseline
+findings in 342 path/rule buckets, and a synthetic new bucket is rejected.
+The repaired regression module passes all three tests.
+
+Two newly exposed conditions required the owner-approved amendment:
+
+1. strict importlib collection reaches the active regression surface and fails
+   because `tests/regression/test_snapshot_regression_v2.py` registers
+   `tests.controller.conftest` a second time through `pytest_plugins`; a
+   diagnostic run excluding only that file collects the remaining configured
+   surface without error;
+2. the pre-existing required `ruff check src` command reports 2,208 baseline
+   findings, while `src/**` is forbidden here. Silencing Ruff or editing source
+   would violate the trustworthy-gate purpose.
+
+The owner approved the narrow amendment on 2026-09-06. It admits only the
+regression fixture repair plus `tools/ci/run_ruff_baseline.py` and
+`tools/ci/ruff_baseline.json`; `src/**` remains forbidden.
+
+Disposable Python 3.11.16 and 3.12.14 environments each pass repository
+completeness, the Ruff ratchet, the 10-file mypy smoke, strict collection, and
+all 73 required smoke tests without repository pollution. Strict collection
+reports 3,083 tests in those environments with two explicit optional-OpenCV
+skips; the count is evidence, not a frozen assertion.
 
 ## 14. Next Steps
 
-1. Commit this approved specification, roadmap update, and docs-index update as
-   one documentation-only planning commit so the allowlist is frozen.
-2. Execute `PR-MVP-010` as one isolated test-harness recovery change on
-   `recovery/mvp-baseline`.
-3. Record Python 3.11/3.12 CI evidence and close it as one completed PR record.
-4. Generate and approve `PR-MVP-020` against the trustworthy harness.
+1. Generate and approve `PR-MVP-020` against the trustworthy harness.
+2. Keep every touched NJR source file at zero Ruff findings.
+3. Do not regenerate this baseline upward.

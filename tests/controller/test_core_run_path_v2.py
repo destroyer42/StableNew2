@@ -18,8 +18,15 @@ from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunResult
-from src.queue.job_model import Job, JobStatus
+from src.queue.job_model import Job
 from src.queue.stub_runner import StubRunner
+from src.utils.logger import StructuredLogger, close_all_structured_loggers
+
+
+@pytest.fixture(autouse=True)
+def _close_structured_loggers_after_test():
+    yield
+    close_all_structured_loggers()
 
 
 class RecordingAppController(AppController):
@@ -28,6 +35,10 @@ class RecordingAppController(AppController):
     def __init__(self, *args: object, tmp_history: Path | None = None, **kwargs: object) -> None:
         self._custom_history = tmp_history
         self.recorded_callables: list[Callable[[Job], dict]] = []
+        if tmp_history is not None and "structured_logger" not in kwargs:
+            kwargs["structured_logger"] = StructuredLogger(
+                output_dir=str(tmp_history.parent / "structured_logs")
+            )
         super().__init__(*args, **kwargs)
 
     def _single_node_runner_factory(
