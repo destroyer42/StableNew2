@@ -117,7 +117,7 @@ rewrite the existing branches.
 | 2 | `PR-MVP-005` | **Completed** | 115 later changed-file occurrences classified into 17 binding dispositions without runtime adoption |
 | 3 | `PR-MVP-010` | **Completed** | Trustworthy isolated test gates plus a pinned non-increasing lint baseline |
 | 4 | `PR-MVP-020` | **Completed** | Reduced immutable NJR and complete versioned serialization |
-| 5 | `PR-MVP-030` | **Next; specification required** | Typed compilers and NJR-only JobService submission contract |
+| 5 | `PR-MVP-030` | **Approved; implementation in progress** | Typed compilers and NJR-only JobService submission contract |
 | 6 | `PR-MVP-040` | Planned | SQLite JobRepository with verified offline legacy import |
 | 7 | `PR-MVP-050` | Planned | One-file JSON PromptPack and conflict-safe migration |
 | 8 | `PR-MVP-060` | Planned | Reliable image create/queue/run/artifact/history/replay slice |
@@ -126,8 +126,9 @@ rewrite the existing branches.
 | 11 | `PR-MVP-090` | Planned | Clean-machine release candidate and signed acceptance record |
 
 `PR-ARCH-MVP-001` and `PR-MVP-000` were owner-approved and have been
-implemented. `PR-MVP-005`, `PR-MVP-010`, and `PR-MVP-020` are complete. Later
-rows require their own exact specs and owner approval.
+implemented. `PR-MVP-005`, `PR-MVP-010`, and `PR-MVP-020` are complete.
+`PR-MVP-030` is owner-approved under its exact allowlist and is the active
+implementation. Later rows require their own exact specs and owner approval.
 
 ## 6. Phase details
 
@@ -399,7 +400,7 @@ and broad UI redesign do not block MVP.
 
 ## 10. Next action
 
-Generate, approve, and execute `PR-MVP-030` against the verified immutable NJR
-core. It must use its own exact allowlist, migrate source callers atomically,
-remove superseded pack-shaped submission behavior, leave touched files clean,
-and adopt no unrelated later-branch change.
+Execute the approved `PR-MVP-030` specification against the verified immutable
+NJR core. It must migrate source callers atomically, remove superseded
+pack-shaped submission behavior, leave touched files clean, and adopt no
+unrelated later-branch change.
