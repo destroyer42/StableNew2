@@ -1,7 +1,7 @@
 # StableNew Documentation Index v2.6
 
 Status: Authoritative
-Updated: 2026-09-05
+Updated: 2026-09-06
 
 ## 0. Purpose
 
@@ -57,10 +57,13 @@ the affected runtime work proceeds.
 ### Tier 4 — Active approved PR specifications
 
 - `docs/PR_Backlog/PR-ARCH-MVP-001-v2.6-Canon-Amendment.md`
+- `docs/PR_Backlog/PR-MVP-010-Test-Harness-Recovery.md`
 
 `PR-ARCH-MVP-001` is implemented and remains here until merge review/closeout.
-There is no approved open runtime PR at this update. Later PR IDs in the roadmap
-are planned placeholders until exact specs are written and approved.
+`PR-MVP-010` is approved as the only open implementation PR; it may change only
+the allowlisted test harness, CI, generated-state tracking, and synchronized
+documentation. Later PR IDs in the roadmap are planned placeholders until exact
+specs are written and approved.
 
 Completed recovery record:
 

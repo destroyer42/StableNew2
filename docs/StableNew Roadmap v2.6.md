@@ -2,7 +2,7 @@
 
 Status: **CURRENT AND ACTIVE**
 Owner: Rob
-Updated: 2026-09-05
+Updated: 2026-09-06
 Supersedes: all earlier active roadmap, mini-roadmap, and backlog ordering claims
 
 ## 0. Roadmap authority
@@ -115,7 +115,7 @@ rewrite the existing branches.
 | 0 | `PR-ARCH-MVP-001` | **Implemented; merge review pending** | Reconciled canon committed as `45b8d07` and carried to recovery as `14d1071` |
 | 1 | `PR-MVP-000` | **Completed** | Recoverable clean baseline with all production source tracked and independently verified |
 | 2 | `PR-MVP-005` | **Completed** | 115 later changed-file occurrences classified into 17 binding dispositions without runtime adoption |
-| 3 | `PR-MVP-010` | Planned | Trustworthy clean-checkout collection and isolated test harness |
+| 3 | `PR-MVP-010` | **Approved; next** | One strict pytest authority, clean collection, positive smoke allowlist, isolated state, and removal of tracked probe debris |
 | 4 | `PR-MVP-020` | Planned | Reduced immutable NJR and complete versioned serialization |
 | 5 | `PR-MVP-030` | Planned | Typed compilers and NJR-only JobService submission contract |
 | 6 | `PR-MVP-040` | Planned | SQLite JobRepository with verified offline legacy import |
@@ -126,8 +126,8 @@ rewrite the existing branches.
 | 11 | `PR-MVP-090` | Planned | Clean-machine release candidate and signed acceptance record |
 
 `PR-ARCH-MVP-001` and `PR-MVP-000` were owner-approved and have been
-implemented. No later runtime PR is approved. Later rows require their own exact
-specs and owner approval.
+implemented. `PR-MVP-010` is the only approved open implementation PR. Later
+rows require their own exact specs and owner approval.
 
 ## 6. Phase details
 
@@ -190,9 +190,28 @@ Remove collection-time script behavior, isolate filesystem and runtime state,
 define test taxonomy/markers, establish deterministic fakes, and add architecture
 guards for repository completeness and the one execution path.
 
+Approved scope: delete the competing `pytest.ini` and consolidate strict marker,
+import, and exclusion policy in `pyproject.toml`; replace the exclusion-based
+2,413-test required command with an exact positive smoke list; make fake/no-WebUI
+behavior the default; redirect cache and log writes to temporary paths; make
+collection and smoke fail on repository pollution; remove three import-executed
+root scripts; untrack the machine-local WebUI cache; and delete the 30 tracked
+files under the five `tmp_prompt_pack_probe*` roots. The exact allowlist and
+acceptance gates are binding in
+`docs/PR_Backlog/PR-MVP-010-Test-Harness-Recovery.md`.
+
+Audit evidence: the active `pytest.ini` path collected 3,092 tests while warning
+that it ignored `pyproject.toml`. Forcing the stricter configuration collected
+3,141 tests but exposed three archive/quarantine import errors. The old required
+smoke selected 2,413 tests, failed after 87.70 seconds in legacy compatibility
+coverage, modified tracked `data/webui_cache.json`, created root `output/`, and
+ran backend emergency cleanup. These counts document the broken baseline; they
+are not future count assertions.
+
 Exit gate: `pytest --collect-only -q` succeeds in a disposable workspace; a
-small canonical smoke suite runs without network, GPU, GUI display, or mutation
-of tracked files.
+small positively selected canonical smoke suite runs without network, backend,
+GPU, GUI display, or mutation of tracked or untracked repository contents; the
+required CI matrix passes on Python 3.11 and 3.12.
 
 ### Phase 2 — Repair the core contract
 
@@ -358,7 +377,8 @@ and broad UI redesign do not block MVP.
 
 ## 10. Next action
 
-Generate and approve `PR-MVP-010` for trustworthy collection, test isolation,
-pytest configuration consolidation, and removal of the 30 tracked probe
-artifacts. Adopt no later runtime change outside the separately approved owner
-PR named in the completed disposition record.
+Commit the approved `PR-MVP-010` planning documents as one documentation-only
+commit, then execute the frozen specification on `recovery/mvp-baseline`.
+Record Python 3.11/3.12 clean-checkout evidence and close it before generating
+`PR-MVP-020`. Adopt no later runtime change outside the separately approved
+owner PR named in the completed disposition record.
