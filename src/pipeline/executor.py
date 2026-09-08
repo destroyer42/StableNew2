@@ -538,6 +538,7 @@ class Pipeline:
             thumbnail_path=thumbnail_path,
             input_image_path=input_image_path,
             artifact_type=artifact_type,
+            job_id=getattr(self, "_current_job_id", None),
         )
         return payload
 
@@ -4725,6 +4726,14 @@ class Pipeline:
                     final_positive=payload.get("prompt", enhanced_positive),
                     final_negative=payload.get("negative_prompt", enhanced_negative),
                 )
+
+            metadata = self._attach_manifest_artifact(
+                metadata=metadata,
+                stage="txt2img",
+                primary_path=image_path,
+                manifest_path=saved_variants[0][0] if saved_variants else None,
+                output_paths=[str(path) for path in saved_paths],
+            )
 
             # Manifests already saved per-variant in the loop above
             self._record_stage_event("txt2img", "exit", 1, 1, False)

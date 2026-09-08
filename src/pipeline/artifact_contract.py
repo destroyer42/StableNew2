@@ -51,6 +51,7 @@ def build_artifact_record(
     manifest_path: str | None = None,
     thumbnail_path: str | None = None,
     input_image_path: str | None = None,
+    job_id: str | None = None,
 ) -> dict[str, Any]:
     outputs = _dedupe_paths(output_paths)
     primary = _coerce_path(primary_path)
@@ -65,6 +66,7 @@ def build_artifact_record(
         "manifest_path": _coerce_path(manifest_path),
         "thumbnail_path": _coerce_path(thumbnail_path),
         "input_image_path": _coerce_path(input_image_path),
+        "job_id": _coerce_path(job_id),
     }
 
 
@@ -166,6 +168,7 @@ def artifact_manifest_payload(
     thumbnail_path: Path | str | None = None,
     input_image_path: Path | str | None = None,
     artifact_type: str | None = None,
+    job_id: str | None = None,
 ) -> dict[str, Any]:
     primary_path = _coerce_path(image_or_output_path)
     stage_name = str(stage or "").strip() or "unknown"
@@ -177,6 +180,7 @@ def artifact_manifest_payload(
         manifest_path=_coerce_path(manifest_path),
         thumbnail_path=_coerce_path(thumbnail_path),
         input_image_path=_coerce_path(input_image_path),
+        job_id=_coerce_path(job_id),
     )
 
 
