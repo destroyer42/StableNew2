@@ -65,6 +65,15 @@ controller-surface, Ruff, mypy, isolated-collection, and required-smoke
 authorities. Each underlying script remains directly usable for diagnosis, and
 CI keeps separate steps for clear failure reporting.
 
+Before starting the sequence it preflights the obvious local prerequisites
+(Ruff, mypy, and pytest). Missing prerequisites are reported as a `TOOLING
+BLOCKER` before downstream gates run; a failing gate after preflight is reported
+as a `SOURCE/TEST FAILURE`. Reuse passing focused results while the relevant
+files are unchanged, and do not repeat expensive acceptance checks for docs-only
+changes. For phased PRs, use bounded implementation/proof, edge/lifecycle, and
+acceptance/closeout phases with a checkpoint between phases unless continuous
+execution is explicitly authorized.
+
 Use `python -m pytest -q <targets>` for focused changed behavior. Run
 real-backend acceptance only when the PR outcome requires it. Do not claim a
 full green suite when environment-dependent tests were not executed.

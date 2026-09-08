@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.util
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -16,18 +18,60 @@ GATE_STEPS = (
     ("required smoke", "tools/ci/run_required_smoke.py"),
 )
 
+TOOLING_BLOCKER_EXIT_CODE = 2
+REQUIRED_TOOL_MODULES = ("mypy", "pytest")
+
+
+def missing_required_tools() -> list[str]:
+    """Return obvious local tool prerequisites missing before the gate starts."""
+
+    missing = [
+        module
+        for module in REQUIRED_TOOL_MODULES
+        if importlib.util.find_spec(module) is None
+    ]
+    if shutil.which("ruff") is None:
+        missing.append("ruff")
+    return missing
+
+
+def preflight_tools() -> bool:
+    missing = missing_required_tools()
+    if not missing:
+        return True
+    print(
+        "TOOLING BLOCKER: missing local gate tool(s): "
+        + ", ".join(sorted(missing)),
+        file=sys.stderr,
+    )
+    print(
+        "Install the pinned tools or use the supported CI environment before "
+        "running the full PR gate.",
+        file=sys.stderr,
+    )
+    return False
+
 
 def main() -> int:
+    if not preflight_tools():
+        return TOOLING_BLOCKER_EXIT_CODE
     for label, relative_script in GATE_STEPS:
         print(f"==> {label}", flush=True)
-        completed = subprocess.run(
-            [sys.executable, str(ROOT / relative_script)],
-            cwd=ROOT,
-            check=False,
-        )
+        try:
+            completed = subprocess.run(
+                [sys.executable, str(ROOT / relative_script)],
+                cwd=ROOT,
+                check=False,
+            )
+        except OSError as exc:
+            print(
+                f"TOOLING BLOCKER while starting {label}: {exc}",
+                file=sys.stderr,
+            )
+            return TOOLING_BLOCKER_EXIT_CODE
         if completed.returncode:
             print(
-                f"PR gate FAILED at {label} (exit {completed.returncode})",
+                f"SOURCE/TEST FAILURE at {label} (exit {completed.returncode})",
                 file=sys.stderr,
             )
             return completed.returncode

@@ -94,6 +94,41 @@ but bounded), or **Architectural** (ambiguous or cross-boundary). PR planning
 maps that class to the currently appropriate model; repository policy does not
 hardcode model names.
 
+## Work budget and checkpoint discipline
+
+- Work only on the authorized phase and outcome. Fixing a blocker does not
+  authorize starting the next major phase.
+- A default Narrow/Standard budget is one focused discovery pass, one coherent
+  implementation pass, one focused repair pass, and one final verification.
+  A second materially different repair class requires a checkpoint/report.
+- Stop and checkpoint after two materially different failure classes; more than
+  two is a mandatory stop/report. Context compaction ends broad exploration on
+  the first Narrow/Standard compaction and requires a checkpoint/report on the
+  second. Architecture work requires owner continuation.
+- Around 12–15 minutes of ongoing Narrow/Standard work, prefer a coherent
+  checkpoint before more exploration; this is guidance, not a hard kill.
+- When the phase acceptance contract is true, stop. Do not begin another
+  roadmap item or PR without explicit authorization.
+- Do not rerun expensive passing validation unless relevant code changed.
+  Passing focused tests remain valid while their relevant files are unchanged;
+  docs-only changes do not require real-backend acceptance. A source change
+  affecting a validated path invalidates that result.
+- Use one practical local interpreter. Python 3.11/3.12 GitHub required CI is
+  the canonical compatibility verdict. Do not spend substantial time rebuilding
+  duplicate environments; one small tool install is acceptable when cheaper,
+  and should be reported.
+
+### Phased PRs and completion reports
+
+For a large approved PR, treat the specification as the acceptance contract:
+Phase A implements and proves the core slice, Phase B covers edge/lifecycle
+behavior, and Phase C performs real acceptance and closeout. Checkpoint, commit,
+and report between phases unless the owner explicitly authorizes continuous
+execution. A checkpoint or completion report should fit roughly 250 words and
+state: branch/SHA (or preserved uncommitted work), phase complete, tests passed,
+exact blocker, next smallest coherent phase, and whether continuation exceeds
+the normal budget.
+
 ## Code ownership boundaries
 
 - `src/gui/` owns Tk presentation and event wiring.
