@@ -452,8 +452,22 @@ class QueuePanelV2(ttk.Frame):
         # PR-GUI-F3: Send Job - enabled if queue has jobs and not currently running a job
         # Also respects pause state (controller handles actual pause blocking)
         running_job = getattr(self.app_state, "running_job", None) if self.app_state else None
-        can_send = has_queued_jobs and running_job is None and not self._is_queue_paused
+        can_send = self._can_send_job(
+            has_queued_jobs=has_queued_jobs,
+            running_job=running_job,
+            is_queue_paused=self._is_queue_paused,
+        )
         self.send_job_button.state(["!disabled"] if can_send else ["disabled"])
+
+    @staticmethod
+    def _can_send_job(
+        *,
+        has_queued_jobs: bool,
+        running_job: Any | None,
+        is_queue_paused: bool,
+    ) -> bool:
+        """Return whether manual dispatch is currently available."""
+        return bool(has_queued_jobs) and running_job is None and not bool(is_queue_paused)
 
     def _on_move_up(self) -> None:
         """Move the selected job up in the queue with visual feedback."""

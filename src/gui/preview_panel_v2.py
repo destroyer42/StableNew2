@@ -845,24 +845,30 @@ class PreviewPanelV2(ttk.Frame):
         preview_jobs: list[NormalizedJobRecord] | None = None,
     ) -> None:
         """Enable/disable action buttons based on draft content."""
-        has_draft = False
-        packs = []
-        packs: list[Any] = []
-        has_parts = False
-        if job_draft is not None:
-            packs = getattr(job_draft, "packs", [])
-            part_summary = getattr(job_draft, "summary", None)
-            has_parts = bool(getattr(part_summary, "part_count", 0))
-            has_draft = bool(packs) or has_parts
-        has_preview = bool(preview_jobs) and has_draft
+        packs = getattr(job_draft, "packs", []) if job_draft is not None else []
         logger.debug(
-            f"[PreviewPanel] _update_action_states: packs={len(packs)}, has_parts={has_parts}, has_draft={has_draft}"
+            "[PreviewPanel] _update_action_states: packs=%d, can_queue=%s",
+            len(packs),
+            self._can_add_to_queue(job_draft, preview_jobs),
         )
-        can_queue = has_draft and has_preview
+        can_queue = self._can_add_to_queue(job_draft, preview_jobs)
         state = ["!disabled"] if can_queue else ["disabled"]
         logger.debug(f"[PreviewPanel] Setting button state to: {state}")
         self.add_to_queue_button.state(state)
         self.clear_draft_button.state(state)
+
+    @staticmethod
+    def _can_add_to_queue(
+        job_draft: Any | None,
+        preview_jobs: list[NormalizedJobRecord] | None,
+    ) -> bool:
+        """Return whether the current draft has a fresh, queueable preview."""
+        if job_draft is None or not preview_jobs:
+            return False
+        packs = getattr(job_draft, "packs", [])
+        part_summary = getattr(job_draft, "summary", None)
+        has_parts = bool(getattr(part_summary, "part_count", 0))
+        return bool(packs) or has_parts
     def _show_preview_details(self) -> None:
         """Display a detailed breakdown of what will be queued."""
         if not self._job_summaries and not self.app_state:
