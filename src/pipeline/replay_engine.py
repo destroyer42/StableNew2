@@ -187,6 +187,9 @@ class ReplayEngine:
                 ]
                 existing.append(checkpoint)
                 execution_metadata.stage_checkpoints = existing[-10:]
+                persist = getattr(job, "_persist_runtime_state", None)
+                if callable(persist):
+                    persist()
 
         if checkpoint_callback is not None:
             try:

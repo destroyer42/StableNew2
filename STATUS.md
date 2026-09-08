@@ -19,11 +19,12 @@ the working tree wholesale.
 
 ## Product state
 
-StableNew has a verified queue-first NJR/runner spine and trustworthy bounded CI
-gates. The immutable NJR and source-specific submission boundary are complete.
-It is not yet an MVP: queue/history persistence has not converged on SQLite,
-PromptPack storage still has paired-file assumptions, and the image/video
-vertical slices lack clean-machine real-backend acceptance.
+StableNew has a verified queue-first NJR/runner spine, trustworthy bounded CI
+gates, and one transactional SQLite authority for job lifecycle state. Queue
+and history are repository projections, and legacy JSON/JSONL state has an
+offline backup-first importer. It is not yet an MVP: PromptPack storage still
+has paired-file assumptions, and the image/video vertical slices lack
+clean-machine real-backend acceptance.
 
 ## Runtime invariants
 
@@ -38,31 +39,27 @@ vertical slices lack clean-machine real-backend acceptance.
 
 ## Current work
 
-Repository convergence and simplification are complete. New work starts from
-`main` on one short-lived outcome branch. The next outcome is transactional job
-persistence; do not revive the recovery, hygiene, or QOL branches as alternate
-sources of truth.
+Repository convergence, simplification, and transactional job persistence are
+complete. New work starts from `main` on one short-lived outcome branch. The
+next outcome is one-file PromptPack convergence; do not revive the recovery,
+hygiene, or QOL branches as alternate sources of truth.
 
 ## Highest-value debt
 
-1. JSON/JSONL queue and history stores still compete with the target SQLite
-   repository authority.
-2. PromptPack native storage has remaining paired TXT/JSON assumptions.
-3. The image create-to-replay journey lacks recorded real-WebUI acceptance.
-4. Legacy CLI/compatibility and migration tests still assert pre-cutover NJR
+1. PromptPack native storage has remaining paired TXT/JSON assumptions.
+2. The image create-to-replay journey lacks recorded real-WebUI acceptance.
+3. Legacy CLI/compatibility and superseded JSON migration tests assert pre-cutover NJR
    fields and payload shapes; the broad suite is therefore not green.
-5. Ruff still has a bounded legacy baseline; repository-wide mypy is not clean.
+4. Ruff still has a bounded legacy baseline; repository-wide mypy is not clean.
 
 ## Now / next / later
 
 **Now / Next**
 
-- `PR-MVP-040`: implement transactional SQLite `JobRepository` plus a
-  backup-first, dry-run-capable, idempotent legacy importer.
+- `PR-MVP-050`: converge PromptPack native storage on one versioned JSON file.
 
 **Later**
 
-- `PR-MVP-050`: one-file JSON PromptPack convergence.
 - `PR-MVP-060`: reliable image create/queue/run/artifact/history/replay slice.
 - `PR-MVP-070`: native SVD XT product slice and hardware preflight.
 - `PR-MVP-080`: operator UX, setup, diagnostics, and bounded lint cleanup.
@@ -72,18 +69,17 @@ sources of truth.
 
 Latest verified baseline for the converged product state:
 
-- repository completeness: 429 tracked Python source files;
-- strict collection: 3,086 tests plus 2 optional-OpenCV module skips on the
+- repository completeness: pending final staged-tree verification for this branch;
+- strict collection: 3,019 tests plus 2 optional-OpenCV module skips on the
   supported Python 3.11 and 3.12 environments;
-- required smoke: 74 passing on Python 3.11 and 3.12;
+- required smoke: 87 passing on Python 3.11 and 3.12;
 - bounded mypy smoke: passing;
-- Ruff 0.14.9 baseline: 1,859 findings against a maximum of 2,208.
+- Ruff 0.14.9 baseline: 1,842 findings against a maximum of 2,208.
 
-A Python 3.11 broad diagnostic stopped at the configured first 10 failures
-after 215 passes and 2 optional-OpenCV skips. The same tests and failure modes
-occurred at both the pre-hygiene recovery baseline and the hygiene baseline.
-They are legacy CLI/compatibility/migration expectations that predate the typed
-NJR cutover and are not part of the required green gate.
+The focused repository, queue, history, and migration sweep passes 125 tests.
+Superseded JSON/JSONL persistence and pre-NJR compatibility tests were removed
+or rewritten against the current repository contract. A repository-wide test
+run was not used as an acceptance gate for this bounded PR.
 
 The local WebUI image path has completed a fixed-seed queue-to-runner smoke.
 Occasional runner stalls and queue errors have been observed outside that

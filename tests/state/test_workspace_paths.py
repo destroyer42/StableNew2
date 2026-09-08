@@ -12,7 +12,6 @@ import pytest
 
 from src.state.workspace_paths import WorkspacePaths, workspace_paths
 
-
 # ---------------------------------------------------------------------------
 # Default instance smoke tests
 # ---------------------------------------------------------------------------
@@ -75,6 +74,7 @@ class TestPathStructure:
     def test_state_file_helpers_resolve_under_state_dir(self, wp, tmp_path):
         expected = (tmp_path / "state").resolve()
         assert wp.queue_state().parent == expected
+        assert wp.job_repository().parent == expected
         assert wp.ui_state().parent == expected
         assert wp.sidebar_state().parent == expected
         assert wp.preview_panel_state().parent == expected
@@ -84,6 +84,7 @@ class TestPathStructure:
 
     def test_state_file_helpers_use_canonical_filenames(self, wp):
         assert wp.queue_state().name == "queue_state_v2.json"
+        assert wp.job_repository().name == "jobs.sqlite3"
         assert wp.ui_state().name == "ui_state.json"
         assert wp.sidebar_state().name == "sidebar_state.json"
         assert wp.preview_panel_state().name == "preview_panel_state.json"
@@ -135,6 +136,7 @@ class TestDirectoryCreation:
 
         paths = [
             wp.queue_state(),
+            wp.job_repository(),
             wp.ui_state(),
             wp.sidebar_state(),
             wp.preview_panel_state(),
@@ -191,9 +193,9 @@ class TestLearningPathsConsistency:
 
     def test_learning_paths_constants_are_absolute(self):
         from src.learning.learning_paths import (
-            CANONICAL_LEARNING_RECORDS_PATH,
-            CANONICAL_LEARNING_EXPERIMENTS_ROOT,
             CANONICAL_DISCOVERED_EXPERIMENTS_ROOT,
+            CANONICAL_LEARNING_EXPERIMENTS_ROOT,
+            CANONICAL_LEARNING_RECORDS_PATH,
         )
         assert CANONICAL_LEARNING_RECORDS_PATH.is_absolute()
         assert CANONICAL_LEARNING_EXPERIMENTS_ROOT.is_absolute()
@@ -201,9 +203,9 @@ class TestLearningPathsConsistency:
 
     def test_learning_paths_match_workspace_paths(self):
         from src.learning.learning_paths import (
-            CANONICAL_LEARNING_RECORDS_PATH,
-            CANONICAL_LEARNING_EXPERIMENTS_ROOT,
             CANONICAL_DISCOVERED_EXPERIMENTS_ROOT,
+            CANONICAL_LEARNING_EXPERIMENTS_ROOT,
+            CANONICAL_LEARNING_RECORDS_PATH,
         )
         assert CANONICAL_LEARNING_RECORDS_PATH == workspace_paths.learning_records(
             create_parent=False

@@ -4,22 +4,10 @@ from __future__ import annotations
 
 import time
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.queue.job_model import Job, JobStatus
+from src.queue.job_model import JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
-
-
-def _record(job_id: str) -> NormalizedJobRecord:
-    return NormalizedJobRecord(
-        job_id=job_id,
-        config={"prompt": "p", "model": "m"},
-        path_output_dir="output",
-        filename_template="{seed}",
-        seed=1,
-        positive_prompt="p",
-        base_model="m",
-    )
+from tests.helpers.njr_factory import make_queue_job
 
 
 def test_single_node_runner_executes_jobs_and_updates_status():
@@ -31,12 +19,8 @@ def test_single_node_runner_executes_jobs_and_updates_status():
         return {"job": job.job_id, "status": "done"}
 
     runner = SingleNodeJobRunner(queue, _run, poll_interval=0.01)
-    job_one = Job(job_id="j1")
-    job_one._normalized_record = _record("j1")
-    job_one.snapshot = {"normalized_job": job_one._normalized_record.to_queue_snapshot()}
-    job_two = Job(job_id="j2")
-    job_two._normalized_record = _record("j2")
-    job_two.snapshot = {"normalized_job": job_two._normalized_record.to_queue_snapshot()}
+    job_one = make_queue_job("j1")
+    job_two = make_queue_job("j2")
     queue.submit(job_one)
     queue.submit(job_two)
 

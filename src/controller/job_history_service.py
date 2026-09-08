@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import replace
-import json
 from pathlib import Path
 from typing import Any
 
@@ -17,8 +17,8 @@ from src.pipeline.job_models_v2 import JobView
 from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
-from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 from src.utils.image_metadata import build_payload_from_manifest, extract_embedded_metadata
+from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 
 class JobHistoryService:
@@ -50,18 +50,12 @@ class JobHistoryService:
                 continue
 
     def record(self, job: Job, *, result: dict | None = None) -> None:
-        try:
-            entry = self._build_entry(job, status=JobStatus.COMPLETED, result=result)
-            self._history.save_entry(entry)
-        except Exception:
-            pass
+        entry = self._build_entry(job, status=JobStatus.COMPLETED, result=result)
+        self._history.save_entry(entry)
 
     def record_failure(self, job: Job, error: str | None = None) -> None:
-        try:
-            entry = self._build_entry(job, status=JobStatus.FAILED, error=error)
-            self._history.save_entry(entry)
-        except Exception:
-            pass
+        entry = self._build_entry(job, status=JobStatus.FAILED, error=error)
+        self._history.save_entry(entry)
 
     def list_active_jobs(self, visibility_mode: str | None = None) -> list[JobView]:
         active_statuses = {JobStatus.QUEUED, JobStatus.RUNNING}
@@ -139,10 +133,11 @@ class JobHistoryService:
         if original is None:
             return None
 
-        submit = getattr(self._job_controller, "submit_pipeline_run", None)
-        if callable(submit):
+        replay = getattr(self._job_controller, "replay", None)
+        record = getattr(original, "_normalized_record", None)
+        if callable(replay) and record is not None:
             try:
-                return submit(original.payload, priority=original.priority)
+                return replay(record)
             except Exception:
                 return None
         return None

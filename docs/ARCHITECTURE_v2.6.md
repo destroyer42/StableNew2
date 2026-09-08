@@ -258,7 +258,7 @@ implemented:
 | NJR scope | **Closed 2026-09-07** | `NormalizedJobRecord` is a frozen eight-field value; nested JSON is recursively frozen; canonical serialization is complete; explicit legacy reads discard lifecycle and output facts; builders, replay, snapshots, services, and runner no longer mutate NJR | `PR-MVP-020` |
 | Source identity | **Closed 2026-09-07** | All enabled source families emit complete NJRs; only `source.kind == "prompt_pack"` carries PromptPack identity, while replay, reprocess, learning, SVD, video, and training preserve their typed source metadata | `PR-MVP-030` |
 | Submission DTO | **Closed 2026-09-07** | `JobService.submit_njrs(records, policy)` is the fresh submission boundary; the pack-shaped `PipelineRunRequest`, generic builder branch, and callback-heavy preview adapter are removed | `PR-MVP-030` |
-| Persistence | Open | Queue/history have multiple JSON/JSONL-era stores rather than one SQLite repository | `PR-MVP-040` |
+| Persistence | **Closed 2026-09-07** | `JobRepository` transactionally owns immutable NJR snapshots and mutable lifecycle state in SQLite; queue/history are projections; restart requeues interrupted work explicitly; the offline importer is dry-run, backup-first, idempotent, conflict-reporting, validated, and rollback-rehearsed | `PR-MVP-040` |
 | PromptPack format | Open | Paired TXT/JSON assumptions remain in docs/code/tests despite unified JSON behavior | `PR-MVP-050` |
 | Test truth | **Closed 2026-09-06** | One strict pytest authority, isolated collection/smoke runners, a positive required list, and a Ruff 0.14.9 non-increasing baseline gate pass on supported interpreters | `PR-MVP-010` |
 | Video scope | Open | Several video paths exist; only native SVD XT is selected for MVP | `PR-MVP-070` |

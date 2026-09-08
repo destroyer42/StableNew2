@@ -284,9 +284,8 @@ class TestQueuedModeExecution:
 
         job_service.submit_queued(job)
 
-        # Job is in queue
-        jobs = job_queue.list_jobs()
-        assert any(j.job_id == "queued-001" for j in jobs)
+        # The repository retains the job even if the worker completes before inspection.
+        assert job_queue.get_job("queued-001") is not None
 
     def test_queued_mode_starts_runner(
         self,

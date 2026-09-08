@@ -19,6 +19,8 @@ will be wired in later via a PipelineRunner abstraction.
 
 from __future__ import annotations
 
+import json
+import logging
 import os
 import subprocess
 import sys
@@ -26,7 +28,7 @@ import tempfile
 import threading
 import time
 import traceback
-import json
+import uuid
 from collections.abc import Callable, Iterable, Mapping
 from copy import deepcopy
 from dataclasses import dataclass, field, replace
@@ -47,39 +49,18 @@ from src.api.webui_resource_service import (
     normalize_resource_map,
 )
 from src.api.webui_resources import WebUIResource
-from src.controller.webui_connection_controller import (
-    WebUIConnectionController,
-    WebUIConnectionState,
+from src.app.optional_dependency_probes import OptionalDependencySnapshot
+from src.config.app_config import (
+    get_jsonl_log_config,
+    is_debug_shutdown_inspector_enabled,
+    set_webui_autostart_enabled,
+    set_webui_health_initial_timeout_seconds,
+    set_webui_health_retry_count,
+    set_webui_health_retry_interval_seconds,
+    set_webui_health_total_timeout_seconds,
+    set_webui_workdir,
 )
 from src.contracts import PackJobEntry
-from src.gui.dropdown_loader_v2 import DropdownLoader
-from src.curation.curation_manifest import build_review_chunk_lineage_block
-from src.pipeline.last_run_store_v2_5 import (
-    LastRunStoreV2_5,
-    current_config_to_last_run,
-    update_current_config_from_last_run,
-)
-from src.pipeline.config_contract_v26 import (
-    validate_svd_native_execution_config,
-    validate_train_lora_execution_config,
-)
-from src.controller.submission_policy_v26 import SubmissionPolicy
-from src.pipeline.training_njr_compiler import TrainingIntent, compile_training_intent
-from src.pipeline.reprocess_builder import (
-    ImageEditSpec,
-    ReprocessEffectiveSettingsPreview,
-    ReprocessJobBuilder,
-    ReprocessSourceItem,
-    extract_reprocess_output_paths,
-)
-from src.pipeline.pipeline_runner import normalize_run_result
-from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
-from src.controller.app_controller_services.learning_completion_router import (
-    build_learning_completion_handler,
-)
-from src.controller.ports.default_runtime_ports import DefaultImageRuntimePorts
-from src.controller.ports.runtime_ports import ImageRuntimePorts
-from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.controller.app_controller_services.application_runtime_coordinator import (
     ApplicationRuntimeCoordinator,
 )
@@ -90,46 +71,64 @@ from src.controller.app_controller_services.diagnostics_coordinator import (
     DiagnosticsCoordinator,
 )
 from src.controller.app_controller_services.gui_config_service import GuiConfigService
+from src.controller.app_controller_services.learning_completion_router import (
+    build_learning_completion_handler,
+)
 from src.controller.app_controller_services.run_submission_service import (
     QueueRunSubmissionService,
 )
 from src.controller.app_controller_services.runtime_projection_coordinator import (
     RuntimeProjectionCoordinator,
 )
-from src.app.optional_dependency_probes import OptionalDependencySnapshot
-import logging
-import uuid
-
-from src.config.app_config import (
-    get_jsonl_log_config,
-    is_debug_shutdown_inspector_enabled,
-    set_webui_autostart_enabled,
-    set_webui_health_initial_timeout_seconds,
-    set_webui_health_retry_count,
-    set_webui_health_retry_interval_seconds,
-    set_webui_health_total_timeout_seconds,
-    set_webui_workdir,
-    set_job_history_path,
-)
+from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
+from src.controller.ports.default_runtime_ports import DefaultImageRuntimePorts
+from src.controller.ports.runtime_ports import ImageRuntimePorts
 from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
     ProcessAutoScannerService,
 )
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
+from src.controller.submission_policy_v26 import SubmissionPolicy
+from src.controller.webui_connection_controller import (
+    WebUIConnectionController,
+    WebUIConnectionState,
+)
+from src.curation.curation_manifest import build_review_chunk_lineage_block
 from src.gui.app_state_projection_sink import AppStateProjectionSink
 from src.gui.app_state_v2 import AppStateV2
+from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
+from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.learning.model_profiles import get_model_profile_defaults_for_model
 from src.photo_optimize import get_photo_optimize_store
-from src.queue.job_history_store import JSONLJobHistoryStore
+from src.pipeline.config_contract_v26 import (
+    validate_svd_native_execution_config,
+    validate_train_lora_execution_config,
+)
+from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
+from src.pipeline.last_run_store_v2_5 import (
+    LastRunStoreV2_5,
+    current_config_to_last_run,
+    update_current_config_from_last_run,
+)
+from src.pipeline.pipeline_runner import normalize_run_result
+from src.pipeline.reprocess_builder import (
+    ImageEditSpec,
+    ReprocessEffectiveSettingsPreview,
+    ReprocessJobBuilder,
+    ReprocessSourceItem,
+    extract_reprocess_output_paths,
+)
+from src.pipeline.training_njr_compiler import TrainingIntent, compile_training_intent
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
+from src.queue.job_repository import JobRepository
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.services.duration_stats_service import DurationStatsService
 from src.state.output_routing import OUTPUT_ROUTE_MOVIE_CLIPS, get_output_route_root
+from src.state.workspace_paths import workspace_paths
 from src.utils import (
     InMemoryLogHandler,
     LogContext,
@@ -147,14 +146,14 @@ from src.utils.error_envelope_v2 import (
     serialize_envelope,
     wrap_exception,
 )
-from src.utils.thread_registry import get_thread_registry
 from src.utils.file_io import load_image_to_base64, read_prompt_pack
-from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils.process_inspector_v2 import (
     collect_process_risk_snapshot,
     format_process_brief,
     iter_stablenew_like_processes,
 )
+from src.utils.prompt_packs import PromptPackInfo, discover_packs
+from src.utils.thread_registry import get_thread_registry
 
 logger = logging.getLogger(__name__)
 
@@ -498,14 +497,16 @@ class AppController:
         self._cancel_token: CancelToken | None = None
         self._worker_thread: threading.Thread | None = None
         self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
-        history_path = Path("runs") / "job_history.json"
+        repository_path = workspace_paths.job_repository()
         if os.environ.get("PYTEST_CURRENT_TEST"):
-            history_path = (
+            repository_path = (
                 Path(tempfile.gettempdir())
-                / f"job_history_{os.getpid()}_{uuid.uuid4().hex}.json"
+                / f"stablenew_jobs_{os.getpid()}_{uuid.uuid4().hex}.sqlite3"
             )
-            set_job_history_path(str(history_path))
-        self._job_history_path = history_path
+        self._job_repository_path = repository_path
+        # Transitional attribute name retained for diagnostics/tests; the value
+        # now identifies SQLite, never a live JSON history file.
+        self._job_history_path = repository_path
         self._duration_stats_service = None
         self._last_diagnostics_bundle: Path | None = None
         self._last_diagnostics_bundle_reason: str | None = None
@@ -571,8 +572,8 @@ class AppController:
                 self._append_log(f"[duration_stats] Initial refresh failed: {exc}")
         
         # PR-LEARN-012: Initialize LearningExecutionController (NEW implementation)
-        from src.learning.execution_controller import LearningExecutionController
         from src.gui.learning_state import LearningState
+        from src.learning.execution_controller import LearningExecutionController
         
         # Initialize learning state if not exists
         if not hasattr(self, '_learning_state'):
@@ -710,16 +711,18 @@ class AppController:
         except Exception as e:
             logger.error(f"[controller] shutdown(): Error shutting down persistence worker: {e}")
         
-        # PR-SHUTDOWN-001: Shutdown history store background writer
-        logger.info("[controller] shutdown(): Shutting down history store writer...")
+        logger.info("[controller] shutdown(): Closing job repository...")
         if self.job_service:
             history_store = getattr(self.job_service, "history_store", None)
-            if history_store and hasattr(history_store, "shutdown"):
+            close_store = getattr(history_store, "close", None) or getattr(
+                history_store, "shutdown", None
+            )
+            if callable(close_store):
                 try:
-                    history_store.shutdown()
-                    logger.info("[controller] shutdown(): History store writer shut down")
+                    close_store()
+                    logger.info("[controller] shutdown(): Job repository closed")
                 except Exception as e:
-                    logger.error(f"[controller] shutdown(): Error shutting down history store: {e}")
+                    logger.error(f"[controller] shutdown(): Error closing job repository: {e}")
         
         # PR-THREAD-001: Join all tracked threads
         logger.info("[controller] shutdown(): Joining all tracked threads...")
@@ -1091,8 +1094,8 @@ class AppController:
         return 0
 
     def _queue_runtime_status_update(self, runtime_status: Any) -> None:
-        import time
         import threading
+        import time
 
         if not hasattr(self, "_runtime_status_lock"):
             self._runtime_status_lock = threading.Lock()
@@ -1272,6 +1275,7 @@ class AppController:
             SDWebUIClient configured with discovered or default URL
         """
         import logging
+
         from src.utils.webui_discovery import find_webui_api_port
         
         logger = logging.getLogger(__name__)
@@ -2748,14 +2752,13 @@ class AppController:
         )
 
     def _build_job_service(self) -> JobService:
-        self._job_history_path.parent.mkdir(parents=True, exist_ok=True)
-        history_store = JSONLJobHistoryStore(self._job_history_path)
-        job_queue = JobQueue(history_store=history_store)
-        history_service = JobHistoryService(job_queue, history_store)
+        repository = JobRepository(self._job_repository_path)
+        job_queue = JobQueue(repository=repository)
+        history_service = JobHistoryService(job_queue, repository)
         return JobService(
             job_queue,
             runner_factory=self._single_node_runner_factory,
-            history_store=history_store,
+            history_store=repository,
             history_service=history_service,
             run_callable=self._execute_job,
             job_lifecycle_logger=self._job_lifecycle_logger,
@@ -5949,7 +5952,11 @@ class AppController:
         Returns:
             StageOverrideFlags instance for use with ConfigMergerV2.merge_pipeline().
         """
-        from src.pipeline.config_merger_v2 import StageOverrideFlags, ConfigMergerV2, StageOverridesBundle
+        from src.pipeline.config_merger_v2 import (
+            ConfigMergerV2,
+            StageOverrideFlags,
+            StageOverridesBundle,
+        )
         
         enabled = self.override_pack_config_enabled
         return StageOverrideFlags(
@@ -6504,13 +6511,13 @@ class AppController:
     def _build_stage_overrides_from_current_config(self, current_config: dict[str, Any]) -> StageOverridesBundle:
         """Build a StageOverridesBundle from the current GUI stage configurations."""
         from src.pipeline.config_merger_v2 import (
+            ADetailerOverrides,
+            HiresOverrides,
+            Img2ImgOverrides,
+            RefinerOverrides,
             StageOverridesBundle,
             Txt2ImgOverrides,
-            Img2ImgOverrides,
             UpscaleOverrides,
-            RefinerOverrides,
-            HiresOverrides,
-            ADetailerOverrides,
         )
 
         def _first_defined(*values: Any) -> Any:
@@ -7072,8 +7079,9 @@ class AppController:
         thread when finished.
         """
         from pathlib import Path as _Path
-        from src.video.movie_clip_service import MovieClipService
+
         from src.video.movie_clip_models import ClipRequest, ClipSettings
+        from src.video.movie_clip_service import MovieClipService
 
         def _worker() -> None:
             try:

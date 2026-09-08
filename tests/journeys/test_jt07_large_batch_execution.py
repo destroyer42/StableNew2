@@ -15,22 +15,22 @@ Key Validations:
 
 from __future__ import annotations
 
-from datetime import datetime
-import math
 import logging
+import math
 import tempfile
 import time
+from datetime import datetime
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from src.pipeline import last_run_store_v2_5
 from src.pipeline.job_models_v2 import RuntimeJobStatus, UnifiedJobSummary
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
+from src.services import ui_state_store
 from src.services.persistence_worker import get_persistence_worker
-from src.services import queue_store_v2, ui_state_store
-from src.pipeline import last_run_store_v2_5
 from src.utils.thread_registry import get_thread_registry
 from tests.helpers.factories import update_current_config
 from tests.helpers.gui_harness import pipeline_harness
@@ -189,7 +189,6 @@ class TestJT07LargeBatchExecution:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             root.mkdir(parents=True, exist_ok=True)
-            monkeypatch.setattr(queue_store_v2, "DEFAULT_QUEUE_STATE_PATH", root / "queue_state_v2.json")
             monkeypatch.setattr(ui_state_store, "UI_STATE_PATH", root / "ui_state.json")
             monkeypatch.setattr(ui_state_store, "_global_store", None)
             monkeypatch.setattr(last_run_store_v2_5, "LAST_RUN_PATH", root / "last_run_v2_5.json")
@@ -285,53 +284,3 @@ class TestJT07LargeBatchExecution:
                 large_metrics["p95_ms"],
                 large_metrics["max_ms"],
             )
-
-    def test_jt07_history_writer_thread_shutdown(self, app_root):
-        """Test history writer thread shuts down cleanly.
-        
-        Scenario: Start app, append some history, shutdown, verify clean termination.
-        
-        Assertions:
-        - Writer thread starts on init
-        - Writer thread processes appends correctly
-        - Writer thread terminates cleanly on shutdown
-        - No pending operations lost
-        """
-        history_store_path = app_root / "job_history.jsonl"
-        from src.queue.job_history_store import JSONLJobHistoryStore
-
-        worker = get_persistence_worker()
-        writer_thread = getattr(worker, "_worker_thread", None)
-        assert writer_thread is not None, "Persistence worker thread should exist"
-        assert writer_thread.is_alive(), "Persistence worker thread should be alive"
-        initial_completed = worker.get_stats()["completed"]
-
-        history_store = JSONLJobHistoryStore(history_store_path)
-
-        logger.info(f"Writer thread running: {writer_thread.name}")
-
-        for i in range(5):
-            record = JobHistoryEntry(
-                job_id=f"test-{i}",
-                created_at=datetime.utcnow(),
-                status=JobStatus.COMPLETED,
-            )
-            history_store.save_entry(record)
-
-        deadline = time.time() + 2.0
-        while time.time() < deadline:
-            entries = history_store.list_jobs(limit=10)
-            stats = worker.get_stats()
-            if (
-                len([entry for entry in entries if entry.job_id.startswith("test-")]) == 5
-                and stats["completed"] >= initial_completed + 5
-            ):
-                break
-            time.sleep(0.05)
-
-        entries = history_store.list_jobs(limit=10)
-        assert len([entry for entry in entries if entry.job_id.startswith("test-")]) == 5
-        stats = worker.get_stats()
-        assert stats["completed"] >= initial_completed + 5
-
-        logger.info("History writer path completed cleanly")

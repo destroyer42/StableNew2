@@ -15,7 +15,9 @@ from typing import Any
 
 from src.api.webui_process_manager import get_global_webui_process_manager
 from src.config.app_config import get_jsonl_log_config
-from src.services.queue_store_v2 import get_queue_state_path
+from src.queue.job_repository import JobRepository
+from src.state.workspace_paths import workspace_paths
+from src.utils.image_metadata import decode_payload, read_image_metadata
 from src.utils.logger import InMemoryLogHandler
 from src.utils.process_inspector_v2 import (
     collect_gpu_snapshot,
@@ -23,7 +25,6 @@ from src.utils.process_inspector_v2 import (
     iter_stablenew_like_processes,
 )
 from src.utils.system_info_v2 import collect_system_snapshot
-from src.utils.image_metadata import decode_payload, read_image_metadata
 
 """Utilities for building diagnostics crash bundles."""
 
@@ -382,13 +383,14 @@ def _include_image_metadata(zf: zipfile.ZipFile, image_roots: list[Path] | None)
 
 
 def _include_queue_state(zf: zipfile.ZipFile) -> None:
-    queue_state_path = get_queue_state_path()
-    if not queue_state_path.exists():
+    repository_path = workspace_paths.job_repository()
+    if not repository_path.exists():
         return
     try:
-        payload = json.loads(queue_state_path.read_text(encoding="utf-8"))
+        rows = JobRepository.read_diagnostics_projection(repository_path)
+        payload = {"source": "JobRepository", "jobs": rows}
     except Exception:
-        logger.debug("Failed to include queue state in diagnostics bundle", exc_info=True)
+        logger.debug("Failed to include repository queue projection", exc_info=True)
         return
     zf.writestr("runtime/queue_state.json", json.dumps(_anonymize(payload), indent=2))
 

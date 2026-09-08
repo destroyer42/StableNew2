@@ -3,18 +3,19 @@
 from datetime import datetime, timedelta
 
 from src.history.duration_stats import DurationStats
-from src.queue.job_history_store import JobHistoryEntry, JSONLJobHistoryStore
-from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_history_store import JobHistoryEntry
+from src.queue.job_model import JobStatus
+from src.queue.job_repository import JobRepository
+from tests.helpers.njr_factory import make_queue_job
 
 
 def test_end_to_end_job_timing_flow(tmp_path):
     """Test complete flow: job submission → execution → history with timing."""
     # Setup
-    history_store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
+    history_store = JobRepository(tmp_path / "jobs.sqlite3")
 
     # Create and submit a job
-    job = Job(job_id="integration-test-job", priority=JobPriority.NORMAL)
-    job.snapshot = {"normalized_job": {"job_id": "integration-test-job"}}
+    job = make_queue_job("integration-test-job")
 
     # Record submission
     history_store.record_job_submission(job)
@@ -71,8 +72,8 @@ def test_duration_stats_handles_large_history():
 
 def test_job_timing_edge_case_very_fast_completion(tmp_path):
     """Test jobs that complete in <1ms."""
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    job = Job(job_id="fast-job", priority=JobPriority.NORMAL)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    job = make_queue_job("fast-job")
 
     store.record_job_submission(job)
 
@@ -92,8 +93,8 @@ def test_job_timing_edge_case_very_fast_completion(tmp_path):
 
 def test_job_timing_edge_case_long_running(tmp_path):
     """Test jobs running for extended periods (days)."""
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    job = Job(job_id="long-job", priority=JobPriority.NORMAL)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    job = make_queue_job("long-job")
 
     store.record_job_submission(job)
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from dataclasses import asdict
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -12,6 +11,7 @@ from src.controller.job_execution_controller import JobExecutionController
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.queue.job_model import Job, JobPriority
 from src.utils.error_envelope_v2 import wrap_exception
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def _make_job(job_id: str) -> Job:
@@ -114,11 +114,8 @@ def test_run_job_callback_resumes_from_checkpoint_after_retry(tmp_path: Path) ->
 
     controller = JobExecutionController(replay_runner=_ResumeRunner())
     job = _make_job("resume-job")
-    record = NormalizedJobRecord(
+    record = make_pipeline_njr(
         job_id="resume-job",
-        config={"prompt": "castle"},
-        path_output_dir="output",
-        filename_template="{seed}",
         prompt_pack_id="pack-1",
         prompt_pack_name="Pack 1",
         positive_prompt="castle",
@@ -128,8 +125,9 @@ def test_run_job_callback_resumes_from_checkpoint_after_retry(tmp_path: Path) ->
             StageConfig(stage_type="upscale", enabled=True),
         ],
     )
-    job._normalized_record = record  # type: ignore[attr-defined]
-    job.snapshot = {"normalized_job": asdict(record)}
+    job._normalized_record = record
+    job.snapshot = {"normalized_job": record.to_dict()}
+    controller.get_queue().submit(job)
 
     result = controller.get_runner().run_once(job)
 

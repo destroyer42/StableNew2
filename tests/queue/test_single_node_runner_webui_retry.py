@@ -5,13 +5,14 @@ import pytest
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import (
+    _TIMEOUT_ESCALATION_THRESHOLD,
     SingleNodeJobRunner,
     _clear_timeout_tracking,
     _consecutive_timeout_counts,
     _is_webui_crash_exception,
-    _TIMEOUT_ESCALATION_THRESHOLD,
 )
 from src.utils.error_envelope_v2 import wrap_exception
+from tests.helpers.njr_factory import make_queue_job
 
 
 def _build_crash_exception(
@@ -85,7 +86,8 @@ def test_runner_retries_webui_crash_once():
         return {"success": True}
 
     runner = SingleNodeJobRunner(queue, run_callable, poll_interval=0.01)
-    job = Job(job_id="job-1")
+    job = make_queue_job("job-1")
+    queue.submit(job)
     manager = Mock()
     manager.restart_webui.return_value = True
 
@@ -118,8 +120,10 @@ def test_runner_retries_webui_connection_failure_and_queue_continues():
         return {"success": True}
 
     runner = SingleNodeJobRunner(queue, run_callable, poll_interval=0.01)
-    job_failure = Job(job_id="always-fail")
-    job_success = Job(job_id="job-2")
+    job_failure = make_queue_job("always-fail")
+    job_success = make_queue_job("job-2")
+    queue.submit(job_failure)
+    queue.submit(job_success)
     manager = Mock()
     manager.restart_webui.return_value = True
 

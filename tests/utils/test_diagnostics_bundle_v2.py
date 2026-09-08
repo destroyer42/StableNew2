@@ -7,6 +7,8 @@ import logging
 import zipfile
 from pathlib import Path
 
+from src.queue.job_repository import JobRepository
+from src.state.workspace_paths import workspace_paths
 from src.utils.diagnostics_bundle_v2 import build_crash_bundle
 from src.utils.logger import InMemoryLogHandler
 
@@ -64,12 +66,9 @@ def test_build_crash_bundle_writes_metadata(tmp_path: Path) -> None:
 
 
 def test_build_crash_bundle_includes_runtime_artifacts(tmp_path: Path, monkeypatch) -> None:
-    queue_state = tmp_path / "queue_state_v2.json"
-    queue_state.write_text(json.dumps({"jobs": [{"queue_id": "job-1"}]}), encoding="utf-8")
-    monkeypatch.setattr(
-        "src.utils.diagnostics_bundle_v2.get_queue_state_path",
-        lambda *_, **__: queue_state,
-    )
+    repository_path = tmp_path / "jobs.sqlite3"
+    JobRepository(repository_path).close()
+    monkeypatch.setattr(workspace_paths, "job_repository", lambda: repository_path)
     monkeypatch.setattr(
         "src.utils.diagnostics_bundle_v2._collect_process_inspector_lines",
         lambda: ["pid=1 StableNew"],

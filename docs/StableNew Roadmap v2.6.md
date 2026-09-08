@@ -61,28 +61,17 @@ feature.
 | 3 | `PR-MVP-010` | Complete | Trustworthy isolated verification gates |
 | 4 | `PR-MVP-020` | Complete | Immutable eight-part NJR contract |
 | 5 | `PR-MVP-030` | Complete | Typed compilers and NJR-only submission |
-| 6 | `PR-MVP-040` | Next | SQLite repository and offline legacy import |
-| 7 | `PR-MVP-050` | Planned | One-file JSON PromptPack convergence |
+| 6 | `PR-MVP-040` | Complete | SQLite repository and offline legacy import |
+| 7 | `PR-MVP-050` | Next | One-file JSON PromptPack convergence |
 | 8 | `PR-MVP-060` | Planned | Image create-to-replay vertical slice |
 | 9 | `PR-MVP-070` | Planned | Native SVD XT vertical slice |
 | 10 | `PR-MVP-080` | Planned | Operator UX, setup, diagnostics, lint cleanup |
 | 11 | `PR-MVP-090` | Planned | Clean-machine release acceptance |
 
-Roadmap progress is 6 of 12 rows (50%). Functional MVP acceptance is still
-open because durable persistence and the product vertical slices follow next.
+Roadmap progress is 7 of 12 rows (58%). Functional MVP acceptance is still
+open because PromptPack convergence and the product vertical slices follow.
 
 ## Remaining work
-
-### PR-MVP-040 — durable repository
-
-Implement a transactional SQLite `JobRepository` for NJR snapshots and mutable
-execution records. Queue and history become projections of that authority. Add
-a backup-first, dry-run-capable, idempotent importer for legacy JSON/JSONL with
-counts, identities, checksums, conflicts, and rollback rehearsal. Do not retain
-live dual-read, dual-write, or fallback behavior.
-
-Exit: restart, failure, cancellation, retries, artifacts, and replay survive
-correctly in disposable migration and rollback tests.
 
 ### PR-MVP-050 — PromptPack convergence
 
@@ -142,6 +131,6 @@ rollback steps.
 
 ## Next action
 
-After repository-hygiene review, implement `PR-MVP-040` as the next coherent
-product change. Durable state authority is required before PromptPack migration
-and reliable restart/replay acceptance.
+Specify and approve `PR-MVP-050` as the next coherent product change. Durable
+job state is now authoritative, so one-file PromptPack migration can proceed
+without creating another persistence ambiguity.

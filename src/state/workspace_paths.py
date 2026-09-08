@@ -59,8 +59,12 @@ class WorkspacePaths:
         return path
 
     def queue_state(self) -> Path:
-        """Return the queue-state path without creating its parent."""
+        """Return the legacy queue JSON path for offline migration only."""
         return self.state_dir(create=False) / "queue_state_v2.json"
+
+    def job_repository(self) -> Path:
+        """Return the authoritative SQLite job repository path."""
+        return self.state_dir(create=False) / "jobs.sqlite3"
 
     def ui_state(self) -> Path:
         """Return the UI-state path without creating its parent."""

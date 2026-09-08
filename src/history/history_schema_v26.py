@@ -83,9 +83,15 @@ def validate_entry(entry: dict[str, Any]) -> tuple[bool, list[str]]:
     if not isinstance(snapshot, dict) or "normalized_job" not in snapshot:
         errors.append("njr_snapshot must include normalized_job (legacy snapshots are view-only)")
     else:
-        # PR-CORE1-D16: Allow prompt via positive_prompt OR config["prompt"] for migrated legacy
+        # Typed NJRs nest authored work under workload; migrated legacy snapshots may be flat.
         njr = snapshot["normalized_job"]
-        prompt = njr.get("positive_prompt") or (njr.get("config", {}) or {}).get("prompt")
+        workload = njr.get("workload", {}) if isinstance(njr, dict) else {}
+        prompt = (
+            njr.get("positive_prompt")
+            or (njr.get("config", {}) or {}).get("prompt")
+            or (workload or {}).get("positive_prompt")
+            or ((workload or {}).get("config", {}) or {}).get("prompt")
+        )
         if not isinstance(prompt, str):
             prompt = ""
         if not prompt:

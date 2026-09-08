@@ -18,6 +18,7 @@ from src.pipeline.job_models_v2 import (
     WorkloadKind,
 )
 from src.pipeline.stage_models import StageType
+from src.queue.job_model import Job, JobPriority
 
 
 def _coerce_stage_type(stage_type: StageType | str) -> str:
@@ -167,4 +168,21 @@ def make_pipeline_njr(
     )
 
 
-__all__ = ["make_stage_config", "make_pipeline_njr"]
+def make_queue_job(
+    job_id: str,
+    *,
+    priority: JobPriority = JobPriority.NORMAL,
+    **njr_overrides: Any,
+) -> Job:
+    """Build a queue-domain job with a valid immutable NJR snapshot."""
+    record = make_pipeline_njr(job_id=job_id, **njr_overrides)
+    job = Job(
+        job_id=job_id,
+        priority=priority,
+        snapshot={"normalized_job": record.to_dict()},
+    )
+    job._normalized_record = record
+    return job
+
+
+__all__ = ["make_queue_job", "make_stage_config", "make_pipeline_njr"]

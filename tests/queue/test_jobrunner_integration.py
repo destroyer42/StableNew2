@@ -5,6 +5,7 @@ import time
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
+from tests.helpers.njr_factory import make_queue_job
 
 
 def test_jobrunner_integration_updates_status_and_result():
@@ -16,18 +17,16 @@ def test_jobrunner_integration_updates_status_and_result():
         return {"done": True}
 
     runner = SingleNodeJobRunner(queue, _execute, poll_interval=0.01)
-    job = Job("j1", priority=JobPriority.NORMAL)
+    job = make_queue_job("j1", priority=JobPriority.NORMAL)
     job.payload = lambda: None
     queue.submit(job)
     runner.start()
     time.sleep(0.05)
     runner.stop()
-    jobs = queue.list_jobs()
-    assert jobs
-    assert jobs[0].result is not None or jobs[0].status in {
-        jobs[0].status.FAILED,
-        jobs[0].status.RUNNING,
-    }
+    persisted = queue.get_job(job.job_id)
+    assert persisted is not None
+    assert persisted.status == JobStatus.COMPLETED
+    assert persisted.result is not None
 
 
 def test_runner_executes_restored_jobs() -> None:
@@ -39,7 +38,7 @@ def test_runner_executes_restored_jobs() -> None:
         return {"restored": True, "success": True}
 
     runner = SingleNodeJobRunner(queue, _execute, poll_interval=0.01)
-    job = Job("restored-job", priority=JobPriority.NORMAL)
+    job = make_queue_job("restored-job", priority=JobPriority.NORMAL)
     job.payload = lambda: {"restored": True}
     queue.restore_jobs([job])
 
@@ -60,7 +59,7 @@ def test_runner_does_not_dequeue_while_queue_paused() -> None:
         executed.append(job.job_id)
         return {"success": True}
 
-    queue.submit(Job("paused-job", priority=JobPriority.NORMAL))
+    queue.submit(make_queue_job("paused-job", priority=JobPriority.NORMAL))
     queue.pause()
     runner = SingleNodeJobRunner(queue, _execute, poll_interval=0.01)
 
@@ -93,7 +92,7 @@ def test_run_once_cancel_return_to_queue_requeues_job() -> None:
         }
 
     runner = SingleNodeJobRunner(queue, _execute, poll_interval=0.01)
-    job = Job("return-job", priority=JobPriority.NORMAL)
+    job = make_queue_job("return-job", priority=JobPriority.NORMAL)
     queue.submit(job)
 
     result = runner.run_once(job)

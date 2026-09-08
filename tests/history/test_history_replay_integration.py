@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import asdict
+import time
 
 from src.controller.job_execution_controller import JobExecutionController
 from src.controller.job_history_service import JobHistoryService
@@ -8,8 +8,9 @@ from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import HISTORY_SCHEMA_VERSION, validate_entry
 from src.pipeline.job_models_v2 import JobView, NormalizedJobRecord
 from src.pipeline.pipeline_runner import PipelineRunResult
-from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_queue import JobQueue
+from src.queue.job_repository import JobRepository
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def test_replay_invokes_njr_path() -> None:
@@ -20,16 +21,12 @@ def test_replay_invokes_njr_path() -> None:
         return {"status": "ok"}
 
     controller = JobExecutionController(execute_job=execute_njr)
-    njr = NormalizedJobRecord(
-        job_id="replay-001",
-        config={"prompt": "castle", "model": "v1-5"},
-        path_output_dir="out",
-        filename_template="{seed}",
-        seed=123,
+    njr = make_pipeline_njr(
+        job_id="replay-001", positive_prompt="castle", base_model="v1-5", seed=123
     )
     record = HistoryRecord(
         id=njr.job_id,
-        njr_snapshot={"normalized_job": asdict(njr)},
+        njr_snapshot={"normalized_job": njr.to_dict()},
         timestamp="2025-01-01T00:00:00Z",
         status="completed",
         history_schema=HISTORY_SCHEMA_VERSION,
@@ -49,27 +46,29 @@ def test_replay_invokes_njr_path() -> None:
     ok, errors = validate_entry(record.to_dict())
     assert ok, errors
 
-    controller.replay(record)
+    replay_job_id = controller.replay(record)
+    deadline = time.monotonic() + 2.0
+    while "record" not in captured and time.monotonic() < deadline:
+        time.sleep(0.01)
+    controller.stop()
 
     assert "record" in captured
-    assert captured["record"].job_id == njr.job_id
+    assert captured["record"].job_id == replay_job_id
+    assert captured["record"].job_id != njr.job_id
+    assert captured["record"].source.parent_job_id == njr.job_id
 
 
 def test_history_record_summary_returns_job_view(tmp_path) -> None:
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    queue = JobQueue(history_store=store)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
     service = JobHistoryService(queue, store)
 
-    njr = NormalizedJobRecord(
-        job_id="replay-002",
-        config={"prompt": "forest", "model": "v1-5"},
-        path_output_dir="out",
-        filename_template="{seed}",
-        seed=456,
+    njr = make_pipeline_njr(
+        job_id="replay-002", positive_prompt="forest", base_model="v1-5", seed=456
     )
     record = HistoryRecord(
         id=njr.job_id,
-        njr_snapshot={"normalized_job": asdict(njr)},
+        njr_snapshot={"normalized_job": njr.to_dict()},
         timestamp="2025-01-02T00:00:00Z",
         status="completed",
         history_schema=HISTORY_SCHEMA_VERSION,
