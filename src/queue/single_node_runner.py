@@ -13,6 +13,7 @@ from dataclasses import asdict
 from typing import Any
 
 from src.api.webui_process_manager import get_global_webui_process_manager
+from src.controller.runtime_state import CancellationError, CancelToken
 from src.pipeline.pipeline_runner import normalize_run_result
 from src.queue.job_model import Job, JobStatus, RetryAttempt, StageCheckpoint
 from src.queue.job_queue import JobQueue
@@ -281,6 +282,7 @@ class SingleNodeJobRunner:
         self._on_status_change = on_status_change
         self._current_job: Job | None = None
         self._cancel_current = threading.Event()
+        self._current_cancel_token: CancelToken | None = None
         self._cancel_return_to_queue = False
         # PR-CORE1-D21B: Activity callback
         self._on_activity = on_activity
@@ -391,7 +393,8 @@ class SingleNodeJobRunner:
             if self._is_paused and self._is_paused():
                 time.sleep(self.poll_interval)
                 continue
-            
+            self._cancel_current.clear()
+            self._cancel_return_to_queue = False
             job = self.job_queue.claim_next_job()
             if job is None:
                 time.sleep(self.poll_interval)
@@ -422,8 +425,8 @@ class SingleNodeJobRunner:
             )
             self._notify(job, JobStatus.RUNNING)
             self._current_job = job
-            self._cancel_current.clear()
-            self._cancel_return_to_queue = False
+            self._current_cancel_token = CancelToken()
+            job._cancel_token = self._current_cancel_token
             try:
                 if self._cancel_current.is_set():
                     queued_job = self.job_queue.cancel_running_job(
@@ -518,6 +521,10 @@ class SingleNodeJobRunner:
                     )
                 self._notify(job, notify_status)
             except Exception as exc:  # noqa: BLE001
+                if self._cancel_current.is_set() or isinstance(exc, CancellationError):
+                    self.job_queue.mark_cancelled(job.job_id, "cancelled")
+                    self._notify(job, JobStatus.CANCELLED)
+                    continue
                 duration_ms = int((time.monotonic() - start_time) * 1000)
                 log_with_ctx(
                     logger,
@@ -539,6 +546,8 @@ class SingleNodeJobRunner:
                 self.job_queue.mark_failed(job.job_id, error_message=str(exc))
                 self._notify(job, JobStatus.FAILED)
             finally:
+                job._cancel_token = None
+                self._current_cancel_token = None
                 self._current_job = None
                 self._cancel_return_to_queue = False
                 # Apply cooldown for reprocess jobs to let WebUI stabilize
@@ -559,11 +568,13 @@ class SingleNodeJobRunner:
             self._on_activity()
         if job is None:
             return None
-        self.job_queue.mark_running(job.job_id)
-        self._notify(job, JobStatus.RUNNING)
-        self._current_job = job
         self._cancel_current.clear()
         self._cancel_return_to_queue = False
+        self._current_cancel_token = CancelToken()
+        job._cancel_token = self._current_cancel_token
+        self._current_job = job
+        self.job_queue.mark_running(job.job_id)
+        self._notify(job, JobStatus.RUNNING)
         try:
             if self._cancel_current.is_set():
                 queued_job = self.job_queue.cancel_running_job(
@@ -625,6 +636,10 @@ class SingleNodeJobRunner:
             self._notify(job, notify_status)
             return canonical_result
         except Exception as exc:  # noqa: BLE001
+            if self._cancel_current.is_set() or isinstance(exc, CancellationError):
+                self.job_queue.mark_cancelled(job.job_id, "cancelled")
+                self._notify(job, JobStatus.CANCELLED)
+                return None
             # PR-CORE1-D21B: Activity on exception
             if self._on_activity:
                 self._on_activity()
@@ -634,6 +649,8 @@ class SingleNodeJobRunner:
             self._notify(job, JobStatus.FAILED)
             raise
         finally:
+            job._cancel_token = None
+            self._current_cancel_token = None
             self._current_job = None
             self._cancel_return_to_queue = False
 
@@ -651,6 +668,8 @@ class SingleNodeJobRunner:
     def cancel_current(self, *, return_to_queue: bool = False) -> None:
         self._cancel_return_to_queue = bool(return_to_queue)
         self._cancel_current.set()
+        if self._current_cancel_token is not None:
+            self._current_cancel_token.cancel()
 
     def is_running(self) -> bool:
         return self._worker is not None and self._worker.is_alive()

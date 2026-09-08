@@ -423,6 +423,8 @@ class JobRepository(JobHistoryStore):
                 completed_at = None
             elif status in _TERMINAL_STATUSES:
                 completed_at = _iso(job.completed_at) or now.isoformat()
+                job.progress = 0.0
+                job.eta_seconds = None
             effective_result = result if result is not None else job.result
             effective_error = error_message or job.error_message
             connection.execute(

@@ -138,11 +138,14 @@ class JobExecutionController:
         """
         job_id = str(status_data.get("job_id") or "")
         job = self._queue.get_job(job_id) if job_id else None
+        reported = max(0.0, min(1.0, float(status_data.get("progress") or 0.0)))
         if job is not None and job.status == JobStatus.RUNNING:
-            job.progress = float(status_data.get("progress") or 0.0)
+            job.progress = max(job.progress, reported)
             eta = status_data.get("eta_seconds")
             job.eta_seconds = float(eta) if eta is not None else None
             self._queue.persist_runtime_state(job)
+            reported = job.progress
+        status_data["progress"] = reported
 
         if not self._app_state:
             return
@@ -159,7 +162,7 @@ class JobExecutionController:
                 stage_detail=status_data.get("stage_detail"),
                 stage_index=status_data.get("stage_index", 0),
                 total_stages=status_data.get("total_stages", 1),
-                progress=status_data.get("progress", 0.0),
+                progress=reported,
                 eta_seconds=status_data.get("eta_seconds"),
                 started_at=status_data.get("started_at") or datetime.utcnow(),
                 actual_seed=status_data.get("actual_seed"),
@@ -172,6 +175,16 @@ class JobExecutionController:
                 self._app_state.set_runtime_status(runtime_status)
         except Exception as exc:
             logger.warning(f"Failed to process runtime status update: {exc}")
+
+    def runtime_status_callback(
+        self, downstream: Callable[[dict[str, Any]], None] | None = None
+    ) -> Callable[[dict[str, Any]], None]:
+        """Return the canonical durable projection callback with an optional UI sink."""
+        def _project(status_data: dict[str, Any]) -> None:
+            self._handle_runtime_status_update(status_data)
+            if downstream is not None:
+                downstream(status_data)
+        return _project
 
     def stop(self) -> None:
         """Stop the queue worker and persist queue state."""

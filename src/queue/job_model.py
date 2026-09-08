@@ -16,6 +16,7 @@ from src.cluster.worker_model import WorkerId
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope, serialize_envelope
 
 if TYPE_CHECKING:
+    from src.controller.runtime_state import CancelToken
     from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 
@@ -97,6 +98,7 @@ class Job:
     progress: float = 0.0
     eta_seconds: float | None = None
     _normalized_record: NormalizedJobRecord | None = field(default=None, repr=False, compare=False)
+    _cancel_token: CancelToken | None = field(default=None, repr=False, compare=False)
     _persist_runtime_state: Callable[[], None] | None = field(
         default=None, repr=False, compare=False
     )

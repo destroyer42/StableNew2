@@ -2238,6 +2238,10 @@ class PipelineRunner:
         self._character_embedder = character_embedder
         self._lora_manager = lora_manager
 
+    def set_status_callback(self, callback: Callable[[dict[str, Any]], None] | None) -> None:
+        """Bind the canonical runtime projection sink used by the executor."""
+        self._pipeline._status_callback = callback
+
     def _resolve_refinement_policy_service(
         self,
         detector_preference: str,

@@ -1534,7 +1534,7 @@ class PipelineController(CorePipelineController):
         record = getattr(job, "_normalized_record", None)
         if record is not None:
             try:
-                result = self.run_njr(record)
+                result = self.run_njr(record, cancel_token=job._cancel_token)
                 return result.to_dict() if hasattr(result, "to_dict") else {"result": result}
             except Exception as exc:  # noqa: BLE001
                 envelope = get_attached_envelope(exc)
@@ -1549,15 +1549,16 @@ class PipelineController(CorePipelineController):
                 }
         error_msg = "Job missing _normalized_record; NJR-only execution requires NormalizedJobRecord snapshots."
         return {"error": error_msg, "job_id": job.job_id}
-
     def _get_runtime_status_callback(self) -> Callable[[dict[str, Any]], None] | None:
         app_controller = getattr(self, "app_controller", None)
-        if app_controller and hasattr(app_controller, "_get_runtime_status_callback"):
-            return app_controller._get_runtime_status_callback()
-        return None
-
+        downstream = app_controller._get_runtime_status_callback() if app_controller else None
+        return self._job_controller.runtime_status_callback(
+            downstream
+        )
     def _create_runtime_pipeline_runner(self) -> Any:
         if self._pipeline_runner is not None:
+            if hasattr(self._pipeline_runner, "set_status_callback"):
+                self._pipeline_runner.set_status_callback(self._get_runtime_status_callback())
             return self._pipeline_runner
         runtime_ports = getattr(self, "_runtime_ports", None) or DefaultImageRuntimePorts()
         api_client = runtime_ports.create_client(base_url="http://127.0.0.1:7860")
@@ -1586,7 +1587,6 @@ class PipelineController(CorePipelineController):
         )
         self.record_run_result(result)
         return result
-
     def _infer_job_stage(self, job: Job) -> str | None:
         record = getattr(job, "_normalized_record", None)
         if record and record.stage_chain:

@@ -2274,6 +2274,7 @@ class Pipeline:
         progress_callback: Any | None,
         stage_label: str,
         stall_detected_event: threading.Event | None = None,
+        cancel_token: Any | None = None,
     ) -> None:
         """
         Background thread that polls WebUI for progress.
@@ -2292,6 +2293,17 @@ class Pipeline:
         
         while not stop_event.is_set():
             try:
+                cancel_requested = bool(
+                    cancel_token
+                    and getattr(cancel_token, "is_cancelled", None)
+                    and cancel_token.is_cancelled()
+                )
+                if cancel_requested:
+                    if not interrupt_sent:
+                        self.client.interrupt()
+                        interrupt_sent = True
+                    stop_event.wait(poll_interval)
+                    continue
                 info = self.client.get_progress(skip_current_image=True)
 
                 if info is None:
@@ -2308,18 +2320,18 @@ class Pipeline:
                         highest_progress = 0.0
                         last_progress_time = time.monotonic()
                 else:
-                    current_progress = max(
-                        highest_progress,
-                        max(0.0, min(1.0, float(getattr(info, "progress", 0.0) or 0.0))),
+                    observed_progress = max(
+                        0.0, min(1.0, float(getattr(info, "progress", 0.0) or 0.0))
                     )
+                    current_progress = max(highest_progress, observed_progress)
                     eta_relative = getattr(info, "eta_relative", None)
                     eta_seconds = (
                         float(eta_relative)
                         if eta_relative is not None and eta_relative > 0
                         else None
                     )
-                    if info.progress > highest_progress:
-                        highest_progress = info.progress
+                    if observed_progress > highest_progress:
+                        highest_progress = observed_progress
                         last_progress_time = time.monotonic()
                         stall_first_detected_at = None  # Reset stall tracking on any progress
                         interrupt_sent = False
@@ -2449,6 +2461,7 @@ class Pipeline:
         poll_interval: float = 0.5,
         progress_callback: Any | None = None,
         stage_label: str | None = None,
+        cancel_token: Any | None = None,
     ) -> dict[str, Any] | None:
         """
         Call generation endpoint with concurrent progress polling.
@@ -2475,10 +2488,12 @@ class Pipeline:
                 progress_callback,  # May be None - that's fine
                 stage_label,
                 stall_detected_event,
+                cancel_token,
             )
             
             # Make the actual generation request (blocking)
             response = self._generate_images(stage, payload)
+            self._ensure_not_cancelled(cancel_token, f"{stage_label} generation")
             
             # Check if stall was detected during generation
             if stall_detected_event.is_set():
@@ -4486,6 +4501,7 @@ class Pipeline:
                 poll_interval=0.5,
                 progress_callback=on_txt2img_progress,
                 stage_label="txt2img",
+                cancel_token=cancel_token,
             )
             if not response or "images" not in response or not response["images"]:
                 logger.error("txt2img failed - no images returned")

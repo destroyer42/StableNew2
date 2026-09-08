@@ -206,6 +206,13 @@ class RunningJobPanelV2(ttk.Frame):
             return
         button.state(["disabled"] if disabled else ["!disabled"])
 
+    @staticmethod
+    def _can_cancel_job(job: Any | None) -> bool:
+        if job is None:
+            return False
+        status = job.status if isinstance(job.status, str) else job.status.value
+        return status.upper() in {"RUNNING", "PAUSED"}
+
     def _clear_timeline(self) -> None:
         if self._timeline_is_clear:
             return
@@ -420,6 +427,7 @@ class RunningJobPanelV2(ttk.Frame):
         is_running = status_str.upper() == "RUNNING"
         is_paused = status_str.upper() == "PAUSED"
         can_control = is_running or is_paused
+        can_cancel = self._can_cancel_job(job)
 
         pause_resume_text = "Resume Queue" if is_paused else "Pause Queue"
         timeline_needs_clear = not self._timeline_is_clear
@@ -436,6 +444,7 @@ class RunningJobPanelV2(ttk.Frame):
             eta_text,
             pause_resume_text,
             can_control,
+            can_cancel,
             is_running,
             is_paused,
         )
@@ -460,7 +469,7 @@ class RunningJobPanelV2(ttk.Frame):
         self._set_widget_text(self.eta_label, eta_text)
         self._set_widget_text(self.pause_resume_button, pause_resume_text)
         self._set_button_disabled(self.pause_resume_button, not can_control)
-        self._set_button_disabled(self.cancel_button, not can_control)
+        self._set_button_disabled(self.cancel_button, not can_cancel)
 
         # Start timer for elapsed time updates (if job is running or paused)
         if can_control:
