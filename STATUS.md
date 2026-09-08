@@ -24,7 +24,8 @@ gates, and one transactional SQLite authority for job lifecycle state. Queue
 and history are repository projections, and legacy JSON/JSONL state has an
 offline backup-first importer. It is not yet an MVP: PromptPack storage still
 has paired-file assumptions, and the image/video vertical slices lack
-clean-machine real-backend acceptance.
+clean-machine real-backend acceptance. PR-MVP-045 restored the PromptPack
+draft-to-preview-to-queue path; one-file storage remains the next blocker.
 
 ## Runtime invariants
 
@@ -39,10 +40,11 @@ clean-machine real-backend acceptance.
 
 ## Current work
 
-Repository convergence, simplification, and transactional job persistence are
-complete. New work starts from `main` on one short-lived outcome branch. The
-next outcome is one-file PromptPack convergence; do not revive the recovery,
-hygiene, or QOL branches as alternate sources of truth.
+Repository convergence, simplification, transactional job persistence, and the
+PR-MVP-045 PromptPack draft/preview/queue repair are complete. New work starts
+from `main` on one short-lived outcome branch. The next outcome is one-file
+PromptPack convergence; do not revive the recovery, hygiene, or QOL branches as
+alternate sources of truth.
 
 ## Highest-value debt
 

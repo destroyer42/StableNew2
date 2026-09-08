@@ -5,6 +5,8 @@ import json
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from src.gui.app_state_v2 import PackJobEntry
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.prompt_pack_parser import parse_prompt_pack_text
@@ -171,6 +173,96 @@ def test_prompt_pack_job_builder_random_matrix_mode_shuffles_combinations(tmp_pa
         for item in expanded
     }
     assert len(unique_pairs) == 3
+
+
+def test_prompt_pack_job_builder_matrix_provenance_is_immutable(tmp_path: Path) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    pack_txt = config_manager.packs_dir / "immutable-matrix-pack.txt"
+    pack_txt.write_text("A [[job]] in a [[environment]]", encoding="utf-8")
+    pack_txt.with_suffix(".json").write_text(
+        json.dumps(
+            {
+                "pack_data": {
+                    "matrix": {
+                        "enabled": True,
+                        "mode": "sequential",
+                        "limit": 2,
+                        "slots": [
+                            {"name": "job", "values": ["wizard", "knight"]},
+                        ],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=config_manager,
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+        packs_dir=config_manager.packs_dir,
+    )
+    entry = PackJobEntry(
+        pack_id=pack_txt.name,
+        pack_name="Immutable Matrix Pack",
+        prompt_text="A [[job]] in a [[environment]]",
+        config_snapshot={"randomization": {"enabled": False}},
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert [record.variant_index for record in records] == [0, 1]
+    assert all(record.variant_total == 2 for record in records)
+    assert [record.matrix_slot_values["job"] for record in records] == ["wizard", "knight"]
+    with pytest.raises(AttributeError):
+        records[0].variant_index = 1  # type: ignore[misc]
+
+
+def test_prompt_pack_job_builder_preserves_randomizer_with_matrix_variants(tmp_path: Path) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    pack_txt = config_manager.packs_dir / "matrix-randomizer-pack.txt"
+    pack_txt.write_text("A [[job]]", encoding="utf-8")
+    pack_txt.with_suffix(".json").write_text(
+        json.dumps(
+            {
+                "pack_data": {
+                    "matrix": {
+                        "enabled": True,
+                        "mode": "sequential",
+                        "limit": 2,
+                        "slots": [{"name": "job", "values": ["wizard", "knight"]}],
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=config_manager,
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+        packs_dir=config_manager.packs_dir,
+    )
+    entry = PackJobEntry(
+        pack_id=pack_txt.name,
+        pack_name="Matrix Randomizer Pack",
+        prompt_text="A [[job]]",
+        config_snapshot={
+            "randomization_enabled": True,
+            "max_variants": 2,
+            "seed": 123,
+        },
+        stage_flags={"txt2img": True},
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert len(records) == 2
+    assert [record.variant_index for record in records] == [0, 1]
+    assert all(record.variant_total == 2 for record in records)
+    assert all(record.randomizer_summary["max_variants"] == 2 for record in records)
+    assert [record.matrix_slot_values["job"] for record in records] == ["wizard", "knight"]
 
 
 def test_prompt_pack_job_builder_auto_limits_unbounded_matrix_expansion(tmp_path: Path) -> None:

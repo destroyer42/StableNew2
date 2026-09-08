@@ -132,7 +132,7 @@ class JobQueue:
             self._notify_state_listeners()
         else:
             running.execution_metadata.last_control_action = "cancelled"
-            cancelled = self._update_status(running.job_id, JobStatus.CANCELLED, "cancelled")
+            self._update_status(running.job_id, JobStatus.CANCELLED, "cancelled")
         return running
 
     def mark_running(self, job_id: str) -> None:

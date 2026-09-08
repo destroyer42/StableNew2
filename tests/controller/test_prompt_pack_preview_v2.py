@@ -111,6 +111,16 @@ def test_preview_jobs_fall_back_when_no_packs(tmp_path: Path) -> None:
     assert preview_jobs == expected
 
 
+def test_preview_jobs_quietly_skip_incomplete_gui_state(tmp_path: Path, caplog) -> None:
+    controller = _make_controller(tmp_path)
+
+    with caplog.at_level("WARNING"):
+        preview_jobs = controller._build_normalized_jobs_from_state()
+
+    assert preview_jobs == []
+    assert "base_config must be a mapping" not in caplog.text
+
+
 def test_preview_jobs_switch_from_manual_to_pack_when_draft_added(tmp_path: Path) -> None:
     controller = _make_controller(tmp_path)
     controller.refresh_preview_from_state()

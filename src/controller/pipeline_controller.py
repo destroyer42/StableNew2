@@ -282,16 +282,81 @@ class PipelineController(CorePipelineController):
         except Exception as exc:
             _logger.debug("Could not extract config variant plan: %s", exc)
 
-        # Build jobs via JobBuilderV2
+        # Build a generic GUI request only from the current typed state.  A
+        # PromptPack draft takes the canonical pack-builder path above; an
+        # incomplete startup state is intentionally non-runnable and should
+        # not invoke the retired ConfigAssembler compatibility surface.
         if base_config is None:
-            assembler = getattr(self, "_config_assembler", None)
-            build_from_gui_input = getattr(assembler, "build_from_gui_input", None)
-            if callable(build_from_gui_input):
+            overrides: dict[str, Any] = {}
+            getter = getattr(self, "gui_get_pipeline_overrides", None)
+            if not callable(getter):
+                getter = getattr(self, "get_gui_overrides", None)
+            if callable(getter):
                 try:
-                    base_config = build_from_gui_input()
+                    value = getter()
+                    if isinstance(value, Mapping):
+                        overrides = dict(value)
                 except Exception as exc:
-                    _logger.warning("Config assembler failed to build base config: %s", exc)
-                    base_config = None
+                    _logger.debug("Could not read typed GUI overrides: %s", exc)
+
+            prompt_state = self._get_prompt_workspace_state()
+            prompt = str(overrides.get("prompt") or "").strip()
+            if not prompt and prompt_state is not None:
+                prompt_getter = getattr(prompt_state, "get_current_prompt_text", None)
+                if callable(prompt_getter):
+                    try:
+                        prompt = str(prompt_getter() or "").strip()
+                    except Exception:
+                        prompt = ""
+            if not prompt and self._app_state is not None:
+                prompt = str(getattr(self._app_state, "prompt", "") or "").strip()
+
+            if not prompt:
+                _logger.debug("Skipping generic preview: GUI intent is incomplete")
+                return []
+
+            runtime_overrides: dict[str, Any] = {}
+            metadata = overrides.get("metadata")
+            if isinstance(metadata, Mapping):
+                runtime_overrides.update(dict(metadata))
+            for section in ("pipeline", "txt2img", "img2img", "adetailer", "upscale"):
+                value = overrides.get(section)
+                if isinstance(value, Mapping):
+                    runtime_overrides[section] = dict(value)
+
+            txt2img = dict(runtime_overrides.get("txt2img") or {})
+            flat_txt2img_keys = (
+                "model",
+                "model_name",
+                "vae",
+                "vae_name",
+                "sampler",
+                "sampler_name",
+                "scheduler",
+                "steps",
+                "cfg_scale",
+                "width",
+                "height",
+                "seed",
+            )
+            for key in flat_txt2img_keys:
+                if key in overrides and overrides[key] is not None:
+                    txt2img[key] = overrides[key]
+            if txt2img:
+                runtime_overrides["txt2img"] = txt2img
+            runtime_overrides["prompt"] = prompt
+            if overrides.get("negative_prompt") is not None:
+                runtime_overrides["negative_prompt"] = overrides["negative_prompt"]
+
+            model_name = str(
+                txt2img.get("model") or txt2img.get("model_name") or ""
+            ).strip() or None
+            preset_name = str(overrides.get("preset_name") or "").strip() or None
+            base_config = self.build_merged_config_for_run(
+                model_name=model_name,
+                preset_name=preset_name,
+                runtime_overrides=runtime_overrides,
+            )
         try:
             jobs = self._job_builder.build_jobs(
                 base_config=base_config,

@@ -62,14 +62,23 @@ feature.
 | 4 | `PR-MVP-020` | Complete | Immutable eight-part NJR contract |
 | 5 | `PR-MVP-030` | Complete | Typed compilers and NJR-only submission |
 | 6 | `PR-MVP-040` | Complete | SQLite repository and offline legacy import |
-| 7 | `PR-MVP-050` | Next | One-file JSON PromptPack convergence |
-| 8 | `PR-MVP-060` | Planned | Image create-to-replay vertical slice |
-| 9 | `PR-MVP-070` | Planned | Native SVD XT vertical slice |
-| 10 | `PR-MVP-080` | Planned | Operator UX, setup, diagnostics, lint cleanup |
-| 11 | `PR-MVP-090` | Planned | Clean-machine release acceptance |
+| 7 | `PR-MVP-045` | Complete | PromptPack draft, preview, and queue repair |
+| 8 | `PR-MVP-050` | Next | One-file JSON PromptPack convergence |
+| 9 | `PR-MVP-060` | Planned | Image create-to-replay vertical slice |
+| 10 | `PR-MVP-070` | Planned | Native SVD XT vertical slice |
+| 11 | `PR-MVP-080` | Planned | Operator UX, setup, diagnostics, lint cleanup |
+| 12 | `PR-MVP-090` | Planned | Clean-machine release acceptance |
 
-Roadmap progress is 7 of 12 rows (58%). Functional MVP acceptance is still
+Roadmap progress is 8 of 13 rows (62%). Functional MVP acceptance is still
 open because PromptPack convergence and the product vertical slices follow.
+
+### PR-MVP-045 — PromptPack draft, preview, and queue repair
+
+The production PromptPack workflow now expands Matrix selections into immutable
+NJR provenance, compiles valid drafts into executable previews, preserves stage
+override precedence, coalesces preview refreshes, and submits through the
+SQLite-backed JobService path. Incomplete generic GUI state is non-runnable and
+quiet rather than routed through the retired ConfigAssembler.
 
 ## Remaining work
 

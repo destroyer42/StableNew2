@@ -6761,14 +6761,13 @@ class AppController:
                         logger.debug(f"[AppController] ERROR: Pack '{pack_id}' not found!")
                         continue
 
-                    # Get pack configuration - read the actual pack file to get its config
+                    # Resolve the stored generation config through ConfigManager;
+                    # prompt rows contain authored text, not runtime stage config.
                     pack_config = {}
                     try:
-                        pack_prompts = read_prompt_pack(pack.path)
-                        if pack_prompts and len(pack_prompts) > 0:
-                            # Use first prompt's metadata as pack config (common approach)
-                            first_prompt = pack_prompts[0]
-                            pack_config = {k: v for k, v in first_prompt.items() if k not in ["positive", "negative"]}
+                        loaded_config = self._config_manager.load_pack_config(pack_id)
+                        if isinstance(loaded_config, dict):
+                            pack_config = loaded_config
                     except Exception as e:
                         self._append_log(f"[controller] Failed to read pack config for '{pack_id}': {e}")
 
