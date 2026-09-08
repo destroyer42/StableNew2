@@ -6,13 +6,17 @@
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum, IntEnum
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from src.cluster.worker_model import WorkerId
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope, serialize_envelope
+
+if TYPE_CHECKING:
+    from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 
 class JobPriority(IntEnum):
@@ -92,6 +96,11 @@ class Job:
     # Runtime tracking attributes for GUI (not persisted)
     progress: float = 0.0
     eta_seconds: float | None = None
+    _normalized_record: NormalizedJobRecord | None = field(default=None, repr=False, compare=False)
+    _persist_runtime_state: Callable[[], None] | None = field(
+        default=None, repr=False, compare=False
+    )
+
     def mark_status(self, status: JobStatus, error_message: str | None = None) -> None:
         self.status = status
         self.updated_at = _utcnow()

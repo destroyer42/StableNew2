@@ -5,67 +5,27 @@ from __future__ import annotations
 import logging
 import os
 import threading
-import uuid
 from collections.abc import Callable, Mapping
-from dataclasses import asdict
-from datetime import datetime
-from pathlib import Path
 from typing import Any
 
 from src.cluster.worker_registry import WorkerRegistry
-from src.config.app_config import get_job_history_path
 from src.history.history_record import HistoryRecord
+from src.history.history_schema_v26 import InvalidHistoryRecord, validate_entry
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import normalize_run_result
 from src.pipeline.replay_engine import ReplayEngine
-from src.queue.job_history_store import JobHistoryStore, JSONLJobHistoryStore
-from src.queue.job_model import Job, JobPriority, JobStatus, RetryAttempt, StageCheckpoint
+from src.pipeline.replay_njr_compiler import ReplayIntent, compile_replay_intent
+from src.queue.job_history_store import JobHistoryStore
+from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
+from src.queue.job_repository import JobRepository
 from src.queue.single_node_runner import SingleNodeJobRunner
-from src.services.queue_store_v2 import (
-    SCHEMA_VERSION,
-    QueueSnapshotV1,
-    UnsupportedQueueSchemaError,
-    load_queue_snapshot,
-    save_queue_snapshot,
-)
+from src.state.workspace_paths import workspace_paths
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import attach_envelope, get_attached_envelope
 from src.utils.snapshot_builder_v2 import normalized_job_from_snapshot
 
 logger = logging.getLogger(__name__)
-
-
-def _njr_from_snapshot(snapshot: dict[str, Any]) -> NormalizedJobRecord | None:
-    if not snapshot:
-        return None
-    constructor = getattr(NormalizedJobRecord, "from_snapshot", None)
-    if callable(constructor):
-        try:
-            return constructor(snapshot)
-        except Exception:
-            # Fallback to legacy util for pre-from_snapshot classes
-            pass
-    normalized_source = snapshot if "normalized_job" in snapshot else {"normalized_job": snapshot}
-    return normalized_job_from_snapshot(normalized_source)
-
-
-def _parse_iso_datetime(value: str | None) -> datetime:
-    if not value:
-        return datetime.utcnow()
-    try:
-        return datetime.fromisoformat(value)
-    except Exception:
-        return datetime.utcnow()
-
-
-def _priority_from_value(value: Any) -> JobPriority:
-    try:
-        if isinstance(value, JobPriority):
-            return value
-        return JobPriority(int(value))
-    except Exception:
-        return JobPriority.NORMAL
 
 
 class JobExecutionController:
@@ -76,19 +36,32 @@ class JobExecutionController:
         execute_job: Callable[[Job], dict] | None = None,
         poll_interval: float = 0.05,
         history_store: JobHistoryStore | None = None,
+        repository: JobRepository | None = None,
         worker_registry: WorkerRegistry | None = None,
         replay_runner: Any | None = None,
         queue: JobQueue | None = None,
         runner: SingleNodeJobRunner | None = None,
         restore_state: bool = True,
     ) -> None:
-        self._history_store = history_store or self._default_history_store()
+        if history_store is not None:
+            if not isinstance(history_store, JobRepository):
+                raise TypeError("Live history must project from JobRepository")
+            if repository is not None and repository is not history_store:
+                raise ValueError("Controller accepts exactly one JobRepository authority")
+            repository = history_store
+        if queue is not None:
+            if repository is not None and queue.repository is not repository:
+                raise ValueError("Controller queue and repository must share one authority")
+            repository = queue.repository
+        if repository is None:
+            path = ":memory:" if os.environ.get("PYTEST_CURRENT_TEST") else workspace_paths.job_repository()
+            repository = JobRepository(path)
+        self._history_store = repository
         self._worker_registry = worker_registry or WorkerRegistry()
-        self._queue = queue or JobQueue(history_store=self._history_store)
+        self._queue = queue or JobQueue(repository=repository)
         self._execute_job = execute_job
         self._auto_run_enabled = True
         self._queue_paused = False
-        self._queue_persistence: QueuePersistenceManager | None = None
         self._runner = runner or SingleNodeJobRunner(
             self._queue,
             self._run_job_callback,
@@ -122,9 +95,6 @@ class JobExecutionController:
         self._app_state: Any | None = None  # For runtime status updates
         if restore_state:
             self._restore_queue_state()
-        self._queue_persistence = QueuePersistenceManager(self)
-        if restore_state:
-            self._persist_queue_state()
         
         # PR-STARTUP-PERF: Deferred autostart is now triggered externally after GUI is ready
         # (previously executed here, blocking GUI startup for ~10 seconds)
@@ -166,11 +136,20 @@ class JobExecutionController:
         
         Converts status dict to RuntimeJobStatus and forwards to app_state.
         """
+        job_id = str(status_data.get("job_id") or "")
+        job = self._queue.get_job(job_id) if job_id else None
+        if job is not None and job.status == JobStatus.RUNNING:
+            job.progress = float(status_data.get("progress") or 0.0)
+            eta = status_data.get("eta_seconds")
+            job.eta_seconds = float(eta) if eta is not None else None
+            self._queue.persist_runtime_state(job)
+
         if not self._app_state:
             return
         
         try:
             from datetime import datetime
+
             from src.pipeline.job_models_v2 import RuntimeJobStatus
             
             # Create RuntimeJobStatus from status_data
@@ -213,30 +192,6 @@ class JobExecutionController:
             logger.debug("Queue state persisted during stop()")
         except Exception as exc:
             logger.warning(f"Failed to persist queue state during stop: {exc}")
-
-    def submit_pipeline_run(
-        self,
-        pipeline_callable,
-        *,
-        priority: JobPriority = JobPriority.NORMAL,
-        run_mode: str = "queue",
-    ) -> str:
-        job_id = str(uuid.uuid4())
-        worker_id = None
-        try:
-            worker_id = self._worker_registry.get_local_worker().id
-        except Exception:
-            worker_id = None
-        job = Job(
-            job_id=job_id,
-            priority=priority,
-            payload=pipeline_callable,
-            worker_id=worker_id,
-            run_mode=run_mode,
-        )
-        self._queue.submit(job)
-        self._ensure_worker_started()
-        return job_id
 
     def _ensure_worker_started(self) -> None:
         """Idempotently start the background worker thread if not already running."""
@@ -314,7 +269,6 @@ class JobExecutionController:
         """Wrapper that executes jobs via payload or the replay engine."""
         if job is None:
             return normalize_run_result(None)
-        payload = getattr(job, "payload", None)
         record = getattr(job, "_normalized_record", None)
         ctx = LogContext(job_id=job.job_id, subsystem="job_exec")
         log_with_ctx(
@@ -355,22 +309,6 @@ class JobExecutionController:
                 if envelope is not None:
                     attach_envelope(wrapped, envelope)
                 raise wrapped from exc
-        elif callable(payload):
-            if os.environ.get("PYTEST_CURRENT_TEST"):
-                log_with_ctx(
-                    logger,
-                    logging.INFO,
-                    "JOB_EXEC_PAYLOAD | Test mode detected, returning stub result",
-                    ctx=ctx,
-                )
-                return normalize_run_result({"success": True}, default_run_id=job.job_id)
-            log_with_ctx(
-                logger,
-                logging.INFO,
-                "JOB_EXEC_PAYLOAD | Executing queued job payload (legacy bridge)",
-                ctx=ctx,
-            )
-            result = payload()
         else:
             error_message = "Missing normalized record for queued job"
             log_with_ctx(
@@ -410,40 +348,17 @@ class JobExecutionController:
 
     def set_queue_paused(self, paused: bool) -> None:
         self._queue_paused = bool(paused)
+        if self._queue_paused:
+            self._queue.pause()
+        else:
+            self._queue.resume()
         self._persist_queue_state()
 
     def _restore_queue_state(self) -> None:
-        """Restore persisted queue state (jobs + control flags)."""
-        try:
-            snapshot = load_queue_snapshot()
-        except UnsupportedQueueSchemaError as exc:
-            logger.warning(
-                "QUEUE_STATE_UNSUPPORTED | schema_version=%s | ignoring persisted queue state",
-                getattr(exc, "schema_version", None),
-            )
-            return
-        except Exception:
-            logger.exception("Failed to restore queue state")
-            return
-        if snapshot is None:
-            return
-
-        self._auto_run_enabled = bool(snapshot.auto_run_enabled)
-        restored_paused = bool(snapshot.paused)
-        if restored_paused:
-            logger.info(
-                "[STARTUP-PERF] Ignoring persisted paused queue state on restore; "
-                "only queued jobs are persisted across restart"
-            )
-        self._queue_paused = False
-
-        restored_jobs: list[Job] = []
-        for entry in snapshot.jobs:
-            job = self._job_from_snapshot_entry(entry)
-            if job is not None:
-                restored_jobs.append(job)
-        if restored_jobs:
-            self._queue.restore_jobs(restored_jobs)
+        """Restore control flags; JobQueue already loaded its repository projection."""
+        self._auto_run_enabled = bool(self._history_store.get_setting("auto_run_enabled", True))
+        self._queue_paused = self._queue.is_paused()
+        restored_jobs = self._queue.list_jobs(status_filter=JobStatus.QUEUED)
         logger.info(
             "[STARTUP-PERF] Restored queue state: auto_run=%s, paused=%s, %d restored job(s)",
             self._auto_run_enabled,
@@ -462,153 +377,33 @@ class JobExecutionController:
                        self._auto_run_enabled, len(restored_jobs), self._queue_paused)
 
     def _persist_queue_state(self) -> None:
-        """Persist current queued jobs and control flags."""
-        entries: list[dict[str, Any]] = []
-        for job in self._queue.list_jobs():
-            # PR-PERSIST-FIX: Only save QUEUED jobs, exclude RUNNING/COMPLETED/FAILED/CANCELLED
-            if job.status != JobStatus.QUEUED:
-                continue
-            entry = self._build_queue_entry(job)
-            if entry is not None:
-                entries.append(entry)
-        snapshot = QueueSnapshotV1(
-            jobs=entries,
-            auto_run_enabled=self._auto_run_enabled,
-            paused=self._queue_paused,
-        )
-        try:
-            save_queue_snapshot(snapshot)
-            logger.debug("Persisted queue state: %d jobs, auto_run=%s, paused=%s", 
-                        len(entries), self._auto_run_enabled, self._queue_paused)
-        except Exception as exc:
-            logger.warning("Failed to persist queue state: %s", exc)
-
-    def _build_queue_entry(self, job: Job) -> dict[str, Any] | None:
-        record = getattr(job, "_normalized_record", None)
-        snapshot = getattr(job, "snapshot", None) or {}
-        if record is None and snapshot:
-            record = _njr_from_snapshot(snapshot)
-        if record is None:
-            logger.debug("Skipping persistence for job without normalized record: %s", job.job_id)
-            return None
-        metadata = {}
-        metadata_fields = {
-            "run_mode": job.run_mode,
-            "source": job.source,
-            "prompt_source": job.prompt_source,
-            "prompt_pack_id": job.prompt_pack_id,
-        }
-        execution_metadata = getattr(job, "execution_metadata", None)
-        if execution_metadata is not None:
-            metadata_fields["execution_metadata"] = {
-                "retry_attempts": [asdict(attempt) for attempt in execution_metadata.retry_attempts],
-                "stage_checkpoints": [asdict(checkpoint) for checkpoint in execution_metadata.stage_checkpoints],
-                "last_control_action": execution_metadata.last_control_action,
-                "return_to_queue_count": execution_metadata.return_to_queue_count,
-            }
-        for key, value in metadata_fields.items():
-            if value is not None:
-                metadata[key] = value
-        snapshot_dict: dict[str, Any] = {}
-        if isinstance(snapshot, Mapping):
-            snapshot_dict = dict(snapshot)
-        if "normalized_job" not in snapshot_dict:
-            snapshot_dict = {"normalized_job": asdict(record)}
-        return {
-            "queue_id": job.job_id,
-            "njr_snapshot": snapshot_dict,
-            "priority": int(job.priority),
-            "status": job.status.value,
-            "created_at": job.created_at.isoformat(),
-            "queue_schema": SCHEMA_VERSION,
-            "metadata": metadata,
-        }
-
-    def _job_from_snapshot_entry(self, entry: Mapping[str, Any]) -> Job | None:
-        if not isinstance(entry, Mapping):
-            return None
-        status_value = str(entry.get("status") or JobStatus.QUEUED.value).lower()
-        if status_value != JobStatus.QUEUED.value:
-            return None
-        snapshot = entry.get("njr_snapshot") or {}
-        record = _njr_from_snapshot(snapshot)
-        if record is None:
-            return None
-        metadata = entry.get("metadata") or {}
-        priority = _priority_from_value(entry.get("priority", JobPriority.NORMAL))
-        job = Job(
-            job_id=str(entry.get("queue_id") or entry.get("job_id") or record.job_id),
-            priority=priority,
-            run_mode=str(metadata.get("run_mode") or "queue"),
-            source=str(metadata.get("source") or "queue"),
-            prompt_source=str(metadata.get("prompt_source") or "manual"),
-            prompt_pack_id=metadata.get("prompt_pack_id"),
-        )
-        job.snapshot = snapshot
-        job._normalized_record = record  # type: ignore[attr-defined]
-        created = _parse_iso_datetime(entry.get("created_at"))
-        job.created_at = created
-        job.updated_at = created
-        job.status = JobStatus.QUEUED
-        job.payload = None
-        execution_metadata = metadata.get("execution_metadata") or {}
-        if isinstance(execution_metadata, Mapping):
-            retry_attempts = execution_metadata.get("retry_attempts") or []
-            stage_checkpoints = execution_metadata.get("stage_checkpoints") or []
-            for attempt in retry_attempts:
-                if isinstance(attempt, Mapping):
-                    job.execution_metadata.retry_attempts.append(
-                        RetryAttempt(
-                            stage=str(attempt.get("stage") or "pipeline"),
-                            attempt_index=int(attempt.get("attempt_index") or 0),
-                            max_attempts=int(attempt.get("max_attempts") or 0),
-                            reason=str(attempt.get("reason") or ""),
-                            timestamp=float(attempt.get("timestamp") or 0.0),
-                        )
-                    )
-            for checkpoint in stage_checkpoints:
-                if isinstance(checkpoint, Mapping):
-                    job.execution_metadata.stage_checkpoints.append(
-                        StageCheckpoint(
-                            stage_name=str(checkpoint.get("stage_name") or ""),
-                            completed_at=float(checkpoint.get("completed_at") or 0.0),
-                            output_paths=[str(path) for path in checkpoint.get("output_paths") or [] if path],
-                            metadata=dict(checkpoint.get("metadata") or {}),
-                        )
-                    )
-            action = execution_metadata.get("last_control_action")
-            if action:
-                job.execution_metadata.last_control_action = str(action)
-            try:
-                job.execution_metadata.return_to_queue_count = int(
-                    execution_metadata.get("return_to_queue_count") or 0
-                )
-            except Exception:
-                job.execution_metadata.return_to_queue_count = 0
-        return job
+        """Persist queue control flags; jobs are persisted at each mutation."""
+        self._history_store.set_setting("auto_run_enabled", self._auto_run_enabled)
+        self._history_store.set_setting("queue_paused", self._queue.is_paused())
 
     def replay(self, record: HistoryRecord | NormalizedJobRecord | Mapping[str, Any]) -> Any:
-        """Replay path that accepts only NJR snapshots (history records or direct NJRs)."""
+        """Compile replay intent and submit it through the canonical queue path."""
         if isinstance(record, NormalizedJobRecord):
-            return self.run_njr(record)
-        return self._replay_engine.replay_history_record(record)
-
-    def run_njr(self, record: NormalizedJobRecord) -> Any:
-        """Execute a NormalizedJobRecord directly via unified replay engine."""
-        return self._replay_engine.replay_njr(record)
-
-    def _default_history_store(self) -> JobHistoryStore:
-        path = Path(get_job_history_path())
-        return JSONLJobHistoryStore(path)
-
-
-class QueuePersistenceManager:
-    """Handles saving queue state whenever jobs or flags change."""
-
-    def __init__(self, controller: JobExecutionController) -> None:
-        self._controller = controller
-        self._queue = controller.get_queue()
-        self._queue.register_state_listener(self._on_queue_changed)
-
-    def _on_queue_changed(self) -> None:
-        self._controller._persist_queue_state()
+            source_record = record
+        else:
+            data = record.to_dict() if isinstance(record, HistoryRecord) else dict(record)
+            ok, errors = validate_entry(data)
+            if not ok:
+                raise InvalidHistoryRecord(errors)
+            source_record = normalized_job_from_snapshot(data.get("njr_snapshot") or {})
+            if source_record is None:
+                raise InvalidHistoryRecord(["njr_snapshot could not be hydrated"])
+        replay_record = compile_replay_intent(ReplayIntent(source_record))
+        job = Job(
+            job_id=replay_record.job_id,
+            priority=JobPriority.NORMAL,
+            run_mode="queue",
+            source=replay_record.source.kind.value,
+            prompt_source="manual",
+            snapshot={"normalized_job": replay_record.to_dict()},
+        )
+        job._normalized_record = replay_record
+        self._queue.submit(job)
+        if self._auto_run_enabled:
+            self._ensure_worker_started()
+        return job.job_id

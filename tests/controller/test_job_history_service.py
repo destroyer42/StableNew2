@@ -1,20 +1,21 @@
 from src.controller.job_history_service import JobHistoryService
-from src.queue.job_history_store import JSONLJobHistoryStore
-from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_model import JobStatus
 from src.queue.job_queue import JobQueue
+from src.queue.job_repository import JobRepository
+from tests.helpers.njr_factory import make_queue_job
 
 
 def test_history_service_merges_active_and_history(tmp_path):
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    queue = JobQueue(history_store=store)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
     service = JobHistoryService(queue, store)
 
-    completed_job = Job(job_id="done", priority=JobPriority.NORMAL)
+    completed_job = make_queue_job("done")
     queue.submit(completed_job)
     queue.mark_running(completed_job.job_id)
     queue.mark_completed(completed_job.job_id)
 
-    active_job = Job(job_id="active", priority=JobPriority.NORMAL)
+    active_job = make_queue_job("active")
     queue.submit(active_job)
 
     active = service.list_active_jobs()
@@ -35,46 +36,56 @@ def test_history_service_merges_active_and_history(tmp_path):
     assert fetched.job_id == "active"
 
 
-def test_history_service_cancel_and_retry(tmp_path):
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    queue = JobQueue(history_store=store)
+def test_history_service_cancel(tmp_path):
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
 
     class StubController:
         def __init__(self):
             self.cancelled = []
-            self.submitted = 0
 
         def cancel_job(self, job_id: str):
             self.cancelled.append(job_id)
 
-        def submit_pipeline_run(self, payload, priority=None):
-            self.submitted += 1
-            return f"job-new-{self.submitted}"
-
     stub = StubController()
     service = JobHistoryService(queue, store, job_controller=stub)
 
-    queued = Job(job_id="queued", priority=JobPriority.NORMAL)
+    queued = make_queue_job("queued")
     queue.submit(queued)
-
-    completed = Job(job_id="done", priority=JobPriority.NORMAL, payload=lambda: None)
-    queue.submit(completed)
-    queue.mark_running(completed.job_id)
-    queue.mark_completed(completed.job_id)
 
     assert service.cancel_job("queued") is True
     assert "queued" in stub.cancelled
 
-    new_id = service.retry_job("done")
-    assert new_id == "job-new-1"
+
+def test_history_service_retry_uses_canonical_replay(tmp_path):
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
+
+    class StubController:
+        def __init__(self):
+            self.records = []
+
+        def replay(self, record):
+            self.records.append(record)
+            return "replay-new"
+
+    stub = StubController()
+    service = JobHistoryService(queue, store, job_controller=stub)
+    completed = make_queue_job("done")
+    queue.submit(completed)
+    queue.mark_running(completed.job_id)
+    queue.mark_completed(completed.job_id)
+
+    assert service.retry_job("done") == "replay-new"
+    assert stub.records == [completed._normalized_record]
 
 
 def test_history_service_records_result(tmp_path):
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    queue = JobQueue(history_store=store)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
     service = JobHistoryService(queue, store)
 
-    job = Job(job_id="finished", priority=JobPriority.NORMAL)
+    job = make_queue_job("finished")
     queue.submit(job)
     queue.mark_running(job.job_id)
     queue.mark_completed(job.job_id, result={"mode": "test"})
@@ -85,21 +96,14 @@ def test_history_service_records_result(tmp_path):
 
 
 def test_history_service_filters_explicit_legacy_payload_summary_in_sfw(tmp_path):
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    queue = JobQueue(history_store=store)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
     service = JobHistoryService(queue, store)
 
-    legacy_job = Job(job_id="legacy-explicit", priority=JobPriority.NORMAL)
+    legacy_job = make_queue_job("legacy-explicit", positive_prompt="studio nude portrait")
     queue.submit(legacy_job)
     queue.mark_running(legacy_job.job_id)
     queue.mark_completed(legacy_job.job_id)
-    store.save_entry(service._build_entry(legacy_job, status=JobStatus.COMPLETED, result={}))
-
-    explicit_entry = store.get_job("legacy-explicit")
-    assert explicit_entry is not None
-    explicit_entry.payload_summary = "studio nude portrait"
-    explicit_entry.result = {"metadata": "legacy-record"}
-    store.save_entry(explicit_entry)
 
     filtered = service.list_recent_jobs(visibility_mode="sfw")
     assert [entry.job_id for entry in filtered] == []
@@ -110,21 +114,14 @@ def test_history_service_filters_explicit_legacy_payload_summary_in_sfw(tmp_path
 
 
 def test_history_service_keeps_unknown_legacy_entries_visible_in_sfw(tmp_path):
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    queue = JobQueue(history_store=store)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
     service = JobHistoryService(queue, store)
 
-    legacy_job = Job(job_id="legacy-unknown", priority=JobPriority.NORMAL)
+    legacy_job = make_queue_job("legacy-unknown", positive_prompt="portrait study")
     queue.submit(legacy_job)
     queue.mark_running(legacy_job.job_id)
     queue.mark_completed(legacy_job.job_id)
-    store.save_entry(service._build_entry(legacy_job, status=JobStatus.COMPLETED, result={}))
-
-    unknown_entry = store.get_job("legacy-unknown")
-    assert unknown_entry is not None
-    unknown_entry.payload_summary = "portrait study"
-    unknown_entry.result = {"metadata": ["unexpected-shape"]}
-    store.save_entry(unknown_entry)
 
     filtered = service.list_recent_jobs(visibility_mode="sfw")
     assert [entry.job_id for entry in filtered] == ["legacy-unknown"]
@@ -199,11 +196,11 @@ def test_normalize_result_video_bundle_handles_none():
 
 def test_build_entry_stamps_video_bundle_for_video_job(tmp_path):
     """record() stamps video_bundle when pipeline result contains video metadata."""
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    queue = JobQueue(history_store=store)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
     service = JobHistoryService(queue, store)
 
-    job = Job(job_id="video-job", priority=JobPriority.NORMAL)
+    job = make_queue_job("video-job")
     queue.submit(job)
     queue.mark_running(job.job_id)
 

@@ -122,54 +122,20 @@ class PromptPackNormalizedJobBuilder:
                 f"[PromptPackNormalizedJobBuilder] Entry {entry_count} ({entry.pack_id}) expanded to {len(expanded_entries)} variant(s)"
             )
 
-            # Track jobs per prompt to renumber variant indices correctly
-            jobs_for_this_prompt: list[NormalizedJobRecord] = []
-
-            for expanded_entry in expanded_entries:
-                jobs = self._build_jobs_for_entry(expanded_entry)
+            for matrix_variant_index, expanded_entry in enumerate(expanded_entries):
+                jobs = self._build_jobs_for_entry(
+                    expanded_entry,
+                    matrix_variant_index=matrix_variant_index,
+                    matrix_variant_count=len(expanded_entries),
+                )
                 if jobs:
                     _logger.info(
                         f"[PromptPackNormalizedJobBuilder] Expanded entry produced {len(jobs)} NJR(s)"
                     )
-                    jobs_for_this_prompt.extend(jobs)
-
-            # Renumber variant indices sequentially across all matrix combinations
-            if jobs_for_this_prompt:
-                self._renumber_variant_indices(jobs_for_this_prompt, len(expanded_entries))
-                records.extend(jobs_for_this_prompt)
+                    records.extend(jobs)
 
         _logger.info(f"[PromptPackNormalizedJobBuilder] Total NJRs generated: {len(records)}")
         return records
-
-    def _renumber_variant_indices(
-        self, jobs: list[NormalizedJobRecord], matrix_combinations_count: int
-    ) -> None:
-        """Renumber variant indices sequentially across matrix combinations.
-
-        When matrix expansion creates multiple combinations, each combination produces
-        jobs with variant_index starting at 0. This method renumbers them sequentially
-        so that matrix combination 1 gets v01-v0N, combination 2 gets v(N+1)-v(2N), etc.
-
-        Args:
-            jobs: List of NJRs to renumber (modified in place)
-            matrix_combinations_count: Number of matrix combinations that were expanded
-        """
-        if matrix_combinations_count <= 1:
-            # No matrix expansion, variants are already numbered correctly
-            return
-
-        # Group jobs by their original variant_index to preserve batch grouping
-        # Jobs are ordered: [matrix1_variant0_batch0, matrix1_variant0_batch1, ..., matrix2_variant0_batch0, ...]
-        jobs_per_combination = len(jobs) // matrix_combinations_count
-
-        # Renumber: each matrix combination gets sequential variant indices
-        for i, job in enumerate(jobs):
-            matrix_combo_index = i // jobs_per_combination
-            job.variant_index = matrix_combo_index
-            job.variant_total = matrix_combinations_count
-            _logger.debug(
-                f"[Variant Renumber] Job {i}: variant_index={job.variant_index}, variant_total={job.variant_total}"
-            )
 
     def _expand_entry_by_matrix(self, entry: PackJobEntry) -> list[PackJobEntry]:
         """Expand a single entry into multiple entries based on pack JSON matrix slots.
@@ -370,7 +336,13 @@ class PromptPackNormalizedJobBuilder:
         values.reverse()
         return tuple(values)
 
-    def _build_jobs_for_entry(self, entry: PackJobEntry) -> list[NormalizedJobRecord]:
+    def _build_jobs_for_entry(
+        self,
+        entry: PackJobEntry,
+        *,
+        matrix_variant_index: int = 0,
+        matrix_variant_count: int = 1,
+    ) -> list[NormalizedJobRecord]:
         pack_config = self._load_pack_config(entry.pack_id)
 
         # BUGFIX: Allow learning experiments without pack config if config_snapshot is provided
@@ -448,6 +420,14 @@ class PromptPackNormalizedJobBuilder:
 
         finalized_jobs: list[NormalizedJobRecord] = []
         for record in jobs:
+            # JobBuilderV2 numbers variants within one matrix expansion. Matrix
+            # expansion happens before final NJR construction, so combine the
+            # immutable provenance values without mutating the NJR.
+            inner_variant_total = max(1, int(record.variant_total))
+            final_variant_total = max(1, matrix_variant_count) * inner_variant_total
+            final_variant_index = (
+                max(0, matrix_variant_index) * inner_variant_total + record.variant_index
+            )
             positive_embeddings = tuple(
                 render_embedding_reference(name, weight)
                 for name, weight in prompt_resolution.positive_embeddings
@@ -513,8 +493,8 @@ class PromptPackNormalizedJobBuilder:
                     ),
                     provenance=NJRProvenance(
                         seed=record.seed,
-                        variant_index=record.variant_index,
-                        variant_total=record.variant_total,
+                        variant_index=final_variant_index,
+                        variant_total=final_variant_total,
                         batch_index=record.batch_index,
                         batch_total=record.batch_total,
                         randomizer_summary={

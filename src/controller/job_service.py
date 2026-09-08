@@ -26,6 +26,7 @@ from src.pipeline.result_contract_v26 import build_diagnostics_descriptor
 from src.queue.job_history_store import JobHistoryStore
 from src.queue.job_model import Job, JobExecutionMetadata, JobStatus, RetryAttempt
 from src.queue.job_queue import JobQueue
+from src.queue.job_repository import JobRepository
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.utils import LogContext, log_with_ctx
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope, serialize_envelope
@@ -231,7 +232,11 @@ class JobService:
             run_callable: Callable to execute jobs, passed to runner/factory.
         """
         self.job_queue = job_queue
-        self.history_store = history_store
+        if history_store is not None and history_store is not job_queue.repository:
+            if not isinstance(history_store, JobRepository):
+                raise TypeError("Live JobService history must project from JobRepository")
+            raise ValueError("JobService and JobQueue must share one JobRepository")
+        self.history_store = job_queue.repository
         self._run_callable = run_callable
 
         # PR-0114C-T(x): Support runner injection via factory or direct instance
@@ -259,11 +264,8 @@ class JobService:
 
         # PR-0114C-T(x): Support history service injection
         self._history_service = history_service
-        if self._history_service is None and history_store is not None:
-            try:
-                self._history_service = JobHistoryService(job_queue, history_store)
-            except Exception:
-                self._history_service = None
+        if self._history_service is None:
+            self._history_service = JobHistoryService(job_queue, self.history_store)
 
         self._listeners: dict[str, list[Callable[..., None]]] = {}
         self._queue_status: QueueStatus = "idle"
@@ -718,6 +720,9 @@ class JobService:
         if pid in meta.external_pids:
             return
         meta.external_pids.append(pid)
+        job = self.job_queue.get_job(job_id)
+        if job is not None:
+            self.job_queue.persist_runtime_state(job)
 
     def record_retry_attempt(
         self,
@@ -739,6 +744,9 @@ class JobService:
                 reason=reason,
             )
         )
+        job = self.job_queue.get_job(job_id)
+        if job is not None:
+            self.job_queue.persist_runtime_state(job)
 
     def cleanup_external_processes(self, job_id: str, *, reason: str | None = None) -> None:
         """Terminate and clear tracked PIDs for the provided job."""
@@ -808,6 +816,7 @@ class JobService:
         if job and job.execution_metadata.external_pids:
             combined_pids.update(job.execution_metadata.external_pids)
             job.execution_metadata.external_pids.clear()
+            self.job_queue.persist_runtime_state(job)
         if not combined_pids:
             return None
         return JobExecutionMetadata(external_pids=list(combined_pids))
@@ -1006,7 +1015,6 @@ class JobService:
             self._log_job_finished(job.job_id, "completed", "Job completed successfully.")
             logger.debug("[job_service/events] emitting EVENT_JOB_FINISHED for job %s", job.job_id)
             self._emit(self.EVENT_JOB_FINISHED, job)
-            self._record_job_history(job, status)
             # PR-LEARN-003: Notify completion handlers
             self._notify_completion(job, {"success": True, "status": status})
         elif status == JobStatus.CANCELLED:
@@ -1019,7 +1027,6 @@ class JobService:
         elif status == JobStatus.FAILED:
             self._log_job_finished(job.job_id, "failed", job.error_message or "Job failed.")
             self._emit(self.EVENT_JOB_FAILED, job)
-            self._record_job_history(job, status)
             # PR-LEARN-003: Notify completion handlers
             self._notify_completion(
                 job, {"success": False, "status": status, "error": job.error_message}
@@ -1096,17 +1103,6 @@ class JobService:
         if job:
             job.error_envelope = envelope
         self.cancel_job(job_id, reason=f"watchdog_{reason.lower()}")
-
-    def _record_job_history(self, job: Job, status: JobStatus) -> None:
-        if not self._history_service:
-            return
-        try:
-            if status == JobStatus.COMPLETED:
-                self._history_service.record(job, result=job.result)
-            elif status == JobStatus.FAILED:
-                self._history_service.record_failure(job, error=job.error_message)
-        except Exception:
-            logging.debug("Failed to record job history for %s", job.job_id, exc_info=True)
 
     def _emit_queue_updated(self) -> None:
         jobs = self.job_queue.list_jobs()

@@ -20,8 +20,8 @@ from src.learning.discovered_review_models import DiscoveredReviewExperiment, Di
 from src.learning.discovered_review_store import DiscoveredReviewStore
 from src.learning.output_scanner import OutputScanner
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_queue import JobQueue
+from src.queue.job_repository import JobRepository
 from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
@@ -183,8 +183,8 @@ def test_resolver_preserves_safe_payload_without_heuristic_hits() -> None:
 
 
 def test_job_history_service_filters_lists_and_redacts_detail_in_sfw(tmp_path: Path) -> None:
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    queue = JobQueue(history_store=store)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
     service = JobHistoryService(queue, store)
 
     safe_record = _make_job_record("safe-job", "heroic landscape")

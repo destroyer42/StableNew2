@@ -338,7 +338,11 @@ class TestJobServiceLifecycleIntegration(unittest.TestCase):
         job_queue = JobQueue()
 
         # Add a job to the queue
-        job = Job(job_id="test-job-1", prompt_pack_id="pack-1", priority=JobPriority.NORMAL)
+        from tests.helpers.njr_factory import make_queue_job
+
+        job = make_queue_job(
+            "test-job-1", prompt_pack_id="pack-1", priority=JobPriority.NORMAL
+        )
         job_queue.submit(job)
 
         service = JobService(job_queue, run_callable=lambda j: None)

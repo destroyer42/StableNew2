@@ -96,3 +96,25 @@ def serialize_envelope(envelope: UnifiedErrorEnvelope | None) -> dict[str, Any] 
         if field.name != "cause"
     }
     return data
+
+
+def deserialize_envelope(data: Mapping[str, Any] | None) -> UnifiedErrorEnvelope | None:
+    """Restore a persisted envelope without attempting to recreate its exception."""
+    if not data:
+        return None
+    return UnifiedErrorEnvelope(
+        error_type=str(data.get("error_type") or "StableNewError"),
+        subsystem=str(data.get("subsystem") or "unknown"),
+        severity=str(data.get("severity") or "ERROR"),
+        message=str(data.get("message") or ""),
+        cause=None,
+        stack=str(data.get("stack") or ""),
+        job_id=str(data["job_id"]) if data.get("job_id") is not None else None,
+        stage=str(data["stage"]) if data.get("stage") is not None else None,
+        timestamp=float(data.get("timestamp") or time.time()),
+        remediation=(
+            str(data["remediation"]) if data.get("remediation") is not None else None
+        ),
+        context=dict(data.get("context") or {}),
+        retry_info=(dict(data["retry_info"]) if data.get("retry_info") else None),
+    )

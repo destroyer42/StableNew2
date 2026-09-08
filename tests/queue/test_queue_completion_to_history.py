@@ -5,19 +5,20 @@ from pathlib import Path
 from typing import Any
 
 from src.api.client import WebUIUnavailableError
-from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
+from src.queue.job_repository import JobRepository
 from src.queue.single_node_runner import SingleNodeJobRunner
+from tests.helpers.njr_factory import make_queue_job
 
 
-def _build_history_queue(tmp_path: Path) -> tuple[JobQueue, JSONLJobHistoryStore]:
-    history_store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    return JobQueue(history_store=history_store), history_store
+def _build_history_queue(tmp_path: Path) -> tuple[JobQueue, JobRepository]:
+    repository = JobRepository(tmp_path / "jobs.sqlite3")
+    return JobQueue(repository=repository), repository
 
 
 def _wait_for_history_entry(
-    history_store: JSONLJobHistoryStore,
+    history_store: JobRepository,
     job_id: str,
     *,
     timeout: float = 1.0,
@@ -42,7 +43,7 @@ def test_successful_job_moves_to_history(tmp_path: Path) -> None:
         return {"status": "success"}
 
     runner = SingleNodeJobRunner(queue, execute, poll_interval=0.01)
-    job = Job("success-job", priority=JobPriority.NORMAL)
+    job = make_queue_job("success-job", priority=JobPriority.NORMAL)
     queue.submit(job)
 
     runner.start()
@@ -74,7 +75,7 @@ def test_webui_down_marks_job_failed(tmp_path: Path) -> None:
         )
 
     runner = SingleNodeJobRunner(queue, fail, poll_interval=0.01)
-    job = Job("fail-job", priority=JobPriority.NORMAL)
+    job = make_queue_job("fail-job", priority=JobPriority.NORMAL)
     queue.submit(job)
 
     runner.start()

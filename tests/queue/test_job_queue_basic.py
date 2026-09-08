@@ -2,16 +2,17 @@ from __future__ import annotations
 
 import threading
 
-from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_model import JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
+from tests.helpers.njr_factory import make_queue_job
 
 
 def test_job_queue_respects_priority_and_fifo():
     queue = JobQueue()
-    queue.submit(Job("low-1", priority=JobPriority.LOW))
-    queue.submit(Job("high-1", priority=JobPriority.HIGH))
-    queue.submit(Job("norm-1", priority=JobPriority.NORMAL))
-    queue.submit(Job("high-2", priority=JobPriority.HIGH))
+    queue.submit(make_queue_job("low-1", priority=JobPriority.LOW))
+    queue.submit(make_queue_job("high-1", priority=JobPriority.HIGH))
+    queue.submit(make_queue_job("norm-1", priority=JobPriority.NORMAL))
+    queue.submit(make_queue_job("high-2", priority=JobPriority.HIGH))
 
     order = [queue.get_next_job().job_id for _ in range(4)]
     assert order[:2] == ["high-1", "high-2"]
@@ -20,7 +21,7 @@ def test_job_queue_respects_priority_and_fifo():
 
 def test_job_queue_status_transitions():
     queue = JobQueue()
-    job = Job("j1")
+    job = make_queue_job("j1")
     queue.submit(job)
     next_job = queue.get_next_job()
     assert next_job.job_id == "j1"
@@ -29,9 +30,8 @@ def test_job_queue_status_transitions():
     queue.mark_completed("j1", result={"ok": True})
     assert job.status == JobStatus.COMPLETED
     assert job.result == {"ok": True}
-    queue.mark_failed("j1", "error")  # even completed, should update status
-    assert job.status == JobStatus.FAILED
-    assert job.error_message == "error"
+    queue.mark_failed("j1", "error")
+    assert job.status == JobStatus.COMPLETED
 
 
 def test_state_listener_notified_on_changes() -> None:
@@ -39,7 +39,7 @@ def test_state_listener_notified_on_changes() -> None:
     events: list[str] = []
     queue.register_state_listener(lambda: events.append("updated"))
 
-    queue.submit(Job("listener-job"))
+    queue.submit(make_queue_job("listener-job"))
     assert events
 
 
@@ -49,15 +49,15 @@ def test_state_listener_notifications_can_be_coalesced() -> None:
     queue.register_state_listener(lambda: events.append("updated"))
 
     with queue.coalesce_state_notifications():
-        queue.submit(Job("listener-job-1"))
-        queue.submit(Job("listener-job-2"))
+        queue.submit(make_queue_job("listener-job-1"))
+        queue.submit(make_queue_job("listener-job-2"))
 
     assert events == ["updated"]
 
 
 def test_restore_jobs_repopulate_queue() -> None:
     queue = JobQueue()
-    job = Job("restored-job")
+    job = make_queue_job("restored-job")
     queue.restore_jobs([job])
 
     restored = queue.get_job("restored-job")
@@ -66,7 +66,7 @@ def test_restore_jobs_repopulate_queue() -> None:
 
 def test_queue_pause_resume_blocks_and_restores_dequeue() -> None:
     queue = JobQueue()
-    queue.submit(Job("j1"))
+    queue.submit(make_queue_job("j1"))
 
     queue.pause()
     assert queue.is_paused() is True
@@ -79,8 +79,8 @@ def test_queue_pause_resume_blocks_and_restores_dequeue() -> None:
 
 def test_remove_listener_can_reenter_queue_without_deadlock() -> None:
     queue = JobQueue()
-    queue.submit(Job("j1"))
-    queue.submit(Job("j2"))
+    queue.submit(make_queue_job("j1"))
+    queue.submit(make_queue_job("j2"))
     completed = threading.Event()
 
     def _listener() -> None:
@@ -98,8 +98,8 @@ def test_remove_listener_can_reenter_queue_without_deadlock() -> None:
 
 def test_clear_listener_can_reenter_queue_without_deadlock() -> None:
     queue = JobQueue()
-    queue.submit(Job("j1"))
-    queue.submit(Job("j2"))
+    queue.submit(make_queue_job("j1"))
+    queue.submit(make_queue_job("j2"))
     completed = threading.Event()
 
     def _listener() -> None:
@@ -117,7 +117,7 @@ def test_clear_listener_can_reenter_queue_without_deadlock() -> None:
 
 def test_remove_refuses_running_job() -> None:
     queue = JobQueue()
-    job = Job("running-job")
+    job = make_queue_job("running-job")
     queue.submit(job)
     queue.mark_running(job.job_id)
 
@@ -130,8 +130,8 @@ def test_remove_refuses_running_job() -> None:
 
 def test_list_active_jobs_ordered_returns_running_then_queue_order() -> None:
     queue = JobQueue()
-    queued_first = Job("queued-1", priority=JobPriority.NORMAL)
-    queued_second = Job("queued-2", priority=JobPriority.NORMAL)
+    queued_first = make_queue_job("queued-1", priority=JobPriority.NORMAL)
+    queued_second = make_queue_job("queued-2", priority=JobPriority.NORMAL)
     queue.submit(queued_first)
     queue.submit(queued_second)
     running = queue.get_next_job()
@@ -144,8 +144,8 @@ def test_list_active_jobs_ordered_returns_running_then_queue_order() -> None:
 
 def test_cancel_running_job_return_to_queue_requeues_at_back() -> None:
     queue = JobQueue()
-    first = Job("first")
-    second = Job("second")
+    first = make_queue_job("first")
+    second = make_queue_job("second")
     queue.submit(first)
     queue.submit(second)
 

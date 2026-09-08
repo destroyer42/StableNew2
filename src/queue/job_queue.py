@@ -1,7 +1,7 @@
 # Subsystem: Queue
-# Role: Implements the in-memory job queue contract.
+# Role: Provides the runnable projection of the durable job repository.
 
-"""In-memory job queue with simple priority + FIFO behavior.
+"""Thread-safe runnable projection with priority + FIFO behavior.
 
 PR-CORE1-060: queue runtime is NJR-only for active jobs. Queue items rely on
 `_normalized_record`, `config_snapshot`, and `snapshot`, not `pipeline_config`.
@@ -12,29 +12,36 @@ from __future__ import annotations
 import heapq
 from collections import deque
 from collections.abc import Callable, Iterable
-from datetime import datetime
 from threading import Lock
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
-from src.queue.job_history_store import JobHistoryStore
 from src.queue.job_model import Job, JobStatus
-
-if TYPE_CHECKING:  # pragma: no cover
-    from datetime import datetime
+from src.queue.job_repository import JobRepository
 
 
 class JobQueue:
-    """Thread-safe in-memory job queue."""
+    """Thread-safe runnable projection of one authoritative repository."""
 
     _FINAL_STATUSES = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
 
-    def __init__(self, *, history_store: JobHistoryStore | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        repository: JobRepository | None = None,
+        history_store: JobRepository | None = None,
+    ) -> None:
+        if repository is not None and history_store is not None and repository is not history_store:
+            raise ValueError("JobQueue accepts exactly one JobRepository authority")
+        selected = repository or history_store
+        if selected is not None and not isinstance(selected, JobRepository):
+            raise TypeError("JSON/JSONL stores cannot be attached to the live queue")
+        self._repository = selected or JobRepository()
         self._queue: list[tuple[int, int, str]] = []
         self._jobs: dict[str, Job] = {}
         self._counter = 0
         self._lock = Lock()
         self._paused = False
-        self._history_store = history_store
+        self._history_store = self._repository
         # PR-MEMORY-001: Bounded finalized jobs (max 100) using deque for FIFO eviction
         self._finalized_jobs_order: deque[str] = deque(maxlen=100)
         self._finalized_jobs: dict[str, Job] = {}
@@ -42,13 +49,27 @@ class JobQueue:
         self._state_listeners: list[Callable[[], None]] = []
         self._state_notifications_suppressed = 0
         self._state_notifications_pending = False
+        self._restore_repository_projection()
+
+    @property
+    def repository(self) -> JobRepository:
+        return self._repository
+
+    def _restore_repository_projection(self) -> None:
+        for job in self._repository.load_runnable_jobs(recover_interrupted=True):
+            job._persist_runtime_state = lambda current=job: self.persist_runtime_state(current)
+            self._counter += 1
+            self._jobs[job.job_id] = job
+            heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
+        self._paused = bool(self._repository.get_setting("queue_paused", False))
 
     def submit(self, job: Job) -> None:
+        self._repository.record_job_submission(job)
+        job._persist_runtime_state = lambda current=job: self.persist_runtime_state(current)
         with self._lock:
             self._counter += 1
             self._jobs[job.job_id] = job
             heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
-        self._record_submission(job)
         self._notify_state_listeners()
 
     def get_next_job(self) -> Job | None:
@@ -63,11 +84,13 @@ class JobQueue:
             return None
 
     def pause(self) -> None:
+        self._repository.set_setting("queue_paused", True)
         with self._lock:
             self._paused = True
         self._notify_state_listeners()
 
     def resume(self) -> None:
+        self._repository.set_setting("queue_paused", False)
         with self._lock:
             self._paused = False
         self._notify_state_listeners()
@@ -91,28 +114,25 @@ class JobQueue:
             running = next((job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None)
             if running is None:
                 return None
-            if return_to_queue:
+        if return_to_queue:
+            running.execution_metadata.last_control_action = "return_to_queue"
+            running.execution_metadata.return_to_queue_count += 1
+            running.progress = 0.0
+            running.eta_seconds = None
+            running.error_message = None
+            running.result = None
+            persisted = self._repository.transition_job(running, JobStatus.QUEUED)
+            with self._lock:
+                self._copy_persisted_state(running, persisted)
                 self._counter += 1
-                running.status = JobStatus.QUEUED
-                running.updated_at = datetime.utcnow()
-                running.completed_at = None
-                running.started_at = None
-                running.error_message = None
-                running.result = None
-                running.progress = 0.0
-                running.eta_seconds = None
-                running.execution_metadata.last_control_action = "return_to_queue"
-                running.execution_metadata.return_to_queue_count += 1
                 self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid != running.job_id]
                 heapq.heappush(self._queue, (-int(running.priority), self._counter, running.job_id))
                 heapq.heapify(self._queue)
-        if return_to_queue:
             self._notify_status(running, JobStatus.QUEUED)
             self._notify_state_listeners()
         else:
-            cancelled = self._update_status(running.job_id, JobStatus.CANCELLED, "cancelled")
-            if cancelled is not None:
-                cancelled.execution_metadata.last_control_action = "cancelled"
+            running.execution_metadata.last_control_action = "cancelled"
+            self._update_status(running.job_id, JobStatus.CANCELLED, "cancelled")
         return running
 
     def mark_running(self, job_id: str) -> None:
@@ -154,7 +174,8 @@ class JobQueue:
             job = self._jobs.get(job_id)
             if job is not None:
                 return job
-            return self._finalized_jobs.get(job_id)
+            finalized = self._finalized_jobs.get(job_id)
+        return finalized or self._repository.get_job_model(job_id)
 
     def _update_status(
         self,
@@ -165,21 +186,48 @@ class JobQueue:
     ) -> Job | None:
         with self._lock:
             job = self._jobs.get(job_id)
-            if job is None:
-                return None
-            job.mark_status(status, error_message)
-            if result is not None:
-                job.result = result
-            ts = job.updated_at
-            should_prune = status in self._FINAL_STATUSES and self._history_store is not None
+        if job is None:
+            return None
+        persisted = self._repository.transition_job(
+            job,
+            status,
+            error_message=error_message,
+            result=result,
+        )
+        with self._lock:
+            self._copy_persisted_state(job, persisted)
+            should_prune = status in self._FINAL_STATUSES
             if should_prune:
                 # PR-MEMORY-001: Add to bounded finalized jobs collection
                 self._add_finalized_job(job_id, job)
                 self._prune_job(job_id)
-        self._record_status(job_id, status, ts, error_message, result=result)
         self._notify_status(job, status)
         self._notify_state_listeners()
         return job
+
+    def claim_next_job(self) -> Job | None:
+        """Atomically claim the next runnable job for the single-node worker."""
+        claimed: Job | None = None
+        with self._lock:
+            if self._paused:
+                return None
+            while self._queue:
+                queue_item = heapq.heappop(self._queue)
+                job = self._jobs.get(queue_item[2])
+                if job is None or job.status != JobStatus.QUEUED:
+                    continue
+                try:
+                    persisted = self._repository.transition_job(job, JobStatus.RUNNING)
+                except Exception:
+                    heapq.heappush(self._queue, queue_item)
+                    raise
+                self._copy_persisted_state(job, persisted)
+                claimed = job
+                break
+        if claimed is not None:
+            self._notify_status(claimed, JobStatus.RUNNING)
+            self._notify_state_listeners()
+        return claimed
 
     def _add_finalized_job(self, job_id: str, job: Job) -> None:
         """Add job to bounded finalized collection.
@@ -201,28 +249,26 @@ class JobQueue:
         self._finalized_jobs_order.append(job_id)
         self._finalized_jobs[job_id] = job
 
-    def _record_submission(self, job: Job) -> None:
-        if not self._history_store:
-            return
-        try:
-            self._history_store.record_job_submission(job)
-        except Exception:
-            pass
+    @staticmethod
+    def _copy_persisted_state(target: Job, source: Job) -> None:
+        for name in (
+            "status",
+            "updated_at",
+            "started_at",
+            "completed_at",
+            "progress",
+            "eta_seconds",
+            "worker_id",
+            "execution_metadata",
+            "error_message",
+            "error_envelope",
+            "result",
+        ):
+            setattr(target, name, getattr(source, name))
 
-    def _record_status(
-        self,
-        job_id: str,
-        status: JobStatus,
-        ts: datetime,
-        error: str | None,
-        result: dict | None,
-    ) -> None:
-        if not self._history_store:
-            return
-        try:
-            self._history_store.record_status_change(job_id, status, ts, error, result=result)
-        except Exception:
-            pass
+    def persist_runtime_state(self, job: Job) -> None:
+        """Durably checkpoint mutable execution metadata for an active job."""
+        self._repository.persist_runtime_state(job)
 
     def register_status_callback(self, callback: Callable[[Job, JobStatus], None]) -> None:
         """Allow observers to react to job status changes."""
@@ -261,6 +307,9 @@ class JobQueue:
                     prev_priority, prev_counter, prev_jid = queued[i - 1]
                     if priority != prev_priority:
                         return False
+                    candidate = list(queued)
+                    candidate[i - 1], candidate[i] = candidate[i], candidate[i - 1]
+                    self._repository.update_queue_order([item[2] for item in candidate])
                     self._swap_queue_positions(job_id, prev_jid, counter, prev_counter)
                     moved = True
                     break
@@ -288,6 +337,9 @@ class JobQueue:
                     next_priority, next_counter, next_jid = queued[i + 1]
                     if priority != next_priority:
                         return False
+                    candidate = list(queued)
+                    candidate[i], candidate[i + 1] = candidate[i + 1], candidate[i]
+                    self._repository.update_queue_order([item[2] for item in candidate])
                     self._swap_queue_positions(job_id, next_jid, counter, next_counter)
                     moved = True
                     break
@@ -335,7 +387,15 @@ class JobQueue:
             # Assign a new lower counter (move to front)
             new_counter = min_counter_for_priority - 1
             
-            # Update the queue with the new counter
+            candidate = [item for item in queued if item[2] != job_id]
+            insert_at = next(
+                (index for index, item in enumerate(candidate) if item[0] == job_priority),
+                0,
+            )
+            candidate.insert(insert_at, queued[job_index])
+            self._repository.update_queue_order([item[2] for item in candidate])
+
+            # Update the in-memory projection after the durable order succeeds.
             new_queue = []
             for priority, counter, jid in self._queue:
                 if jid == job_id:
@@ -389,7 +449,15 @@ class JobQueue:
             # Assign a new higher counter (move to back)
             new_counter = max_counter_for_priority + 1
             
-            # Update the queue with the new counter
+            candidate = [item for item in queued if item[2] != job_id]
+            insert_at = max(
+                (index for index, item in enumerate(candidate) if item[0] == job_priority),
+                default=len(candidate) - 1,
+            ) + 1
+            candidate.insert(insert_at, queued[job_index])
+            self._repository.update_queue_order([item[2] for item in candidate])
+
+            # Update the in-memory projection after the durable order succeeds.
             new_queue = []
             for priority, counter, jid in self._queue:
                 if jid == job_id:
@@ -412,25 +480,11 @@ class JobQueue:
         Returns:
             The removed Job, or None if not found.
         """
-        removed: Job | None = None
         with self._lock:
             live_job = self._jobs.get(job_id)
-            if live_job is not None:
-                if live_job.status == JobStatus.RUNNING:
-                    return None
-                removed = self._jobs.pop(job_id, None)
-                self._finalized_jobs.pop(job_id, None)
-            else:
-                removed = self._finalized_jobs.pop(job_id, None)
-
-            if removed is not None:
-                if removed.status == JobStatus.QUEUED:
-                    removed.status = JobStatus.CANCELLED
-                self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid != job_id]
-                heapq.heapify(self._queue)
-        if removed is not None:
-            self._notify_state_listeners()
-        return removed
+            if live_job is None or live_job.status == JobStatus.RUNNING:
+                return None
+        return self.mark_cancelled(job_id, "removed from queue")
 
     def clear(self) -> int:
         """Clear all queued jobs (not running or completed).
@@ -439,19 +493,11 @@ class JobQueue:
             The number of jobs removed.
         """
         with self._lock:
-            # Find all queued jobs
             queued_ids = [jid for jid, job in self._jobs.items() if job.status == JobStatus.QUEUED]
-            count = len(queued_ids)
-            # Remove from jobs dict
-            for jid in queued_ids:
-                self._jobs.pop(jid, None)
-                self._finalized_jobs.pop(jid, None)
-            # Rebuild queue without queued jobs
-            self._queue = [(p, c, jid) for (p, c, jid) in self._queue if jid not in queued_ids]
-            heapq.heapify(self._queue)
-        if count:
-            self._notify_state_listeners()
-        return count
+        with self.coalesce_state_notifications():
+            for job_id in queued_ids:
+                self.mark_cancelled(job_id, "queue cleared")
+        return len(queued_ids)
 
     def _get_ordered_queued_jobs(self) -> list[tuple[int, int, str]]:
         """Get queued jobs in priority order (internal, must hold lock)."""
@@ -508,14 +554,15 @@ class JobQueue:
                 continue
 
     def restore_jobs(self, jobs: Iterable[Job]) -> None:
-        """Restore queued jobs without recording submissions."""
-        with self._lock:
+        """Submit recovered jobs through repository authority.
+
+        Offline legacy recovery should normally use the migration tool; this
+        method remains for callers that already hold valid NJR-backed jobs.
+        """
+        with self.coalesce_state_notifications():
             for job in jobs:
-                self._counter += 1
                 job.status = JobStatus.QUEUED
-                self._jobs[job.job_id] = job
-                heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
-        self._notify_state_listeners()
+                self.submit(job)
 
 
 class _QueueStateNotificationBatch:

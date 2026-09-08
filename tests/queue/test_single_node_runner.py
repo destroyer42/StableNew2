@@ -8,6 +8,7 @@ import time
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
+from tests.helpers.njr_factory import make_queue_job
 
 
 def _wait_for_status(
@@ -34,7 +35,7 @@ def test_worker_processes_jobs_from_queue() -> None:
     runner = SingleNodeJobRunner(job_queue=job_queue, run_callable=run_callable, poll_interval=0.01)
     runner.start()
 
-    job = Job(job_id="runner-001")
+    job = make_queue_job("runner-001")
     job_queue.submit(job)
 
     assert _wait_for_status(job_queue, "runner-001", status=JobStatus.COMPLETED) is not None
@@ -57,8 +58,8 @@ def test_worker_survives_exceptions_and_processes_following_jobs() -> None:
     runner = SingleNodeJobRunner(job_queue=job_queue, run_callable=run_callable, poll_interval=0.01)
     runner.start()
 
-    job_queue.submit(Job(job_id="runner-fail"))
-    job_queue.submit(Job(job_id="runner-next"))
+    job_queue.submit(make_queue_job("runner-fail"))
+    job_queue.submit(make_queue_job("runner-next"))
 
     failed = _wait_for_status(job_queue, "runner-fail", status=JobStatus.FAILED)
     assert failed is not None and failed.error_message is not None
@@ -84,7 +85,7 @@ def test_worker_warns_long_running_jobs(monkeypatch, caplog) -> None:
     runner = SingleNodeJobRunner(job_queue=job_queue, run_callable=run_callable, poll_interval=0.01)
     runner.start()
 
-    job_queue.submit(Job(job_id="runner-long"))
+    job_queue.submit(make_queue_job("runner-long"))
 
     assert _wait_for_status(job_queue, "runner-long", status=JobStatus.COMPLETED) is not None
     runner.stop()
@@ -101,7 +102,7 @@ def test_worker_marks_job_failed_on_explicit_false_success() -> None:
     runner = SingleNodeJobRunner(job_queue=job_queue, run_callable=run_callable, poll_interval=0.01)
     runner.start()
 
-    job = Job(job_id="runner-explicit-fail")
+    job = make_queue_job("runner-explicit-fail")
     job_queue.submit(job)
 
     failed = _wait_for_status(job_queue, "runner-explicit-fail", status=JobStatus.FAILED)
@@ -120,7 +121,7 @@ def test_worker_allows_legacy_result_without_success_to_complete() -> None:
     runner = SingleNodeJobRunner(job_queue=job_queue, run_callable=run_callable, poll_interval=0.01)
     runner.start()
 
-    job = Job(job_id="runner-legacy-result")
+    job = make_queue_job("runner-legacy-result")
     job_queue.submit(job)
 
     completed = _wait_for_status(job_queue, "runner-legacy-result", status=JobStatus.COMPLETED)

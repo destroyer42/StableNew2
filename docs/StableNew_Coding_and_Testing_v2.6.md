@@ -110,6 +110,14 @@ New typed seams should not add to that debt.
   transitions.
 - Close threads, clients, loggers, temporary servers, and process handles.
 
+## Job persistence and legacy migration
+
+- Use a temporary SQLite database for repository, queue, history, and restart tests.
+- Test lifecycle writes transactionally and assert the persisted projection after reopening.
+- Treat JSON/JSONL queue/history files only as explicit offline importer fixtures.
+- Run the importer without `--apply` first; real imports must create backups and validate.
+- Follow `docs/runbooks/sqlite_job_migration.md` for operator migration and rollback.
+
 ## Real-backend acceptance
 
 Real WebUI/SVD tests require explicit opt-in and must record:

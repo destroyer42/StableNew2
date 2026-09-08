@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 
 from src.pipeline.run_config import PromptSource, RunConfig
-from src.queue.job_history_store import JobHistoryEntry, job_history_entry_from_run_config
+from src.queue.job_history_store import job_history_entry_from_run_config
 from src.queue.job_model import JobStatus
 from src.utils.prompt_packs import (
     build_run_config_for_manual_prompt,
@@ -100,66 +100,3 @@ class TestJobHistoryEntryFromRunConfig:
         entry = job_history_entry_from_run_config("job-7", run_config, created_at=ts)
 
         assert entry.created_at == ts
-
-
-class TestJobHistoryEntryPromptFields:
-    """Tests for JobHistoryEntry prompt-related field serialization."""
-
-    def test_to_json_includes_prompt_fields(self) -> None:
-        """to_json serializes prompt_source, prompt_pack_id, prompt_keys."""
-        entry = JobHistoryEntry(
-            job_id="job-test",
-            created_at=datetime(2025, 1, 1, 12, 0, 0),
-            status=JobStatus.COMPLETED,
-            prompt_source="pack",
-            prompt_pack_id="my-pack",
-            prompt_keys=["a", "b"],
-        )
-
-        json_str = entry.to_json()
-
-        assert '"prompt_source": "pack"' in json_str
-        assert '"prompt_pack_id": "my-pack"' in json_str
-        assert '"prompt_keys": ["a", "b"]' in json_str
-
-    def test_from_json_parses_prompt_fields(self) -> None:
-        """from_json correctly parses prompt-related fields."""
-        json_str = (
-            '{"job_id": "job-x", "created_at": "2025-01-01T12:00:00", '
-            '"status": "completed", "prompt_source": "pack", '
-            '"prompt_pack_id": "pk1", "prompt_keys": ["k1", "k2"]}'
-        )
-
-        entry = JobHistoryEntry.from_json(json_str)
-
-        assert entry.prompt_source == "pack"
-        assert entry.prompt_pack_id == "pk1"
-        assert entry.prompt_keys == ["k1", "k2"]
-
-    def test_from_json_defaults_prompt_source_to_manual(self) -> None:
-        """from_json defaults prompt_source to 'manual' if missing."""
-        json_str = '{"job_id": "job-y", "created_at": "2025-01-01T12:00:00", "status": "queued"}'
-
-        entry = JobHistoryEntry.from_json(json_str)
-
-        assert entry.prompt_source == "manual"
-        assert entry.prompt_pack_id is None
-        assert entry.prompt_keys is None
-
-    def test_roundtrip_preserves_prompt_fields(self) -> None:
-        """to_json -> from_json preserves prompt-related fields."""
-        original = JobHistoryEntry(
-            job_id="job-roundtrip",
-            created_at=datetime(2025, 6, 15, 10, 30, 0),
-            status=JobStatus.RUNNING,
-            prompt_source="pack",
-            prompt_pack_id="test-pack-id",
-            prompt_keys=["prompt1", "prompt2", "prompt3"],
-        )
-
-        json_str = original.to_json()
-        restored = JobHistoryEntry.from_json(json_str)
-
-        assert restored.prompt_source == original.prompt_source
-        assert restored.prompt_pack_id == original.prompt_pack_id
-        assert restored.prompt_keys == original.prompt_keys

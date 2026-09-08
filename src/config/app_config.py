@@ -10,7 +10,6 @@ from src.utils.process_container_v2 import ProcessContainerConfig
 from src.utils.watchdog_v2 import WatchdogConfig
 
 _learning_enabled: bool | None = None
-_job_history_path: str | None = None
 _queue_execution_enabled: bool | None = None
 _core_model_name: str | None = None
 _core_sampler_name: str | None = None
@@ -190,31 +189,6 @@ def set_learning_enabled(enabled: bool) -> None:
 
     global _learning_enabled
     _learning_enabled = bool(enabled)
-
-
-def job_history_path_default() -> str:
-    """Return default path for job history storage."""
-
-    env_path = os.environ.get("STABLENEW_JOB_HISTORY_PATH")
-    if env_path:
-        return env_path
-    return os.path.join("data", "job_history.jsonl")
-
-
-def get_job_history_path() -> str:
-    """Return current job history path (module-level memory)."""
-
-    global _job_history_path
-    if _job_history_path is None:
-        _job_history_path = job_history_path_default()
-    return _job_history_path
-
-
-def set_job_history_path(path: str) -> None:
-    """Override job history storage path."""
-
-    global _job_history_path
-    _job_history_path = path
 
 
 def queue_execution_enabled_default() -> bool:

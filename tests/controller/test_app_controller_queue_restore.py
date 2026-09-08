@@ -3,19 +3,10 @@
 from __future__ import annotations
 
 from src.controller.app_controller import AppController
-from src.queue.job_model import Job
+from tests.helpers.njr_factory import make_queue_job
 
 
 def test_app_controller_load_queue_state_syncs_flags(monkeypatch) -> None:
-    monkeypatch.setattr(
-        "src.controller.job_execution_controller.load_queue_snapshot",
-        lambda *_, **__: None,
-    )
-    monkeypatch.setattr(
-        "src.controller.job_execution_controller.save_queue_snapshot",
-        lambda *_, **__: True,
-    )
-
     controller = AppController(main_window=None, threaded=False)
     job_exec = controller.pipeline_controller.get_job_execution_controller()
 
@@ -23,7 +14,7 @@ def test_app_controller_load_queue_state_syncs_flags(monkeypatch) -> None:
     job_exec._queue_paused = True
 
     queue = job_exec.get_queue()
-    queue.submit(Job(job_id="job-1", config_snapshot={"prompt": "test"}))
+    queue.submit(make_queue_job("job-1"))
 
     controller._load_queue_state()
 

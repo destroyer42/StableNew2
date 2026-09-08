@@ -314,6 +314,7 @@ class SingleNodeJobRunner:
                         reason=_QUEUE_JOB_WEBUI_CRASH_SUSPECTED,
                         max_attempts=max_attempts,
                     )
+                    self.job_queue.persist_runtime_state(job)
                     log_with_ctx(
                         logger,
                         logging.WARNING,
@@ -374,7 +375,7 @@ class SingleNodeJobRunner:
                 time.sleep(self.poll_interval)
                 continue
             
-            job = self.job_queue.get_next_job()
+            job = self.job_queue.claim_next_job()
             if job is None:
                 time.sleep(self.poll_interval)
                 continue
@@ -402,7 +403,6 @@ class SingleNodeJobRunner:
                     "prompt_pack_id": getattr(job, "prompt_pack_id", None),
                 },
             )
-            self.job_queue.mark_running(job.job_id)
             self._notify(job, JobStatus.RUNNING)
             self._current_job = job
             self._cancel_current.clear()
@@ -448,6 +448,7 @@ class SingleNodeJobRunner:
                         job.execution_metadata.stage_checkpoints,
                         checkpoints,
                     )
+                    self.job_queue.persist_runtime_state(job)
                 if self._cancel_current.is_set():
                     queued_job = self.job_queue.cancel_running_job(
                         return_to_queue=self._cancel_return_to_queue
@@ -571,6 +572,7 @@ class SingleNodeJobRunner:
                     job.execution_metadata.stage_checkpoints,
                     checkpoints,
                 )
+                self.job_queue.persist_runtime_state(job)
             if self._cancel_current.is_set():
                 queued_job = self.job_queue.cancel_running_job(
                     return_to_queue=self._cancel_return_to_queue

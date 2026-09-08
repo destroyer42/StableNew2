@@ -6,8 +6,8 @@ from PIL import Image
 
 from src.controller.job_history_service import JobHistoryService
 from src.history.history_record import HistoryRecord
-from src.queue.job_history_store import JSONLJobHistoryStore
 from src.queue.job_queue import JobQueue
+from src.queue.job_repository import JobRepository
 from src.utils.image_metadata import build_contract_kv, write_image_metadata
 
 
@@ -17,8 +17,8 @@ def _write_png(path: Path) -> None:
 
 
 def test_reconcile_metadata_prefers_history_job_id(tmp_path: Path) -> None:
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    queue = JobQueue(history_store=store)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
     service = JobHistoryService(queue, store)
 
     image_path = tmp_path / "sample.png"
@@ -49,8 +49,8 @@ def test_reconcile_metadata_prefers_history_job_id(tmp_path: Path) -> None:
 
 
 def test_reconcile_metadata_falls_back_to_manifest(tmp_path: Path) -> None:
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    queue = JobQueue(history_store=store)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=store)
     service = JobHistoryService(queue, store)
 
     run_dir = tmp_path / "run-1"

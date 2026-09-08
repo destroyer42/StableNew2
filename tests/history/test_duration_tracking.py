@@ -3,14 +3,16 @@
 from datetime import datetime, timedelta
 
 from src.history.duration_stats import DurationStats
-from src.queue.job_history_store import JobHistoryEntry, JSONLJobHistoryStore
-from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_history_store import JobHistoryEntry
+from src.queue.job_model import JobStatus
+from src.queue.job_repository import JobRepository
+from tests.helpers.njr_factory import make_queue_job
 
 
 def test_duration_ms_calculated_and_persisted(tmp_path):
     """Test that duration_ms is calculated when job completes and persisted to history."""
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    job = Job(job_id="timed-job", priority=JobPriority.NORMAL)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    job = make_queue_job("timed-job")
 
     # Record submission
     store.record_job_submission(job)
@@ -31,33 +33,6 @@ def test_duration_ms_calculated_and_persisted(tmp_path):
     assert entry.duration_ms is not None
     # Should be approximately 2500ms (2.5 seconds)
     assert 2400 <= entry.duration_ms <= 2600
-
-
-def test_duration_ms_roundtrip_serialization(tmp_path):
-    """Test that duration_ms survives JSON serialization/deserialization."""
-    history_path = tmp_path / "history.jsonl"
-    store = JSONLJobHistoryStore(history_path)
-
-    start_time = datetime.utcnow()
-    end_time = start_time + timedelta(seconds=5.3)
-
-    entry = JobHistoryEntry(
-        job_id="test-job",
-        created_at=start_time,
-        started_at=start_time,
-        completed_at=end_time,
-        status=JobStatus.COMPLETED,
-        duration_ms=5300,
-    )
-
-    # Serialize and write
-    json_str = entry.to_json()
-    history_path.write_text(json_str + "\n", encoding="utf-8")
-
-    # Load back
-    loaded = store.list_jobs()
-    assert len(loaded) == 1
-    assert loaded[0].duration_ms == 5300
 
 
 def test_duration_stats_calculates_average():
@@ -136,8 +111,8 @@ def test_duration_stats_format_duration_ms():
 
 def test_duration_not_calculated_for_failed_jobs(tmp_path):
     """Test that duration is still calculated for failed jobs."""
-    store = JSONLJobHistoryStore(tmp_path / "history.jsonl")
-    job = Job(job_id="failed-job", priority=JobPriority.NORMAL)
+    store = JobRepository(tmp_path / "jobs.sqlite3")
+    job = make_queue_job("failed-job")
 
     store.record_job_submission(job)
 

@@ -25,13 +25,13 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from src.api.client import SDWebUIClient
+from src.gui.models.prompt_pack_model import PromptPackModel
 from src.pipeline.animatediff_models import AnimateDiffCapability
 from src.pipeline.job_models_v2 import StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner
-from src.api.client import SDWebUIClient
-from src.gui.models.prompt_pack_model import PromptPackModel
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
-from src.queue.job_history_store import JobHistoryEntry, JSONLJobHistoryStore
+from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
 from src.queue.job_model import JobStatus
 from src.utils import StructuredLogger
 from tests.helpers.job_helpers import make_test_njr
@@ -47,7 +47,7 @@ _TINY_PNG_BASE64 = (
 
 
 def wait_for_job_completion(
-    history_store: JSONLJobHistoryStore,
+    history_store: JobHistoryStore,
     job_id: str,
     timeout: float = 2.0,
     poll_interval: float = 0.01,
