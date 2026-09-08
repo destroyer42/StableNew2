@@ -88,16 +88,12 @@ class JobHistoryService:
         active = next((j for j in self._queue.list_jobs() if j.job_id == job_id), None)
         if active:
             return self._apply_job_view_visibility(
-                self._from_job(active, is_active=True),
-                visibility_mode,
-                allow_redacted=True,
+                self._from_job(active, is_active=True), visibility_mode, allow_redacted=True
             )
         entry = self._history.get_job(job_id)
         if entry:
             return self._apply_job_view_visibility(
-                self._from_history(entry),
-                visibility_mode,
-                allow_redacted=True,
+                self._from_history(entry), visibility_mode, allow_redacted=True
             )
         return None
 

@@ -7,6 +7,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from PIL import Image
+import pytest
 
 from src.contracts import PackJobEntry
 from src.controller.job_service import JobService
@@ -26,8 +27,10 @@ from src.utils.logger import StructuredLogger
 class _DeterministicWebUI:
     options_write_enabled = True
 
-    def __init__(self) -> None:
+    def __init__(self, current_model: str) -> None:
         self.calls: list[dict[str, object]] = []
+        self.current_model = current_model
+        self.set_model_calls: list[str] = []
         image = Image.new("RGB", (2, 2), color=(20, 40, 60))
         encoded = io.BytesIO()
         image.save(encoded, format="PNG")
@@ -50,13 +53,15 @@ class _DeterministicWebUI:
         return True
 
     def get_current_model(self) -> str:
-        return "baseline-model.safetensors"
+        return self.current_model
 
     def get_current_vae(self) -> str:
         return "baseline-vae.safetensors"
 
-    def set_model(self, _model: str) -> None:
-        return None
+    def set_model(self, model: str) -> bool:
+        self.set_model_calls.append(model)
+        self.current_model = model
+        return True
 
     def set_vae(self, _vae: str) -> None:
         return None
@@ -120,8 +125,18 @@ def _write_baseline_pack(path: Path, output_dir: Path) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("initial_model", "expected_switches"),
+    [
+        ("baseline-model.safetensors [abc123]", []),
+        ("ambient-model.safetensors", ["baseline-model.safetensors"]),
+    ],
+)
 def test_promptpack_queue_run_artifact_history_replay_production_composition(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path,
+    monkeypatch,
+    initial_model: str,
+    expected_switches: list[str],
 ) -> None:
     monkeypatch.chdir(tmp_path)
     pack_path = tmp_path / "packs" / "mvp-060-baseline.json"
@@ -143,7 +158,7 @@ def test_promptpack_queue_run_artifact_history_replay_production_composition(
         require_normalized_records=True,
     )
     service.auto_run_enabled = False
-    client = _DeterministicWebUI()
+    client = _DeterministicWebUI(initial_model)
     pipeline_runner = PipelineRunner(
         client,
         StructuredLogger(output_dir=tmp_path / "logs"),
@@ -238,6 +253,7 @@ def test_promptpack_queue_run_artifact_history_replay_production_composition(
         "n_iter": 1,
     }
     assert len(client.calls) == 2
+    assert client.set_model_calls == expected_switches
     for call in client.calls:
         payload = call["payload"]
         assert call["stage"] == "txt2img"

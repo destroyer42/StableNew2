@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import time
-from dataclasses import dataclass
 from typing import Any
 
 from src.controller.pipeline_controller import PipelineController
 from src.pipeline.executor import Pipeline
+from tests.helpers.job_helpers import make_test_njr
 
 
 class _NoOpStructuredLogger:
@@ -43,11 +43,6 @@ class _DelayedSwitchClient:
         return True
 
 
-@dataclass
-class _DummyRecord:
-    config: dict[str, Any]
-
-
 def _legacy_set_model_vae(client: _DelayedSwitchClient, model_name: str | None, vae_name: str | None) -> None:
     if model_name:
         client.set_model(model_name)
@@ -55,7 +50,7 @@ def _legacy_set_model_vae(client: _DelayedSwitchClient, model_name: str | None, 
         client.set_vae(vae_name)
 
 
-def _switch_cost(records: list[_DummyRecord], model_cost: float = 1.0, vae_cost: float = 0.2) -> float:
+def _switch_cost(records: list[Any], model_cost: float = 1.0, vae_cost: float = 0.2) -> float:
     total = 0.0
     prev_model = ""
     prev_vae = "automatic"
@@ -98,13 +93,19 @@ def test_executor_metrics_show_switch_overhead_reduction() -> None:
 
 def test_model_vae_grouping_reduces_estimated_switch_cost() -> None:
     records = [
-        _DummyRecord({"model": "modelA", "vae": "vaeA"}),
-        _DummyRecord({"model": "modelB", "vae": "vaeB"}),
-        _DummyRecord({"model": "modelA", "vae": "vaeA"}),
-        _DummyRecord({"model": "modelB", "vae": "vaeB"}),
-        _DummyRecord({"model": "modelA", "vae": "vaeA"}),
-        _DummyRecord({"model": "modelB", "vae": "vaeB"}),
+        make_test_njr(job_id=f"job-{index}", config={"model": model, "vae": vae})
+        for index, (model, vae) in enumerate(
+            [
+                ("modelA", "vaeA"),
+                ("modelB", "vaeB"),
+                ("modelA", "vaeA"),
+                ("modelB", "vaeB"),
+                ("modelA", "vaeA"),
+                ("modelB", "vaeB"),
+            ]
+        )
     ]
+    original_snapshots = [record.to_dict() for record in records]
     controller = object.__new__(PipelineController)
     sorted_records = controller._sort_jobs_by_model(records)
 
@@ -112,3 +113,11 @@ def test_model_vae_grouping_reduces_estimated_switch_cost() -> None:
     sorted_cost = _switch_cost(sorted_records)
 
     assert sorted_cost < unsorted_cost
+    client = _DelayedSwitchClient("ambient-model", 0, 0)
+    pipeline = Pipeline(client=client, structured_logger=_NoOpStructuredLogger())
+    for record in sorted_records:
+        pipeline._ensure_model_and_vae(record.config["model"], record.config["vae"])
+
+    assert client.set_model_calls == ["modelA", "modelB"]
+    assert len(client.set_model_calls) < len(records)
+    assert [record.to_dict() for record in records] == original_snapshots

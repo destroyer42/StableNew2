@@ -41,6 +41,7 @@ from src.prompting.prompt_splitter import split_prompt_chunks
 from src.prompting.prompt_types import PromptOptimizationPairResult
 from src.prompting.contracts import PromptOptimizerAnalysisBundle
 from src.pipeline.artifact_contract import artifact_manifest_payload
+from src.pipeline.model_synchronizer import A1111ModelSynchronizer, normalize_model_name
 from src.pipeline.animatediff_models import (
     AnimateDiffConfig,
     attach_animatediff_to_payload,
@@ -279,6 +280,7 @@ class Pipeline:
         self.progress_controller = None
         self._status_callback = status_callback
         self._current_model: str | None = None
+        self._model_synchronizer = A1111ModelSynchronizer(client)
         self._current_vae: str | None = None
         self._current_hypernetwork: str | None = None
         self._current_hn_strength: float | None = None
@@ -918,19 +920,8 @@ class Pipeline:
             logger.warning("Could not apply WebUI defaults: %s", exc)
 
     def _normalize_model_name(self, raw: str | None) -> str | None:
-        """Normalize model name for comparison by removing extensions and hashes."""
-        if not raw:
-            return None
-        cleaned = str(raw).strip()
-        if not cleaned:
-            return None
-        
-        # Remove hash in brackets like [dd08fa32f9] first
-        import re
-        cleaned = re.sub(r'\s*\[[a-f0-9]+\]$', '', cleaned, flags=re.IGNORECASE)
-        # Then remove file extension (.safetensors, .ckpt, .pt, etc.)
-        cleaned = re.sub(r'\.(safetensors|ckpt|pt|pth)$', '', cleaned, flags=re.IGNORECASE)
-        return cleaned.lower()
+        """Normalize harmless A1111 checkpoint identity variations."""
+        return normalize_model_name(raw)
 
     def _normalize_vae_name(self, raw: str | None) -> str:
         return canonicalize_vae_lookup_key(raw)
@@ -953,33 +944,19 @@ class Pipeline:
     def _ensure_model_and_vae(self, model_name: str | None, vae_name: str | None) -> None:
         """Set model and/or VAE. Model and VAE switches are independent operations."""
         model_switched = False
-        # Handle model switching (if requested)
-        desired_normalized = self._normalize_model_name(model_name)
-        if desired_normalized:
-            self._discover_current_model_if_needed()
-            current_normalized = self._normalize_model_name(self._current_model)
-            if desired_normalized == current_normalized:
-                # Model already loaded - no switch needed, but continue to VAE logic
-                logger.debug(f"Model already loaded: {model_name}")
-            elif not self.client.options_write_enabled:
-                # Only warn if models are actually different (avoids false warnings when normalized names match)
-                if current_normalized != desired_normalized:
-                    logger.warning(
-                        "Model switch to %s requested but options writes are disabled (SafeMode); keeping %s",
-                        model_name,
-                        self._current_model or "current WebUI model",
-                    )
+        if self._normalize_model_name(model_name):
+            try:
+                synchronization = self._model_synchronizer.synchronize(str(model_name))
+            except Exception:
+                self._current_model = None
+                raise
+            self._current_model = synchronization.actual_model
+            model_switched = synchronization.switched
+            if model_switched:
+                logger.info("Verified WebUI model switch to: %s", model_name)
+                self._record_model_switch()
             else:
-                # Model needs switching
-                try:
-                    logger.info(f"Switching to model: {model_name}")
-                    self.client.set_model(model_name)
-                    self._current_model = model_name
-                    model_switched = True
-                    self._record_model_switch()
-                except Exception:
-                    self._current_model = None
-                    raise
+                logger.debug("WebUI model already verified: %s", model_name)
 
         # Handle VAE switching (independent of model - always execute if vae_name provided)
         try:
