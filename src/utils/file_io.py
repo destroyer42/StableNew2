@@ -2,21 +2,17 @@
 
 import base64
 import hashlib
-import json
 import logging
 import os
 import re
+from collections.abc import Callable
 from io import BytesIO
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from PIL import Image, PngImagePlugin
 
-from src.utils.embedding_prompt_utils import (
-    normalize_embedding_entries,
-    render_embedding_reference,
-)
-from src.utils.prompt_templates import compose_prompt_text
+from src.promptpacks.storage import load_prompt_pack_document, render_prompt_pack_prompts
 
 logger = logging.getLogger(__name__)
 
@@ -70,10 +66,10 @@ def save_image_from_base64(
         # Ensure we have a Path object
         if isinstance(output_path, str):
             output_path = Path(output_path)
-        
+
         # Resolve to absolute path for clearer error messages
         output_path = output_path.resolve()
-        
+
         # Remove data URL prefix if present
         if "," in base64_str:
             base64_str = base64_str.split(",", 1)[1]
@@ -82,7 +78,7 @@ def save_image_from_base64(
         parent_dir = output_path.parent
         logger.debug(f"Ensuring parent directory exists: {parent_dir}")
         parent_dir.mkdir(parents=True, exist_ok=True)
-        
+
         # Verify directory was created
         if not parent_dir.exists():
             logger.error(f"Failed to create directory: {parent_dir}")
@@ -126,13 +122,13 @@ def load_image_to_base64(image_path: Path) -> str | None:
             # Log image dimensions and file size for diagnostics
             img_width, img_height = img.size
             file_size_mb = image_path.stat().st_size / (1024 * 1024)
-            
+
             buffered = BytesIO()
             img.save(buffered, format=img.format or "PNG")
             base64_bytes = buffered.getvalue()
             base64_size_mb = len(base64_bytes) / (1024 * 1024)
             img_str = base64.b64encode(base64_bytes).decode("utf-8")
-            
+
             # Warn if base64 payload is large (may cause timeouts)
             if base64_size_mb > 10.0:
                 logger.warning(
@@ -192,71 +188,6 @@ def write_text_file(file_path: Path, content: str) -> bool:
         return False
 
 
-def _render_prompt_pack_slot(slot: dict[str, Any]) -> dict[str, str]:
-    positive_parts: list[str] = []
-    negative_parts: list[str] = []
-
-    positive_embeddings = normalize_embedding_entries(slot.get("positive_embeddings", []))
-    if positive_embeddings:
-        positive_parts.extend(
-            render_embedding_reference(name, weight) for name, weight in positive_embeddings
-        )
-
-    positive_text = compose_prompt_text(
-        str(slot.get("template_id", "") or "").strip(),
-        slot.get("template_variables", {}),
-        str(slot.get("text", "") or "").strip(),
-    )
-    if positive_text:
-        positive_parts.append(positive_text)
-
-    loras = slot.get("loras", [])
-    if isinstance(loras, list):
-        lora_parts = []
-        for item in loras:
-            if not isinstance(item, (list, tuple)) or len(item) != 2:
-                continue
-            name = str(item[0] or "").strip()
-            if not name:
-                continue
-            try:
-                weight = float(item[1])
-            except (TypeError, ValueError):
-                weight = 1.0
-            lora_parts.append(f"<lora:{name}:{weight}>")
-        if lora_parts:
-            positive_parts.extend(lora_parts)
-
-    negative_embeddings = normalize_embedding_entries(slot.get("negative_embeddings", []))
-    if negative_embeddings:
-        negative_parts.extend(
-            render_embedding_reference(name, weight) for name, weight in negative_embeddings
-        )
-
-    negative_text = str(slot.get("negative", "") or "").strip()
-    if negative_text:
-        negative_parts.extend(line.strip() for line in negative_text.splitlines() if line.strip())
-
-    return {
-        "positive": " ".join(part for part in positive_parts if part).strip(),
-        "negative": " ".join(part for part in negative_parts if part).strip(),
-    }
-
-
-def _read_json_prompt_pack(content: str) -> list[dict[str, str]]:
-    data = json.loads(content)
-    pack_data = data.get("pack_data", data) if isinstance(data, dict) else {}
-    raw_slots = pack_data.get("slots", []) if isinstance(pack_data, dict) else []
-    prompts: list[dict[str, str]] = []
-    for slot in raw_slots:
-        if not isinstance(slot, dict):
-            continue
-        rendered = _render_prompt_pack_slot(slot)
-        if rendered["positive"] or rendered["negative"]:
-            prompts.append(rendered)
-    return prompts
-
-
 def read_prompt_pack(pack_path: Path) -> list[dict[str, str]]:
     """
     Read prompt pack from .txt, .tsv, or .json file with UTF-8 safety.
@@ -279,17 +210,15 @@ def read_prompt_pack(pack_path: Path) -> list[dict[str, str]]:
             logger.error(f"Prompt pack not found: {pack_path}")
             return []
 
-        # Read file with UTF-8 encoding
-        with open(pack_path, encoding="utf-8") as f:
-            content = f.read()
-
         prompts = []
 
         suffix = pack_path.suffix.lower()
 
         if suffix == ".json":
-            prompts = _read_json_prompt_pack(content)
+            prompts = render_prompt_pack_prompts(load_prompt_pack_document(pack_path))
         elif suffix == ".tsv":
+            with open(pack_path, encoding="utf-8") as f:
+                content = f.read()
             # Tab-separated format
             for line in content.splitlines():
                 line = line.strip()
@@ -302,6 +231,8 @@ def read_prompt_pack(pack_path: Path) -> list[dict[str, str]]:
 
                 prompts.append({"positive": positive, "negative": negative})
         else:
+            with open(pack_path, encoding="utf-8") as f:
+                content = f.read()
             # Block-based .txt format
             blocks = content.split("\n\n")
 
@@ -338,45 +269,16 @@ def read_prompt_pack(pack_path: Path) -> list[dict[str, str]]:
 
 
 def get_prompt_packs(packs_dir: Path) -> list[Path]:
-    """
-    Get list of available prompt pack files.
-
-    Args:
-        packs_dir: Directory containing prompt packs
-
-    Returns:
-        List of prompt pack file paths
-    """
+    """Return valid versioned native JSON PromptPacks only."""
     try:
-        if not packs_dir.exists():
-            packs_dir.mkdir(parents=True, exist_ok=True)
-            logger.info(f"Created packs directory: {packs_dir}")
-            return []
+        from src.promptpacks.storage import discover_native_prompt_packs
 
-        extension_priority = {".json": 0, ".txt": 1, ".tsv": 2}
-        selected_by_stem: dict[str, Path] = {}
-
-        pack_files: list[Path] = []
-        for ext in ["*.json", "*.txt", "*.tsv"]:
-            pack_files.extend(packs_dir.glob(ext))
-
-        for pack_path in sorted(pack_files, key=lambda path: (path.stem.lower(), extension_priority.get(path.suffix.lower(), 99), path.name.lower())):
-            stem = pack_path.stem.lower()
-            current = selected_by_stem.get(stem)
-            if current is None:
-                selected_by_stem[stem] = pack_path
-                continue
-            current_priority = extension_priority.get(current.suffix.lower(), 99)
-            candidate_priority = extension_priority.get(pack_path.suffix.lower(), 99)
-            if candidate_priority < current_priority:
-                selected_by_stem[stem] = pack_path
-
-        deduped = sorted(selected_by_stem.values(), key=lambda path: path.stem.lower())
-        logger.debug(f"Found {len(deduped)} prompt packs in {packs_dir}")
-        return deduped
+        discovered = discover_native_prompt_packs(packs_dir)
+        logger.debug(f"Found {len(discovered)} native PromptPacks in {packs_dir}")
+        return discovered
 
     except Exception as e:
-        logger.error(f"Failed to scan prompt packs directory: {e}")
+        logger.error(f"Failed to scan native PromptPacks directory: {e}")
         return []
 
 
@@ -418,12 +320,12 @@ def build_safe_image_name(
 ) -> str:
     """
     Build a safe, filesystem-compatible image name with human-readable identifiers.
-    
+
     Prevents Windows MAX_PATH issues by:
     - Limiting filename length based on max_length parameter
     - Using stable prompt/job identifiers for uniqueness
     - Sanitizing all characters for filesystem compatibility
-    
+
     Args:
         base_prefix: Prefix with prompt/variant indices (e.g., "txt2img_p01_v01")
         matrix_values: Optional matrix slot values for hash uniqueness
@@ -432,10 +334,10 @@ def build_safe_image_name(
         pack_name: Optional prompt pack name (first 10 chars used, sanitized)
         max_length: Maximum filename length (default 120, safe for Windows)
         use_one_based_indexing: Convert batch_index to 1-based in filename (default True)
-    
+
     Returns:
         Safe filename string (without extension)
-    
+
     Example:
         build_safe_image_name(
             "txt2img_p01_v01",
@@ -468,46 +370,43 @@ def build_safe_image_name(
         identifier_parts.append(hashlib.md5(hash_input.encode("utf-8")).hexdigest()[:8])
 
     identifier = "_".join(part for part in identifier_parts if part) or "unnamed"
-    
+
     # Build batch suffix with 1-based indexing
     batch_suffix = ""
     if batch_index is not None:
         display_index = batch_index + 1 if use_one_based_indexing else batch_index
         batch_suffix = f"_batch{display_index}"
-    
+
     # Calculate space: prefix + "_" + identifier + batch_suffix + ".png"
     reserved = len("_") + len(identifier) + len(batch_suffix) + len(".png")
     max_prefix_len = max_length - reserved
-    
+
     if len(safe_prefix) > max_prefix_len:
         safe_prefix = safe_prefix[:max_prefix_len]
-    
+
     # Build final name
     final_name = f"{safe_prefix}_{identifier}{batch_suffix}"
-    
+
     return final_name
 
 
-def get_unique_output_path(
-    base_path: Path,
-    max_attempts: int = 100
-) -> Path:
+def get_unique_output_path(base_path: Path, max_attempts: int = 100) -> Path:
     """
     Ensure output path is unique by appending _copy1, _copy2, etc. if needed.
-    
+
     This failsafe prevents silent overwrites if filename generation somehow
     produces duplicates. Normal operation should never trigger this.
-    
+
     Args:
         base_path: Desired output path
         max_attempts: Maximum collision resolution attempts
-    
+
     Returns:
         Unique path that doesn't exist
-    
+
     Raises:
         ValueError: If max_attempts exceeded (indicates serious bug)
-    
+
     Example:
         path = Path("output/image.png")  # exists
         unique = get_unique_output_path(path)
@@ -515,23 +414,23 @@ def get_unique_output_path(
     """
     if not base_path.exists():
         return base_path
-    
+
     logger = logging.getLogger(__name__)
     logger.warning(
         "[COLLISION] Output file already exists: %s (this indicates a filename generation bug)",
-        base_path
+        base_path,
     )
-    
+
     stem = base_path.stem
     suffix = base_path.suffix
     parent = base_path.parent
-    
+
     for i in range(1, max_attempts + 1):
         candidate = parent / f"{stem}_copy{i}{suffix}"
         if not candidate.exists():
             logger.warning("[COLLISION] Using unique filename: %s", candidate.name)
             return candidate
-    
+
     raise ValueError(
         f"Could not find unique filename after {max_attempts} attempts for {base_path}. "
         "This indicates a serious filename generation bug."

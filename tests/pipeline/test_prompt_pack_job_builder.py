@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -9,12 +9,15 @@ import pytest
 
 from src.gui.app_state_v2 import PackJobEntry
 from src.pipeline.job_builder_v2 import JobBuilderV2
-from src.pipeline.prompt_pack_parser import parse_prompt_pack_text
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
+from src.promptpacks.storage import (
+    CURRENT_PROMPTPACK_SCHEMA_VERSION,
+    load_prompt_pack_document,
+    prompt_pack_rows,
+)
 from src.training.lora_manager import LoRAManager
 from src.training.style_lora_manager import StyleLoRAManager
 from src.utils.config import ConfigManager
-from src.utils.prompt_pack_utils import load_pack_metadata
 
 BASE_PACK_CONFIG: dict[str, Any] = {
     "pipeline": {
@@ -64,6 +67,44 @@ class StubConfigManager(ConfigManager):
 
     def get_global_negative_prompt(self) -> str:
         return "global-negative"
+
+
+def _write_native_pack(
+    path: Path,
+    *,
+    text: str = "",
+    matrix: dict[str, Any] | None = None,
+    loras: list[list[Any]] | None = None,
+) -> Path:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+                "pack_data": {
+                    "name": path.stem,
+                    "slots": (
+                        [
+                            {
+                                "index": 0,
+                                "text": text,
+                                "negative": "",
+                                "positive_embeddings": [],
+                                "negative_embeddings": [],
+                                "loras": loras or [],
+                            }
+                        ]
+                        if text or loras
+                        else []
+                    ),
+                    "matrix": matrix
+                    or {"enabled": False, "mode": "fanout", "limit": 8, "slots": []},
+                },
+                "preset_data": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+    return path
 
 
 @dataclass
@@ -127,28 +168,50 @@ def test_prompt_pack_job_builder_populates_preview_fields(tmp_path: Path) -> Non
     assert any(stage.stage_type == "txt2img" for stage in record.stage_chain)
 
 
+def test_prompt_pack_builder_ignores_same_stem_txt_content(tmp_path: Path) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    pack_json = _write_native_pack(
+        config_manager.packs_dir / "native-only.json", text="JSON authority prompt"
+    )
+    pack_json.with_suffix(".txt").write_text(
+        "TXT must not become runtime content", encoding="utf-8"
+    )
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=config_manager,
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+        packs_dir=config_manager.packs_dir,
+    )
+
+    [record] = builder.build_jobs(
+        [
+            PackJobEntry(
+                pack_id=pack_json.name,
+                pack_name="Native Only",
+                config_snapshot={},
+                stage_flags={"txt2img": True},
+                randomizer_metadata={"enabled": False},
+            )
+        ]
+    )
+
+    assert "JSON authority prompt" in record.positive_prompt
+    assert "TXT must not" not in record.positive_prompt
+
+
 def test_prompt_pack_job_builder_random_matrix_mode_shuffles_combinations(tmp_path: Path) -> None:
     config_manager = StubConfigManager(tmp_path)
-    pack_txt = config_manager.packs_dir / "random-matrix-pack.txt"
-    pack_txt.write_text("A [[job]] in a [[environment]]", encoding="utf-8")
-    pack_json = pack_txt.with_suffix(".json")
-    pack_json.write_text(
-        json.dumps(
-            {
-                "pack_data": {
-                    "matrix": {
-                        "enabled": True,
-                        "mode": "random",
-                        "limit": 3,
-                        "slots": [
-                            {"name": "job", "values": ["wizard", "knight", "archer"]},
-                            {"name": "environment", "values": ["forest", "castle"]},
-                        ],
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
+    pack_json = _write_native_pack(
+        config_manager.packs_dir / "random-matrix-pack.json",
+        text="A [[job]] in a [[environment]]",
+        matrix={
+            "enabled": True,
+            "mode": "random",
+            "limit": 3,
+            "slots": [
+                {"name": "job", "values": ["wizard", "knight", "archer"]},
+                {"name": "environment", "values": ["forest", "castle"]},
+            ],
+        },
     )
 
     builder = PromptPackNormalizedJobBuilder(
@@ -157,7 +220,7 @@ def test_prompt_pack_job_builder_random_matrix_mode_shuffles_combinations(tmp_pa
         packs_dir=config_manager.packs_dir,
     )
     entry = PackJobEntry(
-        pack_id=pack_txt.name,
+        pack_id=pack_json.name,
         pack_name="Random Matrix Pack",
         prompt_text="A [[job]] in a [[environment]]",
         config_snapshot={"randomization": {"enabled": False}},
@@ -177,24 +240,15 @@ def test_prompt_pack_job_builder_random_matrix_mode_shuffles_combinations(tmp_pa
 
 def test_prompt_pack_job_builder_matrix_provenance_is_immutable(tmp_path: Path) -> None:
     config_manager = StubConfigManager(tmp_path)
-    pack_txt = config_manager.packs_dir / "immutable-matrix-pack.txt"
-    pack_txt.write_text("A [[job]] in a [[environment]]", encoding="utf-8")
-    pack_txt.with_suffix(".json").write_text(
-        json.dumps(
-            {
-                "pack_data": {
-                    "matrix": {
-                        "enabled": True,
-                        "mode": "sequential",
-                        "limit": 2,
-                        "slots": [
-                            {"name": "job", "values": ["wizard", "knight"]},
-                        ],
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
+    pack_json = _write_native_pack(
+        config_manager.packs_dir / "immutable-matrix-pack.json",
+        text="A [[job]] in a [[environment]]",
+        matrix={
+            "enabled": True,
+            "mode": "sequential",
+            "limit": 2,
+            "slots": [{"name": "job", "values": ["wizard", "knight"]}],
+        },
     )
     builder = PromptPackNormalizedJobBuilder(
         config_manager=config_manager,
@@ -202,7 +256,7 @@ def test_prompt_pack_job_builder_matrix_provenance_is_immutable(tmp_path: Path) 
         packs_dir=config_manager.packs_dir,
     )
     entry = PackJobEntry(
-        pack_id=pack_txt.name,
+        pack_id=pack_json.name,
         pack_name="Immutable Matrix Pack",
         prompt_text="A [[job]] in a [[environment]]",
         config_snapshot={"randomization": {"enabled": False}},
@@ -222,22 +276,15 @@ def test_prompt_pack_job_builder_matrix_provenance_is_immutable(tmp_path: Path) 
 
 def test_prompt_pack_job_builder_preserves_randomizer_with_matrix_variants(tmp_path: Path) -> None:
     config_manager = StubConfigManager(tmp_path)
-    pack_txt = config_manager.packs_dir / "matrix-randomizer-pack.txt"
-    pack_txt.write_text("A [[job]]", encoding="utf-8")
-    pack_txt.with_suffix(".json").write_text(
-        json.dumps(
-            {
-                "pack_data": {
-                    "matrix": {
-                        "enabled": True,
-                        "mode": "sequential",
-                        "limit": 2,
-                        "slots": [{"name": "job", "values": ["wizard", "knight"]}],
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
+    pack_json = _write_native_pack(
+        config_manager.packs_dir / "matrix-randomizer-pack.json",
+        text="A [[job]]",
+        matrix={
+            "enabled": True,
+            "mode": "sequential",
+            "limit": 2,
+            "slots": [{"name": "job", "values": ["wizard", "knight"]}],
+        },
     )
     builder = PromptPackNormalizedJobBuilder(
         config_manager=config_manager,
@@ -245,7 +292,7 @@ def test_prompt_pack_job_builder_preserves_randomizer_with_matrix_variants(tmp_p
         packs_dir=config_manager.packs_dir,
     )
     entry = PackJobEntry(
-        pack_id=pack_txt.name,
+        pack_id=pack_json.name,
         pack_name="Matrix Randomizer Pack",
         prompt_text="A [[job]]",
         config_snapshot={
@@ -267,26 +314,19 @@ def test_prompt_pack_job_builder_preserves_randomizer_with_matrix_variants(tmp_p
 
 def test_prompt_pack_job_builder_auto_limits_unbounded_matrix_expansion(tmp_path: Path) -> None:
     config_manager = StubConfigManager(tmp_path)
-    pack_txt = config_manager.packs_dir / "unbounded-matrix-pack.txt"
-    pack_txt.write_text("A [[job]] in a [[environment]] with [[lighting]]", encoding="utf-8")
-    pack_txt.with_suffix(".json").write_text(
-        json.dumps(
-            {
-                "pack_data": {
-                    "matrix": {
-                        "enabled": True,
-                        "mode": "sequential",
-                        "limit": 0,
-                        "slots": [
-                            {"name": "job", "values": [f"job{i}" for i in range(10)]},
-                            {"name": "environment", "values": [f"env{i}" for i in range(10)]},
-                            {"name": "lighting", "values": [f"light{i}" for i in range(10)]},
-                        ],
-                    }
-                }
-            }
-        ),
-        encoding="utf-8",
+    pack_json = _write_native_pack(
+        config_manager.packs_dir / "unbounded-matrix-pack.json",
+        text="A [[job]] in a [[environment]] with [[lighting]]",
+        matrix={
+            "enabled": True,
+            "mode": "sequential",
+            "limit": 0,
+            "slots": [
+                {"name": "job", "values": [f"job{i}" for i in range(10)]},
+                {"name": "environment", "values": [f"env{i}" for i in range(10)]},
+                {"name": "lighting", "values": [f"light{i}" for i in range(10)]},
+            ],
+        },
     )
 
     builder = PromptPackNormalizedJobBuilder(
@@ -295,7 +335,7 @@ def test_prompt_pack_job_builder_auto_limits_unbounded_matrix_expansion(tmp_path
         packs_dir=config_manager.packs_dir,
     )
     entry = PackJobEntry(
-        pack_id=pack_txt.name,
+        pack_id=pack_json.name,
         pack_name="Unbounded Matrix Pack",
         prompt_text="A [[job]] in a [[environment]] with [[lighting]]",
         config_snapshot={"randomization": {"enabled": False}},
@@ -351,30 +391,27 @@ def test_prompt_pack_job_builder_caches_pack_rows_metadata_and_resolved_config(
     tmp_path: Path, monkeypatch
 ) -> None:
     config_manager = StubConfigManager(tmp_path)
-    pack_txt = config_manager.packs_dir / "cached-pack.txt"
-    pack_txt.write_text("A hero in a forest", encoding="utf-8")
-    pack_txt.with_suffix(".json").write_text(
-        json.dumps({"pack_data": {"matrix": {"enabled": False, "slots": []}}}),
-        encoding="utf-8",
+    pack_json = _write_native_pack(
+        config_manager.packs_dir / "cached-pack.json", text="A hero in a forest"
     )
 
-    parse_calls = {"count": 0}
-    metadata_calls = {"count": 0}
+    document_calls = {"count": 0}
+    row_calls = {"count": 0}
     load_config_calls = {"count": 0}
     resolve_calls = {"count": 0}
 
-    original_parse = parse_prompt_pack_text
-    original_metadata = load_pack_metadata
+    original_load_document = load_prompt_pack_document
+    original_prompt_pack_rows = prompt_pack_rows
     original_load_config = config_manager.load_pack_config
     original_resolve = config_manager.resolve_config
 
-    def counted_parse(content: str):
-        parse_calls["count"] += 1
-        return original_parse(content)
+    def counted_load_document(*args, **kwargs):
+        document_calls["count"] += 1
+        return original_load_document(*args, **kwargs)
 
-    def counted_metadata(path):
-        metadata_calls["count"] += 1
-        return original_metadata(path)
+    def counted_prompt_pack_rows(document):
+        row_calls["count"] += 1
+        return original_prompt_pack_rows(document)
 
     def counted_load_config(pack_id: str):
         load_config_calls["count"] += 1
@@ -384,8 +421,13 @@ def test_prompt_pack_job_builder_caches_pack_rows_metadata_and_resolved_config(
         resolve_calls["count"] += 1
         return original_resolve(pack_overrides=pack_overrides, runtime_params=runtime_params)
 
-    monkeypatch.setattr("src.pipeline.prompt_pack_job_builder.parse_prompt_pack_text", counted_parse)
-    monkeypatch.setattr("src.pipeline.prompt_pack_job_builder.load_pack_metadata", counted_metadata)
+    monkeypatch.setattr(
+        "src.pipeline.prompt_pack_job_builder.load_prompt_pack_document",
+        counted_load_document,
+    )
+    monkeypatch.setattr(
+        "src.pipeline.prompt_pack_job_builder.prompt_pack_rows", counted_prompt_pack_rows
+    )
     monkeypatch.setattr(config_manager, "load_pack_config", counted_load_config)
     monkeypatch.setattr(config_manager, "resolve_config", counted_resolve)
 
@@ -395,7 +437,7 @@ def test_prompt_pack_job_builder_caches_pack_rows_metadata_and_resolved_config(
         packs_dir=config_manager.packs_dir,
     )
     entry = PackJobEntry(
-        pack_id=pack_txt.name,
+        pack_id=pack_json.name,
         pack_name="Cached Pack",
         prompt_text="A hero in a forest",
         config_snapshot={"randomization": {"enabled": False}},
@@ -407,9 +449,9 @@ def test_prompt_pack_job_builder_caches_pack_rows_metadata_and_resolved_config(
     second = builder.build_jobs([entry])
 
     assert first and second
-    assert parse_calls["count"] == 1
-    assert metadata_calls["count"] == 1
-    assert load_config_calls["count"] == 1
+    assert document_calls["count"] == 3
+    assert row_calls["count"] == 1
+    assert load_config_calls["count"] == 0
     assert resolve_calls["count"] == 1
 
 
@@ -562,10 +604,14 @@ def test_prompt_pack_job_builder_preserves_extended_adetailer_stage_contract(
     records = builder.build_jobs([entry])
 
     assert records
-    adetailer_stage = next(stage for stage in records[0].stage_chain if stage.stage_type == "adetailer")
+    adetailer_stage = next(
+        stage for stage in records[0].stage_chain if stage.stage_type == "adetailer"
+    )
     assert adetailer_stage.model is None
     assert adetailer_stage.scheduler is None
-    assert adetailer_stage.extra["adetailer_checkpoint_model"] == "juggernautXL_ragnarokBy.safetensors"
+    assert (
+        adetailer_stage.extra["adetailer_checkpoint_model"] == "juggernautXL_ragnarokBy.safetensors"
+    )
     assert adetailer_stage.extra["enable_face_pass"] is False
     assert adetailer_stage.extra["enable_hands_pass"] is True
     assert adetailer_stage.extra["adetailer_hands_model"] == "hand_yolov8s.pt"
@@ -578,10 +624,10 @@ def test_prompt_pack_job_builder_injects_actor_tokens_and_actor_loras_from_plan_
     tmp_path: Path,
 ) -> None:
     config_manager = StubConfigManager(tmp_path)
-    pack_txt = config_manager.packs_dir / "actor-pack.txt"
-    pack_txt.write_text(
-        "cinematic quality\nportrait on a [[environment]]\n<lora:pack_style:0.45>",
-        encoding="utf-8",
+    pack_json = _write_native_pack(
+        config_manager.packs_dir / "actor-pack.json",
+        text="cinematic quality\nportrait on a [[environment]]",
+        loras=[["pack_style", 0.45]],
     )
 
     weights_dir = tmp_path / "weights"
@@ -609,7 +655,7 @@ def test_prompt_pack_job_builder_injects_actor_tokens_and_actor_loras_from_plan_
         lora_manager=lora_manager,
     )
     entry = PackJobEntry(
-        pack_id=pack_txt.name,
+        pack_id=pack_json.name,
         pack_name="Actor Pack",
         config_snapshot={
             "plan_origin": {
@@ -700,7 +746,9 @@ def test_prompt_pack_job_builder_applies_pack_level_style_lora(tmp_path: Path) -
     assert record.config["style_lora"]["applied"] is True
 
 
-def test_prompt_pack_job_builder_warns_when_pack_level_style_lora_is_unavailable(tmp_path: Path) -> None:
+def test_prompt_pack_job_builder_warns_when_pack_level_style_lora_is_unavailable(
+    tmp_path: Path,
+) -> None:
     config_manager = StubConfigManager(tmp_path)
     config_manager._config["style_lora"] = {"enabled": True, "style_id": "cinematic_grit"}
     config_manager._config["txt2img"]["model"] = "juggernautXL.safetensors"

@@ -171,6 +171,10 @@ post-MVP work and requires a new architecture decision.
 PromptPack is the primary authored image source, not the identity of every job.
 Its canonical storage is one versioned JSON document containing prompts,
 negative prompts, authoring metadata, matrix definitions, and defaults.
+The current native PromptPack schema version is `1`; `pack_data` owns authored
+prompt and Matrix data, while `preset_data` owns saved generation defaults.
+Native discovery, validation, deterministic atomic save, flattened interchange,
+and offline pair migration are owned by `src/promptpacks/storage.py`.
 
 TXT and TSV are import/export interchange formats only. They are not paired
 runtime authorities and are never consulted after NJR construction. Migration
@@ -259,7 +263,7 @@ implemented:
 | Source identity | **Closed 2026-09-07** | All enabled source families emit complete NJRs; only `source.kind == "prompt_pack"` carries PromptPack identity, while replay, reprocess, learning, SVD, video, and training preserve their typed source metadata | `PR-MVP-030` |
 | Submission DTO | **Closed 2026-09-07** | `JobService.submit_njrs(records, policy)` is the fresh submission boundary; the pack-shaped `PipelineRunRequest`, generic builder branch, and callback-heavy preview adapter are removed | `PR-MVP-030` |
 | Persistence | **Closed 2026-09-07** | `JobRepository` transactionally owns immutable NJR snapshots and mutable lifecycle state in SQLite; queue/history are projections; restart requeues interrupted work explicitly; the offline importer is dry-run, backup-first, idempotent, conflict-reporting, validated, and rollback-rehearsed | `PR-MVP-040` |
-| PromptPack format | Open | Paired TXT/JSON assumptions remain in docs/code/tests despite unified JSON behavior | `PR-MVP-050` |
+| PromptPack format | **Closed 2026-09-08** | Versioned schema-1 JSON is the sole discovered and compiled PromptPack authority; save/reload, Matrix expansion, preview/queue, explicit TXT/TSV interchange, and backup-first semantic pair migration are covered without a live text fallback | `PR-MVP-050` |
 | Test truth | **Closed 2026-09-06** | One strict pytest authority, isolated collection/smoke runners, a positive required list, and a Ruff 0.14.9 non-increasing baseline gate pass on supported interpreters | `PR-MVP-010` |
 | Video scope | Open | Several video paths exist; only native SVD XT is selected for MVP | `PR-MVP-070` |
 | Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |

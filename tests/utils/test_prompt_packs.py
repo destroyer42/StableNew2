@@ -1,4 +1,7 @@
+import json
+
 from src.pipeline.run_config import PromptSource, RunConfig
+from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import (
     PromptPackInfo,
@@ -9,10 +12,26 @@ from src.utils.prompt_packs import (
 
 
 def test_discover_packs_returns_sorted_descriptors(tmp_path):
-    pack_two = tmp_path / "beta.txt"
-    pack_two.write_text("prompt")
-    pack_one = tmp_path / "alpha.tsv"
-    pack_one.write_text("hello\tneg")
+    pack_two = tmp_path / "beta.json"
+    pack_two.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+                "pack_data": {"slots": []},
+                "preset_data": {},
+            }
+        )
+    )
+    pack_one = tmp_path / "alpha.json"
+    pack_one.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+                "pack_data": {"slots": []},
+                "preset_data": {},
+            }
+        )
+    )
 
     packs = discover_packs(tmp_path)
 
@@ -23,32 +42,47 @@ def test_discover_packs_returns_sorted_descriptors(tmp_path):
 
 def test_discover_packs_includes_json_prompt_packs(tmp_path):
     pack_one = tmp_path / "alpha.json"
-    pack_one.write_text('{"pack_data":{"slots":[{"index":0,"text":"hero","negative":"bad"}]}}')
+    pack_one.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+                "pack_data": {"slots": [{"index": 0, "text": "hero", "negative": "bad"}]},
+                "preset_data": {},
+            }
+        )
+    )
     pack_two = tmp_path / "beta.txt"
     pack_two.write_text("prompt")
 
     packs = discover_packs(tmp_path)
 
-    assert [p.name for p in packs] == ["alpha", "beta"]
+    assert [p.name for p in packs] == ["alpha"]
     assert packs[0].path == pack_one
 
 
-def test_discover_packs_dedupes_companion_files_and_prefers_json(tmp_path):
+def test_discover_packs_ignores_companion_and_text_only_files(tmp_path):
     json_pack = tmp_path / "alpha.json"
     txt_pack = tmp_path / "alpha.txt"
     tsv_pack = tmp_path / "alpha.tsv"
     beta_pack = tmp_path / "beta.txt"
 
-    json_pack.write_text('{"pack_data":{"slots":[{"index":0,"text":"hero","negative":"bad"}]}}')
+    json_pack.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+                "pack_data": {"slots": [{"index": 0, "text": "hero", "negative": "bad"}]},
+                "preset_data": {},
+            }
+        )
+    )
     txt_pack.write_text("txt prompt", encoding="utf-8")
     tsv_pack.write_text("tsv prompt\tbad", encoding="utf-8")
     beta_pack.write_text("beta prompt", encoding="utf-8")
 
     packs = discover_packs(tmp_path)
 
-    assert [p.name for p in packs] == ["alpha", "beta"]
+    assert [p.name for p in packs] == ["alpha"]
     assert packs[0].path == json_pack
-    assert packs[1].path == beta_pack
 
 
 def test_discover_packs_ensures_directory(tmp_path):
@@ -66,6 +100,7 @@ def test_read_prompt_pack_renders_json_slot_content(tmp_path):
     pack_path.write_text(
         """
         {
+          "schema_version": 1,
           "pack_data": {
             "slots": [
               {
@@ -93,10 +128,11 @@ def test_read_prompt_pack_renders_json_slot_content(tmp_path):
 
 
 def test_read_prompt_pack_renders_template_backed_json_slots(tmp_path):
-        pack_path = tmp_path / "templated.json"
-        pack_path.write_text(
-                """
+    pack_path = tmp_path / "templated.json"
+    pack_path.write_text(
+        """
                 {
+                    "schema_version": 1,
                     "pack_data": {
                         "slots": [
                             {
@@ -114,14 +150,14 @@ def test_read_prompt_pack_renders_template_backed_json_slots(tmp_path):
                     }
                 }
                 """.strip(),
-                encoding="utf-8",
-        )
+        encoding="utf-8",
+    )
 
-        prompts = read_prompt_pack(pack_path)
+    prompts = read_prompt_pack(pack_path)
 
-        assert len(prompts) == 1
-        assert "dramatic aerial reveal of the hidden citadel" in prompts[0]["positive"]
-        assert "mist in the valley" in prompts[0]["positive"]
+    assert len(prompts) == 1
+    assert "dramatic aerial reveal of the hidden citadel" in prompts[0]["positive"]
+    assert "mist in the valley" in prompts[0]["positive"]
 
 
 # ---------------------------------------------------------------------------

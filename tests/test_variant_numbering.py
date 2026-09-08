@@ -1,14 +1,14 @@
 """Test variant numbering for matrix-expanded prompt packs."""
 
-from pathlib import Path
-from unittest.mock import MagicMock, patch
+import json
+from unittest.mock import MagicMock
 
 import pytest
 
 from src.gui.app_state_v2 import PackJobEntry
 from src.pipeline.job_builder_v2 import JobBuilderV2
-from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
+from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
 
 
 class TestVariantNumbering:
@@ -33,153 +33,108 @@ class TestVariantNumbering:
         manager.get_global_negative_prompt.return_value = ""
         return manager
 
-    @pytest.fixture
-    def mock_job_builder(self):
-        """Create mock JobBuilderV2."""
-        builder = MagicMock(spec=JobBuilderV2)
-        
-        def build_jobs_side_effect(**kwargs):
-            # Simulate building 1 job with variant_index=0 (what happens before fix)
-            job = NormalizedJobRecord(
-                job_id="test_job_id",
-                config=kwargs.get("base_config", {}),
-                path_output_dir=kwargs.get("output_settings").base_output_dir,
-                filename_template="{seed}",
-                seed=12345,
-                variant_index=0,  # Always starts at 0
-                variant_total=1,
-                batch_index=0,
-                batch_total=1,
-            )
-            return [job]
-        
-        builder.build_jobs.side_effect = build_jobs_side_effect
-        return builder
-
-    @patch("src.pipeline.prompt_pack_job_builder.load_pack_metadata")
-    @patch("src.pipeline.prompt_pack_job_builder.parse_prompt_pack_text")
     def test_variant_indices_sequential_across_matrix(
         self,
-        mock_parse,
-        mock_load_metadata,
         mock_config_manager,
-        mock_job_builder,
         tmp_path,
     ):
         """Test that matrix combinations get sequential variant indices v01, v02, v03, etc."""
-        
-        # Setup: Pack with 3 matrix combinations
-        mock_load_metadata.return_value = {
-            "pack_data": {
-                "matrix": {
-                    "enabled": True,
-                    "mode": "sequential",
-                    "slots": [
-                        {"name": "job", "values": ["wizard", "knight", "archer"]},
-                    ],
+
+        pack_path = tmp_path / "test_pack.json"
+        pack_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+                    "pack_data": {
+                        "slots": [{"index": 0, "text": "A [[job]] character"}],
+                        "matrix": {
+                            "enabled": True,
+                            "mode": "sequential",
+                            "slots": [
+                                {"name": "job", "values": ["wizard", "knight", "archer"]},
+                            ],
+                        },
+                    },
+                    "preset_data": {},
                 }
-            }
-        }
-        
-        mock_parse.return_value = [
-            MagicMock(
-                embeddings=(),
-                quality_line="A {job} character",
-                subject_template="A {job} character",
-                lora_tags=(),
-                negative_embeddings=(),
-                negative_phrases=("bad quality",),
-            )
-        ]
-        
+            ),
+            encoding="utf-8",
+        )
+
         builder = PromptPackNormalizedJobBuilder(
             config_manager=mock_config_manager,
-            job_builder=mock_job_builder,
+            job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=lambda: "test-job"),
             packs_dir=tmp_path,
         )
-        pack_path = tmp_path / "test_pack.txt"
-        pack_path.write_text("A {job} character", encoding="utf-8")
-        
         # Create single pack entry
         entry = PackJobEntry(
-            pack_id="test_pack",
+            pack_id="test_pack.json",
             pack_name="Test Pack",
             config_snapshot={},
             pack_row_index=0,
-            prompt_text="A {job} character",
+            prompt_text="A [[job]] character",
             negative_prompt_text="bad quality",
         )
-        
-        # Execute
-        with patch.object(builder, "_resolve_pack_text_path", return_value=pack_path):
-            jobs = builder.build_jobs([entry])
-        
+
+        jobs = builder.build_jobs([entry])
+
         # Verify: Should have 3 jobs (one per matrix combination)
         assert len(jobs) == 3, f"Expected 3 jobs but got {len(jobs)}"
-        
+
         # Verify: Each job has unique variant_index (0, 1, 2)
         variant_indices = [job.variant_index for job in jobs]
         assert variant_indices == [0, 1, 2], f"Expected [0, 1, 2] but got {variant_indices}"
-        
+
         # Verify: All jobs have variant_total=3
         for job in jobs:
             assert job.variant_total == 3, f"Expected variant_total=3 but got {job.variant_total}"
-        
+
         # Verify: Matrix slot values are set correctly
         assert jobs[0].matrix_slot_values == {"job": "wizard"}
         assert jobs[1].matrix_slot_values == {"job": "knight"}
         assert jobs[2].matrix_slot_values == {"job": "archer"}
 
-    @patch("src.pipeline.prompt_pack_job_builder.load_pack_metadata")
-    @patch("src.pipeline.prompt_pack_job_builder.parse_prompt_pack_text")
     def test_variant_indices_no_matrix(
         self,
-        mock_parse,
-        mock_load_metadata,
         mock_config_manager,
-        mock_job_builder,
         tmp_path,
     ):
         """Test that non-matrix packs preserve original variant numbering."""
-        
-        # Setup: Pack with no matrix
-        mock_load_metadata.return_value = {}
-        
-        mock_parse.return_value = [
-            MagicMock(
-                embeddings=(),
-                quality_line="A wizard character",
-                subject_template="A wizard character",
-                lora_tags=(),
-                negative_embeddings=(),
-                negative_phrases=("bad quality",),
-            )
-        ]
-        
+
+        pack_path = tmp_path / "test_pack.json"
+        pack_path.write_text(
+            json.dumps(
+                {
+                    "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+                    "pack_data": {
+                        "slots": [{"index": 0, "text": "A wizard character"}],
+                        "matrix": {"enabled": False, "slots": []},
+                    },
+                    "preset_data": {},
+                }
+            ),
+            encoding="utf-8",
+        )
+
         builder = PromptPackNormalizedJobBuilder(
             config_manager=mock_config_manager,
-            job_builder=mock_job_builder,
+            job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=lambda: "test-job"),
             packs_dir=tmp_path,
         )
-        pack_path = tmp_path / "test_pack.txt"
-        pack_path.write_text("A wizard character", encoding="utf-8")
-        
         entry = PackJobEntry(
-            pack_id="test_pack",
+            pack_id="test_pack.json",
             pack_name="Test Pack",
             config_snapshot={},
             pack_row_index=0,
             prompt_text="A wizard character",
             negative_prompt_text="bad quality",
         )
-        
-        # Execute
-        with patch.object(builder, "_resolve_pack_text_path", return_value=pack_path):
-            jobs = builder.build_jobs([entry])
-        
+
+        jobs = builder.build_jobs([entry])
+
         # Verify: Should have 1 job (no matrix expansion)
         assert len(jobs) == 1, f"Expected 1 job but got {len(jobs)}"
-        
+
         # Verify: Variant index unchanged
         assert jobs[0].variant_index == 0
         assert jobs[0].variant_total == 1

@@ -14,8 +14,9 @@ This is a task-oriented navigation map, not an architecture authority. Read
   `src/controller/pipeline_controller.py`,
   `src/controller/app_controller_services/run_submission_service.py`, and
   `src/controller/pipeline_controller_services/`.
-- PromptPack storage/loading: `src/gui/models/prompt_pack_model.py`,
-  `src/utils/prompt_packs.py`, and `src/utils/config.py`.
+- PromptPack native storage, discovery, interchange, and migration:
+  `src/promptpacks/storage.py`; typed GUI editing remains in
+  `src/gui/models/prompt_pack_model.py`.
 - PromptPack expansion/compilation: `src/pipeline/prompt_pack_job_builder.py`,
   `src/pipeline/prompt_pack_parser.py`, and `src/pipeline/resolution_layer.py`.
 - Matrix/randomization: `src/pipeline/config_variant_plan_v2.py`,
@@ -44,7 +45,7 @@ This is a task-oriented navigation map, not an architecture authority. Read
 
 | Task | Start here |
 |---|---|
-| PromptPack behavior | `prompt_pack_model.py` -> `prompt_pack_job_builder.py` |
+| PromptPack behavior | `src/promptpacks/storage.py` -> `prompt_pack_model.py` -> `prompt_pack_job_builder.py` |
 | Matrix/randomization | `config_variant_plan_v2.py` -> `src/randomizer/` |
 | GUI submission | `app_controller.py` -> `run_submission_service.py` -> `job_service.py` |
 | Queue/history | `job_service.py` -> `job_queue.py` -> `job_repository.py` |

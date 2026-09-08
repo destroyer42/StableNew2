@@ -2,17 +2,17 @@
 
 import json
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
-from dataclasses import dataclass
 
 from src.gui.app_state_v2 import PackJobEntry
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 from src.pipeline.resolution_layer import UnifiedPromptResolver
+from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
 from src.utils.config import ConfigManager
 from src.utils.file_io import build_safe_image_name
-
 
 BASE_PACK_CONFIG: dict[str, Any] = {
     "pipeline": {
@@ -80,52 +80,49 @@ class SequentialIdGenerator:
 
 def test_matrix_filename_uniqueness():
     """Test that matrix-expanded jobs resolve to unique runtime filenames."""
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
         packs_dir = tmpdir_path / "packs"
         packs_dir.mkdir()
-        
+
         # Create a test pack with matrix config
         pack_json = {
+            "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
             "pack_data": {
                 "name": "filename_test",
-                "slots": [],
+                "slots": [{"index": 0, "text": "A [[job]] in [[environment]]"}],
                 "matrix": {
                     "enabled": True,
                     "mode": "fanout",
                     "limit": 4,
                     "slots": [
                         {"name": "job", "values": ["wizard", "knight"]},
-                        {"name": "environment", "values": ["forest", "castle"]}
-                    ]
-                }
+                        {"name": "environment", "values": ["forest", "castle"]},
+                    ],
+                },
             },
-            "preset_data": BASE_PACK_CONFIG
+            "preset_data": BASE_PACK_CONFIG,
         }
-        
+
         pack_path = packs_dir / "filename_test.json"
         with open(pack_path, "w", encoding="utf-8") as f:
             json.dump(pack_json, f, indent=2)
-        
-        pack_txt_path = packs_dir / "filename_test.txt"
-        with open(pack_txt_path, "w", encoding="utf-8") as f:
-            f.write("A [[job]] in [[environment]]\\n")
-        
+
         # Create builder
         config_mgr = StubConfigManager(tmpdir_path)
         job_builder = JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator())
-        
+
         builder = PromptPackNormalizedJobBuilder(
             config_manager=config_mgr,
             job_builder=job_builder,
             prompt_resolver=UnifiedPromptResolver(),
             packs_dir=packs_dir,
         )
-        
+
         # Create one entry (will be expanded to 4 by matrix)
         entry = PackJobEntry(
-            pack_id="filename_test.txt",
+            pack_id="filename_test.json",
             pack_name="Filename Test",
             pack_row_index=0,
             prompt_text="",
@@ -135,50 +132,53 @@ def test_matrix_filename_uniqueness():
             matrix_slot_values={},
             randomizer_metadata=None,
         )
-        
+
         print("\\nTest: Matrix Expansion Filename Uniqueness")
-        print("="*60)
+        print("=" * 60)
         print("Matrix: 2 jobs x 2 environments = 4 combinations, limit=4")
         print("Seed: 12345 (FIXED - same for all variants)")
         print()
-        
+
         # Build jobs
         jobs = builder.build_jobs([entry])
-        
+
         print(f"Total jobs created: {len(jobs)}")
         print()
-        
+
         # Build the final runtime filenames the runner would emit.
         filenames = []
         for i, job in enumerate(jobs):
             prompt_row = getattr(job, "prompt_pack_row_index", 0) or 0
-            base_prefix = f"txt2img_p{prompt_row+1:02d}_v{job.variant_index+1:02d}"
-            filename = build_safe_image_name(
-                base_prefix=base_prefix,
-                matrix_values=job.matrix_slot_values,
-                seed=job.seed or 12345,
-                pack_name=job.prompt_pack_name,
-                max_length=100,
-            ) + ".png"
+            base_prefix = f"txt2img_p{prompt_row + 1:02d}_v{job.variant_index + 1:02d}"
+            filename = (
+                build_safe_image_name(
+                    base_prefix=base_prefix,
+                    matrix_values=job.matrix_slot_values,
+                    seed=job.seed or 12345,
+                    pack_name=job.prompt_pack_name,
+                    max_length=100,
+                )
+                + ".png"
+            )
             matrix_values = job.matrix_slot_values
-            
-            print(f"Job {i+1}:")
+
+            print(f"Job {i + 1}:")
             print(f"  Matrix: {matrix_values}")
             print(f"  Base Prefix: {base_prefix}")
             print(f"  Seed: {job.seed or 12345}")
             print(f"  Filename: {filename}")
             print()
-            
+
             filenames.append(filename)
-        
+
         # Check for duplicates
         unique_filenames = set(filenames)
         duplicates = [f for f in filenames if filenames.count(f) > 1]
-        
-        print("="*60)
+
+        print("=" * 60)
         print(f"Total filenames: {len(filenames)}")
         print(f"Unique filenames: {len(unique_filenames)}")
-        
+
         if len(unique_filenames) == len(filenames):
             print("\\n[OK] TEST PASSED: All filenames are unique!")
         else:
@@ -190,6 +190,7 @@ def test_matrix_filename_uniqueness():
         assert len(unique_filenames) == len(filenames), (
             f"Expected unique runtime filenames, got duplicates: {sorted(set(duplicates))}"
         )
+
 
 if __name__ == "__main__":
     test_matrix_filename_uniqueness()

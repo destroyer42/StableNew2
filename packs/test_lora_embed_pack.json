@@ -1,20 +1,16 @@
 {
   "pack_data": {
+    "matrix": {
+      "enabled": false,
+      "limit": 8,
+      "mode": "fanout",
+      "slots": []
+    },
     "name": "Test Pack",
+    "show_preview": true,
     "slots": [
       {
         "index": 0,
-        "text": "(masterpiece, best quality), a [[job]] in [[environment]], highly detailed",
-        "negative": "bad quality, blurry, watermark, signature",
-        "template_id": "",
-        "template_variables": {},
-        "positive_embeddings": [
-          "BadDream",
-          "UnrealisticDream"
-        ],
-        "negative_embeddings": [
-          "bad-hands-5"
-        ],
         "loras": [
           [
             "add-detail-xl",
@@ -24,16 +20,21 @@
             "style-enhance",
             0.8
           ]
-        ]
+        ],
+        "negative": "bad quality, blurry, watermark, signature",
+        "negative_embeddings": [
+          "bad-hands-5"
+        ],
+        "positive_embeddings": [
+          "BadDream",
+          "UnrealisticDream"
+        ],
+        "template_id": "",
+        "template_variables": {},
+        "text": "(masterpiece, best quality), a [[job]] in [[environment]], highly detailed"
       }
-    ],
-    "matrix": {
-      "enabled": false,
-      "mode": "fanout",
-      "limit": 8,
-      "slots": []
-    },
-    "show_preview": true
+    ]
   },
-  "preset_data": {}
+  "preset_data": {},
+  "schema_version": 1
 }

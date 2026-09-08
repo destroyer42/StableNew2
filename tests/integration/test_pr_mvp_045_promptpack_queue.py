@@ -8,6 +8,7 @@ from src.controller.job_history_service import NullHistoryService
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
 from src.gui.app_state_v2 import AppStateV2, PackJobEntry
+from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
 from src.queue.stub_runner import StubRunner
@@ -41,11 +42,20 @@ class JourneyConfigManager(ConfigManager):
         }
 
 
-def _write_pack(manager: JourneyConfigManager, name: str, text: str, *, matrix: dict | None = None) -> None:
-    pack_path = manager.packs_dir / f"{name}.txt"
-    pack_path.write_text(text, encoding="utf-8")
-    metadata = {"pack_data": {"matrix": matrix or {"enabled": False, "slots": []}}}
-    pack_path.with_suffix(".json").write_text(json.dumps(metadata), encoding="utf-8")
+def _write_pack(
+    manager: JourneyConfigManager, name: str, text: str, *, matrix: dict | None = None
+) -> None:
+    pack_path = manager.packs_dir / f"{name}.json"
+    document = {
+        "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+        "pack_data": {
+            "name": name,
+            "slots": [{"index": 0, "text": text}],
+            "matrix": matrix or {"enabled": False, "slots": []},
+        },
+        "preset_data": manager.load_pack_config(name),
+    }
+    pack_path.write_text(json.dumps(document), encoding="utf-8")
 
 
 def test_promptpack_draft_preview_queue_sqlite_journey(tmp_path: Path) -> None:
@@ -79,7 +89,7 @@ def test_promptpack_draft_preview_queue_sqlite_journey(tmp_path: Path) -> None:
     )
     entries = [
         PackJobEntry(
-            pack_id="normal.txt",
+            pack_id="normal.json",
             pack_name="Normal",
             prompt_text="A normal portrait",
             config_snapshot={
@@ -93,7 +103,7 @@ def test_promptpack_draft_preview_queue_sqlite_journey(tmp_path: Path) -> None:
             stage_flags={"txt2img": True},
         ),
         PackJobEntry(
-            pack_id="matrix.txt",
+            pack_id="matrix.json",
             pack_name="Matrix",
             prompt_text="A [[subject]]",
             config_snapshot={

@@ -16,26 +16,26 @@ import tkinter.simpledialog
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
+from src.config.app_config import STABLENEW_WEBUI_ROOT
+from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 from src.controller.content_visibility_resolver import (
     REDACTED_TEXT,
     ContentVisibilityResolver,
 )
-from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
-from src.config.app_config import STABLENEW_WEBUI_ROOT
 from src.gui.app_state_v2 import AppStateV2
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.scrolling import enable_mousewheel
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
-from src.gui.layout_v2 import configure_grid_columns
 from src.gui.view_contracts.prompt_editor_contract import (
+    PROMPT_PICKER_COLUMN_MIN_WIDTH,
+    PROMPT_PICKER_ROW_MIN_HEIGHT,
     build_editor_warning_text,
     build_slot_labels,
     find_undefined_slots,
     get_prompt_tab_column_specs,
-    PROMPT_PICKER_COLUMN_MIN_WIDTH,
-    PROMPT_PICKER_ROW_MIN_HEIGHT,
 )
 from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
@@ -44,11 +44,11 @@ from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.training.style_lora_manager import ResolvedStyleLoRA, StyleLoRAManager
 from src.utils.config import ConfigManager
+from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
-from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
 from src.utils.prompt_templates import compose_prompt_text, list_prompt_templates
-from src.utils.prompt_txt_parser import parse_prompt_txt_to_components, parse_multi_slot_txt
+from src.utils.prompt_txt_parser import parse_multi_slot_txt
 
 
 class PromptTabFrame(ttk.Frame):
@@ -87,11 +87,11 @@ class PromptTabFrame(ttk.Frame):
         self._prompt_optimizer_guard = False
         self._prompt_optimizer_vars = self._build_prompt_optimizer_vars()
         self._content_visibility_mode = self._read_content_visibility_mode()
-        
+
         # Autocomplete for [[slot]] insertion
         self._autocomplete_list: tk.Listbox | None = None
         self._autocomplete_trigger_pos: str | None = None
-        
+
         # Validation state
         self._undefined_slots: set[str] = set()
         self._template_guard = False
@@ -186,67 +186,83 @@ class PromptTabFrame(ttk.Frame):
         if not self._pending_visibility_refresh:
             return
         try:
-            self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
+            self.after_idle(
+                lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode)
+            )
         except Exception:
             self.on_content_visibility_mode_changed(self._content_visibility_mode)
 
     # Left column -------------------------------------------------------
     def _build_left_panel(self) -> None:
         """Build pack manager and slot list panels.
-        
+
         v2.6: Comprehensive pack management with load, clone, delete, rename, validate.
         """
         # Pack Manager Section (top)
         pack_header = ttk.Label(self.left_frame, text="Pack Manager", style=BODY_LABEL_STYLE)
         pack_header.pack(anchor="w")
-        
+
         # Pack management buttons
         pack_btn_frame = ttk.Frame(self.left_frame)
         pack_btn_frame.pack(fill="x", pady=(4, 2))
-        ttk.Button(pack_btn_frame, text="New", command=self._on_new_pack, width=6).pack(side="left", padx=(0, 2))
-        ttk.Button(pack_btn_frame, text="Load", command=self._on_load_selected_pack, width=6).pack(side="left", padx=(0, 2))
-        ttk.Button(pack_btn_frame, text="Save", command=self._on_save_pack, width=6).pack(side="left")
-        
+        ttk.Button(pack_btn_frame, text="New", command=self._on_new_pack, width=6).pack(
+            side="left", padx=(0, 2)
+        )
+        ttk.Button(pack_btn_frame, text="Load", command=self._on_load_selected_pack, width=6).pack(
+            side="left", padx=(0, 2)
+        )
+        ttk.Button(pack_btn_frame, text="Save", command=self._on_save_pack, width=6).pack(
+            side="left"
+        )
+
         pack_btn_frame2 = ttk.Frame(self.left_frame)
         pack_btn_frame2.pack(fill="x", pady=(2, 6))
-        ttk.Button(pack_btn_frame2, text="Clone", command=self._on_clone_pack, width=6).pack(side="left", padx=(0, 2))
-        ttk.Button(pack_btn_frame2, text="Rename", command=self._on_rename_pack, width=6).pack(side="left", padx=(0, 2))
-        ttk.Button(pack_btn_frame2, text="Delete", command=self._on_delete_pack, width=6).pack(side="left", padx=(0, 2))
-        ttk.Button(pack_btn_frame2, text="Validate", command=self._on_validate_pack, width=7).pack(side="left")
-        
+        ttk.Button(pack_btn_frame2, text="Clone", command=self._on_clone_pack, width=6).pack(
+            side="left", padx=(0, 2)
+        )
+        ttk.Button(pack_btn_frame2, text="Rename", command=self._on_rename_pack, width=6).pack(
+            side="left", padx=(0, 2)
+        )
+        ttk.Button(pack_btn_frame2, text="Delete", command=self._on_delete_pack, width=6).pack(
+            side="left", padx=(0, 2)
+        )
+        ttk.Button(pack_btn_frame2, text="Validate", command=self._on_validate_pack, width=7).pack(
+            side="left"
+        )
+
         # Pack list
         self.pack_listbox = tk.Listbox(
-            self.left_frame, 
-            exportselection=False, 
+            self.left_frame,
+            exportselection=False,
             height=8,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
             selectbackground=TOKENS.colors.accent_primary,
             selectforeground=TOKENS.colors.surface_primary,
             highlightthickness=0,
-            borderwidth=0
+            borderwidth=0,
         )
         self.pack_listbox.pack(fill="both", expand=False, pady=(0, 8))
         self.pack_listbox.bind("<Double-Button-1>", lambda e: self._on_load_selected_pack())
         enable_mousewheel(self.pack_listbox)
         self._refresh_pack_list()
-        
+
         # Slot List Section (bottom)
         ttk.Separator(self.left_frame, orient="horizontal").pack(fill="x", pady=(0, 8))
-        
+
         slot_header = ttk.Label(self.left_frame, text="Prompt Slots", style=BODY_LABEL_STYLE)
         slot_header.pack(anchor="w")
 
         self.slot_list = tk.Listbox(
-            self.left_frame, 
-            exportselection=False, 
+            self.left_frame,
+            exportselection=False,
             height=10,
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
             selectbackground=TOKENS.colors.accent_primary,
             selectforeground=TOKENS.colors.surface_primary,
             highlightthickness=0,
-            borderwidth=0
+            borderwidth=0,
         )
         for i in range(10):
             self.slot_list.insert("end", f"Prompt {i + 1}")
@@ -258,9 +274,15 @@ class PromptTabFrame(ttk.Frame):
         # Slot management buttons
         slot_mgmt_frame = ttk.Frame(self.left_frame)
         slot_mgmt_frame.pack(fill="x", pady=(0, 4))
-        ttk.Button(slot_mgmt_frame, text="Add Slot", command=self._on_add_slot).pack(side="left", padx=(0, 2), expand=True, fill="x")
-        ttk.Button(slot_mgmt_frame, text="Copy", command=self._on_copy_slot).pack(side="left", padx=(0, 2), expand=True, fill="x")
-        ttk.Button(slot_mgmt_frame, text="Delete", command=self._on_delete_slot).pack(side="left", expand=True, fill="x")
+        ttk.Button(slot_mgmt_frame, text="Add Slot", command=self._on_add_slot).pack(
+            side="left", padx=(0, 2), expand=True, fill="x"
+        )
+        ttk.Button(slot_mgmt_frame, text="Copy", command=self._on_copy_slot).pack(
+            side="left", padx=(0, 2), expand=True, fill="x"
+        )
+        ttk.Button(slot_mgmt_frame, text="Delete", command=self._on_delete_slot).pack(
+            side="left", expand=True, fill="x"
+        )
         attach_tooltip(self.slot_list, "Select a prompt slot to edit or apply.")
 
     # Center column -----------------------------------------------------
@@ -302,14 +324,12 @@ class PromptTabFrame(ttk.Frame):
         # Positive prompt header (row 0)
         positive_header = ttk.Frame(self.prompts_tab)
         positive_header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 2))
-        ttk.Label(positive_header, text="Prompt Details", style=BODY_LABEL_STYLE).pack(
-            side="left"
-        )
-        
+        ttk.Label(positive_header, text="Prompt Details", style=BODY_LABEL_STYLE).pack(side="left")
+
         # Quick insert buttons frame (updated dynamically)
         self.positive_quick_insert_frame = ttk.Frame(positive_header)
         self.positive_quick_insert_frame.pack(side="right", padx=(0, 5))
-        
+
         ttk.Button(
             positive_header,
             text="Insert Slot...",
@@ -318,8 +338,8 @@ class PromptTabFrame(ttk.Frame):
 
         # Positive prompt editor (row 1)
         self.editor = tk.Text(
-            self.prompts_tab, 
-            height=8, 
+            self.prompts_tab,
+            height=8,
             wrap="word",
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
@@ -328,7 +348,7 @@ class PromptTabFrame(ttk.Frame):
             selectforeground=TOKENS.colors.surface_primary,
             highlightthickness=0,
             borderwidth=1,
-            relief="solid"
+            relief="solid",
         )
         self.editor.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
         self.editor.bind("<<Modified>>", self._on_editor_modified)
@@ -340,7 +360,7 @@ class PromptTabFrame(ttk.Frame):
             self.editor,
             "Freeform prompt text. When a template is selected, this text is appended after the rendered template. Type [[ for slot autocomplete.",
         )
-        
+
         # Configure tag for matrix token highlighting (darker yellow for dark mode)
         self.editor.tag_config(
             "matrix_token",
@@ -353,14 +373,12 @@ class PromptTabFrame(ttk.Frame):
         # Negative prompt header (row 3)
         negative_header = ttk.Frame(self.prompts_tab)
         negative_header.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 2))
-        ttk.Label(negative_header, text="Negative Prompt", style=BODY_LABEL_STYLE).pack(
-            side="left"
-        )
-        
+        ttk.Label(negative_header, text="Negative Prompt", style=BODY_LABEL_STYLE).pack(side="left")
+
         # Quick insert buttons frame (updated dynamically)
         self.negative_quick_insert_frame = ttk.Frame(negative_header)
         self.negative_quick_insert_frame.pack(side="right", padx=(0, 5))
-        
+
         ttk.Button(
             negative_header,
             text="Insert Slot...",
@@ -369,8 +387,8 @@ class PromptTabFrame(ttk.Frame):
 
         # Negative prompt editor (row 4)
         self.negative_editor = tk.Text(
-            self.prompts_tab, 
-            height=4, 
+            self.prompts_tab,
+            height=4,
             wrap="word",
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
@@ -379,7 +397,7 @@ class PromptTabFrame(ttk.Frame):
             selectforeground=TOKENS.colors.surface_primary,
             highlightthickness=0,
             borderwidth=1,
-            relief="solid"
+            relief="solid",
         )
         self.negative_editor.grid(row=4, column=0, columnspan=2, sticky="nsew", pady=(0, 6))
         self.negative_editor.bind("<<Modified>>", self._on_negative_modified)
@@ -387,8 +405,11 @@ class PromptTabFrame(ttk.Frame):
         self.negative_editor.bind("<Escape>", lambda e: self._hide_autocomplete())
         self.negative_editor.bind("<FocusOut>", lambda e: self._hide_autocomplete())
         enable_mousewheel(self.negative_editor)
-        attach_tooltip(self.negative_editor, "Negative prompt to exclude unwanted elements. Type [[ for slot autocomplete.")
-        
+        attach_tooltip(
+            self.negative_editor,
+            "Negative prompt to exclude unwanted elements. Type [[ for slot autocomplete.",
+        )
+
         # Configure tag for matrix token highlighting (darker yellow for dark mode)
         self.negative_editor.tag_config(
             "matrix_token",
@@ -400,10 +421,10 @@ class PromptTabFrame(ttk.Frame):
         self.lora_picker = LoRAPickerPanel(
             self.prompts_tab,
             on_change_callback=self._on_loras_changed,
-            webui_root=STABLENEW_WEBUI_ROOT or None
+            webui_root=STABLENEW_WEBUI_ROOT or None,
         )
         self.lora_picker.grid(row=5, column=0, sticky="nsew", padx=(0, 3))
-        
+
         # Override keyword insertion to insert into prompt editor
         self.lora_picker._insert_keywords_to_prompt = self._insert_keywords_to_prompt
 
@@ -411,7 +432,7 @@ class PromptTabFrame(ttk.Frame):
         self.embedding_picker = EmbeddingPickerPanel(
             self.prompts_tab,
             on_change_callback=self._on_embeddings_changed,
-            webui_root=STABLENEW_WEBUI_ROOT or None
+            webui_root=STABLENEW_WEBUI_ROOT or None,
         )
         self.embedding_picker.grid(row=5, column=1, sticky="nsew", padx=(3, 0))
 
@@ -474,18 +495,23 @@ class PromptTabFrame(ttk.Frame):
         self.template_preview.grid(row=4, column=0, columnspan=3, sticky="ew")
 
     def _mark_pack_modified(self) -> None:
-        pack_name = self.workspace_state.current_pack.name if self.workspace_state.current_pack else "None"
+        pack_name = (
+            self.workspace_state.current_pack.name if self.workspace_state.current_pack else "None"
+        )
         self.pack_name_label.config(text=f"Editor - {pack_name} (modified)")
 
     def _template_preview_text(self) -> str:
         template_id = self.template_selector_var.get().strip()
         if not template_id:
             return self.workspace_state.get_current_raw_prompt_text() or "(freeform prompt only)"
-        return compose_prompt_text(
-            template_id,
-            self._current_template_values_from_controls(),
-            self.workspace_state.get_current_raw_prompt_text(),
-        ) or "(template selected, fill variables to preview)"
+        return (
+            compose_prompt_text(
+                template_id,
+                self._current_template_values_from_controls(),
+                self.workspace_state.get_current_raw_prompt_text(),
+            )
+            or "(template selected, fill variables to preview)"
+        )
 
     def _refresh_template_preview(self) -> None:
         self._set_editor_widget_text(
@@ -669,15 +695,15 @@ class PromptTabFrame(ttk.Frame):
         self._build_prompt_optimizer_panel(optimizer_frame)
 
         self.meta_text = tk.Text(
-            self.right_frame, 
-            height=12, 
-            wrap="word", 
+            self.right_frame,
+            height=12,
+            wrap="word",
             state="disabled",
             bg=TOKENS.colors.surface_secondary,
             fg=TOKENS.colors.text_primary,
             highlightthickness=0,
             borderwidth=1,
-            relief="solid"
+            relief="solid",
         )
         self.meta_text.pack(fill="both", expand=True)
 
@@ -710,7 +736,9 @@ class PromptTabFrame(ttk.Frame):
         style_id = str(style_config.get("style_id") or "").strip()
         combo_value = self._style_id_to_choice.get(style_id)
         if combo_value is None:
-            combo_value = f"{style_id} [missing from catalog]" if style_id else self._style_lora_none_label
+            combo_value = (
+                f"{style_id} [missing from catalog]" if style_id else self._style_lora_none_label
+            )
         self._style_lora_guard = True
         try:
             self.style_lora_var.set(combo_value)
@@ -784,14 +812,24 @@ class PromptTabFrame(ttk.Frame):
             "optimize_positive": tk.BooleanVar(value=bool(defaults["optimize_positive"])),
             "optimize_negative": tk.BooleanVar(value=bool(defaults["optimize_negative"])),
             "dedupe_enabled": tk.BooleanVar(value=bool(defaults["dedupe_enabled"])),
-            "preserve_lora_relative_order": tk.BooleanVar(value=bool(defaults["preserve_lora_relative_order"])),
+            "preserve_lora_relative_order": tk.BooleanVar(
+                value=bool(defaults["preserve_lora_relative_order"])
+            ),
             "preserve_unknown_order": tk.BooleanVar(value=bool(defaults["preserve_unknown_order"])),
-            "enable_score_based_classification": tk.BooleanVar(value=bool(defaults["enable_score_based_classification"])),
-            "allow_subject_anchor_boost": tk.BooleanVar(value=bool(defaults["allow_subject_anchor_boost"])),
+            "enable_score_based_classification": tk.BooleanVar(
+                value=bool(defaults["enable_score_based_classification"])
+            ),
+            "allow_subject_anchor_boost": tk.BooleanVar(
+                value=bool(defaults["allow_subject_anchor_boost"])
+            ),
             "log_before_after": tk.BooleanVar(value=bool(defaults["log_before_after"])),
             "log_bucket_assignments": tk.BooleanVar(value=bool(defaults["log_bucket_assignments"])),
-            "large_chunk_warning_threshold": tk.IntVar(value=int(defaults["large_chunk_warning_threshold"])),
-            "subject_anchor_boost_min_chunk_count": tk.IntVar(value=int(defaults["subject_anchor_boost_min_chunk_count"])),
+            "large_chunk_warning_threshold": tk.IntVar(
+                value=int(defaults["large_chunk_warning_threshold"])
+            ),
+            "subject_anchor_boost_min_chunk_count": tk.IntVar(
+                value=int(defaults["subject_anchor_boost_min_chunk_count"])
+            ),
         }
 
     def _build_prompt_optimizer_panel(self, parent: tk.Misc) -> None:
@@ -821,7 +859,9 @@ class PromptTabFrame(ttk.Frame):
             ).grid(row=row, column=column, sticky="w", padx=2, pady=2)
 
         threshold_row = (len(checkbox_specs) + 1) // 2
-        ttk.Label(parent, text="Chunk Warn").grid(row=threshold_row, column=0, sticky="w", pady=(4, 2))
+        ttk.Label(parent, text="Chunk Warn").grid(
+            row=threshold_row, column=0, sticky="w", pady=(4, 2)
+        )
         ttk.Spinbox(
             parent,
             from_=1,
@@ -830,7 +870,9 @@ class PromptTabFrame(ttk.Frame):
             width=8,
             command=self._on_prompt_optimizer_config_changed,
         ).grid(row=threshold_row, column=1, sticky="ew", pady=(4, 2))
-        ttk.Label(parent, text="Anchor Min").grid(row=threshold_row + 1, column=0, sticky="w", pady=(2, 0))
+        ttk.Label(parent, text="Anchor Min").grid(
+            row=threshold_row + 1, column=0, sticky="w", pady=(2, 0)
+        )
         ttk.Spinbox(
             parent,
             from_=1,
@@ -846,15 +888,29 @@ class PromptTabFrame(ttk.Frame):
             "optimize_positive": bool(self._prompt_optimizer_vars["optimize_positive"].get()),
             "optimize_negative": bool(self._prompt_optimizer_vars["optimize_negative"].get()),
             "dedupe_enabled": bool(self._prompt_optimizer_vars["dedupe_enabled"].get()),
-            "preserve_lora_relative_order": bool(self._prompt_optimizer_vars["preserve_lora_relative_order"].get()),
-            "preserve_unknown_order": bool(self._prompt_optimizer_vars["preserve_unknown_order"].get()),
+            "preserve_lora_relative_order": bool(
+                self._prompt_optimizer_vars["preserve_lora_relative_order"].get()
+            ),
+            "preserve_unknown_order": bool(
+                self._prompt_optimizer_vars["preserve_unknown_order"].get()
+            ),
             "log_before_after": bool(self._prompt_optimizer_vars["log_before_after"].get()),
-            "log_bucket_assignments": bool(self._prompt_optimizer_vars["log_bucket_assignments"].get()),
+            "log_bucket_assignments": bool(
+                self._prompt_optimizer_vars["log_bucket_assignments"].get()
+            ),
             "warn_on_large_chunk_count": True,
-            "large_chunk_warning_threshold": int(self._prompt_optimizer_vars["large_chunk_warning_threshold"].get()),
-            "enable_score_based_classification": bool(self._prompt_optimizer_vars["enable_score_based_classification"].get()),
-            "allow_subject_anchor_boost": bool(self._prompt_optimizer_vars["allow_subject_anchor_boost"].get()),
-            "subject_anchor_boost_min_chunk_count": int(self._prompt_optimizer_vars["subject_anchor_boost_min_chunk_count"].get()),
+            "large_chunk_warning_threshold": int(
+                self._prompt_optimizer_vars["large_chunk_warning_threshold"].get()
+            ),
+            "enable_score_based_classification": bool(
+                self._prompt_optimizer_vars["enable_score_based_classification"].get()
+            ),
+            "allow_subject_anchor_boost": bool(
+                self._prompt_optimizer_vars["allow_subject_anchor_boost"].get()
+            ),
+            "subject_anchor_boost_min_chunk_count": int(
+                self._prompt_optimizer_vars["subject_anchor_boost_min_chunk_count"].get()
+            ),
             "opt_out_pipeline_names": [],
         }
 
@@ -878,8 +934,8 @@ class PromptTabFrame(ttk.Frame):
     # Event handlers / helpers ------------------------------------------
     def _on_new_pack(self) -> None:
         """Create a new pack with default preset settings.
-        
-        v2.6: New packs now use default.json preset settings for companion JSON file.
+
+        New packs save defaults inside their one native JSON document.
         """
         if self.workspace_state.dirty:
             proceed = messagebox.askyesno(
@@ -887,33 +943,34 @@ class PromptTabFrame(ttk.Frame):
             )
             if not proceed:
                 return
-        
+
         # Ask for pack name
         import tkinter.simpledialog as simpledialog
+
         pack_name = simpledialog.askstring("New Pack", "Enter pack name:", initialvalue="Untitled")
         if not pack_name:
             return
-        
+
         # Create new pack
         self.workspace_state.new_pack(pack_name, slot_count=10)
-        
+
         # Load default preset settings into the pack
         try:
-            from pathlib import Path
             import json
-            
+            from pathlib import Path
+
             default_preset_path = Path("presets") / "default.json"
             if default_preset_path.exists():
-                with open(default_preset_path, "r", encoding="utf-8") as f:
+                with open(default_preset_path, encoding="utf-8") as f:
                     default_preset = json.load(f)
-                
+
                 # Apply default preset to current pack
-                if hasattr(self.workspace_state.current_pack, 'preset_data'):
+                if hasattr(self.workspace_state.current_pack, "preset_data"):
                     self.workspace_state.current_pack.preset_data = default_preset
                     self.workspace_state.mark_dirty()
         except Exception:
             pass  # Continue even if default preset loading fails
-        
+
         self.workspace_state.set_current_slot_index(0)
         self.slot_list.selection_clear(0, "end")
         self.slot_list.selection_set(0)
@@ -975,7 +1032,7 @@ class PromptTabFrame(ttk.Frame):
 
             self._sync_template_controls()
             self._sync_style_lora_controls()
-            
+
             # Apply highlighting and update quick insert buttons
             self._highlight_matrix_tokens()
             self._update_quick_insert_buttons()
@@ -1012,8 +1069,7 @@ class PromptTabFrame(ttk.Frame):
         negative_text = self.negative_editor.get("1.0", "end").rstrip("\n")
         try:
             self.workspace_state.set_slot_negative(
-                self.workspace_state.get_current_slot_index(),
-                negative_text
+                self.workspace_state.get_current_slot_index(), negative_text
             )
             # Update UI indicator
             self._mark_pack_modified()
@@ -1031,8 +1087,7 @@ class PromptTabFrame(ttk.Frame):
         try:
             loras = self.lora_picker.get_loras()
             self.workspace_state.set_slot_loras(
-                self.workspace_state.get_current_slot_index(),
-                loras
+                self.workspace_state.get_current_slot_index(), loras
             )
             # Mark dirty
             self._mark_pack_modified()
@@ -1048,16 +1103,14 @@ class PromptTabFrame(ttk.Frame):
             pos_embeds = self.embedding_picker.get_positive_embeddings()
             neg_embeds = self.embedding_picker.get_negative_embeddings()
             self.workspace_state.set_slot_embeddings(
-                self.workspace_state.get_current_slot_index(),
-                pos_embeds,
-                neg_embeds
+                self.workspace_state.get_current_slot_index(), pos_embeds, neg_embeds
             )
             # Mark dirty
             self._mark_pack_modified()
         except Exception:
             pass
         self._refresh_metadata()
-    
+
     def _insert_keywords_to_prompt(self, keywords: str) -> None:
         """Insert LoRA keywords into the positive prompt editor at cursor position."""
         try:
@@ -1072,7 +1125,7 @@ class PromptTabFrame(ttk.Frame):
         slot_index = self.workspace_state.get_current_slot_index()
         resolver = self._visibility_resolver()
         subject = self._current_slot_visibility_subject()
-        
+
         # Get current slot data
         current_slot = self.workspace_state.get_current_slot() if pack else None
         if not current_slot:
@@ -1081,10 +1134,10 @@ class PromptTabFrame(ttk.Frame):
             self.meta_text.insert("1.0", "No pack loaded")
             self.meta_text.config(state="disabled")
             return
-        
+
         # Get matrix config
         matrix_config = self.workspace_state.get_matrix_config()
-        
+
         # Build preview sections
         dirty = " (modified)" if self.workspace_state.dirty else ""
         resolved_style_lora = self._resolve_selected_style_lora()
@@ -1093,9 +1146,9 @@ class PromptTabFrame(ttk.Frame):
             f"Slot: {slot_index + 1}",
             "",
             "━━━ FULL PROMPT PREVIEW ━━━",
-            ""
+            "",
         ]
-        
+
         # Show matrix slots if defined
         if matrix_config and matrix_config.slots:
             preview_lines.append("Matrix Slots:")
@@ -1105,12 +1158,14 @@ class PromptTabFrame(ttk.Frame):
                     values_preview += f"... ({len(slot.values)} total)"
                 preview_lines.append(f"  [[{slot.name}]]: {values_preview}")
             preview_lines.append("")
-        
+
         # Positive embeddings
         if current_slot.positive_embeddings:
-            for emb_name, emb_weight in normalize_embedding_entries(current_slot.positive_embeddings):
+            for emb_name, emb_weight in normalize_embedding_entries(
+                current_slot.positive_embeddings
+            ):
                 preview_lines.append(render_embedding_reference(emb_name, emb_weight))
-        
+
         template_id = str(getattr(current_slot, "template_id", "") or "")
         if template_id:
             preview_lines.append(f"Template: {template_id}")
@@ -1120,7 +1175,11 @@ class PromptTabFrame(ttk.Frame):
                     preview_lines.append(f"  {key}: {value or '(empty)'}")
             preview_lines.append("")
 
-        if resolved_style_lora and resolved_style_lora.applied and resolved_style_lora.trigger_phrase:
+        if (
+            resolved_style_lora
+            and resolved_style_lora.applied
+            and resolved_style_lora.trigger_phrase
+        ):
             preview_lines.append(f"Style Trigger: {resolved_style_lora.trigger_phrase}")
 
         # Positive prompt
@@ -1132,7 +1191,7 @@ class PromptTabFrame(ttk.Frame):
             preview_lines.append(positive_text)
         else:
             preview_lines.append("(no positive prompt)")
-        
+
         # LoRAs
         if current_slot.loras:
             lora_line_parts = []
@@ -1156,21 +1215,23 @@ class PromptTabFrame(ttk.Frame):
         if resolved_style_lora and not resolved_style_lora.applied and resolved_style_lora.warning:
             preview_lines.append("")
             preview_lines.append(f"Style LoRA Warning: {resolved_style_lora.warning}")
-        
+
         preview_lines.append("")
-        
+
         # Negative embeddings
         if current_slot.negative_embeddings:
-            for emb_name, emb_weight in normalize_embedding_entries(current_slot.negative_embeddings):
+            for emb_name, emb_weight in normalize_embedding_entries(
+                current_slot.negative_embeddings
+            ):
                 preview_lines.append(f"neg: {render_embedding_reference(emb_name, emb_weight)}")
-        
+
         # Negative prompt
         negative_text = resolver.redact_text(current_slot.negative.strip(), item=subject)
         if negative_text:
             preview_lines.append(f"neg: {negative_text}")
         else:
             preview_lines.append("neg: (none)")
-        
+
         # Global negative (if available from app_state)
         if self.app_state and hasattr(self.app_state, "global_negative_prompt"):
             global_neg = getattr(self.app_state, "global_negative_prompt", "")
@@ -1178,22 +1239,24 @@ class PromptTabFrame(ttk.Frame):
                 preview_lines.append("")
                 preview_lines.append("Global Negative (appended):")
                 preview_lines.append(f"  {global_neg.strip()}")
-        
-        preview_lines.extend([
-            "",
-            "━━━ STATISTICS ━━━",
-            f"Positive: {len(positive_text)} chars",
-            f"Negative: {len(negative_text)} chars",
-            f"LoRAs: {len(current_slot.loras) + (1 if resolved_style_lora and resolved_style_lora.applied else 0)}",
-            f"Pos Embeddings: {len(current_slot.positive_embeddings)}",
-            f"Neg Embeddings: {len(current_slot.negative_embeddings)}",
-        ])
-        
+
+        preview_lines.extend(
+            [
+                "",
+                "━━━ STATISTICS ━━━",
+                f"Positive: {len(positive_text)} chars",
+                f"Negative: {len(negative_text)} chars",
+                f"LoRAs: {len(current_slot.loras) + (1 if resolved_style_lora and resolved_style_lora.applied else 0)}",
+                f"Pos Embeddings: {len(current_slot.positive_embeddings)}",
+                f"Neg Embeddings: {len(current_slot.negative_embeddings)}",
+            ]
+        )
+
         if matrix_config and matrix_config.slots:
             valid_slots = [s for s in matrix_config.slots if s.name and s.values]
             if valid_slots:
                 # Calculate total combinations
-                from itertools import product
+
                 total_combinations = 1
                 for slot in valid_slots:
                     total_combinations *= len(slot.values)
@@ -1243,7 +1306,7 @@ class PromptTabFrame(ttk.Frame):
         dialog.wait_window(dialog)
 
     # Pack Management Functions (v2.6) ----------------------------------
-    
+
     def _refresh_pack_list(self) -> None:
         """Refresh the list of available packs from the packs directory."""
         self.pack_listbox.delete(0, "end")
@@ -1274,7 +1337,7 @@ class PromptTabFrame(ttk.Frame):
                 visible_infos.append(pack_info)
                 self.pack_listbox.insert("end", pack_info.name)
         self._visible_pack_infos = visible_infos
-    
+
     def _on_load_selected_pack(self) -> None:
         """Load the selected pack from the pack list."""
         selection = self.pack_listbox.curselection()
@@ -1294,7 +1357,7 @@ class PromptTabFrame(ttk.Frame):
             if pack_path.suffix.lower() == ".json":
                 self.workspace_state.load_pack(str(pack_path))
             else:
-                with open(pack_path, "r", encoding="utf-8") as f:
+                with open(pack_path, encoding="utf-8") as f:
                     txt_content = f.read()
 
                 all_components = parse_multi_slot_txt(txt_content)
@@ -1322,159 +1385,168 @@ class PromptTabFrame(ttk.Frame):
             self.slot_list.selection_set(0)
             self._refresh_editor()
             self._refresh_metadata()
-            
+
             self.pack_name_label.config(text=f"Editor - {pack_name}")
-            
+
         except Exception as e:
             messagebox.showerror("Load Pack", f"Failed to load pack:\\n{str(e)}")
-    
+
     def _on_clone_pack(self) -> None:
         """Clone the selected pack with a new name."""
         selection = self.pack_listbox.curselection()
         if not selection:
             messagebox.showinfo("Clone Pack", "Please select a pack to clone.")
             return
-        
+
         pack_name = self.pack_listbox.get(selection[0])
-        new_name = tk.simpledialog.askstring("Clone Pack", f"Clone '{pack_name}' as:", initialvalue=f"{pack_name}_copy")
-        
+        new_name = tk.simpledialog.askstring(
+            "Clone Pack", f"Clone '{pack_name}' as:", initialvalue=f"{pack_name}_copy"
+        )
+
         if not new_name:
             return
-        
-        from pathlib import Path
+
         import shutil
-        
+        from pathlib import Path
+
         src_txt = Path("packs") / f"{pack_name}.txt"
         src_json = Path("packs") / f"{pack_name}.json"
         dest_txt = Path("packs") / f"{new_name}.txt"
         dest_json = Path("packs") / f"{new_name}.json"
-        
+
         if dest_txt.exists():
             messagebox.showerror("Clone Pack", f"Pack '{new_name}' already exists.")
             return
-        
+
         try:
             # Copy TXT file
             if src_txt.exists():
                 shutil.copy2(src_txt, dest_txt)
-            
+
             # Copy JSON file if it exists
             if src_json.exists():
                 shutil.copy2(src_json, dest_json)
-            
+
             self._refresh_pack_list()
             messagebox.showinfo("Clone Pack", f"Pack cloned successfully as '{new_name}'.")
         except Exception as e:
             messagebox.showerror("Clone Pack", f"Failed to clone pack:\\n{str(e)}")
-    
+
     def _on_rename_pack(self) -> None:
         """Rename the selected pack."""
         selection = self.pack_listbox.curselection()
         if not selection:
             messagebox.showinfo("Rename Pack", "Please select a pack to rename.")
             return
-        
+
         old_name = self.pack_listbox.get(selection[0])
-        new_name = tk.simpledialog.askstring("Rename Pack", f"Rename '{old_name}' to:", initialvalue=old_name)
-        
+        new_name = tk.simpledialog.askstring(
+            "Rename Pack", f"Rename '{old_name}' to:", initialvalue=old_name
+        )
+
         if not new_name or new_name == old_name:
             return
-        
+
         from pathlib import Path
-        
+
         old_txt = Path("packs") / f"{old_name}.txt"
         old_json = Path("packs") / f"{old_name}.json"
         new_txt = Path("packs") / f"{new_name}.txt"
         new_json = Path("packs") / f"{new_name}.json"
-        
+
         if new_txt.exists():
             messagebox.showerror("Rename Pack", f"Pack '{new_name}' already exists.")
             return
-        
+
         try:
             # Rename TXT file
             if old_txt.exists():
                 old_txt.rename(new_txt)
-            
+
             # Rename JSON file if it exists
             if old_json.exists():
                 old_json.rename(new_json)
-            
+
             self._refresh_pack_list()
             messagebox.showinfo("Rename Pack", f"Pack renamed to '{new_name}'.")
         except Exception as e:
             messagebox.showerror("Rename Pack", f"Failed to rename pack:\\n{str(e)}")
-    
+
     def _on_delete_pack(self) -> None:
         """Delete the selected pack."""
         selection = self.pack_listbox.curselection()
         if not selection:
             messagebox.showinfo("Delete Pack", "Please select a pack to delete.")
             return
-        
+
         pack_name = self.pack_listbox.get(selection[0])
-        
-        if not messagebox.askyesno("Delete Pack", f"Are you sure you want to delete '{pack_name}'?\\nThis cannot be undone."):
+
+        if not messagebox.askyesno(
+            "Delete Pack",
+            f"Are you sure you want to delete '{pack_name}'?\\nThis cannot be undone.",
+        ):
             return
-        
+
         from pathlib import Path
-        
+
         txt_path = Path("packs") / f"{pack_name}.txt"
         json_path = Path("packs") / f"{pack_name}.json"
-        
+
         try:
             # Delete TXT file
             if txt_path.exists():
                 txt_path.unlink()
-            
+
             # Delete JSON file if it exists
             if json_path.exists():
                 json_path.unlink()
-            
+
             self._refresh_pack_list()
             messagebox.showinfo("Delete Pack", f"Pack '{pack_name}' deleted successfully.")
         except Exception as e:
             messagebox.showerror("Delete Pack", f"Failed to delete pack:\\n{str(e)}")
-    
+
     def _on_validate_pack(self) -> None:
         """Validate the selected pack for errors."""
         selection = self.pack_listbox.curselection()
         if not selection:
             messagebox.showinfo("Validate Pack", "Please select a pack to validate.")
             return
-        
+
         pack_name = self.pack_listbox.get(selection[0])
-        
-        from pathlib import Path
+
         import re
-        
+        from pathlib import Path
+
         txt_path = Path("packs") / f"{pack_name}.txt"
         json_path = Path("packs") / f"{pack_name}.json"
-        
+
         errors = []
         warnings = []
-        
+
         # Check if files exist
         if not txt_path.exists():
             errors.append(f"TXT file not found: {txt_path}")
-        
+
         try:
             # Validate TXT content
             if txt_path.exists():
-                with open(txt_path, "r", encoding="utf-8") as f:
+                with open(txt_path, encoding="utf-8") as f:
                     content = f.read()
-                
+
                 # Check for empty file
                 if not content.strip():
                     errors.append("TXT file is empty")
-                
+
                 # Check for [[tokens]] without defined matrix slots
-                matrix_tokens = re.findall(r'\[\[([^\]]+)\]\]', content)
+                matrix_tokens = re.findall(r"\[\[([^\]]+)\]\]", content)
                 if matrix_tokens and not json_path.exists():
-                    warnings.append(f"Found {len(set(matrix_tokens))} matrix tokens but no JSON file")
-                
+                    warnings.append(
+                        f"Found {len(set(matrix_tokens))} matrix tokens but no JSON file"
+                    )
+
                 # Check for LoRA/embedding syntax
-                lora_pattern = r'<lora:([^:>]+)(?::([^>]+))?>'
+                lora_pattern = r"<lora:([^:>]+)(?::([^>]+))?>"
                 loras = re.findall(lora_pattern, content)
                 for lora_name, weight in loras:
                     if weight:
@@ -1484,13 +1556,14 @@ class PromptTabFrame(ttk.Frame):
                                 warnings.append(f"LoRA '{lora_name}' has unusual weight: {w}")
                         except ValueError:
                             errors.append(f"LoRA '{lora_name}' has invalid weight: {weight}")
-            
+
             # Validate JSON content
             if json_path.exists():
                 import json
-                with open(json_path, "r", encoding="utf-8") as f:
+
+                with open(json_path, encoding="utf-8") as f:
                     json_data = json.load(f)
-                
+
                 # Check matrix configuration
                 matrix_config = json_data.get("matrix_config", {})
                 if matrix_config.get("enabled"):
@@ -1502,8 +1575,10 @@ class PromptTabFrame(ttk.Frame):
                             if not slot.get("name"):
                                 errors.append("Matrix slot missing name")
                             if not slot.get("values"):
-                                warnings.append(f"Matrix slot '{slot.get('name', '?')}' has no values")
-            
+                                warnings.append(
+                                    f"Matrix slot '{slot.get('name', '?')}' has no values"
+                                )
+
             # Display results
             if errors:
                 result_msg = "❌ ERRORS FOUND:\\n\\n" + "\\n".join(f"• {e}" for e in errors)
@@ -1514,8 +1589,11 @@ class PromptTabFrame(ttk.Frame):
                 result_msg = "⚠️ WARNINGS:\\n\\n" + "\\n".join(f"• {w}" for w in warnings)
                 messagebox.showwarning("Validation Warnings", result_msg)
             else:
-                messagebox.showinfo("Validation Passed", f"✓ Pack '{pack_name}' is valid!\\n\\nNo errors or warnings found.")
-        
+                messagebox.showinfo(
+                    "Validation Passed",
+                    f"✓ Pack '{pack_name}' is valid!\\n\\nNo errors or warnings found.",
+                )
+
         except Exception as e:
             messagebox.showerror("Validation Error", f"Failed to validate pack:\\n{str(e)}")
 
@@ -1537,22 +1615,23 @@ class PromptTabFrame(ttk.Frame):
             pass
 
     def _on_open_pack(self) -> None:
-        """Open a prompt pack from TXT file (and load companion JSON if available)."""
+        """Open native JSON or explicitly import a flattened TXT PromptPack."""
         path = filedialog.askopenfilename(
             title="Open Prompt Pack",
             filetypes=[("Text Files", "*.txt"), ("JSON Files", "*.json"), ("All Files", "*.*")],
         )
         if not path:
             return
-        
+
         from pathlib import Path
+
         file_path = Path(path)
-        
+
         try:
-            # If user selected TXT, parse it and look for companion JSON
+            # TXT is an explicit import into a new, unsaved native pack.
             if file_path.suffix.lower() == ".txt":
                 # Read TXT file
-                with open(file_path, "r", encoding="utf-8") as f:
+                with open(file_path, encoding="utf-8") as f:
                     txt_content = f.read()
 
                 # Parse into multiple slots
@@ -1562,17 +1641,10 @@ class PromptTabFrame(ttk.Frame):
                     messagebox.showwarning("Open Prompt Pack", "No valid prompts found in file.")
                     return
 
-                # Check for companion JSON (for matrix config)
-                json_path = file_path.with_suffix(".json")
-                if json_path.exists():
-                    # Load the full pack from JSON (gets matrix, etc.)
-                    self.workspace_state.load_pack(str(json_path))
-                else:
-                    # Create new pack from TXT only
-                    pack_name = file_path.stem
-                    self.workspace_state.new_pack(pack_name, slot_count=len(all_components))
+                pack_name = file_path.stem
+                self.workspace_state.new_pack(pack_name, slot_count=len(all_components))
 
-                # Populate slots from TXT (overwrites JSON slot content)
+                # Populate a new in-memory native pack; Save As writes JSON only.
                 for index, components in enumerate(all_components):
                     if index < len(self.workspace_state.current_pack.slots):
                         slot = self.workspace_state.get_slot(index)
@@ -1599,7 +1671,7 @@ class PromptTabFrame(ttk.Frame):
                 self.slot_list.selection_set(0)
                 self._refresh_editor()
                 self._refresh_metadata()
-                
+
         except Exception as exc:
             messagebox.showerror("Open Prompt Pack", f"Failed to open pack:\n{exc}")
 
@@ -1643,7 +1715,7 @@ class PromptTabFrame(ttk.Frame):
 
         try:
             # Read TXT file
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 txt_content = f.read()
 
             # Parse into multiple slots
@@ -1664,7 +1736,9 @@ class PromptTabFrame(ttk.Frame):
             elif needed_slot_count < current_slot_count:
                 # Remove excess slots
                 for _ in range(current_slot_count - needed_slot_count):
-                    self.workspace_state.remove_slot(len(self.workspace_state.current_pack.slots) - 1)
+                    self.workspace_state.remove_slot(
+                        len(self.workspace_state.current_pack.slots) - 1
+                    )
 
             # Populate each slot
             for index, components in enumerate(all_components):
@@ -1689,14 +1763,13 @@ class PromptTabFrame(ttk.Frame):
             # Show confirmation
             total_loras = sum(len(c.loras) for c in all_components)
             total_embeds = sum(
-                len(c.positive_embeddings) + len(c.negative_embeddings)
-                for c in all_components
+                len(c.positive_embeddings) + len(c.negative_embeddings) for c in all_components
             )
             messagebox.showinfo(
                 "Load from TXT",
                 f"Loaded {len(all_components)} slot(s) from TXT:\n"
                 f"  {total_loras} total LoRA(s)\n"
-                f"  {total_embeds} total embedding(s)"
+                f"  {total_embeds} total embedding(s)",
             )
         except Exception as exc:
             messagebox.showerror("Load from TXT", f"Failed to load TXT:\n{exc}")
@@ -1747,89 +1820,89 @@ class PromptTabFrame(ttk.Frame):
         self._validate_matrix_slots()
 
     # Matrix Integration Features -----------------------------------
-    
+
     def _on_positive_key_release(self, event) -> None:
         """Handle key release in positive editor for autocomplete."""
         if event.keysym in ("Up", "Down", "Return", "Escape"):
             if self._autocomplete_list and self._autocomplete_list.winfo_viewable():
                 self._handle_autocomplete_nav(event, self.editor)
             return
-        
+
         # Check if user typed [[ - check both cursor positions (after second [ or at second [)
         try:
             cursor_pos = self.editor.index("insert")
             line, col = map(int, cursor_pos.split("."))
-            
+
             # First try: check if we're right after [[
             if col >= 2:
-                prev_chars = self.editor.get(f"{line}.{col-2}", f"{line}.{col}")
+                prev_chars = self.editor.get(f"{line}.{col - 2}", f"{line}.{col}")
                 if prev_chars == "[[":
                     self._show_autocomplete(self.editor)
                     return
-            
+
             # Second try: check if we're at the position of second [ (immediately after typing it)
             if col >= 1:
-                check_chars = self.editor.get(f"{line}.{col-1}", f"{line}.{col+1}")
+                check_chars = self.editor.get(f"{line}.{col - 1}", f"{line}.{col + 1}")
                 if check_chars == "[[":
                     # Move cursor to after [[
-                    self.editor.mark_set("insert", f"{line}.{col+1}")
+                    self.editor.mark_set("insert", f"{line}.{col + 1}")
                     self._show_autocomplete(self.editor)
                     return
         except Exception:
             pass
-        
+
         # Hide autocomplete if still visible
         if self._autocomplete_list and self._autocomplete_list.winfo_viewable():
             self._hide_autocomplete()
-    
+
     def _on_negative_key_release(self, event) -> None:
         """Handle key release in negative editor for autocomplete."""
         if event.keysym in ("Up", "Down", "Return", "Escape"):
             if self._autocomplete_list and self._autocomplete_list.winfo_viewable():
                 self._handle_autocomplete_nav(event, self.negative_editor)
             return
-        
+
         # Check if user typed [[ - check both cursor positions (after second [ or at second [)
         try:
             cursor_pos = self.negative_editor.index("insert")
             line, col = map(int, cursor_pos.split("."))
-            
+
             # First try: check if we're right after [[
             if col >= 2:
-                prev_chars = self.negative_editor.get(f"{line}.{col-2}", f"{line}.{col}")
+                prev_chars = self.negative_editor.get(f"{line}.{col - 2}", f"{line}.{col}")
                 if prev_chars == "[[":
                     self._show_autocomplete(self.negative_editor)
                     return
-            
+
             # Second try: check if we're at the position of second [ (immediately after typing it)
             if col >= 1:
-                check_chars = self.negative_editor.get(f"{line}.{col-1}", f"{line}.{col+1}")
+                check_chars = self.negative_editor.get(f"{line}.{col - 1}", f"{line}.{col + 1}")
                 if check_chars == "[[":
                     # Move cursor to after [[
-                    self.negative_editor.mark_set("insert", f"{line}.{col+1}")
+                    self.negative_editor.mark_set("insert", f"{line}.{col + 1}")
                     self._show_autocomplete(self.negative_editor)
                     return
         except Exception:
             pass
-        
+
         # Hide autocomplete if still visible
         if self._autocomplete_list and self._autocomplete_list.winfo_viewable():
             self._hide_autocomplete()
-    
+
     def _show_autocomplete(self, editor: tk.Text) -> None:
         """Show autocomplete dropdown with available matrix slots."""
         matrix_config = self.workspace_state.get_matrix_config()
         if not matrix_config.slots:
             return
-        
+
         slot_names = matrix_config.get_slot_names()
         if not slot_names:
             return
-        
+
         # Store trigger position (should be right after [[)
         cursor_pos = editor.index("insert")
         self._autocomplete_trigger_pos = cursor_pos
-        
+
         # Create or update listbox
         if self._autocomplete_list is None:
             self._autocomplete_list = tk.Listbox(
@@ -1843,18 +1916,22 @@ class PromptTabFrame(ttk.Frame):
                 selectforeground=TOKENS.colors.surface_primary,
                 highlightthickness=1,
                 highlightbackground=TOKENS.colors.border_subtle,
-                borderwidth=0
+                borderwidth=0,
             )
-            self._autocomplete_list.bind("<<ListboxSelect>>", lambda e: self._on_autocomplete_select(editor))
-            self._autocomplete_list.bind("<Double-Button-1>", lambda e: self._on_autocomplete_select(editor))
+            self._autocomplete_list.bind(
+                "<<ListboxSelect>>", lambda e: self._on_autocomplete_select(editor)
+            )
+            self._autocomplete_list.bind(
+                "<Double-Button-1>", lambda e: self._on_autocomplete_select(editor)
+            )
             self._autocomplete_list.bind("<Return>", lambda e: self._on_autocomplete_select(editor))
             self._autocomplete_list.bind("<Escape>", lambda e: self._hide_autocomplete())
-        
+
         # Populate
         self._autocomplete_list.delete(0, "end")
         for name in slot_names:
             self._autocomplete_list.insert("end", name)
-        
+
         # Position below cursor
         try:
             bbox = editor.bbox("insert")
@@ -1870,18 +1947,18 @@ class PromptTabFrame(ttk.Frame):
             # Even if placement fails, make it visible at default position
             self._autocomplete_list.place(x=0, y=20, width=200)
             self._autocomplete_list.selection_set(0)
-    
+
     def _hide_autocomplete(self) -> None:
         """Hide autocomplete dropdown."""
         if self._autocomplete_list:
             self._autocomplete_list.place_forget()
             self._autocomplete_trigger_pos = None
-    
+
     def _handle_autocomplete_nav(self, event, editor: tk.Text) -> None:
         """Handle Up/Down/Return in autocomplete list."""
         if not self._autocomplete_list:
             return
-        
+
         if event.keysym == "Down":
             current = self._autocomplete_list.curselection()
             if current:
@@ -1900,34 +1977,34 @@ class PromptTabFrame(ttk.Frame):
                     self._autocomplete_list.see(idx - 1)
         elif event.keysym == "Return":
             self._on_autocomplete_select(editor)
-    
+
     def _on_autocomplete_select(self, editor: tk.Text) -> None:
         """Insert selected slot name and close autocomplete."""
         if not self._autocomplete_list:
             return
-        
+
         selection = self._autocomplete_list.curselection()
         if not selection:
             return
-        
+
         slot_name = self._autocomplete_list.get(selection[0])
-        
+
         # Find the correct insertion position
         # The trigger position should be right after [[, but verify
         if self._autocomplete_trigger_pos:
             line, col = map(int, self._autocomplete_trigger_pos.split("."))
             # Check if we're right after [[
             if col >= 2:
-                check_text = editor.get(f"{line}.{col-2}", f"{line}.{col}")
+                check_text = editor.get(f"{line}.{col - 2}", f"{line}.{col}")
                 if check_text == "[[":
                     # Good, we're right after [[
                     insert_pos = self._autocomplete_trigger_pos
                 else:
                     # We might be AT the second [, check one position forward
-                    check_text2 = editor.get(f"{line}.{col-1}", f"{line}.{col+1}")
+                    check_text2 = editor.get(f"{line}.{col - 1}", f"{line}.{col + 1}")
                     if check_text2 == "[[":
                         # We're between the brackets, move forward one
-                        insert_pos = f"{line}.{col+1}"
+                        insert_pos = f"{line}.{col + 1}"
                     else:
                         # Just use current position
                         insert_pos = self._autocomplete_trigger_pos
@@ -1935,32 +2012,32 @@ class PromptTabFrame(ttk.Frame):
                 insert_pos = self._autocomplete_trigger_pos
         else:
             insert_pos = "insert"
-        
+
         # Insert slot name
         editor.insert(insert_pos, f"{slot_name}]]")
-        
+
         # Move cursor to end of inserted text
         if self._autocomplete_trigger_pos:
             line, col = map(int, insert_pos.split("."))
             new_pos = f"{line}.{col + len(slot_name) + 2}"  # +2 for ]]
             editor.mark_set("insert", new_pos)
-        
+
         # Trigger modified event
         if editor == self.editor:
             self._on_editor_modified()
         else:
             self._on_negative_modified()
-        
+
         self._hide_autocomplete()
         editor.focus_set()
-    
+
     def _highlight_matrix_tokens(self) -> None:
         """Apply visual highlighting to [[tokens]] in both editors."""
         import re
-        
+
         # Pattern for [[token_name]]
-        pattern = re.compile(r'\[\[([^\]]+)\]\]')
-        
+        pattern = re.compile(r"\[\[([^\]]+)\]\]")
+
         # Highlight in positive editor
         self.editor.tag_remove("matrix_token", "1.0", "end")
         text = self.editor.get("1.0", "end")
@@ -1968,7 +2045,7 @@ class PromptTabFrame(ttk.Frame):
             start_idx = f"1.0 + {match.start()} chars"
             end_idx = f"1.0 + {match.end()} chars"
             self.editor.tag_add("matrix_token", start_idx, end_idx)
-        
+
         # Highlight in negative editor
         self.negative_editor.tag_remove("matrix_token", "1.0", "end")
         neg_text = self.negative_editor.get("1.0", "end")
@@ -1976,25 +2053,25 @@ class PromptTabFrame(ttk.Frame):
             start_idx = f"1.0 + {match.start()} chars"
             end_idx = f"1.0 + {match.end()} chars"
             self.negative_editor.tag_add("matrix_token", start_idx, end_idx)
-    
+
     def _update_quick_insert_buttons(self) -> None:
         """Update quick insert buttons for matrix slots."""
         if not hasattr(self, "positive_quick_insert_frame"):
             return
-        
+
         # Clear existing buttons
         for widget in self.positive_quick_insert_frame.winfo_children():
             widget.destroy()
         for widget in self.negative_quick_insert_frame.winfo_children():
             widget.destroy()
-        
+
         # Get current slots
         matrix_config = self.workspace_state.get_matrix_config()
         if not matrix_config.slots:
             return
-        
+
         slot_names = matrix_config.get_slot_names()
-        
+
         # Limit to first 5 slots for space
         for slot_name in slot_names[:5]:
             # Positive button
@@ -2005,7 +2082,7 @@ class PromptTabFrame(ttk.Frame):
                 command=lambda s=slot_name: self._quick_insert_slot(self.editor, s),
             )
             btn_pos.pack(side="left", padx=2)
-            
+
             # Negative button
             btn_neg = ttk.Button(
                 self.negative_quick_insert_frame,
@@ -2014,7 +2091,7 @@ class PromptTabFrame(ttk.Frame):
                 command=lambda s=slot_name: self._quick_insert_slot(self.negative_editor, s),
             )
             btn_neg.pack(side="left", padx=2)
-    
+
     def _quick_insert_slot(self, editor: tk.Text, slot_name: str) -> None:
         """Insert [[slot_name]] at cursor position."""
         editor.insert("insert", f"[[{slot_name}]]")
@@ -2023,7 +2100,7 @@ class PromptTabFrame(ttk.Frame):
         else:
             self._on_negative_modified()
         editor.focus_set()
-    
+
     def _validate_matrix_slots(self) -> None:
         """Check for undefined [[tokens]] and show warnings."""
         matrix_config = self.workspace_state.get_matrix_config()
@@ -2035,13 +2112,15 @@ class PromptTabFrame(ttk.Frame):
         )
         if self._undefined_slots:
             self._show_validation_warning()
-    
+
     def _show_validation_warning(self) -> None:
         """Show visual indicator for undefined slots (non-blocking)."""
         if not self._undefined_slots:
             return
 
-        pack_name = self.workspace_state.current_pack.name if self.workspace_state.current_pack else "None"
+        pack_name = (
+            self.workspace_state.current_pack.name if self.workspace_state.current_pack else "None"
+        )
         self.pack_name_label.config(
             text=build_editor_warning_text(
                 pack_name=pack_name,
@@ -2100,8 +2179,7 @@ class PromptTabFrame(ttk.Frame):
 
             current_index = self.workspace_state.get_current_slot_index()
             proceed = messagebox.askyesno(
-                "Delete Slot",
-                f"Are you sure you want to delete Prompt {current_index + 1}?"
+                "Delete Slot", f"Are you sure you want to delete Prompt {current_index + 1}?"
             )
             if not proceed:
                 return
@@ -2129,7 +2207,9 @@ class PromptTabFrame(ttk.Frame):
             and hasattr(self.app_state, "unsubscribe")
         ):
             try:
-                self.app_state.unsubscribe("content_visibility_mode", self._content_visibility_listener)
+                self.app_state.unsubscribe(
+                    "content_visibility_mode", self._content_visibility_listener
+                )
             except Exception:
                 pass
             self._content_visibility_listener = None
@@ -2137,4 +2217,3 @@ class PromptTabFrame(ttk.Frame):
 
 
 PromptTabFrame = PromptTabFrame
-

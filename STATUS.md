@@ -20,12 +20,11 @@ the working tree wholesale.
 ## Product state
 
 StableNew has a verified queue-first NJR/runner spine, trustworthy bounded CI
-gates, and one transactional SQLite authority for job lifecycle state. Queue
-and history are repository projections, and legacy JSON/JSONL state has an
-offline backup-first importer. It is not yet an MVP: PromptPack storage still
-has paired-file assumptions, and the image/video vertical slices lack
-clean-machine real-backend acceptance. PR-MVP-045 restored the PromptPack
-draft-to-preview-to-queue path; one-file storage remains the next blocker.
+gates, one transactional SQLite authority for job lifecycle state, and one
+versioned JSON authority for authored PromptPacks. Queue and history are
+repository projections, and legacy persistence has offline backup-first
+migration. It is not yet an MVP: the image/video vertical slices still lack
+clean-machine real-backend acceptance.
 
 ## Runtime invariants
 
@@ -40,31 +39,30 @@ draft-to-preview-to-queue path; one-file storage remains the next blocker.
 
 ## Current work
 
-Repository convergence, simplification, transactional job persistence, and the
-PR-MVP-045 PromptPack draft/preview/queue repair are complete. Developer
+Repository convergence, simplification, transactional job persistence,
+PR-MVP-045 PromptPack draft/preview/queue repair, and PR-MVP-050 one-file JSON
+PromptPack convergence are complete. Developer
 workflow now has a task-oriented code map, one-command local required gate,
 canonical Python 3.11/3.12 CI verdict, and a controller-surface ratchet. New
 product work starts from `main` on one short-lived outcome branch. The next
-product outcome remains one-file PromptPack convergence; do not revive the
-recovery, hygiene, or QOL branches as alternate sources of truth.
+next product outcome is the reliable image create-to-replay slice; do not revive
+the recovery, hygiene, or QOL branches as alternate sources of truth.
 
 ## Highest-value debt
 
-1. PromptPack native storage has remaining paired TXT/JSON assumptions.
-2. The image create-to-replay journey lacks recorded real-WebUI acceptance.
-3. Legacy CLI/compatibility and superseded JSON migration tests assert pre-cutover NJR
+1. The image create-to-replay journey lacks recorded real-WebUI acceptance.
+2. Legacy CLI/compatibility and superseded JSON migration tests assert pre-cutover NJR
    fields and payload shapes; the broad suite is therefore not green.
-4. Ruff still has a bounded legacy baseline; repository-wide mypy is not clean.
+3. Ruff still has a bounded legacy baseline; repository-wide mypy is not clean.
 
 ## Now / next / later
 
 **Now / Next**
 
-- `PR-MVP-050`: converge PromptPack native storage on one versioned JSON file.
+- `PR-MVP-060`: reliable image create/queue/run/artifact/history/replay slice.
 
 **Later**
 
-- `PR-MVP-060`: reliable image create/queue/run/artifact/history/replay slice.
 - `PR-MVP-070`: native SVD XT product slice and hardware preflight.
 - `PR-MVP-080`: operator UX, setup, diagnostics, and bounded lint cleanup.
 - `PR-MVP-090`: clean-machine release proof and zero Ruff baseline.
@@ -73,13 +71,12 @@ recovery, hygiene, or QOL branches as alternate sources of truth.
 
 Latest verified baseline for the converged product state:
 
-- repository completeness: 427 tracked Python source files; verification passed
+- repository completeness: 429 tracked Python source files; verification passed
   on the committed branch;
-- strict collection: 3,029 tests plus 2 optional-OpenCV module skips on the
-  supported Python 3.11 and 3.12 environments;
+- strict local collection: 3,041 tests plus 2 optional-OpenCV module skips;
 - required smoke: 95 passing on Python 3.11 and 3.12;
 - bounded mypy smoke: passing;
-- Ruff 0.14.9 baseline: 1,821 findings against a maximum of 2,208.
+- Ruff 0.14.9 baseline: 1,613 findings against a maximum of 2,208.
 
 Run focused tests, then `python tools/ci/run_pr_gate.py`. GitHub required CI on
 Python 3.11 and 3.12 is the canonical integration verdict.

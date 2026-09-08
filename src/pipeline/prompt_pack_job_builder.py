@@ -35,14 +35,15 @@ from src.pipeline.job_models_v2 import (
     StageConfig,
     WorkloadKind,
 )
-from src.pipeline.prompt_pack_parser import PackRow, parse_prompt_pack_text
+from src.pipeline.prompt_pack_parser import PackRow
 from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
+from src.promptpacks.storage import load_prompt_pack_document, prompt_pack_rows
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 from src.training.lora_manager import LoRAManager
 from src.training.style_lora_manager import StyleLoRAManager
 from src.utils.config import ConfigManager
 from src.utils.embedding_prompt_utils import render_embedding_reference
-from src.utils.prompt_pack_utils import get_matrix_slots_dict, load_pack_metadata
+from src.utils.prompt_pack_utils import get_matrix_slots_dict
 
 _logger = logging.getLogger(__name__)
 
@@ -155,7 +156,7 @@ class PromptPackNormalizedJobBuilder:
             List of PackJobEntry, one per matrix combination
         """
         # Resolve pack path
-        pack_path = self._resolve_pack_text_path(entry.pack_id)
+        pack_path = self._resolve_pack_json_path(entry.pack_id)
         if not pack_path:
             _logger.debug(
                 f"[Matrix Expansion] No pack path found for {entry.pack_id}, skipping expansion"
@@ -416,7 +417,7 @@ class PromptPackNormalizedJobBuilder:
         pipeline_section = merged_config.get("pipeline", {})
         aesthetic_section = merged_config.get("aesthetic", {})
         matrix_section = merged_config.get("randomization", {}).get("matrix", {})
-        pack_path = self._resolve_pack_text_path(entry.pack_id)
+        pack_path = self._resolve_pack_json_path(entry.pack_id)
 
         finalized_jobs: list[NormalizedJobRecord] = []
         for record in jobs:
@@ -756,8 +757,8 @@ class PromptPackNormalizedJobBuilder:
             payload["story_plan"] = copy.deepcopy(story_plan)
         payload["pack_name"] = entry.pack_name or entry.pack_id
         payload["pack_path"] = (
-            str(self._resolve_pack_text_path(entry.pack_id))
-            if self._resolve_pack_text_path(entry.pack_id)
+            str(self._resolve_pack_json_path(entry.pack_id))
+            if self._resolve_pack_json_path(entry.pack_id)
             else None
         )
         payload["prompt_pack_id"] = entry.pack_id
@@ -917,24 +918,16 @@ class PromptPackNormalizedJobBuilder:
             scheduler_choices=[],
         )
 
-    def _resolve_pack_text_path(self, pack_id: str) -> Path | None:
+    def _resolve_pack_json_path(self, pack_id: str) -> Path | None:
         candidate = Path(pack_id)
         if candidate.is_absolute():
-            if candidate.exists():
-                return candidate
-        base = Path(pack_id)
-        stem = base.stem
-        extensions = [".txt", ".tsv"]
-        candidates = []
-        if base.suffix:
-            candidates.append(self._packs_dir / pack_id)
-        else:
-            for ext in extensions:
-                candidates.append(self._packs_dir / f"{stem}{ext}")
-        for path in candidates:
-            if path.exists():
-                return path
-        return None
+            json_candidate = (
+                candidate if candidate.suffix.lower() == ".json" else candidate.with_suffix(".json")
+            )
+            return json_candidate if json_candidate.exists() else None
+        stem = candidate.stem
+        path = self._packs_dir / f"{stem}.json"
+        return path if path.exists() else None
 
     @staticmethod
     def _path_fingerprint(path: Path | None) -> tuple[Any, ...]:
@@ -947,9 +940,8 @@ class PromptPackNormalizedJobBuilder:
             return (str(path), "missing")
 
     def _pack_source_fingerprint(self, pack_id: str) -> tuple[Any, ...]:
-        text_path = self._resolve_pack_text_path(pack_id)
-        json_path = text_path.with_suffix(".json") if text_path is not None else None
-        return (self._path_fingerprint(text_path), self._path_fingerprint(json_path))
+        json_path = self._resolve_pack_json_path(pack_id)
+        return (self._path_fingerprint(json_path),)
 
     @staticmethod
     def _runtime_params_cache_key(runtime_params: dict[str, Any]) -> str:
@@ -959,18 +951,21 @@ class PromptPackNormalizedJobBuilder:
             return repr(runtime_params)
 
     def _load_pack_metadata_cached(self, pack_path: Path) -> dict[str, Any]:
-        json_path = pack_path.with_suffix(".json")
-        cache_key = (self._path_fingerprint(json_path),)
+        cache_key = (self._path_fingerprint(pack_path),)
         cached = self._pack_metadata_cache.get(cache_key)
         if cached is not None:
             return copy.deepcopy(cached)
-        metadata = load_pack_metadata(pack_path)
+        try:
+            metadata = load_prompt_pack_document(pack_path)
+        except Exception as exc:
+            _logger.warning("Failed to load native PromptPack '%s': %s", pack_path, exc)
+            metadata = {}
         self._pack_metadata_cache[cache_key] = copy.deepcopy(metadata)
         return metadata
 
     def _load_pack_rows(self, pack_id: str) -> list[PackRow]:
-        """Load and parse pack rows from the pack file."""
-        path = self._resolve_pack_text_path(pack_id)
+        """Load structured prompt rows from the native JSON document."""
+        path = self._resolve_pack_json_path(pack_id)
         if not path:
             _logger.warning("Pack file not found for '%s'", pack_id)
             return []
@@ -979,24 +974,25 @@ class PromptPackNormalizedJobBuilder:
         if cached is not None:
             return list(cached)
         try:
-            with open(path, encoding="utf-8") as f:
-                content = f.read()
+            document = load_prompt_pack_document(path)
         except Exception as exc:
             _logger.warning("Failed to read prompt pack '%s': %s", pack_id, exc)
             return []
-        rows = parse_prompt_pack_text(content)
+        rows = prompt_pack_rows(document)
         self._pack_rows_cache[cache_key] = list(rows)
         return rows
 
     def _load_pack_config(self, pack_id: str) -> dict[str, Any] | None:
-        config_path_getter = getattr(self._config_manager, "_pack_config_path", None)
-        config_path = config_path_getter(pack_id) if callable(config_path_getter) else None
+        config_path = self._resolve_pack_json_path(pack_id)
         cache_key = (pack_id, self._path_fingerprint(config_path))
         if cache_key in self._pack_config_cache:
             cached = self._pack_config_cache[cache_key]
             return copy.deepcopy(cached) if isinstance(cached, dict) else cached
         try:
-            loaded = self._config_manager.load_pack_config(pack_id)
+            if config_path is not None:
+                loaded = load_prompt_pack_document(config_path).get("preset_data", {})
+            else:
+                loaded = self._config_manager.load_pack_config(pack_id)
             self._pack_config_cache[cache_key] = copy.deepcopy(loaded)
             return loaded
         except Exception as exc:

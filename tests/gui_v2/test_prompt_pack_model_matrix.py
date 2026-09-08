@@ -6,13 +6,11 @@ and TXT export with [[tokens]] and neg: lines.
 """
 
 import json
-import pytest
-from pathlib import Path
+
 from src.gui.models.prompt_pack_model import (
-    PromptPackModel,
-    PromptSlot,
-    MatrixSlot,
     MatrixConfig,
+    MatrixSlot,
+    PromptPackModel,
 )
 
 
@@ -40,7 +38,7 @@ def test_matrix_config_get_slot_names():
         slots=[
             MatrixSlot(name="job", values=["wizard", "knight"]),
             MatrixSlot(name="environment", values=["forest", "castle"]),
-        ]
+        ],
     )
     names = config.get_slot_names()
     assert names == ["job", "environment"]
@@ -53,7 +51,7 @@ def test_matrix_config_get_slot_dict():
         slots=[
             MatrixSlot(name="job", values=["wizard", "knight"]),
             MatrixSlot(name="environment", values=["forest", "castle"]),
-        ]
+        ],
     )
     slot_dict = config.get_slot_dict()
     assert slot_dict == {
@@ -77,7 +75,7 @@ def test_save_includes_matrix_config(tmp_path):
     pack = PromptPackModel.new("test_matrix", slot_count=2)
     pack.slots[0].text = "A [[job]] in [[environment]]"
     pack.slots[0].negative = "bad quality"
-    
+
     pack.matrix = MatrixConfig(
         enabled=True,
         mode="fanout",
@@ -85,16 +83,16 @@ def test_save_includes_matrix_config(tmp_path):
         slots=[
             MatrixSlot(name="job", values=["wizard", "knight"]),
             MatrixSlot(name="environment", values=["forest", "castle"]),
-        ]
+        ],
     )
-    
+
     json_path = tmp_path / "test_matrix.json"
     pack.save_to_file(json_path)
-    
+
     # Read JSON directly
-    with open(json_path, "r", encoding="utf-8") as f:
+    with open(json_path, encoding="utf-8") as f:
         data = json.load(f)
-    
+
     assert "pack_data" in data
     assert data["pack_data"]["matrix"]["enabled"] is True
     assert data["pack_data"]["matrix"]["mode"] == "fanout"
@@ -122,17 +120,17 @@ def test_load_with_matrix_config(tmp_path):
             ],
         },
     }
-    
+
     json_path = tmp_path / "test_load_matrix.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(json_data, f)
-    
+
     pack = PromptPackModel.load_from_file(json_path)
-    
+
     assert pack.name == "test_load_matrix"
     assert len(pack.slots) >= 2
     assert pack.slots[0].text == "[[job]] prompt"
-    
+
     assert pack.matrix.enabled is True
     assert pack.matrix.mode == "fanout"
     assert pack.matrix.limit == 6
@@ -150,13 +148,13 @@ def test_load_backward_compat_no_matrix_field(tmp_path):
         ],
         # NO matrix field
     }
-    
+
     json_path = tmp_path / "old_pack.json"
     with open(json_path, "w", encoding="utf-8") as f:
         json.dump(json_data, f)
-    
+
     pack = PromptPackModel.load_from_file(json_path)
-    
+
     assert pack.name == "old_pack"
     assert len(pack.slots) >= 1
     assert isinstance(pack.matrix, MatrixConfig)
@@ -169,7 +167,7 @@ def test_roundtrip_save_load_matrix(tmp_path):
     original = PromptPackModel.new("roundtrip_matrix", slot_count=3)
     original.slots[0].text = "[[job]] in [[environment]]"
     original.slots[0].negative = "bad quality, blurry"
-    
+
     original.matrix = MatrixConfig(
         enabled=True,
         mode="fanout",
@@ -177,14 +175,14 @@ def test_roundtrip_save_load_matrix(tmp_path):
         slots=[
             MatrixSlot(name="job", values=["mage", "fighter", "rogue"]),
             MatrixSlot(name="environment", values=["dungeon", "forest"]),
-        ]
+        ],
     )
-    
+
     json_path = tmp_path / "roundtrip_matrix.json"
     original.save_to_file(json_path)
-    
+
     loaded = PromptPackModel.load_from_file(json_path)
-    
+
     assert loaded.matrix.enabled == original.matrix.enabled
     assert loaded.matrix.mode == original.matrix.mode
     assert loaded.matrix.limit == original.matrix.limit
@@ -201,30 +199,31 @@ def test_export_txt_with_matrix_tokens(tmp_path):
     pack.slots[0].negative = "bad quality, distorted"
     pack.slots[1].text = "another [[job]] with sword"
     pack.slots[1].negative = ""
-    
+
     pack.matrix = MatrixConfig(
         enabled=True,
         slots=[
             MatrixSlot(name="job", values=["wizard", "knight"]),
             MatrixSlot(name="environment", values=["forest", "castle"]),
-        ]
+        ],
     )
-    
+
+    pack.save_to_file(tmp_path / "txt_export_tokens.json")
     txt_path = tmp_path / "txt_export_tokens.txt"
-    pack._export_txt(txt_path)
-    
+    pack.export_to_file(txt_path)
+
     content = txt_path.read_text(encoding="utf-8")
-    
+
     # Should contain [[tokens]]
     assert "[[job]]" in content
     assert "[[environment]]" in content
-    
+
     # Should contain neg: lines
     assert "neg: bad quality, distorted" in content
-    
+
     # Should contain LoRAs
     assert "<lora:detail:0.5>" in content
-    
+
     # Should have blank line separators
     assert "\n\n" in content
 
@@ -234,12 +233,13 @@ def test_export_txt_multi_line_negative(tmp_path):
     pack = PromptPackModel.new("txt_multiline_neg", slot_count=1)
     pack.slots[0].text = "positive prompt"
     pack.slots[0].negative = "bad quality\nblurry\ndistorted"
-    
+
+    pack.save_to_file(tmp_path / "txt_multiline_neg.json")
     txt_path = tmp_path / "txt_multiline_neg.txt"
-    pack._export_txt(txt_path)
-    
+    pack.export_to_file(txt_path)
+
     content = txt_path.read_text(encoding="utf-8")
-    
+
     # Each negative line should have neg: prefix
     assert "neg: bad quality" in content
     assert "neg: blurry" in content
@@ -278,8 +278,9 @@ def test_export_txt_renders_template_backed_prompt(tmp_path):
         "style": "epic matte painting",
     }
 
+    pack.save_to_file(tmp_path / "templated_export.json")
     txt_path = tmp_path / "templated_export.txt"
-    pack._export_txt(txt_path)
+    pack.export_to_file(txt_path)
 
     content = txt_path.read_text(encoding="utf-8")
 
@@ -294,48 +295,44 @@ def test_export_txt_skips_empty_slots(tmp_path):
     pack.slots[1].text = ""  # Empty
     pack.slots[2].text = "   "  # Whitespace only
     pack.slots[3].text = "prompt 3"
-    
+
+    pack.save_to_file(tmp_path / "txt_skip_empty.json")
     txt_path = tmp_path / "txt_skip_empty.txt"
-    pack._export_txt(txt_path)
-    
+    pack.export_to_file(txt_path)
+
     content = txt_path.read_text(encoding="utf-8")
     lines = [line for line in content.split("\n") if line.strip()]
-    
+
     # Should only have 2 non-empty prompts
     assert len(lines) == 2
     assert "prompt 1" in content
     assert "prompt 3" in content
 
 
-def test_auto_export_txt_in_packs_folder(tmp_path):
-    """save_to_file() should auto-export TXT if saving to packs/ folder."""
+def test_save_in_packs_folder_creates_json_only(tmp_path):
+    """A native save must not create a TXT sidecar."""
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir()
-    
+
     pack = PromptPackModel.new("auto_export", slot_count=1)
     pack.slots[0].text = "test prompt with [[token]]"
     pack.slots[0].negative = "neg prompt"
-    
+
     json_path = packs_dir / "auto_export.json"
     pack.save_to_file(json_path)
-    
-    # Check TXT was auto-created
+
     txt_path = packs_dir / "auto_export.txt"
-    assert txt_path.exists()
-    
-    content = txt_path.read_text(encoding="utf-8")
-    assert "test prompt with [[token]]" in content
-    assert "neg: neg prompt" in content
+    assert not txt_path.exists()
 
 
 def test_no_auto_export_txt_outside_packs(tmp_path):
     """save_to_file() should NOT auto-export TXT if not in packs/ folder."""
     pack = PromptPackModel.new("no_auto_export", slot_count=1)
     pack.slots[0].text = "test prompt"
-    
+
     json_path = tmp_path / "no_auto_export.json"
     pack.save_to_file(json_path)
-    
+
     # TXT should NOT be created
     txt_path = tmp_path / "no_auto_export.txt"
     assert not txt_path.exists()

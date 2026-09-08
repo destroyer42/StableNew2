@@ -44,5 +44,6 @@
       }
     ]
   },
-  "preset_data": {}
+  "preset_data": {},
+  "schema_version": 1
 }

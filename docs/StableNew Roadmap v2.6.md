@@ -63,14 +63,14 @@ feature.
 | 5 | `PR-MVP-030` | Complete | Typed compilers and NJR-only submission |
 | 6 | `PR-MVP-040` | Complete | SQLite repository and offline legacy import |
 | 7 | `PR-MVP-045` | Complete | PromptPack draft, preview, and queue repair |
-| 8 | `PR-MVP-050` | Next | One-file JSON PromptPack convergence |
-| 9 | `PR-MVP-060` | Planned | Image create-to-replay vertical slice |
+| 8 | `PR-MVP-050` | Complete | One-file JSON PromptPack convergence |
+| 9 | `PR-MVP-060` | Next | Image create-to-replay vertical slice |
 | 10 | `PR-MVP-070` | Planned | Native SVD XT vertical slice |
 | 11 | `PR-MVP-080` | Planned | Operator UX, setup, diagnostics, lint cleanup |
 | 12 | `PR-MVP-090` | Planned | Clean-machine release acceptance |
 
-Roadmap progress is 8 of 13 rows (62%). Functional MVP acceptance is still
-open because PromptPack convergence and the product vertical slices follow.
+Roadmap progress is 9 of 13 rows (69%). Functional MVP acceptance is still
+open because the product vertical slices and release proof follow.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair
 
@@ -80,15 +80,17 @@ override precedence, coalesces preview refreshes, and submits through the
 SQLite-backed JobService path. Incomplete generic GUI state is non-runnable and
 quiet rather than routed through the retired ConfigAssembler.
 
-## Remaining work
-
 ### PR-MVP-050 — PromptPack convergence
 
-Make versioned JSON the native PromptPack authority. TXT/TSV become explicit
-import/export formats. Paired-file migration must preserve originals and report
-conflicts rather than silently choosing one side.
+Versioned schema-1 JSON is now the sole native PromptPack authority. Normal save
+creates no text sidecar; discovery and compilation ignore same-stem TXT/TSV;
+Matrix and PR-MVP-045 preview/queue behavior run from JSON alone. TXT/TSV are
+explicit flattened interchange, and the repository pair migration is
+backup-first, semantic, conflict-reporting, and idempotent.
 
-Exit: author/import/save/reload/compile works from JSON alone.
+Exit achieved: author/import/save/reload/compile works from JSON alone.
+
+## Remaining work
 
 ### PR-MVP-060 — image vertical slice
 
@@ -140,6 +142,6 @@ rollback steps.
 
 ## Next action
 
-Specify and approve `PR-MVP-050` as the next coherent product change. Durable
-job state is now authoritative, so one-file PromptPack migration can proceed
-without creating another persistence ambiguity.
+Specify and approve `PR-MVP-060` as the next coherent product change. PromptPack
+authorship and durable job state now have single authorities, so the image
+create-to-replay vertical slice can be proven end to end.
