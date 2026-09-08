@@ -8,6 +8,8 @@ REQUIRED_SMOKE_TARGETS = (
     "tests/system/test_repository_completeness_v2.py",
     "tests/system/test_architecture_enforcement_v2.py",
     "tests/system/test_ci_truth_sync_v2.py",
+    "tests/system/test_controller_surface_ratchet.py",
+    "tests/system/test_pr_gate.py",
     "tests/safety/test_runtime_state_hygiene.py",
     "tests/state/test_workspace_paths.py",
     "tests/state/test_output_routing.py",

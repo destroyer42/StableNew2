@@ -13,6 +13,7 @@ artifacts, history, replay, diagnostics, and learning-ready provenance.
 - Default long-lived branch: `main`
 - Current release line: v2.6 MVP recovery
 - Current state and immediate priorities: `STATUS.md`
+- Task-oriented code map: `docs/CODEX_MAP.md`
 - Architecture: `docs/ARCHITECTURE_v2.6.md`
 - Roadmap: `docs/StableNew Roadmap v2.6.md`
 - Testing: `docs/StableNew_Coding_and_Testing_v2.6.md`
@@ -65,24 +66,33 @@ choice would materially change product behavior, data safety, or architecture.
 
 ## How Codex works here
 
-1. Inspect the current branch, worktree, relevant code, tests, and documentation
-   before editing.
-2. Understand the requested product outcome and explain material architectural
+1. Read `STATUS.md`, `docs/CODEX_MAP.md`, and only the relevant authoritative
+   architecture section; then inspect the current branch and worktree.
+2. Start with targeted symbol/path searches. Search history, archives, or
+   recovery material only when current evidence is insufficient or the request
+   is historical.
+3. Understand the requested product outcome and explain material architectural
    tradeoffs or contradictions.
-3. Choose the smallest coherent change that fully delivers the outcome.
-4. Preserve unrelated user changes and avoid mixing independent work.
-5. Remove obsolete code when dependency evidence supports removal.
-6. Add or update deterministic tests for changed behavior.
-7. Run validation proportional to risk, starting targeted and expanding to the
+4. Choose the smallest coherent change that fully delivers the outcome. Do not
+   ask Rob for implementation file lists that repository evidence can provide.
+5. Preserve unrelated user changes and avoid mixing independent work.
+6. Remove obsolete code when dependency evidence supports removal.
+7. Add or update deterministic tests for changed behavior.
+8. Run validation proportional to risk, starting targeted and expanding to the
    repository gates where practical.
-8. Update `STATUS.md` when repository direction, active work, or verified state
+9. Update `STATUS.md` when repository direction, active work, or verified state
    materially changes.
-9. Report the branch, final commit/state, validation, known limitations, and
-   recommended next action.
+10. Close out concisely with outcome, branch/SHA, targeted validation, required
+    CI, architecture/controller effect, known blocker/debt, and next outcome.
 
 Do not reject ordinary product-owner language merely because it lacks an exact
 file allowlist. Do not invent a broader product change under the cover of a
 refactor or cleanup.
+
+Classify execution as **Narrow** (isolated/mechanical), **Standard** (cross-file
+but bounded), or **Architectural** (ambiguous or cross-boundary). PR planning
+maps that class to the currently appropriate model; repository policy does not
+hardcode model names.
 
 ## Code ownership boundaries
 
@@ -100,6 +110,13 @@ refactor or cleanup.
 - `tools/` and `scripts/` are maintenance/operational utilities, not homes for
   application logic.
 
+Top-level oversized controllers are protected by
+`tools/ci/check_controller_surface.py`. When feature work materially touches a
+ratcheted controller, assess whether the changed responsibility belongs behind
+an existing or new cohesive service boundary. Do not increase a ceiling without
+an explicitly approved architecture exception. When a controller shrinks,
+lower its checked-in ceiling in the same PR.
+
 Keep GUI work non-blocking and marshal widget updates onto the GUI thread.
 Avoid import-time network, process, GPU/model, GUI-loop, or filesystem side
 effects. Keep randomization and compilers deterministic for fixed inputs.
@@ -110,16 +127,18 @@ effects. Keep randomization and compilers deterministic for fixed inputs.
 gate is:
 
 ```text
-python tools/ci/check_repository_completeness.py
-python tools/ci/run_ruff_baseline.py
-python tools/ci/run_mypy_smoke.py
-python tools/ci/run_collection_gate.py
-python tools/ci/run_required_smoke.py
+python tools/ci/run_pr_gate.py
 ```
 
-Use targeted tests first. Tests must use temporary state/artifact roots and
-must not require real networks, WebUI, models, GPUs, or GUI displays unless they
-are explicitly marked as opt-in acceptance tests.
+Run focused changed-behavior tests first, then the local gate when practical.
+GitHub required CI is the canonical Python 3.11/3.12 integration verdict. Do not
+rebuild local interpreters merely to duplicate that matrix; unsupported local
+runs are diagnostic only. Informational full-suite debt does not broaden an
+unrelated PR. Run real-backend acceptance only when the outcome requires it.
+
+Tests must use temporary state/artifact roots and must not require real networks,
+WebUI, models, GPUs, or GUI displays unless explicitly marked as opt-in
+acceptance tests.
 
 Ruff is pinned. New or increased lint debt fails. Leave touched source files
 clean even while the bounded legacy baseline exists.

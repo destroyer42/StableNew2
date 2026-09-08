@@ -27,9 +27,11 @@ the active roadmap.
 
 ## Supported Python
 
-Use Python 3.11 or 3.12. Create a local virtual environment and install the
-project requirements before validation. CI pins tool versions in
-`pyproject.toml` and workflow configuration.
+Supported product interpreters are Python 3.11 and 3.12. Use a supported local
+environment when one is readily available. Do not rebuild the machine merely
+to duplicate the supported-version matrix: GitHub required CI is the canonical
+cross-version integration verdict. A local unsupported-version run can provide
+diagnostic evidence but cannot replace required CI.
 
 ## Test configuration
 
@@ -55,16 +57,24 @@ GPUs, persistent user data, or GUI displays in the required gate.
 Run targeted tests first, then:
 
 ```text
-python tools/ci/check_repository_completeness.py
-python tools/ci/run_ruff_baseline.py
-python tools/ci/run_mypy_smoke.py
-python tools/ci/run_collection_gate.py
-python tools/ci/run_required_smoke.py
+python tools/ci/run_pr_gate.py
 ```
 
-Use `python -m pytest -q <targets>` for focused behavior. Run the broadest
-practical suite when runtime code changes, but do not claim a full green suite
-when environment-dependent tests were not executed.
+The command fails fast while delegating to the existing completeness,
+controller-surface, Ruff, mypy, isolated-collection, and required-smoke
+authorities. Each underlying script remains directly usable for diagnosis, and
+CI keeps separate steps for clear failure reporting.
+
+Use `python -m pytest -q <targets>` for focused changed behavior. Run
+real-backend acceptance only when the PR outcome requires it. Do not claim a
+full green suite when environment-dependent tests were not executed.
+
+## Integration verdict
+
+GitHub required CI runs the required gate on Python 3.11 and 3.12. Both jobs
+must pass before integration. The broader configured suite is informational
+while its bounded legacy debt remains; its failures are reported but do not
+automatically broaden an unrelated PR.
 
 ## Repository completeness
 
@@ -97,6 +107,19 @@ is clean.
 `tools/ci/run_mypy_smoke.py` checks the typed architecture seams. A broad mypy
 run is useful diagnostic evidence but is not yet a repository-wide green gate.
 New typed seams should not add to that debt.
+
+## Controller-surface ratchet
+
+`tools/ci/check_controller_surface.py` counts physical lines in top-level
+controllers. Checked-in ceilings fail on growth, and a reduction also requires
+lowering the ceiling in the same PR so the improvement becomes permanent. A
+600-line guardrail blocks new oversized top-level controllers.
+
+When feature work materially touches a ratcheted controller, assess whether the
+changed responsibility can move into `app_controller_services/`,
+`pipeline_controller_services/`, or another cohesive service boundary. A
+feature PR need not rewrite the controller wholesale, but increasing a ceiling
+requires an explicitly approved architecture exception.
 
 ## Runtime and GUI testing
 
@@ -135,22 +158,21 @@ models or alter user data.
 
 ## Verified baseline
 
-The latest comparable verification including repository-hygiene cleanup reported:
+The latest comparable verification reported:
 
-- 429 tracked Python source files;
-- 3,086 collected tests plus 2 optional-OpenCV module skips on the supported
+- 427 tracked Python source files;
+- 3,029 collected tests plus 2 optional-OpenCV module skips on the supported
   Python 3.11 and 3.12 environments;
-- 74 required smoke tests passing on Python 3.11 and 3.12;
+- 95 required smoke tests passing on Python 3.11 and 3.12;
 - bounded mypy smoke passing;
-- 1,859 Ruff findings against the maximum baseline of 2,208.
+- 1,821 Ruff findings against the maximum baseline of 2,208.
 
 The broad suite is not a green gate yet. A Python 3.11 diagnostic stopped after
 10 failures, 215 passes, and 2 optional-OpenCV skips. The first failures are in
 legacy CLI submission, compatibility-mode execution, and queue/history
 migration expectations that predate the typed NJR cutover.
 
-Update this section and `STATUS.md` together only after running the comparable
-commands. Do not repeat counts in other active documents.
+Update this section and `STATUS.md` together only after comparable required CI.
 
 ## Change review
 

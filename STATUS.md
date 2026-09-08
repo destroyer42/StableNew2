@@ -41,10 +41,12 @@ draft-to-preview-to-queue path; one-file storage remains the next blocker.
 ## Current work
 
 Repository convergence, simplification, transactional job persistence, and the
-PR-MVP-045 PromptPack draft/preview/queue repair are complete. New work starts
-from `main` on one short-lived outcome branch. The next outcome is one-file
-PromptPack convergence; do not revive the recovery, hygiene, or QOL branches as
-alternate sources of truth.
+PR-MVP-045 PromptPack draft/preview/queue repair are complete. Developer
+workflow now has a task-oriented code map, one-command local required gate,
+canonical Python 3.11/3.12 CI verdict, and a controller-surface ratchet. New
+product work starts from `main` on one short-lived outcome branch. The next
+product outcome remains one-file PromptPack convergence; do not revive the
+recovery, hygiene, or QOL branches as alternate sources of truth.
 
 ## Highest-value debt
 
@@ -73,11 +75,14 @@ Latest verified baseline for the converged product state:
 
 - repository completeness: 427 tracked Python source files; verification passed
   on the committed branch;
-- strict collection: 3,019 tests plus 2 optional-OpenCV module skips on the
+- strict collection: 3,029 tests plus 2 optional-OpenCV module skips on the
   supported Python 3.11 and 3.12 environments;
-- required smoke: 87 passing on Python 3.11 and 3.12;
+- required smoke: 95 passing on Python 3.11 and 3.12;
 - bounded mypy smoke: passing;
-- Ruff 0.14.9 baseline: 1,842 findings against a maximum of 2,208.
+- Ruff 0.14.9 baseline: 1,821 findings against a maximum of 2,208.
+
+Run focused tests, then `python tools/ci/run_pr_gate.py`. GitHub required CI on
+Python 3.11 and 3.12 is the canonical integration verdict.
 
 The focused repository, queue, history, and migration sweep passes 125 tests.
 Superseded JSON/JSONL persistence and pre-NJR compatibility tests were removed

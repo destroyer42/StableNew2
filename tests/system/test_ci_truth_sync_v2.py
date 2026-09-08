@@ -12,6 +12,7 @@ def _read(rel_path: str) -> str:
 def test_ci_workflow_uses_named_required_smoke_script() -> None:
     workflow = _read(".github/workflows/ci.yml")
     assert "python tools/ci/check_repository_completeness.py" in workflow
+    assert "python tools/ci/check_controller_surface.py" in workflow
     assert "python tools/ci/run_ruff_baseline.py" in workflow
     assert "python tools/ci/run_collection_gate.py" in workflow
     assert "python tools/ci/run_required_smoke.py" in workflow
@@ -77,7 +78,21 @@ def test_journeys_require_explicit_real_backend_opt_in() -> None:
 
 def test_ci_docs_point_to_named_required_smoke_script() -> None:
     coding = _read("docs/StableNew_Coding_and_Testing_v2.6.md")
-    assert "tools/ci/run_ruff_baseline.py" in coding
-    assert "tools/ci/run_collection_gate.py" in coding
-    assert "tools/ci/run_required_smoke.py" in coding
-    assert "tools/ci/run_mypy_smoke.py" in coding
+    agents = _read("AGENTS.md")
+    assert "python tools/ci/run_pr_gate.py" in coding
+    assert "python tools/ci/run_pr_gate.py" in agents
+    assert "GitHub required CI" in coding
+
+
+def test_local_pr_gate_delegates_to_each_required_authority() -> None:
+    runner = _read("tools/ci/run_pr_gate.py")
+
+    for script in (
+        "check_repository_completeness.py",
+        "check_controller_surface.py",
+        "run_ruff_baseline.py",
+        "run_mypy_smoke.py",
+        "run_collection_gate.py",
+        "run_required_smoke.py",
+    ):
+        assert script in runner
