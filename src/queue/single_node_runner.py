@@ -357,6 +357,23 @@ class SingleNodeJobRunner:
         )
         self._worker.start()
 
+    def run_next_once(self) -> bool:
+        """Dispatch exactly the next queued job on a worker thread."""
+        if self.is_running() or self.job_queue.is_paused():
+            return False
+        job = self.job_queue.get_next_job()
+        if job is None:
+            return False
+        self._stop_event.clear()
+        self._worker = threading.Thread(
+            target=self.run_once,
+            args=(job,),
+            daemon=False,
+            name="QueueWorkerOnce",
+        )
+        self._worker.start()
+        return True
+
     def stop(self) -> None:
         """Stop the worker thread gracefully.
         

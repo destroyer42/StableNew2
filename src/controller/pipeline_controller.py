@@ -1423,10 +1423,10 @@ class PipelineController(CorePipelineController):
         if self._app_state:
             self._app_state.set_is_queue_paused(False)
 
-    def on_queue_send_job_v2(self) -> None:
+    def on_queue_send_job_v2(self) -> bool:
         if not self._job_service:
-            return
-        self._job_service.run_next_now()
+            return False
+        return bool(self._job_service.run_next_now())
 
     def on_pause_job_v2(self) -> None:
         self.on_pause_queue_v2()

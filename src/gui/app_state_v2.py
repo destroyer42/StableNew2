@@ -499,6 +499,9 @@ class AppStateV2:
     def clear_job_draft(self) -> None:
         self.job_draft.clear()
         self.job_draft.packs.clear()
+        if self.preview_jobs:
+            self.preview_jobs = []
+            self._notify("preview_jobs")
         self._notify("job_draft")
 
     def set_preview_jobs(self, jobs: list[NormalizedJobRecord] | None) -> None:

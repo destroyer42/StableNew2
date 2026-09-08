@@ -101,10 +101,6 @@ class JobHistoryService:
             )
         return None
 
-    def get_history_record(self, job_id: str) -> JobHistoryEntry | None:
-        """Return the canonical persisted entry for replay and handoff paths."""
-        return self._history.get_job(job_id)
-
     def cancel_job(self, job_id: str) -> bool:
         """Cancel a queued/running job via controller."""
 

@@ -452,7 +452,7 @@ class QueuePanelV2(ttk.Frame):
         # PR-GUI-F3: Send Job - enabled if queue has jobs and not currently running a job
         # Also respects pause state (controller handles actual pause blocking)
         running_job = getattr(self.app_state, "running_job", None) if self.app_state else None
-        can_send = has_queued_jobs and running_job is None
+        can_send = has_queued_jobs and running_job is None and not self._is_queue_paused
         self.send_job_button.state(["!disabled"] if can_send else ["disabled"])
 
     def _on_move_up(self) -> None:
@@ -842,6 +842,7 @@ class QueuePanelV2(ttk.Frame):
 
         # Update status label
         self._update_queue_status_display(is_paused, running_job, queue_count)
+        self._update_button_states()
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         self._record_refresh_metric("update_from_app_state", elapsed_ms)
 

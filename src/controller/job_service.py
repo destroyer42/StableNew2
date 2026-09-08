@@ -14,6 +14,7 @@ from typing import Any, Literal, Protocol
 from src.config.app_config import get_process_container_config, get_watchdog_config
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
+from src.controller.job_service_dispatch import dispatch_next_now
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
@@ -675,7 +676,8 @@ class JobService:
         resume_queue = getattr(self.job_queue, "resume", None)
         if callable(resume_queue):
             resume_queue()
-        self._ensure_runner_started()
+        if self.auto_run_enabled:
+            self._ensure_runner_started()
         self._set_queue_status("running")
 
     def cancel_current(self, *, return_to_queue: bool = False) -> Job | None:
@@ -950,27 +952,8 @@ class JobService:
             "process_container_config": asdict(self._process_container_config),
         }
 
-    def run_next_now(self) -> None:
-        """Start the runner to process queued jobs.
-
-        This starts the background worker which will continuously process jobs
-        from the queue. Used by "Send Job" button and manual queue execution.
-        """
-        if not self.runner.is_running():
-            log_with_ctx(
-                logger,
-                logging.INFO,
-                "Starting queue worker for manual execution",
-                ctx=LogContext(subsystem="job_service"),
-            )
-            self._ensure_runner_started()
-        else:
-            log_with_ctx(
-                logger,
-                logging.DEBUG,
-                "Queue worker already running",
-                ctx=LogContext(subsystem="job_service"),
-            )
+    def run_next_now(self) -> bool:
+        return dispatch_next_now(self, logger=logger)
 
     def _stop_runner(self) -> None:
         with self._runner_lock:
