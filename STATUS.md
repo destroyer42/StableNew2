@@ -69,7 +69,8 @@ hygiene, or QOL branches as alternate sources of truth.
 
 Latest verified baseline for the converged product state:
 
-- repository completeness: pending final staged-tree verification for this branch;
+- repository completeness: 427 tracked Python source files; verification passed
+  on the committed branch;
 - strict collection: 3,019 tests plus 2 optional-OpenCV module skips on the
   supported Python 3.11 and 3.12 environments;
 - required smoke: 87 passing on Python 3.11 and 3.12;
