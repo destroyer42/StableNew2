@@ -9,6 +9,7 @@ from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.utils.snapshot_builder_v2 import build_job_snapshot
+from tests.helpers.job_helpers import make_test_njr
 
 
 class _HistoryServiceStub:
@@ -19,6 +20,9 @@ class _HistoryServiceStub:
         if job_id == self._entry.job_id:
             return self._entry
         return None
+
+    def get_history_record(self, job_id: str) -> JobHistoryEntry | None:
+        return self.get_job(job_id)
 
 
 class _AppStateStub:
@@ -50,12 +54,12 @@ def _make_entry(record: NormalizedJobRecord) -> JobHistoryEntry:
 
 
 def test_history_handoff_service_replays_snapshot_to_submit_callback() -> None:
-    record = NormalizedJobRecord(
+    record = make_test_njr(
         job_id="history-job",
+        prompt="a",
+        prompt_source="manual",
+        prompt_pack_id="",
         config={"model": "sdxl", "prompt": "a", "negative_prompt": "b"},
-        path_output_dir="out",
-        filename_template="{seed}",
-        seed=7,
     )
     entry = _make_entry(record)
     history_service = _HistoryServiceStub(entry)
@@ -76,7 +80,8 @@ def test_history_handoff_service_replays_snapshot_to_submit_callback() -> None:
     )
 
     assert queued == 1
-    assert app_state.preview_jobs[0].job_id == "history-job"
-    assert submissions[0][0][0].job_id == "history-job"
+    assert app_state.preview_jobs[0].job_id != "history-job"
+    assert app_state.preview_jobs[0].source.parent_job_id == "history-job"
+    assert submissions[0][0][0].job_id == app_state.preview_jobs[0].job_id
     assert submissions[0][1]["run_mode"] == "queue"
     assert last_run_configs[0]["source"] == "history"

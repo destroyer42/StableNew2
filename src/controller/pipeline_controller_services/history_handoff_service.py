@@ -60,8 +60,8 @@ class HistoryHandoffService:
     ) -> int:
         if history_service is None:
             return 0
-        history_store = getattr(history_service, "_history", history_service)
-        entry = history_store.get_job(job_id)
+        get_record = getattr(history_service, "get_history_record", None)
+        entry = get_record(job_id) if callable(get_record) else history_service.get_job(job_id)
         record = self.hydrate_history_record(entry)
         if record is None:
             return 0
