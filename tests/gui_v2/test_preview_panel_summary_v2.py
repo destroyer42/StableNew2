@@ -165,4 +165,10 @@ class TestPreviewPanelSummary:
 
         assert "Job: 1" in preview_panel.job_count_label.cget("text")
         assert "Testing prompt" in preview_panel.prompt_text.get("1.0", "end")
+        # Draft text can render immediately, but queueing is enabled only
+        # after the canonical preview projection has arrived.
+        assert preview_panel.add_to_queue_button.instate(["disabled"])
+
+        preview_panel.app_state = type("State", (), {"preview_jobs": [object()]})()
+        preview_panel.update_from_job_draft(job_draft)
         assert preview_panel.add_to_queue_button.instate(["!disabled"])

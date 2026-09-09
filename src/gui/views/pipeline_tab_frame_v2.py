@@ -663,8 +663,8 @@ class PipelineTabFrame(ttk.Frame):
                 if self._surface_is_visible(self.queue_panel):
                     try:
                         self.queue_panel.update_from_app_state(app_state)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Queue projection refresh failed: %s", exc)
                 else:
                     deferred.add("queue")
             if "running" in dirty and hasattr(self, "running_job_panel"):
@@ -692,8 +692,8 @@ class PipelineTabFrame(ttk.Frame):
                         else:
                             self.preview_panel.update_from_job_draft(getattr(app_state, "job_draft", None))
                         self.preview_panel.update_from_app_state(app_state)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        logger.warning("Preview projection refresh failed: %s", exc)
                 else:
                     deferred.add("preview")
 

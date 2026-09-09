@@ -344,7 +344,10 @@ class PreviewPanelV2(ttk.Frame):
             )
 
         self.set_job_summaries(summaries)
-        self._update_action_states(job_draft, summaries)
+        # Draft rendering is useful before compilation completes, but queue
+        # readiness must remain tied to the current canonical preview list.
+        preview_jobs = getattr(self.app_state, "preview_jobs", None)
+        self._update_action_states(job_draft, preview_jobs)
 
     def update_from_controls(self, sidebar: Any) -> None:
         """Update preview summary from sidebar controls."""

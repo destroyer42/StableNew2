@@ -1,70 +1,122 @@
 from __future__ import annotations
 
-from src.contracts import PackJobEntry
-from src.gui.app_state_v2 import AppStateV2
-from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
-from src.pipeline.job_models_v2 import NormalizedJobRecord
+import json
+import time
+from pathlib import Path
+
+import pytest
+
+from src.controller.app_controller import AppController
+from src.gui.main_window_v2 import MainWindowV2
+from src.utils.config import ConfigManager
+from src.utils.thread_registry import get_thread_registry
+from tests.journeys.fakes.fake_pipeline_runner import FakePipelineRunner
 
 
-def test_pipeline_tab_pack_add_enables_queue_without_override(tk_root) -> None:
-    """Exercise the production PipelineTab/PreviewPanel subscription boundary."""
+class _IsolatedConfigManager(ConfigManager):
+    def __init__(self, packs_dir: Path) -> None:
+        super().__init__(presets_dir=packs_dir.parent / "presets")
+        self._packs_dir = packs_dir
 
-    app_state = AppStateV2()
+    def _pack_config_path(self, pack_name: str) -> Path:
+        return self._packs_dir / f"{Path(pack_name).stem}.json"
 
-    class _Controller:
-        def __init__(self) -> None:
-            self.app_state = app_state
-            self.pipeline_controller = self
-            self.state_manager = None
 
-        def bind_app_state(self, _state) -> None:
-            return None
+def _pump_until(root, predicate, *, timeout: float = 3.0) -> None:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        root.update()
+        if predicate():
+            return
+        time.sleep(0.01)
+    root.update()
+    assert predicate(), "timed out waiting for the hosted projection"
 
-        def request_preview_refresh(self) -> None:
-            return None
 
-        def get_preview_jobs(self) -> list[NormalizedJobRecord]:
-            return list(app_state.preview_jobs)
+@pytest.mark.gui
+def test_pipeline_tab_pack_add_preview_and_queue_projection(
+    tk_root, tmp_path: Path
+) -> None:
+    """Exercise the real AppController/MainWindow/PipelineTab projection path."""
 
-        def on_pipeline_add_packs_to_job(self, _pack_ids: list[str]) -> None:
-            app_state.add_packs_to_job_draft(
-                [
-                    PackJobEntry(
-                        pack_id="pack-alpha",
-                        pack_name="pack-alpha",
-                        config_snapshot={},
-                        prompt_text="a lighthouse",
-                        negative_prompt_text="",
-                        stage_flags={"txt2img": True},
-                        randomizer_metadata={"enabled": False},
-                    )
-                ]
-            )
-            app_state.set_preview_jobs([object()])
+    # Other GUI tests may exercise the process-wide registry shutdown path;
+    # this isolated harness must begin with a live registry.
+    registry = get_thread_registry()
+    registry._shutdown_requested = False
 
-        def get_current_config(self) -> dict[str, object]:
-            return {}
-
-    controller = _Controller()
-    tab = PipelineTabFrame(
-        tk_root,
-        app_state=app_state,
-        app_controller=controller,
-        pipeline_controller=controller,
+    packs_dir = tmp_path / "packs"
+    packs_dir.mkdir()
+    (packs_dir / "native_one_row.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "pack_data": {
+                    "name": "Native one row",
+                    "slots": [
+                        {"index": 0, "text": "a lighthouse at dawn", "negative": "blur"}
+                    ],
+                },
+                "preset_data": {},
+            }
+        ),
+        encoding="utf-8",
     )
-    tab.pack(fill="both", expand=True)
-    tk_root.deiconify()
-    tk_root.update_idletasks()
 
-    sidebar = tab.sidebar
-    sidebar._current_pack_names = ["pack-alpha"]
-    sidebar.pack_listbox.insert("end", "pack-alpha")
-    sidebar.pack_listbox.selection_set(0)
+    config_manager = _IsolatedConfigManager(packs_dir)
+    config_manager.packs_dir = packs_dir
+    controller = AppController(
+        None,
+        threaded=False,
+        packs_dir=packs_dir,
+        config_manager=config_manager,
+        pipeline_runner=FakePipelineRunner(),
+    )
+    # AppController constructs its PipelineController bridge internally; bind
+    # the same isolated config seam used by the controller for this test.
+    controller.pipeline_controller._config_manager = config_manager
+    controller.pipeline_controller._prompt_pack_builder = None
+    window = MainWindowV2(
+        tk_root,
+        app_state=controller.app_state,
+        app_controller=controller,
+        pipeline_controller=controller.pipeline_controller,
+    )
+    controller.set_main_window(window)
+    try:
+        tab = window.pipeline_tab
+        sidebar = tab.sidebar
+        # The hosted sidebar's adapter may discover repository packs as well;
+        # constrain the visible selection to the isolated pack loaded by the
+        # real controller without mutating application state.
+        pack_name = controller.packs[0].name
+        sidebar._current_pack_names = [pack_name]
+        sidebar.pack_listbox.delete(0, "end")
+        sidebar.pack_listbox.insert("end", pack_name)
+        sidebar.pack_listbox.selection_set(0)
+        controller.on_set_auto_run_v2(False)
+        sidebar._on_add_to_job()
 
-    # Production selector callback; no override interaction or direct preview
-    # refresh invocation.
-    sidebar._on_add_to_job()
-    tk_root.update()
+        _pump_until(
+            tk_root,
+            lambda: bool(controller.app_state.job_draft.packs)
+            and bool(controller.app_state.preview_jobs),
+        )
+        assert tab.preview_panel.add_to_queue_button.instate(["!disabled"])
 
-    assert app_state.preview_jobs
-    assert tab.preview_panel.add_to_queue_button.instate(["!disabled"])
+        # Production button callback; no direct state mutation or manual panel
+        # refresh is used to deliver the queue projection.
+        tab.preview_panel.add_to_queue_button.invoke()
+        _pump_until(
+            tk_root,
+            lambda: len(controller.app_state.queue_jobs) == 1
+            and tab.queue_panel.job_listbox.size() == 1,
+        )
+        controller.on_queue_clear_v2()
+        _pump_until(
+            tk_root,
+            lambda: not controller.app_state.queue_jobs
+            and tab.queue_panel.job_listbox.size() == 0,
+        )
+    finally:
+        window.cleanup()
+        registry._shutdown_requested = False

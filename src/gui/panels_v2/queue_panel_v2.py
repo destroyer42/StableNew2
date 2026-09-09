@@ -876,7 +876,9 @@ class QueuePanelV2(ttk.Frame):
 
         # Get queue items from app state
         queue_jobs = getattr(app_state, "queue_jobs", None)
-        if queue_jobs:
+        if queue_jobs is not None:
+            # Project the canonical list in both directions, including an
+            # empty list so removed jobs cannot remain visually stale.
             self.update_jobs(queue_jobs)
         # Note: queue_items is legacy, we only display UnifiedJobSummary objects now
 

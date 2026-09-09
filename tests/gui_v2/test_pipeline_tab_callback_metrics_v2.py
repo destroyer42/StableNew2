@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 
 import pytest
@@ -228,6 +229,36 @@ def test_pipeline_tab_job_draft_change_uses_controller_preview_refresh_when_avai
     assert tab.app_controller.calls == 1
     assert sync_refresh_calls["count"] == 0
     assert tab._hot_surface_dirty == {"preview"}
+
+
+def test_pipeline_tab_logs_projection_refresh_failures(caplog) -> None:
+    class _RaisingPanel:
+        def winfo_ismapped(self) -> bool:
+            return True
+
+        def update_from_app_state(self, _app_state) -> None:
+            raise RuntimeError("projection boom")
+
+    tab = PipelineTabFrame.__new__(PipelineTabFrame)
+    tab.app_state = type("State", (), {"queue_jobs": [], "preview_jobs": [], "job_draft": None})()
+    tab.queue_panel = _RaisingPanel()
+    tab.preview_panel = _RaisingPanel()
+    tab._hot_surface_dirty = {"queue", "preview"}
+    tab._hot_surface_flush_scheduled = True
+    tab._hot_surface_flush_metrics = {
+        "count": 0,
+        "total_ms": 0.0,
+        "max_ms": 0.0,
+        "last_ms": 0.0,
+        "slow_count": 0,
+    }
+
+    with caplog.at_level(logging.WARNING, logger="src.gui.views.pipeline_tab_frame_v2"):
+        tab._flush_hot_surfaces()
+
+    messages = [record.getMessage() for record in caplog.records]
+    assert any("Queue projection refresh failed" in message for message in messages)
+    assert any("Preview projection refresh failed" in message for message in messages)
 
 
 @pytest.mark.gui
