@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
 from src.gui.view_contracts.pipeline_layout_contract import (
     LABEL_COLUMN_MIN_WIDTH,
     PRIMARY_CONTROL_MIN_WIDTH,
@@ -51,6 +52,12 @@ def test_shared_form_column_specs_define_consistent_minimums() -> None:
 def test_stage_card_min_width_rolls_up_shared_form_columns() -> None:
     expected = get_form_min_width(get_two_pair_form_column_specs(), padding=24)
     assert get_stage_card_min_width() == expected
+
+
+def test_base_generation_uses_responsive_two_pair_layout() -> None:
+    assert tuple(spec["index"] for spec in BaseGenerationPanelV2.FORM_COLUMN_SPECS) == (0, 1, 2, 3)
+    assert BaseGenerationPanelV2.FORM_COLUMN_SPECS[1]["minsize"] == 160
+    assert get_form_min_width(BaseGenerationPanelV2.FORM_COLUMN_SPECS) < 664
 
 
 def test_workspace_column_specs_define_shared_surface_minimums() -> None:

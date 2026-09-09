@@ -72,6 +72,30 @@ def test_base_generation_refresh_preserves_selection(tk_root):
     assert panel.model_var.get() == "keep"
 
 
+def test_base_generation_dimensions_fit_representative_sidebar(tk_root):
+    tk_root.geometry("520x900")
+    tk_root.update_idletasks()
+    panel = BaseGenerationPanelV2(tk_root, include_vae=True)
+    panel.pack(fill="both", expand=True)
+    tk_root.update_idletasks()
+
+    card_right = panel.winfo_rootx() + panel.winfo_width()
+    for control in (panel._width_combo, panel._height_combo):
+        assert control is not None
+        assert control.winfo_width() > 0
+        assert control.winfo_rootx() + control.winfo_width() <= card_right + 1
+
+    panel.resolution_preset_var.set("832x1216 (3:4)")
+    panel._on_resolution_preset_selected()
+    assert panel.width_var.get() == "832"
+    assert panel.height_var.get() == "1216"
+
+    panel.width_var.set("640")
+    panel._on_dimension_commit()
+    assert panel.width_var.get() == "640"
+    assert panel.height_var.get() == "1216"
+
+
 def test_core_config_refresh_triggered_on_ready(monkeypatch):
     from src.main import _update_window_webui_manager
 

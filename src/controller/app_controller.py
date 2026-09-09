@@ -2655,16 +2655,16 @@ class AppController:
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
         self._projection_sink.set_app_state(self.app_state)
+        if hasattr(self.pipeline_controller, "bind_app_state"):
+            self.pipeline_controller.bind_app_state(self.app_state)
         self._job_lifecycle_logger.set_app_state(self.app_state)
         self._bind_app_state_visibility_listener()
         self._attach_to_gui()
         if hasattr(self.main_window, "connect_controller"):
             self.main_window.connect_controller(self)
-
         # Initial status
         self._update_status("Idle")
         self.load_packs()
-
     def _bind_app_state_visibility_listener(self) -> None:
         app_state = getattr(self, "app_state", None)
         if app_state is None or not hasattr(app_state, "subscribe"):

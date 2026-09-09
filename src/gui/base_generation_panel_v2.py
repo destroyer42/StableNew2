@@ -17,7 +17,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     LABEL_COLUMN_MIN_WIDTH,
     PRIMARY_CONTROL_MIN_WIDTH,
     SECONDARY_CONTROL_MIN_WIDTH,
-    get_three_pair_form_column_specs,
+    get_two_pair_form_column_specs,
 )
 from src.utils.webui_resource_names import normalize_vae_config_value, vae_names_match
 
@@ -30,6 +30,11 @@ class BaseGenerationPanelV2(BaseStageCardV2):
     LABEL_COLUMN_MIN_WIDTH = LABEL_COLUMN_MIN_WIDTH
     PRIMARY_CONTROL_MIN_WIDTH = PRIMARY_CONTROL_MIN_WIDTH
     SECONDARY_CONTROL_MIN_WIDTH = SECONDARY_CONTROL_MIN_WIDTH
+    FORM_COLUMN_SPECS = get_two_pair_form_column_specs(
+        primary_weight=3,
+        secondary_weight=2,
+        primary_min_width=160,
+    )
 
     def __init__(
         self,
@@ -162,7 +167,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             wraplength=420,
             justify="left",
         )
-        helper.grid(row=row_idx, column=0, columnspan=6, sticky="ew", pady=(0, 8))
+        helper.grid(row=row_idx, column=0, columnspan=4, sticky="ew", pady=(0, 8))
         self._helper_label = helper
         row_idx += 1
 
@@ -205,13 +210,13 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._build_sampler_row(parent, row_idx)
         row_idx += 2
         self._build_resolution_row(parent, row_idx)
-        row_idx += 1
+        row_idx += 2
         self._build_seed_row(parent, row_idx)
 
     def _build_sampler_row(self, parent: ttk.Frame, row_idx: int) -> None:
         sampler_label = ttk.Label(parent, text="Sampler", style=BODY_LABEL_STYLE)
         sampler_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
-        self._sampler_combo.grid(row=row_idx, column=1, sticky="ew", padx=(0, 12), pady=(0, 4))
+        self._sampler_combo.grid(row=row_idx, column=1, sticky="ew", padx=(0, 4), pady=(0, 4))
         self._attach_setting_help(
             "sampler",
             BASE_GENERATION_SETTING_HELP["sampler"],
@@ -223,7 +228,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._scheduler_combo = self._build_combo(parent, self.scheduler_var, scheduler_values)
         scheduler_label = ttk.Label(parent, text="Scheduler", style=BODY_LABEL_STYLE)
         scheduler_label.grid(row=row_idx, column=2, sticky="w", padx=(0, 4), pady=(0, 4))
-        self._scheduler_combo.grid(row=row_idx, column=3, sticky="ew", padx=(0, 12), pady=(0, 4))
+        self._scheduler_combo.grid(row=row_idx, column=3, sticky="ew", pady=(0, 4))
         self._attach_setting_help(
             "scheduler",
             BASE_GENERATION_SETTING_HELP["scheduler"],
@@ -236,7 +241,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._steps_spin = self._build_spin(
             parent, self.steps_var, from_=1, to=200, increment=1, width=6
         )
-        self._steps_spin.grid(row=row_idx + 1, column=1, sticky="ew", padx=(0, 12), pady=(0, 4))
+        self._steps_spin.grid(row=row_idx + 1, column=1, sticky="ew", padx=(0, 4), pady=(0, 4))
         self._attach_setting_help(
             "steps",
             BASE_GENERATION_SETTING_HELP["steps"],
@@ -249,7 +254,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._cfg_spin = self._build_spin(
             parent, self.cfg_var, from_=0.0, to=30.0, increment=0.5, width=6
         )
-        self._cfg_spin.grid(row=row_idx + 1, column=3, sticky="ew", padx=(0, 12), pady=(0, 4))
+        self._cfg_spin.grid(row=row_idx + 1, column=3, sticky="ew", pady=(0, 4))
         self._attach_setting_help(
             "cfg",
             BASE_GENERATION_SETTING_HELP["cfg"],
@@ -261,7 +266,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         preset_label = ttk.Label(parent, text="Preset", style=BODY_LABEL_STYLE)
         preset_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         self._preset_combo = self._build_combo(parent, self.resolution_preset_var, tuple(self._preset_map.keys()))
-        self._preset_combo.grid(row=row_idx, column=1, sticky="ew", padx=(0, 16), pady=(0, 4))
+        self._preset_combo.grid(row=row_idx, column=1, columnspan=3, sticky="ew", pady=(0, 4))
         self._preset_combo.bind("<<ComboboxSelected>>", self._on_resolution_preset_selected)
         self._attach_setting_help(
             "preset",
@@ -271,10 +276,10 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         )
 
         width_label = ttk.Label(parent, text="Width", style=BODY_LABEL_STYLE)
-        width_label.grid(row=row_idx, column=2, sticky="w", padx=(0, 4), pady=(0, 4))
+        width_label.grid(row=row_idx + 1, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         width_values = [str(i) for i in range(256, 2049, 128)]
         self._width_combo = self._build_numeric_combo(parent, self.width_var, width_values)
-        self._width_combo.grid(row=row_idx, column=3, sticky="ew", padx=(0, 16), pady=(0, 4))
+        self._width_combo.grid(row=row_idx + 1, column=1, sticky="ew", padx=(0, 4), pady=(0, 4))
         self._attach_setting_help(
             "width",
             BASE_GENERATION_SETTING_HELP["width"],
@@ -283,10 +288,10 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         )
 
         height_label = ttk.Label(parent, text="Height", style=BODY_LABEL_STYLE)
-        height_label.grid(row=row_idx, column=4, sticky="w", padx=(0, 4), pady=(0, 4))
+        height_label.grid(row=row_idx + 1, column=2, sticky="w", padx=(0, 4), pady=(0, 4))
         height_values = [str(i) for i in range(256, 2049, 128)]
         self._height_combo = self._build_numeric_combo(parent, self.height_var, height_values)
-        self._height_combo.grid(row=row_idx, column=5, sticky="ew", pady=(0, 4))
+        self._height_combo.grid(row=row_idx + 1, column=3, sticky="ew", pady=(0, 4))
         self._attach_setting_help(
             "height",
             BASE_GENERATION_SETTING_HELP["height"],
@@ -298,7 +303,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         seed_label = ttk.Label(parent, text="Seed", style=BODY_LABEL_STYLE)
         seed_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         seed_entry = ttk.Entry(parent, textvariable=self.seed_var, style="Dark.TEntry")
-        seed_entry.grid(row=row_idx, column=1, sticky="ew", padx=(0, 16), pady=(0, 4))
+        seed_entry.grid(row=row_idx, column=1, sticky="ew", padx=(0, 4), pady=(0, 4))
         self._attach_setting_help(
             "seed",
             BASE_GENERATION_SETTING_HELP["seed"],
@@ -310,14 +315,14 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             text="Blank or -1 = random.",
             style=MUTED_LABEL_STYLE,
         )
-        seed_hint.grid(row=row_idx, column=2, columnspan=2, sticky="ew", padx=(0, 8), pady=(0, 4))
+        seed_hint.grid(row=row_idx, column=2, sticky="ew", padx=(0, 8), pady=(0, 4))
         seed_button = ttk.Button(parent, text="Rand", width=6, command=self._randomize_seed)
-        seed_button.grid(row=row_idx, column=4, sticky="w", pady=(0, 4))
+        seed_button.grid(row=row_idx, column=3, sticky="w", pady=(0, 4))
 
         subseed_label = ttk.Label(parent, text="Subseed", style=BODY_LABEL_STYLE)
         subseed_label.grid(row=row_idx + 1, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         subseed_entry = ttk.Entry(parent, textvariable=self.subseed_var, style="Dark.TEntry")
-        subseed_entry.grid(row=row_idx + 1, column=1, sticky="ew", padx=(0, 16), pady=(0, 4))
+        subseed_entry.grid(row=row_idx + 1, column=1, sticky="ew", padx=(0, 4), pady=(0, 4))
         self._attach_setting_help(
             "subseed",
             BASE_GENERATION_SETTING_HELP["subseed"],
@@ -329,9 +334,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             text="Blank or -1 = disabled.",
             style=MUTED_LABEL_STYLE,
         )
-        subseed_hint.grid(row=row_idx + 1, column=2, columnspan=2, sticky="ew", padx=(0, 8), pady=(0, 4))
+        subseed_hint.grid(row=row_idx + 1, column=2, sticky="ew", padx=(0, 8), pady=(0, 4))
         subseed_button = ttk.Button(parent, text="Rand", width=6, command=self._randomize_subseed)
-        subseed_button.grid(row=row_idx + 1, column=4, sticky="w", pady=(0, 4))
+        subseed_button.grid(row=row_idx + 1, column=3, sticky="w", pady=(0, 4))
 
         subseed_strength_label = ttk.Label(
             parent, text="Subseed Strength", style=BODY_LABEL_STYLE
@@ -343,9 +348,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         subseed_strength_entry.grid(
             row=row_idx + 2,
             column=1,
-            columnspan=2,
+            columnspan=3,
             sticky="ew",
-            padx=(0, 12),
+            padx=(0, 4),
             pady=(0, 4),
         )
         self._attach_setting_help(
@@ -358,7 +363,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
     def _configure_layout_columns(self, parent: ttk.Frame) -> None:
         configure_grid_columns(
             parent,
-            get_three_pair_form_column_specs(primary_weight=3, secondary_weight=2),
+            self.FORM_COLUMN_SPECS,
         )
 
     def _attach_change_traces(self) -> None:
@@ -554,7 +559,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
     ) -> None:
         label_widget = ttk.Label(parent, text=label, style=BODY_LABEL_STYLE)
         label_widget.grid(row=row_idx, column=0, sticky="w", padx=(0, 8), pady=(0, 4))
-        widget.grid(row=row_idx, column=1, columnspan=5, sticky="ew", pady=(0, 4))
+        widget.grid(row=row_idx, column=1, columnspan=3, sticky="ew", pady=(0, 4))
         if help_key:
             self._attach_setting_help(help_key, help_text, label_widget, widget)
 

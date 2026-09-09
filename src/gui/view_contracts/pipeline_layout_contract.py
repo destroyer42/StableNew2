@@ -46,11 +46,17 @@ def get_two_pair_form_column_specs(
     *,
     primary_weight: int = 1,
     secondary_weight: int = 1,
+    label_min_width: int = LABEL_COLUMN_MIN_WIDTH,
+    primary_min_width: int = PRIMARY_CONTROL_MIN_WIDTH,
+    secondary_min_width: int = SECONDARY_CONTROL_MIN_WIDTH,
 ) -> tuple[dict[str, int], ...]:
     return build_form_column_specs(
         label_columns=(0, 2),
         primary_columns=(1,),
         secondary_columns=(3,),
+        label_min_width=label_min_width,
+        primary_min_width=primary_min_width,
+        secondary_min_width=secondary_min_width,
         primary_weight=primary_weight,
         secondary_weight=secondary_weight,
     )

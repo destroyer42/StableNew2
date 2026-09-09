@@ -41,13 +41,14 @@ clean-machine real-backend acceptance.
 
 Repository convergence, simplification, transactional job persistence,
 PR-MVP-045 PromptPack draft/preview/queue repair, and PR-MVP-050 one-file JSON
-PromptPack convergence are complete. PR-MVP-060 Phase 1 and Phase 2A/2B/2C are
-verified on `mvp/060-image-vertical-slice`: progress/cancellation, durable
-failure/retry/FIFO/reopen behavior, queue manipulation, and exact-artifact
-thumbnail behavior are covered. Developer workflow retains a task-oriented code
-map, one-command local required gate, canonical Python 3.11/3.12 CI verdict, and
-a controller-surface ratchet. Do not revive recovery, hygiene, or QOL branches
-as alternate sources of truth.
+PromptPack convergence are complete. PR-MVP-060 Phase 1 and Phase 2A/2B/2C/2C1
+are verified on `mvp/060-image-vertical-slice`: progress/cancellation, durable
+failure/retry/FIFO/reopen behavior, queue manipulation, exact-artifact thumbnail
+behavior, live Pack Selector preview refresh, and responsive Base Generation
+dimensions are covered. Developer workflow retains a task-oriented code map,
+one-command local required gate, canonical Python 3.11/3.12 CI verdict, and a
+controller-surface ratchet. Do not revive recovery, hygiene, or QOL branches as
+alternate sources of truth.
 
 ## Highest-value debt
 
