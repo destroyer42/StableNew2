@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import io
 import json
+import time
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -10,10 +11,13 @@ from PIL import Image
 import pytest
 
 from src.contracts import PackJobEntry
+from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.gui.app_state_v2 import AppStateV2
+from src.gui.preview_panel_v2 import PreviewPanelV2
+from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.pipeline.result_contract_v26 import collect_canonical_artifacts
 from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
@@ -22,6 +26,7 @@ from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
 from src.utils.config import ConfigManager
 from src.utils.logger import StructuredLogger
+from src.utils.prompt_packs import PromptPackInfo
 
 
 class _DeterministicWebUI:
@@ -261,3 +266,162 @@ def test_promptpack_queue_run_artifact_history_replay_production_composition(
 
     queue_runner.stop()
     repository.close()
+
+
+def test_phase2d_consolidated_selector_queue_send_and_replay(tmp_path: Path, monkeypatch) -> None:
+    """Compose the proven 060 boundaries through the production-shaped GUI path."""
+
+    monkeypatch.chdir(tmp_path)
+    pack_path = tmp_path / "packs" / "mvp-060-consolidated.json"
+    output_dir = tmp_path / "artifacts"
+    _write_baseline_pack(pack_path, output_dir)
+    document = json.loads(pack_path.read_text(encoding="utf-8"))
+    document["pack_data"]["slots"] = [
+        {"index": 0, "text": "a blue lighthouse at dawn", "negative": "blur"},
+        {"index": 1, "text": "a red lighthouse at dusk", "negative": "watermark"},
+        {"index": 2, "text": "a green lighthouse at night", "negative": "noise"},
+    ]
+    pack_path.write_text(json.dumps(document), encoding="utf-8")
+
+    def _wait_until(predicate, timeout: float = 5.0) -> None:
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if predicate():
+                return
+            time.sleep(0.01)
+        assert predicate(), "condition was not reached before timeout"
+
+    class _Window:
+        root = None
+        app_state = AppStateV2()
+        pipeline_tab = SimpleNamespace(
+            txt2img_enabled=True,
+            img2img_enabled=False,
+            adetailer_enabled=False,
+            upscale_enabled=False,
+        )
+
+        @staticmethod
+        def run_in_main_thread(callback):
+            callback()
+
+        @staticmethod
+        def run_in_main_thread_later(_delay_ms, callback):
+            callback()
+
+        @staticmethod
+        def connect_controller(_controller):
+            return None
+
+    class _Listbox:
+        @staticmethod
+        def curselection():
+            return (0,)
+
+    repository = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=repository)
+    controller_ref: dict[str, AppController] = {}
+
+    def execute_job(job):
+        return controller_ref["controller"].pipeline_controller._run_job(job)
+
+    service = JobService(
+        queue,
+        run_callable=execute_job,
+        require_normalized_records=True,
+    )
+    service.auto_run_enabled = False
+    client = _DeterministicWebUI("ambient-model.safetensors")
+    pipeline_runner = PipelineRunner(
+        client,
+        StructuredLogger(output_dir=tmp_path / "logs"),
+        runs_base_dir=str(output_dir),
+    )
+    controller = AppController(
+        main_window=None,
+        threaded=True,
+        pipeline_runner=pipeline_runner,
+        job_service=service,
+    )
+    controller_ref["controller"] = controller
+    controller.load_packs = lambda: None  # type: ignore[method-assign]
+    controller._update_status = lambda *_args, **_kwargs: None  # type: ignore[method-assign]
+    window = _Window()
+    window.app_state.auto_run_queue = False
+    controller.set_main_window(window)
+    service.auto_run_enabled = False
+    controller.packs = [PromptPackInfo(name=pack_path.stem, path=pack_path)]
+
+    try:
+        assert controller.pipeline_controller._app_state is controller.app_state
+        assert controller._projection_sink._app_state is controller.app_state
+
+        sidebar = object.__new__(SidebarPanelV2)
+        sidebar.pack_listbox = _Listbox()
+        sidebar.controller = controller
+        sidebar._current_pack_names = [pack_path.stem]
+        sidebar._on_add_to_job()
+
+        _wait_until(
+            lambda: len(controller.app_state.job_draft.packs) == 3
+            and len(controller.app_state.preview_jobs) == 3
+        )
+        assert PreviewPanelV2._can_add_to_queue(
+            controller.app_state.job_draft,
+            controller.app_state.preview_jobs,
+        )
+        assert controller.override_pack_config_enabled is False
+
+        controller.on_add_job_to_queue_v2()
+        _wait_until(lambda: len(queue.list_jobs(JobStatus.QUEUED)) == 3)
+        assert client.calls == []
+        assert all(
+            repository.get_job(job.job_id).status is JobStatus.QUEUED
+            for job in queue.list_jobs(JobStatus.QUEUED)
+        )
+
+        initial_queued = queue.list_jobs(JobStatus.QUEUED)
+        original_id = initial_queued[0].job_id
+        original_njr = initial_queued[0]._normalized_record
+        assert original_njr is not None
+        original_snapshot = original_njr.to_dict()
+
+        controller.on_queue_send_job_v2()
+        _wait_until(lambda: repository.get_job(original_id).status is JobStatus.COMPLETED)
+        original_entry = repository.get_job(original_id)
+        assert original_entry is not None
+        original_artifacts = collect_canonical_artifacts(original_entry.result)
+        assert original_artifacts and original_artifacts[0]["job_id"] == original_id
+
+        assert controller.on_replay_history_job_v2(original_id) is True
+        queued_after_replay = queue.list_jobs(JobStatus.QUEUED)
+        replay_ids = {job.job_id for job in queued_after_replay} - {
+            job.job_id for job in initial_queued[1:]
+        }
+        assert len(replay_ids) == 1
+        replay_id = replay_ids.pop()
+        replay_job = queue.get_job(replay_id)
+        assert replay_job is not None and replay_job._normalized_record is not None
+        assert replay_job._normalized_record.source.parent_job_id == original_id
+        assert replay_job._normalized_record.job_id != original_id
+
+        while queue.list_jobs(JobStatus.QUEUED):
+            queued_ids = {job.job_id for job in queue.list_jobs(JobStatus.QUEUED)}
+            _wait_until(lambda: not service.runner.is_running())
+            controller.on_queue_send_job_v2()
+            _wait_until(
+                lambda: any(
+                    repository.get_job(job_id).status is JobStatus.COMPLETED
+                    for job_id in queued_ids
+                )
+            )
+
+        replay_entry = repository.get_job(replay_id)
+        assert replay_entry is not None and replay_entry.status is JobStatus.COMPLETED
+        replay_artifacts = collect_canonical_artifacts(replay_entry.result)
+        assert replay_artifacts and replay_artifacts[0]["job_id"] == replay_id
+        assert original_njr.to_dict() == original_snapshot
+        assert client.set_model_calls == ["baseline-model.safetensors"]
+    finally:
+        service.stop()
+        repository.close()

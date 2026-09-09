@@ -41,11 +41,14 @@ clean-machine real-backend acceptance.
 
 Repository convergence, simplification, transactional job persistence,
 PR-MVP-045 PromptPack draft/preview/queue repair, and PR-MVP-050 one-file JSON
-PromptPack convergence are complete. PR-MVP-060 Phase 1 and Phase 2A/2B/2C/2C1
-are verified on `mvp/060-image-vertical-slice`: progress/cancellation, durable
+PromptPack convergence are complete. PR-MVP-060 Phase 1 and Phase 2A/2B/2C/2C1/2D
+are verified on `mvp/060-image-vertical-slice`: the consolidated image journey
+composes live Pack Selector draft/preview, queue persistence with Auto-run off,
+manual dispatch, deterministic model synchronization, progress, artifacts,
+history, and replay lineage. Existing progress/cancellation, durable
 failure/retry/FIFO/reopen behavior, queue manipulation, exact-artifact thumbnail
-behavior, live Pack Selector preview refresh, and responsive Base Generation
-dimensions are covered. Developer workflow retains a task-oriented code map,
+behavior, live preview refresh, and responsive Base Generation dimensions remain
+covered. Developer workflow retains a task-oriented code map,
 one-command local required gate, canonical Python 3.11/3.12 CI verdict, and a
 controller-surface ratchet. Do not revive recovery, hygiene, or QOL branches as
 alternate sources of truth.
@@ -61,9 +64,8 @@ alternate sources of truth.
 
 **Now / Next**
 
-- `PR-MVP-060 Phase 2D`: consolidated lifecycle acceptance across draft, preview,
-  queue, dispatch, model synchronization, progress/cancellation, failure/retry,
-  queue controls, thumbnails, and replay.
+- `PR-MVP-060 Phase 3`: real A1111 GUI acceptance and final closeout of the
+  image vertical slice.
 
 **Later**
 
@@ -82,9 +84,9 @@ Latest verified baseline for the converged product state:
 - bounded mypy smoke: passing;
 - Ruff 0.14.9 baseline: 1,610 findings against a maximum of 2,208.
 
-Phase 2C branch verification collected 3,066 tests and passed 97 required smoke
-tests on the available local interpreter; required Python 3.11/3.12 CI was not
-rerun in this phase.
+Phase 2D focused acceptance passed 41 tests with one Tk-dependent skip because
+the available local Python 3.10 installation lacks a usable Tcl/Tk runtime;
+required Python 3.11/3.12 CI was not rerun in this phase.
 
 Run focused tests, then `python tools/ci/run_pr_gate.py`. GitHub required CI on
 Python 3.11 and 3.12 is the canonical integration verdict.
