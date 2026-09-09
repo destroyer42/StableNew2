@@ -333,7 +333,13 @@ class WebUIConnectionController:
             return self._state
 
     def is_process_alive(self) -> bool:
-        """Return True if the last-launched WebUI process is still running."""
+        """Return True if the last WebUI process owned by StableNew is running.
+
+        A ``None`` PID means the configured WebUI is externally managed.  A
+        known PID that has exited remains recorded as an ownership marker so
+        strict readiness cannot silently accept an unrelated process on the
+        same port.
+        """
 
         pid = self._process_pid
         if pid is None:
@@ -343,7 +349,6 @@ class WebUIConnectionController:
         except Exception:
             alive = False
         if not alive:
-            self._process_pid = None
             self._process_manager = None
         return alive
 
@@ -377,8 +382,8 @@ class WebUIConnectionController:
                 response.close()
 
     def _evaluate_strict_readiness(self) -> tuple[bool, str | None]:
-        if not self.is_process_alive():
-            return False, "process not alive"
+        if self._process_pid is not None and not self.is_process_alive():
+            return False, "owned process not alive"
         host, port = self._extract_host_port()
         if not host or port is None:
             return False, "invalid base URL"

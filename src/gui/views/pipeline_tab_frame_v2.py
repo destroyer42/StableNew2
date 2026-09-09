@@ -40,6 +40,8 @@ class PipelineTabFrame(ttk.Frame):
     LOGGING_ROW_WEIGHT = 1
     SLOW_UPDATE_THRESHOLD_MS = 20.0
     HOT_SURFACE_FLUSH_DELAY_MS = 1
+    HOT_SURFACE_DEFERRED_RETRY_DELAY_MS = 50
+    HOT_SURFACE_DEFERRED_RETRY_LIMIT = 3
 
     def __init__(
         self,
@@ -62,6 +64,7 @@ class PipelineTabFrame(ttk.Frame):
         self._callback_metrics: dict[str, dict[str, float | int]] = {}
         self._hot_surface_dirty: set[str] = set()
         self._hot_surface_flush_scheduled = False
+        self._hot_surface_deferred_retry_count = 0
         self._hot_surface_flush_metrics: dict[str, float | int] = {
             "count": 0,
             "total_ms": 0.0,
@@ -191,6 +194,7 @@ class PipelineTabFrame(ttk.Frame):
             manage_app_state_subscriptions=False,
         )
         self.history_panel.grid(row=0, column=0, sticky="nsew")
+        self._bind_hot_surface_map_events()
 
         self.right_scroll.inner.rowconfigure(4, weight=0)
 
@@ -574,6 +578,8 @@ class PipelineTabFrame(ttk.Frame):
             self._hot_surface_dirty = set()
         if not hasattr(self, "_hot_surface_flush_scheduled"):
             self._hot_surface_flush_scheduled = False
+        if not hasattr(self, "_hot_surface_deferred_retry_count"):
+            self._hot_surface_deferred_retry_count = 0
         if not hasattr(self, "_hot_surface_flush_metrics"):
             self._hot_surface_flush_metrics = {
                 "count": 0,
@@ -582,6 +588,27 @@ class PipelineTabFrame(ttk.Frame):
                 "last_ms": 0.0,
                 "slow_count": 0,
             }
+
+    def _bind_hot_surface_map_events(self) -> None:
+        """Resume deferred projections when a previously hidden surface maps."""
+        for surface_name in ("preview", "queue", "running", "history"):
+            widget = getattr(self, f"{surface_name}_panel", None)
+            if widget is None or not hasattr(widget, "bind"):
+                continue
+            try:
+                widget.bind(
+                    "<Map>",
+                    lambda _event, name=surface_name: self._on_hot_surface_mapped(name),
+                    add="+",
+                )
+            except Exception:
+                continue
+
+    def _on_hot_surface_mapped(self, surface_name: str) -> None:
+        self._ensure_hot_surface_state()
+        if surface_name in self._hot_surface_dirty:
+            self._hot_surface_deferred_retry_count = 0
+            self._schedule_hot_surface_flush_if_needed()
 
     def _ensure_callback_metrics_state(self) -> None:
         if not hasattr(self, "_callback_metrics"):
@@ -592,9 +619,10 @@ class PipelineTabFrame(ttk.Frame):
             return
         self._ensure_hot_surface_state()
         self._hot_surface_dirty.update(surface for surface in surfaces if surface)
+        self._hot_surface_deferred_retry_count = 0
         self._schedule_hot_surface_flush_if_needed()
 
-    def _schedule_hot_surface_flush_if_needed(self) -> None:
+    def _schedule_hot_surface_flush_if_needed(self, *, delay_ms: int | None = None) -> None:
         self._ensure_hot_surface_state()
         if self._hot_surface_flush_scheduled:
             return
@@ -602,7 +630,12 @@ class PipelineTabFrame(ttk.Frame):
             return
         self._hot_surface_flush_scheduled = True
         try:
-            self.after(self.HOT_SURFACE_FLUSH_DELAY_MS, self._flush_hot_surfaces)
+            delay = (
+                self.HOT_SURFACE_FLUSH_DELAY_MS
+                if delay_ms is None
+                else max(0, int(delay_ms))
+            )
+            self.after(delay, self._flush_hot_surfaces)
         except Exception:
             self._hot_surface_flush_scheduled = False
             self._flush_hot_surfaces()
@@ -666,6 +699,13 @@ class PipelineTabFrame(ttk.Frame):
 
         if deferred:
             self._hot_surface_dirty.update(deferred)
+            if self._hot_surface_deferred_retry_count < self.HOT_SURFACE_DEFERRED_RETRY_LIMIT:
+                self._hot_surface_deferred_retry_count += 1
+                self._schedule_hot_surface_flush_if_needed(
+                    delay_ms=self.HOT_SURFACE_DEFERRED_RETRY_DELAY_MS
+                )
+        else:
+            self._hot_surface_deferred_retry_count = 0
 
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         metrics = self._hot_surface_flush_metrics

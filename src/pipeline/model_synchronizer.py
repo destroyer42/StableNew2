@@ -82,7 +82,13 @@ class A1111ModelSynchronizer:
         except Exception as exc:
             self._raise_failure(requested, actual, f"model change request failed: {exc}")
         if changed is not True:
-            self._raise_failure(requested, actual, "model change request returned false")
+            failure_reason = getattr(self._client, "last_options_write_failure", None)
+            detail = (
+                f"model change request returned false ({failure_reason})"
+                if failure_reason
+                else "model change request returned false"
+            )
+            self._raise_failure(requested, actual, detail)
 
         deadline = self._monotonic() + self._timeout_seconds
         last_actual = actual

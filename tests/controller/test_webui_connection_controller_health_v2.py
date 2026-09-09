@@ -97,3 +97,28 @@ def test_ensure_connected_records_timing_snapshot(monkeypatch):
     assert timing["retry_attempts_used"] == 1
     assert timing["fast_probe_elapsed_ms"] >= 0.0
     assert timing["total_elapsed_ms"] >= 0.0
+
+
+def test_strict_readiness_accepts_healthy_external_webui(monkeypatch):
+    ctrl = WebUIConnectionController(base_url_provider=lambda: "http://test")
+    monkeypatch.setattr(ctrl, "is_port_listening", lambda _host, _port: True)
+    monkeypatch.setattr(ctrl, "_probe_endpoint", lambda _path: (True, None))
+
+    assert ctrl._process_pid is None
+    assert ctrl._evaluate_strict_readiness() == (True, None)
+
+
+def test_strict_readiness_rejects_dead_owned_webui(monkeypatch):
+    ctrl = WebUIConnectionController(base_url_provider=lambda: "http://test")
+    ctrl._process_pid = 12345
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.psutil.pid_exists",
+        lambda _pid: False,
+    )
+    monkeypatch.setattr(ctrl, "is_port_listening", lambda _host, _port: True)
+
+    ready, reason = ctrl._evaluate_strict_readiness()
+
+    assert ready is False
+    assert reason == "owned process not alive"
+    assert ctrl._process_pid == 12345

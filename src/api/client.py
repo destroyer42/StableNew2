@@ -199,6 +199,7 @@ class SDWebUIClient:
         self._last_options_post_ts = 0.0
         self._options_min_interval_seconds = OPTIONS_POST_MIN_INTERVAL
         self._options_readiness_provider: Callable[[], bool] | None = None
+        self._last_options_write_failure: str | None = None
         resolved_flag = (
             bool(options_write_enabled)
             if options_write_enabled is not None
@@ -770,6 +771,12 @@ class SDWebUIClient:
             "WebUI options writes %s",
             "enabled" if self._options_write_enabled else "disabled (SafeMode)",
         )
+
+    @property
+    def last_options_write_failure(self) -> str | None:
+        """Return the reason the most recent options write was rejected."""
+
+        return self._last_options_write_failure
 
     def _options_write_allowed(self) -> bool:
         return self._options_write_enabled
@@ -1934,24 +1941,32 @@ class SDWebUIClient:
             True if successful
         """
         payload = {"sd_model_checkpoint": model_name}
+        self._last_options_write_failure = None
         can_send, reason = self._options_can_send()
         if not can_send:
+            self._last_options_write_failure = reason or "unknown"
             if reason == "safe_mode":
                 logger.warning(
                     "Skipping set_model because options writes are disabled (SafeMode); target=%s",
                     model_name,
                 )
             else:
-                logger.debug("Skipping set_model; reason=%s", reason)
+                logger.warning("Skipping set_model; reason=%s; target=%s", reason, model_name)
             return False
-        with self._request_context(
-            "post",
-            "/sdapi/v1/options",
-            json=payload,
-            timeout=75,  # Model switching can take time
-        ) as response:
-            if response is None:
-                return False
+        try:
+            with self._request_context(
+                "post",
+                "/sdapi/v1/options",
+                json=payload,
+                timeout=75,  # Model switching can take time
+            ) as response:
+                if response is None:
+                    self._last_options_write_failure = "http"
+                    logger.warning("set_model received no HTTP response; target=%s", model_name)
+                    return False
+        except Exception:
+            self._last_options_write_failure = "http"
+            raise
 
         logger.info(f"Set model to: {model_name}")
         return True

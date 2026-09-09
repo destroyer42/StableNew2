@@ -178,12 +178,11 @@ def test_pipeline_tab_defers_hidden_hot_surfaces_until_visible() -> None:
     assert tab.preview_panel.preview_calls == 0
     assert tab.preview_panel.app_state_calls == 0
     assert tab._hot_surface_dirty == {"preview"}
-    assert tab._hot_surface_flush_scheduled is False
+    assert tab._hot_surface_flush_scheduled is True
+    assert len(scheduled) == 1
+    assert scheduled[0][0] == PipelineTabFrame.HOT_SURFACE_DEFERRED_RETRY_DELAY_MS
 
     tab.preview_panel.mapped = True
-    tab._on_first_map()
-
-    assert len(scheduled) == 1
     resumed_flush = scheduled.pop()[1]
     assert callable(resumed_flush)
     resumed_flush()
