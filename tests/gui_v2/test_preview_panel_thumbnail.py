@@ -165,10 +165,8 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
 
         mock_set_image.assert_called_once_with(image_path)
 
-    def test_update_thumbnail_schedules_background_lookup_for_scan_paths(self) -> None:
-        """Directory scans should be deferred off the UI thread."""
-        from unittest.mock import ANY
-
+    def test_update_thumbnail_uses_explicit_placeholder_without_artifact(self) -> None:
+        """Drafts do not scan unrelated output folders for a thumbnail."""
         job = Mock()
         job.job_id = "job-lookup"
         self.panel._show_preview_var.set(True)
@@ -177,11 +175,11 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
 
         with patch.object(self.panel, "_find_immediate_output_image", return_value=None):
             with patch.object(self.panel, "_schedule_thumbnail_lookup") as mock_schedule:
-                with patch.object(self.panel.thumbnail, "set_loading") as mock_loading:
+                with patch.object(self.panel.thumbnail, "set_placeholder") as mock_placeholder:
                     self.panel._update_thumbnail(job, pack_name="pack-a", show_preview=True)
 
-        mock_loading.assert_called_once()
-        mock_schedule.assert_called_once_with(job, "pack-a", ANY)
+        mock_placeholder.assert_called_once_with("No generated preview yet")
+        mock_schedule.assert_not_called()
 
     def test_apply_thumbnail_lookup_result_updates_current_job_only(self) -> None:
         """Async lookup results should only apply to the currently active preview job."""

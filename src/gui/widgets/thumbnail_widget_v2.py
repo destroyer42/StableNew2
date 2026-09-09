@@ -168,6 +168,14 @@ class ThumbnailWidget(ttk.Frame):
         self._show_placeholder()
         self._update_clickability()
 
+    def set_placeholder(self, text: str) -> None:
+        """Show an explicit neutral state without implying an image exists."""
+        self._photo_image = None
+        self._current_path = None
+        self._open_path = None
+        self._show_placeholder(text)
+        self._update_clickability()
+
     def set_loading(self) -> None:
         """Show loading indicator."""
         self._show_placeholder("Loading...")

@@ -34,7 +34,6 @@ from src.gui.utils.display_helpers import extract_seed_from_job, format_seed_dis
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 from src.controller.ports.runtime_ports import NJRSummaryPort, NJRUISummaryPort
-from src.state.output_routing import get_output_root, iter_output_run_dirs
 from src.state.workspace_paths import workspace_paths
 
 logger = logging.getLogger(__name__)
@@ -1082,56 +1081,12 @@ class PreviewPanelV2(ttk.Frame):
         dialog.geometry(f"{width}x{height}+{x}+{y}")
 
     def _find_recent_thumbnail(self, job: Any, pack_name: str | None = None) -> Any:
-        """Find a recent image that matches this job's config for preview."""
-        from pathlib import Path
+        """Return no candidate; previews must come from exact job artifacts.
 
-        # Try to get output directory from job config
-        output_dir = get_output_root("output", create=False)
-        if not output_dir.exists():
-            return None
-
-        # Get pack name or model for matching
-        model_name = None
-
-        if pack_name is None and hasattr(job, "prompt_pack_name"):
-            pack_name = job.prompt_pack_name
-
-        if hasattr(job, "to_unified_summary"):
-            try:
-                summary = job.to_unified_summary()
-                pack_name = pack_name or getattr(summary, "prompt_pack_name", None)
-                model_name = getattr(summary, "model_name", None) or getattr(summary, "base_model", None)
-            except Exception:
-                pass
-
-        # Look for recent outputs with matching pack/model
-        try:
-            # List recent run directories
-            run_dirs = iter_output_run_dirs(output_dir)[:10]
-
-            for run_dir in run_dirs:
-                matches_pack = bool(pack_name and pack_name.lower() in run_dir.name.lower())
-                matches_model = bool(model_name and model_name.lower() in run_dir.name.lower())
-
-                if matches_pack or matches_model:
-                    # Find first image in directory
-                    for img_path in sorted(run_dir.glob("*.png"))[:1]:
-                        return img_path
-
-                    # Check txt2img subdirectory
-                    txt2img_dir = run_dir / "txt2img"
-                    if txt2img_dir.exists():
-                        for img_path in sorted(txt2img_dir.glob("*.png"))[:1]:
-                            return img_path
-
-                # Fallback: return the most recent image if no pack/model match
-                all_pngs = sorted(run_dir.rglob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
-                if all_pngs:
-                    return all_pngs[0]
-
-        except Exception:
-            pass
-
+        Older code scanned recent output folders by pack/model name and could
+        display an unrelated image for a draft.  The canonical job result is
+        the only thumbnail authority now.
+        """
         return None
 
     def _find_immediate_output_image(
@@ -1158,8 +1113,29 @@ class PreviewPanelV2(ttk.Frame):
             if thumbnail.exists():
                 return thumbnail
 
+        for field_name in ("artifact_path", "primary_artifact_path"):
+            candidate = getattr(summary, field_name, None)
+            if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
+                return Path(candidate)
+
+        artifact = getattr(summary, "artifact", None)
+        if isinstance(artifact, dict):
+            for candidate in (
+                artifact.get("thumbnail_path"),
+                artifact.get("primary_path"),
+                *(artifact.get("output_paths") or []),
+            ):
+                if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
+                    return Path(candidate)
+
+        artifact_references = getattr(summary, "artifact_references", None)
+        if isinstance(artifact_references, (list, tuple)):
+            for candidate in artifact_references:
+                if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
+                    return Path(candidate)
+
         output_paths = getattr(summary, "output_paths", None)
-        if isinstance(output_paths, list):
+        if isinstance(output_paths, (list, tuple)):
             for candidate in reversed(output_paths):
                 if isinstance(candidate, (str, os.PathLike)):
                     image_path = Path(candidate)
@@ -1168,17 +1144,35 @@ class PreviewPanelV2(ttk.Frame):
 
         result = getattr(summary, "result", None)
         if isinstance(result, dict):
-            metadata = result.get("metadata")
-            if isinstance(metadata, dict):
-                candidate = metadata.get("path") or metadata.get("output_path")
-                if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
+            path_keys = (
+                "thumbnail_path",
+                "artifact_path",
+                "primary_path",
+                "path",
+                "output_path",
+            )
+
+            def _paths(value: Any) -> list[str]:
+                found: list[str] = []
+                if isinstance(value, dict):
+                    for key in path_keys:
+                        candidate = value.get(key)
+                        if isinstance(candidate, (str, os.PathLike)):
+                            found.append(str(candidate))
+                    for key in ("output_paths", "all_paths", "artifact_references"):
+                        candidates = value.get(key)
+                        if isinstance(candidates, (list, tuple)):
+                            found.extend(str(candidate) for candidate in candidates if candidate)
+                    for key in ("artifact", "metadata", "variants", "artifacts"):
+                        found.extend(_paths(value.get(key)))
+                elif isinstance(value, list):
+                    for item in value:
+                        found.extend(_paths(item))
+                return found
+
+            for candidate in _paths(result):
+                if Path(candidate).exists():
                     return Path(candidate)
-            if isinstance(metadata, list):
-                for entry in reversed(metadata):
-                    if isinstance(entry, dict):
-                        candidate = entry.get("path") or entry.get("output_path")
-                        if isinstance(candidate, (str, os.PathLike)) and Path(candidate).exists():
-                            return Path(candidate)
 
         return None
 
@@ -1187,20 +1181,6 @@ class PreviewPanelV2(ttk.Frame):
         immediate = self._find_immediate_output_image(summary)
         if immediate is not None:
             return immediate
-
-        # If the summary has a job_id, look for a run folder named with it
-        job_id = getattr(summary, "job_id", None)
-        output_dir = get_output_root("output", create=False)
-        if job_id and output_dir.exists():
-            job_dirs = sorted(
-                [p for p in iter_output_run_dirs(output_dir) if job_id in p.name],
-                key=lambda p: p.stat().st_mtime,
-                reverse=True,
-            )
-            for run_dir in job_dirs:
-                candidates = sorted(run_dir.rglob("*.png"), key=lambda p: p.stat().st_mtime, reverse=True)
-                if candidates:
-                    return candidates[0]
 
         return None
 
@@ -1319,7 +1299,7 @@ class PreviewPanelV2(ttk.Frame):
         if resolved_path and resolved_path.exists():
             self.thumbnail.set_image_from_path(resolved_path)
         else:
-            self.thumbnail.clear()
+            self.thumbnail.set_placeholder("No generated preview yet")
 
     def _update_thumbnail(self, job: Any | None = None, pack_name: str | None = None, show_preview: bool = True) -> None:
         """Update the thumbnail display for the current preview job."""
@@ -1345,19 +1325,9 @@ class PreviewPanelV2(ttk.Frame):
             self._record_refresh_metric("_update_thumbnail", elapsed_ms)
             return
 
-        request_key = self._make_thumbnail_lookup_key(job, pack_name)
-        cached_path = self._get_cached_thumbnail_lookup(request_key)
-        if cached_path is not _THUMBNAIL_CACHE_MISS:
-            if cached_path is None:
-                self.thumbnail.clear()
-            else:
-                self.thumbnail.set_image_from_path(cached_path)
-            elapsed_ms = (time.perf_counter() - start) * 1000.0
-            self._record_refresh_metric("_update_thumbnail", elapsed_ms)
-            return
-
-        self.thumbnail.set_loading()
-        self._schedule_thumbnail_lookup(job, pack_name, request_key)
+        # No directory scan or recent-output fallback: a draft/queued job has
+        # no generated preview until its exact artifact is persisted.
+        self.thumbnail.set_placeholder("No generated preview yet")
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         self._record_refresh_metric("_update_thumbnail", elapsed_ms)
 

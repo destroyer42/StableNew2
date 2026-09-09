@@ -349,6 +349,19 @@ class QueuePanelV2(ttk.Frame):
         except ValueError:
             return None, queued_indices
 
+    def _controller_supports(self, *names: str) -> bool:
+        """Return whether a configured controller exposes an action boundary.
+
+        A headless panel (used by state-predicate tests) has no controller and
+        still computes legal queue state.  A live panel with a controller must
+        disable controls that have no callable boundary instead of presenting
+        an enabled silent no-op.
+        """
+        controller = getattr(self, "controller", None)
+        if controller is None:
+            return True
+        return any(callable(getattr(controller, name, None)) for name in names)
+
     def _select_job_id(self, job_id: str) -> int | None:
         for index, job in enumerate(self._jobs):
             if getattr(job, "job_id", None) == job_id:
@@ -418,11 +431,23 @@ class QueuePanelV2(ttk.Frame):
         last_queued_position = len(queued_indices) - 1
 
         # Move to front: enabled if selection exists and not already first
-        can_move_to_front = has_selection and selected_is_queued and has_selected_queued_position and queued_position > 0
+        can_move_to_front = (
+            has_selection
+            and selected_is_queued
+            and has_selected_queued_position
+            and queued_position > 0
+            and self._controller_supports("move_queue_job_to_front", "on_queue_move_to_front_v2")
+        )
         self.move_to_front_button.state(["!disabled"] if can_move_to_front else ["disabled"])
 
         # Move up: enabled if selection is not first
-        can_move_up = has_selection and selected_is_queued and has_selected_queued_position and queued_position > 0
+        can_move_up = (
+            has_selection
+            and selected_is_queued
+            and has_selected_queued_position
+            and queued_position > 0
+            and self._controller_supports("move_queue_job_up", "on_queue_move_up_v2")
+        )
         self.move_up_button.state(["!disabled"] if can_move_up else ["disabled"])
 
         # Move down: enabled if selection is not last
@@ -431,6 +456,7 @@ class QueuePanelV2(ttk.Frame):
             and selected_is_queued
             and has_selected_queued_position
             and queued_position < last_queued_position
+            and self._controller_supports("move_queue_job_down", "on_queue_move_down_v2")
         )
         self.move_down_button.state(["!disabled"] if can_move_down else ["disabled"])
 
@@ -440,14 +466,23 @@ class QueuePanelV2(ttk.Frame):
             and selected_is_queued
             and has_selected_queued_position
             and queued_position < last_queued_position
+            and self._controller_supports("move_queue_job_to_back", "on_queue_move_to_back_v2")
         )
         self.move_to_back_button.state(["!disabled"] if can_move_to_back else ["disabled"])
 
         # Remove only applies to queued jobs; running jobs must be cancelled separately.
-        self.remove_button.state(["!disabled"] if selected_is_queued else ["disabled"])
+        self.remove_button.state(
+            ["!disabled"]
+            if selected_is_queued and self._controller_supports("on_queue_remove_job_v2")
+            else ["disabled"]
+        )
 
         # Clear removes queued jobs only.
-        self.clear_button.state(["!disabled"] if has_queued_jobs else ["disabled"])
+        self.clear_button.state(
+            ["!disabled"]
+            if has_queued_jobs and self._controller_supports("on_queue_clear_v2")
+            else ["disabled"]
+        )
 
         # PR-GUI-F3: Send Job - enabled if queue has jobs and not currently running a job
         # Also respects pause state (controller handles actual pause blocking)
@@ -543,7 +578,9 @@ class QueuePanelV2(ttk.Frame):
         
         # Perform the move
         if self.controller:
-            move_fn = getattr(self.controller, "move_queue_job_to_front", None)
+            move_fn = getattr(self.controller, "move_queue_job_to_front", None) or getattr(
+                self.controller, "on_queue_move_to_front_v2", None
+            )
             if callable(move_fn):
                 moved = bool(move_fn(job.job_id))
                 if moved:
@@ -570,7 +607,9 @@ class QueuePanelV2(ttk.Frame):
         
         # Perform the move
         if self.controller:
-            move_fn = getattr(self.controller, "move_queue_job_to_back", None)
+            move_fn = getattr(self.controller, "move_queue_job_to_back", None) or getattr(
+                self.controller, "on_queue_move_to_back_v2", None
+            )
             if callable(move_fn):
                 moved = bool(move_fn(job.job_id))
                 if moved:
@@ -691,13 +730,14 @@ class QueuePanelV2(ttk.Frame):
 
     def _on_clear_with_confirm(self) -> None:
         """Clear all with confirmation dialog."""
-        if not self._jobs:
+        queued_count = sum(self._job_status_value(job) == "queued" for job in self._jobs)
+        if queued_count == 0:
             return
         
         from tkinter import messagebox
-        if messagebox.askyesno("Clear Queue", f"Remove all {len(self._jobs)} jobs from queue?"):
+        if messagebox.askyesno("Clear Queue", f"Remove all {queued_count} queued jobs from queue?"):
             self._on_clear()
-            self._emit_status_message(f"Cleared {len(self._jobs)} jobs from queue")
+            self._emit_status_message(f"Cleared {queued_count} queued jobs from queue")
 
     def _select_index(self, index: int) -> None:
         """Select a specific index in the listbox."""

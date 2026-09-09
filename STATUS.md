@@ -41,13 +41,13 @@ clean-machine real-backend acceptance.
 
 Repository convergence, simplification, transactional job persistence,
 PR-MVP-045 PromptPack draft/preview/queue repair, and PR-MVP-050 one-file JSON
-PromptPack convergence are complete. PR-MVP-060 Phase 1 and Phase 2A/2B are
-verified on `mvp/060-image-vertical-slice`: image progress and cancellation are
-durable, deterministic failure/retry and FIFO behavior are covered, and terminal
-plus pending SQLite state survives repository/history reconstruction. Developer
-workflow retains a task-oriented code map, one-command local required gate,
-canonical Python 3.11/3.12 CI verdict, and a controller-surface ratchet. Do not
-revive recovery, hygiene, or QOL branches as alternate sources of truth.
+PromptPack convergence are complete. PR-MVP-060 Phase 1 and Phase 2A/2B/2C are
+verified on `mvp/060-image-vertical-slice`: progress/cancellation, durable
+failure/retry/FIFO/reopen behavior, queue manipulation, and exact-artifact
+thumbnail behavior are covered. Developer workflow retains a task-oriented code
+map, one-command local required gate, canonical Python 3.11/3.12 CI verdict, and
+a controller-surface ratchet. Do not revive recovery, hygiene, or QOL branches
+as alternate sources of truth.
 
 ## Highest-value debt
 
@@ -60,8 +60,9 @@ revive recovery, hygiene, or QOL branches as alternate sources of truth.
 
 **Now / Next**
 
-- `PR-MVP-060 Phase 2C`: queue controls (Move Front/Up/Down/Back, Remove, Clear)
-  and thumbnail behavior.
+- `PR-MVP-060 Phase 2D`: consolidated lifecycle acceptance across draft, preview,
+  queue, dispatch, model synchronization, progress/cancellation, failure/retry,
+  queue controls, thumbnails, and replay.
 
 **Later**
 
@@ -73,16 +74,16 @@ revive recovery, hygiene, or QOL branches as alternate sources of truth.
 
 Latest verified baseline for the converged product state:
 
-- repository completeness: 429 tracked Python source files; verification passed
+- repository completeness: 431 tracked Python source files; verification passed
   on the committed branch;
-- strict local collection: 3,062 tests plus 2 optional-OpenCV module skips;
+- strict local collection: 3,066 tests plus 2 optional-OpenCV module skips;
 - required smoke: 95 passing on Python 3.11 and 3.12;
 - bounded mypy smoke: passing;
-- Ruff 0.14.9 baseline: 1,613 findings against a maximum of 2,208.
+- Ruff 0.14.9 baseline: 1,610 findings against a maximum of 2,208.
 
-Phase 2B branch verification additionally collected 3,062 tests and passed 97
-required smoke tests on the available local interpreter; required Python
-3.11/3.12 CI was not rerun in this phase.
+Phase 2C branch verification collected 3,066 tests and passed 97 required smoke
+tests on the available local interpreter; required Python 3.11/3.12 CI was not
+rerun in this phase.
 
 Run focused tests, then `python tools/ci/run_pr_gate.py`. GitHub required CI on
 Python 3.11 and 3.12 is the canonical integration verdict.
