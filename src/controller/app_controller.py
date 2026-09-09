@@ -820,11 +820,7 @@ class AppController:
                     logger.debug("Main window delayed UI dispatcher rejected callback: %s", exc)
         if self._dispatch_via_root_after(delay, fn):
             return
-        scheduler = getattr(self, "_ui_scheduler", None)
-        if mw is None and not callable(scheduler) and self._get_ui_root() is None:
-            fn()
-            return
-        logger.debug("Dropping delayed UI callback because no safe UI dispatcher is available")
+        self._ui_dispatch(fn)
     
     def _mark_ui_dirty(
         self,

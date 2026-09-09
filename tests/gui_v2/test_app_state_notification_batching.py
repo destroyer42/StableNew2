@@ -98,3 +98,24 @@ def test_queue_jobs_batches_like_other_hot_runtime_keys() -> None:
     delayed_flush()
 
     assert calls == ["queue_jobs"]
+
+
+def test_queue_jobs_notifies_for_status_change_but_not_identical_projection() -> None:
+    state = AppStateV2()
+    calls: list[str] = []
+    state.subscribe("queue_jobs", lambda: calls.append("queue_jobs"))
+
+    queued = SimpleNamespace(job_id="job-1", status="QUEUED")
+    running = SimpleNamespace(job_id="job-1", status="RUNNING")
+    identical_running = SimpleNamespace(job_id="job-1", status="RUNNING")
+
+    state.set_queue_jobs([queued])  # type: ignore[list-item]
+    calls.clear()
+    state.set_queue_jobs([running])  # type: ignore[list-item]
+
+    assert state.queue_jobs == [running]
+    assert calls == ["queue_jobs"]
+
+    state.set_queue_jobs([identical_running])  # type: ignore[list-item]
+    assert state.queue_jobs == [running]
+    assert calls == ["queue_jobs"]

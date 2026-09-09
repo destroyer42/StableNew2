@@ -430,11 +430,19 @@ class AppStateV2:
     def set_queue_jobs(self, jobs: list[UnifiedJobSummary] | None) -> None:
         if jobs is None:
             jobs = []
-        # Always update and notify - fixes Remove button not updating GUI (queue job removal bug)
-        # The comparison self.queue_jobs != jobs might miss updates due to object identity issues
-        changed = len(self.queue_jobs) != len(jobs) or any(
-            old.job_id != new.job_id for old, new in zip(self.queue_jobs, jobs, strict=False)
-        )
+        # Order, identity, and lifecycle state define the active queue
+        # projection. A QUEUED -> RUNNING transition keeps the same ID and
+        # length but must still reach observers.
+        def _signature(values: list[UnifiedJobSummary]) -> tuple[tuple[str, str], ...]:
+            return tuple(
+                (
+                    str(getattr(job, "job_id", "")),
+                    str(getattr(job, "status", "")).upper(),
+                )
+                for job in values
+            )
+
+        changed = _signature(self.queue_jobs) != _signature(jobs)
         if changed:
             logger.debug(f"set_queue_jobs: Updating from {len(self.queue_jobs)} to {len(jobs)} jobs")
             self.queue_jobs = list(jobs)

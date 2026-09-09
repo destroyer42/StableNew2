@@ -40,3 +40,14 @@ def test_ui_dispatch_later_falls_back_without_root() -> None:
     controller._ui_dispatch_later(50, lambda: called.__setitem__("ran", True))
 
     assert called["ran"] is True
+
+
+def test_ui_dispatch_later_uses_bootstrap_scheduler_before_window_binding() -> None:
+    controller = _build_controller_stub(None)
+    scheduled: list[object] = []
+    controller._ui_scheduler = scheduled.append
+
+    controller._ui_dispatch_later(50, lambda: None)
+
+    assert len(scheduled) == 1
+    assert callable(scheduled[0])
