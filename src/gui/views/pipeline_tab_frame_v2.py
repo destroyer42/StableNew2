@@ -7,6 +7,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui import design_system_v2 as design_system
+from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
@@ -478,9 +479,9 @@ class PipelineTabFrame(ttk.Frame):
         self, resources: dict[str, list[Any]] | None = None
     ) -> None:
         def _run() -> None:
-            panel = getattr(self, "stage_cards_panel", None)
-            if panel is not None and resources:
-                panel.apply_resource_update(resources)
+            if resources:
+                # Keep all WebUI resource widget updates on the shared loader path.
+                DropdownLoader().apply(resources, pipeline_tab=self)
 
         self._measure_callback("_on_app_state_resources_changed", _run)
 

@@ -64,6 +64,7 @@ def test_pipeline_dropdown_refresh_updates_stage_cards():
     assert txt_card.model_var is base_panel.model_var
 
     assert list(img_card.sampler_combo["values"]) == resources["samplers"]
+    assert list(base_panel._scheduler_combo["values"]) == resources["schedulers"]
     hires_values = list(txt_card.hires_upscaler_combo["values"])
     for upscaler in resources["upscalers"]:
         assert upscaler in hires_values

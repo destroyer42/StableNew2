@@ -7,7 +7,7 @@ import logging
 import random
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -72,6 +72,17 @@ OPTIONS_POST_MIN_INTERVAL = 6.0
 UPSCALE_SINGLE_IMAGE_TIMEOUT = 300.0
 RESOURCE_ENDPOINT_RETRY_COOLDOWN_SEC = 15.0
 RESOURCE_STARTUP_GRACE_SEC = 30.0
+DEFAULT_SCHEDULERS: tuple[str, ...] = (
+    "Normal",
+    "Karras",
+    "Exponential",
+    "SGM Uniform",
+    "Simple",
+    "DDIM Uniform",
+    "Beta",
+    "Linear",
+    "Cosine",
+)
 _STARTUP_GRACE_ENDPOINTS = {
     "/sdapi/v1/sd-models",
     "/sdapi/v1/sd-vae",
@@ -92,6 +103,52 @@ _NONRETRYABLE_HTTP_500_MARKERS = (
 DEFAULT_GENERATION_TIMEOUT = 120.0  # Down from 300s for better UX
 PROGRESS_STALL_THRESHOLD_SEC = 60.0  # If no progress update for this long, consider stalled
 STALL_INTERRUPT_THRESHOLD_SEC = 90.0  # After this long with no progress, interrupt WebUI generation
+
+
+def normalize_scheduler_names(data: Any) -> list[str]:
+    """Normalize supported WebUI scheduler response shapes."""
+    if not isinstance(data, (list, tuple)):
+        return []
+
+    seen: set[str] = set()
+    names: list[str] = []
+    for entry in data:
+        value: Any = entry
+        if isinstance(entry, Mapping):
+            value = entry.get("name")
+            if not isinstance(value, str) or not value.strip():
+                value = entry.get("label")
+        if not isinstance(value, str):
+            continue
+        name = value.strip()
+        if not name:
+            continue
+        if name.lower() in {
+            "karras",
+            "exponential",
+            "normal",
+            "simple",
+            "beta",
+            "linear",
+            "cosine",
+        }:
+            name = name.capitalize()
+        dedupe_key = name.casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        names.append(name)
+    return names
+
+
+def _log_scheduler_fallback(reason: BaseException | str) -> None:
+    failure_type = type(reason).__name__ if isinstance(reason, BaseException) else "InvalidResponse"
+    detail = str(reason)
+    logger.warning(
+        "WebUI resource refresh failed resource=schedulers failure_type=%s reason=%s fallback_used=yes",
+        failure_type,
+        detail,
+    )
 
 
 class WebUIUnavailableError(Exception):
@@ -1762,53 +1819,25 @@ class SDWebUIClient:
             List of scheduler names
         """
         if self._resource_endpoint_startup_grace_active("/sdapi/v1/schedulers"):
-            return [
-                "Normal",
-                "Karras",
-                "Exponential",
-                "SGM Uniform",
-                "Simple",
-                "DDIM Uniform",
-                "Beta",
-                "Linear",
-                "Cosine",
-            ]
+            return list(DEFAULT_SCHEDULERS)
         with self._request_context("get", "/sdapi/v1/schedulers", timeout=10) as response:
             if response is None:
                 logger.warning("Failed to get schedulers from API; using defaults")
-                return [
-                    "Normal",
-                    "Karras",
-                    "Exponential",
-                    "SGM Uniform",
-                    "Simple",
-                    "DDIM Uniform",
-                    "Beta",
-                    "Linear",
-                    "Cosine",
-                ]
+                _log_scheduler_fallback("no response")
+                return list(DEFAULT_SCHEDULERS)
 
             try:
                 data = response.json()
             except ValueError as exc:
                 logger.warning(f"Failed to parse schedulers response: {exc}; using defaults")
-                return [
-                    "Normal",
-                    "Karras",
-                    "Exponential",
-                    "SGM Uniform",
-                    "Simple",
-                    "DDIM Uniform",
-                    "Beta",
-                    "Linear",
-                    "Cosine",
-                ]
+                _log_scheduler_fallback(exc)
+                return list(DEFAULT_SCHEDULERS)
 
-        schedulers = [
-            scheduler.get("name", scheduler.get("label", "")) for scheduler in data if scheduler
-        ]
-        # Ensure proper capitalization for scheduler names (WebUI expects "Karras" not "karras")
-        schedulers = [s.capitalize() if s and s.lower() in {"karras", "exponential", "normal", "simple", "beta", "linear", "cosine"} else s for s in schedulers]
+        schedulers = normalize_scheduler_names(data)
+        if not schedulers:
+            logger.warning("Failed to normalize schedulers response; using defaults")
+            _log_scheduler_fallback("no valid scheduler names in successful response")
+            return list(DEFAULT_SCHEDULERS)
         logger.debug("Retrieved %s schedulers", len(schedulers))
         return schedulers
 
