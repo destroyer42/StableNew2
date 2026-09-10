@@ -6,7 +6,12 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from src.api.client import ProgressInfo, SDWebUIClient, STALL_INTERRUPT_THRESHOLD_SEC
+from src.api.client import (
+    DEFAULT_GENERATION_TIMEOUT,
+    ProgressInfo,
+    SDWebUIClient,
+    STALL_INTERRUPT_THRESHOLD_SEC,
+)
 from src.pipeline.executor import (
     Pipeline,
     STALL_INTERRUPT_THRESHOLD_BY_STAGE,
@@ -19,6 +24,38 @@ from src.prompting.contracts import (
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_types import PromptOptimizationPairResult, PromptOptimizationResult
 from src.utils import StructuredLogger
+
+
+class _FakeMonotonicClock:
+    def __init__(self) -> None:
+        self.now = 0.0
+
+    def monotonic(self) -> float:
+        return self.now
+
+
+class _ClockBoundStopEvent:
+    def __init__(self, clock: _FakeMonotonicClock, *, stop_after: float) -> None:
+        self._clock = clock
+        self._stop_after = stop_after
+        self._is_set = False
+
+    def is_set(self) -> bool:
+        return self._is_set
+
+    def wait(self, duration: float) -> bool:
+        self._clock.now += duration
+        self._is_set = self._clock.now > self._stop_after
+        return self._is_set
+
+
+class _RecordingEvent:
+    def __init__(self, clock: _FakeMonotonicClock) -> None:
+        self._clock = clock
+        self.times: list[float] = []
+
+    def set(self) -> None:
+        self.times.append(self._clock.now)
 
 
 class TestPollProgressLoop(unittest.TestCase):
@@ -446,6 +483,242 @@ class TestStallInterrupt(unittest.TestCase):
     def _make_frozen_progress(self, value: float = 0.5) -> ProgressInfo:
         return ProgressInfo(value, None, 10, 20, None, {})
 
+    def test_ordinary_stall_interrupts_at_90_seconds_from_last_progress(self) -> None:
+        """The hard threshold is measured from progress, not warning detection."""
+        clock = _FakeMonotonicClock()
+        interrupt_times: list[float] = []
+        self.client.get_progress.return_value = self._make_frozen_progress()
+        self.client.interrupt.side_effect = lambda: interrupt_times.append(clock.now) or True
+
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            patch("src.pipeline.executor.PROGRESS_STALL_THRESHOLD_SEC", 60.0),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_SEC", 90.0),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {}),
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=90.0),
+                1.0,
+                None,
+                "txt2img",
+            )
+
+        assert interrupt_times == [90.0]
+
+    def test_ordinary_stall_warning_is_eligible_at_60_seconds(self) -> None:
+        clock = _FakeMonotonicClock()
+        stall_event = _RecordingEvent(clock)
+        self.client.get_progress.return_value = self._make_frozen_progress()
+
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            patch("src.pipeline.executor.PROGRESS_STALL_THRESHOLD_SEC", 60.0),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_SEC", 90.0),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {}),
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=60.0),
+                1.0,
+                None,
+                "txt2img",
+                stall_event,
+            )
+
+        assert stall_event.times[0] == 60.0
+        self.client.interrupt.assert_not_called()
+
+    def test_healthy_progress_for_more_than_90_seconds_never_interrupts(self) -> None:
+        clock = _FakeMonotonicClock()
+
+        def _progress(**_kwargs):
+            return ProgressInfo(0.1 + clock.now / 1000.0, None, None, None, None, {})
+
+        self.client.get_progress.side_effect = _progress
+        with patch("src.pipeline.executor.time.monotonic", clock.monotonic):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=100.0),
+                1.0,
+                None,
+                "txt2img",
+            )
+
+        self.client.interrupt.assert_not_called()
+
+    def test_identical_progress_keeps_status_heartbeat_but_not_stall_clock(self) -> None:
+        clock = _FakeMonotonicClock()
+        interrupt_times: list[float] = []
+        self.pipeline._current_job_id = "job-123"
+        self.pipeline._current_stage_index = 0
+        self.pipeline._current_stage_chain = ["txt2img"]
+        self.pipeline._current_stage_start_time = None
+        self.pipeline._status_callback = Mock()
+        self.client.get_progress.return_value = self._make_frozen_progress()
+        self.client.interrupt.side_effect = lambda: interrupt_times.append(clock.now) or True
+
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {}),
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=90.0),
+                1.0,
+                None,
+                "txt2img",
+            )
+
+        assert self.pipeline._status_callback.call_count > 90
+        assert interrupt_times == [90.0]
+
+    def test_meaningful_progress_resets_stall_episode_and_allows_one_later_interrupt(self) -> None:
+        clock = _FakeMonotonicClock()
+        interrupt_times: list[float] = []
+
+        def _progress(**_kwargs):
+            progress = 0.6 if clock.now >= 80.0 else 0.5
+            return ProgressInfo(progress, None, 10, 20, None, {})
+
+        self.client.get_progress.side_effect = _progress
+        self.client.interrupt.side_effect = lambda: interrupt_times.append(clock.now) or True
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {}),
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=170.0),
+                1.0,
+                None,
+                "txt2img",
+            )
+
+        assert interrupt_times == [170.0]
+
+    def test_trustworthy_step_advance_resets_the_stall_clock(self) -> None:
+        clock = _FakeMonotonicClock()
+        interrupt_times: list[float] = []
+
+        def _progress(**_kwargs):
+            step = 11 if clock.now >= 80.0 else 10
+            return ProgressInfo(0.5, None, step, 20, None, {})
+
+        self.client.get_progress.side_effect = _progress
+        self.client.interrupt.side_effect = lambda: interrupt_times.append(clock.now) or True
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {}),
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=170.0),
+                1.0,
+                None,
+                "txt2img",
+            )
+
+        assert interrupt_times == [170.0]
+
+    def test_new_active_generation_marker_resets_the_stall_clock(self) -> None:
+        clock = _FakeMonotonicClock()
+        interrupt_times: list[float] = []
+
+        def _progress(**_kwargs):
+            marker = "20260910120100" if clock.now >= 80.0 else "20260910120000"
+            return ProgressInfo(0.5, None, 10, 20, None, {"job_timestamp": marker})
+
+        self.client.get_progress.side_effect = _progress
+        self.client.interrupt.side_effect = lambda: interrupt_times.append(clock.now) or True
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {}),
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=170.0),
+                1.0,
+                None,
+                "txt2img",
+            )
+
+        assert interrupt_times == [170.0]
+
+    def test_cancellation_keeps_one_interrupt_per_episode(self) -> None:
+        clock = _FakeMonotonicClock()
+        cancel_token = Mock()
+        cancel_token.is_cancelled.return_value = True
+
+        self.pipeline._poll_progress_loop(
+            _ClockBoundStopEvent(clock, stop_after=3.0),
+            1.0,
+            None,
+            "txt2img",
+            cancel_token=cancel_token,
+        )
+
+        self.client.interrupt.assert_called_once_with()
+        self.client.get_progress.assert_not_called()
+
+    def test_completed_steps_enable_fast_response_stall_without_lowering_percent_fallback(self) -> None:
+        clock = _FakeMonotonicClock()
+        interrupt_times: list[float] = []
+        self.client.get_progress.return_value = ProgressInfo(0.981, None, 20, 20, None, {})
+        self.client.interrupt.side_effect = lambda: interrupt_times.append(clock.now) or True
+
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            patch("src.pipeline.executor.POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC", 20.0),
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=20.0),
+                1.0,
+                None,
+                "txt2img",
+            )
+
+        assert interrupt_times == [20.0]
+
+    def test_98_percent_without_completed_steps_keeps_the_ordinary_stall_threshold(self) -> None:
+        clock = _FakeMonotonicClock()
+        interrupt_times: list[float] = []
+        self.client.get_progress.return_value = ProgressInfo(0.981, None, 19, 20, None, {})
+        self.client.interrupt.side_effect = lambda: interrupt_times.append(clock.now) or True
+
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {}),
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=90.0),
+                1.0,
+                None,
+                "txt2img",
+            )
+
+        assert interrupt_times == [90.0]
+
+    def test_stall_warning_logs_bounded_recovery_context(self) -> None:
+        clock = _FakeMonotonicClock()
+        self.pipeline._current_job_id = "job-123"
+        self.client.get_progress.return_value = self._make_frozen_progress()
+
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            patch("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {}),
+            self.assertLogs("src.pipeline.executor", level="WARNING") as log_ctx,
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=60.0),
+                1.0,
+                None,
+                "txt2img",
+            )
+
+        message = "\n".join(log_ctx.output)
+        assert "stage=txt2img" in message
+        assert "job_id=job-123" in message
+        assert "step=10/20" in message
+        assert "warning=60.0s" in message
+        assert "hard=90.0s" in message
+
+    def test_hard_stall_interrupt_precedes_generation_http_timeout(self) -> None:
+        assert STALL_INTERRUPT_THRESHOLD_SEC < DEFAULT_GENERATION_TIMEOUT
+
     def test_stall_interrupt_sent_after_hard_threshold(self) -> None:
         """Interrupt is called when stall exceeds STALL_INTERRUPT_THRESHOLD_SEC."""
         # Use zero-second thresholds so stall is detected immediately
@@ -495,7 +768,7 @@ class TestStallInterrupt(unittest.TestCase):
                 thread.join(timeout=2.0)
 
         stall_warnings = [
-            m for m in log_ctx.output if "PR-HARDEN-004" in m and "stall detected" in m
+            m for m in log_ctx.output if "WebUI generation stall:" in m
         ]
         # 30s throttle means only 1 log in 150ms run
         assert len(stall_warnings) == 1, f"Expected 1 stall log, got {len(stall_warnings)}: {stall_warnings}"
