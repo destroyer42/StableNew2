@@ -67,10 +67,10 @@ Final R4 manual acceptance recorded:
 - Responsive Width/Height acceptance passed.
 
 PR-PACKS-001 Phase 1/1B converged the user library with a lossless backup and
-quarantine before repository storage changed. Phase 2 moves production
-PromptPack authority to the per-user data directory and removes the tracked
-runtime library; final validation remains required on its dedicated branch.
-PR-MVP-070 follows after that Phase 2 branch is accepted.
+quarantine before repository storage changed. Phase 2 is **COMPLETE / INTEGRATED**:
+production PromptPack authority is the per-user versioned JSON library, and the
+tracked runtime library has been removed. The next step is repository/worktree
+cleanup before PR-MVP-070.
 
 ## Highest-value debt
 
@@ -87,8 +87,10 @@ PR-MVP-070 follows after that Phase 2 branch is accepted.
 
 **Now / Next**
 
-- `PR-PACKS-001 Phase 2`: validate and accept the external PromptPack storage
-  migration; it is implemented on its dedicated branch.
+- `PR-PACKS-001 Phase 2`: **COMPLETE / INTEGRATED**; external PromptPack
+  storage is the production authority.
+- Repository/worktree cleanup: remove superseded integration scaffolding only
+  after reviewing the preserved worktrees and branches.
 - `PR-MVP-070`: native SVD XT product slice and hardware preflight, after
   PR-PACKS-001 Phase 2 is accepted.
 
