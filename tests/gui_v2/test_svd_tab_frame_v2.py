@@ -17,6 +17,7 @@ def test_svd_tab_renders(tk_root: tk.Tk) -> None:
         assert hasattr(tab, "model_combo")
         assert hasattr(tab, "animate_btn")
         assert hasattr(tab, "recent_tree")
+        assert hasattr(tab, "admission_label")
         assert hasattr(tab, "capabilities_label")
         assert tab.output_format_var.get() == "mp4"
         assert tab.preset_var.get() == "Recommended Quality / Enhanced"
@@ -129,6 +130,27 @@ def test_svd_tab_refreshes_capabilities_from_controller(tk_root: tk.Tk) -> None:
     try:
         assert "CodeFormer: ready" in tab.capabilities_label.cget("text")
         controller.get_svd_postprocess_capabilities.assert_called()
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_disables_submit_when_admission_is_blocked(tk_root: tk.Tk) -> None:
+    controller = Mock()
+    controller.get_supported_svd_models.return_value = [
+        "stabilityai/stable-video-diffusion-img2vid-xt"
+    ]
+    controller.get_svd_postprocess_capabilities.return_value = {
+        "admission": {
+            "available": False,
+            "blocking_reasons": ["Local-only mode requires a complete cached SVD model."],
+            "warnings": [],
+        }
+    }
+
+    tab = SVDTabFrameV2(tk_root, app_controller=controller)
+    try:
+        assert "admission blocked" in tab.admission_label.cget("text").lower()
+        assert str(tab.animate_btn.cget("state")) == "disabled"
     finally:
         tab.destroy()
 

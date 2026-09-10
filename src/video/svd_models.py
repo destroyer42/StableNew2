@@ -46,8 +46,18 @@ _SUPPORTED_SVD_MODELS: dict[str, SVDModelSpec] = {
 
 
 def get_default_svd_cache_dir() -> Path:
-    repo_root = Path(__file__).resolve().parents[2]
-    return repo_root / "cache"
+    """Return the single per-user Hugging Face hub cache used by SVD.
+
+    This is deliberately not a repository path: Diffusers owns its model cache
+    and already documents these environment variables as its cache contract.
+    """
+    env_hub = os.getenv("HUGGINGFACE_HUB_CACHE")
+    if env_hub:
+        return Path(env_hub).expanduser()
+    env_home = os.getenv("HF_HOME")
+    if env_home:
+        return Path(env_home).expanduser() / "hub"
+    return Path.home() / ".cache" / "huggingface" / "hub"
 
 
 def resolve_svd_cache_dir(cache_dir: str | Path | None = None) -> Path:
@@ -137,15 +147,6 @@ def _iter_svd_cache_roots(*, cache_dir: str | Path | None = None) -> list[Path]:
     candidates: list[Path] = []
     root = resolve_svd_cache_dir(cache_dir)
     candidates.extend((root, root / "hub", root / "huggingface" / "hub"))
-    if cache_dir is None:
-        env_hub = os.getenv("HUGGINGFACE_HUB_CACHE")
-        if env_hub:
-            candidates.append(Path(env_hub).expanduser())
-        env_home = os.getenv("HF_HOME")
-        if env_home:
-            candidates.append(Path(env_home).expanduser() / "hub")
-        candidates.append(Path.home() / ".cache" / "huggingface" / "hub")
-
     unique: list[Path] = []
     seen: set[str] = set()
     for candidate in candidates:

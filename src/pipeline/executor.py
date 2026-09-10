@@ -5360,6 +5360,7 @@ class Pipeline:
                 thumbnail_path=metadata["thumbnail_path"],
                 input_image_path=metadata["source_image_path"],
                 artifact_type="video",
+                job_id=job_id,
             )
             self._record_stage_event(
                 "svd_native",

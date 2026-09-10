@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+import importlib.util
 import os
 import shutil
 import site
@@ -9,11 +11,13 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from src.video.svd_config import SVDConfig
+from src.video.svd_models import is_svd_model_cached, resolve_svd_cache_dir, resolve_svd_model_spec
 from src.video.svd_postprocess import (
     get_codeformer_runtime_issues,
     get_gfpgan_runtime_issues,
     get_realesrgan_runtime_issues,
 )
+from src.video.svd_preprocess import validate_svd_source_image
 
 
 @dataclass(frozen=True)
@@ -25,6 +29,146 @@ class SVDCapability:
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class SVDPreflight:
+    """Read-only admission facts for a native SVD request."""
+
+    available: bool
+    blocking_reasons: tuple[str, ...]
+    warnings: tuple[str, ...]
+    model_id: str
+    model_supported: bool
+    model_cached: bool
+    local_files_only: bool
+    cache_dir: str
+    torch_available: bool
+    diffusers_available: bool
+    pipeline_available: bool
+    cuda_available: bool
+    gpu_name: str | None
+    gpu_memory_gb: float | None
+    core_summary: str
+    source_image_path: str | None
+    source_image_valid: bool | None
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "available": self.available,
+            "blocking_reasons": list(self.blocking_reasons),
+            "warnings": list(self.warnings),
+            "model": {
+                "id": self.model_id,
+                "supported": self.model_supported,
+                "cached": self.model_cached,
+                "local_files_only": self.local_files_only,
+                "cache_dir": self.cache_dir,
+            },
+            "runtime": {
+                "torch_available": self.torch_available,
+                "diffusers_available": self.diffusers_available,
+                "pipeline_available": self.pipeline_available,
+                "cuda_available": self.cuda_available,
+                "gpu_name": self.gpu_name,
+                "gpu_memory_gb": self.gpu_memory_gb,
+            },
+            "core_summary": self.core_summary,
+            "source_image": {
+                "path": self.source_image_path,
+                "valid": self.source_image_valid,
+            },
+        }
+
+
+def get_svd_preflight(config: SVDConfig, *, source_image_path: str | Path | None = None) -> SVDPreflight:
+    """Inspect admission facts without loading a model, downloading, or writing files."""
+    inference = config.inference
+    blockers: list[str] = []
+    warnings: list[str] = []
+    source_path = str(source_image_path) if source_image_path else None
+    source_image_valid: bool | None = None
+    if source_path:
+        try:
+            validate_svd_source_image(source_path)
+            source_image_valid = True
+        except Exception as exc:
+            source_image_valid = False
+            blockers.append(f"Invalid SVD source image: {exc}")
+    try:
+        resolve_svd_model_spec(inference.model_id)
+        model_supported = True
+    except Exception as exc:
+        model_supported = False
+        blockers.append(str(exc))
+
+    cache_dir = resolve_svd_cache_dir(inference.cache_dir)
+    model_cached = model_supported and is_svd_model_cached(inference.model_id, cache_dir=cache_dir)
+    if inference.local_files_only and not model_cached:
+        blockers.append(
+            f"Local-only mode requires a complete cached SVD model at '{cache_dir}'."
+        )
+    elif not model_cached:
+        warnings.append("Model is not cached; online acquisition will be required when the job runs.")
+
+    torch_available = importlib.util.find_spec("torch") is not None
+    diffusers_available = importlib.util.find_spec("diffusers") is not None
+    pipeline_available = False
+    if not torch_available:
+        blockers.append("PyTorch is unavailable; install the supported SVD runtime dependencies.")
+    if not diffusers_available:
+        blockers.append("Diffusers is unavailable; install the supported SVD runtime dependencies.")
+    else:
+        try:
+            pipeline_available = hasattr(
+                importlib.import_module("diffusers"),
+                "StableVideoDiffusionPipeline",
+            )
+        except Exception as exc:
+            warnings.append(f"Diffusers could not be inspected: {exc}")
+        if not pipeline_available:
+            blockers.append("Diffusers StableVideoDiffusionPipeline is unavailable.")
+
+    cuda_available = False
+    gpu_name: str | None = None
+    gpu_memory_gb: float | None = None
+    if torch_available:
+        try:
+            import torch
+
+            cuda_available = bool(torch.cuda.is_available())
+            if cuda_available:
+                gpu_name = str(torch.cuda.get_device_name(0))
+                gpu_memory_gb = round(torch.cuda.get_device_properties(0).total_memory / (1024 ** 3), 1)
+            else:
+                warnings.append("CUDA is unavailable; native SVD may be too slow or unsupported on this host.")
+        except Exception:
+            warnings.append("CUDA capability could not be inspected.")
+
+    summary = (
+        f"XT core: 25 frames at 7 fps, float16, motion bucket 48, noise 0.01, "
+        f"decode chunk 2, {inference.num_inference_steps} steps, CPU offload, forward chunking, "
+        "no optional postprocess."
+    )
+    return SVDPreflight(
+        available=not blockers,
+        blocking_reasons=tuple(blockers),
+        warnings=tuple(warnings),
+        model_id=inference.model_id,
+        model_supported=model_supported,
+        model_cached=bool(model_cached),
+        local_files_only=inference.local_files_only,
+        cache_dir=str(cache_dir),
+        torch_available=torch_available,
+        diffusers_available=diffusers_available,
+        pipeline_available=pipeline_available,
+        cuda_available=cuda_available,
+        gpu_name=gpu_name,
+        gpu_memory_gb=gpu_memory_gb,
+        core_summary=summary,
+        source_image_path=source_path,
+        source_image_valid=source_image_valid,
+    )
 
 
 def get_svd_postprocess_capabilities(config: SVDConfig | None = None) -> dict[str, SVDCapability]:

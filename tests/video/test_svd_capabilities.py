@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.video.svd_capabilities import apply_recommended_svd_defaults, get_svd_postprocess_capabilities
+from src.video.svd_capabilities import (
+    apply_recommended_svd_defaults,
+    get_svd_postprocess_capabilities,
+    get_svd_preflight,
+)
 from src.video.svd_config import SVDConfig
 
 
@@ -114,3 +118,31 @@ def test_apply_recommended_svd_defaults_falls_back_to_gfpgan_when_codeformer_mis
 
     assert result.postprocess.face_restore.enabled is True
     assert result.postprocess.face_restore.method == "GFPGAN"
+
+
+def test_preflight_blocks_local_only_missing_model_without_mutating_cache(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("src.video.svd_capabilities.importlib.util.find_spec", lambda _name: None)
+    monkeypatch.setattr("src.video.svd_capabilities.is_svd_model_cached", lambda *_args, **_kwargs: False)
+
+    cache_dir = tmp_path / "not-created"
+    preflight = get_svd_preflight(
+        SVDConfig.from_dict({"inference": {"local_files_only": True, "cache_dir": str(cache_dir)}})
+    )
+
+    assert preflight.available is False
+    assert preflight.model_supported is True
+    assert preflight.model_cached is False
+    assert any("Local-only" in reason for reason in preflight.blocking_reasons)
+    assert any("PyTorch" in reason for reason in preflight.blocking_reasons)
+    assert not cache_dir.exists()
+
+
+def test_preflight_warns_about_online_acquisition_when_allowed(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr("src.video.svd_capabilities.importlib.util.find_spec", lambda _name: None)
+    monkeypatch.setattr("src.video.svd_capabilities.is_svd_model_cached", lambda *_args, **_kwargs: False)
+
+    preflight = get_svd_preflight(
+        SVDConfig.from_dict({"inference": {"local_files_only": False, "cache_dir": str(tmp_path)}})
+    )
+
+    assert any("online acquisition" in warning for warning in preflight.warnings)

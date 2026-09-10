@@ -94,7 +94,8 @@ populate through the shared WebUI resource projection path.
 - `PR-MVP-060`: **COMPLETE / ACCEPTED**; image create-to-replay vertical slice.
 - `PR-PACKS-001`: **COMPLETE / INTEGRATED**; external PromptPack storage and
   repository/worktree cleanup are complete.
-- `PR-MVP-070`: native SVD XT product slice and hardware preflight.
+- `PR-MVP-070`: **ACTIVE; Phase 1 COMPLETE** — native SVD XT admission,
+  per-user Hugging Face cache policy, and no-GPU queue-to-replay vertical slice.
 
 **Later**
 

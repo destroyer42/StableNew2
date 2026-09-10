@@ -286,6 +286,14 @@ class SVDTabFrameV2(ttk.Frame):
             wraplength=520,
         )
         self.summary_label.grid(row=1, column=0, sticky="nw", pady=(10, 0))
+        self.admission_label = ttk.Label(
+            help_frame,
+            text="",
+            style="Dark.TLabel",
+            justify="left",
+            wraplength=520,
+        )
+        self.admission_label.grid(row=2, column=0, sticky="nw", pady=(10, 0))
         self.capabilities_label = ttk.Label(
             help_frame,
             text="",
@@ -293,7 +301,7 @@ class SVDTabFrameV2(ttk.Frame):
             justify="left",
             wraplength=520,
         )
-        self.capabilities_label.grid(row=2, column=0, sticky="nw", pady=(10, 0))
+        self.capabilities_label.grid(row=3, column=0, sticky="nw", pady=(10, 0))
         self.workflow_help_panel = ActionExplainerPanel(
             help_frame,
             content=build_svd_workflow_guidance(),
@@ -809,6 +817,7 @@ class SVDTabFrameV2(ttk.Frame):
         except Exception:
             pass
         self._refresh_summary(string_path)
+        self._refresh_capabilities()
         if status_message:
             self._set_status(status_message)
 
@@ -923,6 +932,19 @@ class SVDTabFrameV2(ttk.Frame):
             self._capability_text = "Capabilities: unavailable"
             self.capabilities_label.configure(text=self._capability_text)
             return
+        admission = capabilities.get("admission")
+        if isinstance(admission, dict):
+            available = bool(admission.get("available"))
+            blockers = [str(item) for item in admission.get("blocking_reasons", []) if item]
+            warnings = [str(item) for item in admission.get("warnings", []) if item]
+            message = "SVD admission: ready" if available else "SVD admission blocked: " + "; ".join(blockers)
+            if warnings:
+                message += " | " + "; ".join(warnings)
+            self.admission_label.configure(text=message)
+            self.animate_btn.configure(state="normal" if available else "disabled")
+        else:
+            self.admission_label.configure(text="")
+            self.animate_btn.configure(state="normal")
         parts: list[str] = []
         for key in ("codeformer", "realesrgan", "rife", "gfpgan"):
             entry = capabilities.get(key)

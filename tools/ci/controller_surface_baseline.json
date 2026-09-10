@@ -3,7 +3,7 @@
   "metric": "physical_lines",
   "new_controller_limit": 600,
   "ceilings": {
-    "src/controller/app_controller.py": 7799,
+    "src/controller/app_controller.py": 7796,
     "src/controller/job_history_service.py": 647,
     "src/controller/job_service.py": 1246,
     "src/controller/pipeline_controller.py": 1785

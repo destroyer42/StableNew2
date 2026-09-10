@@ -144,6 +144,13 @@ class SVDService:
             kwargs["variant"] = config.variant
 
         cached_snapshot = is_svd_model_cached(config.model_id, cache_dir=cache_dir)
+        if config.local_files_only and not cached_snapshot:
+            raise SVDModelLoadError(
+                f"SVD local-only mode requires a complete cached model '{config.model_id}' "
+                f"at '{cache_dir}'. Download the model into this cache first, or deliberately "
+                "disable local-only mode to permit online acquisition."
+            )
+
         local_error: Exception | None = None
         if cached_snapshot:
             try:
@@ -154,6 +161,12 @@ class SVDService:
                 )
             except Exception as exc:
                 local_error = exc
+                if config.local_files_only:
+                    raise SVDModelLoadError(
+                        f"Failed to load SVD model '{config.model_id}' from the local-only cache "
+                        f"at '{cache_dir}': {exc}. Repair or replace the local cache, or deliberately "
+                        "disable local-only mode to permit online acquisition."
+                    ) from exc
                 logger.warning(
                     "[SVD] Failed to load %s from local cache %s; retrying remote refresh: %s",
                     config.model_id,
@@ -163,6 +176,7 @@ class SVDService:
             else:
                 return self._initialize_pipeline_device(pipeline, torch=torch, config=config)
 
+        # Reaching the remote load is an explicit opt-in through local_files_only=False.
         try:
             pipeline = pipeline_cls.from_pretrained(
                 config.model_id,

@@ -2,7 +2,29 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.video.svd_models import discover_cached_svd_models, get_svd_model_options, is_svd_model_cached
+from src.video.svd_models import (
+    discover_cached_svd_models,
+    get_default_svd_cache_dir,
+    get_svd_model_options,
+    is_svd_model_cached,
+)
+
+
+def test_default_svd_cache_prefers_huggingface_environment(monkeypatch, tmp_path: Path) -> None:
+    hub_cache = tmp_path / "hub-cache"
+    monkeypatch.setenv("HUGGINGFACE_HUB_CACHE", str(hub_cache))
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "ignored-hf-home"))
+
+    assert get_default_svd_cache_dir() == hub_cache
+
+
+def test_default_svd_cache_uses_hf_home_then_user_huggingface_cache(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
+    monkeypatch.setenv("HF_HOME", str(tmp_path / "hf-home"))
+    assert get_default_svd_cache_dir() == tmp_path / "hf-home" / "hub"
+
+    monkeypatch.delenv("HF_HOME", raising=False)
+    assert get_default_svd_cache_dir() == Path.home() / ".cache" / "huggingface" / "hub"
 
 
 def test_discover_cached_svd_models_requires_complete_snapshot(tmp_path: Path) -> None:

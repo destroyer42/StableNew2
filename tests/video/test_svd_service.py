@@ -2,9 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 
 from src.video.svd_config import SVDInferenceConfig
+from src.video.svd_errors import SVDModelLoadError
 from src.video.svd_service import SVDService
 
 
@@ -143,7 +145,7 @@ def test_load_pipeline_prefers_cached_local_snapshot_before_network(monkeypatch,
     assert calls[0]["cache_dir"] == str(tmp_path / "cache")
 
 
-def test_load_pipeline_downloads_to_persistent_cache_when_snapshot_is_missing(monkeypatch, tmp_path) -> None:
+def test_load_pipeline_permits_online_acquisition_when_local_only_is_disabled(monkeypatch, tmp_path) -> None:
     calls: list[dict[str, object]] = []
 
     class _FakePipeline:
@@ -176,8 +178,47 @@ def test_load_pipeline_downloads_to_persistent_cache_when_snapshot_is_missing(mo
         lambda _model_id, *, cache_dir=None: False,
     )
 
-    SVDService()._load_pipeline(SVDInferenceConfig(local_files_only=True))
+    SVDService()._load_pipeline(SVDInferenceConfig(local_files_only=False))
 
     assert len(calls) == 1
     assert calls[0]["local_files_only"] is False
     assert calls[0]["cache_dir"] == str(tmp_path / "cache")
+
+
+def test_load_pipeline_local_only_missing_snapshot_never_uses_remote(monkeypatch, tmp_path) -> None:
+    calls: list[dict[str, object]] = []
+
+    class _FakePipeline:
+        def to(self, _device: str) -> None:
+            return None
+
+    class _FakePipelineCls:
+        @staticmethod
+        def from_pretrained(_model_id: str, **kwargs):
+            calls.append(dict(kwargs))
+            return _FakePipeline()
+
+    fake_torch = SimpleNamespace(
+        float16="float16",
+        bfloat16="bfloat16",
+        float32="float32",
+        cuda=SimpleNamespace(is_available=lambda: False),
+    )
+    fake_diffusers = SimpleNamespace(StableVideoDiffusionPipeline=_FakePipelineCls)
+    monkeypatch.setattr(
+        "src.video.svd_service.importlib.import_module",
+        lambda name: fake_torch if name == "torch" else fake_diffusers,
+    )
+    monkeypatch.setattr(
+        "src.video.svd_service.resolve_svd_cache_dir",
+        lambda _cache_dir=None: tmp_path / "cache",
+    )
+    monkeypatch.setattr(
+        "src.video.svd_service.is_svd_model_cached",
+        lambda _model_id, *, cache_dir=None: False,
+    )
+
+    with pytest.raises(SVDModelLoadError, match="local-only"):
+        SVDService()._load_pipeline(SVDInferenceConfig(local_files_only=True))
+
+    assert calls == []

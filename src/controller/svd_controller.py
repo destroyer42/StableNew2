@@ -7,7 +7,7 @@ from pathlib import Path
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.reprocess_builder import ReprocessJobBuilder
 from src.state.output_routing import OUTPUT_ROUTE_SVD
-from src.video.svd_capabilities import apply_recommended_svd_defaults, get_svd_postprocess_capabilities
+from src.video.svd_capabilities import get_svd_postprocess_capabilities, get_svd_preflight
 from src.video.svd_config import SVDConfig
 from src.video.svd_models import get_default_svd_cache_dir
 from src.video.svd_postprocess import validate_svd_postprocess_config
@@ -46,8 +46,8 @@ class SVDController:
                     "fps": 7,
                     "motion_bucket_id": 48,
                     "noise_aug_strength": 0.01,
-                    "decode_chunk_size": 4,
-                    "num_inference_steps": 36,
+                    "decode_chunk_size": 2,
+                    "num_inference_steps": 25,
                     "local_files_only": True,
                     "cache_dir": str(get_default_svd_cache_dir()),
                 },
@@ -70,13 +70,21 @@ class SVDController:
                 },
             }
         )
-        return apply_recommended_svd_defaults(base_config)
+        return base_config
 
     def get_postprocess_capabilities(self, config: SVDConfig | None = None) -> dict[str, dict[str, object]]:
         return {
             name: capability.to_dict()
             for name, capability in get_svd_postprocess_capabilities(config).items()
         }
+
+    def get_preflight(
+        self,
+        config: SVDConfig,
+        *,
+        source_image_path: str | Path | None = None,
+    ) -> dict[str, object]:
+        return get_svd_preflight(config, source_image_path=source_image_path).to_dict()
 
     def validate_config(self, config: SVDConfig) -> tuple[bool, str | None]:
         try:
@@ -97,6 +105,9 @@ class SVDController:
         valid, reason = self.validate_config(config)
         if not valid:
             raise RuntimeError(reason or "SVD configuration is invalid")
+        preflight = get_svd_preflight(config, source_image_path=source_image_path)
+        if not preflight.available:
+            raise RuntimeError("SVD admission blocked: " + "; ".join(preflight.blocking_reasons))
         builder = ReprocessJobBuilder()
         output_dir = getattr(self._app_controller, "output_dir", None) or "output"
         source_name = Path(source_image_path).stem.replace("_", " ").strip() or "selected image"

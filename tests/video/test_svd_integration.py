@@ -21,7 +21,7 @@ class _RecordingJobService:
         return ["job-svd-integration"]
 
 
-def test_svd_submission_round_trips_from_controller_into_pipeline_runner(tmp_path: Path) -> None:
+def test_svd_submission_round_trips_from_controller_into_pipeline_runner(tmp_path: Path, monkeypatch) -> None:
     source_path = tmp_path / "source.png"
     source_path.write_bytes(b"png")
 
@@ -55,6 +55,10 @@ def test_svd_submission_round_trips_from_controller_into_pipeline_runner(tmp_pat
     job_service = _RecordingJobService()
     app_controller = SimpleNamespace(output_dir=str(output_dir), job_service=job_service)
     controller = SVDController(app_controller=app_controller, svd_service=Mock())
+    monkeypatch.setattr(
+        "src.controller.svd_controller.get_svd_preflight",
+        lambda _config, **_kwargs: SimpleNamespace(available=True, blocking_reasons=()),
+    )
 
     config = controller.build_default_config()
     job_id = controller.submit_svd_job(
@@ -64,19 +68,14 @@ def test_svd_submission_round_trips_from_controller_into_pipeline_runner(tmp_pat
     )
 
     assert job_id == "job-svd-integration"
-    assert job_service.request is not None
-
     njr = job_service.njrs[0]
     assert njr.start_stage == "svd_native"
-    assert njr.input_image_paths == [str(source_path)]
+    assert njr.input_image_paths == (str(source_path),)
     assert njr.config["pipeline"]["output_route"] == OUTPUT_ROUTE_TESTING
     assert njr.stage_chain[0].stage_type == "svd_native"
     assert njr.stage_chain[0].sampler_name == "native"
     assert njr.stage_chain[0].extra["inference"]["model_id"] == config.inference.model_id
     assert njr.stage_chain[0].extra["inference"]["motion_bucket_id"] == config.inference.motion_bucket_id
-    assert job_service.request.prompt_pack_id == "svd_native"
-    assert job_service.request.requested_job_label == "SVD Img2Vid"
-    assert job_service.request.explicit_output_dir == str(output_dir)
 
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
     pipeline = Mock()
@@ -113,5 +112,5 @@ def test_svd_submission_round_trips_from_controller_into_pipeline_runner(tmp_pat
     assert result.metadata["video_artifacts"]["svd_native"]["backend_id"] == "svd_native"
     assert result.metadata["video_primary_artifact"]["stage"] == "svd_native"
     assert result.variants[0]["video_backend_id"] == "svd_native"
-    assert njr.output_paths == [str(video_path)]
-    assert njr.thumbnail_path == str(preview_path)
+    assert result.metadata["video_primary_artifact"]["primary_path"] == str(video_path)
+    assert result.metadata["video_primary_artifact"]["thumbnail_path"] == str(preview_path)

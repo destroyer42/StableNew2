@@ -7169,9 +7169,7 @@ class AppController:
 
         supported = list(get_svd_model_options(cache_dir=cache_dir, local_files_only=local_files_only))
         default_model = get_default_svd_model_id()
-        if default_model in supported:
-            return [default_model, *[model_id for model_id in supported if model_id != default_model]]
-        return supported
+        return [default_model, *[model_id for model_id in supported if model_id != default_model]] if default_model in supported else supported
 
     def build_svd_defaults(self) -> dict[str, Any]:
         return self._get_svd_controller().build_default_config().to_dict()
@@ -7233,13 +7231,12 @@ class AppController:
 
     def get_svd_postprocess_capabilities(self, form_data: dict[str, Any] | None = None) -> dict[str, dict[str, object]]:
         controller = self._get_svd_controller()
-        validated_form_data = (
-            validate_svd_native_execution_config(form_data)
-            if isinstance(form_data, dict)
-            else None
-        )
+        validated_form_data = validate_svd_native_execution_config(form_data) if isinstance(form_data, dict) else None
         config = controller.build_svd_config(validated_form_data) if isinstance(validated_form_data, dict) else None
-        return controller.get_postprocess_capabilities(config)
+        capabilities = controller.get_postprocess_capabilities(config)
+        if config is not None:
+            capabilities["admission"] = controller.get_preflight(config)
+        return capabilities
 
     def submit_svd_job(self, *, source_image_path: str | Path, form_data: dict[str, Any]) -> str:
         controller = self._get_svd_controller()
