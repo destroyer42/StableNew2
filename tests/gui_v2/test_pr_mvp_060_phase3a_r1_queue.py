@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import threading
 import time
 from pathlib import Path
 
@@ -13,6 +14,24 @@ from src.utils.config import ConfigManager
 from src.utils.thread_registry import get_thread_registry
 from tests.helpers.njr_factory import make_pipeline_njr
 from tests.journeys.fakes.fake_pipeline_runner import FakePipelineRunner
+
+
+class _BlockingFakePipelineRunner(FakePipelineRunner):
+    """Backend-only gate used to observe queue controls through the real UI."""
+
+    def __init__(self, blocked_job_ids: set[str]) -> None:
+        super().__init__()
+        self._blocked_job_ids = blocked_job_ids
+        self.started: dict[str, threading.Event] = {}
+        self.release: dict[str, threading.Event] = {}
+
+    def run_njr(self, record, *args, **kwargs):
+        result = super().run_njr(record, *args, **kwargs)
+        job_id = str(record.job_id)
+        self.started.setdefault(job_id, threading.Event()).set()
+        if job_id in self._blocked_job_ids:
+            assert self.release.setdefault(job_id, threading.Event()).wait(timeout=2.0)
+        return result.to_dict()
 
 
 def _pump_until(root, predicate, *, timeout: float = 3.0) -> None:
@@ -207,5 +226,79 @@ def test_pipeline_tab_pack_add_preview_and_queue_projection(
                 queue.mark_cancelled(replay.job_id, "test cleanup")
                 _pump_until_exact_projection(tk_root, controller, tab, [])
     finally:
+        window.cleanup()
+        registry._shutdown_requested = False
+
+
+@pytest.mark.gui
+def test_queue_panel_manual_and_auto_run_worker_lifecycle(
+    tk_root, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Exercise manual and continuous dispatch through the hosted queue controls."""
+    registry = get_thread_registry()
+    registry._shutdown_requested = False
+    monkeypatch.chdir(tmp_path)
+    backend = _BlockingFakePipelineRunner({"manual-a", "manual-b", "auto-a"})
+    config_manager = ConfigManager(presets_dir=tmp_path / "presets")
+    _, _app_state, controller, window = build_v2_app(
+        root=tk_root,
+        threaded=False,
+        config_manager=config_manager,
+        pipeline_runner=backend,
+    )
+
+    def set_auto_run(enabled: bool) -> None:
+        panel = window.pipeline_tab.queue_panel
+        if bool(panel.auto_run_var.get()) != enabled:
+            panel.auto_run_check.invoke()
+        _pump_until(tk_root, lambda: controller.job_service.auto_run_enabled is enabled)
+
+    def submit(*job_ids: str) -> None:
+        records = [make_pipeline_njr(job_id=job_id) for job_id in job_ids]
+        controller.job_service.submit_njrs(records, SubmissionPolicy(start_when_idle=False))
+
+    try:
+        panel = window.pipeline_tab.queue_panel
+        queue = controller.job_service.queue
+        set_auto_run(False)
+        submit("manual-a", "manual-b")
+        _pump_until(tk_root, lambda: panel.send_job_button.instate(["!disabled"]))
+
+        panel.send_job_button.invoke()
+        assert backend.started.setdefault("manual-a", threading.Event()).wait(timeout=2.0)
+        _pump_until(tk_root, lambda: panel.send_job_button.instate(["disabled"]))
+        backend.release.setdefault("manual-a", threading.Event()).set()
+        _pump_until(
+            tk_root,
+            lambda: queue.get_job("manual-a").status in {JobStatus.COMPLETED, JobStatus.FAILED},
+        )
+        assert queue.get_job("manual-a").status is JobStatus.COMPLETED, queue.get_job("manual-a").error_message
+        _pump_until(tk_root, lambda: panel.send_job_button.instate(["!disabled"]))
+        assert [job.job_id for job in queue.list_jobs(JobStatus.QUEUED)] == ["manual-b"]
+
+        panel.send_job_button.invoke()
+        assert backend.started.setdefault("manual-b", threading.Event()).wait(timeout=2.0)
+        backend.release.setdefault("manual-b", threading.Event()).set()
+        _pump_until(tk_root, lambda: queue.get_job("manual-b").status is JobStatus.COMPLETED)
+
+        submit("auto-a", "auto-b")
+        set_auto_run(True)
+        assert backend.started.setdefault("auto-a", threading.Event()).wait(timeout=2.0)
+        set_auto_run(False)
+        backend.release.setdefault("auto-a", threading.Event()).set()
+        _pump_until(tk_root, lambda: queue.get_job("auto-a").status is JobStatus.COMPLETED)
+        _pump_until(tk_root, lambda: not controller.job_service.runner.is_running())
+        assert queue.get_job("auto-b").status is JobStatus.QUEUED
+        _pump_until(tk_root, lambda: panel.send_job_button.instate(["!disabled"]))
+
+        set_auto_run(True)
+        _pump_until(tk_root, lambda: queue.get_job("auto-b").status is JobStatus.COMPLETED)
+        assert [call.record.job_id for call in backend.run_calls] == [
+            "manual-a", "manual-b", "auto-a", "auto-b"
+        ]
+    finally:
+        for event in backend.release.values():
+            event.set()
+        controller.job_service.runner.stop()
         window.cleanup()
         registry._shutdown_requested = False

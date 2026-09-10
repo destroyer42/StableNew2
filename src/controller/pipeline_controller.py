@@ -1377,27 +1377,21 @@ class PipelineController(CorePipelineController):
                 _logger.exception("on_queue_clear_v2 failed", exc_info=True)
 
     def on_set_auto_run_v2(self, enabled: bool) -> None:
+        enabled = bool(enabled)
         if self._app_state:
-            self._app_state.set_auto_run_queue(bool(enabled))
+            self._app_state.set_auto_run_queue(enabled)
+        if self._job_service:
+            self._sync_auto_run_setting(enabled)
+            set_auto_run_enabled = getattr(self._job_service, "set_auto_run_enabled", None)
+            if callable(set_auto_run_enabled):
+                set_auto_run_enabled(enabled, start_if_ready=True)
+            elif enabled:
+                self._job_service.run_next_now()
         if self._job_controller and hasattr(self._job_controller, "set_auto_run_enabled"):
             try:
-                self._job_controller.set_auto_run_enabled(bool(enabled))
+                self._job_controller.set_auto_run_enabled(enabled)
             except Exception:
                 _logger.exception("Failed to sync auto-run to JobExecutionController", exc_info=True)
-        self._sync_auto_run_setting(bool(enabled))
-        if not enabled or not self._job_service:
-            return
-        if self._app_state and bool(getattr(self._app_state, "is_queue_paused", False)):
-            return
-        queue = getattr(self._job_service, "queue", None) or getattr(self._job_service, "job_queue", None)
-        if not queue or not hasattr(queue, "list_jobs"):
-            return
-        try:
-            has_queued = any(job.status == JobStatus.QUEUED for job in queue.list_jobs())
-        except Exception:
-            has_queued = False
-        if has_queued:
-            self._job_service.resume()
 
     def on_pause_queue_v2(self) -> None:
         if not self._job_service:

@@ -12,6 +12,7 @@ from threading import Lock
 from typing import Any, Literal, Protocol
 
 from src.config.app_config import get_process_container_config, get_watchdog_config
+from src.controller import job_service_auto_run
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service_dispatch import dispatch_next_now
@@ -285,12 +286,9 @@ class JobService:
         self.job_queue.register_status_callback(self._handle_job_status_change)
         self._runner_lock = Lock()
         self._worker_started = False
-        # Auto-run control flag (set externally via app_state restoration or UI toggle)
         self.auto_run_enabled = False
-        # Optional dispatcher used to schedule event delivery (e.g., onto UI thread).
-        # Signature: dispatch_fn(callable_zero_arg) -> None
+        job_service_auto_run.bind_continuous_dispatch_policy(self)
         self._event_dispatcher: Callable[[Callable[[], None]], None] | None = None
-        # PR-LEARN-003: Completion handlers for learning experiments
         self._completion_handlers: list[Callable[[Job, Any], None]] = []
         self._callbacks: dict[str, list[Callable[..., None]]] = {}
         self._status_callbacks: dict[str, Callable[[Job, JobStatus], None]] = {}
@@ -350,7 +348,9 @@ class JobService:
         """Optional hooks called on queue/runner activity for external observers."""
         self._on_queue_activity = on_queue_activity
         self._on_runner_activity = on_runner_activity
-        # Note: auto_run_enabled should be set separately via app_state restoration or explicit control
+
+    def set_auto_run_enabled(self, enabled: bool, *, start_if_ready: bool = False) -> None:
+        job_service_auto_run.set_auto_run_enabled(self, enabled, start_if_ready=start_if_ready)
 
     def enqueue(self, job: Job, *, emit_queue_updated: bool = True) -> None:
         self.job_queue.submit(job)

@@ -273,6 +273,7 @@ class SingleNodeJobRunner:
         on_status_change: Callable[[Job, JobStatus], None] | None = None,
         on_activity=None,
         is_paused: Callable[[], bool] | None = None,
+        continuous_dispatch_allowed: Callable[[], bool] | None = None,
     ) -> None:
         self.job_queue = job_queue
         self.run_callable = run_callable
@@ -288,6 +289,18 @@ class SingleNodeJobRunner:
         self._on_activity = on_activity
         # BUGFIX: Pause state callback
         self._is_paused = is_paused
+        self._continuous_dispatch_allowed = continuous_dispatch_allowed or (lambda: True)
+
+    def set_continuous_dispatch_allowed(self, callback: Callable[[], bool]) -> None:
+        """Set the service-owned policy checked before each continuous claim."""
+        self._continuous_dispatch_allowed = callback
+
+    def _can_continue_dispatching(self) -> bool:
+        try:
+            return bool(self._continuous_dispatch_allowed())
+        except Exception:
+            logger.exception("Continuous queue dispatch policy failed closed")
+            return False
 
     def _run_with_webui_retry(self, job: Job) -> dict | None:
         if self.run_callable is None:
@@ -393,6 +406,9 @@ class SingleNodeJobRunner:
             if self._is_paused and self._is_paused():
                 time.sleep(self.poll_interval)
                 continue
+            if not self._can_continue_dispatching():
+                logger.debug("SingleNodeJobRunner retiring because auto-run is disabled")
+                break
             self._cancel_current.clear()
             self._cancel_return_to_queue = False
             job = self.job_queue.claim_next_job()

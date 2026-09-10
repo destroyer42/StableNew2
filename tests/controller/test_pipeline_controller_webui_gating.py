@@ -29,7 +29,7 @@ def test_run_allowed_when_webui_ready(monkeypatch):
     controller._submit_preview_jobs_for_run.assert_called_once()
 
 
-def test_on_set_auto_run_updates_job_service_and_starts_when_queued():
+def test_on_set_auto_run_updates_job_service_runtime_policy_when_queued():
     controller = PipelineController()
     controller._app_state = mock.Mock()
     controller._app_state.is_queue_paused = False
@@ -41,8 +41,9 @@ def test_on_set_auto_run_updates_job_service_and_starts_when_queued():
     controller.on_set_auto_run_v2(True)
 
     assert controller._job_service.auto_run_enabled is True
+    controller._job_service.set_auto_run_enabled.assert_called_once_with(True, start_if_ready=True)
     controller._job_controller.set_auto_run_enabled.assert_called_once_with(True)
-    controller._job_service.resume.assert_called_once()
+    controller._job_service.resume.assert_not_called()
 
 
 def test_sync_auto_run_setting_reads_app_state_flag():

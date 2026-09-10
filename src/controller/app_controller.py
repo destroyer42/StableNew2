@@ -3270,29 +3270,20 @@ class AppController:
 
     def on_set_auto_run_v2(self, enabled: bool) -> None:
         """Set auto-run queue enabled/disabled."""
+        enabled = bool(enabled)
         if self.app_state:
             self.app_state.set_auto_run_queue(enabled)
+        if self.job_service:
+            set_auto_run_enabled = getattr(self.job_service, "set_auto_run_enabled", None)
+            if callable(set_auto_run_enabled):
+                set_auto_run_enabled(enabled, start_if_ready=True)
+            else:
+                self.job_service.auto_run_enabled = enabled
+                if enabled:
+                    self.job_service.run_next_now()
         job_exec = getattr(getattr(self, "pipeline_controller", None), "_job_controller", None)
         if job_exec and hasattr(job_exec, "set_auto_run_enabled"):
             job_exec.set_auto_run_enabled(enabled)
-        if self.job_service:
-            self.job_service.auto_run_enabled = enabled
-            # If enabling auto-run and queue has jobs, start the runner
-            if enabled:
-                queue = getattr(self.job_service, "job_queue", None)
-                app_paused = bool(getattr(self.app_state, "is_queue_paused", False)) if self.app_state else False
-                queue_paused = bool(getattr(queue, "is_paused", False)) if queue and hasattr(queue, "is_paused") else False
-                is_paused = app_paused or queue_paused
-                if is_paused:
-                    self._append_log("[controller] Auto-run enabled but queue is paused; runner not started")
-                elif queue and hasattr(queue, "list_jobs"):
-                    jobs = list(queue.list_jobs())
-                    if jobs:
-                        try:
-                            self.job_service.run_next_now()
-                            self._append_log(f"[controller] Auto-run enabled - starting runner for {len(jobs)} queued job(s)")
-                        except Exception as exc:
-                            self._append_log(f"[controller] Failed to start runner: {exc!r}")
         self._save_queue_state()
 
     def on_pause_job_v2(self) -> None:

@@ -62,12 +62,17 @@ class JobExecutionController:
         self._execute_job = execute_job
         self._auto_run_enabled = True
         self._queue_paused = False
+        owns_runner = runner is None
         self._runner = runner or SingleNodeJobRunner(
             self._queue,
             self._run_job_callback,
             poll_interval=poll_interval,
             on_status_change=self._on_status,
         )
+        if owns_runner:
+            configure_continuous_dispatch = getattr(self._runner, "set_continuous_dispatch_allowed", None)
+            if callable(configure_continuous_dispatch):
+                configure_continuous_dispatch(lambda: self._auto_run_enabled)
         self._worker_thread_name: str | None = None
 
         replay_target: Any | None = replay_runner
@@ -115,7 +120,7 @@ class JobExecutionController:
 
     def start(self) -> None:
         with self._lock:
-            if not self._started:
+            if not self._runner.is_running():
                 runner_type = type(self._runner).__name__
                 self._runner.start()
                 thread = getattr(self._runner, "_worker", None)
@@ -125,7 +130,7 @@ class JobExecutionController:
                     runner_type,
                     self._worker_thread_name or "pending",
                 )
-                self._started = True
+            self._started = True
 
     def set_app_state(self, app_state: Any) -> None:
         """Set the app state for runtime status updates."""
