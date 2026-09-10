@@ -71,7 +71,10 @@ quarantine before repository storage changed. Phase 2 is **COMPLETE / INTEGRATED
 production PromptPack authority is `%LOCALAPPDATA%\StableNew\PromptPacks`, with
 51 valid native JSON PromptPacks. The tracked runtime library and generated LoRA
 cache are not source-controlled. Repository/worktree cleanup is **COMPLETE**;
-the current main is `1d36cacbd5735fed31e788259582729b06c69d51`.
+the current main is `c1f24ca4df6727d29e3319b8f11c34d2bb85ad6e`.
+
+PR-UI-RESOURCES-001 is **COMPLETE**: Base Generation Scheduler resources now
+populate through the shared WebUI resource projection path.
 
 ## Highest-value debt
 
