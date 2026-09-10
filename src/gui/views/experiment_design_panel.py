@@ -15,6 +15,7 @@ from src.learning.variable_selection_contract import normalize_resource_entries
 from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import discover_packs
+from src.promptpacks.paths import resolve_prompt_pack_dir
 
 
 class ExperimentDesignPanel(ttk.Frame):
@@ -311,14 +312,7 @@ class ExperimentDesignPanel(ttk.Frame):
     def _resolve_packs_dir(self) -> Path:
         if self._packs_dir is not None:
             return self._packs_dir
-        if self.prompt_workspace_state:
-            try:
-                current_path = self.prompt_workspace_state.get_current_path()
-                if current_path:
-                    return Path(current_path).parent
-            except Exception:
-                pass
-        return Path("packs")
+        return resolve_prompt_pack_dir()
 
     def _refresh_prompt_pack_choices(self) -> None:
         self._prompt_pack_paths = {

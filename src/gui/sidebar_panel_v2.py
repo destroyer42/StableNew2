@@ -146,7 +146,12 @@ class SidebarPanelV2(ttk.Frame):
         super().__init__(master, style=CARD_FRAME_STYLE, padding=8, **kwargs)
         self.controller = controller
         self.app_state = app_state
-        self.prompt_pack_adapter = prompt_pack_adapter or PromptPackAdapterV2()
+        controller_packs_dir = getattr(controller, "_packs_dir", None)
+        if controller_packs_dir is None:
+            controller_packs_dir = getattr(
+                getattr(controller, "_config_manager", None), "packs_dir", None
+            )
+        self.prompt_pack_adapter = prompt_pack_adapter or PromptPackAdapterV2(controller_packs_dir)
         self._on_apply_pack = on_apply_pack
         self._on_change = on_change
         self._content_visibility_mode = str(

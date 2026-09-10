@@ -42,6 +42,8 @@ from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
+from src.promptpacks.paths import resolve_prompt_pack_dir
+from src.promptpacks.storage import load_prompt_pack_document
 from src.training.style_lora_manager import ResolvedStyleLoRA, StyleLoRAManager
 from src.utils.config import ConfigManager
 from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
@@ -68,11 +70,17 @@ class PromptTabFrame(ttk.Frame):
     """Prompt tab with slot selection, editor, and metadata preview."""
 
     def __init__(
-        self, master: tk.Misc, app_state: AppStateV2 | None = None, *args, **kwargs
+        self,
+        master: tk.Misc,
+        app_state: AppStateV2 | None = None,
+        packs_dir: Path | str | None = None,
+        *args,
+        **kwargs,
     ) -> None:
         super().__init__(master, *args, **kwargs)
         self.workspace_state = PromptWorkspaceState()
         self.app_state = app_state
+        self._packs_dir = resolve_prompt_pack_dir(packs_dir)
         self._content_visibility_listener = None
         self._pending_visibility_refresh = False
         self._visible_pack_infos: list[PromptPackInfo] = []
@@ -1310,7 +1318,7 @@ class PromptTabFrame(ttk.Frame):
     def _refresh_pack_list(self) -> None:
         """Refresh the list of available packs from the packs directory."""
         self.pack_listbox.delete(0, "end")
-        packs_dir = Path("packs")
+        packs_dir = self._packs_dir
         if not packs_dir.exists():
             packs_dir.mkdir(parents=True, exist_ok=True)
             self._visible_pack_infos = []
@@ -1354,30 +1362,7 @@ class PromptTabFrame(ttk.Frame):
         pack_path = pack_info.path
 
         try:
-            if pack_path.suffix.lower() == ".json":
-                self.workspace_state.load_pack(str(pack_path))
-            else:
-                with open(pack_path, encoding="utf-8") as f:
-                    txt_content = f.read()
-
-                all_components = parse_multi_slot_txt(txt_content)
-                if not all_components:
-                    messagebox.showwarning("Load Pack", "No valid prompts found in file.")
-                    return
-
-                json_path = pack_path.with_suffix(".json")
-                if json_path.exists():
-                    self.workspace_state.load_pack(str(json_path))
-                else:
-                    self.workspace_state.new_pack(pack_name, slot_count=len(all_components))
-                    for index, components in enumerate(all_components):
-                        if index < len(self.workspace_state.current_pack.slots):
-                            slot = self.workspace_state.get_slot(index)
-                            slot.text = components.positive_text
-                            slot.negative = components.negative_text
-                            slot.positive_embeddings = components.positive_embeddings
-                            slot.negative_embeddings = components.negative_embeddings
-                            slot.loras = components.loras
+            self.workspace_state.load_pack(str(pack_path))
 
             self._refresh_slot_list()
             self.workspace_state.set_current_slot_index(0)
@@ -1407,25 +1392,16 @@ class PromptTabFrame(ttk.Frame):
             return
 
         import shutil
-        from pathlib import Path
 
-        src_txt = Path("packs") / f"{pack_name}.txt"
-        src_json = Path("packs") / f"{pack_name}.json"
-        dest_txt = Path("packs") / f"{new_name}.txt"
-        dest_json = Path("packs") / f"{new_name}.json"
+        src_json = self._packs_dir / f"{pack_name}.json"
+        dest_json = self._packs_dir / f"{new_name}.json"
 
-        if dest_txt.exists():
+        if dest_json.exists():
             messagebox.showerror("Clone Pack", f"Pack '{new_name}' already exists.")
             return
 
         try:
-            # Copy TXT file
-            if src_txt.exists():
-                shutil.copy2(src_txt, dest_txt)
-
-            # Copy JSON file if it exists
-            if src_json.exists():
-                shutil.copy2(src_json, dest_json)
+            shutil.copy2(src_json, dest_json)
 
             self._refresh_pack_list()
             messagebox.showinfo("Clone Pack", f"Pack cloned successfully as '{new_name}'.")
@@ -1447,25 +1423,15 @@ class PromptTabFrame(ttk.Frame):
         if not new_name or new_name == old_name:
             return
 
-        from pathlib import Path
+        old_json = self._packs_dir / f"{old_name}.json"
+        new_json = self._packs_dir / f"{new_name}.json"
 
-        old_txt = Path("packs") / f"{old_name}.txt"
-        old_json = Path("packs") / f"{old_name}.json"
-        new_txt = Path("packs") / f"{new_name}.txt"
-        new_json = Path("packs") / f"{new_name}.json"
-
-        if new_txt.exists():
+        if new_json.exists():
             messagebox.showerror("Rename Pack", f"Pack '{new_name}' already exists.")
             return
 
         try:
-            # Rename TXT file
-            if old_txt.exists():
-                old_txt.rename(new_txt)
-
-            # Rename JSON file if it exists
-            if old_json.exists():
-                old_json.rename(new_json)
+            old_json.rename(new_json)
 
             self._refresh_pack_list()
             messagebox.showinfo("Rename Pack", f"Pack renamed to '{new_name}'.")
@@ -1487,19 +1453,10 @@ class PromptTabFrame(ttk.Frame):
         ):
             return
 
-        from pathlib import Path
-
-        txt_path = Path("packs") / f"{pack_name}.txt"
-        json_path = Path("packs") / f"{pack_name}.json"
+        json_path = self._packs_dir / f"{pack_name}.json"
 
         try:
-            # Delete TXT file
-            if txt_path.exists():
-                txt_path.unlink()
-
-            # Delete JSON file if it exists
-            if json_path.exists():
-                json_path.unlink()
+            json_path.unlink()
 
             self._refresh_pack_list()
             messagebox.showinfo("Delete Pack", f"Pack '{pack_name}' deleted successfully.")
@@ -1515,54 +1472,17 @@ class PromptTabFrame(ttk.Frame):
 
         pack_name = self.pack_listbox.get(selection[0])
 
-        import re
-        from pathlib import Path
-
-        txt_path = Path("packs") / f"{pack_name}.txt"
-        json_path = Path("packs") / f"{pack_name}.json"
+        json_path = self._packs_dir / f"{pack_name}.json"
 
         errors = []
         warnings = []
 
-        # Check if files exist
-        if not txt_path.exists():
-            errors.append(f"TXT file not found: {txt_path}")
+        if not json_path.exists():
+            errors.append(f"PromptPack JSON not found: {json_path}")
 
         try:
-            # Validate TXT content
-            if txt_path.exists():
-                with open(txt_path, encoding="utf-8") as f:
-                    content = f.read()
-
-                # Check for empty file
-                if not content.strip():
-                    errors.append("TXT file is empty")
-
-                # Check for [[tokens]] without defined matrix slots
-                matrix_tokens = re.findall(r"\[\[([^\]]+)\]\]", content)
-                if matrix_tokens and not json_path.exists():
-                    warnings.append(
-                        f"Found {len(set(matrix_tokens))} matrix tokens but no JSON file"
-                    )
-
-                # Check for LoRA/embedding syntax
-                lora_pattern = r"<lora:([^:>]+)(?::([^>]+))?>"
-                loras = re.findall(lora_pattern, content)
-                for lora_name, weight in loras:
-                    if weight:
-                        try:
-                            w = float(weight)
-                            if w < 0 or w > 2:
-                                warnings.append(f"LoRA '{lora_name}' has unusual weight: {w}")
-                        except ValueError:
-                            errors.append(f"LoRA '{lora_name}' has invalid weight: {weight}")
-
-            # Validate JSON content
             if json_path.exists():
-                import json
-
-                with open(json_path, encoding="utf-8") as f:
-                    json_data = json.load(f)
+                json_data = load_prompt_pack_document(json_path)
 
                 # Check matrix configuration
                 matrix_config = json_data.get("matrix_config", {})
@@ -1692,6 +1612,10 @@ class PromptTabFrame(ttk.Frame):
     def _on_save_pack_as(self) -> None:
         path = filedialog.asksaveasfilename(
             title="Save Prompt Pack As",
+            initialdir=str(self._packs_dir),
+            initialfile=f"{self.workspace_state.current_pack.name}.json"
+            if self.workspace_state.current_pack is not None
+            else "",
             defaultextension=".json",
             filetypes=[("Prompt Packs", "*.json"), ("All Files", "*.*")],
         )

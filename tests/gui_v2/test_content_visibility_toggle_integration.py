@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tkinter as tk
 from pathlib import Path
 from unittest.mock import patch
@@ -16,6 +17,7 @@ from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.photo_optimize.store import PhotoOptimizeStore
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StagePromptInfo
+from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
 from src.services.ui_state_store import UIStateStore
 from src.utils.config import ConfigManager
 from src.utils.image_metadata import ReadPayloadResult
@@ -29,6 +31,19 @@ def _read_text(widget: tk.Text) -> str:
 def _write_image(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (32, 32), color=(90, 110, 130)).save(path)
+
+
+def _write_native_pack(path: Path, text: str) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+                "pack_data": {"slots": [{"index": 0, "text": text}]},
+                "preset_data": {},
+            }
+        ),
+        encoding="utf-8",
+    )
 
 
 def _build_explicit_preview_job() -> NormalizedJobRecord:
@@ -96,14 +111,13 @@ def test_main_window_visibility_setting_moves_into_settings_dialog(
 def test_prompt_tab_filters_pack_list_live_on_mode_change(
     tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir(parents=True, exist_ok=True)
-    (packs_dir / "safe_pack.txt").write_text("portrait of a traveler", encoding="utf-8")
-    (packs_dir / "explicit_pack.txt").write_text("nude portrait reference", encoding="utf-8")
+    _write_native_pack(packs_dir / "safe_pack.json", "portrait of a traveler")
+    _write_native_pack(packs_dir / "explicit_pack.json", "nude portrait reference")
 
     app_state = AppStateV2()
-    tab = PromptTabFrame(tk_root, app_state=app_state)
+    tab = PromptTabFrame(tk_root, app_state=app_state, packs_dir=packs_dir)
     try:
         visible_before = list(tab.pack_listbox.get(0, tk.END))
         assert "safe_pack" in visible_before
@@ -124,21 +138,20 @@ def test_prompt_tab_filters_pack_list_live_on_mode_change(
 def test_prompt_tab_loads_json_backed_pack_without_collapsing_to_txt_only(
     tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir(parents=True, exist_ok=True)
     (packs_dir / "story_pack.json").write_text(
         (
-            '{"pack_data":{"slots":['
+            '{"schema_version":1,"pack_data":{"slots":['
             '{"index":0,"text":"scene one","negative":"bad anatomy"},'
             '{"index":1,"text":"scene two","negative":"bad hands"}'
-            "]}}"
+            ']},"preset_data":{}}'
         ),
         encoding="utf-8",
     )
 
     app_state = AppStateV2()
-    tab = PromptTabFrame(tk_root, app_state=app_state)
+    tab = PromptTabFrame(tk_root, app_state=app_state, packs_dir=packs_dir)
     try:
         visible = list(tab.pack_listbox.get(0, tk.END))
         assert visible == ["story_pack"]
@@ -158,11 +171,11 @@ def test_prompt_tab_loads_json_backed_pack_without_collapsing_to_txt_only(
 def test_pipeline_sidebar_filters_pack_list_live_on_mode_change(
     tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    monkeypatch.chdir(tmp_path)
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir(parents=True, exist_ok=True)
-    (packs_dir / "safe_pack.txt").write_text("portrait of a traveler", encoding="utf-8")
-    (packs_dir / "explicit_pack.txt").write_text("nude portrait reference", encoding="utf-8")
+    _write_native_pack(packs_dir / "safe_pack.json", "portrait of a traveler")
+    _write_native_pack(packs_dir / "explicit_pack.json", "nude portrait reference")
+    monkeypatch.setenv("STABLENEW_PROMPTPACK_DIR", str(packs_dir))
 
     harness = GuiV2Harness(tk_root)
     try:

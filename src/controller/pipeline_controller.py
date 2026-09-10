@@ -380,7 +380,7 @@ class PipelineController(CorePipelineController):
         builder = getattr(self, "_prompt_pack_builder", None)
         if builder is not None:
             return builder
-        packs_dir = getattr(self._config_manager, "packs_dir", "packs")
+        packs_dir = self._config_manager.packs_dir
         builder = PromptPackNormalizedJobBuilder(
             config_manager=self._config_manager,
             job_builder=self._job_builder,

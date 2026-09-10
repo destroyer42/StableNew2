@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from src.pipeline.run_config import PromptSource, RunConfig
+from src.promptpacks.paths import resolve_prompt_pack_dir
 
 from .file_io import get_prompt_packs
 
@@ -22,9 +23,7 @@ class PromptPackInfo:
 
 
 def _ensure_path(value: Path | str | None) -> Path:
-    if value is None:
-        return Path("packs")
-    return Path(value)
+    return resolve_prompt_pack_dir(value)
 
 
 def discover_packs(packs_dir: Path | str | None = None) -> list[PromptPackInfo]:

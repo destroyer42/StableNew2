@@ -496,7 +496,7 @@ class AppController:
         self.webui_process_manager = webui_process_manager
         self._cancel_token: CancelToken | None = None
         self._worker_thread: threading.Thread | None = None
-        self._packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
+        self._packs_dir = Path(packs_dir) if packs_dir is not None else self._config_manager.packs_dir
         repository_path = workspace_paths.job_repository()
         if os.environ.get("PYTEST_CURRENT_TEST"):
             repository_path = (

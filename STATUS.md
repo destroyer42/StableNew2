@@ -1,6 +1,6 @@
 # StableNew status
 
-Updated: 2026-09-08
+Updated: 2026-09-10
 
 ## Repository
 
@@ -66,10 +66,11 @@ Final R4 manual acceptance recorded:
 - Replay created a new queued job and executed successfully.
 - Responsive Width/Height acceptance passed.
 
-PR-MVP-070 is the next product slice. Run PR-PACKS-001 PromptPack user-storage
-migration immediately before PR-MVP-070 to eliminate repository/worktree
-user-data contamination. Do not migrate PromptPack storage as part of this
-closeout.
+PR-PACKS-001 Phase 1/1B converged the user library with a lossless backup and
+quarantine before repository storage changed. Phase 2 moves production
+PromptPack authority to the per-user data directory and removes the tracked
+runtime library; final validation remains required on its dedicated branch.
+PR-MVP-070 follows after that Phase 2 branch is accepted.
 
 ## Highest-value debt
 
@@ -86,8 +87,10 @@ closeout.
 
 **Now / Next**
 
+- `PR-PACKS-001 Phase 2`: validate and accept the external PromptPack storage
+  migration; it is implemented on its dedicated branch.
 - `PR-MVP-070`: native SVD XT product slice and hardware preflight, after
-  PR-PACKS-001 PromptPack user-storage migration.
+  PR-PACKS-001 Phase 2 is accepted.
 
 **Later**
 

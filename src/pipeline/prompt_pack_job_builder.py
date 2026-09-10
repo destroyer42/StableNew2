@@ -87,7 +87,7 @@ class PromptPackNormalizedJobBuilder:
         job_builder: JobBuilderV2,
         prompt_resolver: UnifiedPromptResolver | None = None,
         config_resolver: UnifiedConfigResolver | None = None,
-        packs_dir: Path | str = "packs",
+        packs_dir: Path | str | None = None,
         lora_manager: LoRAManager | None = None,
         style_lora_manager: StyleLoRAManager | None = None,
     ) -> None:
@@ -95,7 +95,7 @@ class PromptPackNormalizedJobBuilder:
         self._job_builder = job_builder
         self._prompt_resolver = prompt_resolver or UnifiedPromptResolver()
         self._config_resolver = config_resolver or UnifiedConfigResolver()
-        self._packs_dir = Path(packs_dir)
+        self._packs_dir = Path(packs_dir) if packs_dir is not None else config_manager.packs_dir
         self._lora_manager = lora_manager
         self._style_lora_manager = style_lora_manager
         self._pack_rows_cache: dict[tuple[Any, ...], list[PackRow]] = {}

@@ -24,6 +24,7 @@ class LayoutManagerV2:
 
         app_state = getattr(mw, "app_state", None)
         app_controller = getattr(mw, "app_controller", None)
+        packs_dir = getattr(app_controller, "_packs_dir", None)
         pipeline_controller = getattr(mw, "pipeline_controller", None)
         prompt_workspace_state = getattr(mw, "prompt_workspace_state", None)
         theme = getattr(mw, "theme", None)
@@ -34,12 +35,12 @@ class LayoutManagerV2:
         else:
 
             def _make_prompt(parent):
-                return PromptTabFrame(parent, app_state=app_state)
+                return PromptTabFrame(parent, app_state=app_state, packs_dir=packs_dir)
 
             mw.prompt_tab = (
                 mw.add_tab("prompt", "Prompt", _make_prompt)
                 if hasattr(mw, "add_tab")
-                else PromptTabFrame(notebook, app_state=app_state)
+                else PromptTabFrame(notebook, app_state=app_state, packs_dir=packs_dir)
             )
 
         if hasattr(mw, "get_tab") and mw.get_tab("pipeline") is not None:

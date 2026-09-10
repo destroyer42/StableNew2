@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import tkinter as tk
 from pathlib import Path
 
@@ -9,8 +10,8 @@ import pytest
 
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
-from src.gui.main_window_v2 import MainWindow
-from src.gui.main_window_v2 import MainWindowV2
+from src.gui.main_window_v2 import MainWindow, MainWindowV2
+from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
 from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
 
@@ -29,7 +30,16 @@ def _fake_packs_dir(tmp_path: Path) -> Path:
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir(parents=True, exist_ok=True)
     for name in ("alpha", "beta"):
-        (packs_dir / f"{name}.txt").write_text("prompt1\nneg: bad\n", encoding="utf-8")
+        (packs_dir / f"{name}.json").write_text(
+            json.dumps(
+                {
+                    "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+                    "pack_data": {"slots": [{"index": 0, "text": "prompt1"}]},
+                    "preset_data": {},
+                }
+            ),
+            encoding="utf-8",
+        )
     return packs_dir
 
 
@@ -92,7 +102,7 @@ def test_load_and_edit_pack_require_selection(tmp_path: Path, tk_root):
     )
     controller._packs_dir = packs_dir
     controller.load_packs()
-    expected_path = str(packs_dir / "alpha.txt")
+    expected_path = str(packs_dir / "alpha.json")
 
     controller.on_load_pack()
     controller.on_edit_pack()
@@ -125,7 +135,7 @@ def test_find_pack_by_id_falls_back_to_disk_when_visible_cache_is_stale(tmp_path
 
     assert found is not None
     assert found.name == "alpha"
-    assert found.path == packs_dir / "alpha.txt"
+    assert found.path == packs_dir / "alpha.json"
 
 
 class NoopRunner:

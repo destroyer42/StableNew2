@@ -14,9 +14,13 @@ from src.pipeline.job_models_v2 import NormalizedJobRecord
 def _make_pack_files(tmp_path: Path, pack_id: str, prompt: str) -> None:
     pack_dir = tmp_path
     pack_dir.mkdir(parents=True, exist_ok=True)
-    (pack_dir / f"{pack_id}.txt").write_text(f"{prompt}\nneg: bad\n", encoding="utf-8")
     config = {
-        "version": "1.0",
+        "schema_version": 1,
+        "pack_data": {
+            "name": pack_id,
+            "slots": [{"index": 0, "text": prompt, "negative": "bad"}],
+        },
+        "preset_data": {
         "pipeline": {"images_per_prompt": 1, "loop_count": 1},
         "txt2img": {
             "model": "test-model",
@@ -25,6 +29,7 @@ def _make_pack_files(tmp_path: Path, pack_id: str, prompt: str) -> None:
             "cfg_scale": 7.0,
             "width": 256,
             "height": 256,
+        },
         },
     }
     (pack_dir / f"{pack_id}.json").write_text(json.dumps(config), encoding="utf-8")
@@ -52,9 +57,6 @@ def test_prompt_pack_builder_produces_njrs_for_single_entry(
     _make_pack_files(pack_dir, pack_id, "hello world")
     controller = PipelineController(config_manager=None)
     controller._config_manager.packs_dir = pack_dir  # type: ignore[attr-defined]
-    controller._config_manager.load_pack_config = lambda pid: json.loads(  # type: ignore[attr-defined]
-        (pack_dir / f"{pid}.json").read_text(encoding="utf-8")
-    )
 
     entry = make_minimal_pack_job_entry(pack_id=pack_id, prompt="hello world")
     njrs = controller._build_njrs_from_pack_bundle([entry])
@@ -67,9 +69,6 @@ def test_multiple_pack_entries_produce_multiple_njrs(pack_dir: Path):
     _make_pack_files(pack_dir, "pack2", "prompt2")
     controller = PipelineController(config_manager=None)
     controller._config_manager.packs_dir = pack_dir  # type: ignore[attr-defined]
-    controller._config_manager.load_pack_config = lambda pid: json.loads(  # type: ignore[attr-defined]
-        (pack_dir / f"{pid}.json").read_text(encoding="utf-8")
-    )
 
     entry1 = make_minimal_pack_job_entry(pack_id="pack1", prompt="prompt1")
     entry2 = make_minimal_pack_job_entry(pack_id="pack2", prompt="prompt2")

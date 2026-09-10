@@ -950,7 +950,7 @@ neg: malformed, bad anatomy, low quality"""
 
         file_path = filedialog.askopenfilename(
             title="Open Prompt Pack",
-            initialdir="packs",
+            initialdir=str(self.config_manager.packs_dir),
             filetypes=[("Text files", "*.txt"), ("TSV files", "*.tsv"), ("All files", "*.*")],
         )
 
@@ -962,12 +962,12 @@ neg: malformed, bad anatomy, low quality"""
         # Determine proposed filename
         base_name = self.pack_name_var.get().strip() or "new_pack"
         ext = (self.format_var.get() or "txt").lower()
-        initial = str(Path("packs") / f"{base_name}.{ext}")
+        initial = str(self.config_manager.packs_dir / f"{base_name}.{ext}")
 
         file_path = filedialog.asksaveasfilename(
             title="Save Prompt Pack As",
             initialfile=Path(initial).name,
-            initialdir="packs",
+            initialdir=str(self.config_manager.packs_dir),
             defaultextension=f".{ext}",
             filetypes=[
                 ("Text files", "*.txt"),
@@ -1069,7 +1069,7 @@ neg: malformed, bad anatomy, low quality"""
             or (self.current_pack_path.suffix[1:] if self.current_pack_path else "txt")
         ).lower()
         counter = 1
-        while (Path("packs") / f"{clone_name}.{ext}").exists():
+        while (self.config_manager.packs_dir / f"{clone_name}.{ext}").exists():
             clone_name = f"{original_name}_copy_{counter}"
             counter += 1
 

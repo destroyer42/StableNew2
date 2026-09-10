@@ -46,7 +46,7 @@ def test_pack_config_preserves_stage_flags() -> None:
         original_cwd = Path.cwd()
         try:
             os.chdir(tmpdir_path)
-            config_mgr = ConfigManager(presets_dir=presets_dir)
+            config_mgr = ConfigManager(presets_dir=presets_dir, packs_dir=packs_dir)
             loaded_config = config_mgr.load_pack_config("test_pack.txt")
         finally:
             os.chdir(original_cwd)
@@ -122,7 +122,7 @@ def test_different_flag_combinations() -> None:
         original_cwd = Path.cwd()
         os.chdir(tmpdir_path)
         try:
-            config_mgr = ConfigManager(presets_dir=presets_dir)
+            config_mgr = ConfigManager(presets_dir=presets_dir, packs_dir=packs_dir)
 
             for test_case in test_cases:
                 name = test_case["name"]

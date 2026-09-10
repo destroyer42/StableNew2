@@ -236,7 +236,11 @@ class MainWindowV2:
         self._tab_registry: dict[str, tk.Widget] = {}
 
         # Prompt tab (compatibility for journey tests / prompt workspace access)
-        self.prompt_tab = PromptTabFrame(self.center_notebook, app_state=self.app_state)
+        self.prompt_tab = PromptTabFrame(
+            self.center_notebook,
+            app_state=self.app_state,
+            packs_dir=getattr(self.app_controller, "_packs_dir", None),
+        )
         self.add_tab("prompt", "Prompt", self.prompt_tab)
 
         # PR-CORE1-D14: Always create and assign pipeline_tab for test/compat

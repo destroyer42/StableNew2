@@ -95,7 +95,9 @@ def migrate_pack_json(json_path: Path) -> bool:
 
 def main():
     """Migrate all pack JSON files."""
-    packs_dir = Path("packs")
+    from src.promptpacks.paths import resolve_prompt_pack_dir
+
+    packs_dir = resolve_prompt_pack_dir()
     
     if not packs_dir.exists():
         print("No packs/ directory found")

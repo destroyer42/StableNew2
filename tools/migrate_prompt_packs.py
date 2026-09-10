@@ -11,12 +11,13 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 if str(REPOSITORY_ROOT) not in sys.path:
     sys.path.insert(0, str(REPOSITORY_ROOT))
 
+from src.promptpacks.paths import resolve_prompt_pack_dir  # noqa: E402
 from src.promptpacks.storage import MigrationAction, migrate_legacy_pairs  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--packs-dir", type=Path, default=Path("packs"))
+    parser.add_argument("--packs-dir", type=Path, default=resolve_prompt_pack_dir())
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--backup-dir", type=Path)
     args = parser.parse_args()

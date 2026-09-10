@@ -53,7 +53,7 @@ def test_pack_config_preserves_stage_flags():
         previous_cwd = Path.cwd()
         try:
             os.chdir(tmpdir_path)
-            config_mgr = ConfigManager(presets_dir)
+            config_mgr = ConfigManager(presets_dir, packs_dir=packs_dir)
             loaded_config = config_mgr.load_pack_config("test_pack.txt")
         finally:
             os.chdir(previous_cwd)
@@ -130,7 +130,7 @@ def test_different_flag_combinations():
         previous_cwd = Path.cwd()
         try:
             os.chdir(tmpdir_path)
-            config_mgr = ConfigManager(presets_dir)
+            config_mgr = ConfigManager(presets_dir, packs_dir=packs_dir)
 
             print("\nTesting various flag combinations...")
             for test_case in test_cases:

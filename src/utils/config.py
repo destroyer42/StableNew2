@@ -110,15 +110,24 @@ def normalize_lora_strengths(raw: Iterable[dict[str, Any]] | None) -> list[LoraR
 class ConfigManager:
     """Manages configuration, presets, and simple engine settings."""
 
-    def __init__(self, presets_dir: str | Path = "presets"):
+    def __init__(
+        self,
+        presets_dir: str | Path = "presets",
+        packs_dir: str | Path | None = None,
+    ):
         """
         Initialize configuration manager.
 
         Args:
-            presets_dir: Directory containing preset files
+            presets_dir: Directory containing preset files.
+            packs_dir: Explicit PromptPack directory. When omitted, use the
+                canonical per-user storage resolver.
         """
         self.presets_dir = Path(presets_dir)
         self.presets_dir.mkdir(exist_ok=True)
+        from src.promptpacks.paths import resolve_prompt_pack_dir
+
+        self.packs_dir = resolve_prompt_pack_dir(packs_dir)
         self._global_negative_path = self.presets_dir / "global_negative.txt"
         self._global_negative_cache: str | None = None
         self._global_positive_path = self.presets_dir / "global_positive.txt"
@@ -528,7 +537,7 @@ class ConfigManager:
         Return the expected config file path for a prompt pack.
         """
         pack_stem = Path(pack_name).stem
-        return Path("packs") / f"{pack_stem}.json"
+        return self.packs_dir / f"{pack_stem}.json"
 
     def get_pack_config(self, pack_name: str) -> dict[str, Any]:
         """

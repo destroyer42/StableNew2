@@ -9,6 +9,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 
+from src.promptpacks.paths import resolve_prompt_pack_dir
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 
@@ -27,7 +28,7 @@ class PromptPackAdapterV2:
     """Expose prompt packs to GUI V2 without Tk or controller dependencies."""
 
     def __init__(self, packs_dir: Path | str | None = None) -> None:
-        self.packs_dir = Path(packs_dir) if packs_dir is not None else Path("packs")
+        self.packs_dir = resolve_prompt_pack_dir(packs_dir)
 
     def load_summaries(self) -> list[PromptPackSummary]:
         """Return prompt pack summaries for display."""
