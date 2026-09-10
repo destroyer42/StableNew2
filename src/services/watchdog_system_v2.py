@@ -30,6 +30,7 @@ class SystemWatchdogV2:
         self._lock = threading.Lock()
         self._last_trigger_ts: dict[str, float] = defaultdict(lambda: 0.0)
         self._in_flight: dict[str, bool] = defaultdict(lambda: False)
+        self._runner_stall_episode_active = False
         self._loop_period = (
             float(check_interval_s) if check_interval_s is not None else float(self.LOOP_PERIOD_S)
         )
@@ -101,7 +102,13 @@ class SystemWatchdogV2:
                 self._trigger("ui_heartbeat_stall", now)
 
         if self._queue_running_but_stalled(now):
-            self._trigger("queue_runner_stall", now)
+            if not self._runner_stall_episode_active:
+                self._runner_stall_episode_active = True
+                self._trigger("queue_runner_stall", now)
+        else:
+            if self._runner_stall_episode_active:
+                self._last_trigger_ts["queue_runner_stall"] = 0.0
+            self._runner_stall_episode_active = False
 
     def _queue_running_but_stalled(self, now: float) -> bool:
         runner_ts = getattr(self.app, "last_runner_activity_ts", None)
@@ -152,6 +159,7 @@ class SystemWatchdogV2:
             "shutdown_in_progress": bool(getattr(self.app, "_is_shutting_down", False)),
             "main_thread_alive": bool(threading.main_thread().is_alive()),
         }
+        context.update(self._runner_activity_context())
 
         def _done_callback():
             with self._lock:
@@ -221,3 +229,17 @@ class SystemWatchdogV2:
                 )
         except Exception:
             _done_callback()
+
+    def _runner_activity_context(self) -> dict[str, object]:
+        """Collect cheap current-run fields without creating another state store."""
+        runtime_status = getattr(self.app, "_last_runtime_status", None)
+        running_job = getattr(getattr(self.app, "app_state", None), "running_job", None)
+        return {
+            "job_id": getattr(runtime_status, "job_id", None)
+            or getattr(running_job, "job_id", None),
+            "current_stage": getattr(runtime_status, "current_stage", None)
+            or getattr(running_job, "current_stage", None),
+            "latest_progress": getattr(runtime_status, "progress", None)
+            if runtime_status is not None
+            else getattr(running_job, "progress", None),
+        }

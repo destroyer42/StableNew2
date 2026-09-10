@@ -295,6 +295,10 @@ class SingleNodeJobRunner:
         """Set the service-owned policy checked before each continuous claim."""
         self._continuous_dispatch_allowed = callback
 
+    def set_activity_callback(self, callback) -> None:
+        """Bind the existing runner activity signal to an external observer."""
+        self._on_activity = callback
+
     def _can_continue_dispatching(self) -> bool:
         try:
             return bool(self._continuous_dispatch_allowed())

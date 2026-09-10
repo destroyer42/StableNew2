@@ -633,11 +633,8 @@ class AppController:
             except Exception:
                 pass
         # PR-CORE1-D21B: Wire activity hooks for queue/runner heartbeats
-        if (
-            hasattr(self.pipeline_controller, "job_service")
-            and self.pipeline_controller.job_service is not None
-        ):
-            self.pipeline_controller.job_service.set_activity_hooks(
+        if self.job_service is not None and hasattr(self.job_service, "set_activity_hooks"):
+            self.job_service.set_activity_hooks(
                 on_queue_activity=self.notify_queue_activity,
                 on_runner_activity=self.notify_runner_activity,
             )
