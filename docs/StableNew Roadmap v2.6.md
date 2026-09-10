@@ -2,7 +2,7 @@
 
 Status: CURRENT AND ACTIVE
 Owner: Rob
-Updated: 2026-09-07
+Updated: 2026-09-10
 
 This is the only active roadmap. `STATUS.md` identifies the work happening now;
 Git history preserves completed plans and earlier sequencing.
@@ -64,13 +64,14 @@ feature.
 | 6 | `PR-MVP-040` | Complete | SQLite repository and offline legacy import |
 | 7 | `PR-MVP-045` | Complete | PromptPack draft, preview, and queue repair |
 | 8 | `PR-MVP-050` | Complete | One-file JSON PromptPack convergence |
-| 9 | `PR-MVP-060` | Next | Image create-to-replay vertical slice |
-| 10 | `PR-MVP-070` | Planned | Native SVD XT vertical slice |
+| 9 | `PR-MVP-060` | Complete | Image create-to-replay vertical slice |
+| 10 | `PR-MVP-070` | Next | Native SVD XT vertical slice |
 | 11 | `PR-MVP-080` | Planned | Operator UX, setup, diagnostics, lint cleanup |
 | 12 | `PR-MVP-090` | Planned | Clean-machine release acceptance |
 
-Roadmap progress is 9 of 13 rows (69%). Functional MVP acceptance is still
-open because the product vertical slices and release proof follow.
+Roadmap progress is 10 of 13 rows (77%). Functional MVP remains incomplete
+because native SVD XT, operator readiness, and clean-machine release proof
+remain.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair
 
@@ -90,15 +91,21 @@ backup-first, semantic, conflict-reporting, and idempotent.
 
 Exit achieved: author/import/save/reload/compile works from JSON alone.
 
-## Remaining work
+### PR-PACKS-001 — external PromptPack storage hygiene
+
+This intervening repository and user-data hygiene PR converged the active
+PromptPack library, preserved migration backup and quarantine evidence, moved
+production authority to `%LOCALAPPDATA%\StableNew\PromptPacks`, and retired
+superseded PromptPack worktrees and branches. It did not renumber the MVP
+sequence.
 
 ### PR-MVP-060 — image vertical slice
 
-Stabilize one conservative txt2img path, then include only optional stages that
-pass deterministic coverage. Wire progress, cancellation, errors, artifacts,
-history, and replay end to end.
+The conservative txt2img path, optional stages, queue policy, progress,
+cancellation, artifacts, history, replay, and real-WebUI GUI acceptance are
+complete and accepted.
 
-Exit: the mocked journey passes and a real-WebUI GUI smoke is recorded.
+## Remaining work
 
 ### PR-MVP-070 — native SVD XT
 
@@ -142,6 +149,6 @@ rollback steps.
 
 ## Next action
 
-Specify and approve `PR-MVP-060` as the next coherent product change. PromptPack
-authorship and durable job state now have single authorities, so the image
-create-to-replay vertical slice can be proven end to end.
+Specify/execute `PR-MVP-070` as the next coherent product slice. PromptPack
+authorship and durable job state now have single authorities, and the accepted
+image vertical slice is complete.

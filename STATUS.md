@@ -43,8 +43,8 @@ release proof and the native video slice remain future work.
 Repository convergence, simplification, transactional job persistence,
 PR-MVP-045 PromptPack draft/preview/queue repair, and PR-MVP-050 one-file JSON
 PromptPack convergence are complete. PR-MVP-060 Phase 1 and Phase 2A/2B/2C/2C1/2D
-are verified on `mvp/060-image-vertical-slice`. Final implementation is R4
-`57a197f272ae66bfc240fa3cd80e310b29ec0e47` and its closeout descendant. The
+are verified on `main`. The final image implementation and acceptance are
+integrated in the current main baseline. The
 consolidated image journey composes live Pack Selector draft/preview, queue
 persistence, manual dispatch, deterministic model synchronization, progress,
 artifacts, history, and replay lineage. Do not revive recovery, hygiene, or
@@ -68,9 +68,10 @@ Final R4 manual acceptance recorded:
 
 PR-PACKS-001 Phase 1/1B converged the user library with a lossless backup and
 quarantine before repository storage changed. Phase 2 is **COMPLETE / INTEGRATED**:
-production PromptPack authority is the per-user versioned JSON library, and the
-tracked runtime library has been removed. The next step is repository/worktree
-cleanup before PR-MVP-070.
+production PromptPack authority is `%LOCALAPPDATA%\StableNew\PromptPacks`, with
+51 valid native JSON PromptPacks. The tracked runtime library and generated LoRA
+cache are not source-controlled. Repository/worktree cleanup is **COMPLETE**;
+the current main is `1d36cacbd5735fed31e788259582729b06c69d51`.
 
 ## Highest-value debt
 
@@ -87,12 +88,10 @@ cleanup before PR-MVP-070.
 
 **Now / Next**
 
-- `PR-PACKS-001 Phase 2`: **COMPLETE / INTEGRATED**; external PromptPack
-  storage is the production authority.
-- Repository/worktree cleanup: remove superseded integration scaffolding only
-  after reviewing the preserved worktrees and branches.
-- `PR-MVP-070`: native SVD XT product slice and hardware preflight, after
-  PR-PACKS-001 Phase 2 is accepted.
+- `PR-MVP-060`: **COMPLETE / ACCEPTED**; image create-to-replay vertical slice.
+- `PR-PACKS-001`: **COMPLETE / INTEGRATED**; external PromptPack storage and
+  repository/worktree cleanup are complete.
+- `PR-MVP-070`: native SVD XT product slice and hardware preflight.
 
 **Later**
 
@@ -103,10 +102,13 @@ cleanup before PR-MVP-070.
 
 Latest verified baseline for the converged product state:
 
-- repository completeness: 431 tracked Python source files; verification passed
+- repository completeness: 433 tracked Python source files; verification passed
   on the committed branch;
-- strict local collection: 3,066 tests plus 2 optional-OpenCV module skips;
-- required smoke: 95 passing on Python 3.11 and 3.12;
+- strict local collection: 3,090 tests;
+- required smoke: 97 passing;
+- local gate: PASS;
+- required Python 3.11 CI: PASS;
+- required Python 3.12 CI: PASS;
 - bounded mypy smoke: passing;
 - Ruff 0.14.9 baseline: 1,610 findings against a maximum of 2,208.
 
@@ -114,9 +116,10 @@ Final R4 manual GUI acceptance passed on the real StableNew desktop GUI with
 real A1111, including queue policy, model synchronization, txt2img,
 artifact/history, replay, and responsive dimensions as recorded above.
 
-Phase 2D focused acceptance passed 41 tests with one Tk-dependent skip because
-the available local Python 3.10 installation lacks a usable Tcl/Tk runtime;
-required Python 3.11/3.12 CI was not rerun in this phase.
+The integrated PromptPack storage path resolved the default authority to
+`%LOCALAPPDATA%\StableNew\PromptPacks` and discovered 51 valid native packs.
+The generated LoRA cache was backed up, removed from tracking, and verified to
+regenerate without dirty-tree noise.
 
 Run focused tests, then `python tools/ci/run_pr_gate.py`. GitHub required CI on
 Python 3.11 and 3.12 is the canonical integration verdict.
