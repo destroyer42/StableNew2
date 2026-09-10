@@ -95,6 +95,7 @@ populate through the shared WebUI resource projection path.
 - `PR-PACKS-001`: **COMPLETE / INTEGRATED**; external PromptPack storage and
   repository/worktree cleanup are complete.
 - `PR-MVP-070`: native SVD XT product slice and hardware preflight.
+- `PR-HARDEN-008`: **ACTIVE**; Phase 1 runner watchdog heartbeat diagnostics.
 
 **Later**
 

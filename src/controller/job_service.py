@@ -345,9 +345,9 @@ class JobService:
         self._job_lifecycle_logger = logger
 
     def set_activity_hooks(self, *, on_queue_activity=None, on_runner_activity=None) -> None:
-        """Optional hooks called on queue/runner activity for external observers."""
         self._on_queue_activity = on_queue_activity
         self._on_runner_activity = on_runner_activity
+        set_runner_activity(on_runner_activity) if callable(set_runner_activity := getattr(self.runner, "set_activity_callback", None)) else None
 
     def set_auto_run_enabled(self, enabled: bool, *, start_if_ready: bool = False) -> None:
         job_service_auto_run.set_auto_run_enabled(self, enabled, start_if_ready=start_if_ready)
