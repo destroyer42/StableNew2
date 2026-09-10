@@ -1,13 +1,42 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import tkinter as tk
 
+from src.controller.svd_controller import SVDController
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
 from src.video.svd_models import get_default_svd_cache_dir
+
+
+class _FakeVar:
+    def __init__(self, value: str = "") -> None:
+        self.value = value
+
+    def get(self) -> str:
+        return self.value
+
+
+class _FakeWidget:
+    def __init__(self) -> None:
+        self.values: dict[str, object] = {}
+
+    def configure(self, **kwargs: object) -> None:
+        self.values.update(kwargs)
+
+
+def _capability_projection_tab(controller: Mock, source: str = "") -> SVDTabFrameV2:
+    tab = SVDTabFrameV2.__new__(SVDTabFrameV2)
+    tab.app_controller = controller
+    tab.source_image_var = _FakeVar(source)
+    tab.capabilities_label = _FakeWidget()
+    tab.admission_label = _FakeWidget()
+    tab.animate_btn = _FakeWidget()
+    tab._build_form_data = lambda: {}
+    return tab
 
 
 def test_svd_tab_renders(tk_root: tk.Tk) -> None:
@@ -27,6 +56,17 @@ def test_svd_tab_renders(tk_root: tk.Tk) -> None:
         assert tab.noise_aug_var.get() == 0.01
         assert tab.local_files_only_var.get() is True
         assert tab.cache_dir_var.get() == str(get_default_svd_cache_dir())
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_help_sections_use_distinct_rows(tk_root: tk.Tk) -> None:
+    tab = SVDTabFrameV2(tk_root)
+    try:
+        assert int(tab.summary_label.grid_info()["row"]) == 1
+        assert int(tab.admission_label.grid_info()["row"]) == 2
+        assert int(tab.capabilities_label.grid_info()["row"]) == 3
+        assert int(tab.workflow_help_panel.grid_info()["row"]) == 4
     finally:
         tab.destroy()
 
@@ -155,6 +195,102 @@ def test_svd_tab_disables_submit_when_admission_is_blocked(tk_root: tk.Tk) -> No
         tab.destroy()
 
 
+def test_svd_tab_blocks_admission_without_selected_source(tk_root: tk.Tk) -> None:
+    controller = Mock()
+    controller.get_supported_svd_models.return_value = [
+        "stabilityai/stable-video-diffusion-img2vid-xt"
+    ]
+    controller.get_svd_postprocess_capabilities.return_value = {
+        "admission": {
+            "available": False,
+            "blocking_reasons": ["Select a source image."],
+            "warnings": [],
+        }
+    }
+
+    tab = SVDTabFrameV2(tk_root, app_controller=controller)
+    try:
+        assert "Select a source image." in tab.admission_label.cget("text")
+        assert str(tab.animate_btn.cget("state")) == "disabled"
+        assert controller.get_svd_postprocess_capabilities.call_args.kwargs["source_image_path"] is None
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_projects_invalid_source_admission_blocker(tk_root: tk.Tk, tmp_path: Path) -> None:
+    source_path = tmp_path / "missing.png"
+    controller = Mock()
+    controller.get_supported_svd_models.return_value = [
+        "stabilityai/stable-video-diffusion-img2vid-xt"
+    ]
+    controller.get_svd_postprocess_capabilities.side_effect = lambda _form_data, **kwargs: {
+        "admission": {
+            "available": False,
+            "blocking_reasons": [f"Invalid SVD source image: {kwargs['source_image_path']}"],
+            "warnings": [],
+        }
+    }
+
+    tab = SVDTabFrameV2(tk_root, app_controller=controller)
+    try:
+        tab.set_source_image_path(source_path)
+        assert "Invalid SVD source image:" in tab.admission_label.cget("text")
+        assert str(tab.animate_btn.cget("state")) == "disabled"
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_enables_submit_for_valid_source_admission(tk_root: tk.Tk, tmp_path: Path) -> None:
+    source_path = tmp_path / "source.png"
+    source_path.write_bytes(b"png")
+    controller = Mock()
+    controller.get_supported_svd_models.return_value = [
+        "stabilityai/stable-video-diffusion-img2vid-xt"
+    ]
+    controller.get_svd_postprocess_capabilities.side_effect = lambda _form_data, **kwargs: {
+        "admission": {
+            "available": bool(kwargs["source_image_path"]),
+            "blocking_reasons": [],
+            "warnings": [],
+        }
+    }
+
+    tab = SVDTabFrameV2(tk_root, app_controller=controller)
+    try:
+        tab.set_source_image_path(source_path)
+        assert tab.admission_label.cget("text") == "SVD admission: ready"
+        assert str(tab.animate_btn.cget("state")) == "normal"
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_capability_projection_passes_source_without_tk() -> None:
+    controller = Mock()
+    controller.get_svd_postprocess_capabilities.side_effect = lambda _form_data, **kwargs: {
+        "admission": {
+            "available": kwargs["source_image_path"] == "valid.png",
+            "blocking_reasons": (
+                [] if kwargs["source_image_path"] == "valid.png" else ["Select a source image."]
+            ),
+            "warnings": [],
+        }
+    }
+    tab = _capability_projection_tab(controller)
+
+    tab._refresh_capabilities()
+    assert tab.admission_label.values["text"] == "SVD admission blocked: Select a source image."
+    assert tab.animate_btn.values["state"] == "disabled"
+
+    tab.source_image_var.value = "invalid.png"
+    tab._refresh_capabilities()
+    assert controller.get_svd_postprocess_capabilities.call_args.kwargs["source_image_path"] == "invalid.png"
+
+    tab.source_image_var.value = "valid.png"
+    tab._refresh_capabilities()
+    assert tab.admission_label.values["text"] == "SVD admission: ready"
+    assert tab.animate_btn.values["state"] == "normal"
+
+
 def test_svd_tab_applies_runtime_recommended_defaults(tk_root: tk.Tk) -> None:
     controller = Mock()
     controller.get_supported_svd_models.return_value = [
@@ -192,6 +328,32 @@ def test_svd_tab_applies_runtime_recommended_defaults(tk_root: tk.Tk) -> None:
         assert tab.rife_executable_var.get() == "C:/tools/rife/rife-ncnn-vulkan.exe"
         assert tab.local_files_only_var.get() is True
         assert tab.cache_dir_var.get() == "C:/cache/svd"
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_recommended_preset_matches_controller_core_defaults(tk_root: tk.Tk) -> None:
+    controller = Mock()
+    controller.get_supported_svd_models.return_value = [
+        "stabilityai/stable-video-diffusion-img2vid-xt"
+    ]
+    controller.get_svd_postprocess_capabilities.return_value = {}
+    expected = SVDController(
+        app_controller=SimpleNamespace(),
+        svd_service=Mock(),
+    ).build_default_config().to_dict()["inference"]
+    controller.build_svd_defaults.return_value = {
+        "inference": expected,
+    }
+
+    tab = SVDTabFrameV2(tk_root, app_controller=controller)
+    try:
+        assert tab.frames_var.get() == expected["num_frames"]
+        assert tab.fps_var.get() == expected["fps"]
+        assert tab.motion_bucket_var.get() == expected["motion_bucket_id"]
+        assert tab.noise_aug_var.get() == expected["noise_aug_strength"]
+        assert tab.inference_steps_var.get() == expected["num_inference_steps"]
+        assert tab.decode_chunk_size_var.get() == expected["decode_chunk_size"]
     finally:
         tab.destroy()
 

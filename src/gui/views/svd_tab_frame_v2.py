@@ -49,8 +49,8 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "fps": 7,
         "output_format": "mp4",
         "save_frames": False,
-        "num_inference_steps": 36,
-        "decode_chunk_size": 4,
+        "num_inference_steps": 25,
+        "decode_chunk_size": 2,
         "motion_bucket": 48,
         "noise_aug": 0.01,
         "resize_mode": "center_crop",
@@ -200,6 +200,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._refresh_capabilities()
         self._refresh_summary()
         self._refresh_recent_runs()
+        self.source_image_var.trace_add("write", self._on_source_image_changed)
 
         if app_state and hasattr(app_state, "subscribe"):
             try:
@@ -308,7 +309,7 @@ class SVDTabFrameV2(ttk.Frame):
             app_state=self.app_state,
             wraplength=520,
         )
-        self.workflow_help_panel.grid(row=3, column=0, sticky="ew", pady=(10, 0))
+        self.workflow_help_panel.grid(row=4, column=0, sticky="ew", pady=(10, 0))
 
         settings = ttk.LabelFrame(body, text="Settings", style="Dark.TLabelframe", padding=8)
         settings.grid(row=0, column=1, sticky="ns")
@@ -809,6 +810,10 @@ class SVDTabFrameV2(ttk.Frame):
         self._refresh_summary()
         self._refresh_capabilities()
 
+    def _on_source_image_changed(self, *_args: Any) -> None:
+        self._refresh_summary()
+        self._refresh_capabilities()
+
     def set_source_image_path(self, path: str | Path, *, status_message: str | None = None) -> None:
         string_path = str(path)
         self.source_image_var.set(string_path)
@@ -926,7 +931,11 @@ class SVDTabFrameV2(ttk.Frame):
             self.capabilities_label.configure(text="")
             return
         try:
-            capabilities = getter(self._build_form_data())
+            source_image_path = self.source_image_var.get().strip() or None
+            capabilities = getter(
+                self._build_form_data(),
+                source_image_path=source_image_path,
+            )
         except Exception:
             logger.exception("Failed to load SVD postprocess capabilities from controller")
             self._capability_text = "Capabilities: unavailable"

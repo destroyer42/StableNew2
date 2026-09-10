@@ -86,9 +86,11 @@ def get_svd_preflight(config: SVDConfig, *, source_image_path: str | Path | None
     inference = config.inference
     blockers: list[str] = []
     warnings: list[str] = []
-    source_path = str(source_image_path) if source_image_path else None
+    source_path = str(source_image_path).strip() if source_image_path else None
     source_image_valid: bool | None = None
-    if source_path:
+    if not source_path:
+        blockers.append("Select a source image.")
+    else:
         try:
             validate_svd_source_image(source_path)
             source_image_valid = True
@@ -146,9 +148,12 @@ def get_svd_preflight(config: SVDConfig, *, source_image_path: str | Path | None
             warnings.append("CUDA capability could not be inspected.")
 
     summary = (
-        f"XT core: 25 frames at 7 fps, float16, motion bucket 48, noise 0.01, "
-        f"decode chunk 2, {inference.num_inference_steps} steps, CPU offload, forward chunking, "
-        "no optional postprocess."
+        f"XT effective config: {inference.num_frames} frames at {inference.fps} fps, "
+        f"{inference.torch_dtype}, motion bucket {inference.motion_bucket_id}, "
+        f"noise {inference.noise_aug_strength}, decode chunk {inference.decode_chunk_size}, "
+        f"{inference.num_inference_steps} steps, "
+        f"CPU offload={'enabled' if inference.cpu_offload else 'disabled'}, "
+        f"forward chunking={'enabled' if inference.forward_chunking else 'disabled'}."
     )
     return SVDPreflight(
         available=not blockers,

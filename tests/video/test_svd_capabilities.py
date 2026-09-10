@@ -137,6 +137,44 @@ def test_preflight_blocks_local_only_missing_model_without_mutating_cache(monkey
     assert not cache_dir.exists()
 
 
+def test_preflight_blocks_when_source_image_is_not_selected(monkeypatch) -> None:
+    monkeypatch.setattr("src.video.svd_capabilities.importlib.util.find_spec", lambda _name: None)
+
+    preflight = get_svd_preflight(SVDConfig())
+
+    assert preflight.source_image_path is None
+    assert preflight.source_image_valid is None
+    assert "Select a source image." in preflight.blocking_reasons
+
+
+def test_preflight_core_summary_reports_effective_config(monkeypatch) -> None:
+    monkeypatch.setattr("src.video.svd_capabilities.importlib.util.find_spec", lambda _name: None)
+    config = SVDConfig.from_dict(
+        {
+            "inference": {
+                "num_frames": 14,
+                "fps": 8,
+                "motion_bucket_id": 72,
+                "noise_aug_strength": 0.02,
+                "decode_chunk_size": 4,
+                "num_inference_steps": 30,
+                "cpu_offload": False,
+                "forward_chunking": False,
+            }
+        }
+    )
+
+    summary = get_svd_preflight(config).core_summary
+
+    assert "14 frames at 8 fps" in summary
+    assert "motion bucket 72" in summary
+    assert "noise 0.02" in summary
+    assert "decode chunk 4" in summary
+    assert "30 steps" in summary
+    assert "CPU offload=disabled" in summary
+    assert "forward chunking=disabled" in summary
+
+
 def test_preflight_warns_about_online_acquisition_when_allowed(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("src.video.svd_capabilities.importlib.util.find_spec", lambda _name: None)
     monkeypatch.setattr("src.video.svd_capabilities.is_svd_model_cached", lambda *_args, **_kwargs: False)

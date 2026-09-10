@@ -69,8 +69,8 @@ def test_build_svd_defaults_uses_controller_default_config() -> None:
             "inference": {
                 "motion_bucket_id": 48,
                 "noise_aug_strength": 0.01,
-                "num_inference_steps": 36,
-                "decode_chunk_size": 4,
+                "num_inference_steps": 25,
+                "decode_chunk_size": 2,
             },
             "postprocess": {
                 "face_restore": {"enabled": True},
@@ -87,6 +87,28 @@ def test_build_svd_defaults_uses_controller_default_config() -> None:
     assert defaults["postprocess"]["face_restore"]["enabled"] is True
     assert defaults["postprocess"]["interpolation"]["enabled"] is True
     assert defaults["postprocess"]["upscale"]["enabled"] is True
+
+
+def test_get_svd_capabilities_forwards_selected_source_to_preflight() -> None:
+    controller = AppController.__new__(AppController)
+    controller._svd_controller = Mock()
+    controller._svd_controller.build_svd_config.return_value = "cfg"
+    controller._svd_controller.get_postprocess_capabilities.return_value = {}
+    controller._svd_controller.get_preflight.return_value = {
+        "available": False,
+        "blocking_reasons": ["Invalid SVD source image"],
+    }
+
+    result = controller.get_svd_postprocess_capabilities(
+        {"inference": {}},
+        source_image_path="C:/tmp/source.png",
+    )
+
+    assert result["admission"]["available"] is False
+    controller._svd_controller.get_preflight.assert_called_once_with(
+        "cfg",
+        source_image_path="C:/tmp/source.png",
+    )
 
 
 def test_submit_svd_job_rejects_invalid_motion_bucket_before_controller_dispatch() -> None:

@@ -7226,13 +7226,13 @@ class AppController:
     def validate_svd_source_image(self, path: str | Path) -> tuple[bool, str | None]:
         return self._get_svd_controller().validate_source_image(path)
 
-    def get_svd_postprocess_capabilities(self, form_data: dict[str, Any] | None = None) -> dict[str, dict[str, object]]:
+    def get_svd_postprocess_capabilities(self, form_data: dict[str, Any] | None = None, *, source_image_path: str | Path | None = None) -> dict[str, dict[str, object]]:
         controller = self._get_svd_controller()
         validated_form_data = validate_svd_native_execution_config(form_data) if isinstance(form_data, dict) else None
         config = controller.build_svd_config(validated_form_data) if isinstance(validated_form_data, dict) else None
         capabilities = controller.get_postprocess_capabilities(config)
         if config is not None:
-            capabilities["admission"] = controller.get_preflight(config)
+            capabilities["admission"] = controller.get_preflight(config, source_image_path=source_image_path)
         return capabilities
 
     def submit_svd_job(self, *, source_image_path: str | Path, form_data: dict[str, Any]) -> str:
