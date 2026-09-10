@@ -23,8 +23,9 @@ StableNew has a verified queue-first NJR/runner spine, trustworthy bounded CI
 gates, one transactional SQLite authority for job lifecycle state, and one
 versioned JSON authority for authored PromptPacks. Queue and history are
 repository projections, and legacy persistence has offline backup-first
-migration. It is not yet an MVP: the image/video vertical slices still lack
-clean-machine real-backend acceptance.
+migration. PR-MVP-060 is **COMPLETE / ACCEPTED** after final real StableNew GUI
+and A1111 acceptance. The image vertical slice is accepted; clean-machine
+release proof and the native video slice remain future work.
 
 ## Runtime invariants
 
@@ -42,34 +43,54 @@ clean-machine real-backend acceptance.
 Repository convergence, simplification, transactional job persistence,
 PR-MVP-045 PromptPack draft/preview/queue repair, and PR-MVP-050 one-file JSON
 PromptPack convergence are complete. PR-MVP-060 Phase 1 and Phase 2A/2B/2C/2C1/2D
-are verified on `mvp/060-image-vertical-slice`: the consolidated image journey
-composes live Pack Selector draft/preview, queue persistence with Auto-run off,
-manual dispatch, deterministic model synchronization, progress, artifacts,
-history, and replay lineage. Existing progress/cancellation, durable
-failure/retry/FIFO/reopen behavior, queue manipulation, exact-artifact thumbnail
-behavior, live preview refresh, and responsive Base Generation dimensions remain
-covered. Developer workflow retains a task-oriented code map,
-one-command local required gate, canonical Python 3.11/3.12 CI verdict, and a
-controller-surface ratchet. Do not revive recovery, hygiene, or QOL branches as
-alternate sources of truth.
+are verified on `mvp/060-image-vertical-slice`. Final implementation is R4
+`57a197f272ae66bfc240fa3cd80e310b29ec0e47` and its closeout descendant. The
+consolidated image journey composes live Pack Selector draft/preview, queue
+persistence, manual dispatch, deterministic model synchronization, progress,
+artifacts, history, and replay lineage. Do not revive recovery, hygiene, or
+QOL branches as alternate sources of truth.
+
+PR-MVP-060 — **COMPLETE / ACCEPTED**
+
+Final R4 manual acceptance recorded:
+
+- Real StableNew GUI exercised with native JSON PromptPack preview.
+- Add to Queue worked without touching Override; SQLite-backed queue
+  projections and counts remained correct with no first-item or leftover
+  mismatch.
+- Manual Send Job worked with Auto-run OFF; Auto-run ON drained continuously.
+- Switching Auto-run OFF during active execution finished the current job and
+  left subsequent jobs queued; pause/resume respected the active policy.
+- External A1111 checkpoint mismatch, model switch, and verification succeeded.
+- Real txt2img generated an image and produced artifact/history records.
+- Replay created a new queued job and executed successfully.
+- Responsive Width/Height acceptance passed.
+
+PR-MVP-070 is the next product slice. Run PR-PACKS-001 PromptPack user-storage
+migration immediately before PR-MVP-070 to eliminate repository/worktree
+user-data contamination. Do not migrate PromptPack storage as part of this
+closeout.
 
 ## Highest-value debt
 
-1. The image create-to-replay journey lacks recorded real-WebUI acceptance.
+1. A false `queue_runner_stall` diagnostic was observed during a successful
+   real run.
 2. Legacy CLI/compatibility and superseded JSON migration tests assert pre-cutover NJR
    fields and payload shapes; the broad suite is therefore not green.
 3. Ruff still has a bounded legacy baseline; repository-wide mypy is not clean.
+4. PromptPack visibility filtering can make packs appear missing without clearly
+   indicating that SFW filtering is active.
+5. Known stale legacy fixture debt remains outside the required gate.
 
 ## Now / next / later
 
 **Now / Next**
 
-- `PR-MVP-060 Phase 3`: real A1111 GUI acceptance and final closeout of the
-  image vertical slice.
+- `PR-MVP-070`: native SVD XT product slice and hardware preflight, after
+  PR-PACKS-001 PromptPack user-storage migration.
 
 **Later**
 
-- `PR-MVP-070`: native SVD XT product slice and hardware preflight.
 - `PR-MVP-080`: operator UX, setup, diagnostics, and bounded lint cleanup.
 - `PR-MVP-090`: clean-machine release proof and zero Ruff baseline.
 
@@ -83,6 +104,10 @@ Latest verified baseline for the converged product state:
 - required smoke: 95 passing on Python 3.11 and 3.12;
 - bounded mypy smoke: passing;
 - Ruff 0.14.9 baseline: 1,610 findings against a maximum of 2,208.
+
+Final R4 manual GUI acceptance passed on the real StableNew desktop GUI with
+real A1111, including queue policy, model synchronization, txt2img,
+artifact/history, replay, and responsive dimensions as recorded above.
 
 Phase 2D focused acceptance passed 41 tests with one Tk-dependent skip because
 the available local Python 3.10 installation lacks a usable Tcl/Tk runtime;
