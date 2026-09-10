@@ -483,6 +483,62 @@ class TestStallInterrupt(unittest.TestCase):
     def _make_frozen_progress(self, value: float = 0.5) -> ProgressInfo:
         return ProgressInfo(value, None, 10, 20, None, {})
 
+    def test_adetailer_hard_threshold_interrupts_at_45_seconds(self) -> None:
+        """ADetailer uses its hard threshold even before the general warning."""
+        clock = _FakeMonotonicClock()
+        interrupt_times: list[float] = []
+        self.client.get_progress.return_value = self._make_frozen_progress()
+        self.client.interrupt.side_effect = lambda: interrupt_times.append(clock.now) or True
+
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            patch("src.pipeline.executor.PROGRESS_STALL_THRESHOLD_SEC", 60.0),
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=45.0),
+                1.0,
+                None,
+                "adetailer",
+            )
+
+        assert interrupt_times == [45.0]
+
+    def test_adetailer_has_no_interrupt_at_44_seconds(self) -> None:
+        clock = _FakeMonotonicClock()
+        self.client.get_progress.return_value = self._make_frozen_progress()
+
+        with patch("src.pipeline.executor.time.monotonic", clock.monotonic):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=44.0),
+                1.0,
+                None,
+                "adetailer",
+            )
+
+        self.client.interrupt.assert_not_called()
+
+    def test_adetailer_hard_threshold_does_not_wait_for_warning_gate(self) -> None:
+        clock = _FakeMonotonicClock()
+        stall_event = _RecordingEvent(clock)
+        self.client.get_progress.return_value = self._make_frozen_progress()
+
+        with (
+            patch("src.pipeline.executor.time.monotonic", clock.monotonic),
+            self.assertLogs("src.pipeline.executor", level="WARNING") as log_ctx,
+        ):
+            self.pipeline._poll_progress_loop(
+                _ClockBoundStopEvent(clock, stop_after=45.0),
+                1.0,
+                None,
+                "adetailer",
+                stall_event,
+            )
+
+        assert stall_event.times == [45.0]
+        assert "reason=stage-hard-threshold" in "\n".join(log_ctx.output)
+        assert "warning_due=False" in "\n".join(log_ctx.output)
+        self.client.interrupt.assert_called_once_with()
+
     def test_ordinary_stall_interrupts_at_90_seconds_from_last_progress(self) -> None:
         """The hard threshold is measured from progress, not warning detection."""
         clock = _FakeMonotonicClock()
@@ -713,7 +769,7 @@ class TestStallInterrupt(unittest.TestCase):
         assert "stage=txt2img" in message
         assert "job_id=job-123" in message
         assert "step=10/20" in message
-        assert "warning=60.0s" in message
+        assert "warning_threshold=60.0s" in message
         assert "hard=90.0s" in message
 
     def test_hard_stall_interrupt_precedes_generation_http_timeout(self) -> None:

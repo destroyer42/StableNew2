@@ -2440,24 +2440,32 @@ class Pipeline:
                         and total_steps is not None
                         and current_step >= total_steps
                     )
-                    progress_stalled = (
-                        elapsed_since_progress >= PROGRESS_STALL_THRESHOLD_SEC
-                        and highest_progress > 0
+                    ordinary_generation_active = (
+                        highest_progress > 0
                         and highest_progress < 0.99
                         and not completed_steps
+                    )
+                    effective_hard_threshold = STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(
+                        stage_label, STALL_INTERRUPT_THRESHOLD_SEC
+                    )
+                    warning_due = (
+                        ordinary_generation_active
+                        and elapsed_since_progress >= PROGRESS_STALL_THRESHOLD_SEC
+                    )
+                    hard_interrupt_due = (
+                        ordinary_generation_active
+                        and elapsed_since_progress >= effective_hard_threshold
                     )
                     completion_stalled = (
                         elapsed_since_progress >= POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC
                         and (completed_steps or highest_progress >= 0.99)
                     )
-                    if progress_stalled or completion_stalled:
+                    if warning_due or hard_interrupt_due or completion_stalled:
                         now = time.monotonic()
                         interrupt_threshold = (
                             0.0
                             if completion_stalled
-                            else STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(
-                                stage_label, STALL_INTERRUPT_THRESHOLD_SEC
-                            )
+                            else effective_hard_threshold
                         )
 
                         # Throttle log to once per 30s instead of every poll interval
@@ -2465,7 +2473,8 @@ class Pipeline:
                             if completion_stalled:
                                 logger.warning(
                                     "WebUI completion stall: stage=%s job_id=%s progress=%.1f%% "
-                                    "step=%s/%s age=%.1fs warning=%.1fs hard=%.1fs interrupt_sent=%s",
+                                    "step=%s/%s age=%.1fs warning_threshold=%.1fs hard=%.1fs "
+                                    "interrupt_sent=%s",
                                     stage_label,
                                     self._current_job_id,
                                     highest_progress * 100,
@@ -2479,13 +2488,20 @@ class Pipeline:
                             else:
                                 logger.warning(
                                     "WebUI generation stall: stage=%s job_id=%s progress=%.1f%% "
-                                    "step=%s/%s age=%.1fs warning=%.1fs hard=%.1fs interrupt_sent=%s",
+                                    "step=%s/%s age=%.1fs reason=%s warning_due=%s "
+                                    "warning_threshold=%.1fs hard=%.1fs interrupt_sent=%s",
                                     stage_label,
                                     self._current_job_id,
                                     highest_progress * 100,
                                     current_step,
                                     total_steps,
                                     elapsed_since_progress,
+                                    (
+                                        "stage-hard-threshold"
+                                        if hard_interrupt_due and not warning_due
+                                        else "warning-threshold"
+                                    ),
+                                    warning_due,
                                     PROGRESS_STALL_THRESHOLD_SEC,
                                     interrupt_threshold,
                                     interrupt_sent,
