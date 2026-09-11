@@ -2,20 +2,27 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 import logging
+import shutil
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
-from src.video.svd_config import SVDConfig
-from src.video.svd_errors import SVDModelLoadError, SVDPostprocessError
-from src.video.svd_models import SVDResult
+from src.controller.runtime_state import CancellationError, CancelToken
+from src.video.container_metadata import write_video_container_metadata
 from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
+from src.video.svd_config import SVDConfig
+from src.video.svd_errors import (
+    SVDExportError,
+    SVDInputError,
+    SVDModelLoadError,
+    SVDPostprocessError,
+)
+from src.video.svd_models import SVDResult
 from src.video.svd_postprocess import SVDPostprocessRunner, validate_svd_postprocess_config
 from src.video.svd_preprocess import prepare_svd_input, validate_svd_source_image
 from src.video.svd_registry import write_svd_run_manifest
 from src.video.svd_service import SVDService
-from src.video.container_metadata import write_video_container_metadata
 from src.video.video_export import export_video_gif, export_video_mp4, save_video_frames
 
 logger = logging.getLogger(__name__)
@@ -50,27 +57,44 @@ class SVDRunner:
         source_image_path: str | Path,
         config: SVDConfig,
         job_id: str,
+        cancel_token: CancelToken | None = None,
     ) -> SVDResult:
         self._output_root.mkdir(parents=True, exist_ok=True)
         temp_dir = self._output_root / "_svd_temp" / job_id
         frames: list = []
+        source_path = Path(source_image_path)
+        partial_outputs = self._partial_output_paths(source_path)
+        preexisting_outputs = {path: path.exists() for path in partial_outputs}
         try:
+            self._ensure_not_cancelled(cancel_token, "native SVD preflight")
             logger.info(
                 "[SVD] start job=%s source=%s model=%s frames=%s fps=%s decode_chunk=%s format=%s",
                 job_id,
-                Path(source_image_path).name,
+                source_path.name,
                 config.inference.model_id,
                 config.inference.num_frames,
                 config.inference.fps,
                 config.inference.decode_chunk_size,
                 config.output.output_format,
             )
-            self._emit_status(stage_detail="preprocess", progress=0.05)
-            preprocess = prepare_svd_input(
-                source_path=source_image_path,
-                config=config.preprocess,
-                temp_dir=temp_dir,
-            )
+            self._emit_status(stage_detail="preflight", progress=0.05)
+            self._emit_status(stage_detail="loading_model", progress=0.1)
+            prepare_runtime = getattr(self._service, "prepare_runtime", None)
+            if callable(prepare_runtime):
+                prepare_runtime(config=config.inference, cancel_token=cancel_token)
+            self._ensure_not_cancelled(cancel_token, "native SVD model loading")
+            self._emit_status(stage_detail="preprocess", progress=0.2)
+            try:
+                preprocess = prepare_svd_input(
+                    source_path=source_path,
+                    config=config.preprocess,
+                    temp_dir=temp_dir,
+                )
+            except SVDInputError:
+                raise
+            except Exception as exc:
+                raise SVDInputError(f"SVD preprocessing failed: {exc}") from exc
+            self._ensure_not_cancelled(cancel_token, "native SVD preprocessing")
             logger.info(
                 "[SVD] preprocess prepared=%s original=%sx%s target=%sx%s resize=%s resized=%s padded=%s cropped=%s",
                 preprocess.prepared_path.name,
@@ -85,14 +109,17 @@ class SVDRunner:
             )
             self._emit_status(
                 stage_detail="inference",
-                progress=0.3,
+                progress=0.25,
                 current_step=0,
-                total_steps=config.inference.num_frames,
+                total_steps=0,
             )
             frames = self._service.generate_frames(
                 prepared_image_path=preprocess.prepared_path,
                 config=config.inference,
+                cancel_token=cancel_token,
+                status_callback=self._map_inference_status,
             )
+            self._ensure_not_cancelled(cancel_token, "native SVD inference")
             logger.info("[SVD] inference completed frame_count=%s", len(frames))
             postprocess_enabled = any(
                 (
@@ -103,6 +130,7 @@ class SVDRunner:
                 )
             )
             if postprocess_enabled:
+                self._ensure_not_cancelled(cancel_token, "native SVD postprocess")
                 self._emit_status(
                     stage_detail="postprocess",
                     progress=0.6,
@@ -118,51 +146,66 @@ class SVDRunner:
                         if enabled
                     ),
                 )
-            frames, postprocess_metadata = SVDPostprocessRunner(
-                status_callback=self._map_postprocess_status,
-            ).process_frames(
-                frames=frames,
-                config=config,
-                work_dir=temp_dir / "postprocess",
-            )
+            try:
+                frames, postprocess_metadata = SVDPostprocessRunner(
+                    status_callback=self._map_postprocess_status,
+                ).process_frames(
+                    frames=frames,
+                    config=config,
+                    work_dir=temp_dir / "postprocess",
+                )
+            except CancellationError:
+                raise
+            except SVDPostprocessError:
+                raise
+            except Exception as exc:
+                raise SVDPostprocessError(f"SVD postprocess failed: {exc}") from exc
+            self._ensure_not_cancelled(cancel_token, "native SVD postprocess")
             logger.info(
                 "[SVD] postprocess completed frame_count=%s applied=%s",
                 len(frames),
                 list((postprocess_metadata or {}).get("applied") or []),
             )
 
-            source_path = Path(source_image_path)
             stem = f"svd_{source_path.stem}"
             video_path = None
             gif_path = None
             frame_paths: list[Path] = []
             thumbnail_path = None
 
-            self._emit_status(stage_detail="export", progress=0.9)
+            self._ensure_not_cancelled(cancel_token, "native SVD export")
+            self._emit_status(stage_detail="encoding", progress=0.85)
+            try:
+                if config.output.save_frames:
+                    frame_dir = self._output_root / f"{stem}_frames"
+                    frame_paths = save_video_frames(frames=frames, output_dir=frame_dir, prefix="frame")
 
-            if config.output.save_frames:
-                frame_dir = self._output_root / f"{stem}_frames"
-                frame_paths = save_video_frames(frames=frames, output_dir=frame_dir, prefix="frame")
+                if config.output.output_format == "mp4":
+                    video_path = export_video_mp4(
+                        frames=frames,
+                        output_path=self._output_root / f"{stem}.mp4",
+                        fps=config.inference.fps,
+                    )
+                elif config.output.output_format == "gif":
+                    gif_path = export_video_gif(
+                        frames=frames,
+                        output_path=self._output_root / f"{stem}.gif",
+                        fps=config.inference.fps,
+                    )
+                elif not frame_paths:
+                    frame_dir = self._output_root / f"{stem}_frames"
+                    frame_paths = save_video_frames(frames=frames, output_dir=frame_dir, prefix="frame")
 
-            if config.output.output_format == "mp4":
-                video_path = export_video_mp4(
-                    frames=frames,
-                    output_path=self._output_root / f"{stem}.mp4",
-                    fps=config.inference.fps,
-                )
-            elif config.output.output_format == "gif":
-                gif_path = export_video_gif(
-                    frames=frames,
-                    output_path=self._output_root / f"{stem}.gif",
-                    fps=config.inference.fps,
-                )
-            elif not frame_paths:
-                frame_dir = self._output_root / f"{stem}_frames"
-                frame_paths = save_video_frames(frames=frames, output_dir=frame_dir, prefix="frame")
-
-            if config.output.save_preview_image and frames:
-                thumbnail_path = self._output_root / f"{stem}_preview.png"
-                frames[0].save(thumbnail_path, format="PNG")
+                if config.output.save_preview_image and frames:
+                    thumbnail_path = self._output_root / f"{stem}_preview.png"
+                    frames[0].save(thumbnail_path, format="PNG")
+            except CancellationError:
+                raise
+            except SVDExportError:
+                raise
+            except Exception as exc:
+                raise SVDExportError(f"SVD export failed: {exc}") from exc
+            self._ensure_not_cancelled(cancel_token, "native SVD export")
 
             result = SVDResult(
                 source_image_path=source_path,
@@ -178,7 +221,14 @@ class SVDRunner:
                 preprocess=preprocess,
                 postprocess=postprocess_metadata,
             )
-            manifest_path = write_svd_run_manifest(run_dir=self._output_root, config=config, result=result)
+            self._ensure_not_cancelled(cancel_token, "native SVD manifest write")
+            try:
+                manifest_path = write_svd_run_manifest(run_dir=self._output_root, config=config, result=result)
+            except SVDExportError:
+                raise
+            except Exception as exc:
+                raise SVDExportError(f"SVD manifest export failed: {exc}") from exc
+            self._ensure_not_cancelled(cancel_token, "native SVD artifact completion")
             metadata_payload = {
                 "stage": "svd_native",
                 "backend_id": "svd_native",
@@ -232,6 +282,9 @@ class SVDRunner:
                 preprocess=result.preprocess,
                 postprocess=result.postprocess,
             )
+        except Exception:
+            self._remove_partial_outputs(partial_outputs, preexisting_outputs)
+            raise
         finally:
             self._close_frames(frames)
             self._service._release_runtime_memory()
@@ -255,6 +308,55 @@ class SVDRunner:
             total_steps=int(status.get("total_steps", 0) or 0),
             eta_seconds=status.get("eta_seconds"),
         )
+
+    def _map_inference_status(self, status: dict[str, Any]) -> None:
+        total_steps = int(status.get("total_steps", 0) or 0)
+        current_step = int(status.get("current_step", 0) or 0)
+        if total_steps <= 0:
+            return
+        local_progress = max(0.0, min(1.0, float(status.get("progress", 0.0) or 0.0)))
+        self._emit_status(
+            stage_detail="inference",
+            progress=0.25 + (local_progress * 0.55),
+            current_step=current_step,
+            total_steps=total_steps,
+            eta_seconds=status.get("eta_seconds"),
+        )
+
+    @staticmethod
+    def _ensure_not_cancelled(cancel_token: CancelToken | None, context: str) -> None:
+        if cancel_token is not None:
+            cancel_token.check_cancelled()
+
+    def _partial_output_paths(self, source_path: Path) -> tuple[Path, ...]:
+        stem = f"svd_{source_path.stem}"
+        return (
+            self._output_root / f"{stem}.mp4",
+            self._output_root / f"{stem}.gif",
+            self._output_root / f"{stem}_preview.png",
+            self._output_root / f"{stem}_frames",
+            self._output_root / "manifests" / f"{stem}.json",
+        )
+
+    def _remove_partial_outputs(
+        self,
+        paths: tuple[Path, ...],
+        preexisting: dict[Path, bool],
+    ) -> None:
+        root = self._output_root.resolve()
+        for path in paths:
+            if preexisting.get(path, False) or not path.exists():
+                continue
+            try:
+                resolved = path.resolve()
+                if not resolved.is_relative_to(root):
+                    continue
+                if path.is_dir():
+                    shutil.rmtree(path)
+                else:
+                    path.unlink()
+            except Exception:
+                logger.warning("[SVD] unable to remove partial output %s", path, exc_info=True)
 
     def _emit_status(
         self,

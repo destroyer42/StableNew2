@@ -23,6 +23,10 @@ class SVDInferenceError(SVDError):
     """Raised when the SVD backend fails during frame generation."""
 
 
+class SVDOutOfMemoryError(SVDInferenceError):
+    """Raised when native SVD exhausts GPU memory without an automatic retry."""
+
+
 class SVDExportError(SVDError):
     """Raised when generated frames cannot be exported."""
 

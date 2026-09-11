@@ -138,9 +138,9 @@ def test_svd_runner_emits_live_stage_status_details(tmp_path: Path, monkeypatch)
     )
 
     details = [str(update.get("stage_detail")) for update in updates]
-    assert details[:3] == ["preprocess", "inference", "postprocess"]
+    assert details[:4] == ["preflight", "loading_model", "preprocess", "inference"]
     assert "postprocess: interpolation" in details
-    assert details[-2:] == ["export", "complete"]
+    assert details[-2:] == ["encoding", "complete"]
     postprocess_update = next(update for update in updates if update.get("stage_detail") == "postprocess: interpolation")
     assert postprocess_update["progress"] == pytest.approx(0.725)
 

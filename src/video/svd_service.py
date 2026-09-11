@@ -4,14 +4,22 @@ from __future__ import annotations
 
 import gc
 import importlib
+import inspect
 import logging
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from PIL import Image
 
+from src.controller.runtime_state import CancellationError, CancelToken
 from src.video.svd_config import SVDInferenceConfig
-from src.video.svd_errors import SVDInferenceError, SVDInputError, SVDModelLoadError
+from src.video.svd_errors import (
+    SVDInferenceError,
+    SVDInputError,
+    SVDModelLoadError,
+    SVDOutOfMemoryError,
+)
 from src.video.svd_models import is_svd_model_cached, resolve_svd_cache_dir
 
 logger = logging.getLogger(__name__)
@@ -52,7 +60,10 @@ class SVDService:
         *,
         prepared_image_path: str | Path,
         config: SVDInferenceConfig,
+        cancel_token: CancelToken | None = None,
+        status_callback: Callable[[dict[str, Any]], None] | None = None,
     ) -> list[Image.Image]:
+        self._ensure_not_cancelled(cancel_token, "native SVD inference setup")
         path = Path(prepared_image_path)
         if not path.exists():
             raise SVDInputError(f"Prepared SVD image does not exist: {path}")
@@ -61,7 +72,11 @@ class SVDService:
         if not available:
             raise SVDModelLoadError(reason or "Diffusers SVD runtime is unavailable")
 
-        pipeline = self._get_pipeline(config)
+        pipeline = self.prepare_runtime(
+            config=config,
+            cancel_token=cancel_token,
+            status_callback=status_callback,
+        )
 
         torch = importlib.import_module("torch")
         generator = None
@@ -78,17 +93,28 @@ class SVDService:
         result: Any | None = None
         raw_frames: list[Image.Image] = []
         try:
+            self._ensure_not_cancelled(cancel_token, "native SVD preprocessing")
+            call_kwargs: dict[str, Any] = {
+                "decode_chunk_size": config.decode_chunk_size,
+                "motion_bucket_id": config.motion_bucket_id,
+                "noise_aug_strength": config.noise_aug_strength,
+                "num_frames": config.num_frames,
+                "num_inference_steps": config.num_inference_steps,
+                "min_guidance_scale": config.min_guidance_scale,
+                "max_guidance_scale": config.max_guidance_scale,
+                "generator": generator,
+            }
+            if self._supports_step_callback(pipeline):
+                call_kwargs["callback_on_step_end"] = self._build_step_callback(
+                    cancel_token=cancel_token,
+                    status_callback=status_callback,
+                    total_steps=config.num_inference_steps,
+                )
             result = pipeline(
                 image,
-                decode_chunk_size=config.decode_chunk_size,
-                motion_bucket_id=config.motion_bucket_id,
-                noise_aug_strength=config.noise_aug_strength,
-                num_frames=config.num_frames,
-                num_inference_steps=config.num_inference_steps,
-                min_guidance_scale=config.min_guidance_scale,
-                max_guidance_scale=config.max_guidance_scale,
-                generator=generator,
+                **call_kwargs,
             )
+            self._ensure_not_cancelled(cancel_token, "native SVD inference")
             frames = getattr(result, "frames", result)
             if isinstance(frames, list) and frames and isinstance(frames[0], list):
                 frames = frames[0]
@@ -98,7 +124,11 @@ class SVDService:
                 raise SVDInferenceError("SVD returned no frames")
             raw_frames = frames
             return [frame.convert("RGB") for frame in raw_frames]
+        except CancellationError:
+            raise
         except Exception as exc:
+            if self._is_cuda_out_of_memory(exc):
+                raise SVDOutOfMemoryError(self._format_oom_error(config, exc)) from exc
             raise SVDInferenceError(f"SVD inference failed: {exc}") from exc
         finally:
             if image is not None:
@@ -110,6 +140,99 @@ class SVDService:
             result = None
             generator = None
             self._release_runtime_memory()
+
+    def prepare_runtime(
+        self,
+        *,
+        config: SVDInferenceConfig,
+        cancel_token: CancelToken | None = None,
+        status_callback: Callable[[dict[str, Any]], None] | None = None,
+    ) -> Any:
+        """Load or reuse the model at a cancellable boundary before preprocessing."""
+        self._ensure_not_cancelled(cancel_token, "native SVD model loading")
+        self._emit_status(status_callback, stage_detail="loading_model")
+        pipeline = self._get_pipeline(config)
+        self._ensure_not_cancelled(cancel_token, "native SVD model loading")
+        return pipeline
+
+    @staticmethod
+    def _ensure_not_cancelled(cancel_token: CancelToken | None, context: str) -> None:
+        if cancel_token is not None:
+            cancel_token.check_cancelled()
+
+    @staticmethod
+    def _emit_status(
+        callback: Callable[[dict[str, Any]], None] | None,
+        **status: Any,
+    ) -> None:
+        if callback is None:
+            return
+        callback(status)
+
+    @staticmethod
+    def _supports_step_callback(pipeline: Any) -> bool:
+        """Use only Diffusers' documented callback_on_step_end parameter when present."""
+        try:
+            target = pipeline.__call__ if callable(pipeline) else pipeline
+            signature = inspect.signature(target)
+        except (TypeError, ValueError):
+            return False
+        return "callback_on_step_end" in signature.parameters
+
+    def _build_step_callback(
+        self,
+        *,
+        cancel_token: CancelToken | None,
+        status_callback: Callable[[dict[str, Any]], None] | None,
+        total_steps: int,
+    ) -> Callable[[Any, int, Any, dict[str, Any]], dict[str, Any]]:
+        def _on_step_end(
+            _pipeline: Any,
+            step_index: int,
+            _timestep: Any,
+            callback_kwargs: dict[str, Any],
+        ) -> dict[str, Any]:
+            self._ensure_not_cancelled(cancel_token, "native SVD denoising")
+            completed_step = min(max(0, int(step_index) + 1), total_steps)
+            self._emit_status(
+                status_callback,
+                stage_detail="inference",
+                progress=(completed_step / total_steps) if total_steps else 0.0,
+                current_step=completed_step,
+                total_steps=total_steps,
+            )
+            return callback_kwargs
+
+        return _on_step_end
+
+    @staticmethod
+    def _is_cuda_out_of_memory(exc: Exception) -> bool:
+        try:
+            torch = importlib.import_module("torch")
+        except Exception:
+            torch = None
+        oom_types: list[type[BaseException]] = []
+        for owner in (torch, getattr(torch, "cuda", None) if torch is not None else None):
+            candidate = getattr(owner, "OutOfMemoryError", None)
+            if isinstance(candidate, type) and issubclass(candidate, BaseException):
+                oom_types.append(candidate)
+        if oom_types and isinstance(exc, tuple(oom_types)):
+            return True
+        message = str(exc).lower()
+        return "cuda out of memory" in message or "cuda error: out of memory" in message
+
+    @staticmethod
+    def _format_oom_error(config: SVDInferenceConfig, exc: Exception) -> str:
+        return (
+            "Native SVD exhausted GPU memory. Effective config: "
+            f"model={config.model_id}, num_frames={config.num_frames}, "
+            f"num_inference_steps={config.num_inference_steps}, "
+            f"decode_chunk_size={config.decode_chunk_size}, dtype={config.torch_dtype}, "
+            f"cpu_offload={config.cpu_offload}, forward_chunking={config.forward_chunking}. "
+            "StableNew did not automatically rerun or downgrade this job. "
+            "Use the 12 GB conservative baseline when retrying explicitly. "
+            f"Original error: {exc}"
+        )
 
     def _get_pipeline(self, config: SVDInferenceConfig) -> Any:
         resolved_cache_dir = str(self._resolve_cache_dir(config))

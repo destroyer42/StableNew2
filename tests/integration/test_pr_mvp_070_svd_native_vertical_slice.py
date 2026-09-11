@@ -8,6 +8,7 @@ from PIL import Image
 
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
+from src.controller.runtime_state import CancellationError
 from src.controller.svd_controller import SVDController
 from src.gui.app_state_v2 import AppStateV2
 from src.pipeline.pipeline_runner import PipelineRunner
@@ -31,10 +32,11 @@ def test_svd_native_vertical_slice_queue_artifact_history_and_replay(tmp_path: P
             self.output_root = Path(output_root)
             self.status_callback = status_callback
 
-        def run(self, *, source_image_path, config, job_id):
+        def run(self, *, source_image_path, config, job_id, cancel_token=None):
             assert Path(source_image_path) == source_path
             assert config.inference.local_files_only is False
             assert self.status_callback is not None
+            assert cancel_token is not None
             self.status_callback({"stage_detail": "inference", "progress": 0.5, "current_step": 1, "total_steps": 2})
             self.output_root.mkdir(parents=True, exist_ok=True)
             video_path = self.output_root / "native-svd.mp4"
@@ -159,3 +161,68 @@ def test_svd_admission_failure_creates_no_queue_artifact(tmp_path: Path, monkeyp
         assert "admission blocked" in str(exc)
     assert submitted == []
     assert not (tmp_path / "output").exists()
+
+
+def test_svd_runtime_cancellation_marks_canonical_job_cancelled(tmp_path: Path, monkeypatch) -> None:
+    """A native SVD cancellation must flow through the normal queue terminal state."""
+    source_path = tmp_path / "selected.png"
+    Image.new("RGB", (32, 32), "navy").save(source_path)
+    output_dir = tmp_path / "output"
+
+    class _CancellingSVDRunner:
+        def __init__(self, *, output_root, status_callback=None) -> None:
+            self.status_callback = status_callback
+
+        def run(self, *, cancel_token=None, **_kwargs):
+            assert cancel_token is not None
+            cancel_token.cancel()
+            raise CancellationError("cancelled during native SVD denoising")
+
+    monkeypatch.setattr("src.video.svd_runner.SVDRunner", _CancellingSVDRunner)
+    monkeypatch.setattr(
+        "src.controller.svd_controller.get_svd_preflight",
+        lambda config, **_kwargs: SimpleNamespace(available=True, blocking_reasons=()),
+    )
+
+    repository = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=repository)
+    pipeline_ref: dict[str, PipelineController] = {}
+    service = JobService(
+        queue,
+        run_callable=lambda job: pipeline_ref["controller"]._run_job(job),
+        require_normalized_records=True,
+    )
+    service.auto_run_enabled = False
+    runner = PipelineRunner(
+        SimpleNamespace(),
+        StructuredLogger(output_dir=tmp_path / "logs"),
+        runs_base_dir=str(output_dir),
+    )
+    pipeline_controller = PipelineController(
+        app_state=AppStateV2(),
+        config_manager=ConfigManager(presets_dir=tmp_path / "presets"),
+        job_service=service,
+        pipeline_runner=runner,
+    )
+    pipeline_ref["controller"] = pipeline_controller
+    service.runner.stop()
+    controller = SVDController(
+        app_controller=SimpleNamespace(output_dir=str(output_dir), job_service=service)
+    )
+    job_id = controller.submit_svd_job(
+        source_image_path=source_path,
+        config=SVDConfig.from_dict(
+            {"inference": {"local_files_only": False, "cache_dir": str(tmp_path / "hf-cache")}}
+        ),
+    )
+    job = queue.get_job(job_id)
+    assert job is not None
+
+    assert service.runner.run_once(job) is None
+    stored = repository.get_job(job_id)
+    assert stored is not None and stored.status is JobStatus.CANCELLED
+    assert stored.result is None
+    assert not list(output_dir.rglob("*.mp4"))
+    assert not list(output_dir.rglob("*.json"))
+    service.runner.stop()
+    repository.close()

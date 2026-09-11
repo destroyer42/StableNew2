@@ -2060,6 +2060,8 @@ class PipelineRunner:
                     )
                 )
                 metadata["adaptive_refinement"] = refinement_payload
+        except CancellationError:
+            raise
         except Exception as exc:
             error = str(exc)
             logger.error("[pipeline] execution failed: %s", exc, exc_info=True)

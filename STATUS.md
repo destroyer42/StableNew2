@@ -96,7 +96,8 @@ populate through the shared WebUI resource projection path.
   repository/worktree cleanup are complete.
 - `PR-MVP-070`: **ACTIVE**; Phase 1 / 1R1 **COMPLETE** — native SVD XT
   admission, per-user Hugging Face cache policy, and the no-GPU
-  queue-to-replay vertical slice. Phase 2: **NEXT**.
+  queue-to-replay vertical slice. Phase 2: **COMPLETE**. Phase 3: **NEXT** —
+  real SVD XT target-GPU acceptance.
 - `PR-HARDEN-008`: **COMPLETE / INTEGRATED**; truthful runner-watchdog
   telemetry, bounded WebUI stall recovery, and safe ambiguous generation
   transport handling. Ambiguous txt2img/img2img response loss does not

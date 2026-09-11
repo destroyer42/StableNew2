@@ -31,7 +31,7 @@ from src.controller.pipeline_controller_services.queue_submission_service import
 )
 from src.controller.ports.default_runtime_ports import DefaultImageRuntimePorts
 from src.controller.ports.runtime_ports import ImageRuntimePorts
-from src.controller.runtime_state import GUIState, PipelineState
+from src.controller.runtime_state import CancellationError, GUIState, PipelineState
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.webui_connection_controller import (
     WebUIConnectionController,
@@ -1521,9 +1521,7 @@ class PipelineController(CorePipelineController):
         Accepts a Job that must have _normalized_record (preferred) for PipelineRunner.run_njr().
         Legacy pipeline_config execution is retired in CORE1-C2.
 
-        Returns dict with job result metadata or error information.
-
-        If the record is missing, returns an error dict instead of raising.
+        Returns job result metadata or an error dict when the record is missing.
         """
         record = getattr(job, "_normalized_record", None)
         if record is not None:
@@ -1531,6 +1529,8 @@ class PipelineController(CorePipelineController):
                 result = self.run_njr(record, cancel_token=job._cancel_token)
                 return result.to_dict() if hasattr(result, "to_dict") else {"result": result}
             except Exception as exc:  # noqa: BLE001
+                if isinstance(exc, CancellationError):
+                    raise
                 envelope = get_attached_envelope(exc)
                 if envelope is None:
                     envelope = wrap_exception(

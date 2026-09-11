@@ -5406,13 +5406,14 @@ class Pipeline:
                 source_image_path=input_image_path,
                 config=config,
                 job_id=job_id,
+                cancel_token=cancel_token,
             )
             self._emit_stage_detail_update(
                 stage_name="svd_native",
                 stage_detail="complete",
                 progress=1.0,
-                current_step=result.frame_count,
-                total_steps=result.frame_count,
+                current_step=0,
+                total_steps=0,
             )
 
             output_paths = [str(path) for path in result.frame_paths]
@@ -5487,6 +5488,11 @@ class Pipeline:
             self._record_stage_event("svd_native", "cancelled", 1, 1, True)
             raise
         except Exception as exc:
+            from src.video.svd_errors import SVDError
+
+            if isinstance(exc, SVDError):
+                logger.error("svd_native stage failed: %s", exc)
+                raise
             logger.error("svd_native stage failed: %s", exc)
             return None
 
