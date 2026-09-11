@@ -63,8 +63,8 @@ class SVDRunner:
         temp_dir = self._output_root / "_svd_temp" / job_id
         frames: list = []
         source_path = Path(source_image_path)
-        partial_outputs = self._partial_output_paths(source_path)
-        preexisting_outputs = {path: path.exists() for path in partial_outputs}
+        owned_outputs: list[Path] = []
+        output_existence: dict[Path, bool] = {}
         try:
             self._ensure_not_cancelled(cancel_token, "native SVD preflight")
             logger.info(
@@ -178,26 +178,39 @@ class SVDRunner:
             try:
                 if config.output.save_frames:
                     frame_dir = self._output_root / f"{stem}_frames"
+                    self._track_output(frame_dir, owned_outputs, output_existence)
                     frame_paths = save_video_frames(frames=frames, output_dir=frame_dir, prefix="frame")
+                    for frame_path in frame_paths:
+                        self._track_output(frame_path, owned_outputs, output_existence)
 
                 if config.output.output_format == "mp4":
+                    output_path = self._output_root / f"{stem}.mp4"
+                    self._track_output(output_path, owned_outputs, output_existence)
                     video_path = export_video_mp4(
                         frames=frames,
-                        output_path=self._output_root / f"{stem}.mp4",
+                        output_path=output_path,
                         fps=config.inference.fps,
                     )
+                    self._track_output(video_path, owned_outputs, output_existence)
                 elif config.output.output_format == "gif":
+                    output_path = self._output_root / f"{stem}.gif"
+                    self._track_output(output_path, owned_outputs, output_existence)
                     gif_path = export_video_gif(
                         frames=frames,
-                        output_path=self._output_root / f"{stem}.gif",
+                        output_path=output_path,
                         fps=config.inference.fps,
                     )
+                    self._track_output(gif_path, owned_outputs, output_existence)
                 elif not frame_paths:
                     frame_dir = self._output_root / f"{stem}_frames"
+                    self._track_output(frame_dir, owned_outputs, output_existence)
                     frame_paths = save_video_frames(frames=frames, output_dir=frame_dir, prefix="frame")
+                    for frame_path in frame_paths:
+                        self._track_output(frame_path, owned_outputs, output_existence)
 
                 if config.output.save_preview_image and frames:
                     thumbnail_path = self._output_root / f"{stem}_preview.png"
+                    self._track_output(thumbnail_path, owned_outputs, output_existence)
                     frames[0].save(thumbnail_path, format="PNG")
             except CancellationError:
                 raise
@@ -223,11 +236,17 @@ class SVDRunner:
             )
             self._ensure_not_cancelled(cancel_token, "native SVD manifest write")
             try:
-                manifest_path = write_svd_run_manifest(run_dir=self._output_root, config=config, result=result)
+                manifest_path = write_svd_run_manifest(
+                    run_dir=self._output_root,
+                    config=config,
+                    result=result,
+                    before_write=lambda path: self._track_output(path, owned_outputs, output_existence),
+                )
             except SVDExportError:
                 raise
             except Exception as exc:
                 raise SVDExportError(f"SVD manifest export failed: {exc}") from exc
+            self._track_output(manifest_path, owned_outputs, output_existence)
             self._ensure_not_cancelled(cancel_token, "native SVD artifact completion")
             metadata_payload = {
                 "stage": "svd_native",
@@ -255,10 +274,15 @@ class SVDRunner:
                 metadata_payload["secondary_motion_summary"] = extract_secondary_motion_summary(
                     {"secondary_motion": secondary_motion}
                 )
-            if video_path is not None:
-                write_video_container_metadata(video_path, metadata_payload)
-            if gif_path is not None:
-                write_video_container_metadata(gif_path, metadata_payload)
+            try:
+                if video_path is not None:
+                    write_video_container_metadata(video_path, metadata_payload)
+                if gif_path is not None:
+                    write_video_container_metadata(gif_path, metadata_payload)
+            except SVDExportError:
+                raise
+            except Exception as exc:
+                raise SVDExportError(f"SVD container metadata export failed: {exc}") from exc
             logger.info(
                 "[SVD] complete video=%s gif=%s frame_files=%s preview=%s manifest=%s",
                 result.video_path.name if result.video_path else None,
@@ -283,7 +307,7 @@ class SVDRunner:
                 postprocess=result.postprocess,
             )
         except Exception:
-            self._remove_partial_outputs(partial_outputs, preexisting_outputs)
+            self._remove_partial_outputs(owned_outputs)
             raise
         finally:
             self._close_frames(frames)
@@ -328,24 +352,27 @@ class SVDRunner:
         if cancel_token is not None:
             cancel_token.check_cancelled()
 
-    def _partial_output_paths(self, source_path: Path) -> tuple[Path, ...]:
-        stem = f"svd_{source_path.stem}"
-        return (
-            self._output_root / f"{stem}.mp4",
-            self._output_root / f"{stem}.gif",
-            self._output_root / f"{stem}_preview.png",
-            self._output_root / f"{stem}_frames",
-            self._output_root / "manifests" / f"{stem}.json",
-        )
+    @staticmethod
+    def _track_output(
+        path: str | Path,
+        owned_outputs: list[Path],
+        output_existence: dict[Path, bool],
+    ) -> None:
+        output_path = Path(path)
+        if output_path in output_existence:
+            return
+        existed = output_path.exists()
+        output_existence[output_path] = existed
+        if not existed:
+            owned_outputs.append(output_path)
 
     def _remove_partial_outputs(
         self,
-        paths: tuple[Path, ...],
-        preexisting: dict[Path, bool],
+        paths: list[Path],
     ) -> None:
         root = self._output_root.resolve()
         for path in paths:
-            if preexisting.get(path, False) or not path.exists():
+            if not path.exists():
                 continue
             try:
                 resolved = path.resolve()

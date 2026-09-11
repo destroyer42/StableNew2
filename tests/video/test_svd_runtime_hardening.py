@@ -280,3 +280,214 @@ def test_runner_removes_new_partial_export_on_failure(tmp_path: Path, monkeypatc
 
     assert not (tmp_path / "svd_prepared.mp4").exists()
     assert not (tmp_path / "manifests" / "svd_prepared.json").exists()
+
+
+@pytest.mark.parametrize(
+    ("output_format", "save_frames", "output_suffix", "manifest_name"),
+    [
+        ("mp4", False, "svd_prepared.mp4", "svd_prepared.json"),
+        ("gif", False, "svd_prepared.gif", "prepared.json"),
+        ("frames", False, "svd_prepared_frames", "prepared.json"),
+        ("mp4", True, "svd_prepared.mp4", "svd_prepared.json"),
+    ],
+)
+def test_cancellation_after_manifest_removes_exact_outputs(
+    tmp_path: Path,
+    monkeypatch,
+    output_format: str,
+    save_frames: bool,
+    output_suffix: str,
+    manifest_name: str,
+) -> None:
+    source_path = _prepared_image(tmp_path)
+    prepared = SVDPreprocessResult(
+        source_path=source_path,
+        prepared_path=source_path,
+        original_width=32,
+        original_height=32,
+        target_width=1024,
+        target_height=576,
+        resize_mode="letterbox",
+        was_resized=True,
+        was_padded=True,
+        was_cropped=False,
+    )
+    monkeypatch.setattr("src.video.svd_runner.prepare_svd_input", lambda **_kwargs: prepared)
+    monkeypatch.setattr(
+        "src.video.svd_runner.SVDPostprocessRunner.process_frames",
+        lambda self, **kwargs: (kwargs["frames"], {"applied": []}),
+    )
+
+    output_path = tmp_path / output_suffix
+    if output_format == "mp4":
+        monkeypatch.setattr("src.video.svd_runner.export_video_mp4", lambda **_kwargs: _write_and_return(output_path))
+    elif output_format == "gif":
+        monkeypatch.setattr("src.video.svd_runner.export_video_gif", lambda **_kwargs: _write_and_return(output_path))
+    frame_dir = tmp_path / "svd_prepared_frames"
+    frame_path = frame_dir / "frame_000000.png"
+    if save_frames:
+        monkeypatch.setattr(
+            "src.video.svd_runner.save_video_frames",
+            lambda **_kwargs: _write_frame_and_return(frame_path),
+        )
+
+    manifest_path = tmp_path / "manifests" / manifest_name
+    token = CancelToken()
+
+    def _write_manifest(**_kwargs):
+        _kwargs["before_write"](manifest_path)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text("success", encoding="utf-8")
+        token.cancel()
+        return manifest_path
+
+    monkeypatch.setattr("src.video.svd_runner.write_svd_run_manifest", _write_manifest)
+
+    class FakeService:
+        def prepare_runtime(self, **_kwargs):
+            return None
+
+        def generate_frames(self, **_kwargs):
+            return [Image.new("RGB", (8, 8), "yellow")]
+
+        def _release_runtime_memory(self) -> None:
+            return None
+
+    config = SVDConfig.from_dict(
+        {"output": {"output_format": output_format, "save_frames": save_frames, "save_preview_image": False}}
+    )
+    with pytest.raises(CancellationError):
+        SVDRunner(service=FakeService(), output_root=tmp_path).run(
+            source_image_path=source_path,
+            config=config,
+            job_id="job-after-manifest",
+            cancel_token=token,
+        )
+
+    assert not output_path.exists()
+    assert not manifest_path.exists()
+    assert not frame_dir.exists()
+
+
+def _write_and_return(path: Path) -> Path:
+    path.write_bytes(b"output")
+    return path
+
+
+def _write_frame_and_return(path: Path) -> list[Path]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(b"frame")
+    return [path]
+
+
+def test_container_metadata_failure_is_typed_and_cleans_manifest(tmp_path: Path, monkeypatch) -> None:
+    source_path = _prepared_image(tmp_path)
+    prepared = SVDPreprocessResult(
+        source_path=source_path,
+        prepared_path=source_path,
+        original_width=32,
+        original_height=32,
+        target_width=1024,
+        target_height=576,
+        resize_mode="letterbox",
+        was_resized=True,
+        was_padded=True,
+        was_cropped=False,
+    )
+    monkeypatch.setattr("src.video.svd_runner.prepare_svd_input", lambda **_kwargs: prepared)
+    monkeypatch.setattr(
+        "src.video.svd_runner.SVDPostprocessRunner.process_frames",
+        lambda self, **kwargs: (kwargs["frames"], {"applied": []}),
+    )
+    output_path = tmp_path / "svd_prepared.mp4"
+    manifest_path = tmp_path / "manifests" / "svd_prepared.json"
+    monkeypatch.setattr("src.video.svd_runner.export_video_mp4", lambda **_kwargs: _write_and_return(output_path))
+
+    def _write_manifest(**_kwargs):
+        _kwargs["before_write"](manifest_path)
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        manifest_path.write_text("success", encoding="utf-8")
+        return manifest_path
+
+    monkeypatch.setattr("src.video.svd_runner.write_svd_run_manifest", _write_manifest)
+    monkeypatch.setattr(
+        "src.video.svd_runner.write_video_container_metadata",
+        lambda *_args: (_ for _ in ()).throw(RuntimeError("metadata encoder failed")),
+    )
+
+    class FakeService:
+        def prepare_runtime(self, **_kwargs):
+            return None
+
+        def generate_frames(self, **_kwargs):
+            return [Image.new("RGB", (8, 8), "yellow")]
+
+        def _release_runtime_memory(self) -> None:
+            return None
+
+    with pytest.raises(SVDExportError, match="metadata encoder failed"):
+        SVDRunner(service=FakeService(), output_root=tmp_path).run(
+            source_image_path=source_path,
+            config=SVDConfig(),
+            job_id="job-metadata",
+        )
+
+    assert not output_path.exists()
+    assert not manifest_path.exists()
+
+
+def test_preexisting_outputs_survive_failed_run(tmp_path: Path, monkeypatch) -> None:
+    source_path = _prepared_image(tmp_path)
+    output_path = tmp_path / "svd_prepared.gif"
+    manifest_path = tmp_path / "manifests" / "prepared.json"
+    output_path.write_bytes(b"old-output")
+    manifest_path.parent.mkdir(parents=True, exist_ok=True)
+    manifest_path.write_text("old-manifest", encoding="utf-8")
+    prepared = SVDPreprocessResult(
+        source_path=source_path,
+        prepared_path=source_path,
+        original_width=32,
+        original_height=32,
+        target_width=1024,
+        target_height=576,
+        resize_mode="letterbox",
+        was_resized=True,
+        was_padded=True,
+        was_cropped=False,
+    )
+    monkeypatch.setattr("src.video.svd_runner.prepare_svd_input", lambda **_kwargs: prepared)
+    monkeypatch.setattr(
+        "src.video.svd_runner.SVDPostprocessRunner.process_frames",
+        lambda self, **kwargs: (kwargs["frames"], {"applied": []}),
+    )
+    monkeypatch.setattr("src.video.svd_runner.export_video_gif", lambda **_kwargs: output_path)
+    token = CancelToken()
+
+    def _existing_manifest(**_kwargs):
+        token.cancel()
+        return manifest_path
+
+    monkeypatch.setattr("src.video.svd_runner.write_svd_run_manifest", _existing_manifest)
+
+    class FakeService:
+        def prepare_runtime(self, **_kwargs):
+            return None
+
+        def generate_frames(self, **_kwargs):
+            return [Image.new("RGB", (8, 8), "yellow")]
+
+        def _release_runtime_memory(self) -> None:
+            return None
+
+    with pytest.raises(CancellationError):
+        SVDRunner(service=FakeService(), output_root=tmp_path).run(
+            source_image_path=source_path,
+            config=SVDConfig.from_dict(
+                {"output": {"output_format": "gif", "save_preview_image": False}}
+            ),
+            job_id="job-preexisting",
+            cancel_token=token,
+        )
+
+    assert output_path.read_bytes() == b"old-output"
+    assert manifest_path.read_text(encoding="utf-8") == "old-manifest"
