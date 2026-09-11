@@ -94,8 +94,12 @@ populate through the shared WebUI resource projection path.
 - `PR-MVP-060`: **COMPLETE / ACCEPTED**; image create-to-replay vertical slice.
 - `PR-PACKS-001`: **COMPLETE / INTEGRATED**; external PromptPack storage and
   repository/worktree cleanup are complete.
-- `PR-MVP-070`: native SVD XT product slice and hardware preflight.
-- `PR-HARDEN-008`: **ACTIVE**; Phase 2B generation POST retry safety.
+- `PR-MVP-070`: **ACTIVE**; native SVD XT product slice and hardware preflight.
+- `PR-HARDEN-008`: **COMPLETE / INTEGRATED**; truthful runner-watchdog
+  telemetry, bounded WebUI stall recovery, and safe ambiguous generation
+  transport handling. Ambiguous txt2img/img2img response loss does not
+  automatically re-POST, fails without fabricating an artifact, and later
+  work waits for WebUI idle through the existing readiness authority.
 
 **Later**
 
