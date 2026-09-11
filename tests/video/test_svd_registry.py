@@ -41,7 +41,12 @@ def test_write_svd_run_manifest_includes_canonical_artifact(tmp_path: Path) -> N
     result = _FakeResult(tmp_path, output_kind="video")
     config = SVDConfig()
 
-    manifest_path = write_svd_run_manifest(run_dir=tmp_path, config=config, result=result)
+    manifest_path = write_svd_run_manifest(
+        run_dir=tmp_path,
+        config=config,
+        result=result,
+        artifact_stem="svd_source_job-a",
+    )
 
     payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     assert payload["artifact"]["schema"] == "stablenew.artifact.v2.6"

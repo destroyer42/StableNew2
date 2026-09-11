@@ -2,14 +2,25 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 from src.pipeline.artifact_contract import artifact_manifest_payload
+from src.utils.file_io import get_safe_filename
 from src.video.svd_config import SVDConfig
 from src.video.svd_models import SVDResult
+
+
+def build_svd_artifact_stem(*, source_image_path: str | Path, job_id: str) -> str:
+    """Build the deterministic, filesystem-safe stem for one SVD job."""
+    source_stem = get_safe_filename(Path(source_image_path).stem)[:96] or "source"
+    job_text = str(job_id or "").strip() or "job"
+    job_fragment = get_safe_filename(job_text)[:24] or "job"
+    identity_hash = hashlib.sha256(f"{source_stem}\0{job_text}".encode()).hexdigest()[:12]
+    return f"svd_{source_stem}_{job_fragment}-{identity_hash}"
 
 
 def write_svd_run_manifest(
@@ -17,13 +28,13 @@ def write_svd_run_manifest(
     run_dir: str | Path,
     config: SVDConfig,
     result: SVDResult,
+    artifact_stem: str,
     before_write: Callable[[Path], None] | None = None,
 ) -> Path:
     root = Path(run_dir)
     manifest_dir = root / "manifests"
     manifest_dir.mkdir(parents=True, exist_ok=True)
-    manifest_name = result.video_path.stem if result.video_path else result.source_image_path.stem
-    manifest_path = manifest_dir / f"{manifest_name}.json"
+    manifest_path = manifest_dir / f"{artifact_stem}.json"
     video_paths = [str(result.video_path)] if result.video_path else []
     gif_paths = [str(result.gif_path)] if result.gif_path else []
     frame_paths = [str(path) for path in result.frame_paths]

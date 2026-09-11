@@ -10,6 +10,7 @@ from src.controller.runtime_state import CancellationError, CancelToken
 from src.video.svd_config import SVDConfig, SVDInferenceConfig
 from src.video.svd_errors import SVDExportError, SVDOutOfMemoryError
 from src.video.svd_models import SVDPreprocessResult
+from src.video.svd_registry import build_svd_artifact_stem
 from src.video.svd_runner import SVDRunner
 from src.video.svd_service import SVDService
 
@@ -171,8 +172,9 @@ def test_runner_cancellation_before_export_produces_no_success_output(tmp_path: 
     with pytest.raises(CancellationError):
         runner.run(source_image_path=source_path, config=SVDConfig(), job_id="job-cancel", cancel_token=token)
 
-    assert not (tmp_path / "svd_prepared.mp4").exists()
-    assert not (tmp_path / "manifests" / "svd_prepared.json").exists()
+    stem = build_svd_artifact_stem(source_image_path=source_path, job_id="job-cancel")
+    assert not (tmp_path / f"{stem}.mp4").exists()
+    assert not (tmp_path / "manifests" / f"{stem}.json").exists()
 
 
 def test_runner_projects_callback_steps_as_inference_progress(tmp_path: Path, monkeypatch) -> None:
@@ -278,17 +280,18 @@ def test_runner_removes_new_partial_export_on_failure(tmp_path: Path, monkeypatc
     with pytest.raises(SVDExportError, match="encoder failed"):
         runner.run(source_image_path=source_path, config=SVDConfig(), job_id="job-export")
 
-    assert not (tmp_path / "svd_prepared.mp4").exists()
-    assert not (tmp_path / "manifests" / "svd_prepared.json").exists()
+    stem = build_svd_artifact_stem(source_image_path=source_path, job_id="job-export")
+    assert not (tmp_path / f"{stem}.mp4").exists()
+    assert not (tmp_path / "manifests" / f"{stem}.json").exists()
 
 
 @pytest.mark.parametrize(
-    ("output_format", "save_frames", "output_suffix", "manifest_name"),
+    ("output_format", "save_frames"),
     [
-        ("mp4", False, "svd_prepared.mp4", "svd_prepared.json"),
-        ("gif", False, "svd_prepared.gif", "prepared.json"),
-        ("frames", False, "svd_prepared_frames", "prepared.json"),
-        ("mp4", True, "svd_prepared.mp4", "svd_prepared.json"),
+        ("mp4", False),
+        ("gif", False),
+        ("frames", False),
+        ("mp4", True),
     ],
 )
 def test_cancellation_after_manifest_removes_exact_outputs(
@@ -296,8 +299,6 @@ def test_cancellation_after_manifest_removes_exact_outputs(
     monkeypatch,
     output_format: str,
     save_frames: bool,
-    output_suffix: str,
-    manifest_name: str,
 ) -> None:
     source_path = _prepared_image(tmp_path)
     prepared = SVDPreprocessResult(
@@ -318,12 +319,15 @@ def test_cancellation_after_manifest_removes_exact_outputs(
         lambda self, **kwargs: (kwargs["frames"], {"applied": []}),
     )
 
-    output_path = tmp_path / output_suffix
+    stem = build_svd_artifact_stem(source_image_path=source_path, job_id="job-after-manifest")
+    output_path = tmp_path / (
+        f"{stem}.mp4" if output_format == "mp4" else f"{stem}.gif" if output_format == "gif" else f"{stem}_frames"
+    )
     if output_format == "mp4":
         monkeypatch.setattr("src.video.svd_runner.export_video_mp4", lambda **_kwargs: _write_and_return(output_path))
     elif output_format == "gif":
         monkeypatch.setattr("src.video.svd_runner.export_video_gif", lambda **_kwargs: _write_and_return(output_path))
-    frame_dir = tmp_path / "svd_prepared_frames"
+    frame_dir = tmp_path / f"{stem}_frames"
     frame_path = frame_dir / "frame_000000.png"
     if save_frames:
         monkeypatch.setattr(
@@ -331,7 +335,7 @@ def test_cancellation_after_manifest_removes_exact_outputs(
             lambda **_kwargs: _write_frame_and_return(frame_path),
         )
 
-    manifest_path = tmp_path / "manifests" / manifest_name
+    manifest_path = tmp_path / "manifests" / f"{stem}.json"
     token = CancelToken()
 
     def _write_manifest(**_kwargs):
@@ -399,8 +403,9 @@ def test_container_metadata_failure_is_typed_and_cleans_manifest(tmp_path: Path,
         "src.video.svd_runner.SVDPostprocessRunner.process_frames",
         lambda self, **kwargs: (kwargs["frames"], {"applied": []}),
     )
-    output_path = tmp_path / "svd_prepared.mp4"
-    manifest_path = tmp_path / "manifests" / "svd_prepared.json"
+    stem = build_svd_artifact_stem(source_image_path=source_path, job_id="job-metadata")
+    output_path = tmp_path / f"{stem}.mp4"
+    manifest_path = tmp_path / "manifests" / f"{stem}.json"
     monkeypatch.setattr("src.video.svd_runner.export_video_mp4", lambda **_kwargs: _write_and_return(output_path))
 
     def _write_manifest(**_kwargs):
@@ -438,8 +443,9 @@ def test_container_metadata_failure_is_typed_and_cleans_manifest(tmp_path: Path,
 
 def test_preexisting_outputs_survive_failed_run(tmp_path: Path, monkeypatch) -> None:
     source_path = _prepared_image(tmp_path)
-    output_path = tmp_path / "svd_prepared.gif"
-    manifest_path = tmp_path / "manifests" / "prepared.json"
+    stem = build_svd_artifact_stem(source_image_path=source_path, job_id="job-preexisting")
+    output_path = tmp_path / f"{stem}.gif"
+    manifest_path = tmp_path / "manifests" / f"{stem}.json"
     output_path.write_bytes(b"old-output")
     manifest_path.parent.mkdir(parents=True, exist_ok=True)
     manifest_path.write_text("old-manifest", encoding="utf-8")

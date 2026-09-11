@@ -21,7 +21,7 @@ from src.video.svd_errors import (
 from src.video.svd_models import SVDResult
 from src.video.svd_postprocess import SVDPostprocessRunner, validate_svd_postprocess_config
 from src.video.svd_preprocess import prepare_svd_input, validate_svd_source_image
-from src.video.svd_registry import write_svd_run_manifest
+from src.video.svd_registry import build_svd_artifact_stem, write_svd_run_manifest
 from src.video.svd_service import SVDService
 from src.video.video_export import export_video_gif, export_video_mp4, save_video_frames
 
@@ -167,7 +167,7 @@ class SVDRunner:
                 list((postprocess_metadata or {}).get("applied") or []),
             )
 
-            stem = f"svd_{source_path.stem}"
+            stem = build_svd_artifact_stem(source_image_path=source_path, job_id=job_id)
             video_path = None
             gif_path = None
             frame_paths: list[Path] = []
@@ -240,6 +240,7 @@ class SVDRunner:
                     run_dir=self._output_root,
                     config=config,
                     result=result,
+                    artifact_stem=stem,
                     before_write=lambda path: self._track_output(path, owned_outputs, output_existence),
                 )
             except SVDExportError:
