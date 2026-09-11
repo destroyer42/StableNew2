@@ -16,6 +16,7 @@ class GenerateErrorCode(str, Enum):
     INVALID_SCHEDULER = "invalid_scheduler"
     ADETAILER_CONFIG = "adetailer_config_error"
     PAYLOAD_VALIDATION = "payload_validation_error"
+    OUTCOME_UNKNOWN = "outcome_unknown"
     UNKNOWN = "unknown_error"
 
 

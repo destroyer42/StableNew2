@@ -2169,11 +2169,33 @@ class Pipeline:
                 stage=stage,
             )
             diag_details = (error.details or {}).get("diagnostics")
-            should_recover, recovery_reason = self._should_attempt_stage_recovery(
-                stage=stage,
-                error=error,
-                diagnostics=diag_details if isinstance(diag_details, dict) else None,
-            )
+            runtime_recovery_attempted = False
+            runtime_recovery_succeeded = False
+            outcome_unknown = error.code == GenerateErrorCode.OUTCOME_UNKNOWN
+            if outcome_unknown:
+                # Do not replay an ambiguous generation request. Reset the existing
+                # admission gate and use process-manager recovery before a later job.
+                self._true_ready_gated = False
+                recovered = self._attempt_webui_recovery(
+                    stage=stage,
+                    reason="generation_outcome_unknown",
+                )
+                runtime_recovery_attempted = True
+                runtime_recovery_succeeded = recovered
+                should_recover = False
+                recovery_reason = "generation_outcome_unknown"
+                logger.warning(
+                    "Generation outcome is unknown for stage=%s; runtime recovery=%s; "
+                    "the POST will not be replayed",
+                    stage,
+                    recovered,
+                )
+            else:
+                should_recover, recovery_reason = self._should_attempt_stage_recovery(
+                    stage=stage,
+                    error=error,
+                    diagnostics=diag_details if isinstance(diag_details, dict) else None,
+                )
             if should_recover and not recovery_attempted:
                 recovered = self._attempt_webui_recovery(
                     stage=stage,
@@ -2200,10 +2222,14 @@ class Pipeline:
             request_summary = diag_details.get("request_summary") if diag_details else None
             envelope_context: dict[str, Any] = {
                 "error_code": error.code.value,
-                "recovery_attempted": recovery_attempted or should_recover,
+                "recovery_attempted": (
+                    recovery_attempted or should_recover or runtime_recovery_attempted
+                ),
                 "recovery_reason": recovery_reason,
-                "recovery_succeeded": False,
-                "recovery_attempt_count": 1 if (recovery_attempted or should_recover) else 0,
+                "recovery_succeeded": runtime_recovery_succeeded,
+                "recovery_attempt_count": (
+                    1 if (recovery_attempted or should_recover or runtime_recovery_attempted) else 0
+                ),
             }
             if diag_details:
                 envelope_context["diagnostics"] = diag_details

@@ -176,6 +176,29 @@ class WebUIUnavailableError(Exception):
         self.original_exception = original_exception
 
 
+class WebUIGenerationOutcomeUnknownError(Exception):
+    """A generation POST may have executed but its response was lost."""
+
+    def __init__(
+        self,
+        *,
+        endpoint: str,
+        stage: str | None,
+        original_exception: Exception,
+        attempt_count: int,
+    ) -> None:
+        super().__init__(
+            "WebUI stopped responding after generation was submitted. The request may have "
+            "executed, so StableNew did not automatically submit it again. Use Replay to "
+            "generate a new child job if needed."
+        )
+        self.endpoint = endpoint
+        self.stage = stage
+        self.original_exception = original_exception
+        self.attempt_count = attempt_count
+        self.request_may_have_executed = True
+
+
 class WebUIPayloadValidationError(ValueError):
     """Raised when a payload cannot be serialized or violates safety checks."""
 
@@ -194,6 +217,21 @@ def _log_stage_failure(stage: str, error: str | Exception) -> None:
         ctx=LogContext(subsystem="api", stage=stage),
         extra_fields={"error": str(error)},
     )
+
+
+_GENERATION_POST_ENDPOINTS = frozenset({"/sdapi/v1/txt2img", "/sdapi/v1/img2img"})
+
+
+def _is_ambiguous_generation_transport_failure(
+    *, method: str, endpoint: str, exc: Exception
+) -> bool:
+    """Return true only for generation transport failures that may follow dispatch."""
+
+    if method.upper() != "POST" or endpoint.rstrip("/") not in _GENERATION_POST_ENDPOINTS:
+        return False
+    if isinstance(exc, requests.ConnectTimeout):
+        return False
+    return isinstance(exc, (requests.ConnectionError, requests.Timeout))
 
 
 def _extract_http_500_application_signature(response_snippet: str | None) -> str:
@@ -683,6 +721,42 @@ class SDWebUIClient:
                     self._last_http_500_summary = None
                 attempt_index = attempt + 1
                 will_retry = attempt < retries - 1
+                if _is_ambiguous_generation_transport_failure(
+                    method=method,
+                    endpoint=endpoint,
+                    exc=exc,
+                ):
+                    self._reset_http_session()
+                    outcome_unknown = WebUIGenerationOutcomeUnknownError(
+                        endpoint=endpoint,
+                        stage=stage_key,
+                        original_exception=exc,
+                        attempt_count=attempt_index,
+                    )
+                    self._attach_diagnostics_context(
+                        outcome_unknown,
+                        summary=summary,
+                        webui_unavailable=False,
+                        crash_suspected=False,
+                        error_message=str(exc),
+                    )
+                    log_with_ctx(
+                        logger,
+                        logging.WARNING,
+                        "Generation response lost after dispatch; refusing automatic POST replay",
+                        ctx=context,
+                        extra_fields={
+                            "stage": stage_key,
+                            "endpoint": endpoint,
+                            "attempt": attempt_index,
+                            "max_attempts": retries,
+                            "original_error": type(exc).__name__,
+                            "session_id": failed_session_id,
+                            "replacement_session_id": self._session_id,
+                        },
+                    )
+                    _log_api_failure(error_text=str(exc))
+                    raise outcome_unknown from exc
                 session_recycled = False
                 fail_fast_reason = getattr(exc, "fail_fast_reason", None)
                 if will_retry and isinstance(exc, (requests.ConnectionError, requests.Timeout)):
@@ -1551,6 +1625,22 @@ class SDWebUIClient:
                     stage_normalized, "WebUI returned no data", GenerateErrorCode.UNKNOWN
                 )
             return GenerateOutcome(result=result)
+        except WebUIGenerationOutcomeUnknownError as exc:
+            diag = getattr(exc, "diagnostics_context", None)
+            details = {
+                "diagnostics": diag,
+                "recovery_classification": "generation_outcome_unknown",
+                "endpoint": exc.endpoint,
+                "attempt_count": exc.attempt_count,
+                "request_may_have_executed": exc.request_may_have_executed,
+                "original_exception": type(exc.original_exception).__name__,
+            }
+            return self._generate_error_outcome(
+                stage_normalized,
+                str(exc),
+                GenerateErrorCode.OUTCOME_UNKNOWN,
+                details=details,
+            )
         except WebUIUnavailableError as exc:
             diag = None
             original = getattr(exc, "original_exception", None)

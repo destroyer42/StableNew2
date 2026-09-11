@@ -2,13 +2,19 @@ from __future__ import annotations
 
 import json
 from typing import Any
+from unittest.mock import patch
 
 import pytest
+import requests
 
+from src.api.client import SDWebUIClient
 from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome
 from src.pipeline.executor import Pipeline, PipelineStageError
+from src.queue.job_model import JobStatus
+from src.queue.job_queue import JobQueue
+from src.queue.single_node_runner import SingleNodeJobRunner
 from src.utils import StructuredLogger
-from unittest.mock import patch
+from tests.helpers.njr_factory import make_queue_job
 
 
 class DummyClient:
@@ -112,3 +118,41 @@ def test_generate_images_still_attempts_restart_on_opaque_http_500():
         stage="adetailer",
         reason="request_http_500",
     )
+
+
+def test_ambiguous_generation_fails_canonical_job_without_replay(monkeypatch):
+    """Client, executor, and queue preserve one POST and a failed job."""
+    post_methods: list[str] = []
+
+    def _fake_request(self, method: str, url: str, **kwargs: object):
+        post_methods.append(method)
+        raise requests.ReadTimeout("response lost after dispatch")
+
+    monkeypatch.setattr("src.api.client.requests.Session.request", _fake_request)
+    client = SDWebUIClient()
+    pipeline = Pipeline(client, StructuredLogger())
+    pipeline._true_ready_gated = True
+    queue = JobQueue()
+    job = make_queue_job("ambiguous-generation")
+    queue.submit(job)
+    runner = SingleNodeJobRunner(
+        job_queue=queue,
+        run_callable=lambda _job: pipeline._generate_images("txt2img", {"prompt": "test"}),
+    )
+
+    with (
+        patch.object(pipeline, "_ensure_webui_true_ready", return_value=None),
+        patch.object(pipeline, "_check_webui_health_before_stage", return_value=None),
+        patch.object(pipeline, "_attempt_webui_recovery", return_value=True) as recovery,
+    ):
+        with pytest.raises(PipelineStageError):
+            runner.run_once(job)
+
+    stored = queue.get_job(job.job_id)
+    assert post_methods == ["POST"]
+    assert recovery.call_count == 1
+    assert pipeline._true_ready_gated is False
+    assert stored is not None
+    assert stored.status == JobStatus.FAILED
+    assert stored.result is None
+    assert "may have executed" in (stored.error_message or "")

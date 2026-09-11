@@ -157,8 +157,8 @@ class TestWaitUntilTrueReadyGate:
         assert excinfo.value.checks_status["boot_marker_found"] is False
         assert "boot_marker_found" in str(excinfo.value.checks_status)
 
-    def test_no_stdout_callback_assumes_marker_present(self):
-        """When no stdout callback provided, gate assumes boot marker present."""
+    def test_no_stdout_callback_requires_idle_progress(self):
+        """Without stdout capture, API readiness still requires idle progress."""
         client = Mock()
         api = WebUIAPI(client=client)
 
@@ -168,6 +168,7 @@ class TestWaitUntilTrueReadyGate:
 
         mock_response = Mock()
         mock_response.status_code = 200
+        mock_response.json.return_value = {"progress": 0.0}
         client._session.get = Mock(return_value=mock_response)
 
         with patch.object(api, "_sleep"):
@@ -180,7 +181,7 @@ class TestWaitUntilTrueReadyGate:
         assert result is True
 
     def test_partial_endpoint_failure_still_waits(self):
-        """If one endpoint fails, gate continues polling until endpoints and marker all pass."""
+        """If one endpoint fails, gate waits until endpoints and idle progress pass."""
         client = Mock()
         api = WebUIAPI(client=client)
 
@@ -198,6 +199,7 @@ class TestWaitUntilTrueReadyGate:
                 raise Exception("Connection refused")
             mock_response = Mock()
             mock_response.status_code = 200
+            mock_response.json.return_value = {"progress": 0.0}
             return mock_response
 
         client._session.get = mock_get
@@ -215,3 +217,24 @@ class TestWaitUntilTrueReadyGate:
         # Should succeed once options endpoint recovers
         assert result is True
         assert poll_count[0] >= 3
+
+    def test_boot_marker_does_not_admit_busy_webui(self):
+        """A prior generation must finish before a later job can enter WebUI."""
+        client = Mock()
+        api = WebUIAPI(client=client)
+        client.check_api_ready = Mock(return_value=True)
+        client._session = Mock()
+        client.base_url = "http://127.0.0.1:7860"
+
+        options_response = Mock(status_code=200)
+        progress_response = Mock(status_code=200)
+        progress_response.json.return_value = {"progress": 0.5}
+        client._session.get = Mock(side_effect=[options_response, progress_response] * 100)
+
+        with patch.object(api, "_sleep"):
+            with pytest.raises(WebUIReadinessTimeout):
+                api.wait_until_true_ready(
+                    timeout_s=0.05,
+                    poll_interval_s=0.01,
+                    get_stdout_tail=lambda: "Startup time: 5s",
+                )
