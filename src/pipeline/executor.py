@@ -2169,11 +2169,33 @@ class Pipeline:
                 stage=stage,
             )
             diag_details = (error.details or {}).get("diagnostics")
-            should_recover, recovery_reason = self._should_attempt_stage_recovery(
-                stage=stage,
-                error=error,
-                diagnostics=diag_details if isinstance(diag_details, dict) else None,
-            )
+            runtime_recovery_attempted = False
+            runtime_recovery_succeeded = False
+            outcome_unknown = error.code == GenerateErrorCode.OUTCOME_UNKNOWN
+            if outcome_unknown:
+                # Do not replay an ambiguous generation request. Reset the existing
+                # admission gate and use process-manager recovery before a later job.
+                self._true_ready_gated = False
+                recovered = self._attempt_webui_recovery(
+                    stage=stage,
+                    reason="generation_outcome_unknown",
+                )
+                runtime_recovery_attempted = True
+                runtime_recovery_succeeded = recovered
+                should_recover = False
+                recovery_reason = "generation_outcome_unknown"
+                logger.warning(
+                    "Generation outcome is unknown for stage=%s; runtime recovery=%s; "
+                    "the POST will not be replayed",
+                    stage,
+                    recovered,
+                )
+            else:
+                should_recover, recovery_reason = self._should_attempt_stage_recovery(
+                    stage=stage,
+                    error=error,
+                    diagnostics=diag_details if isinstance(diag_details, dict) else None,
+                )
             if should_recover and not recovery_attempted:
                 recovered = self._attempt_webui_recovery(
                     stage=stage,
@@ -2200,10 +2222,14 @@ class Pipeline:
             request_summary = diag_details.get("request_summary") if diag_details else None
             envelope_context: dict[str, Any] = {
                 "error_code": error.code.value,
-                "recovery_attempted": recovery_attempted or should_recover,
+                "recovery_attempted": (
+                    recovery_attempted or should_recover or runtime_recovery_attempted
+                ),
                 "recovery_reason": recovery_reason,
-                "recovery_succeeded": False,
-                "recovery_attempt_count": 1 if (recovery_attempted or should_recover) else 0,
+                "recovery_succeeded": runtime_recovery_succeeded,
+                "recovery_attempt_count": (
+                    1 if (recovery_attempted or should_recover or runtime_recovery_attempted) else 0
+                ),
             }
             if diag_details:
                 envelope_context["diagnostics"] = diag_details
@@ -2279,15 +2305,14 @@ class Pipeline:
         """
         Background thread that polls WebUI for progress.
         
-        PR-HARDEN-004: Enhanced with stall detection - if no progress update
-        for PROGRESS_STALL_THRESHOLD_SEC, sets stall_detected_event and logs
-        a warning (throttled to once per 30s). After STALL_INTERRUPT_THRESHOLD_SEC
-        with no progress, sends a single interrupt to WebUI to cancel the hung
-        generation so the blocking HTTP call can return.
+        Emits a warning after PROGRESS_STALL_THRESHOLD_SEC without meaningful
+        progress, then sends at most one interrupt at the stage hard threshold
+        measured from that same last-meaningful-progress timestamp.
         """
         highest_progress = 0.0
         last_progress_time = time.monotonic()
-        stall_first_detected_at: float | None = None
+        last_current_step: int | None = None
+        last_active_generation_marker: str | None = None
         last_stall_log_time: float = 0.0
         interrupt_sent: bool = False
         
@@ -2310,18 +2335,64 @@ class Pipeline:
                     # WebUI is idle — either between jobs or restarted mid-call.
                     # Reset stall tracking so a fresh generation starting from 0%
                     # is not pre-judged as stalled by stale counters.
-                    if stall_first_detected_at is not None or interrupt_sent:
+                    if last_active_generation_marker is not None or interrupt_sent:
                         logger.debug(
                             "Poll loop: WebUI idle signal received for %s — resetting stall state",
                             stage_label,
                         )
-                        stall_first_detected_at = None
-                        interrupt_sent = False
-                        highest_progress = 0.0
-                        last_progress_time = time.monotonic()
+                    last_current_step = None
+                    last_active_generation_marker = None
+                    interrupt_sent = False
+                    highest_progress = 0.0
+                    last_stall_log_time = 0.0
+                    last_progress_time = time.monotonic()
                 else:
                     observed_progress = max(
                         0.0, min(1.0, float(getattr(info, "progress", 0.0) or 0.0))
+                    )
+                    raw_current_step = getattr(info, "current_step", None)
+                    raw_total_steps = getattr(info, "total_steps", None)
+                    try:
+                        current_step = int(raw_current_step)
+                        total_steps = int(raw_total_steps)
+                    except (TypeError, ValueError):
+                        current_step = None
+                        total_steps = None
+                    if (
+                        current_step is None
+                        or total_steps is None
+                        or total_steps <= 0
+                        or current_step < 0
+                        or current_step > total_steps
+                    ):
+                        current_step = None
+                        total_steps = None
+
+                    state = getattr(info, "state", None)
+                    active_generation_marker = None
+                    if isinstance(state, Mapping):
+                        # WebUI's timestamp is minted for each new generation;
+                        # job is retained as a compatibility fallback.
+                        marker = state.get("job_timestamp") or state.get("job")
+                        if marker:
+                            active_generation_marker = str(marker).strip() or None
+                    newer_active_generation = bool(
+                        active_generation_marker
+                        and active_generation_marker != last_active_generation_marker
+                    )
+                    if active_generation_marker:
+                        last_active_generation_marker = active_generation_marker
+                    if newer_active_generation:
+                        highest_progress = 0.0
+                        last_current_step = None
+
+                    progress_advanced = observed_progress > highest_progress
+                    step_advanced = bool(
+                        current_step is not None
+                        and (last_current_step is None or current_step > last_current_step)
+                    )
+                    meaningful_progress = (
+                        newer_active_generation or progress_advanced or step_advanced
                     )
                     current_progress = max(highest_progress, observed_progress)
                     eta_relative = getattr(info, "eta_relative", None)
@@ -2330,11 +2401,17 @@ class Pipeline:
                         if eta_relative is not None and eta_relative > 0
                         else None
                     )
-                    if observed_progress > highest_progress:
-                        highest_progress = observed_progress
+                    if meaningful_progress:
+                        highest_progress = max(highest_progress, observed_progress)
+                        current_progress = highest_progress
                         last_progress_time = time.monotonic()
-                        stall_first_detected_at = None  # Reset stall tracking on any progress
+                        last_stall_log_time = 0.0
                         interrupt_sent = False
+                        if current_step is not None:
+                            last_current_step = max(
+                                last_current_step if last_current_step is not None else current_step,
+                                current_step,
+                            )
                         
                         with self._progress_lock:
                             self._current_generation_progress = highest_progress
@@ -2347,9 +2424,6 @@ class Pipeline:
                             # Convert 0-1 to percentage
                             percent = highest_progress * 100.0
                             eta = eta_seconds
-                            # Pass step info if available
-                            current_step = getattr(info, 'current_step', 0)
-                            total_steps = getattr(info, 'total_steps', 0)
                             progress_callback(percent, eta, current_step, total_steps)
                             
                     # Keep runtime activity alive on every healthy progress poll,
@@ -2384,54 +2458,88 @@ class Pipeline:
                         }
                         self._emit_status_update(status_data)
 
-                    # PR-HARDEN-004: Check for stall (no progress for too long)
+                    # A runner heartbeat proves the poll path is alive.  Only
+                    # meaningful WebUI generation progress advances this clock.
                     elapsed_since_progress = time.monotonic() - last_progress_time
-                    progress_stalled = (
-                        elapsed_since_progress > PROGRESS_STALL_THRESHOLD_SEC
-                        and highest_progress > 0
+                    completed_steps = bool(
+                        current_step is not None
+                        and total_steps is not None
+                        and current_step >= total_steps
+                    )
+                    ordinary_generation_active = (
+                        highest_progress > 0
                         and highest_progress < 0.99
+                        and not completed_steps
+                    )
+                    effective_hard_threshold = STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(
+                        stage_label, STALL_INTERRUPT_THRESHOLD_SEC
+                    )
+                    warning_due = (
+                        ordinary_generation_active
+                        and elapsed_since_progress >= PROGRESS_STALL_THRESHOLD_SEC
+                    )
+                    hard_interrupt_due = (
+                        ordinary_generation_active
+                        and elapsed_since_progress >= effective_hard_threshold
                     )
                     completion_stalled = (
-                        elapsed_since_progress > POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC
-                        and highest_progress >= 0.99
+                        elapsed_since_progress >= POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC
+                        and (completed_steps or highest_progress >= 0.99)
                     )
-                    if progress_stalled or completion_stalled:
+                    if warning_due or hard_interrupt_due or completion_stalled:
                         now = time.monotonic()
-                        if stall_first_detected_at is None:
-                            stall_first_detected_at = now
+                        interrupt_threshold = (
+                            0.0
+                            if completion_stalled
+                            else effective_hard_threshold
+                        )
 
                         # Throttle log to once per 30s instead of every poll interval
                         if now - last_stall_log_time >= 30.0:
                             if completion_stalled:
                                 logger.warning(
-                                    "PR-HARDEN-004: Completion stall detected for %s - waiting %.1fs after %.1f%% progress",
+                                    "WebUI completion stall: stage=%s job_id=%s progress=%.1f%% "
+                                    "step=%s/%s age=%.1fs warning_threshold=%.1fs hard=%.1fs "
+                                    "interrupt_sent=%s",
                                     stage_label,
-                                    elapsed_since_progress,
+                                    self._current_job_id,
                                     highest_progress * 100,
+                                    current_step,
+                                    total_steps,
+                                    elapsed_since_progress,
+                                    POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC,
+                                    interrupt_threshold,
+                                    interrupt_sent,
                                 )
                             else:
                                 logger.warning(
-                                    "PR-HARDEN-004: Generation stall detected for %s - no progress for %.1fs (stuck at %.1f%%)",
+                                    "WebUI generation stall: stage=%s job_id=%s progress=%.1f%% "
+                                    "step=%s/%s age=%.1fs reason=%s warning_due=%s "
+                                    "warning_threshold=%.1fs hard=%.1fs interrupt_sent=%s",
                                     stage_label,
-                                    elapsed_since_progress,
+                                    self._current_job_id,
                                     highest_progress * 100,
+                                    current_step,
+                                    total_steps,
+                                    elapsed_since_progress,
+                                    (
+                                        "stage-hard-threshold"
+                                        if hard_interrupt_due and not warning_due
+                                        else "warning-threshold"
+                                    ),
+                                    warning_due,
+                                    PROGRESS_STALL_THRESHOLD_SEC,
+                                    interrupt_threshold,
+                                    interrupt_sent,
                                 )
                             last_stall_log_time = now
 
                         if stall_detected_event:
                             stall_detected_event.set()
 
-                        # After hard threshold, interrupt WebUI to unblock the HTTP call.
-                        # Completion stalls already consumed their threshold, so interrupt
-                        # immediately once we declare the request hung after 100%.
-                        if completion_stalled:
-                            _interrupt_threshold = 0.0
-                        else:
-                            _interrupt_threshold = STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(
-                                stage_label, STALL_INTERRUPT_THRESHOLD_SEC
-                            )
-                        stall_duration = now - stall_first_detected_at
-                        if stall_duration >= _interrupt_threshold and not interrupt_sent:
+                        # The hard threshold is measured from last meaningful
+                        # generation progress, never from warning detection.
+                        if elapsed_since_progress >= interrupt_threshold and not interrupt_sent:
                             if completion_stalled:
                                 logger.error(
                                     "PR-HARDEN-004: Completion stall for %s exceeded %.0fs — sending interrupt to WebUI",
@@ -2442,7 +2550,7 @@ class Pipeline:
                                 logger.error(
                                     "PR-HARDEN-004: Stall for %s exceeded %.0fs — sending interrupt to WebUI",
                                     stage_label,
-                                    _interrupt_threshold,
+                                    interrupt_threshold,
                                 )
                             self.client.interrupt()
                             interrupt_sent = True

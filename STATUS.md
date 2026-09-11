@@ -94,10 +94,14 @@ populate through the shared WebUI resource projection path.
 - `PR-MVP-060`: **COMPLETE / ACCEPTED**; image create-to-replay vertical slice.
 - `PR-PACKS-001`: **COMPLETE / INTEGRATED**; external PromptPack storage and
   repository/worktree cleanup are complete.
-- `PR-MVP-070`: **ACTIVE — Phase 1 COMPLETE** — native SVD XT admission,
-  per-user Hugging Face cache policy, and no-GPU queue-to-replay vertical slice.
-- `PR-HARDEN-008 Phase 1`: **COMPLETE / integrated into main**; runner watchdog
-  heartbeat diagnostics are truthful.
+- `PR-MVP-070`: **ACTIVE**; Phase 1 / 1R1 **COMPLETE** — native SVD XT
+  admission, per-user Hugging Face cache policy, and the no-GPU
+  queue-to-replay vertical slice. Phase 2: **NEXT**.
+- `PR-HARDEN-008`: **COMPLETE / INTEGRATED**; truthful runner-watchdog
+  telemetry, bounded WebUI stall recovery, and safe ambiguous generation
+  transport handling. Ambiguous txt2img/img2img response loss does not
+  automatically re-POST, fails without fabricating an artifact, and later
+  work waits for WebUI idle through the existing readiness authority.
 
 **Later**
 
