@@ -44,7 +44,7 @@ def test_queue_runner_stall_triggers_diagnostics(tmp_path):
     watchdog = SystemWatchdogV2(app, diag, check_interval_s=0.25)
     watchdog.start()
     # Simulate running job with no runner activity
-    app.last_runner_activity_ts -= 15.0
+    app.last_runner_activity_ts -= SystemWatchdogV2.RUNNER_STALL_S + 5.0
     # Wait for watchdog to trigger synchronously
     time.sleep(1.5)
     watchdog.stop()

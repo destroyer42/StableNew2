@@ -124,8 +124,9 @@ slideshow semantics remain unchanged.
 
 **Later**
 
-- `PR-MVP-080`: **COMPLETE**; operator readiness projection, first-run guidance,
-  and supported-path labels are in place.
+- `PR-MVP-080`: **IN PROGRESS**; Phase 0 source-aware targets, Phase 1 readiness
+  projection, and Phase 2 UI guidance are complete. Runtime correctness, recovery,
+  and final acceptance remain pending.
 - `PR-MVP-090`: clean-machine release proof and zero Ruff baseline.
 
 ## Verification state

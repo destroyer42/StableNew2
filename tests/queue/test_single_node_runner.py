@@ -75,7 +75,12 @@ def test_worker_warns_long_running_jobs(monkeypatch, caplog) -> None:
     from src.queue import single_node_runner as runner_module
 
     monkeypatch.setattr(runner_module, "QUEUE_JOB_SOFT_TIMEOUT_SECONDS", 0)
-    job_queue = JobQueue()
+    class _ObservingQueue(JobQueue):
+        def mark_completed(self, *args, **kwargs):
+            assert any("QUEUE_JOB_WARNING" in record.getMessage() for record in caplog.records)
+            return super().mark_completed(*args, **kwargs)
+
+    job_queue = _ObservingQueue()
     caplog.set_level(logging.WARNING)
 
     def run_callable(job: Job) -> dict[str, str]:

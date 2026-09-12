@@ -939,7 +939,6 @@ class AppController:
             try:
                 from src.pipeline.job_models_v2 import RuntimeJobStatus
 
-                self.notify_runner_activity()
                 previous_status = self._get_latest_runtime_status()
                 running_job = getattr(getattr(self, "app_state", None), "running_job", None)
                 fallback_job_id = getattr(running_job, "job_id", None)

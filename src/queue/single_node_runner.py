@@ -508,6 +508,14 @@ class SingleNodeJobRunner:
                 if success is None:
                     success = error_message is None
                 logger.debug("[queue/result] after fallback success=%s", success)
+                elapsed_s = duration_ms / 1000
+                if elapsed_s > QUEUE_JOB_SOFT_TIMEOUT_SECONDS:
+                    # This message is only truthful while this worker still owns
+                    # the RUNNING job; terminal state is written immediately below.
+                    logger.warning(
+                        "QUEUE_JOB_WARNING | Job appears to be running for a long time",
+                        extra={**extra, "elapsed_s": elapsed_s},
+                    )
                 if success:
                     self.job_queue.mark_completed(job.job_id, result=canonical_result)
                     status_value = "completed"
@@ -533,12 +541,6 @@ class SingleNodeJobRunner:
                     ctx=LogContext(job_id=job.job_id, subsystem="queue_runner"),
                     extra_fields={**extra, "duration_ms": duration_ms, "status": status_value},
                 )
-                elapsed_s = duration_ms / 1000
-                if elapsed_s > QUEUE_JOB_SOFT_TIMEOUT_SECONDS:
-                    logger.warning(
-                        "QUEUE_JOB_WARNING | Job appears to be running for a long time",
-                        extra={**extra, "elapsed_s": elapsed_s},
-                    )
                 self._notify(job, notify_status)
             except Exception as exc:  # noqa: BLE001
                 if self._cancel_current.is_set() or isinstance(exc, CancellationError):

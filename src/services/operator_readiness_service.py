@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import sys
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -169,6 +170,7 @@ class OperatorReadinessService:
         svd_preflight_provider: SVDPreflightProvider = get_svd_preflight,
         ffmpeg_resolver: Callable[[], Path | None] = resolve_ffmpeg_executable,
         path_probe: PathProbe | None = None,
+        python_version_provider: Callable[[], tuple[int, int, int]] | None = None,
     ) -> None:
         self._repository = repository
         self._webui_connection = webui_connection
@@ -178,6 +180,7 @@ class OperatorReadinessService:
         self._svd_preflight_provider = svd_preflight_provider
         self._ffmpeg_resolver = ffmpeg_resolver
         self._path_probe = path_probe or _probe_directory
+        self._python_version_provider = python_version_provider or _current_python_version
 
     def collect(self, *, source_image_path: str | Path | None = None) -> OperatorReadinessSnapshot:
         """Collect a side-effect-free projection of existing authority state."""
@@ -188,6 +191,7 @@ class OperatorReadinessService:
         return OperatorReadinessSnapshot(
             support_surfaces=product_support_surfaces(),
             records=(
+                self._python_runtime_record(),
                 self._repository_record(),
                 self._path_record(
                     record_id="promptpack_storage",
@@ -213,6 +217,29 @@ class OperatorReadinessService:
         """Rebind to the application's existing WebUI authority without probing it."""
 
         self._webui_connection = webui_connection
+
+    def _python_runtime_record(self) -> OperatorReadinessRecord:
+        version = self._python_version_provider()
+        major, minor, patch = (int(value) for value in version[:3])
+        detected = f"Python {major}.{minor}.{patch}"
+        if (major, minor) >= (3, 11):
+            return OperatorReadinessRecord(
+                id="python_runtime",
+                display_name="Python runtime",
+                state=OperatorReadinessState.READY,
+                summary=f"{detected} meets the required Python 3.11+ runtime.",
+                blocking_reasons=(),
+                operator_actions=(),
+                source="sys.version_info",
+            )
+        return _action_record(
+            "python_runtime",
+            "Python runtime",
+            "StableNew requires Python 3.11 or later.",
+            (f"Detected {detected}; required Python 3.11+.",),
+            ("Launch StableNew with a Python 3.11 or newer environment, then refresh readiness.",),
+            "sys.version_info",
+        )
 
     def _repository_record(self) -> OperatorReadinessRecord:
         if self._repository is None:
@@ -440,6 +467,11 @@ def _accepted_svd_baseline_config() -> SVDConfig:
             "output": {"output_format": "mp4", "save_frames": False, "save_preview_image": True},
         }
     )
+
+
+def _current_python_version() -> tuple[int, int, int]:
+    version = sys.version_info
+    return (int(version.major), int(version.minor), int(version.micro))
 
 
 def _probe_directory(path: Path) -> tuple[bool, str | None]:

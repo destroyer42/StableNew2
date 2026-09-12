@@ -193,14 +193,6 @@ class CorePipelineController:
             self._status_callback = callback
 
     def report_progress(self, stage: str, percent: float, eta: str | None) -> None:
-        if self._app_controller is not None:
-            try:
-                notify_runner_activity = getattr(self._app_controller, "notify_runner_activity", None)
-                if callable(notify_runner_activity):
-                    notify_runner_activity()
-            except Exception:
-                pass
-
         eta_text = eta if eta else "ETA: --"
         try:
             if self.state_manager.current == GUIState.ERROR and (stage or "").lower() != "error":
@@ -209,11 +201,23 @@ class CorePipelineController:
             pass
 
         with self._progress_lock:
+            previous_progress = self._last_progress
+            meaningful_progress = (
+                str(previous_progress.get("stage") or "") != str(stage or "")
+                or float(percent) > float(previous_progress.get("percent") or 0.0)
+            )
             self._last_progress = {
                 "stage": stage,
                 "percent": float(percent),
                 "eta": eta_text,
             }
+            if meaningful_progress and self._app_controller is not None:
+                try:
+                    notify_runner_activity = getattr(self._app_controller, "notify_runner_activity", None)
+                    if callable(notify_runner_activity):
+                        notify_runner_activity()
+                except Exception:
+                    pass
             try:
                 if self._status_callback:
                     self._status_callback(stage)

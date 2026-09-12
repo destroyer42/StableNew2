@@ -99,8 +99,10 @@ _NONRETRYABLE_HTTP_500_MARKERS = (
     "outofmemoryerror",
 )
 
-# PR-HARDEN-001: Reduced generation timeout for faster failure detection
-DEFAULT_GENERATION_TIMEOUT = 120.0  # Down from 300s for better UX
+# Generation POSTs remain bounded, but legitimate high-resolution work can outlive
+# a short response timeout.  The executor owns the earlier 60s/90s no-progress
+# warning/interrupt path; an ambiguous response timeout must not create a replay.
+DEFAULT_GENERATION_TIMEOUT = 600.0
 PROGRESS_STALL_THRESHOLD_SEC = 60.0  # If no progress update for this long, consider stalled
 STALL_INTERRUPT_THRESHOLD_SEC = 90.0  # After this long with no progress, interrupt WebUI generation
 

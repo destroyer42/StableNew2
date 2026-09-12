@@ -94,6 +94,7 @@ def _service(
     preflight: SVDPreflight | None = None,
     ffmpeg: Path | None | object = ...,
     path_probe=None,
+    python_version: tuple[int, int, int] = (3, 11, 0),
 ) -> OperatorReadinessService:
     packs = tmp_path / "packs"
     output = tmp_path / "output"
@@ -110,6 +111,7 @@ def _service(
         or _preflight(source_path=source_image_path),
         ffmpeg_resolver=lambda: resolved_ffmpeg,
         path_probe=path_probe,
+        python_version_provider=lambda: python_version,
     )
 
 
@@ -133,6 +135,22 @@ def test_ready_webui_and_svd_runtime_are_truthful_when_source_is_not_selected(tm
     assert snapshot.record_for("native_svd_runtime").state is OperatorReadinessState.READY
     assert snapshot.record_for("svd_source_image").state is OperatorReadinessState.OPTIONAL
     assert webui.probe_calls == 0
+
+
+def test_python_310_is_action_required_with_an_actionable_upgrade_message(tmp_path: Path) -> None:
+    runtime = _service(tmp_path, python_version=(3, 10, 6)).collect().record_for("python_runtime")
+
+    assert runtime is not None
+    assert runtime.state is OperatorReadinessState.ACTION_REQUIRED
+    assert runtime.blocking_reasons == ("Detected Python 3.10.6; required Python 3.11+.",)
+    assert "Python 3.11" in runtime.operator_actions[0]
+
+
+def test_python_311_is_ready(tmp_path: Path) -> None:
+    runtime = _service(tmp_path, python_version=(3, 11, 9)).collect().record_for("python_runtime")
+
+    assert runtime is not None
+    assert runtime.state is OperatorReadinessState.READY
 
 
 def test_unavailable_webui_projects_existing_connection_authority(tmp_path: Path) -> None:
