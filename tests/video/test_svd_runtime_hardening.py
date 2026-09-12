@@ -42,7 +42,7 @@ def test_callback_capable_pipeline_reports_real_denoising_steps(monkeypatch, tmp
             self.callback = callback_on_step_end
             for step in range(25):
                 callback_on_step_end(self, step, None, {"latents": object()})
-            return SimpleNamespace(frames=[Image.new("RGB", (8, 8), "navy")])
+            return SimpleNamespace(frames=[Image.new("RGB", (32, 32), "navy")])
 
     pipeline = FakePipeline()
     service = _service_with_pipeline(monkeypatch, pipeline)
@@ -70,7 +70,7 @@ def test_callback_unavailable_pipeline_does_not_fabricate_denoising_progress(mon
 
         def __call__(self, _image, **kwargs):
             self.kwargs = kwargs
-            return SimpleNamespace(frames=[Image.new("RGB", (8, 8), "teal")])
+            return SimpleNamespace(frames=[Image.new("RGB", (32, 32), "teal")])
 
     pipeline = FakePipeline()
     service = _service_with_pipeline(monkeypatch, pipeline)
@@ -221,7 +221,7 @@ def test_runner_projects_callback_steps_as_inference_progress(tmp_path: Path, mo
                         "total_steps": 25,
                     }
                 )
-            return [Image.new("RGB", (8, 8), "orange")]
+            return [Image.new("RGB", (32, 32), "orange")]
 
         def _release_runtime_memory(self) -> None:
             return None
@@ -270,7 +270,7 @@ def test_runner_removes_new_partial_export_on_failure(tmp_path: Path, monkeypatc
             return None
 
         def generate_frames(self, **_kwargs):
-            return [Image.new("RGB", (8, 8), "purple")]
+            return [Image.new("RGB", (32, 32), "purple")]
 
         def _release_runtime_memory(self) -> None:
             return None
@@ -352,7 +352,7 @@ def test_cancellation_after_manifest_removes_exact_outputs(
             return None
 
         def generate_frames(self, **_kwargs):
-            return [Image.new("RGB", (8, 8), "yellow")]
+            return [Image.new("RGB", (32, 32), "yellow")]
 
         def _release_runtime_memory(self) -> None:
             return None
@@ -425,7 +425,7 @@ def test_container_metadata_failure_is_typed_and_cleans_manifest(tmp_path: Path,
             return None
 
         def generate_frames(self, **_kwargs):
-            return [Image.new("RGB", (8, 8), "yellow")]
+            return [Image.new("RGB", (32, 32), "yellow")]
 
         def _release_runtime_memory(self) -> None:
             return None
@@ -480,7 +480,7 @@ def test_preexisting_outputs_survive_failed_run(tmp_path: Path, monkeypatch) -> 
             return None
 
         def generate_frames(self, **_kwargs):
-            return [Image.new("RGB", (8, 8), "yellow")]
+            return [Image.new("RGB", (32, 32), "yellow")]
 
         def _release_runtime_memory(self) -> None:
             return None

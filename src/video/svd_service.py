@@ -92,16 +92,20 @@ class SVDService:
 
         result: Any | None = None
         raw_frames: list[Image.Image] = []
+        converted_frames: list[Image.Image] = []
         try:
             self._ensure_not_cancelled(cancel_token, "native SVD preprocessing")
+            prepared_width, prepared_height = image.size
             call_kwargs: dict[str, Any] = {
                 "decode_chunk_size": config.decode_chunk_size,
+                "height": prepared_height,
                 "motion_bucket_id": config.motion_bucket_id,
                 "noise_aug_strength": config.noise_aug_strength,
                 "num_frames": config.num_frames,
                 "num_inference_steps": config.num_inference_steps,
                 "min_guidance_scale": config.min_guidance_scale,
                 "max_guidance_scale": config.max_guidance_scale,
+                "width": prepared_width,
                 "generator": generator,
             }
             if self._supports_step_callback(pipeline):
@@ -123,10 +127,21 @@ class SVDService:
             if not isinstance(frames, list) or not frames:
                 raise SVDInferenceError("SVD returned no frames")
             raw_frames = frames
-            return [frame.convert("RGB") for frame in raw_frames]
+            converted_frames = [frame.convert("RGB") for frame in raw_frames]
+            self._validate_frame_geometry(
+                converted_frames,
+                expected_width=prepared_width,
+                expected_height=prepared_height,
+                model_id=config.model_id,
+            )
+            return converted_frames
         except CancellationError:
             raise
+        except SVDInferenceError:
+            self._close_images(converted_frames)
+            raise
         except Exception as exc:
+            self._close_images(converted_frames)
             if self._is_cuda_out_of_memory(exc):
                 raise SVDOutOfMemoryError(self._format_oom_error(config, exc)) from exc
             raise SVDInferenceError(f"SVD inference failed: {exc}") from exc
@@ -140,6 +155,23 @@ class SVDService:
             result = None
             generator = None
             self._release_runtime_memory()
+
+    @staticmethod
+    def _validate_frame_geometry(
+        frames: list[Image.Image],
+        *,
+        expected_width: int,
+        expected_height: int,
+        model_id: str,
+    ) -> None:
+        actual_sizes = [tuple(int(value) for value in frame.size) for frame in frames]
+        expected = (int(expected_width), int(expected_height))
+        if not actual_sizes or any(size != expected for size in actual_sizes):
+            actual = ", ".join(f"{width}x{height}" for width, height in actual_sizes) or "none"
+            raise SVDInferenceError(
+                "SVD inference geometry mismatch: "
+                f"expected {expected[0]}x{expected[1]}, actual {actual}, model {model_id}."
+            )
 
     def prepare_runtime(
         self,

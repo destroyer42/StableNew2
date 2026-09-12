@@ -6,7 +6,7 @@ import pytest
 from PIL import Image
 
 from src.video.svd_config import SVDInferenceConfig
-from src.video.svd_errors import SVDModelLoadError
+from src.video.svd_errors import SVDInferenceError, SVDModelLoadError
 from src.video.svd_service import SVDService
 
 
@@ -72,7 +72,7 @@ def test_generate_frames_releases_inference_images_and_cuda_cache(monkeypatch, t
 
     class _Frame:
         def __init__(self, color: str) -> None:
-            self._image = Image.new("RGB", (8, 8), color)
+            self._image = Image.new("RGB", (32, 32), color)
 
         def convert(self, mode: str):
             return self._image.convert(mode)
@@ -103,6 +103,66 @@ def test_generate_frames_releases_inference_images_and_cuda_cache(monkeypatch, t
     assert len(frames) == 2
     assert calls.count("frame.close") == 2
     assert calls[-1] == "release"
+
+
+@pytest.mark.parametrize("prepared_size", [(576, 1024), (1024, 576), (640, 960)])
+def test_generate_frames_passes_prepared_geometry_to_diffusers(
+    monkeypatch, tmp_path, prepared_size
+) -> None:
+    prepared_path = tmp_path / "prepared.png"
+    Image.new("RGB", prepared_size, "white").save(prepared_path)
+    captured: dict[str, object] = {}
+
+    class _FakePipeline:
+        def __call__(self, _image, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(frames=[Image.new("RGB", prepared_size, "black")])
+
+    service = SVDService()
+    monkeypatch.setattr(service, "is_available", lambda: (True, None))
+    monkeypatch.setattr(service, "_get_pipeline", lambda _config: _FakePipeline())
+    monkeypatch.setattr(service, "_release_runtime_memory", lambda: None)
+    monkeypatch.setattr(
+        "src.video.svd_service.importlib.import_module",
+        lambda name: SimpleNamespace(Generator=lambda device: None) if name == "torch" else None,
+    )
+
+    service.generate_frames(
+        prepared_image_path=prepared_path,
+        config=SVDInferenceConfig(),
+    )
+
+    assert captured["width"] == prepared_size[0]
+    assert captured["height"] == prepared_size[1]
+
+
+def test_generate_frames_rejects_mismatched_output_geometry_without_repair(monkeypatch, tmp_path) -> None:
+    prepared_size = (576, 1024)
+    actual_size = (1024, 576)
+    prepared_path = tmp_path / "prepared.png"
+    Image.new("RGB", prepared_size, "white").save(prepared_path)
+
+    class _FakePipeline:
+        def __call__(self, _image, **_kwargs):
+            return SimpleNamespace(frames=[Image.new("RGB", actual_size, "black")])
+
+    service = SVDService()
+    monkeypatch.setattr(service, "is_available", lambda: (True, None))
+    monkeypatch.setattr(service, "_get_pipeline", lambda _config: _FakePipeline())
+    monkeypatch.setattr(service, "_release_runtime_memory", lambda: None)
+    monkeypatch.setattr(
+        "src.video.svd_service.importlib.import_module",
+        lambda name: SimpleNamespace(Generator=lambda device: None) if name == "torch" else None,
+    )
+
+    with pytest.raises(
+        SVDInferenceError,
+        match="expected 576x1024, actual 1024x576.*stable-video-diffusion-img2vid-xt",
+    ):
+        service.generate_frames(
+            prepared_image_path=prepared_path,
+            config=SVDInferenceConfig(),
+        )
 
 
 def test_load_pipeline_prefers_cached_local_snapshot_before_network(monkeypatch, tmp_path) -> None:

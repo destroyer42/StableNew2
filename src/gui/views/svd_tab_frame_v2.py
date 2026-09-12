@@ -50,9 +50,11 @@ _OUTPUT_FORMATS = ("mp4", "gif", "frames")
 _FACE_RESTORE_METHODS = ("CodeFormer", "GFPGAN")
 _DEFAULT_TARGET_PRESET = _TARGET_AUTO_LABEL
 _DEFAULT_SVD_PRESET = "Recommended 12GB / XT 14f"
+_CUSTOM_SVD_PRESET = "Custom"
 _SVD_OUTPUT_ROUTES = (OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING)
 _SVD_PRESETS: dict[str, dict[str, Any]] = {
     "Recommended 12GB / XT 14f": {
+        "model_id": "stabilityai/stable-video-diffusion-img2vid-xt",
         "frames": 14,
         "fps": 7,
         "output_format": "mp4",
@@ -61,6 +63,9 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "decode_chunk_size": 2,
         "motion_bucket": 48,
         "noise_aug": 0.01,
+        "cpu_offload": True,
+        "forward_chunking": True,
+        "local_files_only": True,
         "resize_mode": "center_crop",
         "target_preset": _TARGET_AUTO_LABEL,
     },
@@ -151,6 +156,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._setting_tooltips: dict[str, Any] = {}
         self._history_listener_registered = False
         self._pending_recent_runs_refresh = False
+        self._preset_sync_in_progress = False
 
         model_options = self._get_model_options()
         preferred_model = get_default_svd_model_id()
@@ -205,6 +211,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._build_body(model_options)
         self._apply_preset(_DEFAULT_SVD_PRESET, update_status=False)
         self._apply_runtime_defaults()
+        self._install_preset_state_traces()
         self._refresh_capabilities()
         self._refresh_summary()
         self._refresh_recent_runs()
@@ -331,7 +338,7 @@ class SVDTabFrameV2(ttk.Frame):
             row,
             "Preset",
             self.preset_var,
-            list(_SVD_PRESETS.keys()),
+            [*list(_SVD_PRESETS.keys()), _CUSTOM_SVD_PRESET],
             help_key="preset",
         )
         self.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_selected)
@@ -816,6 +823,8 @@ class SVDTabFrameV2(ttk.Frame):
             self.model_var.set(values[0])
 
     def _on_model_availability_changed(self, *_args: Any) -> None:
+        if self._preset_sync_in_progress:
+            return
         self._refresh_model_options()
         self._refresh_summary()
         self._refresh_capabilities()
@@ -1021,12 +1030,17 @@ class SVDTabFrameV2(ttk.Frame):
 
         inference = defaults.get("inference")
         if isinstance(inference, dict):
+            model_id = str(inference.get("model_id") or self.model_var.get())
+            if model_id in list(self.model_combo.cget("values")):
+                self.model_var.set(model_id)
             self.frames_var.set(int(inference.get("num_frames", self.frames_var.get())))
             self.fps_var.set(int(inference.get("fps", self.fps_var.get())))
             self.motion_bucket_var.set(int(inference.get("motion_bucket_id", self.motion_bucket_var.get())))
             self.noise_aug_var.set(float(inference.get("noise_aug_strength", self.noise_aug_var.get())))
             self.inference_steps_var.set(int(inference.get("num_inference_steps", self.inference_steps_var.get())))
             self.decode_chunk_size_var.set(int(inference.get("decode_chunk_size", self.decode_chunk_size_var.get())))
+            self.cpu_offload_var.set(bool(inference.get("cpu_offload", self.cpu_offload_var.get())))
+            self.forward_chunking_var.set(bool(inference.get("forward_chunking", self.forward_chunking_var.get())))
             self.local_files_only_var.set(bool(inference.get("local_files_only", self.local_files_only_var.get())))
             self.cache_dir_var.set(str(inference.get("cache_dir") or self.cache_dir_var.get() or ""))
 
@@ -1101,6 +1115,73 @@ class SVDTabFrameV2(ttk.Frame):
     def _on_preset_selected(self, _event: tk.Event | None = None) -> None:
         self._apply_preset(self.preset_var.get())
 
+    def _install_preset_state_traces(self) -> None:
+        for variable in (
+            self.model_var,
+            self.frames_var,
+            self.fps_var,
+            self.motion_bucket_var,
+            self.noise_aug_var,
+            self.inference_steps_var,
+            self.target_preset_var,
+            self.resize_mode_var,
+            self.output_format_var,
+            self.save_frames_var,
+            self.cpu_offload_var,
+            self.forward_chunking_var,
+            self.local_files_only_var,
+            self.decode_chunk_size_var,
+        ):
+            variable.trace_add("write", self._on_generation_setting_changed)
+
+    def _on_generation_setting_changed(self, *_args: Any) -> None:
+        if self._preset_sync_in_progress:
+            return
+        self._reconcile_preset()
+        self._refresh_summary()
+
+    def _generation_preset_state(self) -> dict[str, Any]:
+        return {
+            "model_id": self.model_var.get(),
+            "frames": int(self.frames_var.get()),
+            "fps": int(self.fps_var.get()),
+            "motion_bucket": int(self.motion_bucket_var.get()),
+            "noise_aug": float(self.noise_aug_var.get()),
+            "num_inference_steps": int(self.inference_steps_var.get()),
+            "decode_chunk_size": int(self.decode_chunk_size_var.get()),
+            "output_format": self.output_format_var.get(),
+            "save_frames": bool(self.save_frames_var.get()),
+            "cpu_offload": bool(self.cpu_offload_var.get()),
+            "forward_chunking": bool(self.forward_chunking_var.get()),
+            "local_files_only": bool(self.local_files_only_var.get()),
+            "resize_mode": self.resize_mode_var.get(),
+            "target_preset": self.target_preset_var.get(),
+        }
+
+    @staticmethod
+    def _preset_matches(payload: dict[str, Any], state: dict[str, Any]) -> bool:
+        for key, expected in payload.items():
+            actual = state.get(key)
+            if isinstance(expected, float):
+                if abs(float(actual) - expected) > 1e-9:
+                    return False
+            elif actual != expected:
+                return False
+        return True
+
+    def _reconcile_preset(self) -> None:
+        state = self._generation_preset_state()
+        matching_name = next(
+            (
+                name
+                for name, payload in _SVD_PRESETS.items()
+                if self._preset_matches(payload, state)
+            ),
+            _CUSTOM_SVD_PRESET,
+        )
+        if self.preset_var.get() != matching_name:
+            self.preset_var.set(matching_name)
+
     def _on_target_selected(self, _event: tk.Event | None = None) -> None:
         self._refresh_summary()
         self._refresh_capabilities()
@@ -1109,20 +1190,38 @@ class SVDTabFrameV2(ttk.Frame):
         payload = _SVD_PRESETS.get(preset_name)
         if not payload:
             return
-        self.frames_var.set(int(payload["frames"]))
-        self.fps_var.set(int(payload["fps"]))
-        self.output_format_var.set(str(payload["output_format"]))
-        self.save_frames_var.set(bool(payload["save_frames"]))
-        self.inference_steps_var.set(int(payload.get("num_inference_steps", self.inference_steps_var.get())))
-        self.decode_chunk_size_var.set(int(payload["decode_chunk_size"]))
-        self.motion_bucket_var.set(int(payload["motion_bucket"]))
-        self.noise_aug_var.set(float(payload["noise_aug"]))
-        resize_mode = payload.get("resize_mode")
-        if resize_mode in _RESIZE_MODES:
-            self.resize_mode_var.set(str(resize_mode))
-        target_preset = payload.get("target_preset")
-        if target_preset in _TARGET_PRESETS:
-            self.target_preset_var.set(str(target_preset))
+        local_files_only_before = bool(self.local_files_only_var.get())
+        self._preset_sync_in_progress = True
+        try:
+            model_id = payload.get("model_id")
+            if model_id in list(self.model_combo.cget("values")):
+                self.model_var.set(str(model_id))
+            self.frames_var.set(int(payload["frames"]))
+            self.fps_var.set(int(payload["fps"]))
+            self.output_format_var.set(str(payload["output_format"]))
+            self.save_frames_var.set(bool(payload["save_frames"]))
+            self.inference_steps_var.set(int(payload.get("num_inference_steps", self.inference_steps_var.get())))
+            self.decode_chunk_size_var.set(int(payload["decode_chunk_size"]))
+            self.motion_bucket_var.set(int(payload["motion_bucket"]))
+            self.noise_aug_var.set(float(payload["noise_aug"]))
+            for key, variable in (
+                ("cpu_offload", self.cpu_offload_var),
+                ("forward_chunking", self.forward_chunking_var),
+                ("local_files_only", self.local_files_only_var),
+            ):
+                if key in payload:
+                    variable.set(bool(payload[key]))
+            resize_mode = payload.get("resize_mode")
+            if resize_mode in _RESIZE_MODES:
+                self.resize_mode_var.set(str(resize_mode))
+            target_preset = payload.get("target_preset")
+            if target_preset in _TARGET_PRESETS:
+                self.target_preset_var.set(str(target_preset))
+        finally:
+            self._preset_sync_in_progress = False
+        if bool(self.local_files_only_var.get()) != local_files_only_before:
+            self._refresh_model_options()
+        self._reconcile_preset()
         self._refresh_summary()
         if update_status:
             self._set_status(f"Applied preset: {preset_name}")
@@ -1376,9 +1475,6 @@ class SVDTabFrameV2(ttk.Frame):
             if source_path:
                 self.source_image_var.set(source_path)
             self._last_folder = str(payload.get("last_folder") or self._last_folder)
-            preset_name = str(payload.get("preset_name") or _DEFAULT_SVD_PRESET)
-            if preset_name in _SVD_PRESETS:
-                self.preset_var.set(preset_name)
             model_id = str(payload.get("model_id") or "")
             if model_id and model_id in list(self.model_combo.cget("values")):
                 self.model_var.set(model_id)
@@ -1419,6 +1515,7 @@ class SVDTabFrameV2(ttk.Frame):
             self.frame_upscale_enabled_var.set(bool(payload.get("frame_upscale_enabled", self.frame_upscale_enabled_var.get())))
             self.frame_upscale_factor_var.set(float(payload.get("frame_upscale_factor", self.frame_upscale_factor_var.get())))
             self._refresh_capabilities()
+            self._reconcile_preset()
             self._refresh_summary(source_path or None)
             return True
         except Exception as exc:
