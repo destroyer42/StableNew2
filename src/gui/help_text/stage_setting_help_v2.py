@@ -98,7 +98,7 @@ ADETAILER_STAGE_HELP = {
 SVD_SETTING_HELP = {
     "preset": "Applies a tested group of SVD settings for a common outcome. Use presets as a safe starting point, then deviate only when you know which motion or postprocess behavior needs to change.",
     "model": "Chooses the SVD model variant. XT-style models usually give stronger quality but cost more, while lighter variants are useful when you want faster experiments.",
-    "frames": "Total frame count in the generated clip. More frames increase clip length and cost; shorter runs are safer for previews and faster iteration.",
+    "frames": "Total frame count in the generated clip. 14 frames is the recommended conservative target for ~12GB Windows GPUs; 25 frames is a higher-memory option that may be much slower. More frames increase clip length and cost.",
     "fps": "Playback speed of the exported clip. Higher FPS makes the output play faster and smoother if enough frames exist, while lower FPS stretches the same motion over more time.",
     "motion_bucket": "Controls how much motion SVD is encouraged to add. Lower values tend to keep motion subtle and more realistic; higher values push stronger movement but increase artifact and drift risk. Around 40-90 is a practical safe band for realism-first work.",
     "noise_aug": "Noise augmentation strength before motion generation. Lower values preserve the source image more faithfully; higher values can help stylized movement but increase instability.",

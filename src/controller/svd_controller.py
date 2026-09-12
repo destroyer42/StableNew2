@@ -42,7 +42,7 @@ class SVDController:
                     "resize_mode": "center_crop",
                 },
                 "inference": {
-                    "num_frames": 25,
+                    "num_frames": 14,
                     "fps": 7,
                     "motion_bucket_id": 48,
                     "noise_aug_strength": 0.01,

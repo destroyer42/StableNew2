@@ -49,7 +49,13 @@ def test_svd_tab_renders(tk_root: tk.Tk) -> None:
         assert hasattr(tab, "admission_label")
         assert hasattr(tab, "capabilities_label")
         assert tab.output_format_var.get() == "mp4"
-        assert tab.preset_var.get() == "Recommended Quality / Enhanced"
+        assert tab.preset_var.get() == "Recommended 12GB / XT 14f"
+        assert tab.frames_var.get() == 14
+        assert tab.fps_var.get() == 7
+        assert tab.inference_steps_var.get() == 25
+        assert tab.decode_chunk_size_var.get() == 2
+        assert tab.cpu_offload_var.get() is True
+        assert tab.forward_chunking_var.get() is True
         assert tab.face_restore_method_var.get() == "CodeFormer"
         assert tab.resize_mode_var.get() == "center_crop"
         assert tab.motion_bucket_var.get() == 48
@@ -385,6 +391,8 @@ def test_svd_tab_prefers_xt_default_model_when_controller_list_is_unsorted(tk_ro
     tab = SVDTabFrameV2(tk_root, app_controller=controller)
     try:
         assert tab.model_var.get() == "stabilityai/stable-video-diffusion-img2vid-xt"
+        tab._refresh_model_options()
+        assert tab.frames_var.get() == 14
     finally:
         tab.destroy()
 
@@ -412,7 +420,7 @@ def test_svd_tab_local_files_only_refreshes_model_options(tk_root: tk.Tk) -> Non
 def test_svd_tab_preset_applies_expected_values(tk_root: tk.Tk) -> None:
     tab = SVDTabFrameV2(tk_root)
     try:
-        tab.preset_var.set("Frames Only")
+        tab.preset_var.set("Frames Only 25f / High Memory")
         tab._on_preset_selected()
 
         assert tab.output_format_var.get() == "frames"

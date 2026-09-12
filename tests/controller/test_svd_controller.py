@@ -31,7 +31,7 @@ def test_submit_svd_job_enqueues_svd_native_njr(tmp_path, monkeypatch) -> None:
 
     job_id = controller.submit_svd_job(
         source_image_path=source_path,
-        config=SVDConfig(),
+        config=SVDConfig.from_dict({"inference": {"num_frames": 25}}),
         output_route=OUTPUT_ROUTE_TESTING,
     )
 
@@ -41,6 +41,7 @@ def test_submit_svd_job_enqueues_svd_native_njr(tmp_path, monkeypatch) -> None:
     assert njr.input_image_paths == (str(source_path),)
     assert "SVD animation source" in njr.positive_prompt
     assert [stage.stage_type for stage in njr.stage_chain] == ["svd_native"]
+    assert njr.config["svd_native"]["inference"]["num_frames"] == 25
     assert njr.config["pipeline"]["output_route"] == OUTPUT_ROUTE_TESTING
     assert captured["policy"].start_when_idle is False
 
@@ -64,11 +65,14 @@ def test_build_default_config_is_conservative_xt_core_baseline() -> None:
 
     assert result.preprocess.resize_mode == "center_crop"
     assert result.inference.model_id == "stabilityai/stable-video-diffusion-img2vid-xt"
+    assert result.inference.num_frames == 14
     assert result.inference.motion_bucket_id == 48
     assert result.inference.noise_aug_strength == 0.01
     assert result.inference.decode_chunk_size == 2
     assert result.inference.num_inference_steps == 25
     assert result.inference.local_files_only is True
+    assert result.inference.cpu_offload is True
+    assert result.inference.forward_chunking is True
     assert result.inference.cache_dir == str(get_default_svd_cache_dir())
     assert result.postprocess.face_restore.enabled is False
     assert result.postprocess.interpolation.enabled is False

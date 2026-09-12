@@ -41,11 +41,11 @@ _RESIZE_MODES = ("letterbox", "center_crop", "contain_then_crop")
 _OUTPUT_FORMATS = ("mp4", "gif", "frames")
 _FACE_RESTORE_METHODS = ("CodeFormer", "GFPGAN")
 _DEFAULT_TARGET_PRESET = "Landscape 1024x576"
-_DEFAULT_SVD_PRESET = "Recommended Quality / Enhanced"
+_DEFAULT_SVD_PRESET = "Recommended 12GB / XT 14f"
 _SVD_OUTPUT_ROUTES = (OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING)
 _SVD_PRESETS: dict[str, dict[str, Any]] = {
-    "Recommended Quality / Enhanced": {
-        "frames": 25,
+    "Recommended 12GB / XT 14f": {
+        "frames": 14,
         "fps": 7,
         "output_format": "mp4",
         "save_frames": False,
@@ -56,7 +56,7 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "resize_mode": "center_crop",
         "target_preset": "Landscape 1024x576",
     },
-    "Quality 25f MP4": {
+    "Quality 25f MP4 / High Memory": {
         "frames": 25,
         "fps": 7,
         "output_format": "mp4",
@@ -66,7 +66,7 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "motion_bucket": 72,
         "noise_aug": 0.02,
     },
-    "Subtle Motion / Realism": {
+    "Subtle Motion / Realism 25f / High Memory": {
         "frames": 25,
         "fps": 7,
         "output_format": "mp4",
@@ -97,7 +97,7 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "motion_bucket": 110,
         "noise_aug": 0.05,
     },
-    "More Motion / Stylized": {
+    "More Motion / Stylized 25f / High Memory": {
         "frames": 25,
         "fps": 7,
         "output_format": "mp4",
@@ -107,7 +107,7 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "motion_bucket": 140,
         "noise_aug": 0.06,
     },
-    "Frames Only": {
+    "Frames Only 25f / High Memory": {
         "frames": 25,
         "fps": 7,
         "output_format": "frames",
@@ -154,14 +154,14 @@ class SVDTabFrameV2(ttk.Frame):
         self.source_image_var = tk.StringVar()
         self.preset_var = tk.StringVar(value=_DEFAULT_SVD_PRESET)
         self.model_var = tk.StringVar(value=default_model)
-        self.frames_var = tk.IntVar(value=25)
+        self.frames_var = tk.IntVar(value=14)
         self.fps_var = tk.IntVar(value=7)
-        self.motion_bucket_var = tk.IntVar(value=127)
-        self.noise_aug_var = tk.DoubleVar(value=0.05)
-        self.inference_steps_var = tk.IntVar(value=30)
+        self.motion_bucket_var = tk.IntVar(value=48)
+        self.noise_aug_var = tk.DoubleVar(value=0.01)
+        self.inference_steps_var = tk.IntVar(value=25)
         self.seed_var = tk.StringVar()
         self.target_preset_var = tk.StringVar(value=_DEFAULT_TARGET_PRESET)
-        self.resize_mode_var = tk.StringVar(value="letterbox")
+        self.resize_mode_var = tk.StringVar(value="center_crop")
         self.output_format_var = tk.StringVar(value="mp4")
         self.output_route_var = tk.StringVar(value=OUTPUT_ROUTE_SVD)
         self.save_frames_var = tk.BooleanVar(value=False)
@@ -269,7 +269,8 @@ class SVDTabFrameV2(ttk.Frame):
         help_text = (
             "Stable Video Diffusion animates an existing still image into a short clip.\n"
             "This path is native Python and does not use A1111/WebUI generation APIs.\n"
-            "Best quality usually comes from the XT model, lower motion/noise values, and a landscape hero crop."
+            "Recommended baseline: XT at 14 frames for ~12GB Windows GPUs. "
+            "25 frames is a higher-memory, potentially much slower option."
         )
         ttk.Label(
             help_frame,
