@@ -44,6 +44,9 @@ class FakeWindow:
         self.status_bar_v2 = FakeStatusBar()
         self.webui_process_manager = None
         self.left_zone = None
+        self.app_controller = SimpleNamespace(
+            webui_connection_controller=FakeConnectionController()
+        )
 
     def after(self, _delay, callback):
         callback()

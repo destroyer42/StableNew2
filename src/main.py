@@ -377,21 +377,31 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
         try:
             webui_panel = getattr(window.status_bar_v2, "webui_panel", None)
             if webui_panel:
-                # Create a proper WebUI connection controller
+                status_bar = window.status_bar_v2
                 from src.controller.webui_connection_controller import (
-                    WebUIConnectionController,
                     WebUIConnectionState,
                 )
 
-                connection_controller = WebUIConnectionController()
+                # Reuse the controller already owned by AppController/PipelineController.
+                # Readiness and status must observe one WebUI authority.
+                connection_controller = getattr(controller, "webui_connection_controller", None)
+                if connection_controller is None:
+                    connection_controller = getattr(status_bar, "_webui_controller", None)
+                if connection_controller is None:
+                    logging.warning(
+                        "WebUI connection authority is not available for status wiring"
+                    )
+                    return
 
                 # Connect the status panel to the controller
-                status_bar = window.status_bar_v2
                 if hasattr(status_bar, "attach_webui_connection_controller"):
                     try:
                         status_bar.attach_webui_connection_controller(connection_controller)
                     except Exception:
                         pass
+                bind_readiness = getattr(window, "bind_operator_readiness_webui", None)
+                if callable(bind_readiness):
+                    bind_readiness(connection_controller)
                 last_logged_state = None
                 consecutive_failures = 0
                 error_logged = False

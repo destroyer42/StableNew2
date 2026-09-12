@@ -5,6 +5,7 @@ import logging
 import os
 import tkinter as tk
 from collections.abc import Callable
+from pathlib import Path
 from tkinter import ttk
 from typing import Any
 
@@ -17,18 +18,27 @@ from src.gui.engine_settings_dialog import EngineSettingsDialog
 from src.gui.gui_invoker import GuiInvoker
 from src.gui.layout_v2 import configure_root_grid
 from src.gui.log_trace_panel_v2 import LogTracePanelV2
+from src.gui.panels_v2.operator_readiness_panel_v2 import (
+    OperatorReadinessPanelV2,
+    format_product_support_label,
+    is_intro_dismissed,
+)
 from src.gui.status_bar_v2 import StatusBarV2
 from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
+from src.gui.views.character_training_frame import CharacterTrainingFrame
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.gui.views.movie_clips_tab_frame_v2 import MovieClipsTabFrameV2
-from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrame
+from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
-from src.gui.views.character_training_frame import CharacterTrainingFrame
 from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
 from src.gui.views.video_workflow_tab_frame_v2 import VideoWorkflowTabFrameV2
 from src.gui.zone_map_v2 import get_root_zone_config
+from src.services.operator_readiness_service import (
+    OperatorReadinessService,
+    product_support_surfaces,
+)
 from src.services.ui_state_store import get_ui_state_store
 from src.utils import InMemoryLogHandler
 from src.utils.config import ConfigManager
@@ -48,6 +58,7 @@ class HeaderZone(ttk.Frame):
         self.refresh_button = ttk.Button(self, text="Refresh", style="Secondary.TButton")
         self.help_button = ttk.Button(self, text="Help Mode: Off", style="Secondary.TButton")
         self.debug_button = ttk.Button(self, text="Debug", style="Secondary.TButton")
+        self.readiness_button = ttk.Button(self, text="Readiness", style="Secondary.TButton")
 
         for idx, btn in enumerate(
             [
@@ -58,6 +69,7 @@ class HeaderZone(ttk.Frame):
                 self.refresh_button,
                 self.help_button,
                 self.debug_button,
+                self.readiness_button,
             ]
         ):
             btn.grid(row=0, column=idx, padx=4, pady=4)
@@ -241,7 +253,7 @@ class MainWindowV2:
             app_state=self.app_state,
             packs_dir=getattr(self.app_controller, "_packs_dir", None),
         )
-        self.add_tab("prompt", "Prompt", self.prompt_tab)
+        self.add_tab("prompt", self._support_tab_title("prompt", "Prompt"), self.prompt_tab)
 
         # PR-CORE1-D14: Always create and assign pipeline_tab for test/compat
         from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
@@ -276,7 +288,9 @@ class MainWindowV2:
         if existing_pipeline_tab is not None:
             self.pipeline_tab = existing_pipeline_tab
         else:
-            self.pipeline_tab = self.add_tab("pipeline", "Pipeline", _make_pipeline)
+            self.pipeline_tab = self.add_tab(
+                "pipeline", self._support_tab_title("pipeline", "Pipeline"), _make_pipeline
+            )
 
         # Learning tab (optional; attach via registry)
         def _make_learning(parent):
@@ -302,7 +316,9 @@ class MainWindowV2:
                     pass
             return tab
 
-        self.learning_tab = self.add_tab("learning", "Learning", _make_learning)
+        self.learning_tab = self.add_tab(
+            "learning", self._support_tab_title("learning", "Learning"), _make_learning
+        )
         self._restore_learning_tab_state()
 
         def _make_review(parent):
@@ -312,7 +328,9 @@ class MainWindowV2:
                 app_state=self.app_state,
             )
 
-        self.review_tab = self.add_tab("review", "Review", _make_review)
+        self.review_tab = self.add_tab(
+            "review", self._support_tab_title("review", "Review"), _make_review
+        )
 
         def _make_photo_optimize(parent):
             return PhotoOptimizeTabFrame(
@@ -321,7 +339,11 @@ class MainWindowV2:
                 app_state=self.app_state,
             )
 
-        self.photo_optimize_tab = self.add_tab("photo_optimize", "Photo Optomize", _make_photo_optimize)
+        self.photo_optimize_tab = self.add_tab(
+            "photo_optimize",
+            self._support_tab_title("photo_optimize", "Photo Optomize"),
+            _make_photo_optimize,
+        )
         self._restore_photo_optimize_tab_state()
 
         def _make_movie_clips(parent):
@@ -331,7 +353,9 @@ class MainWindowV2:
                 app_state=self.app_state,
             )
 
-        self.movie_clips_tab = self.add_tab("movie_clips", "Movie Clips", _make_movie_clips)
+        self.movie_clips_tab = self.add_tab(
+            "movie_clips", self._support_tab_title("movie_clips", "Movie Clips"), _make_movie_clips
+        )
         self._restore_movie_clips_tab_state()
 
         def _make_character_training(parent):
@@ -343,7 +367,7 @@ class MainWindowV2:
 
         self.character_training_tab = self.add_tab(
             "character_training",
-            "Character Training",
+            self._support_tab_title("character_training", "Character Training"),
             _make_character_training,
         )
 
@@ -354,7 +378,9 @@ class MainWindowV2:
                 app_state=self.app_state,
             )
 
-        self.svd_tab = self.add_tab("svd", "SVD Img2Vid", _make_svd)
+        self.svd_tab = self.add_tab(
+            "svd", self._support_tab_title("svd", "SVD Img2Vid"), _make_svd
+        )
         self._restore_svd_tab_state()
 
         def _make_video_workflow(parent):
@@ -366,7 +392,7 @@ class MainWindowV2:
 
         self.video_workflow_tab = self.add_tab(
             "video_workflow",
-            "Video Workflow",
+            self._support_tab_title("video_workflow", "Video Workflow"),
             _make_video_workflow,
         )
         self._restore_video_workflow_tab_state()
@@ -416,6 +442,8 @@ class MainWindowV2:
         self.left_zone = getattr(self.pipeline_tab, "pack_loader_compat", None)
         self.right_zone = getattr(self.pipeline_tab, "preview_panel", None)
         self.sidebar_panel_v2 = getattr(self.pipeline_tab, "sidebar", None)
+        self.operator_readiness_service = self._build_operator_readiness_service()
+        self._operator_readiness_window: tk.Toplevel | None = None
 
         self._dropdown_loader_v2 = DropdownLoaderV2(
             getattr(self.app_controller, "_config_manager", None)
@@ -446,6 +474,11 @@ class MainWindowV2:
             self.root.bind("<Map>", self._on_window_map, add="+")
         except Exception:
             pass
+        if not self._is_test_mode:
+            try:
+                self.root.after_idle(self._maybe_show_operator_readiness)
+            except Exception:
+                pass
 
         # --- UI Heartbeat: Tk thread liveness signal ---
         self._install_ui_heartbeat()
@@ -501,6 +534,113 @@ class MainWindowV2:
             except Exception:
                 pass
         cb()
+
+    @staticmethod
+    def _support_tab_title(surface_id: str, default_title: str) -> str:
+        support = {surface.id: surface for surface in product_support_surfaces()}.get(surface_id)
+        if support is None:
+            return default_title
+        return format_product_support_label(default_title, support.state)
+
+    def _build_operator_readiness_service(self) -> OperatorReadinessService:
+        controller = getattr(self, "app_controller", None)
+        job_service = getattr(controller, "job_service", None)
+        repository = getattr(job_service, "history_store", None)
+        if repository is None:
+            queue = getattr(job_service, "job_queue", None)
+            repository = getattr(queue, "repository", None)
+
+        config_manager = getattr(controller, "_config_manager", None)
+
+        def output_dir_provider() -> Path:
+            load_settings = getattr(config_manager, "load_settings", None)
+            settings = load_settings() if callable(load_settings) else {}
+            if not isinstance(settings, dict):
+                settings = {}
+            configured = (
+                settings.get("output_dir")
+                or getattr(controller, "output_dir", None)
+                or "output"
+            )
+            return Path(str(configured)).expanduser()
+
+        def prompt_pack_dir_provider() -> Path:
+            configured = getattr(controller, "_packs_dir", None)
+            return Path(configured) if configured is not None else Path("packs")
+
+        return OperatorReadinessService(
+            repository=repository,
+            webui_connection=getattr(controller, "webui_connection_controller", None),
+            prompt_pack_dir_provider=prompt_pack_dir_provider,
+            output_dir_provider=output_dir_provider,
+        )
+
+    def _readiness_source_image_path(self) -> str | None:
+        svd_tab = getattr(self, "svd_tab", None)
+        getter = getattr(svd_tab, "get_svd_state", None)
+        if not callable(getter):
+            return None
+        try:
+            state = getter()
+        except Exception:
+            return None
+        if not isinstance(state, dict):
+            return None
+        return str(state.get("source_image_path") or "").strip() or None
+
+    def bind_operator_readiness_webui(self, connection_controller: Any | None) -> None:
+        """Bind readiness to the same WebUI connection authority used by status UI."""
+        service = getattr(self, "operator_readiness_service", None)
+        binder = getattr(service, "bind_webui_connection", None)
+        if callable(binder):
+            binder(connection_controller)
+        panel = getattr(self, "_operator_readiness_panel", None)
+        if panel is not None:
+            panel.refresh()
+
+    def _maybe_show_operator_readiness(self) -> None:
+        if not is_intro_dismissed():
+            self.open_operator_readiness()
+
+    def open_operator_readiness(self) -> None:
+        existing = getattr(self, "_operator_readiness_window", None)
+        try:
+            if existing is not None and existing.winfo_exists():
+                existing.lift()
+                existing.focus_force()
+                panel = getattr(self, "_operator_readiness_panel", None)
+                if panel is not None:
+                    panel.refresh()
+                return
+        except Exception:
+            pass
+
+        dialog = tk.Toplevel(self.root)
+        dialog.title("Operator Readiness")
+        dialog.geometry("780x720")
+        dialog.minsize(640, 520)
+
+        def close() -> None:
+            self._operator_readiness_window = None
+            self._operator_readiness_panel = None
+            try:
+                dialog.destroy()
+            except Exception:
+                pass
+
+        controller = getattr(self, "app_controller", None)
+        diagnostics = getattr(controller, "open_debug_hub", None)
+        panel = OperatorReadinessPanelV2(
+            dialog,
+            service=self.operator_readiness_service,
+            source_image_path_provider=self._readiness_source_image_path,
+            on_close=close,
+            on_open_diagnostics=diagnostics if callable(diagnostics) else None,
+        )
+        panel.pack(fill=tk.BOTH, expand=True)
+        self._operator_readiness_window = dialog
+        self._operator_readiness_panel = panel
+        dialog.protocol("WM_DELETE_WINDOW", close)
 
     def add_tab(self, tab_id: str, title: str, frame_or_factory: Any) -> tk.Widget:
         """Add a tab only if not already present. Accepts a frame instance or a factory(parent)->frame."""
@@ -860,6 +1000,11 @@ class MainWindowV2:
                 if callable(stop_cb):
                     header.stop_button.configure(command=stop_cb)
             header.help_button.configure(command=self._toggle_help_mode)
+
+        try:
+            header.readiness_button.configure(command=self.open_operator_readiness)
+        except Exception:
+            pass
 
         if getattr(self, "app_state", None) and hasattr(self.app_state, "subscribe"):
             try:

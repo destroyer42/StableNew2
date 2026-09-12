@@ -209,6 +209,11 @@ class OperatorReadinessService:
             ),
         )
 
+    def bind_webui_connection(self, webui_connection: _WebUIConnectionAuthority | None) -> None:
+        """Rebind to the application's existing WebUI authority without probing it."""
+
+        self._webui_connection = webui_connection
+
     def _repository_record(self) -> OperatorReadinessRecord:
         if self._repository is None:
             return _unknown_record(

@@ -124,7 +124,8 @@ slideshow semantics remain unchanged.
 
 **Later**
 
-- `PR-MVP-080`: **NEXT** — operator UX, setup, diagnostics, and bounded lint cleanup.
+- `PR-MVP-080`: **COMPLETE**; operator readiness projection, first-run guidance,
+  and supported-path labels are in place.
 - `PR-MVP-090`: clean-machine release proof and zero Ruff baseline.
 
 ## Verification state

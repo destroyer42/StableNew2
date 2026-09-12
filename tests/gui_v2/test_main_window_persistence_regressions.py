@@ -170,6 +170,31 @@ def test_save_ui_state_preserves_existing_learning_payload_when_tab_returns_none
     assert saved["tabs"]["selected_index"] == 1
 
 
+def test_save_ui_state_preserves_operator_readiness_dismissal(tmp_path: Path) -> None:
+    store = UIStateStore(tmp_path / "ui_state.json")
+    store.save_state(
+        {
+            "operator_readiness": {"intro_dismissed": True},
+            "window": {"geometry": "1100x700+50+50", "state": "normal"},
+        }
+    )
+
+    window = MainWindowV2.__new__(MainWindowV2)
+    window.root = _StubRoot()
+    window.center_notebook = _StubNotebook()
+    window.learning_tab = _StubLearningTab(None)
+    window.app_state = _StubAppState()
+
+    from unittest.mock import patch
+
+    with patch("src.gui.main_window_v2.get_ui_state_store", return_value=store):
+        window._save_ui_state()
+
+    saved = store.load_state()
+    assert saved is not None
+    assert saved["operator_readiness"] == {"intro_dismissed": True}
+
+
 def test_save_ui_state_persists_photo_optimize_selection(tmp_path: Path) -> None:
     store = UIStateStore(tmp_path / "ui_state.json")
 
