@@ -1,6 +1,6 @@
 # StableNew status
 
-Updated: 2026-09-10
+Updated: 2026-09-12
 
 ## Repository
 
@@ -23,9 +23,9 @@ StableNew has a verified queue-first NJR/runner spine, trustworthy bounded CI
 gates, one transactional SQLite authority for job lifecycle state, and one
 versioned JSON authority for authored PromptPacks. Queue and history are
 repository projections, and legacy persistence has offline backup-first
-migration. PR-MVP-060 is **COMPLETE / ACCEPTED** after final real StableNew GUI
-and A1111 acceptance. The image vertical slice is accepted; clean-machine
-release proof and the native video slice remain future work.
+migration. PR-MVP-060 and PR-MVP-070 are **COMPLETE / ACCEPTED / INTEGRATED**.
+ The image and native SVD XT vertical slices are accepted; operator readiness
+ and clean-machine release proof remain future work.
 
 ## Runtime invariants
 
@@ -71,15 +71,34 @@ quarantine before repository storage changed. Phase 2 is **COMPLETE / INTEGRATED
 production PromptPack authority is `%LOCALAPPDATA%\StableNew\PromptPacks`, with
 51 valid native JSON PromptPacks. The tracked runtime library and generated LoRA
 cache are not source-controlled. Repository/worktree cleanup is **COMPLETE**;
-the current main is `c1f24ca4df6727d29e3319b8f11c34d2bb85ad6e`.
+the current main is `a107756f2d19475907015652d7a89a2c04bf30ac`.
 
 PR-UI-RESOURCES-001 is **COMPLETE**: Base Generation Scheduler resources now
 populate through the shared WebUI resource projection path.
 
+PR-MVP-070 is **COMPLETE / ACCEPTED / INTEGRATED** on main
+(`a107756f2d19475907015652d7a89a2c04bf30ac`). The accepted product path is:
+
+`Intent -> Compiler / typed builder -> immutable NJR -> JobService -> SQLite
+Queue/Repository -> PipelineRunner.run_njr -> SVDNativeVideoBackend -> native
+SVD runner/service -> Canonical Artifact/History`
+
+The validated conservative Windows/~12GB baseline uses the native
+`stabilityai/stable-video-diffusion-img2vid-xt` model with 14 frames, 7 fps,
+25 inference steps, 1024x576 center-crop output, motion bucket 48, noise
+augmentation 0.01, decode chunk 2, fp16, CPU model offload ON, forward
+chunking ON, and local-only model/cache policy. A real RTX 4070 Ti acceptance
+completed the canonical queue-first job through COMPLETED in 77.7 seconds with
+25/25 denoising and MP4, preview, manifest, history, and replay artifacts.
+The manifest and ffprobe each report 14 frames. 25-frame XT remains an
+explicit higher-memory capability, not the conservative default. The exact
+sequence exporter now constrains MP4 output with `-frames:v len(temp_images)`;
+slideshow semantics remain unchanged.
+
 ## Highest-value debt
 
-1. A false `queue_runner_stall` diagnostic was observed during a successful
-   real run.
+1. Informational Linux/Xvfb full-suite isolation debt still causes known
+   WindowsPath/platform-state failures outside the required integration gate.
 2. Legacy CLI/compatibility and superseded JSON migration tests assert pre-cutover NJR
    fields and payload shapes; the broad suite is therefore not green.
 3. Ruff still has a bounded legacy baseline; repository-wide mypy is not clean.
@@ -94,10 +113,9 @@ populate through the shared WebUI resource projection path.
 - `PR-MVP-060`: **COMPLETE / ACCEPTED**; image create-to-replay vertical slice.
 - `PR-PACKS-001`: **COMPLETE / INTEGRATED**; external PromptPack storage and
   repository/worktree cleanup are complete.
-- `PR-MVP-070`: **ACTIVE**; Phase 1 / 1R1 **COMPLETE** — native SVD XT
-  admission, per-user Hugging Face cache policy, and the no-GPU
-  queue-to-replay vertical slice. Phase 2: **COMPLETE**. Phase 3: **NEXT** —
-  real SVD XT target-GPU acceptance.
+- `PR-MVP-070`: **COMPLETE / ACCEPTED / INTEGRATED**; native SVD XT admission,
+  per-user Hugging Face cache policy, queue-first execution, target-GPU
+  acceptance, exact artifacts/history, and replay lineage are complete.
 - `PR-HARDEN-008`: **COMPLETE / INTEGRATED**; truthful runner-watchdog
   telemetry, bounded WebUI stall recovery, and safe ambiguous generation
   transport handling. Ambiguous txt2img/img2img response loss does not
@@ -106,22 +124,17 @@ populate through the shared WebUI resource projection path.
 
 **Later**
 
-- `PR-MVP-080`: operator UX, setup, diagnostics, and bounded lint cleanup.
+- `PR-MVP-080`: **NEXT** — operator UX, setup, diagnostics, and bounded lint cleanup.
 - `PR-MVP-090`: clean-machine release proof and zero Ruff baseline.
 
 ## Verification state
 
-Latest verified baseline for the converged product state:
+Latest integrated-main verification for the converged product state:
 
-- repository completeness: 433 tracked Python source files; verification passed
-  on the committed branch;
-- strict local collection: 3,090 tests;
-- required smoke: 97 passing;
-- local gate: PASS;
-- required Python 3.11 CI: PASS;
-- required Python 3.12 CI: PASS;
-- bounded mypy smoke: passing;
-- Ruff 0.14.9 baseline: 1,610 findings against a maximum of 2,208.
+- required GitHub CI run `34708650314`: Python 3.11 PASS and Python 3.12 PASS;
+- informational full-suite jobs failed from known Linux/Xvfb
+  WindowsPath/platform-state test debt and are not the integration verdict;
+- bounded repository-wide Ruff and typing debt remains tracked separately.
 
 Final R4 manual GUI acceptance passed on the real StableNew desktop GUI with
 real A1111, including queue policy, model synchronization, txt2img,
@@ -141,9 +154,8 @@ or rewritten against the current repository contract. A repository-wide test
 run was not used as an acceptance gate for this bounded PR.
 
 The local WebUI image path has completed a fixed-seed queue-to-runner smoke.
-Occasional runner stalls and queue errors have been observed outside that
-controlled run and remain known operational instability; convergence did not
-claim to resolve them.
+PR-HARDEN-008 resolved the false queue-runner stall diagnosis, bounded WebUI
+stall recovery, and ambiguous generation transport replay risk.
 
 Run the commands in `docs/StableNew_Coding_and_Testing_v2.6.md` rather than
 copying these numbers elsewhere. Update this section only after a comparable
