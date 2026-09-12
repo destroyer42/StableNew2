@@ -215,6 +215,8 @@ class VideoCreator:
                 "yuv420p",  # Compatibility
                 "-r",
                 str(fps),
+                "-frames:v",
+                str(len(temp_images)),
                 str(output_path),
             ]
 
