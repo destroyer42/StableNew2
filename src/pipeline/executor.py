@@ -167,6 +167,11 @@ STALL_INTERRUPT_THRESHOLD_BY_STAGE: dict[str, float] = {
 # If WebUI reports completion progress but the blocking request never returns,
 # treat that as a separate end-of-request stall and interrupt sooner.
 POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC = 20.0
+POST_INTERRUPT_STALL_GRACE_SEC = 30.0
+EXTERNAL_WEBUI_STALL_ACTION_REQUIRED = "EXTERNAL_WEBUI_STALL_ACTION_REQUIRED"
+_EXTERNAL_WEBUI_STALL_ACTION = (
+    "Restart or stop the external A1111 instance, then restore readiness."
+)
 _ALLOWED_TEXT_CONTROL_CODES = {9, 10}
 
 
@@ -304,6 +309,9 @@ class Pipeline:
         # PR-PIPE-004: Progress polling infrastructure
         self._current_generation_progress: float = 0.0
         self._progress_lock = threading.Lock()
+        # Per-request signal shared only by the blocking generation call and its
+        # progress poller. It is not a queue or process-lifecycle authority.
+        self._active_managed_stall_escalation: threading.Event | None = None
         self._run_started_at_monotonic: float | None = None
         self._run_model_switch_count: int = 0
         self._run_vae_switch_count: int = 0
@@ -2176,19 +2184,43 @@ class Pipeline:
                 # Do not replay an ambiguous generation request. Reset the existing
                 # admission gate and use process-manager recovery before a later job.
                 self._true_ready_gated = False
-                recovered = self._attempt_webui_recovery(
-                    stage=stage,
-                    reason="generation_outcome_unknown",
+                managed_stall_escalation = self._active_managed_stall_escalation
+                recovery_already_in_progress = bool(
+                    managed_stall_escalation and managed_stall_escalation.is_set()
                 )
-                runtime_recovery_attempted = True
+                recovered = False
+                runtime_recovery_attempted = recovery_already_in_progress
+                if not recovery_already_in_progress:
+                    manager = get_global_webui_process_manager()
+                    tracked_process = (
+                        getattr(manager, "process", None) if manager is not None else None
+                    )
+                    manager_owns_running_process = bool(
+                        manager is not None
+                        and tracked_process is not None
+                        and manager.is_running()
+                    )
+                    if manager_owns_running_process:
+                        runtime_recovery_attempted = True
+                        recovered = self._attempt_webui_recovery(
+                            stage=stage,
+                            reason="generation_outcome_unknown",
+                        )
+                    else:
+                        logger.warning(
+                            "Generation outcome is unknown for external/unmanaged WebUI; "
+                            "process recovery is unavailable and no second WebUI will be started"
+                        )
                 runtime_recovery_succeeded = recovered
                 should_recover = False
                 recovery_reason = "generation_outcome_unknown"
                 logger.warning(
                     "Generation outcome is unknown for stage=%s; runtime recovery=%s; "
+                    "recovery_already_in_progress=%s; "
                     "the POST will not be replayed",
                     stage,
                     recovered,
+                    recovery_already_in_progress,
                 )
             else:
                 should_recover, recovery_reason = self._should_attempt_stage_recovery(
@@ -2301,6 +2333,7 @@ class Pipeline:
         stage_label: str,
         stall_detected_event: threading.Event | None = None,
         cancel_token: Any | None = None,
+        managed_stall_escalation_event: threading.Event | None = None,
     ) -> None:
         """
         Background thread that polls WebUI for progress.
@@ -2315,6 +2348,79 @@ class Pipeline:
         last_active_generation_marker: str | None = None
         last_stall_log_time: float = 0.0
         interrupt_sent: bool = False
+        stall_interrupt_time: float | None = None
+        escalation_attempted: bool = False
+        latest_progress: float = 0.0
+        latest_current_step: int | None = None
+        latest_total_steps: int | None = None
+
+        def escalate_if_due(now: float) -> None:
+            nonlocal escalation_attempted
+            if (
+                stall_interrupt_time is None
+                or escalation_attempted
+                or (now - stall_interrupt_time) < POST_INTERRUPT_STALL_GRACE_SEC
+            ):
+                return
+
+            escalation_attempted = True
+            seconds_since_progress = max(0.0, now - last_progress_time)
+            grace_elapsed = max(0.0, now - stall_interrupt_time)
+            manager = get_global_webui_process_manager()
+            tracked_process = getattr(manager, "process", None) if manager is not None else None
+            owns_running_process = bool(
+                manager is not None
+                and tracked_process is not None
+                and manager.is_running()
+            )
+            if owns_running_process:
+                if managed_stall_escalation_event is not None:
+                    managed_stall_escalation_event.set()
+                logger.error(
+                    "Managed WebUI generation remained wedged after interrupt grace; "
+                    "restarting tracked process stage=%s job_id=%s grace=%.1fs",
+                    stage_label,
+                    self._current_job_id,
+                    grace_elapsed,
+                )
+                manager.restart_webui(wait_ready=True, max_attempts=1)
+                return
+
+            status_data = {
+                "event": EXTERNAL_WEBUI_STALL_ACTION_REQUIRED,
+                "job_id": self._current_job_id,
+                "current_stage": stage_label,
+                "stage_detail": "external_webui_stall_action_required",
+                "stage_index": self._current_stage_index,
+                "total_stages": len(self._current_stage_chain)
+                if self._current_stage_chain
+                else 1,
+                "progress": latest_progress,
+                "eta_seconds": None,
+                "started_at": self._current_stage_start_time,
+                "actual_seed": self._current_actual_seed,
+                "current_step": latest_current_step or 0,
+                "total_steps": latest_total_steps or 0,
+                "seconds_since_meaningful_progress": seconds_since_progress,
+                "interrupt_sent": True,
+                "interrupt_timestamp": stall_interrupt_time,
+                "grace_elapsed": grace_elapsed,
+                "recovery_mode": "external_manual",
+                "action": _EXTERNAL_WEBUI_STALL_ACTION,
+            }
+            logger.error(
+                "%s stage=%s job_id=%s progress=%.3f step=%s/%s "
+                "seconds_since_meaningful_progress=%.1f grace_elapsed=%.1f",
+                EXTERNAL_WEBUI_STALL_ACTION_REQUIRED,
+                stage_label,
+                self._current_job_id,
+                latest_progress,
+                latest_current_step,
+                latest_total_steps,
+                seconds_since_progress,
+                grace_elapsed,
+            )
+            self._emit_status_update(status_data)
         
         while not stop_event.is_set():
             try:
@@ -2340,12 +2446,19 @@ class Pipeline:
                             "Poll loop: WebUI idle signal received for %s — resetting stall state",
                             stage_label,
                         )
-                    last_current_step = None
-                    last_active_generation_marker = None
-                    interrupt_sent = False
-                    highest_progress = 0.0
-                    last_stall_log_time = 0.0
-                    last_progress_time = time.monotonic()
+                    if stall_interrupt_time is None:
+                        last_current_step = None
+                        last_active_generation_marker = None
+                        interrupt_sent = False
+                        highest_progress = 0.0
+                        last_stall_log_time = 0.0
+                        last_progress_time = time.monotonic()
+                    else:
+                        # Idle progress after an interrupt does not prove the
+                        # original blocking POST has returned. Preserve this
+                        # exact request's grace clock until the caller sets the
+                        # stop event on request completion.
+                        escalate_if_due(time.monotonic())
                 else:
                     observed_progress = max(
                         0.0, min(1.0, float(getattr(info, "progress", 0.0) or 0.0))
@@ -2407,11 +2520,16 @@ class Pipeline:
                         last_progress_time = time.monotonic()
                         last_stall_log_time = 0.0
                         interrupt_sent = False
+                        stall_interrupt_time = None
+                        escalation_attempted = False
                         if current_step is not None:
                             last_current_step = max(
                                 last_current_step if last_current_step is not None else current_step,
                                 current_step,
                             )
+                        latest_progress = current_progress
+                        latest_current_step = current_step
+                        latest_total_steps = total_steps
                         
                         with self._progress_lock:
                             self._current_generation_progress = highest_progress
@@ -2554,6 +2672,10 @@ class Pipeline:
                                 )
                             self.client.interrupt()
                             interrupt_sent = True
+                            stall_interrupt_time = time.monotonic()
+
+                    if stall_interrupt_time is not None:
+                        escalate_if_due(time.monotonic())
                         
             except Exception:
                 pass  # Ignore polling errors
@@ -2583,6 +2705,7 @@ class Pipeline:
         
         stop_event = threading.Event()
         stall_detected_event = threading.Event()
+        managed_stall_escalation_event = threading.Event()
         poll_future: Future | None = None
         poll_executor: ThreadPoolExecutor | None = None
         
@@ -2597,10 +2720,50 @@ class Pipeline:
                 stage_label,
                 stall_detected_event,
                 cancel_token,
+                managed_stall_escalation_event,
             )
             
             # Make the actual generation request (blocking)
-            response = self._generate_images(stage, payload)
+            self._active_managed_stall_escalation = managed_stall_escalation_event
+            try:
+                response = self._generate_images(stage, payload)
+            except Exception as exc:
+                if managed_stall_escalation_event.is_set():
+                    if (
+                        isinstance(exc, PipelineStageError)
+                        and exc.error.code == GenerateErrorCode.OUTCOME_UNKNOWN
+                    ):
+                        raise
+                    raise PipelineStageError(
+                        GenerateError(
+                            code=GenerateErrorCode.OUTCOME_UNKNOWN,
+                            message=(
+                                "WebUI was restarted after a generation stall. The request may "
+                                "have executed, so StableNew did not automatically submit it again."
+                            ),
+                            stage=stage,
+                            details={
+                                "recovery_classification": "managed_generation_stall",
+                                "request_may_have_executed": True,
+                            },
+                        )
+                    ) from exc
+                raise
+            if managed_stall_escalation_event.is_set():
+                raise PipelineStageError(
+                    GenerateError(
+                        code=GenerateErrorCode.OUTCOME_UNKNOWN,
+                        message=(
+                            "WebUI was restarted after a generation stall. The request may have "
+                            "executed, so StableNew did not automatically submit it again."
+                        ),
+                        stage=stage,
+                        details={
+                            "recovery_classification": "managed_generation_stall",
+                            "request_may_have_executed": True,
+                        },
+                    )
+                )
             self._ensure_not_cancelled(cancel_token, f"{stage_label} generation")
             
             # Check if stall was detected during generation
@@ -2622,6 +2785,8 @@ class Pipeline:
                     pass
             if poll_executor is not None:
                 poll_executor.shutdown(wait=True, cancel_futures=True)
+            if self._active_managed_stall_escalation is managed_stall_escalation_event:
+                self._active_managed_stall_escalation = None
 
     def _log_pipeline_cancellation(self, phase: str, exc: Exception) -> None:
         """Emit a consistent INFO-level log for pipeline cancellations."""
