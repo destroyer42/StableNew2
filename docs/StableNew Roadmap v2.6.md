@@ -66,12 +66,12 @@ feature.
 | 8 | `PR-MVP-050` | Complete | One-file JSON PromptPack convergence |
 | 9 | `PR-MVP-060` | Complete | Image create-to-replay vertical slice |
 | 10 | `PR-MVP-070` | Complete | Native SVD XT vertical slice |
-| 11 | `PR-MVP-080` | Next | Operator UX, setup, diagnostics, lint cleanup |
+| 11 | `PR-MVP-080` | IN PROGRESS | Operator readiness and runtime recovery closeout |
 | 12 | `PR-MVP-090` | Planned | Clean-machine release acceptance |
 
-Roadmap progress is 11 of 13 rows complete (approximately 85%). Native SVD is
-complete; remaining MVP work is operator readiness and clean-machine release
-proof.
+Roadmap progress is 10 of 13 rows complete (approximately 77%). Native SVD is
+complete; operator readiness is in progress and clean-machine release proof
+remains planned.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair
 
@@ -121,16 +121,23 @@ export preserves the requested 14-frame sequence.
 
 ### PR-MVP-080 — operator readiness
 
-Expose or clearly label only supported paths. Add first-run guidance, dependency
-diagnostics, queue/history recovery controls, and bounded mechanical Ruff
-cleanup. This is workflow polish, not a GUI rewrite.
+Expose or clearly label only supported paths and finish the operator-readiness
+outcome. Remaining work is:
+
+- runtime hardening closeout;
+- img2img cancellation consistency;
+- one real source-aware SVD geometry acceptance;
+- RIFE interpolation semantics decision if required;
+- queue/history recovery UX;
+- final operator journey, documentation, required CI, and integration.
+
+This is workflow polish, not a GUI rewrite.
 
 ### PR-MVP-090 — release proof
 
-Run clean-machine setup, migration rehearsal, canonical gates, real image/video
-smokes, restart/replay, and artifact inspection. Remove the Ruff baseline only
-after raw lint is clean, then publish one acceptance record with limitations and
-rollback steps.
+PR-MVP-090 remains planned and owns reproducible local environment/bootstrap,
+clean-checkout setup, migration/recovery rehearsal, final image/SVD smokes,
+restart/replay/artifact proof, and final release limitations and rollback.
 
 ## Risk controls
 
@@ -153,6 +160,6 @@ rollback steps.
 
 ## Next action
 
-Specify/execute `PR-MVP-080` as the next coherent product slice. PromptPack
-authorship, durable job state, image generation, and native SVD XT now have
-single accepted product paths.
+Continue `PR-MVP-080` through the remaining operator-readiness outcomes.
+PromptPack authorship, durable job state, image generation, and native SVD XT
+already have single accepted product paths.

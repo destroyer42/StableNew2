@@ -1,7 +1,8 @@
 # StableNew Codex map
 
-This is a task-oriented navigation map, not an architecture authority. Read
-`STATUS.md`, this map, and only the relevant section of
+This is a task-oriented navigation map, not an architecture authority. Start
+from the task row, and do not expand into adjacent subsystems without
+evidence. Read `STATUS.md`, this map, and only the relevant section of
 `docs/ARCHITECTURE_v2.6.md` before exploring implementation.
 
 ## Canonical runtime
@@ -54,6 +55,12 @@ This is a task-oriented navigation map, not an architecture authority. Read
 | Video/SVD | `workflow_compiler.py` -> `svd_service.py` -> `svd_native_backend.py` |
 | Replay/learning | `replay_engine.py`, `src/learning/`, `job_history_store.py` |
 | Tests/CI | `pyproject.toml`, `tools/ci/`, `.github/workflows/ci.yml` |
+| A1111 generation / transport | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |
+| A1111 process ownership / lifecycle | `src/api/webui_process_manager.py` -> `src/controller/webui_connection_controller.py` |
+| Generation progress / stall diagnostics | `src/pipeline/executor.py` -> `src/controller/core_pipeline_controller.py` -> `src/controller/app_controller.py` runtime projection -> `src/services/watchdog_system_v2.py` |
+| Operator readiness | `src/services/operator_readiness_service.py` -> `src/gui/panels_v2/operator_readiness_panel_v2.py` -> `src/gui/main_window_v2.py` |
+| SVD geometry/presets | `src/gui/views/svd_tab_frame_v2.py` -> `src/video/svd_target.py` -> `src/video/svd_service.py` -> `src/video/svd_models.py` |
+| Queue/history recovery UX | `src/gui/panels_v2/queue_panel_v2.py`, `src/gui/panels_v2/history_panel_v2.py` -> `src/controller/job_service.py` -> `src/queue/job_queue.py` -> `src/queue/job_repository.py` |
 
 ## Controller decomposition
 
@@ -66,10 +73,12 @@ look for an existing service or create one with a single clear owner.
 ## Documentation authority
 
 1. `AGENTS.md`
-2. `docs/ARCHITECTURE_v2.6.md`
-3. `docs/StableNew Roadmap v2.6.md`
-4. `docs/StableNew_Coding_and_Testing_v2.6.md`
-5. `STATUS.md` for current verified state and immediate priority
+2. `STATUS.md`
+3. `docs/CODEX_MAP.md`
+4. Relevant section of `docs/ARCHITECTURE_v2.6.md`
+5. Relevant section of `docs/StableNew_Coding_and_Testing_v2.6.md`
+6. `docs/StableNew Roadmap v2.6.md` for sequencing
+7. Git history only when current evidence is insufficient or history is asked
 
 Git history and archive/recovery material are not searched unless a historical
 question requires them. Runtime history code under `src/history/` is current

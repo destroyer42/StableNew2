@@ -1,7 +1,7 @@
 # StableNew Architecture v2.6
 
 Status: Canonical, Binding
-Updated: 2026-09-07
+Updated: 2026-09-12
 Decision: MVP architecture reconciliation
 
 ## 0. Purpose and truth model
@@ -188,6 +188,14 @@ The canonical still-image stage order is:
 Only stages implemented and covered by the MVP golden path may be advertised as
 MVP-supported.
 
+WebUI ownership is explicit. **MANAGED WebUI:** StableNew may control lifecycle
+only when `WebUIProcessManager` owns and tracks the process it launched.
+**EXTERNAL WebUI:** StableNew may connect and use API, progress, and interrupt,
+but must not infer process ownership from endpoint, PID, or port health and must
+never automatically adopt, terminate, restart, or launch a second process as
+recovery. Ambiguous generation after a dispatched POST is never automatically
+replayed.
+
 ## 8. Video execution
 
 Video uses the same outer path and NJR lifecycle as image work. Video-specific
@@ -253,7 +261,7 @@ UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 
 ## 13. Current implementation gap register
 
-Audit date: 2026-09-07. These gaps mean the target contract is not yet fully
+Audit date: 2026-09-12. These gaps mean the target contract is not yet fully
 implemented:
 
 | Gap | Status | Current evidence | Closing roadmap item |
@@ -265,7 +273,8 @@ implemented:
 | Persistence | **Closed 2026-09-07** | `JobRepository` transactionally owns immutable NJR snapshots and mutable lifecycle state in SQLite; queue/history are projections; restart requeues interrupted work explicitly; the offline importer is dry-run, backup-first, idempotent, conflict-reporting, validated, and rollback-rehearsed | `PR-MVP-040` |
 | PromptPack format | **Closed 2026-09-08** | Versioned schema-1 JSON is the sole discovered and compiled PromptPack authority; save/reload, Matrix expansion, preview/queue, explicit TXT/TSV interchange, and backup-first semantic pair migration are covered without a live text fallback | `PR-MVP-050` |
 | Test truth | **Closed 2026-09-06** | One strict pytest authority, isolated collection/smoke runners, a positive required list, and a Ruff 0.14.9 non-increasing baseline gate pass on supported interpreters | `PR-MVP-010` |
-| Video scope | Open | Several video paths exist; only native SVD XT is selected for MVP | `PR-MVP-070` |
+| Video scope | **Closed 2026-09-12 / ACCEPTED** | Native SVD XT is the selected and accepted MVP video backend; its queue-first path, geometry, artifacts, and replay lineage are proven | `PR-MVP-070` |
+| Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated, but img2img cancellation, real portrait geometry acceptance, recovery UX, and final operator journey remain | `PR-MVP-080` |
 | Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
 
 Closing a row requires implementation evidence and tests. Updating prose alone

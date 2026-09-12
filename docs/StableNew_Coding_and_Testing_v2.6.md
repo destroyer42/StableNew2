@@ -1,7 +1,7 @@
 # StableNew coding and testing v2.6
 
 Status: Active
-Updated: 2026-09-07
+Updated: 2026-09-12
 
 This file is the concise development and verification authority. Architecture
 rules live in `ARCHITECTURE_v2.6.md`; current priorities live in `STATUS.md` and
@@ -77,6 +77,12 @@ execution is explicitly authorized.
 Use `python -m pytest -q <targets>` for focused changed behavior. Run
 real-backend acceptance only when the PR outcome requires it. Do not claim a
 full green suite when environment-dependent tests were not executed.
+
+Evidence reuse: exact-SHA green focused or required evidence remains reusable
+while the relevant source is unchanged. A docs-only commit does not require
+repeating real GPU/WebUI acceptance or other expensive runtime checks. Run the
+prescribed gate when source changes or a current CI result is required; do not
+normalize dependencies in a documentation PR.
 
 ## Integration verdict
 
@@ -165,23 +171,14 @@ Real WebUI/SVD tests require explicit opt-in and must record:
 Real-backend checks never run during collection and never silently download
 models or alter user data.
 
-## Verified baseline
+## Current evidence
 
-The latest comparable verification reported:
-
-- 427 tracked Python source files;
-- 3,029 collected tests plus 2 optional-OpenCV module skips on the supported
-  Python 3.11 and 3.12 environments;
-- 95 required smoke tests passing on Python 3.11 and 3.12;
-- bounded mypy smoke passing;
-- 1,821 Ruff findings against the maximum baseline of 2,208.
-
-The broad suite is not a green gate yet. A Python 3.11 diagnostic stopped after
-10 failures, 215 passes, and 2 optional-OpenCV skips. The first failures are in
-legacy CLI submission, compatibility-mode execution, and queue/history
-migration expectations that predate the typed NJR cutover.
-
-Update this section and `STATUS.md` together only after comparable required CI.
+Current exact collection and smoke counts are taken from the latest required CI
+recorded in `STATUS.md` or the applicable acceptance report. The broader suite
+and bounded Ruff/mypy debt remain informational and non-blocking for unrelated
+PRs while their known legacy or environment-dependent failures remain. Update
+the recorded evidence only after comparable required CI or a documented
+acceptance run.
 
 ## Change review
 

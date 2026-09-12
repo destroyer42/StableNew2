@@ -94,6 +94,52 @@ but bounded), or **Architectural** (ambiguous or cross-boundary). PR planning
 maps that class to the currently appropriate model; repository policy does not
 hardcode model names.
 
+## Context and execution efficiency
+
+Repository/branch/HEAD and repo-local canonical docs outrank Codex memories,
+old recovery plans, historical chats, and stale planning files. Do not inspect
+`~/.codex/memories` by default; use Codex memory only when the task explicitly
+depends on historical context unavailable from the current repository or prompt.
+
+For a bounded prompt with an exact parent SHA, explicit outcome, acceptance
+contract, and named surfaces:
+
+1. verify branch, SHA, and worktree;
+2. read `STATUS.md`;
+3. read only the relevant `CODEX_MAP.md` task row;
+4. read only relevant architecture and testing sections;
+5. inspect implementation.
+
+Do not reread the full roadmap or architecture unless sequencing or
+architecture is actually in question. Prefer symbol/path searches over
+repo-wide exploratory scans. Do not search the web unless external/current
+dependency semantics are necessary to the acceptance contract. Do not repeat
+already-green expensive validation when relevant source is unchanged; docs-only
+changes do not invalidate source/runtime acceptance evidence.
+
+If Ruff, mypy, or another prescribed tool is unavailable locally, run the
+prescribed gate once, report **TOOLING BLOCKER**, and do not rebuild the
+environment inside an unrelated PR. `PR-MVP-090` owns normalizing/bootstraping
+the local development environment.
+
+Advisory execution/model matrix:
+
+- Narrow: **GPT-5.6 Luna — High**
+- Standard: **GPT-5.6 Terra — High**
+- Architectural: **GPT-5.6 Sol — Medium**
+
+If discovery shows that a task belongs to a higher execution class than the
+current invocation, stop and recommend escalation rather than silently
+broadening scope. This model mapping is an execution-cost policy, not a
+product architecture invariant, and may be updated as available models change.
+
+Use **LOCAL Codex** when dirty or unpushed local work, local SQLite/user state,
+Tk/native GUI, A1111, GPU/CUDA/SVD, local filesystem/runtime acceptance, or
+environment/bootstrap work matters. **Cloud Codex** is suitable only when the
+exact parent is pushed, the relevant tree is clean, the task is source/test/docs
+only, no local hardware/runtime/user state is needed, and deterministic tests
+plus GitHub CI can establish acceptance.
+
 ## Work budget and checkpoint discipline
 
 - Work only on the authorized phase and outcome. Fixing a blocker does not
