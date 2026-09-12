@@ -58,6 +58,7 @@ def test_svd_tab_renders(tk_root: tk.Tk) -> None:
         assert tab.forward_chunking_var.get() is True
         assert tab.face_restore_method_var.get() == "CodeFormer"
         assert tab.resize_mode_var.get() == "center_crop"
+        assert tab.target_preset_var.get() == "Match Source Aspect"
         assert tab.motion_bucket_var.get() == 48
         assert tab.noise_aug_var.get() == 0.01
         assert tab.local_files_only_var.get() is True
@@ -428,6 +429,48 @@ def test_svd_tab_preset_applies_expected_values(tk_root: tk.Tk) -> None:
         assert tab.frames_var.get() == 25
         assert tab.decode_chunk_size_var.get() == 4
         assert "Memory:" in tab.summary_label.cget("text")
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_matches_source_aspect_and_persists_resolved_target_in_form(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
+    from PIL import Image
+
+    source_path = tmp_path / "portrait.png"
+    Image.new("RGB", (832, 1216), color="black").save(source_path)
+    tab = SVDTabFrameV2(tk_root)
+    try:
+        tab.set_source_image_path(source_path)
+        assert tab.target_preset_var.get() == "Match Source Aspect"
+        form_data = tab._build_form_data()
+        assert form_data["preprocess"]["target_width"] == 640
+        assert form_data["preprocess"]["target_height"] == 960
+        assert "SVD target: 640x960" in tab.summary_label.cget("text")
+        assert "source 832x1216" in tab.summary_label.cget("text")
+    finally:
+        tab.destroy()
+
+
+def test_svd_tab_manual_target_overrides_source_matching_after_source_change(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
+    from PIL import Image
+
+    first_path = tmp_path / "first.png"
+    second_path = tmp_path / "second.png"
+    Image.new("RGB", (832, 1216), color="black").save(first_path)
+    Image.new("RGB", (1152, 896), color="white").save(second_path)
+    tab = SVDTabFrameV2(tk_root)
+    try:
+        tab.set_source_image_path(first_path)
+        tab.target_preset_var.set("Landscape 1024x576")
+        tab.set_source_image_path(second_path)
+        form_data = tab._build_form_data()
+        assert form_data["preprocess"]["target_width"] == 1024
+        assert form_data["preprocess"]["target_height"] == 576
+        assert tab.target_preset_var.get() == "Landscape 1024x576"
     finally:
         tab.destroy()
 

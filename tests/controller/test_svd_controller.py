@@ -46,6 +46,42 @@ def test_submit_svd_job_enqueues_svd_native_njr(tmp_path, monkeypatch) -> None:
     assert captured["policy"].start_when_idle is False
 
 
+def test_submit_svd_job_persists_resolved_target_dimensions(tmp_path, monkeypatch) -> None:
+    captured = {}
+    source_path = tmp_path / "portrait.png"
+    source_path.write_bytes(b"png")
+
+    def _submit_njrs(njrs, _policy):
+        captured["njr"] = njrs[0]
+        return ["job-svd-portrait"]
+
+    app_controller = SimpleNamespace(
+        output_dir=str(tmp_path),
+        job_service=SimpleNamespace(submit_njrs=_submit_njrs),
+    )
+    controller = SVDController(app_controller=app_controller, svd_service=Mock())
+    monkeypatch.setattr(
+        "src.controller.svd_controller.get_svd_preflight",
+        lambda _config, **_kwargs: SimpleNamespace(available=True, blocking_reasons=()),
+    )
+    config = SVDConfig.from_dict(
+        {
+            "preprocess": {
+                "target_width": 640,
+                "target_height": 960,
+                "resize_mode": "center_crop",
+            }
+        }
+    )
+
+    assert controller.submit_svd_job(source_image_path=source_path, config=config) == "job-svd-portrait"
+
+    preprocess = captured["njr"].config["svd_native"]["preprocess"]
+    assert preprocess["target_width"] == 640
+    assert preprocess["target_height"] == 960
+    assert preprocess["resize_mode"] == "center_crop"
+
+
 def test_get_postprocess_capabilities_exposes_runtime_status() -> None:
     app_controller = SimpleNamespace(output_dir="output", job_service=Mock())
     controller = SVDController(app_controller=app_controller, svd_service=Mock())

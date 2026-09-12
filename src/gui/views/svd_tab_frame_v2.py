@@ -25,6 +25,7 @@ from src.video.svd_models import (
     get_svd_model_options,
     get_supported_svd_models,
 )
+from src.video.svd_target import SVD_TARGET_SIZES, select_svd_target_size
 
 logger = logging.getLogger(__name__)
 
@@ -33,14 +34,21 @@ _IMAGE_FILETYPES = [
     ("Image files", "*.png *.jpg *.jpeg *.webp *.bmp *.tiff *.tif"),
     ("All files", "*.*"),
 ]
-_TARGET_PRESETS: dict[str, tuple[int, int]] = {
-    "Landscape 1024x576": (1024, 576),
-    "Portrait 576x1024": (576, 1024),
+_TARGET_AUTO_LABEL = "Match Source Aspect"
+_TARGET_PRESETS: dict[str, tuple[int, int] | None] = {
+    _TARGET_AUTO_LABEL: None,
+    "Landscape 1024x576": SVD_TARGET_SIZES[6],
+    "Portrait 576x1024": SVD_TARGET_SIZES[0],
+    "Portrait 640x960": SVD_TARGET_SIZES[1],
+    "Portrait 704x896": SVD_TARGET_SIZES[2],
+    "Square 768x768": SVD_TARGET_SIZES[3],
+    "Landscape 896x704": SVD_TARGET_SIZES[4],
+    "Landscape 960x640": SVD_TARGET_SIZES[5],
 }
 _RESIZE_MODES = ("letterbox", "center_crop", "contain_then_crop")
 _OUTPUT_FORMATS = ("mp4", "gif", "frames")
 _FACE_RESTORE_METHODS = ("CodeFormer", "GFPGAN")
-_DEFAULT_TARGET_PRESET = "Landscape 1024x576"
+_DEFAULT_TARGET_PRESET = _TARGET_AUTO_LABEL
 _DEFAULT_SVD_PRESET = "Recommended 12GB / XT 14f"
 _SVD_OUTPUT_ROUTES = (OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING)
 _SVD_PRESETS: dict[str, dict[str, Any]] = {
@@ -54,7 +62,7 @@ _SVD_PRESETS: dict[str, dict[str, Any]] = {
         "motion_bucket": 48,
         "noise_aug": 0.01,
         "resize_mode": "center_crop",
-        "target_preset": "Landscape 1024x576",
+        "target_preset": _TARGET_AUTO_LABEL,
     },
     "Quality 25f MP4 / High Memory": {
         "frames": 25,
@@ -380,7 +388,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._attach_setting_help("seed", SVD_SETTING_HELP["seed"], seed_label, self.seed_entry)
         row += 1
 
-        self._add_combo(
+        self.target_combo = self._add_combo(
             settings,
             row,
             "Target size",
@@ -388,6 +396,7 @@ class SVDTabFrameV2(ttk.Frame):
             list(_TARGET_PRESETS.keys()),
             help_key="target_size",
         )
+        self.target_combo.bind("<<ComboboxSelected>>", self._on_target_selected)
         row += 1
         self._add_combo(
             settings,
@@ -871,10 +880,7 @@ class SVDTabFrameV2(ttk.Frame):
             messagebox.showerror("SVD submit failed", str(exc))
 
     def _build_form_data(self) -> dict[str, Any]:
-        target_width, target_height = _TARGET_PRESETS.get(
-            self.target_preset_var.get(),
-            _TARGET_PRESETS[_DEFAULT_TARGET_PRESET],
-        )
+        target_width, target_height = self._effective_target_size()
         seed_text = self.seed_var.get().strip()
         seed_value = None if not seed_text else int(seed_text)
         cache_dir = self.cache_dir_var.get().strip()
@@ -923,6 +929,29 @@ class SVDTabFrameV2(ttk.Frame):
                 },
             },
         }
+
+    def _effective_target_size(self) -> tuple[int, int]:
+        selected = self.target_preset_var.get()
+        manual_target = _TARGET_PRESETS.get(selected)
+        if selected != _TARGET_AUTO_LABEL and manual_target is not None:
+            return manual_target
+
+        source_size = self._read_source_size()
+        if source_size is not None:
+            return select_svd_target_size(*source_size)
+        return (1024, 576)
+
+    def _read_source_size(self) -> tuple[int, int] | None:
+        source = self.source_image_var.get().strip()
+        if not source:
+            return None
+        try:
+            from PIL import Image
+
+            with Image.open(source) as image:
+                return image.size
+        except Exception:
+            return None
 
     def _refresh_capabilities(self) -> None:
         controller = self.app_controller
@@ -1043,11 +1072,20 @@ class SVDTabFrameV2(ttk.Frame):
         memory_note = ""
         if decode_chunk >= 6 or (decode_chunk >= 4 and frames >= 25):
             memory_note = "\nMemory: high decode setting for this frame count; lower Decode chunk if the app stalls."
+        target_width, target_height = self._effective_target_size()
+        target_text = f"SVD target: {target_width}x{target_height}"
+        if self.target_preset_var.get() == _TARGET_AUTO_LABEL:
+            source_size = self._read_source_size()
+            if source_size is not None:
+                resize_description = self.resize_mode_var.get().replace("_", " ")
+                target_text += f" (source {source_size[0]}x{source_size[1]}, aspect-preserving {resize_description})"
+            else:
+                target_text = "SVD target: Match Source Aspect (select a valid source image)"
         self.summary_label.configure(
             text=(
                 f"Source: {source_name}\n"
                 f"Preset: {self.preset_var.get()} | Frames: {int(self.frames_var.get())} at {int(self.fps_var.get())} fps | Steps: {int(self.inference_steps_var.get())}\n"
-                f"Output: {self.output_format_var.get()} | Route: {self.output_route_var.get()} | Resize: {self.resize_mode_var.get()} | Decode chunk: {decode_chunk} | Cache: {cache_dir}\n"
+                f"{target_text} | Output: {self.output_format_var.get()} | Route: {self.output_route_var.get()} | Resize: {self.resize_mode_var.get()} | Decode chunk: {decode_chunk} | Cache: {cache_dir}\n"
                 f"Postprocess: face={bool(self.face_restore_enabled_var.get())} | rife={bool(self.interpolation_enabled_var.get())} | upscale={bool(self.frame_upscale_enabled_var.get())}"
                 f"{memory_note}"
             )
@@ -1062,6 +1100,10 @@ class SVDTabFrameV2(ttk.Frame):
 
     def _on_preset_selected(self, _event: tk.Event | None = None) -> None:
         self._apply_preset(self.preset_var.get())
+
+    def _on_target_selected(self, _event: tk.Event | None = None) -> None:
+        self._refresh_summary()
+        self._refresh_capabilities()
 
     def _apply_preset(self, preset_name: str, *, update_status: bool = True) -> None:
         payload = _SVD_PRESETS.get(preset_name)
