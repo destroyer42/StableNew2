@@ -7,23 +7,23 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from src.gui.layout_v2 import configure_grid_columns
-from src.gui.help_text.workflow_guidance_v2 import build_svd_workflow_guidance
 from src.gui.help_text.stage_setting_help_v2 import SVD_SETTING_HELP
+from src.gui.help_text.workflow_guidance_v2 import build_svd_workflow_guidance
+from src.gui.layout_v2 import configure_grid_columns
+from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.pipeline_layout_contract import (
     PRIMARY_CONTROL_MIN_WIDTH,
     get_two_pane_workspace_column_specs,
 )
-from src.gui.tooltip import attach_tooltip
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
-from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
+from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
 from src.video.svd_models import (
     get_default_svd_cache_dir,
     get_default_svd_model_id,
-    get_svd_model_options,
     get_supported_svd_models,
+    get_svd_model_options,
 )
 from src.video.svd_target import SVD_TARGET_SIZES, select_svd_target_size
 

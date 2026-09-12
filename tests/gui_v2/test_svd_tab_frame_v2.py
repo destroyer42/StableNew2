@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import tkinter as tk
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
-
-import tkinter as tk
 
 from src.controller.svd_controller import SVDController
 from src.gui.app_state_v2 import AppStateV2
