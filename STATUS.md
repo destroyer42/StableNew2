@@ -61,46 +61,44 @@ resurrection when a late response succeeds.
 
 ## Current acceptance blocker
 
-The first PR-MVP-090 Phase 0 bootstrap attempt established the local runtime
-prerequisites on the target machine, but production SVD preflight remains
-blocked by the exact accepted XT model cache.
-Portrait source-aware SVD geometry acceptance remains blocked until that
-preflight succeeds.
+Phase 0R1 established that the StableNew runtime is healthy under the proven
+local execution scope. StableNew's production default Hugging Face cache is
+the per-user Hugging Face hub cache, and it already contains a complete
+`stabilityai/stable-video-diffusion-img2vid-xt`. No XT download is required.
 
-Established successfully:
+A fresh `SVDController` default using the accepted plain-XT profile passes
+production local-only preflight:
 
-- Official per-user Python 3.11.9.
-- Recreated healthy StableNew `.venv`.
-- Declared StableNew/SVD dependencies installed.
-- CUDA-enabled PyTorch sees RTX 4070 Ti.
-- Diffusers exposes `StableVideoDiffusionPipeline`.
-- FFmpeg and ffprobe are available.
-- Existing portrait source validates.
+- Model is supported and cached.
+- Torch is available.
+- Diffusers and `StableVideoDiffusionPipeline` are available.
+- CUDA is available on the RTX 4070 Ti.
+- The portrait source is valid.
+- Blocking reasons and warnings are empty.
 
-Remaining Phase 0 blocker:
+The remaining operator blocker is persisted GUI state overriding SVD `cache_dir`
+to the obsolete repository-local `cache` directory, where plain XT is
+incomplete. Historical base-model and XT 1.1 records do not supersede the
+canonical accepted plain-XT baseline. Zero new SVD inference jobs have run
+during Phase 0.
 
-- The accepted Recommended profile requires
-  `stabilityai/stable-video-diffusion-img2vid-xt`.
-- The discovered complete cache is
-  `stabilityai/stable-video-diffusion-img2vid-xt-1-1`.
-- Production local-only preflight therefore remains blocked.
-- Zero SVD inference jobs were submitted.
-
-XT 1.1 is a distinct supported model and must not be substituted for the
-accepted XT baseline merely because it is cached.
+XT 1.1 remains a distinct supported model and must not be substituted for the
+accepted plain-XT baseline merely because it is cached.
 
 ## Remaining sequence
 
-1. Complete the minimum PR-MVP-090 Phase 0 environment/bootstrap prerequisite
-   required to establish one supported local StableNew + native-SVD runtime.
+1. Complete the remaining PR-MVP-090 Phase 0 operator prerequisite: correct
+   the persisted SVD cache setting and prove the operator-effective
+   local-only preflight, then complete the reproducibility/bootstrap helper gap.
 2. Resume the real portrait source-aware SVD geometry acceptance.
 3. Decide/repair RIFE interpolation semantics if required.
 4. Complete queue/history recovery UX and no-op cleanup.
 5. Finish PR-MVP-080 operator journey/docs/required CI/integration.
 6. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
 
-Next action: reconcile production cache authority and establish the exact
-accepted XT model cache if genuinely absent, then rerun SVD preflight.
+Next action: correct the persisted SVD cache setting through the existing
+user-state authority, prove the actual operator-effective configuration passes
+local-only preflight, then complete the reproducibility/bootstrap helper gap.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is pulled forward only to unblock PR-MVP-080; the remaining clean-machine and
