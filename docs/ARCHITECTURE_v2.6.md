@@ -1,7 +1,7 @@
 # StableNew Architecture v2.6
 
 Status: Canonical, Binding
-Updated: 2026-09-12
+Updated: 2026-09-13
 Decision: MVP architecture reconciliation
 
 ## 0. Purpose and truth model
@@ -274,7 +274,7 @@ implemented:
 | PromptPack format | **Closed 2026-09-08** | Versioned schema-1 JSON is the sole discovered and compiled PromptPack authority; save/reload, Matrix expansion, preview/queue, explicit TXT/TSV interchange, and backup-first semantic pair migration are covered without a live text fallback | `PR-MVP-050` |
 | Test truth | **Closed 2026-09-06** | One strict pytest authority, isolated collection/smoke runners, a positive required list, and a Ruff 0.14.9 non-increasing baseline gate pass on supported interpreters | `PR-MVP-010` |
 | Video scope | **Closed 2026-09-12 / ACCEPTED** | Native SVD XT is the selected and accepted MVP video backend; its queue-first path, geometry, artifacts, and replay lineage are proven | `PR-MVP-070` |
-| Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated, but img2img cancellation, real portrait geometry acceptance, recovery UX, and final operator journey remain | `PR-MVP-080` |
+| Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated; the Windows runtime/bootstrap baseline, real local native SVD XT square-source run through the public production runner, replay lineage, separate artifact generation, and cancellation are accepted. Real portrait source-aware geometry remains the immediate runtime gate; queue/history metadata and recovery UX plus final operator-facing polish remain open | `PR-MVP-080` |
 | Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
 
 Closing a row requires implementation evidence and tests. Updating prose alone
