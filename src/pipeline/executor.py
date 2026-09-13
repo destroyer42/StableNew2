@@ -5167,8 +5167,17 @@ class Pipeline:
             except Exception:
                 pass
 
-            # Execute img2img
-            response = self._generate_images("img2img", payload)
+            # Execute img2img through the shared progress/cancellation authority.
+            response = self._generate_images_with_progress(
+                "img2img",
+                payload,
+                poll_interval=0.5,
+                stage_label="img2img",
+                cancel_token=cancel_token,
+            )
+            # Cancellation wins even if the request returned successfully after
+            # the interrupt and before artifact promotion.
+            self._ensure_not_cancelled(cancel_token, "img2img post-call")
             if not response or "images" not in response or not response["images"]:
                 logger.error("img2img request failed or returned no images")
                 return None
