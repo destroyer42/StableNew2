@@ -8,8 +8,7 @@ Updated: 2026-09-12
 - Default/release baseline: `main`
 - Current remote `origin/main`: `4982e7672573927cc3bab0f5074123e5ba06207b`
 - Active integration branch: `mvp/080-operator-readiness`
-- Current integration SHA: `9b1c7da05efa11392fb09abdefe894ea0bdd9b57`
-- `origin/mvp/080-operator-readiness` is `27f2e60cbaaf10b9fd9186263398f043e7705754`; the local branch is one R1D commit ahead and remains unpushed.
+- Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` remains the release baseline until PR-MVP-080 integration is complete.
 The canonical documentation order is `AGENTS.md`, `STATUS.md`,
@@ -42,7 +41,7 @@ Accepted 080 work includes source-aware SVD target selection, readiness
 projection/UI, truthful SVD preset state, explicit SVD geometry enforcement,
 HARDEN-009 runtime timeout/watchdog corrections, canonical txt2img cancellation
 deterministic proof, and a real A1111 operator-cancellation PASS. R1D managed /
-external WebUI stall policy is integrated at the current local SHA.
+external WebUI stall policy is integrated on the active PR-MVP-080 branch.
 
 R1B real-A1111 evidence used WebUI v1.10.1. Operator cancellation during active
 sampling worked with one generation POST and one interrupt; SQLite recorded

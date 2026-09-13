@@ -89,10 +89,9 @@ Do not reject ordinary product-owner language merely because it lacks an exact
 file allowlist. Do not invent a broader product change under the cover of a
 refactor or cleanup.
 
-Classify execution as **Narrow** (isolated/mechanical), **Standard** (cross-file
-but bounded), or **Architectural** (ambiguous or cross-boundary). PR planning
-maps that class to the currently appropriate model; repository policy does not
-hardcode model names.
+Classify execution as **Narrow**, **Standard**, or **Architectural**. The
+current advisory model mapping below is an execution-cost policy, not an
+architecture invariant, and may change as available models change.
 
 ## Context and execution efficiency
 
@@ -119,7 +118,7 @@ changes do not invalidate source/runtime acceptance evidence.
 
 If Ruff, mypy, or another prescribed tool is unavailable locally, run the
 prescribed gate once, report **TOOLING BLOCKER**, and do not rebuild the
-environment inside an unrelated PR. `PR-MVP-090` owns normalizing/bootstraping
+environment inside an unrelated PR. `PR-MVP-090` owns normalizing/bootstrapping
 the local development environment.
 
 Advisory execution/model matrix:
@@ -139,6 +138,31 @@ environment/bootstrap work matters. **Cloud Codex** is suitable only when the
 exact parent is pushed, the relevant tree is clean, the task is source/test/docs
 only, no local hardware/runtime/user state is needed, and deterministic tests
 plus GitHub CI can establish acceptance.
+
+## Documentation impact gate
+
+After every accepted Codex implementation and before beginning the next
+functional phase:
+
+1. verify exact SHA/diff and applicable validation/required CI;
+2. accept or reject based on behavior and architecture, not tests alone;
+3. determine whether canonical truth changed;
+4. update only affected repo authorities before continuing.
+
+Check the following authorities when their scope is affected:
+
+- `STATUS.md`: verified state, accepted evidence, active objective, next action;
+- `docs/ARCHITECTURE_v2.6.md`: ownership, lifecycle, architecture, or invariant changes;
+- `docs/StableNew Roadmap v2.6.md`: phase completion, scope, sequencing, or priority changes;
+- `docs/CODEX_MAP.md`: newly discovered task-to-code authority;
+- `docs/StableNew_Coding_and_Testing_v2.6.md`: validation or evidence-reuse policy;
+- `AGENTS.md`: Codex execution/process policy.
+
+Do not update docs merely to narrate a commit; Git history owns implementation
+history. If implementation discovers a new product or architecture decision
+rather than implementing an already-approved one, stop for product-owner review
+before making that decision canonical. The next functional phase begins only
+after required canonical-document updates are coherent.
 
 ## Work budget and checkpoint discipline
 
