@@ -53,6 +53,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | Queue/history | `job_service.py` -> `job_queue.py` -> `job_repository.py` |
 | Image execution | `pipeline_runner.py` -> `executor.py` -> `src/api/` |
 | Video/SVD | `workflow_compiler.py` -> `svd_service.py` -> `svd_native_backend.py` |
+| Windows runtime/bootstrap | `scripts/bootstrap_windows.ps1` -> `docs/runbooks/windows_runtime_bootstrap.md` |
 | Replay/learning | `replay_engine.py`, `src/learning/`, `job_history_store.py` |
 | Tests/CI | `pyproject.toml`, `tools/ci/`, `.github/workflows/ci.yml` |
 | A1111 generation / transport | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |

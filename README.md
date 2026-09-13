@@ -40,6 +40,11 @@ typed source, not a universal job identity.
 
 Use Python 3.11 or 3.12 in a virtual environment:
 
+For the canonical Windows native-SVD setup, use the
+[Windows runtime bootstrap runbook](docs/runbooks/windows_runtime_bootstrap.md)
+and its [`scripts/bootstrap_windows.ps1`](scripts/bootstrap_windows.ps1)
+helper.
+
 ```text
 python -m venv .venv
 .venv\Scripts\python -m pip install -r requirements.txt
@@ -47,9 +52,9 @@ python -m venv .venv
 ```
 
 Image generation requires a configured Stable Diffusion WebUI. Native SVD XT
-video has additional dependencies in `requirements-svd.txt` and is not yet
-clean-machine certified. Missing external dependencies should fail with an
-actionable message; they are not installed or downloaded at import time.
+video has additional dependencies in `requirements-svd.txt`. Missing external
+dependencies should fail with an actionable message; they are not installed
+or downloaded at import time.
 
 ## Verify changes
 
