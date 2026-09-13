@@ -100,6 +100,29 @@ assumed. No new SQLite schema/version or second lifecycle authority was
 introduced. The former automatic `RUNNING -> QUEUED` restart behavior is
 superseded.
 
+Queue/history action-state and no-op cleanup is **PASS / ACCEPTED**. Live Queue
+controls now combine legal queue state with callable controller capability.
+Manual Send Job remains available with Auto-run OFF when queued work exists, the
+queue is unpaused, no job is running, and the manual dispatch boundary exists.
+Auto-run and Pause/Resume are not presented as operable without their
+application boundaries; reorder, remove, and clear remain restricted to legal
+queued work. Direct, keyboard, and stale callback paths re-check legality, and
+Remove/Clear do not report success when the underlying action reports no change
+or failure.
+
+The live Pipeline Job History surface is `src/gui/job_history_panel_v2.py`.
+History actions combine callable controller capability with real persisted,
+artifact, and replay evidence. Open Output Folder requires a real surviving
+output location; Replay requires a reconstructable persisted NJR, while valid
+interrupted-restart records remain explicitly replayable through the existing
+new-NJR/lineage rules. Animate with SVD requires a real existing still-image
+artifact. Video Workflow and Movie Clips require usable surviving handoff
+evidence, Explain requires its callable boundary, and buttons/context-menu
+actions share the same predicates. Canonical direct-image artifact discovery
+was aligned in the existing AppController handoff helper without adding
+controller responsibility. No SQLite, lifecycle, replay-architecture,
+acknowledgement, backend, or GPU behavior changed.
+
 ## Current acceptance state
 
 PR-MVP-090 Phase 0 runtime/bootstrap is **COMPLETE / ACCEPTED**. The supported
@@ -198,13 +221,14 @@ commit `b33d028473f905747ddc19ae394526f5e6531fe8`.
 
 ## Remaining sequence
 
-1. Complete queue/history action-state + no-op cleanup.
-2. Finish PR-MVP-080 operator journey/docs/required CI/integration.
+1. Complete final PR-MVP-080 operator journey / operator-facing verification.
+2. Complete required CI and integration/documentation closeout for PR-MVP-080.
 3. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
-4. After v2.6 release acceptance, begin PR-IMG-100 Phase A from the exact
-   integrated post-v2.6 branch/SHA.
+4. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
+   exact integrated post-v2.6 parent.
 
-Next action: queue/history action-state + no-op cleanup.
+Next action: final PR-MVP-080 operator journey + required CI/integration
+closeout.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is complete and accepted, pulled forward only to unblock PR-MVP-080; the

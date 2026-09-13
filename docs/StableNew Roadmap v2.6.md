@@ -149,8 +149,13 @@ outcome. Remaining work is:
   `INTERRUPTED_RESTART_ACTION_REQUIRED`, preserves available recovery evidence,
   prevents automatic requeue/replay, and renders the record as `Interrupted`;
   explicit Replay creates a new NJR/job identity with parent lineage;
-- remaining queue/history action-state + no-op cleanup;
-- final operator journey, documentation, required CI, and integration.
+- accepted evidence: queue/history action-state and no-op cleanup combines
+  legal state, callable boundaries, and real artifact/replay evidence; manual
+  Send Job remains available with Auto-run OFF when safely dispatchable; stale,
+  direct, keyboard, and context-menu paths cannot bypass the predicates; and
+  false Remove/Clear success is not reported;
+- final operator-facing journey verification, documentation consistency,
+  required CI, and integration.
 
 This is workflow polish, not a GUI rewrite.
 
@@ -276,10 +281,11 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-Complete queue/history action-state + no-op cleanup. PromptPack authorship,
-durable job state, image generation, native SVD XT, the Phase 0 runtime/bootstrap
-prerequisite, real portrait source-aware SVD geometry, and duration-preserving
-RIFE interpolation semantics already have single accepted product paths.
+Complete the final PR-MVP-080 operator journey and required CI/integration
+closeout. Queue/history action-state and no-op cleanup is accepted, alongside
+PromptPack authorship, durable job state, image generation, native SVD XT, the
+Phase 0 runtime/bootstrap prerequisite, real portrait source-aware SVD geometry,
+and duration-preserving RIFE interpolation semantics.
 
 After PR-MVP-080 and PR-MVP-090 are accepted and integrated, verify the exact
 post-v2.6 parent SHA and begin `PR-IMG-100 Phase A`; do not reuse the discovery
