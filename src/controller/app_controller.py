@@ -7482,6 +7482,10 @@ class AppController:
         candidates: list[str] = []
         result = getattr(entry, "result", None)
         if isinstance(result, dict):
+            artifact = result.get("artifact")
+            if isinstance(artifact, Mapping):
+                artifact_paths = artifact.get("output_paths") or [artifact.get("primary_path")]
+                candidates.extend(str(item) for item in artifact_paths if item)
             for key in ("output_paths", "frame_paths", "video_paths", "gif_paths"):
                 value = result.get(key)
                 if isinstance(value, list):
@@ -7503,13 +7507,9 @@ class AppController:
                 thumbnail = normalized.get("thumbnail_path")
                 if thumbnail:
                     candidates.append(str(thumbnail))
-        deduped: list[str] = []
-        seen: set[str] = set()
-        for candidate in candidates:
-            if candidate and candidate not in seen:
-                seen.add(candidate)
-                deduped.append(candidate)
-        return deduped
+
+        # Preserve the first usable candidate as the handoff preference.
+        return list(dict.fromkeys(candidate for candidate in candidates if candidate))
 
     def _get_history_entry_by_job_id(self, job_id: str) -> Any | None:
         app_state = getattr(self, "app_state", None)

@@ -12,6 +12,7 @@ import threading
 import time
 import tkinter as tk
 from collections.abc import Callable
+from dataclasses import dataclass
 from tkinter import ttk
 from typing import Any
 
@@ -35,6 +36,21 @@ from src.pipeline.job_models_v2 import (
     NormalizedJobRecord,
     UnifiedJobSummary,
 )
+
+
+@dataclass(frozen=True)
+class QueueActionState:
+    """The currently legal, callable actions for this queue projection."""
+
+    auto_run: bool
+    pause_resume: bool
+    send: bool
+    move_to_front: bool
+    move_up: bool
+    move_down: bool
+    move_to_back: bool
+    remove: bool
+    clear: bool
 
 
 class QueuePanelV2(ttk.Frame):
@@ -352,15 +368,13 @@ class QueuePanelV2(ttk.Frame):
     def _controller_supports(self, *names: str) -> bool:
         """Return whether a configured controller exposes an action boundary.
 
-        A headless panel (used by state-predicate tests) has no controller and
-        still computes legal queue state.  A live panel with a controller must
-        disable controls that have no callable boundary instead of presenting
-        an enabled silent no-op.
+        A panel without a configured controller has no application boundary,
+        so no mutating action may present as available.
         """
         controller = getattr(self, "controller", None)
-        if controller is None:
-            return True
-        return any(callable(getattr(controller, name, None)) for name in names)
+        return controller is not None and any(
+            callable(getattr(controller, name, None)) for name in names
+        )
 
     def _select_job_id(self, job_id: str) -> int | None:
         for index, job in enumerate(self._jobs):
@@ -419,8 +433,8 @@ class QueuePanelV2(ttk.Frame):
 
         return (total_seconds, confidence)
 
-    def _update_button_states(self) -> None:
-        """Update button enabled/disabled states based on selection and queue contents."""
+    def _queue_action_state(self) -> QueueActionState:
+        """Calculate legality and controller capability for every queue action."""
         idx = self._get_selected_index()
         selected_job = self._get_selected_job()
         has_selection = idx is not None
@@ -429,70 +443,70 @@ class QueuePanelV2(ttk.Frame):
         queued_position, queued_indices = self._selected_queued_position()
         has_selected_queued_position = queued_position is not None
         last_queued_position = len(queued_indices) - 1
-
-        # Move to front: enabled if selection exists and not already first
-        can_move_to_front = (
-            has_selection
-            and selected_is_queued
-            and has_selected_queued_position
-            and queued_position > 0
-            and self._controller_supports("move_queue_job_to_front", "on_queue_move_to_front_v2")
-        )
-        self.move_to_front_button.state(["!disabled"] if can_move_to_front else ["disabled"])
-
-        # Move up: enabled if selection is not first
-        can_move_up = (
-            has_selection
-            and selected_is_queued
-            and has_selected_queued_position
-            and queued_position > 0
-            and self._controller_supports("move_queue_job_up", "on_queue_move_up_v2")
-        )
-        self.move_up_button.state(["!disabled"] if can_move_up else ["disabled"])
-
-        # Move down: enabled if selection is not last
-        can_move_down = (
-            has_selection
-            and selected_is_queued
-            and has_selected_queued_position
-            and queued_position < last_queued_position
-            and self._controller_supports("move_queue_job_down", "on_queue_move_down_v2")
-        )
-        self.move_down_button.state(["!disabled"] if can_move_down else ["disabled"])
-
-        # Move to back: enabled if selection exists and not already last
-        can_move_to_back = (
-            has_selection
-            and selected_is_queued
-            and has_selected_queued_position
-            and queued_position < last_queued_position
-            and self._controller_supports("move_queue_job_to_back", "on_queue_move_to_back_v2")
-        )
-        self.move_to_back_button.state(["!disabled"] if can_move_to_back else ["disabled"])
-
-        # Remove only applies to queued jobs; running jobs must be cancelled separately.
-        self.remove_button.state(
-            ["!disabled"]
-            if selected_is_queued and self._controller_supports("on_queue_remove_job_v2")
-            else ["disabled"]
-        )
-
-        # Clear removes queued jobs only.
-        self.clear_button.state(
-            ["!disabled"]
-            if has_queued_jobs and self._controller_supports("on_queue_clear_v2")
-            else ["disabled"]
-        )
-
-        # PR-GUI-F3: Send Job - enabled if queue has jobs and not currently running a job
-        # Also respects pause state (controller handles actual pause blocking)
         running_job = getattr(self.app_state, "running_job", None) if self.app_state else None
-        can_send = self._can_send_job(
-            has_queued_jobs=has_queued_jobs,
-            running_job=running_job,
-            is_queue_paused=self._is_queue_paused,
+        selected_before_last = (
+            has_selection
+            and selected_is_queued
+            and has_selected_queued_position
+            and queued_position < last_queued_position
         )
-        self.send_job_button.state(["!disabled"] if can_send else ["disabled"])
+        selected_after_first = (
+            has_selection
+            and selected_is_queued
+            and has_selected_queued_position
+            and queued_position > 0
+        )
+        return QueueActionState(
+            auto_run=self._controller_supports("on_set_auto_run_v2"),
+            pause_resume=self._controller_supports(
+                "on_resume_queue_v2" if self._is_queue_paused else "on_pause_queue_v2"
+            ),
+            send=(
+                self._can_send_job(
+                    has_queued_jobs=has_queued_jobs,
+                    running_job=running_job,
+                    is_queue_paused=self._is_queue_paused,
+                )
+                and self._controller_supports("on_queue_send_job_v2")
+            ),
+            move_to_front=(
+                selected_after_first
+                and self._controller_supports(
+                    "move_queue_job_to_front", "on_queue_move_to_front_v2"
+                )
+            ),
+            move_up=(
+                selected_after_first
+                and self._controller_supports("move_queue_job_up", "on_queue_move_up_v2")
+            ),
+            move_down=(
+                selected_before_last
+                and self._controller_supports("move_queue_job_down", "on_queue_move_down_v2")
+            ),
+            move_to_back=(
+                selected_before_last
+                and self._controller_supports(
+                    "move_queue_job_to_back", "on_queue_move_to_back_v2"
+                )
+            ),
+            remove=(
+                selected_is_queued and self._controller_supports("on_queue_remove_job_v2")
+            ),
+            clear=has_queued_jobs and self._controller_supports("on_queue_clear_v2"),
+        )
+
+    def _update_button_states(self) -> None:
+        """Render the current queue action state without changing queue state."""
+        actions = self._queue_action_state()
+        self.auto_run_check.state(["!disabled"] if actions.auto_run else ["disabled"])
+        self.pause_resume_button.state(["!disabled"] if actions.pause_resume else ["disabled"])
+        self.send_job_button.state(["!disabled"] if actions.send else ["disabled"])
+        self.move_to_front_button.state(["!disabled"] if actions.move_to_front else ["disabled"])
+        self.move_up_button.state(["!disabled"] if actions.move_up else ["disabled"])
+        self.move_down_button.state(["!disabled"] if actions.move_down else ["disabled"])
+        self.move_to_back_button.state(["!disabled"] if actions.move_to_back else ["disabled"])
+        self.remove_button.state(["!disabled"] if actions.remove else ["disabled"])
+        self.clear_button.state(["!disabled"] if actions.clear else ["disabled"])
 
     @staticmethod
     def _can_send_job(
@@ -506,6 +520,9 @@ class QueuePanelV2(ttk.Frame):
 
     def _on_move_up(self) -> None:
         """Move the selected job up in the queue with visual feedback."""
+        if not self._queue_action_state().move_up:
+            self._update_button_states()
+            return
         job = self._get_selected_job()
         queued_position, _ = self._selected_queued_position()
         
@@ -536,6 +553,9 @@ class QueuePanelV2(ttk.Frame):
 
     def _on_move_down(self) -> None:
         """Move the selected job down in the queue with visual feedback."""
+        if not self._queue_action_state().move_down:
+            self._update_button_states()
+            return
         job = self._get_selected_job()
         queued_position, queued_indices = self._selected_queued_position()
         
@@ -565,6 +585,9 @@ class QueuePanelV2(ttk.Frame):
 
     def _on_move_to_front(self) -> None:
         """Move the selected job to the front of the queue."""
+        if not self._queue_action_state().move_to_front:
+            self._update_button_states()
+            return
         job = self._get_selected_job()
         queued_position, _ = self._selected_queued_position()
         
@@ -594,6 +617,9 @@ class QueuePanelV2(ttk.Frame):
 
     def _on_move_to_back(self) -> None:
         """Move the selected job to the back of the queue."""
+        if not self._queue_action_state().move_to_back:
+            self._update_button_states()
+            return
         job = self._get_selected_job()
         queued_position, queued_indices = self._selected_queued_position()
         
@@ -626,27 +652,63 @@ class QueuePanelV2(ttk.Frame):
         job = self._get_selected_job()
         idx = self._get_selected_index()
 
-        if not job:
-            return
-        if self._job_status_value(job) != "queued":
-            self._emit_status_message("Running jobs must be cancelled, not removed", level="warning")
+        if not self._queue_action_state().remove:
+            if job and self._job_status_value(job) != "queued":
+                self._emit_status_message(
+                    "Running jobs must be cancelled, not removed", level="warning"
+                )
             self._update_button_states()
             return
+        if not job:
+            return
+        remove_job = getattr(self.controller, "on_queue_remove_job_v2", None)
+        if not callable(remove_job):
+            self._update_button_states()
+            return
+        try:
+            removed = bool(remove_job(job.job_id))
+        except Exception:
+            removed = False
+        if not removed:
+            self._emit_status_message("Queued job was not removed", level="warning")
+            self._update_button_states()
+            return
+        self._emit_status_message(
+            f"Removed job from position #{idx + 1}" if idx is not None else "Removed job"
+        )
+        if self._jobs and idx is not None:
+            new_idx = min(idx, len(self._jobs) - 1)
+            if new_idx >= 0:
+                self.after(50, lambda: self._select_index(new_idx))
 
-        if self.controller:
-            self.controller.on_queue_remove_job_v2(job.job_id)
-            self._emit_status_message(f"Removed job from position #{idx + 1}" if idx is not None else "Removed job")
-            
-            # Select next item if available
-            if self._jobs and idx is not None:
-                new_idx = min(idx, len(self._jobs) - 1)
-                if new_idx >= 0:
-                    self.after(50, lambda: self._select_index(new_idx))
-
-    def _on_clear(self) -> None:
-        """Clear all jobs from the queue."""
-        if self.controller and self._has_queued_jobs():
-            self.controller.on_queue_clear_v2()
+    def _on_clear(self) -> int:
+        """Clear queued jobs and report success only when a count is returned."""
+        if not self._queue_action_state().clear:
+            self._update_button_states()
+            return 0
+        clear_queue = getattr(self.controller, "on_queue_clear_v2", None)
+        if not callable(clear_queue):
+            self._update_button_states()
+            return 0
+        try:
+            result = clear_queue()
+        except Exception:
+            self._emit_status_message("Queued jobs could not be cleared", level="warning")
+            return 0
+        if isinstance(result, bool):
+            cleared = int(result)
+        elif isinstance(result, int):
+            cleared = result
+        else:
+            self._update_button_states()
+            return 0
+        if cleared <= 0:
+            self._emit_status_message("No queued jobs were cleared", level="warning")
+            self._update_button_states()
+            return 0
+        self._emit_status_message(f"Cleared {cleared} queued job(s)")
+        self._update_button_states()
+        return cleared
 
     # PR-PIPE-003: Visual feedback methods
     
@@ -730,14 +792,13 @@ class QueuePanelV2(ttk.Frame):
 
     def _on_clear_with_confirm(self) -> None:
         """Clear all with confirmation dialog."""
-        queued_count = sum(self._job_status_value(job) == "queued" for job in self._jobs)
-        if queued_count == 0:
+        if not self._queue_action_state().clear:
+            self._update_button_states()
             return
-        
+        queued_count = sum(self._job_status_value(job) == "queued" for job in self._jobs)
         from tkinter import messagebox
         if messagebox.askyesno("Clear Queue", f"Remove all {queued_count} queued jobs from queue?"):
             self._on_clear()
-            self._emit_status_message(f"Cleared {queued_count} queued jobs from queue")
 
     def _select_index(self, index: int) -> None:
         """Select a specific index in the listbox."""
@@ -944,18 +1005,37 @@ class QueuePanelV2(ttk.Frame):
     def _on_auto_run_changed(self) -> None:
         """Handle auto-run checkbox change."""
         enabled = self.auto_run_var.get()
+        if not self._queue_action_state().auto_run:
+            self.auto_run_var.set(self._auto_run_enabled)
+            self._update_button_states()
+            return
+        setter = getattr(self.controller, "on_set_auto_run_v2", None)
+        if not callable(setter):
+            self.auto_run_var.set(self._auto_run_enabled)
+            self._update_button_states()
+            return
+        try:
+            setter(enabled)
+        except Exception:
+            self.auto_run_var.set(self._auto_run_enabled)
+            self._emit_status_message("Auto-run setting could not be updated", level="warning")
+            return
         self._auto_run_enabled = enabled
-        if self.controller:
-            self.controller.on_set_auto_run_v2(enabled)
 
     def _on_pause_resume(self) -> None:
         """Toggle queue pause state."""
-        if self._is_queue_paused:
-            if self.controller:
-                self.controller.on_resume_queue_v2()
-        else:
-            if self.controller:
-                self.controller.on_pause_queue_v2()
+        if not self._queue_action_state().pause_resume:
+            self._update_button_states()
+            return
+        name = "on_resume_queue_v2" if self._is_queue_paused else "on_pause_queue_v2"
+        handler = getattr(self.controller, name, None)
+        if not callable(handler):
+            self._update_button_states()
+            return
+        try:
+            handler()
+        except Exception:
+            self._emit_status_message("Queue state could not be updated", level="warning")
 
     def _on_send_job(self) -> None:
         """Handle Send Job button click.
@@ -963,8 +1043,20 @@ class QueuePanelV2(ttk.Frame):
         PR-GUI-F3: Dispatches the top job from the queue immediately.
         Respects pause state (JobService handles this).
         """
-        if self.controller:
-            self.controller.on_queue_send_job_v2()
+        if not self._queue_action_state().send:
+            self._update_button_states()
+            return
+        handler = getattr(self.controller, "on_queue_send_job_v2", None)
+        if not callable(handler):
+            self._update_button_states()
+            return
+        try:
+            started = handler()
+        except Exception:
+            self._emit_status_message("Queued job could not be sent", level="warning")
+            return
+        if started is False:
+            self._emit_status_message("Queued job was not sent", level="warning")
 
     def _update_queue_status_display(
         self, is_paused: bool, running_job: Any | None, queue_count: int

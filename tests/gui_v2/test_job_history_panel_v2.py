@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import pytest
-from pathlib import Path
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
@@ -11,6 +10,7 @@ from src.queue.job_history_store import (
     JobStatus,
 )
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
+from tests.helpers.job_helpers import make_test_njr
 
 
 class DummyController:
@@ -20,6 +20,7 @@ class DummyController:
         self.svd_calls: list[str] = []
         self.video_workflow_calls: list[str] = []
         self.movie_clips_calls: list[str] = []
+        self.explain_calls: list[str] = []
 
     def refresh_job_history(self) -> None:
         self.refresh_calls += 1
@@ -36,8 +37,11 @@ class DummyController:
     def send_history_job_to_movie_clips(self, job_id: str) -> None:
         self.movie_clips_calls.append(job_id)
 
+    def explain_job(self, job_id: str) -> None:
+        self.explain_calls.append(job_id)
 
-def _make_entry(job_id: str) -> JobHistoryEntry:
+
+def _make_entry(job_id: str, *, replayable: bool = False) -> JobHistoryEntry:
     timestamp = "2025-01-01T12:00:00"
     return JobHistoryEntry(
         job_id=job_id,
@@ -46,6 +50,17 @@ def _make_entry(job_id: str) -> JobHistoryEntry:
         payload_summary="PackA",
         completed_at=timestamp,
         started_at=timestamp,
+        snapshot=(
+            {
+                "normalized_job": make_test_njr(
+                    job_id=job_id,
+                    prompt_source="manual",
+                    prompt_pack_id="",
+                ).to_dict()
+            }
+            if replayable
+            else None
+        ),
     )
 
 
@@ -86,7 +101,7 @@ def test_job_history_panel_updates_and_opens_folder(tk_root, tmp_path, monkeypat
         folder_opener=fake_opener,
     )
 
-    entry = _make_entry("job123")
+    entry = _make_entry("job123", replayable=True)
     image_path = tmp_path / "job123" / "image.png"
     image_path.parent.mkdir(parents=True)
     image_path.write_bytes(b"png")
@@ -326,7 +341,7 @@ def test_panel_iter_video_artifact_aggregates_includes_video_workflow_artifact(
     assert "video_workflow" in stages
 
 
-def test_entry_supports_video_workflow_handoff_for_image_entry() -> None:
+def test_entry_supports_video_workflow_handoff_for_image_entry(tmp_path) -> None:
     """Image-type entries should also support Video Workflow handoff."""
     panel = JobHistoryPanelV2.__new__(JobHistoryPanelV2)
     entry = _make_entry("job-img")
@@ -334,23 +349,25 @@ def test_entry_supports_video_workflow_handoff_for_image_entry() -> None:
         "artifact": {
             "schema": "stablenew.artifact.v2.6",
             "artifact_type": "image",
-            "primary_path": "/out/img.png",
-            "output_paths": ["/out/img.png"],
+            "primary_path": str(tmp_path / "img.png"),
+            "output_paths": [str(tmp_path / "img.png")],
         }
     }
+    (tmp_path / "img.png").write_bytes(b"png")
     assert panel._entry_supports_video_workflow_handoff(entry) is True
 
 
-def test_entry_supports_video_workflow_handoff_for_video_bundle() -> None:
+def test_entry_supports_video_workflow_handoff_for_video_bundle(tmp_path) -> None:
     """Video entries with video_bundle should support Video Workflow handoff."""
     panel = JobHistoryPanelV2.__new__(JobHistoryPanelV2)
     entry = _make_entry("job-vid")
     entry.result = {
         "video_bundle": {
-            "primary_path": "/out/clip.mp4",
-            "thumbnail_path": "/out/frame_001.png",
+            "primary_path": str(tmp_path / "clip.mp4"),
+            "thumbnail_path": str(tmp_path / "frame_001.png"),
         }
     }
+    (tmp_path / "frame_001.png").write_bytes(b"png")
     assert panel._entry_supports_video_workflow_handoff(entry) is True
 
 
@@ -367,15 +384,16 @@ def test_entry_supports_video_workflow_handoff_false_without_usable_output() -> 
     assert panel._entry_supports_video_workflow_handoff(entry) is False
 
 
-def test_entry_supports_movie_clips_handoff_for_video_bundle_outputs() -> None:
+def test_entry_supports_movie_clips_handoff_for_video_bundle_outputs(tmp_path) -> None:
     panel = JobHistoryPanelV2.__new__(JobHistoryPanelV2)
     entry = _make_entry("job-movie")
     entry.result = {
         "video_bundle": {
-            "primary_path": "/out/clip.mp4",
-            "output_paths": ["/out/clip.mp4"],
+            "primary_path": str(tmp_path / "clip.mp4"),
+            "output_paths": [str(tmp_path / "clip.mp4")],
         }
     }
+    (tmp_path / "clip.mp4").write_bytes(b"video")
     assert panel._entry_supports_movie_clips_handoff(entry) is True
 
 
@@ -435,5 +453,5 @@ def test_job_history_panel_handles_mixed_legacy_entries_without_crashing(tk_root
     panel.history_tree.selection_set(children[1])
     panel.history_tree.event_generate("<<TreeviewSelect>>")
 
-    assert panel.open_btn.instate(["!disabled"])
-    assert panel.svd_btn.instate(["!disabled"])
+    assert panel.open_btn.instate(["disabled"])
+    assert panel.svd_btn.instate(["disabled"])

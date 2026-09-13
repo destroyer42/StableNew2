@@ -30,6 +30,7 @@ class _ButtonState:
 
 def _queue_panel_state(*, paused: bool, running_job: object | None) -> QueuePanelV2:
     panel = object.__new__(QueuePanelV2)
+    panel.controller = SimpleNamespace(on_queue_send_job_v2=lambda: True)
     panel.app_state = SimpleNamespace(
         auto_run_queue=False,
         running_job=running_job,
@@ -47,6 +48,8 @@ def _queue_panel_state(*, paused: bool, running_job: object | None) -> QueuePane
     panel.remove_button = _ButtonState()
     panel.clear_button = _ButtonState()
     panel.send_job_button = _ButtonState()
+    panel.auto_run_check = _ButtonState()
+    panel.pause_resume_button = _ButtonState()
     return panel
 
 

@@ -97,11 +97,13 @@ def test_queue_panel_invokes_controller_actions(tk_root: tk.Tk) -> None:
         def on_queue_move_down_v2(self, job_id: str) -> None:
             self.calls.append(("move_down", job_id))
 
-        def on_queue_remove_job_v2(self, job_id: str) -> None:
+        def on_queue_remove_job_v2(self, job_id: str) -> bool:
             self.calls.append(("remove", job_id))
+            return True
 
-        def on_queue_clear_v2(self) -> None:
+        def on_queue_clear_v2(self) -> int:
             self.calls.append("clear")
+            return 2
 
         def on_queue_send_job_v2(self) -> None:
             self.calls.append("send")
@@ -120,6 +122,7 @@ def test_queue_panel_invokes_controller_actions(tk_root: tk.Tk) -> None:
     panel._on_pause_resume()
     panel._is_queue_paused = True
     panel._on_pause_resume()
+    panel._is_queue_paused = False
     panel._on_move_up()
     panel._on_move_down()
     panel._on_remove()
@@ -153,7 +156,10 @@ def test_queue_panel_disables_remove_and_clear_for_running_only_queue(tk_root: t
 
 
 def test_queue_panel_move_buttons_use_queued_position_not_visual_index(tk_root: tk.Tk) -> None:
-    panel = QueuePanelV2(tk_root)
+    panel = QueuePanelV2(
+        tk_root,
+        controller=SimpleNamespace(on_queue_remove_job_v2=lambda _job_id: True),
+    )
     running_job = SimpleNamespace(job_id="running", status="RUNNING", get_display_summary=lambda: "running")
     queued_job = SimpleNamespace(job_id="queued", status="QUEUED", get_display_summary=lambda: "queued")
 
@@ -171,7 +177,13 @@ def test_queue_panel_move_buttons_use_queued_position_not_visual_index(tk_root: 
 
 
 def test_queue_panel_enables_move_up_for_second_queued_job_below_running(tk_root: tk.Tk) -> None:
-    panel = QueuePanelV2(tk_root)
+    panel = QueuePanelV2(
+        tk_root,
+        controller=SimpleNamespace(
+            on_queue_move_up_v2=lambda _job_id: True,
+            on_queue_move_to_front_v2=lambda _job_id: True,
+        ),
+    )
     running_job = SimpleNamespace(job_id="running", status="RUNNING", get_display_summary=lambda: "running")
     queued_job_1 = SimpleNamespace(job_id="queued-1", status="QUEUED", get_display_summary=lambda: "queued-1")
     queued_job_2 = SimpleNamespace(job_id="queued-2", status="QUEUED", get_display_summary=lambda: "queued-2")

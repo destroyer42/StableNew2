@@ -5,14 +5,18 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
-import tkinter as tk
 import time
+import tkinter as tk
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from tkinter import ttk
 from typing import Any
 
+from src.controller.pipeline_controller_services.history_handoff_service import (
+    HistoryHandoffService,
+)
 from src.gui import theme_v2 as theme_mod
 from src.gui.view_contracts.movie_clips_contract import extract_source_paths_from_bundle
 from src.pipeline.artifact_contract import extract_artifact_paths
@@ -21,6 +25,35 @@ from src.queue.job_history_store import (
     JobHistoryEntry,
 )
 from src.video.video_artifact_helpers import extract_source_image_for_handoff
+
+_IMAGE_OUTPUT_SUFFIXES = {
+    ".png",
+    ".jpg",
+    ".jpeg",
+    ".webp",
+    ".bmp",
+    ".tiff",
+    ".tif",
+}
+_MOVIE_CLIPS_SOURCE_SUFFIXES = _IMAGE_OUTPUT_SUFFIXES | {
+    ".mp4",
+    ".mov",
+    ".mkv",
+    ".avi",
+    ".webm",
+}
+
+
+@dataclass(frozen=True)
+class HistoryActionState:
+    """The currently legal, callable actions for one history entry."""
+
+    open_folder: bool
+    replay: bool
+    svd: bool
+    video_workflow: bool
+    movie_clips: bool
+    explain: bool
 
 
 class JobHistoryPanelV2(ttk.Frame):
@@ -180,9 +213,10 @@ class JobHistoryPanelV2(ttk.Frame):
 
     def _on_refresh(self) -> None:
         ctrl = self.controller
-        if ctrl and hasattr(ctrl, "refresh_job_history"):
+        refresh = getattr(ctrl, "refresh_job_history", None)
+        if callable(refresh):
             try:
-                ctrl.refresh_job_history()
+                refresh()
                 return
             except Exception:
                 pass
@@ -245,12 +279,7 @@ class JobHistoryPanelV2(ttk.Frame):
             self._record_refresh_metric("_populate_history", elapsed_ms)
             return
         self._selected_job_id = None
-        self.open_btn.configure(state=tk.DISABLED)
-        self.replay_btn.configure(state=tk.DISABLED)
-        self.svd_btn.configure(state=tk.DISABLED)
-        self.video_workflow_btn.configure(state=tk.DISABLED)
-        self.movie_clips_btn.configure(state=tk.DISABLED)
-        self.explain_btn.configure(state=tk.DISABLED)
+        self._update_action_buttons(None)
         elapsed_ms = (time.perf_counter() - start) * 1000.0
         self._record_refresh_metric("_populate_history", elapsed_ms)
 
@@ -320,9 +349,7 @@ class JobHistoryPanelV2(ttk.Frame):
         selection = self.history_tree.selection()
         if not selection:
             self._selected_job_id = None
-            self.open_btn.configure(state=tk.DISABLED)
-            self.replay_btn.configure(state=tk.DISABLED)
-            self.svd_btn.configure(state=tk.DISABLED)
+            self._update_action_buttons(None)
             return
         item_id = selection[0]
         job_id = self._item_to_job.get(item_id)
@@ -330,22 +357,15 @@ class JobHistoryPanelV2(ttk.Frame):
         entry = self._entries.get(job_id) if job_id else None
         if not entry:
             self._selected_job_id = None
-            self.open_btn.configure(state=tk.DISABLED)
-            self.replay_btn.configure(state=tk.DISABLED)
-            self.svd_btn.configure(state=tk.DISABLED)
-            self.video_workflow_btn.configure(state=tk.DISABLED)
-            self.movie_clips_btn.configure(state=tk.DISABLED)
-            self.explain_btn.configure(state=tk.DISABLED)
+            self._update_action_buttons(None)
             return
         self._update_action_buttons(entry)
 
     def _on_open_folder(self) -> None:
-        if not self._selected_job_id:
+        entry = self._selected_entry()
+        if not entry or not self._history_action_state(entry).open_folder:
             return
-        entry = self._entries.get(self._selected_job_id)
-        if not entry:
-            return
-        folder = self._derive_output_folder(entry)
+        folder = self._usable_output_folder(entry)
         if not folder:
             return
         try:
@@ -354,7 +374,8 @@ class JobHistoryPanelV2(ttk.Frame):
             pass
 
     def _on_replay_job(self) -> None:
-        if not self._selected_job_id or not self.controller:
+        entry = self._selected_entry()
+        if not entry or not self._history_action_state(entry).replay:
             return
         handler = getattr(self.controller, "on_replay_history_job_v2", None)
         if not callable(handler):
@@ -365,7 +386,8 @@ class JobHistoryPanelV2(ttk.Frame):
             pass
 
     def _on_explain_job(self) -> None:
-        if not self._selected_job_id or not self.controller:
+        entry = self._selected_entry()
+        if not entry or not self._history_action_state(entry).explain:
             return
         handler = getattr(self.controller, "explain_job", None)
         if callable(handler):
@@ -375,7 +397,8 @@ class JobHistoryPanelV2(ttk.Frame):
                 pass
 
     def _on_send_to_svd(self) -> None:
-        if not self._selected_job_id or not self.controller:
+        entry = self._selected_entry()
+        if not entry or not self._history_action_state(entry).svd:
             return
         handler = getattr(self.controller, "send_history_job_image_to_svd", None)
         if callable(handler):
@@ -385,7 +408,8 @@ class JobHistoryPanelV2(ttk.Frame):
                 pass
 
     def _on_send_to_video_workflow(self) -> None:
-        if not self._selected_job_id or not self.controller:
+        entry = self._selected_entry()
+        if not entry or not self._history_action_state(entry).video_workflow:
             return
         handler = getattr(self.controller, "send_history_job_image_to_video_workflow", None)
         if callable(handler):
@@ -395,7 +419,8 @@ class JobHistoryPanelV2(ttk.Frame):
                 pass
 
     def _on_send_to_movie_clips(self) -> None:
-        if not self._selected_job_id or not self.controller:
+        entry = self._selected_entry()
+        if not entry or not self._history_action_state(entry).movie_clips:
             return
         handler = getattr(self.controller, "send_history_job_to_movie_clips", None)
         if callable(handler):
@@ -420,79 +445,144 @@ class JobHistoryPanelV2(ttk.Frame):
         self._history_menu.tk_popup(event.x_root, event.y_root)
 
     def _update_action_buttons(self, entry: JobHistoryEntry | None) -> None:
-        if not entry:
-            self.open_btn.configure(state=tk.DISABLED)
-            self.replay_btn.configure(state=tk.DISABLED)
-            self.svd_btn.configure(state=tk.DISABLED)
-            self.video_workflow_btn.configure(state=tk.DISABLED)
-            self.movie_clips_btn.configure(state=tk.DISABLED)
-            self.explain_btn.configure(state=tk.DISABLED)
-            self._history_menu.entryconfigure("Animate with SVD", state=tk.DISABLED)
-            self._history_menu.entryconfigure("Send to Video Workflow", state=tk.DISABLED)
-            self._history_menu.entryconfigure("Send to Movie Clips", state=tk.DISABLED)
-            self._history_menu.entryconfigure("Explain This Job", state=tk.DISABLED)
-            return
-        self.open_btn.configure(state=tk.NORMAL)
-        self.replay_btn.configure(state=tk.NORMAL)
-        self.explain_btn.configure(state=tk.NORMAL)
-        svd_state = tk.NORMAL if self._entry_supports_image_handoff(entry) else tk.DISABLED
-        vw_state = tk.NORMAL if self._entry_supports_video_workflow_handoff(entry) else tk.DISABLED
-        movie_clips_state = tk.NORMAL if self._entry_supports_movie_clips_handoff(entry) else tk.DISABLED
-        self.svd_btn.configure(state=svd_state)
-        self.video_workflow_btn.configure(state=vw_state)
-        self.movie_clips_btn.configure(state=movie_clips_state)
-        self._history_menu.entryconfigure("Animate with SVD", state=svd_state)
-        self._history_menu.entryconfigure("Send to Video Workflow", state=vw_state)
-        self._history_menu.entryconfigure("Send to Movie Clips", state=movie_clips_state)
-        self._history_menu.entryconfigure("Explain This Job", state=tk.NORMAL)
+        actions = self._history_action_state(entry)
+        self.open_btn.configure(state=tk.NORMAL if actions.open_folder else tk.DISABLED)
+        self.replay_btn.configure(state=tk.NORMAL if actions.replay else tk.DISABLED)
+        self.svd_btn.configure(state=tk.NORMAL if actions.svd else tk.DISABLED)
+        self.video_workflow_btn.configure(
+            state=tk.NORMAL if actions.video_workflow else tk.DISABLED
+        )
+        self.movie_clips_btn.configure(state=tk.NORMAL if actions.movie_clips else tk.DISABLED)
+        self.explain_btn.configure(state=tk.NORMAL if actions.explain else tk.DISABLED)
+        self._history_menu.entryconfigure(
+            "Animate with SVD", state=tk.NORMAL if actions.svd else tk.DISABLED
+        )
+        self._history_menu.entryconfigure(
+            "Send to Video Workflow",
+            state=tk.NORMAL if actions.video_workflow else tk.DISABLED,
+        )
+        self._history_menu.entryconfigure(
+            "Send to Movie Clips", state=tk.NORMAL if actions.movie_clips else tk.DISABLED
+        )
+        self._history_menu.entryconfigure(
+            "Explain This Job", state=tk.NORMAL if actions.explain else tk.DISABLED
+        )
+
+    def _selected_entry(self) -> JobHistoryEntry | None:
+        if not self._selected_job_id:
+            return None
+        return self._entries.get(self._selected_job_id)
+
+    def _controller_supports(self, name: str) -> bool:
+        return callable(getattr(self.controller, name, None))
+
+    @staticmethod
+    def _is_existing_file(path_value: object, suffixes: set[str]) -> bool:
+        try:
+            path = Path(str(path_value or "")).expanduser()
+            return path.is_file() and path.suffix.lower() in suffixes
+        except (OSError, ValueError):
+            return False
+
+    def _usable_image_artifact_path(self, entry: JobHistoryEntry) -> str | None:
+        artifact = self._extract_primary_artifact(entry)
+        if str(artifact.get("artifact_type") or "").strip().lower() != "image":
+            return None
+        for path in extract_artifact_paths({"artifact": artifact}):
+            if self._is_existing_file(path, _IMAGE_OUTPUT_SUFFIXES):
+                return str(path)
+        return None
+
+    def _usable_video_workflow_source(self, entry: JobHistoryEntry) -> str | None:
+        result = entry.result if isinstance(entry.result, dict) else {}
+        bundles = [result.get("video_bundle")]
+        bundles.extend(
+            self._iter_video_artifact_aggregates(self._extract_result_metadata(entry))
+        )
+        for bundle in bundles:
+            if not isinstance(bundle, dict):
+                continue
+            source_path = extract_source_image_for_handoff(bundle)
+            if self._is_existing_file(source_path, _IMAGE_OUTPUT_SUFFIXES):
+                return str(source_path)
+        return self._usable_image_artifact_path(entry)
+
+    def _usable_movie_clips_source(self, entry: JobHistoryEntry) -> str | None:
+        result = entry.result if isinstance(entry.result, dict) else {}
+        bundles = [result.get("video_bundle")]
+        bundles.extend(
+            self._iter_video_artifact_aggregates(self._extract_result_metadata(entry))
+        )
+        for bundle in bundles:
+            if not isinstance(bundle, dict):
+                continue
+            for path in extract_source_paths_from_bundle(bundle):
+                if self._is_existing_file(path, _MOVIE_CLIPS_SOURCE_SUFFIXES):
+                    return str(path)
+        return self._usable_image_artifact_path(entry)
+
+    def _entry_has_reconstructable_njr(self, entry: JobHistoryEntry) -> bool:
+        snapshot = entry.snapshot if isinstance(entry.snapshot, dict) else None
+        try:
+            return HistoryHandoffService().hydrate_njr_from_snapshot(snapshot) is not None
+        except Exception:
+            return False
+
+    def _usable_output_folder(self, entry: JobHistoryEntry) -> str | None:
+        artifact = self._extract_primary_artifact(entry)
+        for path_value in extract_artifact_paths({"artifact": artifact}) if artifact else []:
+            try:
+                path = Path(path_value).expanduser()
+                folder = path if path.is_dir() else path.parent
+                if path.exists() and folder.is_dir():
+                    return str(folder)
+            except (OSError, ValueError):
+                continue
+        result = entry.result if isinstance(entry.result, dict) else {}
+        output_dir = result.get("output_dir") or result.get("output_folder")
+        try:
+            path = Path(str(output_dir or "")).expanduser()
+            return str(path) if output_dir and path.is_dir() else None
+        except (OSError, ValueError):
+            return None
+
+    def _history_action_state(self, entry: JobHistoryEntry | None) -> HistoryActionState:
+        if entry is None:
+            return HistoryActionState(False, False, False, False, False, False)
+        return HistoryActionState(
+            open_folder=(
+                self._usable_output_folder(entry) is not None
+                and callable(getattr(self, "_folder_opener", None))
+            ),
+            replay=(
+                self._controller_supports("on_replay_history_job_v2")
+                and self._entry_has_reconstructable_njr(entry)
+            ),
+            svd=(
+                self._controller_supports("send_history_job_image_to_svd")
+                and self._usable_image_artifact_path(entry) is not None
+            ),
+            video_workflow=(
+                self._controller_supports("send_history_job_image_to_video_workflow")
+                and self._usable_video_workflow_source(entry) is not None
+            ),
+            movie_clips=(
+                self._controller_supports("send_history_job_to_movie_clips")
+                and self._usable_movie_clips_source(entry) is not None
+            ),
+            explain=self._controller_supports("explain_job"),
+        )
 
     def _entry_supports_image_handoff(self, entry: JobHistoryEntry) -> bool:
         """Returns True if the entry has a still-image primary output suitable for SVD."""
-        artifact = self._extract_primary_artifact(entry)
-        artifact_type = str(artifact.get("artifact_type") or "").strip().lower()
-        if artifact_type == "video":
-            return False
-        return True
+        return self._usable_image_artifact_path(entry) is not None
 
     def _entry_supports_video_workflow_handoff(self, entry: JobHistoryEntry) -> bool:
         """Return True only when the entry has a usable still-image handoff source."""
-        result = entry.result if isinstance(entry.result, dict) else {}
-        bundle = result.get("video_bundle")
-        if isinstance(bundle, dict):
-            if extract_source_image_for_handoff(bundle):
-                return True
-
-        metadata = self._extract_result_metadata(entry)
-        for aggregate in self._iter_video_artifact_aggregates(metadata):
-            if extract_source_image_for_handoff(aggregate):
-                return True
-
-        if self._entry_supports_image_handoff(entry):
-            artifact = self._extract_primary_artifact(entry)
-            return bool(extract_artifact_paths({"artifact": artifact}))
-
-        return False
+        return self._usable_video_workflow_source(entry) is not None
 
     def _entry_supports_movie_clips_handoff(self, entry: JobHistoryEntry) -> bool:
-        result = entry.result if isinstance(entry.result, dict) else {}
-        bundle = result.get("video_bundle")
-        if isinstance(bundle, dict) and extract_source_paths_from_bundle(bundle):
-            return True
-
-        metadata = self._extract_result_metadata(entry)
-        for aggregate in self._iter_video_artifact_aggregates(metadata):
-            aggregate_bundle = {
-                "stage": aggregate.get("stage"),
-                "segment_provenance": aggregate.get("segment_provenance"),
-                "export_output": aggregate.get("export_output"),
-                "frame_paths": list(aggregate.get("frame_paths") or []),
-                "output_paths": list(aggregate.get("output_paths") or aggregate.get("video_paths") or []),
-                "primary_path": aggregate.get("primary_path"),
-            }
-            if extract_source_paths_from_bundle(aggregate_bundle):
-                return True
-
-        return self._entry_supports_image_handoff(entry)
+        return self._usable_movie_clips_source(entry) is not None
 
     def _get_display_status(self, entry: JobHistoryEntry) -> str:
         """D-GUI-003: Determine status: Success, Failed, or Cancelled."""
@@ -789,43 +879,8 @@ class JobHistoryPanelV2(ttk.Frame):
         return job_id[:20] if len(job_id) > 20 else job_id
     
     def _derive_output_folder(self, entry: JobHistoryEntry) -> str:
-        """PR-GUI-FUNC-003: Derive actual output folder path from job entry."""
-        artifact = self._extract_primary_artifact(entry)
-        primary_paths = extract_artifact_paths({"artifact": artifact}) if artifact else []
-        if primary_paths:
-            output_path = Path(primary_paths[0]).parent
-            if output_path.exists():
-                return str(output_path)
-
-        # Try to get output_dir from result first (most accurate)
-        if entry.result and isinstance(entry.result, dict):
-            output_dir = entry.result.get("output_dir") or entry.result.get("output_folder")
-            if output_dir:
-                output_path = Path(output_dir)
-                if output_path.exists():
-                    return str(output_path)
-        
-        # Try to get path_output_dir from snapshot
-        if entry.snapshot:
-            njr = entry.snapshot.get("normalized_job", {})
-            path_output_dir = njr.get("path_output_dir")
-            if path_output_dir:
-                output_path = Path(path_output_dir)
-                if output_path.exists():
-                    return str(output_path)
-        
-        # Fall back to checking runs/{job_id}
-        runs_candidate = Path("runs") / entry.job_id
-        if runs_candidate.exists():
-            return str(runs_candidate)
-        
-        # Last resort: return base runs directory
-        runs_base = Path("runs")
-        if runs_base.exists():
-            return str(runs_base)
-        
-        # If nothing exists, return the expected location
-        return str(runs_base)
+        """Return only a current folder proven by canonical result/artifact evidence."""
+        return self._usable_output_folder(entry) or ""
 
     def _on_tree_motion(self, event: tk.Event) -> None:
         """Show tooltip with full model name and efficiency metrics on hover."""
