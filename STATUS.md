@@ -106,16 +106,35 @@ evident stretch or squash. The physical GUI button was not used because the
 desktop bridge was unavailable; the approved public submission boundary was
 used instead. No production or test source changes were required.
 
+RIFE interpolation semantics are **PASS / ACCEPTED**. RIFE is an optional
+native-SVD temporal-smoothing postprocess, not slow motion. MVP operators may
+use only 2x or 4x: output frames equal base frames multiplied by the factor,
+and output FPS is multiplied by the same factor. Thus 14 frames at 7 fps
+becomes 28 at 14 fps for 2x or 56 at 28 fps for 4x; disabled RIFE remains at
+the base cadence. Unsupported factors such as 3x are rejected before SVD
+model preparation or inference. Effective artifact FPS propagates through
+MP4/GIF export, `SVDResult`, manifest/history, and embedded container metadata;
+immutable SVD configuration retains base generation FPS. Postprocess metadata
+records explicit input/output counts and FPS plus the duration-preserving
+semantics. Exact output counts are validated, including the bounded
+compatibility path for existing non-v4 RIFE runtimes.
+
+A bounded real RIFE-only check used the accepted 14-frame SVD artifact: 14
+frames at 7 fps and 2.00 seconds became 28 frames at 14 fps and 2.00 seconds.
+The installed runtime rejected custom `-n`, so the compatibility fallback was
+exercised; visual smoke inspection showed no obvious corruption. No SVD
+inference, model/runtime download, or queue submission occurred. No GitHub
+Actions run is associated with the RIFE commit, so its Python 3.11/3.12 CI
+status must not be represented as passed.
+
 ## Remaining sequence
 
-1. Decide/repair RIFE interpolation semantics if required.
-2. Complete portable video provenance and parent artifact lineage.
-3. Complete queue/history recovery UX and no-op cleanup.
-4. Finish PR-MVP-080 operator journey/docs/required CI/integration.
-5. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
+1. Complete portable video provenance and parent artifact lineage.
+2. Complete queue/history recovery UX and no-op cleanup.
+3. Finish PR-MVP-080 operator journey/docs/required CI/integration.
+4. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
 
-Next action: investigate and decide RIFE interpolation semantics; do not imply
-that RIFE is broken before verification.
+Next action: portable video provenance + parent artifact lineage.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is complete and accepted, pulled forward only to unblock PR-MVP-080; the

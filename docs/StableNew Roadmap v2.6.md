@@ -128,7 +128,10 @@ outcome. Remaining work is:
   selected `832x1216 -> 640x960`, produced an exact `640x960` center-cropped
   prepared image, and completed with a verified 14-frame portrait MP4 through
   the canonical queue-first runner path;
-- RIFE interpolation semantics decision if required;
+- accepted RIFE interpolation semantics: optional and disabled by default;
+  duration-preserving temporal smoothing with bounded 2x and 4x factors only;
+  unsupported factors are rejected before expensive generation; final artifact
+  cadence reflects interpolation;
 - portable video provenance and parent artifact lineage: make produced MP4
   provenance self-contained enough for later inspection and recovery when
   sidecars or original paths are unavailable; embedded provenance remains an
@@ -180,7 +183,7 @@ Remaining clean-machine/release-proof work stays after PR-MVP-080:
 
 ## Next action
 
-Investigate and decide RIFE interpolation semantics. PromptPack authorship,
+Complete portable video provenance and parent artifact lineage. PromptPack authorship,
 durable job state, image generation, native SVD XT, the Phase 0 runtime/bootstrap
-prerequisite, and real portrait source-aware SVD geometry already have single
-accepted product paths.
+prerequisite, real portrait source-aware SVD geometry, and duration-preserving
+RIFE interpolation semantics already have single accepted product paths.
