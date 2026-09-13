@@ -58,3 +58,20 @@ def test_application_runtime_coordinator_syncs_queue_flags() -> None:
     assert app_state.auto_run_queue is True
     assert app_state.is_queue_paused is False
     assert job_service.auto_run_enabled is True
+
+
+def test_application_runtime_coordinator_defers_until_webui_ready_after_gui() -> None:
+    job_controller = _JobControllerStub()
+    webui = _WebUIStub(ready=False)
+    coordinator = ApplicationRuntimeCoordinator(
+        job_controller=job_controller,
+        webui_connection_controller=webui,
+    )
+
+    coordinator.on_gui_ready()
+    assert job_controller.trigger_calls == 0
+
+    webui._ready = True
+    coordinator.on_webui_ready()
+
+    assert job_controller.trigger_calls == 1

@@ -80,25 +80,16 @@ class _StubPhotoOptimizeTab:
         return self._payload
 
 
-class _StubJobController:
+class _StubApplicationController:
     def __init__(self) -> None:
-        self.called = 0
+        self.gui_ready_calls = 0
 
-    def trigger_deferred_autostart(self) -> None:
-        self.called += 1
+    def on_gui_ready(self) -> None:
+        self.gui_ready_calls += 1
 
-
-class _StubPipelineController:
-    def __init__(self, job_controller: _StubJobController) -> None:
-        self._job_controller = job_controller
-
-
-class _StubWebUIConnection:
-    def __init__(self, ready: bool) -> None:
-        self._ready = ready
-
-    def is_webui_ready_strict(self) -> bool:
-        return self._ready
+    @property
+    def webui_connection_controller(self):
+        raise AssertionError("MainWindowV2 must not inspect WebUI readiness")
 
 
 class _StubSVDTab:
@@ -280,26 +271,21 @@ def test_save_ui_state_persists_content_visibility_mode(tmp_path: Path) -> None:
     assert saved["content_visibility"] == {"mode": "sfw"}
 
 
-def test_trigger_deferred_queue_autostart_calls_job_controller() -> None:
-    job_controller = _StubJobController()
+def test_trigger_deferred_queue_autostart_delegates_to_app_controller() -> None:
+    app_controller = _StubApplicationController()
     window = MainWindowV2.__new__(MainWindowV2)
-    window.pipeline_controller = _StubPipelineController(job_controller)
-    window.app_controller = type("ControllerStub", (), {"webui_connection_controller": _StubWebUIConnection(True)})()
+    window.app_controller = app_controller
 
     window._trigger_deferred_queue_autostart()
 
-    assert job_controller.called == 1
+    assert app_controller.gui_ready_calls == 1
 
 
-def test_trigger_deferred_queue_autostart_defers_until_webui_ready() -> None:
-    job_controller = _StubJobController()
+def test_trigger_deferred_queue_autostart_missing_app_callback_is_nonfatal() -> None:
     window = MainWindowV2.__new__(MainWindowV2)
-    window.pipeline_controller = _StubPipelineController(job_controller)
-    window.app_controller = type("ControllerStub", (), {"webui_connection_controller": _StubWebUIConnection(False)})()
+    window.app_controller = object()
 
     window._trigger_deferred_queue_autostart()
-
-    assert job_controller.called == 0
 
 
 def test_cleanup_does_not_double_shutdown_webui_when_controller_present() -> None:
