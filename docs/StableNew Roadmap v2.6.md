@@ -69,7 +69,7 @@ feature.
 | 11 | `PR-MVP-080` | IN PROGRESS | Operator readiness and runtime recovery closeout |
 | 12 | `PR-MVP-090` | Planned | Clean-machine release acceptance |
 
-Roadmap progress is 10 of 13 rows complete (approximately 77%). Native SVD is
+Roadmap progress is 11 of 13 rows complete (approximately 85%). Native SVD is
 complete; operator readiness is in progress and clean-machine release proof
 remains planned.
 
@@ -124,9 +124,7 @@ export preserves the requested 14-frame sequence.
 Expose or clearly label only supported paths and finish the operator-readiness
 outcome. Remaining work is:
 
-- runtime hardening closeout;
-- img2img cancellation consistency;
-- one real source-aware SVD geometry acceptance;
+- one real portrait source-aware SVD geometry acceptance;
 - RIFE interpolation semantics decision if required;
 - queue/history recovery UX;
 - final operator journey, documentation, required CI, and integration.
@@ -160,6 +158,6 @@ restart/replay/artifact proof, and final release limitations and rollback.
 
 ## Next action
 
-Continue `PR-MVP-080` through the remaining operator-readiness outcomes.
-PromptPack authorship, durable job state, image generation, and native SVD XT
-already have single accepted product paths.
+The next action is to complete one real portrait source-aware SVD geometry
+acceptance. PromptPack authorship, durable job state, image generation, and
+native SVD XT already have single accepted product paths.

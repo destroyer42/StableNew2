@@ -53,13 +53,18 @@ post-interrupt wedge. For external A1111, StableNew may use supported
 API/progress/interrupt operations but never adopts, kills, or restarts the
 process. A stalled external runtime surfaces operator action required.
 
+The canonical `run_img2img_stage` now uses the existing shared
+progress/cancellation authority. Active img2img cancellation is deterministically
+proven with one generation POST, one interrupt, persisted `CANCELLED`, no
+promoted artifact, no later pipeline stage, no process restart/retry, and no
+resurrection when a late response succeeds.
+
 ## Remaining sequence
 
-1. Make img2img cancellation consistent with canonical txt2img behavior.
-2. Complete one real portrait source-aware SVD geometry acceptance.
-3. Decide or repair RIFE interpolation semantics if required.
-4. Complete queue/history recovery UX and no-op cleanup.
-5. Finish the operator journey, documentation, required CI, and integration.
+1. Complete one real portrait source-aware SVD geometry acceptance.
+2. Decide or repair RIFE interpolation semantics if required.
+3. Complete queue/history recovery UX and no-op cleanup.
+4. Finish the operator journey, documentation, required CI, and integration.
 
 Then PR-MVP-090 owns reproducible local environment/bootstrap, clean-checkout
 setup, migration/recovery rehearsal, final image/SVD smokes, restart/replay/
@@ -68,7 +73,8 @@ artifact proof, and final release limitations and rollback.
 ## Known non-blocking debt
 
 - Informational Linux/Xvfb isolation failures remain outside the required CI verdict.
-- Legacy stale tests still reflect superseded CLI, compatibility, or migration expectations.
+- Legacy stale tests still reflect superseded CLI, compatibility, migration, or
+  stale constructor-fixture expectations.
 - Bounded Ruff and mypy debt remains tracked; local environment/bootstrap normalization belongs to PR-MVP-090.
 
 Current exact collection and smoke counts are taken from the latest required CI
