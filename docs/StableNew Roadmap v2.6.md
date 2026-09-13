@@ -37,6 +37,10 @@ feature.
 - MVP execution is same-process and single-node.
 - Native SVD XT is the only MVP video backend.
 
+The accepted first post-v2.6 image architecture direction is one typed image
+backend per image NJR. That work begins only after the MVP/release proof is
+accepted; it does not expand the current v2.6 release gate.
+
 ## Definition of done
 
 - Production modules are tracked and importable from a clean checkout.
@@ -69,8 +73,8 @@ feature.
 | 11 | `PR-MVP-080` | IN PROGRESS | Operator readiness and runtime recovery closeout |
 | 12 | `PR-MVP-090` | Planned | Clean-machine release acceptance |
 
-Roadmap progress is 11 of 13 rows complete (approximately 85%). Native SVD is
-complete; operator readiness is in progress and clean-machine release proof
+Roadmap progress is 11 of 13 MVP rows complete (approximately 85%). Native SVD
+is complete; operator readiness is in progress and clean-machine release proof
 remains planned.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair
@@ -105,7 +109,7 @@ The conservative txt2img path, optional stages, queue policy, progress,
 cancellation, artifacts, history, replay, and real-WebUI GUI acceptance are
 complete and accepted.
 
-## Remaining work
+## Remaining MVP work
 
 ### PR-MVP-070 — native SVD XT — COMPLETE
 
@@ -162,15 +166,93 @@ Remaining clean-machine/release-proof work stays after PR-MVP-080:
 - restart/replay/artifact proof;
 - final limitations and rollback documentation.
 
+## Approved post-v2.6 sequence
+
+This sequence is approved architecture direction but is not part of the current
+MVP completion count. Do not begin it until PR-MVP-080 and PR-MVP-090 are
+accepted and integrated and the exact post-v2.6 parent SHA is verified.
+
+| Order | Work | Status | Outcome |
+|---:|---|---|---|
+| P1 | `PR-IMG-100` | Approved / Not started | One typed image backend per image NJR; existing A1111 path preserved behind a StableNew-owned backend contract |
+| P2 | `PR-IMG-110` | Planned decision-gated qualification | Diffusers / Ideogram 4 runtime qualification on target hardware; no production backend yet |
+| P3 | `PR-IMG-120` | Conditional | First Diffusers production image vertical slice if PR-IMG-110 proves viable |
+| P4 | `PR-IMG-130` | Conditional | Capability-aware image backend/model UI and compiler projections |
+
+### PR-IMG-100 — backend-neutral image execution
+
+Accepted architecture: **COA B — one typed image backend per image NJR**.
+
+The PR introduces StableNew-owned image backend capabilities/request/result/
+interface/registry contracts below `PipelineRunner.run_njr`. Newly compiled image
+NJRs explicitly persist image backend identity in the existing immutable
+`backend_options` layer. Historical v2.6 image NJRs that lack backend identity
+resolve to `a1111_webui` through one bounded compatibility rule.
+
+A1111/WebUI remains the only production backend delivered by PR-IMG-100 and must
+preserve current txt2img, img2img, ADetailer, upscale, model/VAE verification,
+managed/external ownership, cancellation, stall/recovery, ambiguous-POST,
+artifact, history, and replay behavior. A deterministic fake backend proves the
+boundary before the A1111 adapter cutover; final acceptance includes a real
+queue-first A1111 golden path.
+
+One backend owns all image stages in an NJR for this PR. Unsupported stages fail
+before dispatch. There is no implicit cross-backend fallback.
+
+The binding acceptance contract and exact Codex Phase A/B/C templates are in:
+
+`docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`
+
+### PR-IMG-110 — Diffusers / Ideogram 4 qualification
+
+This is a separate runtime qualification after PR-IMG-100. It must determine,
+on the actual supported target environment, model access/license flow, minimum
+known-good Diffusers version, local cache behavior, VRAM/RAM/offload strategy,
+1024-class viability, latency, seed behavior, progress/cancellation, model
+unload/reload, and coexistence with the existing A1111/SVD GPU lifecycle.
+
+Qualification does not authorize production integration. PR-IMG-120 begins only
+if the evidence is acceptable and Rob approves the production slice.
+
+### PR-IMG-120 — conditional Diffusers production slice
+
+If qualified, add `diffusers` as a second image backend behind the PR-IMG-100
+contract. Ideogram 4 is the first candidate model family, not a public backend
+class. The initial slice should remain `txt2img`-only unless evidence supports a
+broader capability contract.
+
+### PR-IMG-130 — conditional capability-aware UX/compiler
+
+After a real second backend exists, make backend/model capabilities explicit in
+intent/UI/compiler projections so A1111-only controls are not presented as
+universal image settings. Do not redesign PromptPack storage merely to support
+capability-aware compilation.
+
+## Deferred image-backend options
+
+- **COA C — per-stage backend composition:** potentially valuable for explicit
+  chains such as Diffusers base generation followed by A1111 detail work, but it
+  requires its own design for artifact handoff, capability negotiation, replay,
+  provenance, resource lifecycle, and failure semantics.
+- **COA D — ComfyUI-centric image execution:** ComfyUI may later be a useful
+  image backend for selected model families/workflows, but it must remain behind
+  StableNew-owned orchestration and may not replace the compiler, NJR, queue,
+  runner, artifact, history, replay, cancellation, or process authorities.
+
+Neither COA C nor COA D is authorized inside PR-IMG-100.
+
 ## Risk controls
 
 - Never bulk-merge comparison branches; adopt changes by current need and test.
 - Never migrate user data without dry-run, backup, verification, idempotence,
   conflict reporting, and rehearsed rollback.
 - Keep required CI hermetic; real backends are separate explicit acceptance.
-- Keep video to one backend and one MVP journey.
+- Keep MVP video to one backend and one MVP journey.
 - Do not revive the failed child runtime host or add distributed execution.
 - Do not let historical feature breadth block the defined vertical slice.
+- Do not begin PR-IMG-100 before the accepted v2.6 release baseline exists.
+- PR-IMG-100 must preserve A1111 rather than combine backend-neutralization with
+  image-quality changes, a broad executor rewrite, or another real backend.
 
 ## Deferred until after MVP
 
@@ -179,7 +261,9 @@ Remaining clean-machine/release-proof work stays after PR-MVP-080:
 - daemon, cluster, child-host, or multi-node execution;
 - full training-product UX;
 - automated closed-loop learning decisions;
-- broad GUI or performance rewrites unrelated to measured MVP blockers.
+- broad GUI or performance rewrites unrelated to measured MVP blockers;
+- per-stage image backend composition and ComfyUI image execution until their
+  own post-v2.6 decisions/acceptance contracts are approved.
 
 ## Next action
 
@@ -187,3 +271,7 @@ Complete portable video provenance and parent artifact lineage. PromptPack autho
 durable job state, image generation, native SVD XT, the Phase 0 runtime/bootstrap
 prerequisite, real portrait source-aware SVD geometry, and duration-preserving
 RIFE interpolation semantics already have single accepted product paths.
+
+After PR-MVP-080 and PR-MVP-090 are accepted and integrated, verify the exact
+post-v2.6 parent SHA and begin `PR-IMG-100 Phase A`; do not reuse the discovery
+branch SHA as an implementation parent.
