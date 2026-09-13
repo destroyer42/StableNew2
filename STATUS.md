@@ -61,57 +61,43 @@ resurrection when a late response succeeds.
 
 ## Current acceptance blocker
 
-Phase 0R1 established that the StableNew runtime is healthy under the proven
-local execution scope. StableNew's production default Hugging Face cache is
-the per-user Hugging Face hub cache, and it already contains a complete
-`stabilityai/stable-video-diffusion-img2vid-xt`. No XT download is required.
+The persisted SVD operator-profile blocker is resolved. The persisted SVD
+operator state was normalized through the existing `UIStateStore`; only stale
+SVD values changed, and unrelated UI/application state remained unchanged.
+The effective persisted profile now matches `Recommended 12GB / XT 14f`:
 
-A fresh `SVDController` default using the accepted plain-XT profile passes
-production local-only preflight:
+- Plain XT is active with the production default per-user Hugging Face cache.
+- 14 frames, 7 fps, 25 steps, motion bucket 48, noise 0.01, decode 2.
+- Match Source Aspect with `center_crop`.
+- Local-only mode is true and all postprocess stages are OFF.
 
-- Model is supported and cached.
-- Torch is available.
-- Diffusers and `StableVideoDiffusionPipeline` are available.
-- CUDA is available on the RTX 4070 Ti.
-- The portrait source is valid.
-- Blocking reasons and warnings are empty.
-
-The remaining operator blocker is stale persisted GUI state in more than one
-SVD field:
-
-- `model_id` is `stabilityai/stable-video-diffusion-img2vid` (base).
-- `cache_dir` points to the obsolete repository-local `cache` directory, where
-  plain XT is incomplete.
-
-The base model is supported historical/user state, but it is not the
-authoritative Recommended-profile baseline for this acceptance. Correcting
-`cache_dir` alone would therefore not establish the accepted
-operator-effective profile. Historical base-model and XT 1.1 records do not
-supersede the canonical accepted plain-XT baseline. No user-state mutation,
-NJR submission, model load, or inference occurred during Phase 0.
+Production local-only preflight passes with no blockers or warnings. The model
+is cached, Torch and the Diffusers pipeline are available, CUDA sees the RTX
+4070 Ti, and the portrait source is valid. Zero NJR submissions and zero SVD
+inference jobs occurred during Phase 0.
 
 XT 1.1 remains a distinct supported model and must not be substituted for the
 accepted plain-XT baseline merely because it is cached.
 
+Remaining Phase 0 blocker:
+
+The working runtime is not yet reproducibly encoded by repository setup
+instructions/tooling. Ordinary requirements installation resolved CPU-only
+Torch, while the successful runtime required the official CUDA PyTorch package
+index. Windows Python and FFmpeg prerequisites also need a single supported
+setup procedure.
+
 ## Remaining sequence
 
-1. Complete the remaining PR-MVP-090 Phase 0 operator prerequisite: reconcile
-   the full persisted SVD effective state against the `Recommended 12GB / XT
-   14f` preset, apply that preset through the existing operator/UI-state
-   authority while preserving unrelated settings, restore the canonical cache
-   authority, and prove the operator-effective local-only preflight; then
-   complete the reproducibility/bootstrap helper gap.
+1. Complete PR-MVP-090 Phase 0R2 reproducible Windows bootstrap helper/runbook.
 2. Resume the real portrait source-aware SVD geometry acceptance.
 3. Decide/repair RIFE interpolation semantics if required.
 4. Complete queue/history recovery UX and no-op cleanup.
 5. Finish PR-MVP-080 operator journey/docs/required CI/integration.
 6. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
 
-Next action: reconcile the full persisted SVD effective state against the
-`Recommended 12GB / XT 14f` preset, apply that preset through the existing
-operator/UI-state authority while preserving unrelated settings, restore the
-canonical cache authority, and rerun production preflight; then complete the
-reproducibility/bootstrap helper gap.
+Next action: complete PR-MVP-090 Phase 0R2 reproducible Windows bootstrap
+helper/runbook.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is pulled forward only to unblock PR-MVP-080; the remaining clean-machine and
