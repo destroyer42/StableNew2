@@ -76,29 +76,42 @@ production local-only preflight:
 - The portrait source is valid.
 - Blocking reasons and warnings are empty.
 
-The remaining operator blocker is persisted GUI state overriding SVD `cache_dir`
-to the obsolete repository-local `cache` directory, where plain XT is
-incomplete. Historical base-model and XT 1.1 records do not supersede the
-canonical accepted plain-XT baseline. Zero new SVD inference jobs have run
-during Phase 0.
+The remaining operator blocker is stale persisted GUI state in more than one
+SVD field:
+
+- `model_id` is `stabilityai/stable-video-diffusion-img2vid` (base).
+- `cache_dir` points to the obsolete repository-local `cache` directory, where
+  plain XT is incomplete.
+
+The base model is supported historical/user state, but it is not the
+authoritative Recommended-profile baseline for this acceptance. Correcting
+`cache_dir` alone would therefore not establish the accepted
+operator-effective profile. Historical base-model and XT 1.1 records do not
+supersede the canonical accepted plain-XT baseline. No user-state mutation,
+NJR submission, model load, or inference occurred during Phase 0.
 
 XT 1.1 remains a distinct supported model and must not be substituted for the
 accepted plain-XT baseline merely because it is cached.
 
 ## Remaining sequence
 
-1. Complete the remaining PR-MVP-090 Phase 0 operator prerequisite: correct
-   the persisted SVD cache setting and prove the operator-effective
-   local-only preflight, then complete the reproducibility/bootstrap helper gap.
+1. Complete the remaining PR-MVP-090 Phase 0 operator prerequisite: reconcile
+   the full persisted SVD effective state against the `Recommended 12GB / XT
+   14f` preset, apply that preset through the existing operator/UI-state
+   authority while preserving unrelated settings, restore the canonical cache
+   authority, and prove the operator-effective local-only preflight; then
+   complete the reproducibility/bootstrap helper gap.
 2. Resume the real portrait source-aware SVD geometry acceptance.
 3. Decide/repair RIFE interpolation semantics if required.
 4. Complete queue/history recovery UX and no-op cleanup.
 5. Finish PR-MVP-080 operator journey/docs/required CI/integration.
 6. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
 
-Next action: correct the persisted SVD cache setting through the existing
-user-state authority, prove the actual operator-effective configuration passes
-local-only preflight, then complete the reproducibility/bootstrap helper gap.
+Next action: reconcile the full persisted SVD effective state against the
+`Recommended 12GB / XT 14f` preset, apply that preset through the existing
+operator/UI-state authority while preserving unrelated settings, restore the
+canonical cache authority, and rerun production preflight; then complete the
+reproducibility/bootstrap helper gap.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is pulled forward only to unblock PR-MVP-080; the remaining clean-machine and
