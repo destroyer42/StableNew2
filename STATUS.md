@@ -148,16 +148,43 @@ inference, model/runtime download, or queue submission occurred. No GitHub
 Actions run is associated with the RIFE commit, so its Python 3.11/3.12 CI
 status must not be represented as passed.
 
+Portable native-SVD MP4 provenance and parent artifact lineage are **PASS /
+ACCEPTED**. Native-SVD MP4 artifacts embed machine-readable immutable audit /
+recovery evidence under `stablenew.video-provenance.v2.6`. The payload uses
+canonical JSON, with raw storage for smaller payloads and gzip/base64 for
+larger payloads, and verifies its payload SHA-256. It preserves the exact
+source-image byte SHA-256, valid embedded StableNew image provenance when
+available, current NJR SHA-256 when available, authorized parent job/artifact
+IDs, complete SVD configuration, actual preprocess/postprocess results, and
+effective RIFE frame/FPS values. Missing, omitted, or corrupt source
+provenance is explicit rather than fabricated. The MP4 video media/elementary
+stream has an independent SHA-256 that was verified unchanged across metadata
+remux; this is not a whole-MP4 file hash. Existing public container metadata
+remains available, and the SVD JSON sidecar carries a matching summary.
+Failure to embed, read back, or verify required provenance fails SVD export and
+uses the existing partial-output cleanup. SQLite remains the live queue,
+repository, and history authority; embedded provenance does not authorize
+replay or automatically restore history, and paths remain convenience
+references rather than durable identity.
+
+A bounded real FFmpeg-only acceptance exercised the production `SVDRunner` with
+temporary frames and a fake SVD service. Payload read-back and SHA verification,
+source and media hashes, sidecar coherence, isolated MP4-only lineage recovery,
+and ffprobe validation of 14 frames at 7 fps all passed. No model download,
+GPU/SVD inference, or queue submission was required. Focused validation was
+`74 passed`; the local standard PR gate remains blocked by missing local
+`mypy`. No GitHub Python 3.11/3.12 CI result is claimed for the provenance
+commit `b33d028473f905747ddc19ae394526f5e6531fe8`.
+
 ## Remaining sequence
 
-1. Complete portable video provenance and parent artifact lineage.
-2. Complete queue/history recovery UX and no-op cleanup.
-3. Finish PR-MVP-080 operator journey/docs/required CI/integration.
-4. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
-5. After v2.6 release acceptance, begin PR-IMG-100 Phase A from the exact
+1. Complete queue/history recovery UX and no-op cleanup.
+2. Finish PR-MVP-080 operator journey/docs/required CI/integration.
+3. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
+4. After v2.6 release acceptance, begin PR-IMG-100 Phase A from the exact
    integrated post-v2.6 branch/SHA.
 
-Next action: portable video provenance + parent artifact lineage.
+Next action: queue/history recovery UX + no-op cleanup.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is complete and accepted, pulled forward only to unblock PR-MVP-080; the

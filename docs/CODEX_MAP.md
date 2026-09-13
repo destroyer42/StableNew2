@@ -46,6 +46,9 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   only after they exist.
 - Native SVD/video: `src/video/svd_service.py`, `src/video/svd_runner.py`,
   `src/video/svd_native_backend.py`, and `src/video/workflow_contracts.py`.
+- Portable SVD provenance: `src/video/svd_portable_provenance.py` ->
+  `src/video/container_metadata.py` -> `src/video/svd_runner.py` ->
+  `src/video/svd_registry.py`.
 - Learning: `src/learning/`, with GUI coordination in
   `src/gui/controllers/learning_controller.py`.
 - Artifacts and replay: `src/pipeline/artifact_contract.py`,
@@ -62,6 +65,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | Current image execution | `pipeline_runner.py` -> `executor.py` -> `src/api/` |
 | `PR-IMG-100` backend-neutral image execution | `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md` -> `njr_core_v26.py` / `config_contract_v26.py` -> image compilers -> `pipeline_runner.py` -> runtime ports -> current A1111 executor boundary |
 | Video/SVD | `workflow_compiler.py` -> `svd_service.py` -> `svd_native_backend.py` |
+| Portable SVD provenance | `src/video/svd_portable_provenance.py` -> `src/video/container_metadata.py` -> `src/video/svd_runner.py` -> `src/video/svd_registry.py` |
 | Windows runtime/bootstrap | `scripts/bootstrap_windows.ps1` -> `docs/runbooks/windows_runtime_bootstrap.md` |
 | Replay/learning | `replay_engine.py`, `src/learning/`, `job_history_store.py` |
 | Tests/CI | `pyproject.toml`, `tools/ci/`, `.github/workflows/ci.yml` |

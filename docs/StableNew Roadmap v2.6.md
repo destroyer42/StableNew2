@@ -136,10 +136,13 @@ outcome. Remaining work is:
   duration-preserving temporal smoothing with bounded 2x and 4x factors only;
   unsupported factors are rejected before expensive generation; final artifact
   cadence reflects interpolation;
-- portable video provenance and parent artifact lineage: make produced MP4
-  provenance self-contained enough for later inspection and recovery when
-  sidecars or original paths are unavailable; embedded provenance remains an
-  audit/recovery copy, not lifecycle authority;
+- accepted evidence: native-SVD MP4 provenance is self-contained enough for
+  later inspection and recovery when sidecars or original paths are
+  unavailable, with verified machine payload, source-content identity,
+  available parent/source-generation lineage, SVD execution/preprocess/
+  postprocess provenance, media-stream verification, and isolated MP4-only
+  recovery; embedded provenance remains an audit/recovery copy, not lifecycle
+  authority;
 - queue/history recovery UX;
 - final operator journey, documentation, required CI, and integration.
 
@@ -267,7 +270,7 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-Complete portable video provenance and parent artifact lineage. PromptPack authorship,
+Complete queue/history recovery UX and no-op cleanup. PromptPack authorship,
 durable job state, image generation, native SVD XT, the Phase 0 runtime/bootstrap
 prerequisite, real portrait source-aware SVD geometry, and duration-preserving
 RIFE interpolation semantics already have single accepted product paths.

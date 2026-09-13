@@ -307,15 +307,18 @@ and execution-result contracts. Backend identity/model-family information may be
 persisted as authorized workload/provenance and backend result metadata, but it
 must not become a second lifecycle database.
 
-StableNew media artifacts may carry embedded portable provenance sufficient to
-preserve artifact lineage when external sidecars or history are unavailable.
-For SVD/video, that provenance should preserve, when available, the video
-artifact and job identity, SVD execution/configuration/result provenance, source
-artifact identity and parent generation provenance, and verification hashes.
-Embedded provenance is an audit/recovery representation, not queue or mutable
-lifecycle authority and not a second history database. SQLite remains the live
-queue/repository/history authority; filesystem paths are references, not durable
-identity.
+Native-SVD MP4 artifacts carry embedded portable provenance under
+`stablenew.video-provenance.v2.6`. It preserves, when available, the video
+artifact and job identity, complete SVD execution/configuration/result and
+actual preprocess/postprocess provenance, source-content identity and verified
+StableNew source-generation provenance, current NJR and parent lineage, and
+payload/media-stream verification hashes. Embedded provenance is immutable
+artifact audit/recovery evidence, not queue or mutable lifecycle authority and
+not a second history database. SQLite remains the live
+queue/repository/history authority; filesystem paths are references, not
+durable identity. Portable metadata does not authorize replay or automatically
+restore history, and metadata survival is not guaranteed after third-party
+transcoding or stripping.
 
 ## 11. Application and GUI ownership
 
@@ -366,7 +369,7 @@ implemented:
 | PromptPack format | **Closed 2026-09-08** | Versioned schema-1 JSON is the sole discovered and compiled PromptPack authority; save/reload, Matrix expansion, preview/queue, explicit TXT/TSV interchange, and backup-first semantic pair migration are covered without a live text fallback | `PR-MVP-050` |
 | Test truth | **Closed 2026-09-06** | One strict pytest authority, isolated collection/smoke runners, a positive required list, and a Ruff 0.14.9 non-increasing baseline gate pass on supported interpreters | `PR-MVP-010` |
 | Video scope | **Closed 2026-09-12 / ACCEPTED** | Native SVD XT is the selected and accepted MVP video backend; its queue-first path, geometry, artifacts, and replay lineage are proven | `PR-MVP-070` |
-| Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated; the Windows runtime/bootstrap baseline, real local native SVD XT square-source run through the public production runner, replay lineage, separate artifact generation, cancellation, real portrait `832x1216 -> 640x960` source-aware production acceptance, and duration-preserving RIFE interpolation semantics with real compatibility-runtime proof are accepted. Remaining open work is portable video provenance and parent artifact lineage, queue/history metadata and recovery UX, and final operator-facing/CI/integration closeout | `PR-MVP-080` |
+| Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated; the Windows runtime/bootstrap baseline, real local native SVD XT square-source run through the public production runner, replay lineage, separate artifact generation, cancellation, real portrait `832x1216 -> 640x960` source-aware production acceptance, duration-preserving RIFE interpolation semantics with real compatibility-runtime proof, and portable native-SVD MP4 provenance with isolated-copy recovery proof are accepted. Remaining open work is queue/history metadata and recovery UX plus final operator-facing/CI/integration closeout | `PR-MVP-080` |
 | Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
 | Backend-neutral image execution | **Approved post-v2.6 target / not implemented** | Image NJR already has immutable `backend_options`, but current image compilation/runner/executor remain A1111/WebUI-centric. Approved direction is one typed image backend per NJR with A1111 preserved behind the first adapter; fake-backend proof and real A1111 parity are required before closure | `PR-IMG-100` |
 
