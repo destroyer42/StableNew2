@@ -143,7 +143,13 @@ outcome. Remaining work is:
   postprocess provenance, media-stream verification, and isolated MP4-only
   recovery; embedded provenance remains an audit/recovery copy, not lifecycle
   authority;
-- queue/history recovery UX;
+- accepted evidence: conservative interrupted-running restart recovery preserves
+  durable queue order for queued jobs, records ambiguous running work as
+  terminal action-required `FAILED` history with
+  `INTERRUPTED_RESTART_ACTION_REQUIRED`, preserves available recovery evidence,
+  prevents automatic requeue/replay, and renders the record as `Interrupted`;
+  explicit Replay creates a new NJR/job identity with parent lineage;
+- remaining queue/history action-state + no-op cleanup;
 - final operator journey, documentation, required CI, and integration.
 
 This is workflow polish, not a GUI rewrite.
@@ -270,7 +276,7 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-Complete queue/history recovery UX and no-op cleanup. PromptPack authorship,
+Complete queue/history action-state + no-op cleanup. PromptPack authorship,
 durable job state, image generation, native SVD XT, the Phase 0 runtime/bootstrap
 prerequisite, real portrait source-aware SVD geometry, and duration-preserving
 RIFE interpolation semantics already have single accepted product paths.

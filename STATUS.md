@@ -80,6 +80,26 @@ proven with one generation POST, one interrupt, persisted `CANCELLED`, no
 promoted artifact, no later pipeline stage, no process restart/retry, and no
 resurrection when a late response succeeds.
 
+Conservative interrupted-job recovery is **PASS / ACCEPTED**. SQLite remains the
+single lifecycle/history authority. Jobs persisted as `QUEUED` before restart
+remain queued/runnable in durable order. Jobs persisted as `RUNNING` at process
+loss have an ambiguous execution outcome: they are never automatically
+requeued or replayed, and become terminal `FAILED` records with the machine-
+identifiable `INTERRUPTED_RESTART_ACTION_REQUIRED` reason. `FAILED` is the
+durable lifecycle encoding, not proof that backend generation definitely
+failed. The record requires operator review and preserves available NJR,
+fingerprint, lineage, timestamps, execution metadata, checkpoints, results,
+artifacts, and diagnostic evidence without incrementing return-to-queue count.
+Only genuine queued rows enter the restored runnable projection, so auto-run
+cannot dispatch the interrupted record. Pipeline history renders it as
+`Interrupted`; explicit Replay remains opt-in and creates new authorized work
+with a new NJR/job identity and parent lineage, while the original remains
+terminal history. Operator Readiness surfaces persisted interrupted-restart
+records as action-required; no acknowledgement mechanism is documented or
+assumed. No new SQLite schema/version or second lifecycle authority was
+introduced. The former automatic `RUNNING -> QUEUED` restart behavior is
+superseded.
+
 ## Current acceptance state
 
 PR-MVP-090 Phase 0 runtime/bootstrap is **COMPLETE / ACCEPTED**. The supported
@@ -178,13 +198,13 @@ commit `b33d028473f905747ddc19ae394526f5e6531fe8`.
 
 ## Remaining sequence
 
-1. Complete queue/history recovery UX and no-op cleanup.
+1. Complete queue/history action-state + no-op cleanup.
 2. Finish PR-MVP-080 operator journey/docs/required CI/integration.
 3. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
 4. After v2.6 release acceptance, begin PR-IMG-100 Phase A from the exact
    integrated post-v2.6 branch/SHA.
 
-Next action: queue/history recovery UX + no-op cleanup.
+Next action: queue/history action-state + no-op cleanup.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is complete and accepted, pulled forward only to unblock PR-MVP-080; the

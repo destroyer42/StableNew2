@@ -74,7 +74,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | Generation progress / stall diagnostics | `src/pipeline/executor.py` -> `src/controller/core_pipeline_controller.py` -> `src/controller/app_controller.py` runtime projection -> `src/services/watchdog_system_v2.py` |
 | Operator readiness | `src/services/operator_readiness_service.py` -> `src/gui/panels_v2/operator_readiness_panel_v2.py` -> `src/gui/main_window_v2.py` |
 | SVD geometry/presets | `src/gui/views/svd_tab_frame_v2.py` -> `src/video/svd_target.py` -> `src/video/svd_service.py` -> `src/video/svd_models.py` |
-| Queue/history recovery UX | `src/gui/panels_v2/queue_panel_v2.py`, `src/gui/panels_v2/history_panel_v2.py` -> `src/controller/job_service.py` -> `src/queue/job_queue.py` -> `src/queue/job_repository.py` |
+| Queue/history recovery UX | `src/gui/panels_v2/queue_panel_v2.py` + `src/gui/job_history_panel_v2.py` -> `src/controller/job_history_service.py` / `src/controller/job_service.py` -> `src/queue/job_queue.py` -> `src/queue/job_repository.py` |
 
 ## Controller decomposition
 

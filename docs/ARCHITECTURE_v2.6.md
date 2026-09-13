@@ -160,6 +160,21 @@ records. Its canonical MVP backend is SQLite.
 - Repository transactions own lifecycle transitions and durable results.
 - Queue workers operate in the StableNew process for MVP.
 
+On process restart, persisted `QUEUED` work remains runnable with its durable
+queue order. Persisted `RUNNING` work has an execution-outcome ambiguity because
+the process may have exited after dispatch; it must never be automatically
+requeued or replayed. StableNew records that old execution as terminal
+action-required `FAILED` history with the structured
+`INTERRUPTED_RESTART_ACTION_REQUIRED` reason, preserving available immutable NJR,
+lineage, timestamps, execution evidence, results, and artifact references.
+`FAILED` is the existing lifecycle encoding and does not prove backend
+generation failed. The GUI/history renders this repository projection as
+`Interrupted` and exposes only explicit recovery actions. Explicit Replay
+creates a new immutable NJR/job identity with parent lineage; the old record is
+not converted back to ordinary queued work. Portable artifact provenance,
+sidecars, and GUI state remain evidence or presentation, never lifecycle
+authority.
+
 Existing JSON/JSONL state is migration input only. The migration is backup-first,
 offline, idempotent, and conflict-reporting. There is no live JSON fallback after
 cutover. Legacy files remain untouched until import validation succeeds, then
@@ -365,11 +380,11 @@ implemented:
 | NJR scope | **Closed 2026-09-07** | `NormalizedJobRecord` is a frozen eight-field value; nested JSON is recursively frozen; canonical serialization is complete; explicit legacy reads discard lifecycle and output facts; builders, replay, snapshots, services, and runner no longer mutate NJR | `PR-MVP-020` |
 | Source identity | **Closed 2026-09-07** | All enabled source families emit complete NJRs; only `source.kind == "prompt_pack"` carries PromptPack identity, while replay, reprocess, learning, SVD, video, and training preserve their typed source metadata | `PR-MVP-030` |
 | Submission DTO | **Closed 2026-09-07** | `JobService.submit_njrs(records, policy)` is the fresh submission boundary; the pack-shaped `PipelineRunRequest`, generic builder branch, and callback-heavy preview adapter are removed | `PR-MVP-030` |
-| Persistence | **Closed 2026-09-07** | `JobRepository` transactionally owns immutable NJR snapshots and mutable lifecycle state in SQLite; queue/history are projections; restart requeues interrupted work explicitly; the offline importer is dry-run, backup-first, idempotent, conflict-reporting, validated, and rollback-rehearsed | `PR-MVP-040` |
+| Persistence | **Closed 2026-09-07** | `JobRepository` transactionally owns immutable NJR snapshots and mutable lifecycle state in SQLite; queue/history are projections; conservative restart recovery preserves queued work and records ambiguous running work as terminal action-required history without automatic replay; the offline importer is dry-run, backup-first, idempotent, conflict-reporting, validated, and rollback-rehearsed | `PR-MVP-040` / `PR-MVP-080` |
 | PromptPack format | **Closed 2026-09-08** | Versioned schema-1 JSON is the sole discovered and compiled PromptPack authority; save/reload, Matrix expansion, preview/queue, explicit TXT/TSV interchange, and backup-first semantic pair migration are covered without a live text fallback | `PR-MVP-050` |
 | Test truth | **Closed 2026-09-06** | One strict pytest authority, isolated collection/smoke runners, a positive required list, and a Ruff 0.14.9 non-increasing baseline gate pass on supported interpreters | `PR-MVP-010` |
 | Video scope | **Closed 2026-09-12 / ACCEPTED** | Native SVD XT is the selected and accepted MVP video backend; its queue-first path, geometry, artifacts, and replay lineage are proven | `PR-MVP-070` |
-| Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated; the Windows runtime/bootstrap baseline, real local native SVD XT square-source run through the public production runner, replay lineage, separate artifact generation, cancellation, real portrait `832x1216 -> 640x960` source-aware production acceptance, duration-preserving RIFE interpolation semantics with real compatibility-runtime proof, and portable native-SVD MP4 provenance with isolated-copy recovery proof are accepted. Remaining open work is queue/history metadata and recovery UX plus final operator-facing/CI/integration closeout | `PR-MVP-080` |
+| Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated; the Windows runtime/bootstrap baseline, real local native SVD XT square-source run through the public production runner, replay lineage, separate artifact generation, cancellation, real portrait `832x1216 -> 640x960` source-aware production acceptance, duration-preserving RIFE interpolation semantics with real compatibility-runtime proof, portable native-SVD MP4 provenance with isolated-copy recovery proof, and conservative interrupted-running restart recovery are accepted. Remaining open work is queue/history action-state and no-op cleanup plus final operator-facing/CI/integration closeout | `PR-MVP-080` |
 | Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
 | Backend-neutral image execution | **Approved post-v2.6 target / not implemented** | Image NJR already has immutable `backend_options`, but current image compilation/runner/executor remain A1111/WebUI-centric. Approved direction is one typed image backend per NJR with A1111 preserved behind the first adapter; fake-backend proof and real A1111 parity are required before closure | `PR-IMG-100` |
 
