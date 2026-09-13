@@ -12,8 +12,27 @@ from src.controller.runtime_state import CancellationError, CancelToken
 from src.video.svd_config import SVDConfig
 from src.video.svd_errors import SVDExportError
 from src.video.svd_models import SVDPreprocessResult, SVDResult
+from src.video.svd_portable_provenance import PortableVideoProvenanceError
 from src.video.svd_registry import build_svd_artifact_stem, build_svd_history_record
 from src.video.svd_runner import SVDRunner
+
+
+@pytest.fixture(autouse=True)
+def _stub_portable_mp4_provenance(monkeypatch):
+    """Keep legacy runner tests hermetic; portable details have focused coverage."""
+
+    monkeypatch.setattr(
+        SVDRunner,
+        "_embed_portable_svd_provenance",
+        lambda _self, **_kwargs: {
+            "schema": "stablenew.video-provenance.v2.6",
+            "encoding": "raw",
+            "payload_sha256": "a" * 64,
+            "source_image_sha256": "b" * 64,
+            "source_provenance_status": "missing",
+            "video_media_content_sha256": "c" * 64,
+        },
+    )
 
 
 def test_svd_runner_logs_run_summary(tmp_path: Path, monkeypatch, caplog) -> None:
@@ -21,7 +40,6 @@ def test_svd_runner_logs_run_summary(tmp_path: Path, monkeypatch, caplog) -> Non
     source_path.write_bytes(b"png")
     prepared_path = tmp_path / "_svd_temp" / "job-1" / "prepared.png"
     output_video = tmp_path / "svd_source.mp4"
-    preview_path = tmp_path / "svd_source_preview.png"
     manifest_path = tmp_path / "svd_source.json"
 
     preprocess = SVDPreprocessResult(
@@ -74,8 +92,7 @@ def test_svd_runner_logs_run_summary(tmp_path: Path, monkeypatch, caplog) -> Non
     assert "[SVD] inference completed frame_count=1" in caplog.text
     assert "[SVD] postprocess completed frame_count=1 applied=['interpolation']" in caplog.text
     assert "[SVD] complete video=svd_source.mp4" in caplog.text
-    write_container_metadata.assert_called_once()
-    assert write_container_metadata.call_args.args[0] == output_video
+    write_container_metadata.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -175,9 +192,12 @@ def test_svd_runner_exports_effective_duration_preserving_fps(
     assert result.frame_count == output_frame_count
     assert result.fps == expected_fps
     assert captured["result"].fps == expected_fps
-    container_payload = write_container_metadata.call_args.args[1]
-    assert container_payload["fps"] == expected_fps
-    assert container_payload["config"]["inference"]["fps"] == 7
+    if output_format == "gif":
+        container_payload = write_container_metadata.call_args.args[1]
+        assert container_payload["fps"] == expected_fps
+        assert container_payload["config"]["inference"]["fps"] == 7
+    else:
+        write_container_metadata.assert_not_called()
 
 
 def test_svd_runner_rejects_unsupported_rife_multiplier_before_model_prepare(tmp_path: Path) -> None:
@@ -336,14 +356,48 @@ def test_svd_runner_stamps_secondary_motion_summary_into_container_metadata(tmp_
         def _release_runtime_memory(self) -> None:
             return None
 
+    captured: dict[str, object] = {}
+    monkeypatch.setattr(
+        SVDRunner,
+        "_embed_portable_svd_provenance",
+        lambda _self, **kwargs: captured.update(kwargs["public_metadata"])
+        or {
+            "schema": "stablenew.video-provenance.v2.6",
+            "encoding": "raw",
+            "payload_sha256": "a" * 64,
+            "source_image_sha256": "b" * 64,
+            "source_provenance_status": "missing",
+            "video_media_content_sha256": "c" * 64,
+        },
+    )
     runner = SVDRunner(service=_FakeService(), output_root=tmp_path)
 
     runner.run(source_image_path=source_path, config=SVDConfig(), job_id="job-1")
 
-    payload = write_container_metadata.call_args.args[1]
+    payload = captured
     assert payload["secondary_motion"]["summary"]["status"] == "applied"
     assert payload["secondary_motion_summary"]["status"] == "applied"
     assert payload["secondary_motion_summary"]["application_path"] == "frame_directory_worker"
+
+
+def test_svd_runner_fails_and_cleans_outputs_when_required_provenance_fails(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    source_path, active, run_job = _patch_fake_svd_run(tmp_path, monkeypatch)
+    active["job_id"] = "provenance-failure"
+    monkeypatch.setattr(
+        SVDRunner,
+        "_embed_portable_svd_provenance",
+        lambda _self, **_kwargs: (_ for _ in ()).throw(
+            PortableVideoProvenanceError("intentional test failure")
+        ),
+    )
+
+    with pytest.raises(SVDExportError, match="portable provenance export failed"):
+        run_job("provenance-failure", SVDConfig())
+
+    assert not (_expected_job_paths(tmp_path, source_path, "provenance-failure") & set(tmp_path.glob("**/*")))
 
 
 def _patch_fake_svd_run(tmp_path: Path, monkeypatch):

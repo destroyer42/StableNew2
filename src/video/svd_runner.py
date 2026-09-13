@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +19,13 @@ from src.video.svd_errors import (
     SVDPostprocessError,
 )
 from src.video.svd_models import SVDResult
+from src.video.svd_portable_provenance import (
+    PortableVideoProvenanceError,
+    build_svd_portable_provenance,
+    compute_video_media_content_sha256,
+    verify_portable_svd_video_media_content,
+    write_portable_svd_video_provenance,
+)
 from src.video.svd_postprocess import (
     SVDPostprocessRunner,
     get_effective_svd_export_fps,
@@ -62,6 +69,7 @@ class SVDRunner:
         config: SVDConfig,
         job_id: str,
         cancel_token: CancelToken | None = None,
+        provenance_context: Mapping[str, Any] | None = None,
     ) -> SVDResult:
         self._output_root.mkdir(parents=True, exist_ok=True)
         temp_dir = self._output_root / "_svd_temp" / job_id
@@ -246,21 +254,7 @@ class SVDRunner:
                 preprocess=preprocess,
                 postprocess=postprocess_metadata,
             )
-            self._ensure_not_cancelled(cancel_token, "native SVD manifest write")
-            try:
-                manifest_path = write_svd_run_manifest(
-                    run_dir=self._output_root,
-                    config=config,
-                    result=result,
-                    artifact_stem=stem,
-                    before_write=lambda path: self._track_output(path, owned_outputs, output_existence),
-                )
-            except SVDExportError:
-                raise
-            except Exception as exc:
-                raise SVDExportError(f"SVD manifest export failed: {exc}") from exc
-            self._track_output(manifest_path, owned_outputs, output_existence)
-            self._ensure_not_cancelled(cancel_token, "native SVD artifact completion")
+            manifest_path_hint = self._output_root / "manifests" / f"{stem}.json"
             metadata_payload = {
                 "stage": "svd_native",
                 "backend_id": "svd_native",
@@ -278,18 +272,51 @@ class SVDRunner:
                 "frame_count": len(frames),
                 "seed": config.inference.seed,
                 "model_id": config.inference.model_id,
-                "manifest_path": str(manifest_path),
+                "manifest_path": str(manifest_path_hint),
                 "config": config.to_dict(),
             }
-            secondary_motion = ((postprocess_metadata or {}).get("secondary_motion") if isinstance(postprocess_metadata, dict) else None)
+            secondary_motion = (
+                (postprocess_metadata or {}).get("secondary_motion")
+                if isinstance(postprocess_metadata, dict)
+                else None
+            )
             if isinstance(secondary_motion, dict):
                 metadata_payload["secondary_motion"] = secondary_motion
                 metadata_payload["secondary_motion_summary"] = extract_secondary_motion_summary(
                     {"secondary_motion": secondary_motion}
                 )
+
+            portable_provenance_summary: dict[str, Any] | None = None
+            if video_path is not None:
+                try:
+                    portable_provenance_summary = self._embed_portable_svd_provenance(
+                        video_path=video_path,
+                        public_metadata=metadata_payload,
+                        source_image_path=source_path,
+                        config=config,
+                        result=result,
+                        provenance_context=provenance_context,
+                    )
+                except PortableVideoProvenanceError as exc:
+                    raise SVDExportError(f"SVD portable provenance export failed: {exc}") from exc
+
+            self._ensure_not_cancelled(cancel_token, "native SVD manifest write")
             try:
-                if video_path is not None:
-                    write_video_container_metadata(video_path, metadata_payload)
+                manifest_path = write_svd_run_manifest(
+                    run_dir=self._output_root,
+                    config=config,
+                    result=result,
+                    artifact_stem=stem,
+                    portable_provenance_summary=portable_provenance_summary,
+                    before_write=lambda path: self._track_output(path, owned_outputs, output_existence),
+                )
+            except SVDExportError:
+                raise
+            except Exception as exc:
+                raise SVDExportError(f"SVD manifest export failed: {exc}") from exc
+            self._track_output(manifest_path, owned_outputs, output_existence)
+            self._ensure_not_cancelled(cancel_token, "native SVD artifact completion")
+            try:
                 if gif_path is not None:
                     write_video_container_metadata(gif_path, metadata_payload)
             except SVDExportError:
@@ -325,6 +352,73 @@ class SVDRunner:
         finally:
             self._close_frames(frames)
             self._service._release_runtime_memory()
+
+    @staticmethod
+    def _preprocess_provenance(preprocess: Any) -> dict[str, Any]:
+        return {
+            "source_dimensions": {
+                "width": preprocess.original_width,
+                "height": preprocess.original_height,
+            },
+            "prepared_dimensions": {
+                "width": preprocess.target_width,
+                "height": preprocess.target_height,
+            },
+            "resize_mode": preprocess.resize_mode,
+            "was_resized": preprocess.was_resized,
+            "was_padded": preprocess.was_padded,
+            "was_cropped": preprocess.was_cropped,
+        }
+
+    def _embed_portable_svd_provenance(
+        self,
+        *,
+        video_path: Path,
+        public_metadata: Mapping[str, Any],
+        source_image_path: Path,
+        config: SVDConfig,
+        result: SVDResult,
+        provenance_context: Mapping[str, Any] | None,
+    ) -> dict[str, Any]:
+        media_hash_before_remux = compute_video_media_content_sha256(video_path)
+        payload = build_svd_portable_provenance(
+            source_image_path=source_image_path,
+            job_id=str(public_metadata["job_id"]),
+            run_id=str(public_metadata["run_id"]),
+            model_id=result.model_id,
+            seed=result.seed,
+            frame_count=result.frame_count,
+            fps=result.fps,
+            config=config.to_dict(),
+            preprocess=self._preprocess_provenance(result.preprocess),
+            postprocess=result.postprocess,
+            media_content_sha256=media_hash_before_remux,
+            execution_context=provenance_context,
+        )
+        encoded = write_portable_svd_video_provenance(
+            video_path=video_path,
+            public_metadata=public_metadata,
+            payload=payload,
+        )
+        media_hash_after_remux = compute_video_media_content_sha256(video_path)
+        if media_hash_after_remux != media_hash_before_remux:
+            raise PortableVideoProvenanceError(
+                "MP4 metadata remux changed the video media-content hash"
+            )
+        verified = verify_portable_svd_video_media_content(video_path)
+        if verified.status != "ok":
+            raise PortableVideoProvenanceError(
+                f"Portable SVD provenance media verification failed: {verified.error or verified.status}"
+            )
+        source = dict(payload["source"])
+        return {
+            "schema": payload["schema"],
+            "encoding": encoded.mode,
+            "payload_sha256": encoded.payload_sha256,
+            "source_image_sha256": source["file_sha256"],
+            "source_provenance_status": source["stable_new_provenance_status"],
+            "video_media_content_sha256": media_hash_after_remux,
+        }
 
     @staticmethod
     def _close_frames(frames: list) -> None:

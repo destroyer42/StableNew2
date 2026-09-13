@@ -137,6 +137,10 @@ def test_svd_native_backend_normalizes_executor_result(tmp_path: Path) -> None:
             output_dir=tmp_path,
             input_image_path=tmp_path / "seed.png",
             job_id="job-123",
+            context_metadata={
+                "current_njr_sha256": "current-njr-sha",
+                "source_descriptor": {"parent_job_id": "parent-job"},
+            },
         ),
     )
 
@@ -147,6 +151,10 @@ def test_svd_native_backend_normalizes_executor_result(tmp_path: Path) -> None:
     variant_payload = result.to_variant_payload()
     assert variant_payload["video_backend_id"] == "svd_native"
     assert variant_payload["thumbnail_path"] == str(tmp_path / "preview.png")
+    assert pipeline.run_svd_native_stage.call_args.kwargs["context_metadata"] == {
+        "current_njr_sha256": "current-njr-sha",
+        "source_descriptor": {"parent_job_id": "parent-job"},
+    }
 
 
 def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monkeypatch) -> None:

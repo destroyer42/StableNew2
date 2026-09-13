@@ -27,6 +27,7 @@ class SVDNativeVideoBackend:
             output_dir=request.output_dir,
             job_id=str(request.job_id or ""),
             cancel_token=request.cancel_token,
+            context_metadata=dict(request.context_metadata or {}),
         )
         if not isinstance(result, dict):
             return None

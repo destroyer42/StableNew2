@@ -814,6 +814,14 @@ def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
         input_image_paths=[str(input_path)],
         start_stage="svd_native",
     )
+    record = replace(
+        record,
+        source=replace(
+            record.source,
+            parent_job_id="parent-job-1",
+            parent_artifact_id="parent-artifact-1",
+        ),
+    )
     pipeline = Mock()
     pipeline.run_svd_native_stage.return_value = {
         "path": str(output_video),
@@ -839,6 +847,10 @@ def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
     result = runner.run_njr(record, cancel_token=None)
 
     pipeline.run_svd_native_stage.assert_called_once()
+    provenance_context = pipeline.run_svd_native_stage.call_args.kwargs["context_metadata"]
+    assert len(provenance_context["current_njr_sha256"]) == 64
+    assert provenance_context["source_descriptor"]["parent_job_id"] == "parent-job-1"
+    assert provenance_context["source_descriptor"]["parent_artifact_id"] == "parent-artifact-1"
     assert result.success is True
     assert result.metadata["svd_native_artifact"]["count"] == 1
     assert result.metadata["svd_native_artifact"]["primary_path"] == str(output_video)

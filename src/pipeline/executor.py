@@ -5550,6 +5550,7 @@ class Pipeline:
         output_dir: Path,
         job_id: str,
         cancel_token=None,
+        context_metadata: Mapping[str, Any] | None = None,
     ) -> dict[str, Any] | None:
         """Run the native Stable Video Diffusion stage against an existing image."""
 
@@ -5581,6 +5582,7 @@ class Pipeline:
                 config=config,
                 job_id=job_id,
                 cancel_token=cancel_token,
+                provenance_context=context_metadata,
             )
             self._emit_stage_detail_update(
                 stage_name="svd_native",

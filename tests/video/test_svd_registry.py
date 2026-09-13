@@ -70,6 +70,27 @@ def test_write_svd_run_manifest_includes_canonical_artifact(tmp_path: Path) -> N
     assert payload["postprocess"]["interpolation"]["output_fps"] == 14
 
 
+def test_write_svd_run_manifest_includes_portable_provenance_summary(tmp_path: Path) -> None:
+    result = _FakeResult(tmp_path, output_kind="video")
+    manifest_path = write_svd_run_manifest(
+        run_dir=tmp_path,
+        config=SVDConfig(),
+        result=result,
+        artifact_stem="svd_source_job-a",
+        portable_provenance_summary={
+            "schema": "stablenew.video-provenance.v2.6",
+            "payload_sha256": "a" * 64,
+            "source_image_sha256": "b" * 64,
+            "video_media_content_sha256": "c" * 64,
+            "source_provenance_status": "ok",
+        },
+    )
+
+    payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert payload["portable_provenance"]["schema"] == "stablenew.video-provenance.v2.6"
+    assert payload["portable_provenance"]["payload_sha256"] == "a" * 64
+
+
 def test_build_svd_history_record_supports_frames_only_outputs(tmp_path: Path) -> None:
     result = _FakeResult(tmp_path, output_kind="frames")
     config = SVDConfig()

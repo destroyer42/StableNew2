@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +29,7 @@ def write_svd_run_manifest(
     config: SVDConfig,
     result: SVDResult,
     artifact_stem: str,
+    portable_provenance_summary: Mapping[str, Any] | None = None,
     before_write: Callable[[Path], None] | None = None,
 ) -> Path:
     root = Path(run_dir)
@@ -84,6 +85,8 @@ def write_svd_run_manifest(
     secondary_motion = ((result.postprocess or {}).get("secondary_motion") if isinstance(result.postprocess, dict) else None)
     if isinstance(secondary_motion, dict):
         payload["secondary_motion"] = dict(secondary_motion)
+    if portable_provenance_summary:
+        payload["portable_provenance"] = dict(portable_provenance_summary)
     if before_write is not None:
         before_write(manifest_path)
     manifest_path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")

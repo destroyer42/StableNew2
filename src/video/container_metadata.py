@@ -7,9 +7,10 @@ import logging
 import os
 import shutil
 import subprocess
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from PIL import Image, ImageSequence
 
@@ -201,6 +202,8 @@ def build_video_container_tags(
 def write_video_container_metadata(
     path: str | Path,
     metadata_payload: Mapping[str, Any] | None,
+    *,
+    additional_tags: Mapping[str, str] | None = None,
 ) -> bool:
     output_path = Path(path)
     suffix = output_path.suffix.lower()
@@ -213,6 +216,10 @@ def write_video_container_metadata(
         logger.debug("Skipping video container metadata for %s because FFmpeg is unavailable", output_path)
         return False
     tags = build_video_container_tags(metadata_payload, file_path=output_path)
+    for key, value in (additional_tags or {}).items():
+        normalized_key = str(key).strip()
+        if normalized_key:
+            tags[normalized_key] = str(value)
     temp_path = output_path.with_name(f"{output_path.stem}.metadata_tmp{output_path.suffix}")
     command = [
         str(ffmpeg_executable),

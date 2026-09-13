@@ -484,6 +484,18 @@ class PipelineRunner:
                 "variant_index": getattr(njr, "variant_index", 0),
                 "batch_index": img_idx,
             }
+            if stage_name == "svd_native":
+                current_njr_sha256 = str(
+                    getattr(self._pipeline, "_current_njr_sha256", "") or ""
+                ).strip()
+                if current_njr_sha256:
+                    request_context_metadata["current_njr_sha256"] = current_njr_sha256
+                source = getattr(njr, "source", None)
+                source_to_dict = getattr(source, "to_dict", None)
+                if callable(source_to_dict):
+                    source_descriptor = source_to_dict()
+                    if isinstance(source_descriptor, Mapping):
+                        request_context_metadata["source_descriptor"] = dict(source_descriptor)
             if secondary_motion_enabled:
                 secondary_motion_observation = (
                     self._secondary_motion_policy_service.build_observation(

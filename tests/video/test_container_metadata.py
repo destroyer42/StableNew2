@@ -67,6 +67,37 @@ def test_write_video_container_metadata_uses_standard_ffmpeg_tags(
     assert description_payload["config"]["fps"] == 16
 
 
+def test_write_video_container_metadata_preserves_additional_machine_tags(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "clip.mp4"
+    video_path.write_bytes(b"mp4")
+    ffmpeg_path = tmp_path / "ffmpeg.exe"
+    ffmpeg_path.write_bytes(b"")
+    calls: list[list[str]] = []
+    monkeypatch.setattr(container_metadata, "resolve_ffmpeg_executable", lambda: ffmpeg_path)
+    def _fake_run(command, **_kwargs):
+        calls.append(list(command))
+        Path(command[-1]).write_bytes(b"mp4-with-meta")
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(container_metadata.subprocess, "run", _fake_run)
+
+    assert container_metadata.write_video_container_metadata(
+        video_path,
+        {"stage": "svd_native", "backend_id": "svd_native"},
+        additional_tags={"stablenew_provenance_schema": "stablenew.video-provenance.v2.6"},
+    )
+
+    metadata_args = [
+        calls[-1][index + 1]
+        for index, value in enumerate(calls[-1][:-1])
+        if value == "-metadata"
+    ]
+    assert "stablenew_provenance_schema=stablenew.video-provenance.v2.6" in metadata_args
+
+
 def test_build_public_media_payload_includes_secondary_motion_summary() -> None:
     payload = container_metadata.build_public_media_payload(
         {

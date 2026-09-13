@@ -52,12 +52,13 @@ def test_run_svd_native_stage_returns_artifact_metadata(tmp_path: Path, monkeypa
             self.output_root = output_root
             self.status_callback = status_callback
 
-        def run(self, *, source_image_path, config, job_id, cancel_token=None):
+        def run(self, *, source_image_path, config, job_id, cancel_token=None, provenance_context=None):
             assert Path(source_image_path) == input_path
             assert job_id == "job-123"
             assert Path(self.output_root) == tmp_path
             assert config.inference.model_id == "stabilityai/stable-video-diffusion-img2vid-xt"
             assert cancel_token is None
+            assert provenance_context is None
             return _FakeResult()
 
     monkeypatch.setattr("src.video.svd_runner.SVDRunner", _FakeRunner)
@@ -157,11 +158,12 @@ def test_run_svd_native_stage_emits_runtime_stage_detail_updates(tmp_path: Path,
             self.output_root = output_root
             self.status_callback = status_callback
 
-        def run(self, *, source_image_path, config, job_id, cancel_token=None):
+        def run(self, *, source_image_path, config, job_id, cancel_token=None, provenance_context=None):
             assert Path(source_image_path) == input_path
             assert Path(self.output_root) == tmp_path
             assert job_id == "job-123"
             assert cancel_token is None
+            assert provenance_context is None
             assert self.status_callback is not None
             self.status_callback(
                 {
