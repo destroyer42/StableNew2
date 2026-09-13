@@ -2,19 +2,23 @@
 
 Status: Canonical, Binding
 Updated: 2026-09-13
-Decision: MVP architecture reconciliation
+Decision: MVP architecture reconciliation plus approved post-v2.6 image-backend target
 
 ## 0. Purpose and truth model
 
-This document defines the architecture StableNew is converging on for its MVP.
-It is intentionally narrower than earlier v2.6 designs and is grounded in the
-parts of the repository that have demonstrated stable behavior.
+This document defines the architecture StableNew is converging on for its MVP
+and records approved near-term architecture targets that must not be mistaken
+for already-implemented behavior. It is intentionally narrower than earlier
+v2.6 designs and is grounded in the parts of the repository that have
+demonstrated stable behavior.
 
-Every architectural statement is one of two things:
+Every architectural statement is one of three things:
 
-- a **preserved invariant**, which new code must obey immediately; or
+- a **preserved invariant**, which new code must obey immediately;
 - a **target contract**, whose remaining implementation gap is named in this
-  document and scheduled in the active roadmap.
+  document and scheduled in the active roadmap; or
+- an **approved post-v2.6 target**, which is binding direction for future work
+  but must not be treated as implemented before its acceptance contract closes.
 
 Documentation must never imply that a target contract is already implemented.
 The gap register in section 13 is authoritative until the corresponding PR is
@@ -38,6 +42,13 @@ it was documented. The selected approach is an evidence-based amendment:
 The failed child-runtime-host migration from March 2026 is historical evidence,
 not a foundation to finish. The recovery baseline and exact commit evidence are
 recorded in the active roadmap and Git history for `PR-MVP-000`.
+
+Approved for the first post-v2.6 image architecture change: still-image
+execution will use **one typed image backend per image NJR**. A1111/WebUI remains
+the current/default production image backend and must preserve accepted behavior
+behind that boundary. Per-stage backend composition and ComfyUI-centric image
+execution remain possible future options, but neither is part of the first
+backend-neutralization PR.
 
 ## 2. Canonical runtime
 
@@ -119,6 +130,12 @@ lineage. Serialization must round-trip every core and workload-specific field;
 silent omission is a contract failure. Schema upgrades are explicit, tested,
 and one-way at the repository boundary.
 
+The existing workload-level `backend_options` field is the approved carrier for
+backend-specific immutable execution selection. PR-IMG-100 must not add a new
+top-level NJR field solely to select an image backend unless implementation
+evidence proves the existing contract insufficient and Rob explicitly approves
+that architecture change.
+
 ### 4.3 State that is not NJR
 
 The following are mutable runtime facts and belong to queue/history execution
@@ -163,6 +180,10 @@ Permitted internal handlers include image, video, and training handlers. They:
 - do not own queue state or history persistence;
 - do not accept GUI objects or source-authoring DTOs.
 
+Backend/runtime adapters may contain backend-specific payloads, model controls,
+process/lifecycle logic, progress integrations, and result translation. Those
+backend details must not become the public StableNew runner contract.
+
 A child runtime host, daemon, distributed scheduler, or multi-node executor is
 post-MVP work and requires a new architecture decision.
 
@@ -196,6 +217,46 @@ never automatically adopt, terminate, restart, or launch a second process as
 recovery. Ambiguous generation after a dispatched POST is never automatically
 replayed.
 
+### 7.1 Current v2.6 implementation
+
+The accepted production still-image path is A1111/WebUI-centric. A1111-specific
+payload construction, checkpoint/VAE synchronization, extension semantics,
+progress, cancellation, stall handling, and managed/external runtime ownership
+remain current production truth until PR-IMG-100 is implemented and accepted.
+
+### 7.2 Approved post-v2.6 target — PR-IMG-100
+
+The selected course of action is **one typed image backend per image NJR**.
+Backend selection is immutable authorized workload state under the existing
+`backend_options` layer. Newly compiled image NJRs must explicitly record the
+selected image backend after PR-IMG-100; historical v2.6 image NJRs with no
+explicit image backend resolve deterministically to the A1111 backend through
+one bounded compatibility rule.
+
+The first backend remains `a1111_webui` and supports the existing accepted image
+stages. PR-IMG-100 introduces a StableNew-owned image backend capability/request/
+result/interface/registry boundary below `PipelineRunner.run_njr` and wraps the
+existing A1111 executor/client behavior rather than rewriting it.
+
+A future `diffusers` image backend may host multiple model families. Ideogram 4
+is the first planned qualification target after PR-IMG-100, but Ideogram is a
+model family, not the public backend architecture. Backend/runtime, model family,
+and model identity must remain separate concepts.
+
+An image NJR whose selected backend does not support every requested image stage
+must fail deterministically before backend dispatch. The first backend-neutral
+implementation does **not** silently fall back to A1111 per stage.
+
+Per-stage backend composition (COA C) is deferred. It may later support explicit
+cross-backend chains, but requires its own acceptance contract for artifact
+handoff, capability negotiation, resource lifecycle, replay, and provenance.
+ComfyUI-centric image execution (COA D) is also deferred. ComfyUI may later be
+an image execution backend, but it may not replace StableNew's compiler, NJR,
+queue, runner, artifact, history, replay, cancellation, or process authorities.
+
+The binding PR-IMG-100 acceptance contract is
+`docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`.
+
 ## 8. Video execution
 
 Video uses the same outer path and NJR lifecycle as image work. Video-specific
@@ -218,6 +279,11 @@ Raw backend workflow JSON is private to its backend adapter. It must not leak
 into NJR core, controllers, GUI state, queue records, or history as a public
 StableNew contract.
 
+Image and video backend registries remain separate unless later evidence proves
+a shared runtime abstraction is materially simpler without weakening typed
+image/video contracts. PR-IMG-100 must not create a premature universal backend
+registry merely because video already uses typed backend adapters.
+
 ## 9. Training execution
 
 Training is a valid typed NJR workload and may delegate to a runner-owned local
@@ -234,6 +300,12 @@ Produced paths and mutable inspection state live in execution results.
 Replay creates or hydrates a valid NJR, records parent lineage, and submits it
 through `JobService`. Learning consumes canonical artifacts and history; it does
 not modify PromptPacks or NJRs in place.
+
+A backend-neutral image boundary does not create a new artifact or history
+authority. Backend results must normalize into the existing canonical artifact
+and execution-result contracts. Backend identity/model-family information may be
+persisted as authorized workload/provenance and backend result metadata, but it
+must not become a second lifecycle database.
 
 StableNew media artifacts may carry embedded portable provenance sufficient to
 preserve artifact lineage when external sidecars or history are unavailable.
@@ -255,6 +327,11 @@ a second source of execution truth.
 The MVP remains a single-process desktop application. Threaded work must marshal
 UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 
+Capability-aware backend/model selection may later change what image settings a
+GUI presents, but GUI surfaces may only express intent/configuration and render
+projections; they may never build A1111, Diffusers, ComfyUI, or model-family
+payloads directly.
+
 ## 12. Forbidden patterns
 
 - requiring PromptPack identity for non-PromptPack jobs;
@@ -265,6 +342,11 @@ UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 - direct fresh runner invocation;
 - runner fallback to legacy job/config dictionaries;
 - using video workflow DTOs as alternate executable identities;
+- image backend selection inferred from a model name when an explicit backend
+  identity is required;
+- implicit per-stage fallback from one image backend to another;
+- model-family branches such as Ideogram/FLUX/Qwen embedded in generic runner
+  orchestration instead of backend/model-family adapters;
 - import-time network calls, worker startup, or repository mutation;
 - untracked production modules hidden by broad `.gitignore` rules;
 - reviving the failed child runtime host during MVP recovery.
@@ -286,9 +368,11 @@ implemented:
 | Video scope | **Closed 2026-09-12 / ACCEPTED** | Native SVD XT is the selected and accepted MVP video backend; its queue-first path, geometry, artifacts, and replay lineage are proven | `PR-MVP-070` |
 | Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated; the Windows runtime/bootstrap baseline, real local native SVD XT square-source run through the public production runner, replay lineage, separate artifact generation, cancellation, real portrait `832x1216 -> 640x960` source-aware production acceptance, and duration-preserving RIFE interpolation semantics with real compatibility-runtime proof are accepted. Remaining open work is portable video provenance and parent artifact lineage, queue/history metadata and recovery UX, and final operator-facing/CI/integration closeout | `PR-MVP-080` |
 | Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
+| Backend-neutral image execution | **Approved post-v2.6 target / not implemented** | Image NJR already has immutable `backend_options`, but current image compilation/runner/executor remain A1111/WebUI-centric. Approved direction is one typed image backend per NJR with A1111 preserved behind the first adapter; fake-backend proof and real A1111 parity are required before closure | `PR-IMG-100` |
 
 Closing a row requires implementation evidence and tests. Updating prose alone
-does not close a gap.
+does not close a gap. The backend-neutral image row begins only after the v2.6
+MVP/release rows are accepted and integrated.
 
 ## 14. Change control
 
@@ -298,5 +382,13 @@ scope and implementation details from the approved outcome. Compatibility
 bridges must have a removal condition and may not create a second live
 execution path.
 
-This amendment preserves version v2.6 because it corrects the unfinished v2.6
-migration instead of adding a new runner or distributed-execution architecture.
+The approved PR-IMG-100 architecture is defined more precisely in
+`docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`. Any
+implementation discovery that requires per-stage backend composition, a new NJR
+core field, a new persistence authority, a new public runner, or replacement of
+StableNew orchestration with ComfyUI/another runtime is a new material decision
+and requires owner review before implementation.
+
+This amendment preserves version v2.6 because it corrects and records the
+unfinished v2.6 architecture plus the first approved post-release target; it does
+not claim PR-IMG-100 has been implemented inside the v2.6 release.
