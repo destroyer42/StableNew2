@@ -16,7 +16,10 @@ from typing import Any
 from src.gui import theme_v2 as theme_mod
 from src.gui.view_contracts.movie_clips_contract import extract_source_paths_from_bundle
 from src.pipeline.artifact_contract import extract_artifact_paths
-from src.queue.job_history_store import JobHistoryEntry
+from src.queue.job_history_store import (
+    INTERRUPTED_RESTART_ACTION_REQUIRED,
+    JobHistoryEntry,
+)
 from src.video.video_artifact_helpers import extract_source_image_for_handoff
 
 
@@ -493,6 +496,12 @@ class JobHistoryPanelV2(ttk.Frame):
 
     def _get_display_status(self, entry: JobHistoryEntry) -> str:
         """D-GUI-003: Determine status: Success, Failed, or Cancelled."""
+        if (
+            entry.error_envelope is not None
+            and entry.error_envelope.error_type == INTERRUPTED_RESTART_ACTION_REQUIRED
+        ):
+            return "Interrupted"
+
         # Check for explicit error
         if entry.result and isinstance(entry.result, dict):
             error = entry.result.get("error")

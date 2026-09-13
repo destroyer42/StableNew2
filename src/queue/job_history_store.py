@@ -12,9 +12,13 @@ from typing import TYPE_CHECKING, Any
 
 from src.cluster.worker_model import WorkerId
 from src.queue.job_model import Job, JobStatus
+from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
 
 if TYPE_CHECKING:
     from src.pipeline.run_config import RunConfig
+
+
+INTERRUPTED_RESTART_ACTION_REQUIRED = "INTERRUPTED_RESTART_ACTION_REQUIRED"
 
 
 def _utcnow() -> datetime:
@@ -40,6 +44,7 @@ class JobHistoryEntry:
     prompt_keys: list[str] | None = None
     snapshot: dict[str, Any] | None = None
     duration_ms: int | None = None
+    error_envelope: UnifiedErrorEnvelope | None = None
 
 
 def job_history_entry_from_run_config(

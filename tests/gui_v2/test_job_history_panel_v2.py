@@ -5,7 +5,12 @@ from pathlib import Path
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
-from src.queue.job_history_store import JobHistoryEntry, JobStatus
+from src.queue.job_history_store import (
+    INTERRUPTED_RESTART_ACTION_REQUIRED,
+    JobHistoryEntry,
+    JobStatus,
+)
+from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
 
 
 class DummyController:
@@ -42,6 +47,27 @@ def _make_entry(job_id: str) -> JobHistoryEntry:
         completed_at=timestamp,
         started_at=timestamp,
     )
+
+
+def test_job_history_panel_labels_interrupted_recovery_distinctly() -> None:
+    panel = JobHistoryPanelV2.__new__(JobHistoryPanelV2)
+    interrupted = _make_entry("interrupted")
+    interrupted.status = JobStatus.FAILED
+    interrupted.error_envelope = UnifiedErrorEnvelope(
+        error_type=INTERRUPTED_RESTART_ACTION_REQUIRED,
+        subsystem="queue_recovery",
+        severity="ERROR",
+        message="action required",
+        cause=None,
+        stack="",
+        job_id=interrupted.job_id,
+        stage=None,
+    )
+    ordinary_failure = _make_entry("failed")
+    ordinary_failure.status = JobStatus.FAILED
+
+    assert panel._get_display_status(interrupted) == "Interrupted"
+    assert panel._get_display_status(ordinary_failure) == "Failed"
 
 
 @pytest.mark.gui

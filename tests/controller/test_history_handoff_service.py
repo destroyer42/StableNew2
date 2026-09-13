@@ -6,8 +6,12 @@ from src.controller.pipeline_controller_services.history_handoff_service import 
     HistoryHandoffService,
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.queue.job_history_store import JobHistoryEntry
+from src.queue.job_history_store import (
+    INTERRUPTED_RESTART_ACTION_REQUIRED,
+    JobHistoryEntry,
+)
 from src.queue.job_model import Job, JobPriority, JobStatus
+from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
 from src.utils.snapshot_builder_v2 import build_job_snapshot
 from tests.helpers.job_helpers import make_test_njr
 
@@ -33,7 +37,11 @@ class _AppStateStub:
         self.preview_jobs = list(jobs or [])
 
 
-def _make_entry(record: NormalizedJobRecord) -> JobHistoryEntry:
+def _make_entry(
+    record: NormalizedJobRecord,
+    *,
+    status: JobStatus = JobStatus.COMPLETED,
+) -> JobHistoryEntry:
     job = Job(
         job_id=record.job_id,
         config_snapshot=record.to_queue_snapshot(),
@@ -41,13 +49,13 @@ def _make_entry(record: NormalizedJobRecord) -> JobHistoryEntry:
         source="gui",
         prompt_source="manual",
         priority=JobPriority.NORMAL,
-        status=JobStatus.COMPLETED,
+        status=status,
     )
     snapshot = build_job_snapshot(job, record, run_config={"run_mode": "queue", "source": "history"})
     return JobHistoryEntry(
         job_id=job.job_id,
         created_at=datetime.utcnow(),
-        status=JobStatus.COMPLETED,
+        status=status,
         payload_summary="",
         snapshot=snapshot,
     )
@@ -85,3 +93,43 @@ def test_history_handoff_service_replays_snapshot_to_submit_callback() -> None:
     assert submissions[0][0][0].job_id == app_state.preview_jobs[0].job_id
     assert submissions[0][1]["run_mode"] == "queue"
     assert last_run_configs[0]["source"] == "history"
+
+
+def test_interrupted_history_replay_creates_new_identity_with_parent_lineage() -> None:
+    record = make_test_njr(
+        job_id="interrupted-job",
+        prompt="a",
+        prompt_source="manual",
+        prompt_pack_id="",
+        config={"model": "sdxl", "prompt": "a", "negative_prompt": "b"},
+    )
+    entry = _make_entry(record, status=JobStatus.FAILED)
+    entry.error_envelope = UnifiedErrorEnvelope(
+        error_type=INTERRUPTED_RESTART_ACTION_REQUIRED,
+        subsystem="queue_recovery",
+        severity="ERROR",
+        message="action required",
+        cause=None,
+        stack="",
+        job_id=entry.job_id,
+        stage="txt2img",
+    )
+    history_service = _HistoryServiceStub(entry)
+    app_state = _AppStateStub()
+    submissions: list[NormalizedJobRecord] = []
+
+    queued = HistoryHandoffService().replay_job_from_history(
+        job_id=entry.job_id,
+        history_service=history_service,
+        app_state=app_state,
+        submit_normalized_jobs=lambda records, **_kwargs: (
+            submissions.extend(records) or len(records)
+        ),
+        set_last_run_config=lambda _cfg: None,
+    )
+
+    assert queued == 1
+    assert entry.status == JobStatus.FAILED
+    assert len(submissions) == 1
+    assert submissions[0].job_id != entry.job_id
+    assert submissions[0].source.parent_job_id == entry.job_id

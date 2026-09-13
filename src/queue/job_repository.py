@@ -14,7 +14,11 @@ from pathlib import Path
 from typing import Any
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
+from src.queue.job_history_store import (
+    INTERRUPTED_RESTART_ACTION_REQUIRED,
+    JobHistoryEntry,
+    JobHistoryStore,
+)
 from src.queue.job_model import (
     Job,
     JobExecutionMetadata,
@@ -23,7 +27,11 @@ from src.queue.job_model import (
     RetryAttempt,
     StageCheckpoint,
 )
-from src.utils.error_envelope_v2 import deserialize_envelope, serialize_envelope
+from src.utils.error_envelope_v2 import (
+    UnifiedErrorEnvelope,
+    deserialize_envelope,
+    serialize_envelope,
+)
 
 REPOSITORY_SCHEMA_VERSION = 1
 _TERMINAL_STATUSES = {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
@@ -501,21 +509,62 @@ class JobRepository(JobHistoryStore):
     def recover_interrupted_jobs(self) -> int:
         with self.transaction() as connection:
             rows = connection.execute(
-                "SELECT job_id, execution_metadata FROM jobs WHERE status = 'running'"
+                """
+                SELECT job_id, execution_metadata, error_envelope
+                FROM jobs WHERE status = 'running'
+                """
             ).fetchall()
             now = datetime.utcnow().isoformat()
             for row in rows:
                 metadata = _execution_metadata_from_dict(_json_loads(row["execution_metadata"], {}))
-                metadata.last_control_action = "restart_requeue"
-                metadata.return_to_queue_count += 1
+                metadata.last_control_action = "restart_interrupted_action_required"
+                prior_envelope = deserialize_envelope(
+                    _json_loads(row["error_envelope"], None)
+                )
+                message = (
+                    "StableNew exited while this job was running. Its generation outcome may "
+                    "be ambiguous, so it was not automatically replayed. Inspect available "
+                    "artifacts/backend state, then use Replay Job if you intentionally want "
+                    "to run it again."
+                )
+                recovery_context: dict[str, Any] = {
+                    "recovery_identifier": INTERRUPTED_RESTART_ACTION_REQUIRED,
+                    "action_required": True,
+                    "generation_outcome": "ambiguous",
+                    "automatic_replay": False,
+                }
+                if prior_envelope is not None:
+                    recovery_context["prior_error_envelope"] = serialize_envelope(prior_envelope)
+                recovery_envelope = UnifiedErrorEnvelope(
+                    error_type=INTERRUPTED_RESTART_ACTION_REQUIRED,
+                    subsystem="queue_recovery",
+                    severity="ERROR",
+                    message=message,
+                    cause=None,
+                    stack=prior_envelope.stack if prior_envelope is not None else "",
+                    job_id=str(row["job_id"]),
+                    stage=prior_envelope.stage if prior_envelope is not None else None,
+                    remediation=(
+                        "Inspect available artifacts and backend state, then use Replay Job "
+                        "only if you intentionally want a new execution."
+                    ),
+                    context=recovery_context,
+                    retry_info=prior_envelope.retry_info if prior_envelope is not None else None,
+                )
                 connection.execute(
                     """
-                    UPDATE jobs SET status = 'queued', started_at = NULL, completed_at = NULL,
-                        updated_at = ?, execution_metadata = ?, error_message = NULL,
-                        result_json = NULL, artifact_references = '[]'
+                    UPDATE jobs SET status = 'failed', completed_at = ?, updated_at = ?,
+                        execution_metadata = ?, error_message = ?, error_envelope = ?
                     WHERE job_id = ?
                     """,
-                    (now, _json_dumps(_execution_metadata_to_dict(metadata)), row["job_id"]),
+                    (
+                        now,
+                        now,
+                        _json_dumps(_execution_metadata_to_dict(metadata)),
+                        message,
+                        _json_dumps(serialize_envelope(recovery_envelope)),
+                        row["job_id"],
+                    ),
                 )
             return len(rows)
 
@@ -605,6 +654,7 @@ class JobRepository(JobHistoryStore):
             raise JobRepositoryError("History is a projection; submit the NJR before recording history")
         job.started_at = entry.started_at
         job.completed_at = entry.completed_at
+        job.error_envelope = entry.error_envelope
         self.transition_job(job, entry.status, error_message=entry.error_message, result=entry.result)
 
     def register_callback(self, callback: Any) -> None:
@@ -806,6 +856,7 @@ class JobRepository(JobHistoryStore):
             prompt_pack_id=row["prompt_pack_id"],
             snapshot=_json_loads(row["njr_snapshot"], {}),
             duration_ms=duration_ms,
+            error_envelope=deserialize_envelope(_json_loads(row["error_envelope"], None)),
         )
 
     def _emit(self, entry: JobHistoryEntry | None) -> None:

@@ -204,14 +204,16 @@ def test_promptpack_and_output_failures_are_projected_without_writes(tmp_path: P
 def test_collection_reads_recovery_metadata_without_queue_or_repository_mutation(tmp_path: Path) -> None:
     repository = _Repository(
         count=2,
-        jobs=[_Job(_Metadata("restart_requeue")), _Job(_Metadata())],
+        jobs=[_Job(_Metadata("restart_interrupted_action_required")), _Job(_Metadata())],
     )
     snapshot = _service(tmp_path, repository=repository).collect()
 
     storage = snapshot.record_for("job_storage")
     recovery = snapshot.record_for("queue_recovery")
     assert storage.state is OperatorReadinessState.READY
-    assert recovery.state is OperatorReadinessState.READY
-    assert "1 persisted job was recovered" in recovery.summary
+    assert recovery.state is OperatorReadinessState.ACTION_REQUIRED
+    assert "1 interrupted job requires operator review" in recovery.summary
+    assert recovery.blocking_reasons == ("INTERRUPTED_RESTART_ACTION_REQUIRED",)
+    assert "Replay Job intentionally" in recovery.operator_actions[0]
     assert repository.submission_calls == 0
     assert repository.recovery_calls == 0

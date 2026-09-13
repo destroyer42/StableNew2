@@ -12,6 +12,7 @@ from typing import Any, Protocol
 
 from src.pipeline.video import resolve_ffmpeg_executable
 from src.promptpacks.paths import resolve_prompt_pack_dir
+from src.queue.job_history_store import INTERRUPTED_RESTART_ACTION_REQUIRED
 from src.video.svd_capabilities import SVDPreflight, get_svd_preflight
 from src.video.svd_config import SVDConfig
 from src.video.svd_models import get_default_svd_cache_dir
@@ -422,7 +423,7 @@ class OperatorReadinessService:
                 1
                 for job in jobs
                 if getattr(getattr(job, "execution_metadata", None), "last_control_action", None)
-                == "restart_requeue"
+                == "restart_interrupted_action_required"
             )
         except Exception as exc:
             return _unknown_record(
@@ -432,18 +433,23 @@ class OperatorReadinessService:
                 "JobRepository execution_metadata",
             )
         if recovered:
-            summary = f"{recovered} persisted job{' was' if recovered == 1 else 's were'} recovered after interruption."
-            state = OperatorReadinessState.READY
+            summary = (
+                f"{recovered} interrupted job"
+                f"{' requires' if recovered == 1 else 's require'} operator review."
+            )
+            state = OperatorReadinessState.ACTION_REQUIRED
         else:
-            summary = "No persisted restart-requeue recovery metadata is currently present."
+            summary = "No interrupted-restart action-required records are currently present."
             state = OperatorReadinessState.OPTIONAL
         return OperatorReadinessRecord(
             id="queue_recovery",
             display_name="Persisted queue recovery",
             state=state,
             summary=summary,
-            blocking_reasons=(),
-            operator_actions=("Interrupted RUNNING jobs are requeued by the existing repository recovery path.",),
+            blocking_reasons=(INTERRUPTED_RESTART_ACTION_REQUIRED,) if recovered else (),
+            operator_actions=(
+                "Inspect available artifacts/backend state, then use Replay Job intentionally.",
+            ) if recovered else (),
             source="JobRepository execution_metadata",
         )
 
