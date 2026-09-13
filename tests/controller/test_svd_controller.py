@@ -141,3 +141,27 @@ def test_submit_svd_job_rejects_missing_rife_runtime(tmp_path, monkeypatch) -> N
         assert False, "expected submit_svd_job to reject missing RIFE runtime"
     except RuntimeError as exc:
         assert "RIFE" in str(exc)
+
+
+def test_submit_svd_job_rejects_unsupported_rife_multiplier_before_preflight(tmp_path, monkeypatch) -> None:
+    source_path = tmp_path / "source.png"
+    source_path.write_bytes(b"png")
+    app_controller = SimpleNamespace(
+        output_dir=str(tmp_path),
+        job_service=SimpleNamespace(submit_njrs=Mock()),
+    )
+    controller = SVDController(app_controller=app_controller, svd_service=Mock())
+    monkeypatch.setattr(
+        "src.controller.svd_controller.get_svd_preflight",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("preflight must not run")),
+    )
+
+    config = SVDConfig.from_dict(
+        {"postprocess": {"interpolation": {"enabled": True, "multiplier": 3}}}
+    )
+
+    try:
+        controller.submit_svd_job(source_image_path=source_path, config=config)
+        assert False, "expected unsupported multiplier admission failure"
+    except RuntimeError as exc:
+        assert "only 2x or 4x" in str(exc)

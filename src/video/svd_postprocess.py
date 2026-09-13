@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 import gc
 import importlib.util
 import json
@@ -30,6 +30,35 @@ _REQUIRED_FACELIB_FILES = (
     "parsing_parsenet.pth",
 )
 _RIFE_CUSTOM_FRAMECOUNT_UNSUPPORTED = "only rife-v4 model support custom numframe and timestep"
+_SUPPORTED_RIFE_MULTIPLIERS = frozenset((2, 4))
+_RIFE_DURATION_PRESERVING_SEMANTICS = "duration_preserving_temporal_smoothing"
+
+
+def get_rife_multiplier_validation_error(multiplier: int) -> str | None:
+    """Return the bounded MVP admission error for unsupported RIFE factors."""
+    if multiplier not in _SUPPORTED_RIFE_MULTIPLIERS:
+        return (
+            f"RIFE interpolation multiplier {multiplier} is unsupported. "
+            "StableNew supports only 2x or 4x duration-preserving interpolation."
+        )
+    return None
+
+
+def get_effective_svd_export_fps(
+    *,
+    base_fps: int,
+    postprocess_metadata: Mapping[str, Any] | None,
+    interpolation_multiplier: int,
+) -> int:
+    """Return the actual artifact cadence while retaining base SVD config FPS."""
+    if not postprocess_metadata or "interpolation" not in (postprocess_metadata.get("applied") or []):
+        return base_fps
+    interpolation = postprocess_metadata.get("interpolation")
+    if isinstance(interpolation, Mapping):
+        output_fps = interpolation.get("output_fps")
+        if isinstance(output_fps, int) and output_fps > 0:
+            return output_fps
+    return base_fps * interpolation_multiplier
 
 
 def get_codeformer_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str]:
@@ -96,6 +125,9 @@ def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None
         if issues:
             return False, "RealESRGAN is enabled but required runtime assets are missing: " + ", ".join(issues)
     if postprocess.interpolation.enabled:
+        multiplier_error = get_rife_multiplier_validation_error(int(postprocess.interpolation.multiplier))
+        if multiplier_error:
+            return False, multiplier_error
         executable = resolve_rife_executable(postprocess)
         if executable is None:
             return False, "RIFE interpolation is enabled but no rife-ncnn-vulkan executable was found."
@@ -252,13 +284,24 @@ class SVDPostprocessRunner:
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
             )
+            interpolation_input_frame_count = len(current_frames)
             current_frames = self._run_rife_stage(
                 frames=current_frames,
                 postprocess=postprocess,
                 work_dir=root,
             )
             metadata["applied"].append("interpolation")
-            metadata["interpolation"] = postprocess.interpolation.to_dict()
+            interpolation_metadata = postprocess.interpolation.to_dict()
+            interpolation_metadata.update(
+                {
+                    "semantics": _RIFE_DURATION_PRESERVING_SEMANTICS,
+                    "input_frame_count": interpolation_input_frame_count,
+                    "input_fps": config.inference.fps,
+                    "output_frame_count": len(current_frames),
+                    "output_fps": config.inference.fps * int(postprocess.interpolation.multiplier),
+                }
+            )
+            metadata["interpolation"] = interpolation_metadata
             self._emit_status(
                 stage_detail="postprocess: interpolation",
                 progress=len(metadata["applied"]) / total_enabled_stages,
@@ -447,7 +490,11 @@ class SVDPostprocessRunner:
         output_dir = work_dir / "rife_output"
         self._reset_dir(input_dir)
         self._reset_dir(output_dir)
-        target_count = ((len(frames) - 1) * int(postprocess.interpolation.multiplier)) + 1
+        multiplier = int(postprocess.interpolation.multiplier)
+        multiplier_error = get_rife_multiplier_validation_error(multiplier)
+        if multiplier_error:
+            raise SVDPostprocessError(multiplier_error)
+        target_count = len(frames) * multiplier
         logger.info(
             "[SVD][postprocess] stage=interpolation start input_frames=%s multiplier=%s target_frames=%s exe=%s",
             len(frames),
@@ -487,6 +534,7 @@ class SVDPostprocessRunner:
         interpolated = self._load_frame_sequence(output_dir)
         if not interpolated:
             raise SVDPostprocessError("RIFE interpolation produced no output frames")
+        self._require_exact_rife_frame_count(interpolated, target_count)
         logger.info(
             "[SVD][postprocess] stage=interpolation complete output_frames=%s",
             len(interpolated),
@@ -502,17 +550,15 @@ class SVDPostprocessRunner:
         executable: Path,
     ) -> list[Image.Image]:
         multiplier = int(postprocess.interpolation.multiplier)
-        if multiplier < 2 or not self._is_power_of_two(multiplier):
-            raise SVDPostprocessError(
-                "RIFE runtime does not support custom frame targets for the selected model, "
-                f"and multiplier {multiplier} cannot be reproduced in compatibility mode. "
-                "Use multiplier 2 or 4, or switch to a rife-v4 model."
-            )
+        multiplier_error = get_rife_multiplier_validation_error(multiplier)
+        if multiplier_error:
+            raise SVDPostprocessError(multiplier_error)
 
         current_frames = list(frames)
         owns_current_frames = False
         pass_count = int(math.log2(multiplier))
         for pass_index in range(pass_count):
+            pass_target_count = len(current_frames) * 2
             input_dir = work_dir / f"rife_input_pass_{pass_index + 1}"
             output_dir = work_dir / f"rife_output_pass_{pass_index + 1}"
             self._reset_dir(input_dir)
@@ -539,12 +585,25 @@ class SVDPostprocessRunner:
             owns_current_frames = True
             if not current_frames:
                 raise SVDPostprocessError("RIFE interpolation produced no output frames")
+            self._require_exact_rife_frame_count(current_frames, pass_target_count)
             logger.info(
                 "[SVD][postprocess] stage=interpolation compatibility pass=%s output_frames=%s",
                 pass_index + 1,
                 len(current_frames),
             )
         return current_frames
+
+    @staticmethod
+    def _require_exact_rife_frame_count(frames: list[Image.Image], target_count: int) -> None:
+        if len(frames) == target_count:
+            return
+        actual_count = len(frames)
+        SVDPostprocessRunner._close_images(frames)
+        frames.clear()
+        raise SVDPostprocessError(
+            "RIFE interpolation produced an unexpected frame count: "
+            f"expected {target_count}, got {actual_count}"
+        )
 
     @staticmethod
     def _build_rife_command(

@@ -5,11 +5,13 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
 from PIL import Image
 
 from src.video.svd_config import SVDConfig
 from src.video.svd_postprocess import (
     SVDPostprocessRunner,
+    get_effective_svd_export_fps,
     get_codeformer_runtime_issues,
     get_gfpgan_runtime_issues,
     resolve_rife_executable,
@@ -43,6 +45,39 @@ def test_validate_svd_postprocess_requires_rife_executable(tmp_path: Path, monke
     assert valid is False
     assert reason is not None
     assert "RIFE" in reason
+
+
+def test_validate_svd_postprocess_rejects_unsupported_rife_multiplier_before_runtime_lookup() -> None:
+    config = SVDConfig.from_dict(
+        {"postprocess": {"interpolation": {"enabled": True, "multiplier": 3}}}
+    )
+
+    valid, reason = validate_svd_postprocess_config(config)
+
+    assert valid is False
+    assert reason is not None
+    assert "only 2x or 4x" in reason
+
+
+@pytest.mark.parametrize(
+    ("metadata", "multiplier", "expected_fps"),
+    [
+        (None, 2, 7),
+        ({"applied": ["interpolation"], "interpolation": {"output_fps": 14}}, 2, 14),
+        ({"applied": ["interpolation"], "interpolation": {"output_fps": 28}}, 4, 28),
+    ],
+)
+def test_effective_svd_export_fps_uses_applied_interpolation_output(
+    metadata: dict[str, object] | None, multiplier: int, expected_fps: int
+) -> None:
+    assert (
+        get_effective_svd_export_fps(
+            base_fps=7,
+            postprocess_metadata=metadata,
+            interpolation_multiplier=multiplier,
+        )
+        == expected_fps
+    )
 
 
 def test_validate_svd_postprocess_requires_codeformer_facelib_weights(tmp_path: Path) -> None:
@@ -461,7 +496,7 @@ def test_run_rife_stage_releases_input_frames_before_loading_output(tmp_path: Pa
     monkeypatch.setattr(
         runner,
         "_load_frame_sequence",
-        lambda _path: [Image.new("RGB", (8, 8), "blue")],
+        lambda _path: [Image.new("RGB", (8, 8), "blue") for _ in range(4)],
     )
 
     frames = [_TrackedFrame(), _TrackedFrame()]
@@ -471,7 +506,7 @@ def test_run_rife_stage_releases_input_frames_before_loading_output(tmp_path: Pa
         work_dir=tmp_path,
     )
 
-    assert len(processed) == 1
+    assert len(processed) == 4
     assert closed == ["close", "close"]
     assert frames == []
 
@@ -510,7 +545,7 @@ def test_run_rife_stage_falls_back_when_runtime_rejects_custom_framecount(
 
     load_mock = Mock(
         side_effect=[
-            [Image.new("RGB", (8, 8), "red"), Image.new("RGB", (8, 8), "blue"), Image.new("RGB", (8, 8), "green")]
+            [Image.new("RGB", (8, 8), "blue") for _ in range(4)]
         ]
     )
     monkeypatch.setattr("src.video.svd_postprocess.save_video_frames", _fake_save_video_frames)
@@ -525,12 +560,12 @@ def test_run_rife_stage_falls_back_when_runtime_rejects_custom_framecount(
         work_dir=tmp_path,
     )
 
-    assert len(processed) == 3
-    assert any("-n" in cmd for cmd in command_log)
-    assert any("-n" not in cmd for cmd in command_log)
+    assert len(processed) == 4
+    assert ["-n", "4"] in [cmd[index : index + 2] for cmd in command_log for index in range(len(cmd) - 1)]
+    assert len([cmd for cmd in command_log if "-n" not in cmd]) == 1
 
 
-def test_run_rife_stage_compatibility_mode_rejects_non_power_of_two_multiplier(
+def test_run_rife_stage_compatibility_mode_repeats_default_double_passes_for_4x(
     tmp_path: Path, monkeypatch
 ) -> None:
     executable = tmp_path / "rife-ncnn-vulkan.exe"
@@ -541,7 +576,7 @@ def test_run_rife_stage_compatibility_mode_rejects_non_power_of_two_multiplier(
                 "interpolation": {
                     "enabled": True,
                     "executable_path": str(executable),
-                    "multiplier": 3,
+                    "multiplier": 4,
                 }
             }
         }
@@ -551,26 +586,69 @@ def test_run_rife_stage_compatibility_mode_rejects_non_power_of_two_multiplier(
         Path(output_dir).mkdir(parents=True, exist_ok=True)
         return []
 
+    command_log: list[list[str]] = []
+
     def _fake_run(*, cmd, executable):
-        return SimpleNamespace(
-            returncode=1,
-            stdout="",
-            stderr="only rife-v4 model support custom numframe and timestep",
-        )
+        command_log.append(list(cmd))
+        if "-n" in cmd:
+            return SimpleNamespace(
+                returncode=1,
+                stdout="",
+                stderr="only rife-v4 model support custom numframe and timestep",
+            )
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
 
     monkeypatch.setattr("src.video.svd_postprocess.save_video_frames", _fake_save_video_frames)
     monkeypatch.setattr(SVDPostprocessRunner, "_run_rife_command", staticmethod(_fake_run))
+    runner = SVDPostprocessRunner(repo_root=tmp_path)
+    monkeypatch.setattr(
+        runner,
+        "_load_frame_sequence",
+        Mock(side_effect=[[Image.new("RGB", (8, 8), "white") for _ in range(28)], [Image.new("RGB", (8, 8), "black") for _ in range(56)]]),
+    )
 
-    frames = [Image.new("RGB", (8, 8), "white"), Image.new("RGB", (8, 8), "black")]
-    try:
-        SVDPostprocessRunner(repo_root=tmp_path)._run_rife_stage(
-            frames=frames,
-            postprocess=config.postprocess,
-            work_dir=tmp_path,
-        )
-        assert False, "expected compatibility fallback to reject multiplier 3"
-    except Exception as exc:
-        assert "multiplier 3" in str(exc)
+    processed = runner._run_rife_stage(
+        frames=[Image.new("RGB", (8, 8), "white") for _ in range(14)],
+        postprocess=config.postprocess,
+        work_dir=tmp_path,
+    )
+
+    assert len(processed) == 56
+    assert ["-n", "56"] in [cmd[index : index + 2] for cmd in command_log for index in range(len(cmd) - 1)]
+    assert len([cmd for cmd in command_log if "-n" not in cmd]) == 2
+
+
+@pytest.mark.parametrize(("multiplier", "expected_count"), [(2, 28), (4, 56)])
+def test_run_rife_stage_requests_duration_preserving_frame_count(
+    tmp_path: Path, monkeypatch, multiplier: int, expected_count: int
+) -> None:
+    executable = tmp_path / "rife-ncnn-vulkan.exe"
+    executable.write_bytes(b"exe")
+    config = SVDConfig.from_dict(
+        {"postprocess": {"interpolation": {"enabled": True, "executable_path": str(executable), "multiplier": multiplier}}}
+    )
+    command_log: list[list[str]] = []
+    monkeypatch.setattr("src.video.svd_postprocess.save_video_frames", lambda **_kwargs: [])
+    monkeypatch.setattr(
+        SVDPostprocessRunner,
+        "_run_rife_command",
+        staticmethod(lambda *, cmd, executable: command_log.append(list(cmd)) or SimpleNamespace(returncode=0, stdout="", stderr="")),
+    )
+    runner = SVDPostprocessRunner(repo_root=tmp_path)
+    monkeypatch.setattr(
+        runner,
+        "_load_frame_sequence",
+        lambda _path: [Image.new("RGB", (8, 8), "white") for _ in range(expected_count)],
+    )
+
+    processed = runner._run_rife_stage(
+        frames=[Image.new("RGB", (8, 8), "black") for _ in range(14)],
+        postprocess=config.postprocess,
+        work_dir=tmp_path,
+    )
+
+    assert len(processed) == expected_count
+    assert ["-n", str(expected_count)] in [cmd[index : index + 2] for cmd in command_log for index in range(len(cmd) - 1)]
 
 
 def test_process_frames_logs_stage_summary(tmp_path: Path, monkeypatch, caplog) -> None:
@@ -591,7 +669,7 @@ def test_process_frames_logs_stage_summary(tmp_path: Path, monkeypatch, caplog) 
     monkeypatch.setattr(
         SVDPostprocessRunner,
         "_run_rife_stage",
-        lambda self, **_kwargs: [Image.new("RGB", (16, 16), "blue")] * 3,
+        lambda self, **_kwargs: [Image.new("RGB", (16, 16), "blue") for _ in range(4)],
     )
 
     caplog.set_level(logging.INFO)
@@ -601,10 +679,22 @@ def test_process_frames_logs_stage_summary(tmp_path: Path, monkeypatch, caplog) 
         work_dir=tmp_path,
     )
 
-    assert len(processed) == 3
+    assert len(processed) == 4
     assert metadata is not None
+    assert metadata["interpolation"] == {
+        "enabled": True,
+        "method": "rife",
+        "multiplier": 2,
+        "executable_path": str(executable),
+        "model_dir": None,
+        "semantics": "duration_preserving_temporal_smoothing",
+        "input_frame_count": 2,
+        "input_fps": 7,
+        "output_frame_count": 4,
+        "output_fps": 14,
+    }
     assert "[SVD][postprocess] start input_frames=2" in caplog.text
-    assert "[SVD][postprocess] complete output_frames=3 applied=['interpolation'] size=16x16" in caplog.text
+    assert "[SVD][postprocess] complete output_frames=4 applied=['interpolation'] size=16x16" in caplog.text
 
 
 def test_process_frames_emits_stage_status_updates(tmp_path: Path, monkeypatch) -> None:
@@ -625,7 +715,7 @@ def test_process_frames_emits_stage_status_updates(tmp_path: Path, monkeypatch) 
     monkeypatch.setattr(
         SVDPostprocessRunner,
         "_run_rife_stage",
-        lambda self, **_kwargs: [Image.new("RGB", (16, 16), "blue")] * 3,
+        lambda self, **_kwargs: [Image.new("RGB", (16, 16), "blue") for _ in range(4)],
     )
 
     updates: list[dict[str, object]] = []

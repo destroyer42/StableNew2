@@ -19,7 +19,11 @@ from src.video.svd_errors import (
     SVDPostprocessError,
 )
 from src.video.svd_models import SVDResult
-from src.video.svd_postprocess import SVDPostprocessRunner, validate_svd_postprocess_config
+from src.video.svd_postprocess import (
+    SVDPostprocessRunner,
+    get_effective_svd_export_fps,
+    validate_svd_postprocess_config,
+)
 from src.video.svd_preprocess import prepare_svd_input, validate_svd_source_image
 from src.video.svd_registry import build_svd_artifact_stem, write_svd_run_manifest
 from src.video.svd_service import SVDService
@@ -67,6 +71,9 @@ class SVDRunner:
         output_existence: dict[Path, bool] = {}
         try:
             self._ensure_not_cancelled(cancel_token, "native SVD preflight")
+            valid, reason = validate_svd_postprocess_config(config)
+            if not valid:
+                raise SVDPostprocessError(reason or "SVD postprocess configuration is invalid")
             logger.info(
                 "[SVD] start job=%s source=%s model=%s frames=%s fps=%s decode_chunk=%s format=%s",
                 job_id,
@@ -166,6 +173,11 @@ class SVDRunner:
                 len(frames),
                 list((postprocess_metadata or {}).get("applied") or []),
             )
+            effective_fps = get_effective_svd_export_fps(
+                base_fps=config.inference.fps,
+                postprocess_metadata=postprocess_metadata,
+                interpolation_multiplier=config.postprocess.interpolation.multiplier,
+            )
 
             stem = build_svd_artifact_stem(source_image_path=source_path, job_id=job_id)
             video_path = None
@@ -189,7 +201,7 @@ class SVDRunner:
                     video_path = export_video_mp4(
                         frames=frames,
                         output_path=output_path,
-                        fps=config.inference.fps,
+                        fps=effective_fps,
                     )
                     self._track_output(video_path, owned_outputs, output_existence)
                 elif config.output.output_format == "gif":
@@ -198,7 +210,7 @@ class SVDRunner:
                     gif_path = export_video_gif(
                         frames=frames,
                         output_path=output_path,
-                        fps=config.inference.fps,
+                        fps=effective_fps,
                     )
                     self._track_output(gif_path, owned_outputs, output_existence)
                 elif not frame_paths:
@@ -228,7 +240,7 @@ class SVDRunner:
                 thumbnail_path=thumbnail_path,
                 metadata_path=None,
                 frame_count=len(frames),
-                fps=config.inference.fps,
+                fps=effective_fps,
                 seed=config.inference.seed,
                 model_id=config.inference.model_id,
                 preprocess=preprocess,
@@ -262,7 +274,7 @@ class SVDRunner:
                 "gif_paths": [str(gif_path)] if gif_path else [],
                 "frame_path_count": len(frame_paths),
                 "thumbnail_path": str(thumbnail_path) if thumbnail_path else None,
-                "fps": config.inference.fps,
+                "fps": effective_fps,
                 "frame_count": len(frames),
                 "seed": config.inference.seed,
                 "model_id": config.inference.model_id,

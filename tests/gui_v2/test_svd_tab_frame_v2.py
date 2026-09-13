@@ -62,6 +62,7 @@ def test_svd_tab_renders(tk_root: tk.Tk) -> None:
         assert tab.noise_aug_var.get() == 0.01
         assert tab.local_files_only_var.get() is True
         assert tab.cache_dir_var.get() == str(get_default_svd_cache_dir())
+        assert tuple(tab.rife_multiplier_combo.cget("values")) == ("2", "4")
     finally:
         tab.destroy()
 

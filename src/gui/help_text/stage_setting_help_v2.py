@@ -117,8 +117,8 @@ SVD_SETTING_HELP = {
     "face_cleanup": "Runs an optional face restoration cleanup after SVD output. Useful when faces soften during animation, but review carefully because cleanup tools can alter expression or identity.",
     "face_method": "Chooses the face-cleanup backend. Use the method that best matches the tradeoff you want between preservation and aggressive repair.",
     "face_fidelity": "How strongly the face cleanup should preserve source identity versus aggressively correcting defects. Midrange values are safest until you know the subject tolerates stronger cleanup.",
-    "rife_interpolate": "Enables frame interpolation after SVD generation. Use it when the clip needs smoother playback, knowing it adds processing time and can hallucinate motion between frames.",
-    "rife_multiplier": "How many in-between frames RIFE should synthesize. Higher multipliers smooth motion more, but they also increase processing time and interpolation artifact risk.",
+    "rife_interpolate": "Enables duration-preserving temporal smoothing after SVD generation. RIFE adds frames and raises playback FPS by the same factor, so clip duration stays unchanged; it adds processing time and can hallucinate motion.",
+    "rife_multiplier": "Temporal smoothing factor. 2x turns 14 frames at 7 fps into 28 frames at 14 fps; 4x produces 56 frames at 28 fps. Only 2x and 4x are supported.",
     "rife_exe": "Path to the RIFE executable used for interpolation. Set it only when local post-processing is available and you want interpolation in this workflow.",
     "upscale_frames": "Upscales generated frames after motion generation. Use it when final delivery size matters more than raw turnaround speed.",
 }

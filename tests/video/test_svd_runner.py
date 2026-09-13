@@ -78,6 +78,136 @@ def test_svd_runner_logs_run_summary(tmp_path: Path, monkeypatch, caplog) -> Non
     assert write_container_metadata.call_args.args[0] == output_video
 
 
+@pytest.mark.parametrize(
+    ("output_format", "multiplier", "output_frame_count", "expected_fps"),
+    [("mp4", None, 14, 7), ("mp4", 2, 28, 14), ("mp4", 4, 56, 28), ("gif", 2, 28, 14)],
+)
+def test_svd_runner_exports_effective_duration_preserving_fps(
+    tmp_path: Path,
+    monkeypatch,
+    output_format: str,
+    multiplier: int | None,
+    output_frame_count: int,
+    expected_fps: int,
+) -> None:
+    source_path = tmp_path / "source.png"
+    Image.new("RGB", (16, 16), "white").save(source_path)
+    prepared = SVDPreprocessResult(
+        source_path=source_path,
+        prepared_path=tmp_path / "prepared.png",
+        original_width=16,
+        original_height=16,
+        target_width=1024,
+        target_height=576,
+        resize_mode="letterbox",
+        was_resized=True,
+        was_padded=True,
+        was_cropped=False,
+    )
+    config_payload: dict[str, object] = {
+        "inference": {"num_frames": 14, "fps": 7},
+        "output": {"output_format": output_format},
+    }
+    if multiplier is not None:
+        executable = tmp_path / "rife-ncnn-vulkan.exe"
+        executable.write_bytes(b"exe")
+        config_payload["postprocess"] = {
+            "interpolation": {
+                "enabled": True,
+                "multiplier": multiplier,
+                "executable_path": str(executable),
+            }
+        }
+    config = SVDConfig.from_dict(config_payload)
+    captured: dict[str, object] = {}
+    output_video = tmp_path / f"output.{output_format}"
+    manifest_path = tmp_path / "manifest.json"
+
+    monkeypatch.setattr("src.video.svd_runner.prepare_svd_input", lambda **_kwargs: prepared)
+
+    def _postprocess(_self, **_kwargs):
+        metadata = None
+        if multiplier is not None:
+            metadata = {
+                "applied": ["interpolation"],
+                "interpolation": {
+                    "input_frame_count": 14,
+                    "input_fps": 7,
+                    "output_frame_count": output_frame_count,
+                    "output_fps": expected_fps,
+                },
+            }
+        return [Image.new("RGB", (16, 16), "white") for _ in range(output_frame_count)], metadata
+
+    monkeypatch.setattr("src.video.svd_runner.SVDPostprocessRunner.process_frames", _postprocess)
+    def _export(**kwargs):
+        captured["export_fps"] = kwargs["fps"]
+        return output_video
+
+    monkeypatch.setattr("src.video.svd_runner.export_video_mp4", _export)
+    monkeypatch.setattr("src.video.svd_runner.export_video_gif", _export)
+
+    def _write_manifest(**kwargs):
+        captured["result"] = kwargs["result"]
+        return manifest_path
+
+    monkeypatch.setattr("src.video.svd_runner.write_svd_run_manifest", _write_manifest)
+    write_container_metadata = Mock(return_value=True)
+    monkeypatch.setattr("src.video.svd_runner.write_video_container_metadata", write_container_metadata)
+
+    class _FakeService:
+        def prepare_runtime(self, **_kwargs) -> None:
+            return None
+
+        def generate_frames(self, **_kwargs):
+            return [Image.new("RGB", (16, 16), "white") for _ in range(14)]
+
+        def _release_runtime_memory(self) -> None:
+            return None
+
+    result = SVDRunner(service=_FakeService(), output_root=tmp_path).run(
+        source_image_path=source_path,
+        config=config,
+        job_id="duration-fps",
+    )
+
+    assert captured["export_fps"] == expected_fps
+    assert result.frame_count == output_frame_count
+    assert result.fps == expected_fps
+    assert captured["result"].fps == expected_fps
+    container_payload = write_container_metadata.call_args.args[1]
+    assert container_payload["fps"] == expected_fps
+    assert container_payload["config"]["inference"]["fps"] == 7
+
+
+def test_svd_runner_rejects_unsupported_rife_multiplier_before_model_prepare(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    class _FakeService:
+        def prepare_runtime(self, **_kwargs) -> None:
+            calls.append("prepare_runtime")
+
+        def generate_frames(self, **_kwargs):
+            calls.append("generate_frames")
+            return []
+
+        def _release_runtime_memory(self) -> None:
+            return None
+
+    config = SVDConfig.from_dict(
+        {"postprocess": {"interpolation": {"enabled": True, "multiplier": 3}}}
+    )
+
+    with pytest.raises(Exception, match="only 2x or 4x"):
+        SVDRunner(service=_FakeService(), output_root=tmp_path).run(
+            source_image_path=tmp_path / "unused.png",
+            config=config,
+            job_id="reject-before-inference",
+        )
+
+    assert calls == []
+
+
 def test_svd_runner_emits_live_stage_status_details(tmp_path: Path, monkeypatch) -> None:
     source_path = tmp_path / "source.png"
     source_path.write_bytes(b"png")
@@ -135,9 +265,11 @@ def test_svd_runner_emits_live_stage_status_details(tmp_path: Path, monkeypatch)
     updates: list[dict[str, object]] = []
     runner = SVDRunner(service=_FakeService(), output_root=tmp_path, status_callback=updates.append)
 
+    executable = tmp_path / "rife-ncnn-vulkan.exe"
+    executable.write_bytes(b"exe")
     runner.run(
         source_image_path=source_path,
-        config=SVDConfig.from_dict({"postprocess": {"interpolation": {"enabled": True, "executable_path": "C:/tmp/rife.exe"}}}),
+        config=SVDConfig.from_dict({"postprocess": {"interpolation": {"enabled": True, "executable_path": str(executable)}}}),
         job_id="job-1",
     )
 

@@ -547,13 +547,12 @@ class SVDTabFrameV2(ttk.Frame):
             rife_interpolate_check,
         )
         row += 1
-        self._add_spinbox(
+        self.rife_multiplier_combo = self._add_combo(
             settings,
             row,
             "RIFE multiplier",
             self.interpolation_multiplier_var,
-            from_=2,
-            to=4,
+            ["2", "4"],
             help_key="rife_multiplier",
         )
         row += 1

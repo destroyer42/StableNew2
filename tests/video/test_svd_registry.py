@@ -29,12 +29,22 @@ class _FakeResult:
         self.frame_paths = [root / "frames" / "frame_0001.png", root / "frames" / "frame_0002.png"] if output_kind == "frames" else []
         self.thumbnail_path = root / "preview.png"
         self.metadata_path = root / "manifests" / "clip.json"
-        self.frame_count = 25
-        self.fps = 7
+        self.frame_count = 28
+        self.fps = 14
         self.seed = 1234
         self.model_id = "stabilityai/stable-video-diffusion-img2vid-xt"
         self.preprocess = _FakePreprocess(root)
-        self.postprocess = {"applied": ["interpolation"], "output_frame_count": 49}
+        self.postprocess = {
+            "applied": ["interpolation"],
+            "interpolation": {
+                "semantics": "duration_preserving_temporal_smoothing",
+                "input_frame_count": 14,
+                "input_fps": 7,
+                "output_frame_count": 28,
+                "output_fps": 14,
+            },
+            "output_frame_count": 28,
+        }
 
 
 def test_write_svd_run_manifest_includes_canonical_artifact(tmp_path: Path) -> None:
@@ -55,6 +65,9 @@ def test_write_svd_run_manifest_includes_canonical_artifact(tmp_path: Path) -> N
     assert payload["video_paths"] == [str(result.video_path)]
     assert payload["manifest_paths"] == [str(manifest_path)]
     assert payload["count"] == 1
+    assert payload["fps"] == 14
+    assert payload["config"]["inference"]["fps"] == 7
+    assert payload["postprocess"]["interpolation"]["output_fps"] == 14
 
 
 def test_build_svd_history_record_supports_frames_only_outputs(tmp_path: Path) -> None:
@@ -69,3 +82,5 @@ def test_build_svd_history_record_supports_frames_only_outputs(tmp_path: Path) -
     assert record["manifest_paths"] == [str(result.metadata_path)]
     assert record["count"] == 2
     assert record["artifact"]["primary_path"] == str(result.frame_paths[0])
+    assert record["fps"] == 14
+    assert record["postprocess"]["interpolation"]["output_fps"] == 14
