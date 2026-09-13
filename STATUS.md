@@ -70,7 +70,8 @@ The accepted runtime evidence includes:
 - Diffusers `StableVideoDiffusionPipeline` is available.
 - FFmpeg and ffprobe execute through the production resolver.
 - The accepted plain XT is detected through the production cache authority.
-- The persisted operator profile matches `Recommended 12GB / XT 14f`: plain XT,
+- Phase 0 acceptance verified that the effective operator profile matched the
+  `Recommended 12GB / XT 14f` baseline at acceptance time: plain XT,
   production default per-user Hugging Face cache, 14 frames, 7 fps, 25 steps,
   motion bucket 48, noise 0.01, decode 2, Match Source Aspect with
   `center_crop`, local-only true, and all postprocess stages OFF.
@@ -85,15 +86,26 @@ submissions and zero SVD inference jobs occurred during Phase 0.
 XT 1.1 remains a distinct supported model and must not be substituted for the
 accepted plain-XT baseline merely because it is cached.
 
+The subsequent real portrait source-aware SVD acceptance attempt stopped before
+submission because the current effective local SVD state had drifted from that
+accepted baseline: it reported the base model, repository-local cache, and
+interpolation enabled. This is not currently classified as repository default
+drift. The selected real source was `832x1216`, whose current source-aware
+target is `640x960`. Zero NJR submissions and zero SVD inference jobs occurred
+during the attempt.
+
 ## Remaining sequence
 
-1. Complete one real portrait source-aware SVD geometry acceptance.
+1. Normalize the effective local SVD profile and complete one real portrait
+   source-aware SVD geometry acceptance.
 2. Decide/repair RIFE interpolation semantics if required.
-3. Complete queue/history recovery UX and no-op cleanup.
-4. Finish PR-MVP-080 operator journey/docs/required CI/integration.
-5. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
+3. Complete portable video provenance and parent artifact lineage.
+4. Complete queue/history recovery UX and no-op cleanup.
+5. Finish PR-MVP-080 operator journey/docs/required CI/integration.
+6. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
 
-Next action: complete one real portrait source-aware SVD geometry acceptance.
+Next action: normalize the effective local SVD profile, then rerun the one real
+portrait source-aware SVD geometry acceptance.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is complete and accepted, pulled forward only to unblock PR-MVP-080; the

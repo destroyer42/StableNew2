@@ -127,6 +127,10 @@ outcome. Remaining work is:
 - one real portrait source-aware SVD geometry acceptance, now the next objective
   after the accepted runtime/bootstrap prerequisite;
 - RIFE interpolation semantics decision if required;
+- portable video provenance and parent artifact lineage: make produced MP4
+  provenance self-contained enough for later inspection and recovery when
+  sidecars or original paths are unavailable; embedded provenance remains an
+  audit/recovery copy, not lifecycle authority;
 - queue/history recovery UX;
 - final operator journey, documentation, required CI, and integration.
 
@@ -174,6 +178,7 @@ Remaining clean-machine/release-proof work stays after PR-MVP-080:
 
 ## Next action
 
-Complete the real portrait source-aware SVD geometry acceptance. PromptPack
-authorship, durable job state, image generation, native SVD XT, and the Phase 0
-runtime/bootstrap prerequisite already have single accepted product paths.
+Normalize the effective local SVD profile, then rerun the real portrait
+source-aware SVD geometry acceptance. PromptPack authorship, durable job state,
+image generation, native SVD XT, and the Phase 0 runtime/bootstrap prerequisite
+already have single accepted product paths.

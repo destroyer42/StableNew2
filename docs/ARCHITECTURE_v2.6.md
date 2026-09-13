@@ -235,6 +235,16 @@ Replay creates or hydrates a valid NJR, records parent lineage, and submits it
 through `JobService`. Learning consumes canonical artifacts and history; it does
 not modify PromptPacks or NJRs in place.
 
+StableNew media artifacts may carry embedded portable provenance sufficient to
+preserve artifact lineage when external sidecars or history are unavailable.
+For SVD/video, that provenance should preserve, when available, the video
+artifact and job identity, SVD execution/configuration/result provenance, source
+artifact identity and parent generation provenance, and verification hashes.
+Embedded provenance is an audit/recovery representation, not queue or mutable
+lifecycle authority and not a second history database. SQLite remains the live
+queue/repository/history authority; filesystem paths are references, not durable
+identity.
+
 ## 11. Application and GUI ownership
 
 Application services coordinate compilers, repository operations, queue policy,
@@ -261,7 +271,7 @@ UI changes onto the GUI thread and expose bounded cancellation/error behavior.
 
 ## 13. Current implementation gap register
 
-Audit date: 2026-09-12. These gaps mean the target contract is not yet fully
+Audit date: 2026-09-13. These gaps mean the target contract is not yet fully
 implemented:
 
 | Gap | Status | Current evidence | Closing roadmap item |
@@ -274,7 +284,7 @@ implemented:
 | PromptPack format | **Closed 2026-09-08** | Versioned schema-1 JSON is the sole discovered and compiled PromptPack authority; save/reload, Matrix expansion, preview/queue, explicit TXT/TSV interchange, and backup-first semantic pair migration are covered without a live text fallback | `PR-MVP-050` |
 | Test truth | **Closed 2026-09-06** | One strict pytest authority, isolated collection/smoke runners, a positive required list, and a Ruff 0.14.9 non-increasing baseline gate pass on supported interpreters | `PR-MVP-010` |
 | Video scope | **Closed 2026-09-12 / ACCEPTED** | Native SVD XT is the selected and accepted MVP video backend; its queue-first path, geometry, artifacts, and replay lineage are proven | `PR-MVP-070` |
-| Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated; the Windows runtime/bootstrap baseline, real local native SVD XT square-source run through the public production runner, replay lineage, separate artifact generation, and cancellation are accepted. Real portrait source-aware geometry remains the immediate runtime gate; queue/history metadata and recovery UX plus final operator-facing polish remain open | `PR-MVP-080` |
+| Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated; the Windows runtime/bootstrap baseline, real local native SVD XT square-source run through the public production runner, replay lineage, separate artifact generation, and cancellation are accepted. Real portrait source-aware geometry acceptance remains open, along with RIFE semantics if required, portable video provenance and parent artifact lineage, queue/history metadata and recovery UX, and final operator-facing polish | `PR-MVP-080` |
 | Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
 
 Closing a row requires implementation evidence and tests. Updating prose alone
