@@ -61,19 +61,33 @@ resurrection when a late response succeeds.
 
 ## Current acceptance blocker
 
-Portrait source-aware SVD geometry acceptance was attempted on the target
-Windows/RTX machine but stopped before submission because no usable established
-native-SVD runtime remained.
+The first PR-MVP-090 Phase 0 bootstrap attempt established the local runtime
+prerequisites on the target machine, but production SVD preflight remains
+blocked by the exact accepted XT model cache.
+Portrait source-aware SVD geometry acceptance remains blocked until that
+preflight succeeds.
 
-Verified blocker facts:
+Established successfully:
 
-- RTX 4070 Ti is available and the cached XT model exists.
-- The repository `.venv` and WebUI venv point to missing Python base executables.
-- Available bundled Python lacks `torch`, `diffusers`, and `imageio-ffmpeg`.
-- FFmpeg/ffprobe was unavailable through the established runtime/PATH.
-- No NJR was submitted, zero SVD GPU jobs ran, and no source files changed.
+- Official per-user Python 3.11.9.
+- Recreated healthy StableNew `.venv`.
+- Declared StableNew/SVD dependencies installed.
+- CUDA-enabled PyTorch sees RTX 4070 Ti.
+- Diffusers exposes `StableVideoDiffusionPipeline`.
+- FFmpeg and ffprobe are available.
+- Existing portrait source validates.
 
-This is an environment/bootstrap prerequisite, not an SVD product failure.
+Remaining Phase 0 blocker:
+
+- The accepted Recommended profile requires
+  `stabilityai/stable-video-diffusion-img2vid-xt`.
+- The discovered complete cache is
+  `stabilityai/stable-video-diffusion-img2vid-xt-1-1`.
+- Production local-only preflight therefore remains blocked.
+- Zero SVD inference jobs were submitted.
+
+XT 1.1 is a distinct supported model and must not be substituted for the
+accepted XT baseline merely because it is cached.
 
 ## Remaining sequence
 
@@ -84,6 +98,9 @@ This is an environment/bootstrap prerequisite, not an SVD product failure.
 4. Complete queue/history recovery UX and no-op cleanup.
 5. Finish PR-MVP-080 operator journey/docs/required CI/integration.
 6. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
+
+Next action: reconcile production cache authority and establish the exact
+accepted XT model cache if genuinely absent, then rerun SVD preflight.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is pulled forward only to unblock PR-MVP-080; the remaining clean-machine and
