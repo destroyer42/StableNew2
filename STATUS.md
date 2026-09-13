@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-09-12
+Updated: 2026-09-13
 
 ## Repository
 
@@ -59,56 +59,53 @@ proven with one generation POST, one interrupt, persisted `CANCELLED`, no
 promoted artifact, no later pipeline stage, no process restart/retry, and no
 resurrection when a late response succeeds.
 
-## Current acceptance blocker
+## Current acceptance state
 
-The persisted SVD operator-profile blocker is resolved. The persisted SVD
-operator state was normalized through the existing `UIStateStore`; only stale
-SVD values changed, and unrelated UI/application state remained unchanged.
-The effective persisted profile now matches `Recommended 12GB / XT 14f`:
+PR-MVP-090 Phase 0 runtime/bootstrap is **COMPLETE / ACCEPTED**. The supported
+Windows Python 3.11/3.12 bootstrap is repository-owned, and its CUDA-enabled
+Torch installation order is encoded. Disposable bootstrap validation passed on
+the RTX 4070 Ti, and check-only validation passed on the established runtime.
+The accepted runtime evidence includes:
 
-- Plain XT is active with the production default per-user Hugging Face cache.
-- 14 frames, 7 fps, 25 steps, motion bucket 48, noise 0.01, decode 2.
-- Match Source Aspect with `center_crop`.
-- Local-only mode is true and all postprocess stages are OFF.
+- Diffusers `StableVideoDiffusionPipeline` is available.
+- FFmpeg and ffprobe execute through the production resolver.
+- The accepted plain XT is detected through the production cache authority.
+- The persisted operator profile matches `Recommended 12GB / XT 14f`: plain XT,
+  production default per-user Hugging Face cache, 14 frames, 7 fps, 25 steps,
+  motion bucket 48, noise 0.01, decode 2, Match Source Aspect with
+  `center_crop`, local-only true, and all postprocess stages OFF.
+- Production local-only SVD preflight passes with no blockers or warnings.
+- No model download or SVD inference was required for Phase 0.
+- Required GitHub Python 3.11/3.12 CI, including mypy and smoke gates, passed.
 
-Production local-only preflight passes with no blockers or warnings. The model
-is cached, Torch and the Diffusers pipeline are available, CUDA sees the RTX
-4070 Ti, and the portrait source is valid. Zero NJR submissions and zero SVD
-inference jobs occurred during Phase 0.
+Local PR-gate execution was blocked by missing local `mypy`; the required
+GitHub mypy/smoke gates passed, so this is not an active blocker. Zero NJR
+submissions and zero SVD inference jobs occurred during Phase 0.
 
 XT 1.1 remains a distinct supported model and must not be substituted for the
 accepted plain-XT baseline merely because it is cached.
 
-Remaining Phase 0 blocker:
-
-The working runtime is not yet reproducibly encoded by repository setup
-instructions/tooling. Ordinary requirements installation resolved CPU-only
-Torch, while the successful runtime required the official CUDA PyTorch package
-index. Windows Python and FFmpeg prerequisites also need a single supported
-setup procedure.
-
 ## Remaining sequence
 
-1. Complete PR-MVP-090 Phase 0R2 reproducible Windows bootstrap helper/runbook.
-2. Resume the real portrait source-aware SVD geometry acceptance.
-3. Decide/repair RIFE interpolation semantics if required.
-4. Complete queue/history recovery UX and no-op cleanup.
-5. Finish PR-MVP-080 operator journey/docs/required CI/integration.
-6. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
+1. Complete one real portrait source-aware SVD geometry acceptance.
+2. Decide/repair RIFE interpolation semantics if required.
+3. Complete queue/history recovery UX and no-op cleanup.
+4. Finish PR-MVP-080 operator journey/docs/required CI/integration.
+5. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
 
-Next action: complete PR-MVP-090 Phase 0R2 reproducible Windows bootstrap
-helper/runbook.
+Next action: complete one real portrait source-aware SVD geometry acceptance.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
-is pulled forward only to unblock PR-MVP-080; the remaining clean-machine and
-release-proof work stays after PR-MVP-080.
+is complete and accepted, pulled forward only to unblock PR-MVP-080; the
+remaining clean-machine and release-proof work stays after PR-MVP-080.
 
 ## Known non-blocking debt
 
 - Informational Linux/Xvfb isolation failures remain outside the required CI verdict.
 - Legacy stale tests still reflect superseded CLI, compatibility, migration, or
   stale constructor-fixture expectations.
-- Bounded Ruff and mypy debt remains tracked; local environment/bootstrap normalization belongs to PR-MVP-090.
+- Local PR-gate execution can be unavailable when local `mypy` is missing;
+  required GitHub mypy and smoke gates are the compatibility verdict.
 
 Current exact collection and smoke counts are taken from the latest required CI
 recorded here or in the applicable acceptance report. Run focused checks, then

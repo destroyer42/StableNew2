@@ -124,8 +124,8 @@ export preserves the requested 14-frame sequence.
 Expose or clearly label only supported paths and finish the operator-readiness
 outcome. Remaining work is:
 
-- one real portrait source-aware SVD geometry acceptance, currently blocked by
-  the local runtime/bootstrap prerequisite;
+- one real portrait source-aware SVD geometry acceptance, now the next objective
+  after the accepted runtime/bootstrap prerequisite;
 - RIFE interpolation semantics decision if required;
 - queue/history recovery UX;
 - final operator journey, documentation, required CI, and integration.
@@ -135,16 +135,17 @@ This is workflow polish, not a GUI rewrite.
 ### PR-MVP-090 — release proof
 
 PR-MVP-090 remains planned overall. Phase 0 — enabling prerequisite, pulled
-forward for dependency sequencing only:
+forward for dependency sequencing only — COMPLETE / ACCEPTED:
 
-- establish a reproducible supported Python 3.11/3.12 local runtime;
-- establish base and native-SVD dependencies;
-- establish usable FFmpeg/ffprobe access;
-- prove the runtime can perform SVD preflight without repairing unrelated
-  product behavior.
+- repository-owned Windows Python 3.11/3.12 bootstrap with CUDA-enabled Torch
+  installation ordering;
+- disposable RTX 4070 Ti bootstrap and established-runtime check-only passes;
+- Diffusers SVD pipeline and production-resolved FFmpeg/ffprobe available;
+- accepted plain XT detected through the production cache authority and
+  production local-only preflight passing without blockers or warnings.
 
 Pulling forward Phase 0 does not complete or broadly start PR-MVP-090.
-Remaining PR-MVP-090 work stays after PR-MVP-080:
+Remaining clean-machine/release-proof work stays after PR-MVP-080:
 
 - clean-checkout release proof;
 - migration/recovery rehearsal;
@@ -173,7 +174,6 @@ Remaining PR-MVP-090 work stays after PR-MVP-080:
 
 ## Next action
 
-Complete PR-MVP-090 Phase 0 runtime/bootstrap prerequisite, then resume the
-real portrait SVD geometry acceptance. PromptPack authorship, durable job
-state, image generation, and native SVD XT already have single accepted product
-paths.
+Complete the real portrait source-aware SVD geometry acceptance. PromptPack
+authorship, durable job state, image generation, native SVD XT, and the Phase 0
+runtime/bootstrap prerequisite already have single accepted product paths.
