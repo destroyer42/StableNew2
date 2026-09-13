@@ -35,6 +35,27 @@ The current branch is an integration checkpoint, not a release declaration:
 remaining 080 acceptance and the later 090 clean-machine proof are still
 required before the release baseline can move.
 
+## Approved post-v2.6 direction
+
+After PR-MVP-080 and PR-MVP-090 are accepted and integrated, the first approved
+post-v2.6 architecture PR is `PR-IMG-100 — Backend-Neutral Image Execution`.
+The accepted course of action is **one typed image backend per image NJR**.
+A1111/WebUI remains the default/current production image backend and its accepted
+behavior must be preserved behind the new boundary. Newly compiled image NJRs
+will explicitly persist image backend identity through the existing immutable
+`backend_options` workload layer; historical v2.6 image NJRs that lack backend
+identity will resolve deterministically to A1111 through one bounded compatibility
+rule.
+
+`PR-IMG-100` does not implement Ideogram, Diffusers image inference, ComfyUI
+still-image execution, or per-stage backend composition. A later Diffusers
+backend may be qualified against Ideogram 4 after PR-IMG-100 is accepted.
+Per-stage backend composition (COA C) and ComfyUI-centric image execution (COA D)
+remain possible future options, but neither may replace StableNew's compiler,
+NJR, queue, runner, artifact, history, replay, cancellation, or process authorities.
+The full approved acceptance contract and phased Codex prompts are in
+`docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`.
+
 ## Accepted PR-MVP-080 work
 
 Accepted 080 work includes source-aware SVD target selection, readiness
@@ -133,6 +154,8 @@ status must not be represented as passed.
 2. Complete queue/history recovery UX and no-op cleanup.
 3. Finish PR-MVP-080 operator journey/docs/required CI/integration.
 4. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
+5. After v2.6 release acceptance, begin PR-IMG-100 Phase A from the exact
+   integrated post-v2.6 branch/SHA.
 
 Next action: portable video provenance + parent artifact lineage.
 
