@@ -124,8 +124,10 @@ export preserves the requested 14-frame sequence.
 Expose or clearly label only supported paths and finish the operator-readiness
 outcome. Remaining work is:
 
-- one real portrait source-aware SVD geometry acceptance, now the next objective
-  after the accepted runtime/bootstrap prerequisite;
+- accepted evidence: one real portrait source-aware native-SVD production run
+  selected `832x1216 -> 640x960`, produced an exact `640x960` center-cropped
+  prepared image, and completed with a verified 14-frame portrait MP4 through
+  the canonical queue-first runner path;
 - RIFE interpolation semantics decision if required;
 - portable video provenance and parent artifact lineage: make produced MP4
   provenance self-contained enough for later inspection and recovery when
@@ -178,7 +180,7 @@ Remaining clean-machine/release-proof work stays after PR-MVP-080:
 
 ## Next action
 
-Normalize the effective local SVD profile, then rerun the real portrait
-source-aware SVD geometry acceptance. PromptPack authorship, durable job state,
-image generation, native SVD XT, and the Phase 0 runtime/bootstrap prerequisite
-already have single accepted product paths.
+Investigate and decide RIFE interpolation semantics. PromptPack authorship,
+durable job state, image generation, native SVD XT, the Phase 0 runtime/bootstrap
+prerequisite, and real portrait source-aware SVD geometry already have single
+accepted product paths.

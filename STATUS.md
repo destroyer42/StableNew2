@@ -86,26 +86,36 @@ submissions and zero SVD inference jobs occurred during Phase 0.
 XT 1.1 remains a distinct supported model and must not be substituted for the
 accepted plain-XT baseline merely because it is cached.
 
-The subsequent real portrait source-aware SVD acceptance attempt stopped before
-submission because the current effective local SVD state had drifted from that
-accepted baseline: it reported the base model, repository-local cache, and
-interpolation enabled. This is not currently classified as repository default
-drift. The selected real source was `832x1216`, whose current source-aware
-target is `640x960`. Zero NJR submissions and zero SVD inference jobs occurred
-during the attempt.
+The earlier stopped portrait attempt is historical context only; it found local
+effective-state drift and submitted no work. After normalization through the
+existing UI-state authority, portrait source-aware native-SVD acceptance is now
+**PASS / ACCEPTED**. A real StableNew source artifact at `832x1216` selected the
+deterministic `640x960` target. The prepared image was exactly `640x960`,
+resized and center-cropped without padding. The conservative plain-XT profile
+was used: 14 frames, 7 fps, 25 steps, motion bucket 48, noise 0.01, decode 2,
+CPU offload and forward chunking enabled, local-only enabled, canonical
+production Hugging Face cache, and all postprocess stages disabled.
+
+The fresh job was submitted through the public application/controller boundary
+and canonical queue-first `JobService` / SQLite / `PipelineRunner.run_njr`
+spine. SQLite job `a46863c56b9e4d8cba8925e96edcb18d` reached `completed`; its
+artifact, manifest, preview, and repository result agreed. The MP4 was
+non-empty and decoded at `640x960`, `7/1` fps, with exactly 14 frames. Visual
+inspection confirmed portrait orientation, plausible center crop, and no
+evident stretch or squash. The physical GUI button was not used because the
+desktop bridge was unavailable; the approved public submission boundary was
+used instead. No production or test source changes were required.
 
 ## Remaining sequence
 
-1. Normalize the effective local SVD profile and complete one real portrait
-   source-aware SVD geometry acceptance.
-2. Decide/repair RIFE interpolation semantics if required.
-3. Complete portable video provenance and parent artifact lineage.
-4. Complete queue/history recovery UX and no-op cleanup.
-5. Finish PR-MVP-080 operator journey/docs/required CI/integration.
-6. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
+1. Decide/repair RIFE interpolation semantics if required.
+2. Complete portable video provenance and parent artifact lineage.
+3. Complete queue/history recovery UX and no-op cleanup.
+4. Finish PR-MVP-080 operator journey/docs/required CI/integration.
+5. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
 
-Next action: normalize the effective local SVD profile, then rerun the one real
-portrait source-aware SVD geometry acceptance.
+Next action: investigate and decide RIFE interpolation semantics; do not imply
+that RIFE is broken before verification.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is complete and accepted, pulled forward only to unblock PR-MVP-080; the
