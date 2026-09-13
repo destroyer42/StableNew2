@@ -124,7 +124,8 @@ export preserves the requested 14-frame sequence.
 Expose or clearly label only supported paths and finish the operator-readiness
 outcome. Remaining work is:
 
-- one real portrait source-aware SVD geometry acceptance;
+- one real portrait source-aware SVD geometry acceptance, currently blocked by
+  the local runtime/bootstrap prerequisite;
 - RIFE interpolation semantics decision if required;
 - queue/history recovery UX;
 - final operator journey, documentation, required CI, and integration.
@@ -133,9 +134,23 @@ This is workflow polish, not a GUI rewrite.
 
 ### PR-MVP-090 — release proof
 
-PR-MVP-090 remains planned and owns reproducible local environment/bootstrap,
-clean-checkout setup, migration/recovery rehearsal, final image/SVD smokes,
-restart/replay/artifact proof, and final release limitations and rollback.
+PR-MVP-090 remains planned overall. Phase 0 — enabling prerequisite, pulled
+forward for dependency sequencing only:
+
+- establish a reproducible supported Python 3.11/3.12 local runtime;
+- establish base and native-SVD dependencies;
+- establish usable FFmpeg/ffprobe access;
+- prove the runtime can perform SVD preflight without repairing unrelated
+  product behavior.
+
+Pulling forward Phase 0 does not complete or broadly start PR-MVP-090.
+Remaining PR-MVP-090 work stays after PR-MVP-080:
+
+- clean-checkout release proof;
+- migration/recovery rehearsal;
+- final image/SVD smokes;
+- restart/replay/artifact proof;
+- final limitations and rollback documentation.
 
 ## Risk controls
 
@@ -158,6 +173,7 @@ restart/replay/artifact proof, and final release limitations and rollback.
 
 ## Next action
 
-The next action is to complete one real portrait source-aware SVD geometry
-acceptance. PromptPack authorship, durable job state, image generation, and
-native SVD XT already have single accepted product paths.
+Complete PR-MVP-090 Phase 0 runtime/bootstrap prerequisite, then resume the
+real portrait SVD geometry acceptance. PromptPack authorship, durable job
+state, image generation, and native SVD XT already have single accepted product
+paths.

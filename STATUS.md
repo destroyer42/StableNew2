@@ -59,16 +59,35 @@ proven with one generation POST, one interrupt, persisted `CANCELLED`, no
 promoted artifact, no later pipeline stage, no process restart/retry, and no
 resurrection when a late response succeeds.
 
+## Current acceptance blocker
+
+Portrait source-aware SVD geometry acceptance was attempted on the target
+Windows/RTX machine but stopped before submission because no usable established
+native-SVD runtime remained.
+
+Verified blocker facts:
+
+- RTX 4070 Ti is available and the cached XT model exists.
+- The repository `.venv` and WebUI venv point to missing Python base executables.
+- Available bundled Python lacks `torch`, `diffusers`, and `imageio-ffmpeg`.
+- FFmpeg/ffprobe was unavailable through the established runtime/PATH.
+- No NJR was submitted, zero SVD GPU jobs ran, and no source files changed.
+
+This is an environment/bootstrap prerequisite, not an SVD product failure.
+
 ## Remaining sequence
 
-1. Complete one real portrait source-aware SVD geometry acceptance.
-2. Decide or repair RIFE interpolation semantics if required.
-3. Complete queue/history recovery UX and no-op cleanup.
-4. Finish the operator journey, documentation, required CI, and integration.
+1. Complete the minimum PR-MVP-090 Phase 0 environment/bootstrap prerequisite
+   required to establish one supported local StableNew + native-SVD runtime.
+2. Resume the real portrait source-aware SVD geometry acceptance.
+3. Decide/repair RIFE interpolation semantics if required.
+4. Complete queue/history recovery UX and no-op cleanup.
+5. Finish PR-MVP-080 operator journey/docs/required CI/integration.
+6. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
 
-Then PR-MVP-090 owns reproducible local environment/bootstrap, clean-checkout
-setup, migration/recovery rehearsal, final image/SVD smokes, restart/replay/
-artifact proof, and final release limitations and rollback.
+PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
+is pulled forward only to unblock PR-MVP-080; the remaining clean-machine and
+release-proof work stays after PR-MVP-080.
 
 ## Known non-blocking debt
 
