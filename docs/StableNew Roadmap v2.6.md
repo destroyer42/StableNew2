@@ -149,27 +149,8 @@ outcome. Remaining work is:
   `INTERRUPTED_RESTART_ACTION_REQUIRED`, preserves available recovery evidence,
   prevents automatic requeue/replay, and renders the record as `Interrupted`;
   explicit Replay creates a new NJR/job identity with parent lineage;
-- accepted evidence: queue/history action-state and no-op cleanup combines
-  legal state, callable boundaries, and real artifact/replay evidence; manual
-  Send Job remains available with Auto-run OFF when safely dispatchable; stale,
-  direct, keyboard, and context-menu paths cannot bypass the predicates; and
-  false Remove/Clear success is not reported;
-- accepted repair at `d2909e752faaa34f20a49fccc9865a8412c21b15`: terminal result
-  publication requires durable `RUNNING` ownership, so accepted cancellation or
-  return-to-queue decisions cannot acquire late successful result data, artifact
-  references, or `final_output` checkpoints; normal success, replay lineage,
-  lifecycle/schema, and architecture remain unchanged; physical cancelled-job
-  bytes may remain as non-authoritative residue when no safe generic cleanup
-  authority exists;
-- final operator-facing journey verification, documentation consistency,
-  required CI, and integration.
-
-The final operator journey is **PASS / ACCEPTED**. Rob manually verified one
-normal queue-first run with Auto-run OFF and a second back-to-back run; both
-completed successfully. Queue/history action-state, replay identity/parent
-lineage, cancellation safety, and the shutdown persistence-order repair remain
-accepted evidence. The next PR-MVP-080 phase is required CI and
-integration/documentation closeout.
+- remaining queue/history action-state + no-op cleanup;
+- final operator journey, documentation, required CI, and integration.
 
 This is workflow polish, not a GUI rewrite.
 
@@ -194,28 +175,62 @@ Remaining clean-machine/release-proof work stays after PR-MVP-080:
 - restart/replay/artifact proof;
 - final limitations and rollback documentation.
 
-## Approved post-v2.6 sequence
+## Approved post-v2.6 value roadmap
 
-This sequence is approved architecture direction but is not part of the current
-MVP completion count. Do not begin it until PR-MVP-080 and PR-MVP-090 are
-accepted and integrated and the exact post-v2.6 parent SHA is verified.
+This direction was accepted on 2026-09-13 after reviewing backend neutrality,
+Asset Intelligence, Learning/quality efficiency, controller/executor debt,
+household compute, cloud bursting, and directed-motion video. It is not part of
+the current MVP completion count and must not begin until PR-MVP-080 and
+PR-MVP-090 are accepted and integrated.
+
+The post-MVP optimization objective is **useful-output efficiency**, not feature
+count or raw images per second. Prefer work that reduces time/GPU cost per keeper
+or unlocks a material new capability without increasing architectural coupling.
+Useful measurements include keeper rate, GPU-minutes per keeper, wall-clock time
+to curated final, failed/aborted-job rate, operator interventions per final,
+repeated model/checkpoint loads, and generation-to-refine-to-final conversion.
+
+Before authorizing each implementation wave, re-check the exact integrated repo
+state and rewrite the bounded implementation contract from live evidence. The
+labels below are roadmap outcomes, not permission to execute discovery-era file
+lists, schemas, or Codex prompts unchanged.
 
 | Order | Work | Status | Outcome |
 |---:|---|---|---|
-| P1 | `PR-IMG-100` | Approved / Not started | One typed image backend per image NJR; existing A1111 path preserved behind a StableNew-owned backend contract |
-| P2 | `PR-IMG-110` | Planned decision-gated qualification | Diffusers / Ideogram 4 runtime qualification on target hardware; no production backend yet |
-| P3 | `PR-IMG-120` | Conditional | First Diffusers production image vertical slice if PR-IMG-110 proves viable |
-| P4 | `PR-IMG-130` | Conditional | Capability-aware image backend/model UI and compiler projections |
+| P0 | Post-v2.6 efficiency baseline | Approved measurement gate | Establish keeper/latency/GPU/failure/intervention baseline and re-check the dominant bottleneck before new implementation |
+| P1 | `PR-IMG-100` | Approved / Not started | One typed image backend per image NJR; preserve A1111 behind a StableNew-owned backend contract and simplify touched generic execution responsibilities |
+| P2 | Asset Intelligence + Quality Efficiency | Approved planning direction; discovery reference exists | Hash-backed local asset inventory, family/role metadata, deterministic VAE policy, compatibility preflight, known-good operating profiles, controlled Learning evidence, and curation-derived quality signals |
+| P3 | Execution Placement v1 | Approved planning direction; architecture discovery required | Central StableNew capability-aware placement across local/LAN workers with a contract that can later support cloud workers without a second queue/lifecycle authority |
+| P4 | Directed Motion Video | Approved planning direction; technology qualification required | StableNew-owned motion-intent/control semantics translated through video backends for articulated body/limb motion beyond SVD |
+| P5 | Evidence-selected backend/model expansion | Decision-gated | Qualify and productionize only image/video runtimes or model families that materially improve useful-output efficiency or unlock an accepted capability |
 
-### PR-IMG-100 — backend-neutral image execution
+The earlier fixed sequence `PR-IMG-110 -> PR-IMG-120 -> PR-IMG-130` is
+superseded before implementation. Those labels must not be executed as a
+pre-authorized Ideogram-first chain. Modern image qualification remains valid
+work, but it now belongs under the evidence-selected P5 decision gate and must
+compare whatever credible candidates exist when that decision is reached.
 
-Accepted architecture: **COA B — one typed image backend per image NJR**.
+### P0 — post-v2.6 efficiency baseline
+
+This is a measurement/reprioritization checkpoint, not a broad instrumentation
+rewrite. Use existing manifests, history, timing/provenance, curated outcomes,
+and a bounded representative corpus where possible. Establish enough evidence
+to answer which bottleneck dominates useful-output cost after v2.6: bad
+configuration/model/adapter choices, execution latency, refinement churn,
+manual review effort, repeated loading, or another measured source of waste.
+
+Do not let P0 become an indefinite analytics project. Its purpose is to verify
+that the accepted value sequence still matches observed post-090 reality.
+
+### P1 — PR-IMG-100 backend-neutral image execution
+
+Accepted architecture remains **COA B — one typed image backend per image NJR**.
 
 The PR introduces StableNew-owned image backend capabilities/request/result/
-interface/registry contracts below `PipelineRunner.run_njr`. Newly compiled image
-NJRs explicitly persist image backend identity in the existing immutable
-`backend_options` layer. Historical v2.6 image NJRs that lack backend identity
-resolve to `a1111_webui` through one bounded compatibility rule.
+interface/registry responsibilities below `PipelineRunner.run_njr`. Newly
+compiled image NJRs explicitly persist image backend identity in the existing
+immutable `backend_options` layer. Historical v2.6 image NJRs that lack backend
+identity resolve to `a1111_webui` through one bounded compatibility rule.
 
 A1111/WebUI remains the only production backend delivered by PR-IMG-100 and must
 preserve current txt2img, img2img, ADetailer, upscale, model/VAE verification,
@@ -227,41 +242,135 @@ queue-first A1111 golden path.
 One backend owns all image stages in an NJR for this PR. Unsupported stages fail
 before dispatch. There is no implicit cross-backend fallback.
 
-The binding acceptance contract and exact Codex Phase A/B/C templates are in:
+PR-IMG-100 is also the first deliberate opportunity to reduce execution coupling:
+A1111-specific responsibility should move behind the backend adapter where the
+accepted outcome requires it. Do **not** turn this into a broad `executor.py` or
+controller LOC cleanup; extraction is justified by responsibility, not line
+count.
+
+Its architecture contract is:
 
 `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`
 
-### PR-IMG-110 — Diffusers / Ideogram 4 qualification
+Any phase prompt/template inside that document must be revalidated and rewritten
+from the exact post-v2.6 parent before use; the accepted architecture outcome is
+binding, but discovery-era SHAs/file lists/implementation assumptions are not.
 
-This is a separate runtime qualification after PR-IMG-100. It must determine,
-on the actual supported target environment, model access/license flow, minimum
-known-good Diffusers version, local cache behavior, VRAM/RAM/offload strategy,
-1024-class viability, latency, seed behavior, progress/cancellation, model
-unload/reload, and coexistence with the existing A1111/SVD GPU lifecycle.
+### P2 — Asset Intelligence + Quality Efficiency
 
-Qualification does not authorize production integration. PR-IMG-120 begins only
-if the evidence is acceptable and Rob approves the production slice.
+The daily-use objective is to prevent known-bad or poorly supported generation
+decisions before spending GPU time and to learn which configurations actually
+produce keepers.
 
-### PR-IMG-120 — conditional Diffusers production slice
+The planning target includes:
 
-If qualified, add `diffusers` as a second image backend behind the PR-IMG-100
-contract. Ideogram 4 is the first candidate model family, not a public backend
-class. The initial slice should remain `txt2img`-only unless evidence supports a
-broader capability contract.
+- one local Asset Registry for checkpoints, VAEs, LoRAs, and embeddings with
+  exact hash-backed identity and incremental change detection;
+- factual family/role/provenance metadata with optional external enrichment OFF
+  by default unless the user explicitly opts in;
+- deterministic checkpoint/VAE resolution before NJR authorization;
+- compatibility projection for models/adapters/embeddings without silently
+  mutating authored Prompt intent;
+- controlled Learning templates and exact provenance for model/VAE/LoRA/
+  embedding comparisons;
+- known-good operating profiles by model/task/context when evidence supports
+  them;
+- curation-funnel evidence so configurations are judged by whether candidates
+  survive refinement to useful finals, not only isolated ratings.
 
-### PR-IMG-130 — conditional capability-aware UX/compiler
+The seven-phase Asset Intelligence workbook and plan are discovery/reference
+material only. Before implementation, re-ground them against the actual
+post-PR-IMG-100 repository and collapse, split, reorder, or discard discovery
+phases as current code makes appropriate.
 
-After a real second backend exists, make backend/model capabilities explicit in
-intent/UI/compiler projections so A1111-only controls are not presented as
-universal image settings. Do not redesign PromptPack storage merely to support
-capability-aware compilation.
+### P3 — capability-aware Execution Placement v1
+
+The first distribution goal is independent-job parallelism across hardware that
+already exists, not pooled VRAM or distributed model-parallel inference.
+
+Central StableNew must continue to own intent, compilation, immutable NJR,
+JobService, SQLite queue/lifecycle, scheduling, lineage, replay,
+cancellation policy, artifacts/history, and provenance. A remote machine is an
+execution worker, not another StableNew queue/history/compiler authority.
+
+Worker eligibility should be capability-aware and based on hardware/runtime,
+supported backend/task capabilities, load/availability, and exact local asset
+identity. The Asset Registry direction is intentionally reusable for worker
+asset/capability manifests rather than creating a second model scanner.
+
+Design LAN and cloud as one execution-placement concept: local, LAN-worker, and
+future cloud-worker targets implement the same StableNew-owned placement/
+execution contract. Provider-specific queues/APIs remain transport details and
+must not become lifecycle authority. This roadmap approval does **not** itself
+approve a distributed scheduler architecture; perform a fresh bounded
+architecture decision before implementation.
+
+### P4 — directed-motion video
+
+Native SVD XT remains the reliable lightweight baseline. Do not keep extending
+SVD or whole-frame secondary-motion postprocessing as though it can provide
+articulated subject actions.
+
+The next major video capability should represent StableNew-owned motion intent
+independently from backend/model choice. Candidate concepts include
+prompt-directed body action, driving/performance video, pose/control video,
+keyframes/anchors, trajectory, depth/control signals, and camera motion as
+supported by qualified technology.
+
+At implementation time, qualify the strongest current open/runtime candidates
+against actual hardware and worker/cloud options. ComfyUI, DiffSynth, or another
+runtime may be used where they add value, but raw workflow graphs and backend
+queues remain private adapters and may not replace the StableNew
+compiler/NJR/queue/runner/artifact/history authorities.
+
+### P5 — evidence-selected backend/model expansion
+
+Do not organize StableNew around the fashionable model of the month.
+Backend/runtime, model family, and exact model identity remain separate.
+
+When modern image or video expansion is reconsidered, compare the strongest
+current candidates using a controlled qualification matrix that includes:
+
+- keeper/output quality on representative tasks;
+- VRAM/RAM and offload behavior on supported targets;
+- cold/warm latency and throughput;
+- local/offline completeness and network dependencies;
+- license/usage constraints;
+- editing/control support and adapter/LoRA ecosystem;
+- deterministic replay/seed behavior where applicable;
+- progress/cancellation and unload/reload semantics;
+- exact model/revision provenance;
+- LAN/cloud suitability and cost.
+
+Ideogram-, Qwen-, FLUX-, Wan-, and successor families are examples of possible
+candidates, not preselected product destinations. Production integration occurs
+only if evidence beats the current pathway on useful-output efficiency or
+unlocks a material capability.
+
+## Responsibility-extraction rule
+
+Large controller/executor surfaces are real structural debt, but broad cleanup is
+not a roadmap outcome by itself. Every major post-v2.6 feature should pay down
+only the cohesive responsibility it materially touches:
+
+- backend-neutral image work extracts backend-specific execution;
+- Asset Intelligence converges fragmented resource discovery/metadata;
+- quality/Learning work extracts scoring/evidence logic from GUI/controller
+  surfaces as needed;
+- Execution Placement isolates placement/lease/capability concerns from job
+  coordination;
+- directed-motion work isolates motion-intent translation from GUI/workflow
+  authoring.
+
+Do not refactor solely for LOC reduction. If a ratcheted surface shrinks, lower
+its checked-in ceiling.
 
 ## Deferred image-backend options
 
 - **COA C — per-stage backend composition:** potentially valuable for explicit
-  chains such as Diffusers base generation followed by A1111 detail work, but it
-  requires its own design for artifact handoff, capability negotiation, replay,
-  provenance, resource lifecycle, and failure semantics.
+  cross-backend chains, but it requires its own design for artifact handoff,
+  capability negotiation, replay, provenance, resource lifecycle, and failure
+  semantics.
 - **COA D — ComfyUI-centric image execution:** ComfyUI may later be a useful
   image backend for selected model families/workflows, but it must remain behind
   StableNew-owned orchestration and may not replace the compiler, NJR, queue,
@@ -276,32 +385,36 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
   conflict reporting, and rehearsed rollback.
 - Keep required CI hermetic; real backends are separate explicit acceptance.
 - Keep MVP video to one backend and one MVP journey.
-- Do not revive the failed child runtime host or add distributed execution.
+- Do not revive the failed child runtime host during MVP recovery.
 - Do not let historical feature breadth block the defined vertical slice.
-- Do not begin PR-IMG-100 before the accepted v2.6 release baseline exists.
+- Do not begin post-v2.6 work before the accepted v2.6 release baseline exists.
 - PR-IMG-100 must preserve A1111 rather than combine backend-neutralization with
-  image-quality changes, a broad executor rewrite, or another real backend.
+  image-quality changes, broad cleanup, or another real backend.
+- Do not begin LAN/cloud execution without a new bounded architecture decision
+  for placement, lease/failure semantics, security, artifact transfer, and
+  exact capability/asset verification.
+- Do not let model popularity outrank measured useful-output efficiency.
 
-## Deferred until after MVP
+## Deferred until after MVP / later decision gates
 
-- ComfyUI/LTX and additional video backends;
-- AnimateDiff, secondary motion, multi-shot continuity, and stitching;
-- daemon, cluster, child-host, or multi-node execution;
+- per-stage image backend composition;
 - full training-product UX;
-- automated closed-loop learning decisions;
-- broad GUI or performance rewrites unrelated to measured MVP blockers;
-- per-stage image backend composition and ComfyUI image execution until their
-  own post-v2.6 decisions/acceptance contracts are approved.
+- broad GUI or performance rewrites unrelated to measured blockers;
+- automated closed-loop learning decisions beyond accepted evidence gates;
+- multi-shot continuity/stitching beyond an accepted directed-motion/video
+  contract;
+- true distributed/model-parallel inference across multiple GPUs unless a
+  separate measured use case justifies it.
 
 ## Next action
 
-PR-MVP-080 required CI and integration/documentation closeout. PR-MVP-080
-remains IN PROGRESS; the final operator journey is PASS / ACCEPTED and the work
-is ready for CI/integration closeout. Queue/history action-state and no-op cleanup is
-accepted, alongside PromptPack authorship, durable job state, image generation,
-native SVD XT, the Phase 0 runtime/bootstrap prerequisite, real portrait
-source-aware SVD geometry, and duration-preserving RIFE interpolation semantics.
+Complete queue/history action-state + no-op cleanup. PromptPack authorship,
+durable job state, image generation, native SVD XT, the Phase 0 runtime/bootstrap
+prerequisite, real portrait source-aware SVD geometry, and duration-preserving
+RIFE interpolation semantics already have single accepted product paths.
 
 After PR-MVP-080 and PR-MVP-090 are accepted and integrated, verify the exact
-post-v2.6 parent SHA and begin `PR-IMG-100 Phase A`; do not reuse the discovery
-branch SHA as an implementation parent.
+post-v2.6 parent SHA, establish the bounded P0 efficiency baseline, and then
+rewrite/authorize the first PR-IMG-100 implementation phase from that live repo
+state. Do not reuse discovery-era SHAs or Codex prompt assumptions as execution
+authority.
