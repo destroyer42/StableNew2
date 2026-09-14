@@ -1,27 +1,35 @@
 # PR-IMG-100 — Backend-Neutral Image Execution
 
-Status: APPROVED POST-v2.6 ARCHITECTURE CONTRACT
+Status: APPROVED POST-v2.6 ARCHITECTURE / ACCEPTANCE REFERENCE
 Owner: Rob
 Decision date: 2026-09-13
 Execution state: Not started; begins only after PR-MVP-080 and PR-MVP-090 are accepted and integrated.
 
+> **Implementation-authority rule:** this document preserves the approved product/architecture outcome and acceptance intent. It is **not** an executable Codex prompt or frozen file/schema plan. Before implementation, verify the exact integrated post-v2.6 branch/SHA, read current repo authorities, inspect the live implementation surfaces, reconcile all accepted predecessor work, and rewrite the bounded Codex work package from that repository state. Any old phase prompt, file list, execution-class estimate, or sequencing assumption from discovery is reference material only.
+
 ## 1. Outcome
 
-Make still-image execution backend-neutral while preserving the accepted A1111 image path unchanged and creating a clean later path for a Diffusers image backend, initially qualified against Ideogram 4.
+Make still-image execution backend-neutral while preserving the accepted A1111
+image path unchanged and creating a clean later path for whichever additional
+image runtime/model family is justified by evidence.
 
 The canonical outer path remains:
 
 `Intent -> Compiler -> immutable NJR -> JobService -> Queue/Repository -> PipelineRunner.run_njr -> Handler -> Artifacts/History`
 
-PR-IMG-100 changes only the internal still-image execution boundary below `PipelineRunner.run_njr`. It does not create a second runner, queue, persistence authority, GUI execution path, or alternate NJR.
+PR-IMG-100 changes only the internal still-image execution boundary below
+`PipelineRunner.run_njr`. It does not create a second runner, queue, persistence
+authority, GUI execution path, or alternate NJR.
 
 ## 2. Accepted architecture decision
 
 Adopt COA B: **one typed image backend per image NJR**.
 
-The selected image backend owns all still-image stages in that NJR. The first production backend remains the accepted A1111/WebUI path and must preserve current behavior. A later Diffusers backend may initially support only `txt2img`.
+The selected image backend owns all still-image stages in that NJR. The first
+production backend remains the accepted A1111/WebUI path and must preserve
+current behavior.
 
-Initial target shape:
+Conceptual target shape:
 
 ```text
 Intent
@@ -31,30 +39,39 @@ Intent
   -> SQLite Queue/Repository
   -> PipelineRunner.run_njr
   -> Image stage handler
-  -> ImageBackendRegistry
-       -> A1111WebUIImageBackend -> existing Pipeline / SDWebUIClient / WebUI
-       -> DiffusersImageBackend  -> later model-family adapter (Ideogram 4 first candidate)
-  -> ImageExecutionResult
+  -> StableNew-owned ImageBackend boundary
+       -> A1111/WebUI adapter -> existing executor/client/runtime behavior
+       -> future backend(s)   -> added only after separate qualification
+  -> normalized image execution result
   -> existing Artifact / History / Replay
 ```
 
 Backend/runtime, model family, and model identity are separate concepts:
 
-- backend/runtime examples: `a1111_webui`, `diffusers`, future `comfyui`;
-- model-family examples: `sdxl`, `ideogram4`, future `flux`, `qwen_image`;
-- model identity is backend-specific: local checkpoint name, Hugging Face model/revision, workflow model reference, or equivalent.
+- backend/runtime examples: `a1111_webui`, future `diffusers`, future `comfyui`;
+- model-family examples: SDXL, Ideogram-, Qwen-, FLUX-class or successors;
+- model identity is backend-specific: local checkpoint/hash, Hugging Face
+  model/revision, workflow model reference, or equivalent.
 
-Do not create model-named backend classes as the public StableNew architecture when several models share one runtime.
+Do not create model-named backend classes as the public StableNew architecture
+when several models share one runtime.
 
 ## 3. Deferred alternatives
 
 ### COA C — per-stage backend composition
 
-Potential future capability. It could permit chains such as Ideogram/Diffusers `txt2img` followed by an A1111 detail or upscale stage. It is explicitly out of scope for PR-IMG-100 because it requires cross-backend artifact handoff, capability negotiation, resource lifecycle coordination, replay semantics, and provenance rules.
+Potential future capability. It could permit chains such as one backend for
+base generation followed by another backend for detail/upscale. It is explicitly
+out of scope for PR-IMG-100 because it requires cross-backend artifact handoff,
+capability negotiation, resource lifecycle coordination, replay semantics, and
+provenance rules.
 
 ### COA D — ComfyUI-centric image execution
 
-Potential future backend option. ComfyUI may later be valuable for model families or workflows that benefit from it, but it must remain an execution backend behind StableNew-owned orchestration. It must not replace StableNew's compiler, NJR, queue, runner, artifact, history, replay, or cancellation authorities.
+Potential future backend option. ComfyUI may later be valuable for model
+families/workflows that benefit from it, but it must remain an execution backend
+behind StableNew-owned orchestration. It must not replace StableNew's compiler,
+NJR, queue, runner, artifact, history, replay, or cancellation authorities.
 
 ## 4. Existing authority preserved
 
@@ -69,119 +86,114 @@ PR-IMG-100 must preserve:
 - PromptPack native JSON authority;
 - existing learning consumption path;
 - current image stage order: `txt2img -> optional img2img -> optional adetailer -> optional upscale`;
-- existing A1111 `SDWebUIClient` transport;
+- existing A1111 `SDWebUIClient` transport semantics unless current repo evidence shows a narrower cohesive adapter seam;
 - model/VAE synchronization and verification;
-- A1111 payload construction and extension semantics;
+- A1111 payload/extension semantics;
 - managed-versus-external WebUI lifecycle ownership rules;
-- generation progress, operator cancellation, stall handling, recovery classification, and ambiguous dispatched-POST non-replay semantics;
+- generation progress, operator cancellation, stall handling, recovery
+  classification, and ambiguous dispatched-POST non-replay semantics;
 - exact job artifacts as thumbnail authority.
 
-Existing A1111 implementation details may be moved behind an adapter but are not to be reimplemented merely to create the abstraction.
+Existing A1111 implementation details may be moved behind an adapter but are not
+to be reimplemented merely to create the abstraction.
 
-## 5. NJR and configuration contract
+## 5. NJR and configuration intent
 
-No new top-level NJR field or NJR schema version is required solely for backend selection. `ImageWorkloadSpec.backend_options` is the authorized immutable carrier.
+The current approved intent is to use the existing workload-level
+`backend_options` carrier for immutable backend selection rather than add a new
+top-level NJR field solely for backend identity. This must be revalidated against
+the live post-v2.6 NJR before implementation.
 
-Newly compiled image work after PR-IMG-100 must persist an explicit image backend identity under the existing backend-options layer. The exact normalized shape may be chosen during Phase A, but it must be singular, typed/validated, round-trip completely, and remain backend configuration rather than GUI state.
+Required semantics remain:
 
-Required semantics:
+- newly compiled image work explicitly authorizes one image backend;
+- historical v2.6 image NJRs that predate explicit backend identity resolve
+  deterministically to A1111 through one bounded compatibility rule;
+- replay preserves authorized backend identity while creating a new NJR/job with
+  normal lineage;
+- GUI state is not backend-selection authority after compilation.
 
-```text
-backend_options.image.backend_id = a1111_webui
-```
+If live implementation evidence shows that the existing workload carrier is
+insufficient, stop for architecture review rather than silently adding a new NJR
+core field.
 
-for the existing production path.
+## 6. Minimum backend responsibilities
 
-Historical v2.6 image NJRs with no explicit image backend resolve deterministically to `a1111_webui`. This is a bounded compatibility rule for persisted pre-PR-IMG-100 records, not permission for new compilers to omit backend identity.
+The implementation must establish one StableNew-owned internal boundary with
+responsibilities equivalent to:
 
-Replay of a persisted NJR preserves the selected backend through normal NJR replacement/lineage semantics.
+- backend identity/capabilities;
+- StableNew-authorized image execution request;
+- normalized image execution result;
+- backend interface/adapter;
+- backend registry/resolver.
 
-## 6. Minimum typed image-backend contract
+Names and file placement are implementation output and must be chosen from the
+live repository. These responsibilities may not collapse back into generic
+`PipelineRunner` orchestration.
 
-PR-IMG-100 must introduce one StableNew-owned internal contract equivalent in responsibility to:
+### Capabilities
 
-- `ImageBackendCapabilities`
-- `ImageExecutionRequest`
-- `ImageExecutionResult`
-- `ImageBackendInterface`
-- `ImageBackendRegistry`
-
-Names and exact file placement may change if current repo structure provides a better cohesive home, but the responsibilities may not be collapsed back into `PipelineRunner`.
-
-### 6.1 Capabilities
-
-At minimum, capabilities must identify:
+At minimum the boundary must truthfully express:
 
 - backend ID;
 - supported image stage types;
 - whether a stage requires an input image;
-- prompt/negative-prompt support where needed for truthful validation;
-- artifact type (`image`).
+- prompt/negative-prompt support where needed for validation;
+- image artifact result type.
 
-Do not pre-design a universal feature taxonomy for every future image model. Extend capability vocabulary only when an accepted backend requires it.
+Do not pre-design a universal capability ontology for every future model. Extend
+capability vocabulary only when an accepted backend requires it.
 
-### 6.2 Request
+### Request
 
-The request contains StableNew-authorized stage work, not an A1111 payload. It should carry the minimum required set of:
+The backend receives StableNew-authorized stage work, not a GUI object and not a
+public A1111/ComfyUI payload. Backend-private API/workflow payloads are created
+inside the adapter.
 
-- backend ID;
-- stage name;
-- prompt and negative prompt as applicable;
-- normalized stage configuration;
-- output directory;
-- input image path(s) where applicable;
-- requested image name/output identity context;
-- job ID;
-- immutable backend options needed by the selected backend;
-- cancel token;
-- context/provenance metadata needed for canonical artifacts and diagnostics.
+### Result
 
-Backend-private API/workflow payloads are created inside the backend adapter.
-
-### 6.3 Result
-
-The result normalizes backend output into StableNew-owned execution facts:
-
-- backend ID;
-- stage name;
-- primary path;
-- output paths;
-- manifest path where applicable;
-- canonical artifact record;
-- backend metadata;
-- diagnostics/error context;
-- optional raw/private result retained only where current contracts require it.
-
-The runner and downstream history/replay code consume this normalized result rather than WebUI response semantics.
+Backend output is normalized into StableNew-owned execution facts sufficient for
+canonical artifacts, history, replay, diagnostics, and provenance. The generic
+runner must not depend on WebUI-specific response semantics.
 
 ## 7. Initial backend policy
 
-### 7.1 A1111/WebUI
+### A1111/WebUI
 
-`a1111_webui` is the default and only production image backend delivered by PR-IMG-100.
+`a1111_webui` is the default and only production image backend delivered by
+PR-IMG-100.
 
-It supports all currently accepted image stages:
+It must preserve support for the currently accepted image stages:
 
 - `txt2img`
 - `img2img`
 - `adetailer`
 - `upscale`
 
-The adapter should delegate to the existing executor/client implementation and preserve behavior rather than duplicate it.
+The adapter should delegate to accepted executor/client behavior rather than
+duplicate it.
 
-### 7.2 Future Diffusers
+### Future real backends
 
-`diffusers` is the planned second backend family but is not implemented by PR-IMG-100.
+PR-IMG-100 does not select or implement the second production backend.
 
-The first qualification target is Ideogram 4. Initial production support, if later accepted, may advertise only `txt2img`.
+The previous Ideogram-first follow-on assumption is superseded. Later image
+runtime/model expansion belongs to the active roadmap's evidence-selected
+qualification gate. At that future decision point, compare the strongest current
+candidates on useful-output quality, VRAM/RAM, latency, local/offline behavior,
+license, control/editing support, adapter ecosystem, determinism, cancellation,
+provenance, and LAN/cloud suitability.
 
-An NJR selecting a backend that does not support every requested image stage must fail deterministically before backend dispatch. PR-IMG-100 must not silently fall back to A1111 for unsupported stages.
+An NJR selecting a backend that does not support every requested image stage must
+fail deterministically before backend dispatch. PR-IMG-100 must not silently
+fall back to A1111 for unsupported stages.
 
 ## 8. Explicit non-goals
 
 PR-IMG-100 does not:
 
-- implement Ideogram 4 inference;
+- implement Ideogram, Qwen, FLUX, or another second real model family;
 - add a Diffusers production backend;
 - add ComfyUI still-image execution;
 - add per-stage backend selection;
@@ -189,295 +201,146 @@ PR-IMG-100 does not:
 - redesign PromptPack storage;
 - change queue/history persistence;
 - change the public runner entry;
-- redesign learning or Adapter Intelligence;
+- redesign Learning or Adapter Intelligence;
 - migrate current A1111 still-image work to ComfyUI;
 - redesign output-folder naming solely for backend neutrality;
-- broadly decompose `executor.py` for LOC reduction;
-- change A1111 generation quality/settings as part of the refactor.
+- broadly decompose `executor.py` or controllers for LOC reduction;
+- change A1111 generation quality/settings as part of the refactor;
+- implement LAN/cloud execution placement.
+
+Responsibility extraction that is necessary to put A1111-specific execution
+behind the accepted backend boundary is in scope; unrelated cleanup is not.
 
 ## 9. Acceptance contract
 
-PR-IMG-100 is accepted only when all of the following are true.
+PR-IMG-100 is accepted only when all of the following remain true after the
+live-repo implementation contract is rewritten.
 
-### 9.1 Backend identity and compilation
+### Backend identity and compilation
 
-1. Every newly compiled image NJR records an explicit image backend ID.
-2. The default/current backend ID is `a1111_webui` unless an accepted intent surface explicitly selects another registered backend.
-3. Backend selection is immutable authorized workload state and round-trips through NJR serialization/repository persistence.
-4. Historical v2.6 image NJRs lacking backend identity resolve to `a1111_webui` through one documented compatibility rule.
-5. Replay preserves backend identity and creates a new NJR/job with existing parent-lineage semantics.
+1. Every newly compiled image NJR records one explicit image backend identity.
+2. The default/current production backend remains A1111 unless an accepted
+   intent surface explicitly selects another registered backend in the future.
+3. Backend selection is immutable authorized workload state and round-trips
+   through NJR serialization/repository persistence.
+4. Historical v2.6 image NJRs lacking backend identity resolve to A1111 through
+   one documented compatibility rule.
+5. Replay preserves backend identity and creates a new NJR/job with existing
+   parent-lineage semantics.
 
-### 9.2 Routing and capability enforcement
+### Routing and capability enforcement
 
 6. `PipelineRunner.run_njr` remains the only public production runner entry.
-7. Image execution resolves a backend through one registry/resolver owned below the runner contract.
-8. The selected backend is resolved by backend ID; model names do not select public backend classes.
-9. Unsupported backend/stage combinations fail before dispatch with an actionable deterministic error.
+7. Image execution resolves its backend through one StableNew-owned boundary.
+8. Backend selection is by backend identity; model names do not select public
+   backend classes.
+9. Unsupported backend/stage combinations fail before dispatch with an
+   actionable deterministic error.
 10. No automatic per-stage fallback to A1111 exists.
 11. No backend creates queue/history state or another executable job model.
 
-### 9.3 A1111 preservation
+### A1111 preservation
 
-12. Current A1111 `txt2img`, `img2img`, `adetailer`, and `upscale` execute through the new image-backend boundary.
-13. Existing A1111 request construction remains backend-private; generic runner code no longer treats a WebUI payload as the image execution contract.
-14. Existing checkpoint/model synchronization and wrong/unverified-model failure behavior remain unchanged.
-15. Existing VAE behavior remains unchanged.
-16. Managed A1111 lifecycle actions remain limited to the process launched/tracked by `WebUIProcessManager`.
+12. Current A1111 `txt2img`, `img2img`, `adetailer`, and `upscale` execute through
+    the new image-backend boundary.
+13. Existing A1111 request construction remains backend-private; generic runner
+    code no longer treats a WebUI payload as the image execution contract.
+14. Existing checkpoint/model synchronization and wrong/unverified-model failure
+    behavior remain accepted.
+15. Existing VAE behavior remains accepted unless a separately authorized VAE
+    change has already landed before this PR, in which case preserve that newer
+    live contract.
+16. Managed A1111 lifecycle actions remain limited to the process
+    launched/tracked by `WebUIProcessManager` or its accepted successor.
 17. External A1111 is never adopted, killed, or restarted automatically.
 18. A generation POST whose outcome is ambiguous is never automatically replayed.
-19. Existing cancellation/progress/stall/recovery behavior remains accepted through the adapter.
-20. Existing image artifact/history/replay results remain product-equivalent for the same authorized A1111 NJR.
+19. Existing cancellation/progress/stall/recovery behavior remains accepted
+    through the adapter.
+20. Existing image artifact/history/replay results remain product-equivalent for
+    the same authorized A1111 workload.
 
-### 9.4 Backend-neutral proof
+### Backend-neutral proof
 
-21. A deterministic fake/non-WebUI image backend can be injected or registered without changing the queue, repository, public runner, or artifact/history authorities.
-22. A `txt2img` NJR selecting that fake backend traverses the normal `JobService -> SQLite -> PipelineRunner.run_njr -> backend -> artifact/history` path without calling WebUI.
-23. A fake backend advertising only `txt2img` is rejected before execution when the NJR requests `txt2img -> adetailer`.
-24. The fake-backend proof does not add a test-only production runner or bypass persistence.
+21. A deterministic fake/non-WebUI image backend can be injected/registered
+    without changing queue, repository, public runner, or artifact/history
+    authorities.
+22. A txt2img workload selecting that fake backend traverses the normal
+    JobService -> SQLite -> PipelineRunner.run_njr -> backend -> artifact/history
+    path without calling WebUI.
+23. A fake backend advertising only txt2img is rejected before dispatch when the
+    workload requests an unsupported image stage chain.
+24. The fake-backend proof does not add a test-only production runner or bypass
+    persistence.
 
-### 9.5 Architecture and controller discipline
+### Architecture/controller discipline
 
-25. No `if ideogram`, `if flux`, `if qwen`, or equivalent future-model dispatch is added to generic `PipelineRunner`.
-26. No second image queue, history, compiler, runner, cancellation authority, or process authority is introduced.
-27. GUI/controllers continue to express intent and projections only; they do not create backend payloads.
-28. If a ratcheted controller is materially touched, the change does not add a new coherent responsibility inline and its ceiling is lowered if the surface shrinks.
-29. Existing video backend authority remains independent; PR-IMG-100 does not merge video and image registries into a premature universal runtime abstraction.
+25. No model-family dispatch such as `if ideogram`, `if flux`, or `if qwen` is
+    added to generic `PipelineRunner` orchestration.
+26. No second image queue, history, compiler, runner, cancellation authority, or
+    process authority is introduced.
+27. GUI/controllers continue to express intent/projections only; they do not
+    create backend payloads.
+28. If a ratcheted controller is materially touched, no new coherent
+    responsibility is added inline and its ceiling is lowered if the surface
+    shrinks.
+29. Existing video backend authority remains independent; PR-IMG-100 does not
+    create a premature universal image/video runtime registry.
 
-## 10. Required deterministic validation
+## 10. Required validation intent
 
-Focused validation must cover at least:
+The eventual implementation contract should cover, at minimum:
 
-- image backend option normalization/defaulting;
-- NJR serialization round-trip with explicit image backend;
-- historical v2.6 no-backend compatibility to A1111;
-- replay backend preservation;
+- backend-option normalization/defaulting;
+- NJR serialization/replay preservation;
+- historical no-backend compatibility to A1111;
 - registry lookup and unknown-backend failure;
-- supported-stage capability validation;
-- fake backend queue-first golden path;
-- fake backend unsupported-stage rejection;
-- A1111 `txt2img` adapter parity;
-- A1111 `img2img` adapter parity;
-- A1111 ADetailer adapter parity;
-- A1111 upscale adapter parity;
-- cancellation propagation through adapter;
+- capability validation and unsupported-stage rejection;
+- fake-backend queue-first golden path;
+- A1111 parity for all accepted image stages;
+- cancellation propagation through the adapter;
 - canonical artifact/result normalization;
-- existing affected image golden-path tests.
-
-Run focused tests first. Then run `python tools/ci/run_pr_gate.py` once when practical. Missing local Ruff/mypy/etc. is reported as a tooling blocker rather than repaired inside this PR. Required GitHub Python 3.11/3.12 remains the canonical integration verdict.
-
-A final real-A1111 acceptance is required after the adapter cutover because the refactor touches the accepted production execution boundary. Reuse prior expensive runtime evidence only for behavior whose relevant source did not change.
-
-No Ideogram, ComfyUI, or other second real image backend is required for PR-IMG-100 acceptance.
-
-## 11. Work estimate
-
-Expected size: **medium architectural refactor**, not a rewrite.
-
-Discovery estimate:
-
-- approximately 3–5 new small image-backend contract/registry/adapter modules;
-- approximately 8–15 existing production/test/documentation files materially touched across the full PR;
-- approximately 90% of StableNew authorities and behavior preserved;
-- approximately 8% materially refactored around still-image execution/config routing;
-- approximately 2% made obsolete, chiefly generic-runner assumptions that image execution inherently means A1111/WebUI/SDXL.
-
-These percentages are architecture-surface estimates, not LOC targets or acceptance metrics.
-
-## 12. Phased implementation sequence
-
-The PR is one acceptance contract, but Codex executes one bounded phase per invocation unless explicitly authorized otherwise.
-
-### Phase A — Contract, backend identity, deterministic routing proof
-
-**Execution class/model:** Architectural — GPT-5.6 Sol, Medium. Use Local/Desktop if local worktree state matters; Cloud is acceptable only from the exact pushed clean post-v2.6 parent because this phase is source/test/docs-only.
-
-**Outcome:** Introduce the typed image backend contract and registry/resolver, persist explicit A1111 backend identity in newly compiled image NJRs, provide historical no-backend compatibility, and prove routing with a fake backend. Do not cut production A1111 execution over yet.
-
-**Likely starting surfaces:**
-
-- `src/pipeline/njr_core_v26.py`
-- `src/pipeline/config_contract_v26.py`
-- image NJR compilers/builders identified through targeted references to `ImageWorkloadSpec`
-- `src/pipeline/pipeline_runner.py`
-- `src/controller/ports/runtime_ports.py`
-- `src/controller/ports/default_runtime_ports.py`
-- new cohesive image-backend contract/registry home chosen from current repository structure
-- focused pipeline/config/replay tests
-
-**Phase A acceptance:** acceptance items 1–11 and 21–24 are deterministically proven, while current A1111 production dispatch is unchanged.
-
-**Stop:** checkpoint after deterministic fake-backend proof and focused validation. Do not begin A1111 cutover.
-
-### Phase B — A1111 adapter cutover
-
-**Execution class/model:** Architectural — GPT-5.6 Sol, Medium. Prefer Local/Desktop because A1111 behavior and local runtime contracts are directly affected even though deterministic tests come first.
-
-**Outcome:** Route all four accepted image stages through `a1111_webui` behind the typed backend interface, preserving current A1111 implementation and moving A1111-specific preparation out of generic runner orchestration where required.
-
-**Likely starting surfaces:**
-
-- image backend contract/registry from Phase A
-- `src/pipeline/pipeline_runner.py`
-- `src/pipeline/executor.py`
-- `src/pipeline/payload_builder.py`
-- `src/api/client.py` only if adapter integration requires it; do not redesign transport
-- A1111-focused pipeline/executor tests and helpers
-
-**Phase B acceptance:** items 12–20 and 25–29 are deterministically proven. All four stages pass adapter-parity tests. Existing WebUI lifecycle/recovery authorities remain unchanged.
-
-**Stop:** checkpoint after deterministic parity/cancellation validation. Do not perform unrelated executor cleanup, add another backend, or begin real-backend closeout without review.
-
-### Phase C — A1111 real acceptance, CI, documentation closeout
-
-**Execution class/model:** GPT-5.6 Luna High for bounded integration/docs once Phase B architecture is accepted; escalate only if real acceptance exposes cross-boundary design defects. Use Local/Desktop.
-
-**Outcome:** Establish that the accepted A1111 operator path remains product-equivalent through the new backend boundary, finish required CI, and update canonical documentation from target to implemented truth.
-
-**Required evidence:**
-
-- exact Phase B parent SHA/diff reviewed;
-- focused tests remain green;
-- `python tools/ci/run_pr_gate.py` once where practical;
-- required GitHub Python 3.11/3.12 integration verdict;
-- one real A1111 queue-first image golden path through `PipelineRunner.run_njr` and the new A1111 backend adapter;
-- cancellation/ownership/ambiguous-POST evidence repeated only where changed source invalidates prior proof;
-- artifact, history, and replay agreement;
-- documentation impact gate completed.
-
-**Stop:** PR-IMG-100 acceptance. Do not begin Diffusers/Ideogram qualification.
-
-## 13. Codex prompt template — Phase A
-
-Before use, replace the exact-start placeholders with the verified integrated post-v2.6 branch and SHA. Do not reuse the discovery SHA.
-
-```text
-Title: PR-IMG-100 Phase A — Image Backend Contract + Deterministic Routing
-
-Execution class/model: Architectural — GPT-5.6 Sol, Medium.
-Execution environment: Cloud only if the exact parent below is pushed and clean; otherwise Local/Desktop.
-
-Exact start branch: <VERIFY_POST-v2.6_BRANCH>
-Exact start SHA: <VERIFY_POST-v2.6_SHA>
-
-Outcome:
-Introduce the StableNew-owned typed still-image backend boundary without changing production A1111 execution yet. Newly compiled image NJRs must explicitly authorize backend `a1111_webui`; historical v2.6 image NJRs with no image backend must deterministically resolve to A1111. Prove the boundary with a fake txt2img-only backend through the canonical queue/repository/runner/artifact path.
-
-Read first:
-1. AGENTS.md
-2. STATUS.md
-3. the Image backend-neutralization row in docs/CODEX_MAP.md
-4. docs/ARCHITECTURE_v2.6.md section 7 and relevant gap/target text
-5. docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md
-6. only the relevant testing section
-
-Evidence/root-cause hypothesis:
-Image NJR already carries immutable backend_options and GUI/config layering already exposes backend_options, but image compilation does not establish backend identity and PipelineRunner still embeds A1111/WebUI image semantics. Video proves typed backend adapters fit the architecture. The smallest coherent fix is one image backend per NJR, not per-stage composition.
-
-Architecture invariants:
-- Intent -> Compiler -> immutable NJR -> JobService -> SQLite Queue/Repository -> PipelineRunner.run_njr -> Handler -> Artifacts/History.
-- PipelineRunner.run_njr remains the only public production runner entry.
-- No new queue/history/compiler/runner/cancellation/process authority.
-- GUI/controllers never build backend payloads.
-- A1111 production execution behavior is unchanged in Phase A.
-- Do not add model-family dispatch to generic runner.
-- One backend owns all image stages in an NJR.
-- No implicit cross-backend fallback.
-- Preserve video backend authority separately.
-
-Bounded scope:
-- typed image capabilities/request/result/interface/registry-resolver;
-- normalized backend_options.image backend identity;
-- centralized defaulting for newly compiled image NJRs;
-- bounded compatibility rule for historical v2.6 image NJRs lacking backend identity;
-- replay preservation;
-- fake backend injection/registration and deterministic golden-path proof;
-- capability rejection for unsupported stage chain.
-Do NOT cut A1111 execution over to the adapter in this phase.
-
-Validation:
-Run focused backend-option/NJR/replay/registry/fake-backend tests first. Prove fake txt2img reaches JobService -> SQLite -> PipelineRunner.run_njr -> fake backend -> canonical artifact/history without WebUI. Prove fake txt2img-only backend rejects txt2img+adetailer before dispatch. Run the PR gate once if practical; required GitHub Python 3.11/3.12 remains canonical.
-
-Work budget / stop conditions:
-One focused discovery pass, one implementation pass, one repair pass, one final verification. Stop after Phase A acceptance is true. Stop if more than two materially different failure classes appear, scope expands into A1111 cutover/Ideogram/ComfyUI/per-stage composition, or a higher execution class is required.
-
-Completion report:
-Return exact branch/SHA, files changed, backend-options shape chosen, compatibility rule, deterministic tests and results, PR-gate/CI state, architecture/controller effect, known blockers/debt, and whether Phase A acceptance is fully true. Do not begin Phase B.
-```
-
-## 14. Codex prompt template — Phase B
-
-Fill the exact start from the accepted Phase A checkpoint.
-
-```text
-Title: PR-IMG-100 Phase B — A1111 Image Backend Adapter Cutover
-
-Execution class/model: Architectural — GPT-5.6 Sol, Medium.
-Execution environment: Local/Desktop preferred.
-
-Exact start branch: <ACCEPTED_PHASE_A_BRANCH>
-Exact start SHA: <ACCEPTED_PHASE_A_SHA>
-
-Outcome:
-Route the four accepted still-image stages through the Phase A image-backend contract using `a1111_webui`, while preserving current accepted A1111 behavior. Generic PipelineRunner orchestration must stop treating WebUI payloads/model-VAE operations as the universal image contract. Reuse the existing executor/client safety logic rather than rewriting it.
-
-Read first:
-AGENTS.md, STATUS.md, Image row in CODEX_MAP, architecture section 7, PR-IMG-100 contract, then inspect only the Phase A backend modules plus current PipelineRunner/executor/payload-builder/A1111 tests needed for the cutover.
-
-Architecture invariants:
-Preserve every PR-IMG-100 invariant, especially queue-first NJR authority, one public runner, one backend per image NJR, managed/external WebUI ownership, wrong-model pre-generation failure, no ambiguous POST replay, and no second cancellation/process authority.
-
-Bounded scope:
-- implement A1111 backend adapter around existing image executor behavior;
-- route txt2img/img2img/adetailer/upscale through registry-selected A1111 adapter;
-- move only A1111-specific preparation that must leave generic runner code;
-- normalize results through ImageExecutionResult/canonical artifacts;
-- update focused tests/helpers for parity and cancellation.
-Do NOT implement Diffusers/Ideogram/ComfyUI, per-stage backend selection, broad executor cleanup, output-layout redesign, learning redesign, or unrelated controller refactors.
-
-Validation:
-Prove deterministic parity for all four stages, model/VAE propagation, cancellation, result/artifact normalization, and unsupported-stage behavior. Reuse existing safety evidence only where relevant source is unchanged. Run PR gate once if practical; required GitHub Python 3.11/3.12 is canonical.
-
-Work budget / stop conditions:
-One discovery pass, implementation pass, repair pass, final verification. Stop after deterministic Phase B acceptance. Stop after two materially different failure classes or if cutover requires changing queue/repository/public runner/process ownership semantics.
-
-Completion report:
-Return exact branch/SHA, diff summary, what moved behind A1111 adapter vs remained unchanged, focused tests, PR-gate/CI state, any accepted evidence invalidated by source changes, controller/architecture effect, blockers/debt, and whether Phase B acceptance is fully true. Do not begin Phase C.
-```
-
-## 15. Codex prompt template — Phase C
-
-Fill the exact start from the accepted Phase B checkpoint.
-
-```text
-Title: PR-IMG-100 Phase C — A1111 Acceptance + Closeout
-
-Execution class/model: GPT-5.6 Luna High for bounded integration/docs; escalate to Sol Medium only if acceptance reveals an unresolved architecture defect.
-Execution environment: Local/Desktop.
-
-Exact start branch: <ACCEPTED_PHASE_B_BRANCH>
-Exact start SHA: <ACCEPTED_PHASE_B_SHA>
-
-Outcome:
-Prove the accepted A1111 still-image product journey remains correct through the new backend-neutral boundary, obtain required integration verdicts, and close documentation. Do not add another backend.
-
-Acceptance:
-Use the full PR-IMG-100 acceptance contract. At minimum, run one real queue-first A1111 image journey through JobService/SQLite/PipelineRunner/new A1111 backend, verify artifact/history/replay agreement, and repeat cancellation/ownership/ambiguous-request evidence only where changed source invalidated prior proof.
-
-Validation:
-Focused tests first; one PR gate where practical; required GitHub Python 3.11/3.12; bounded real A1111 acceptance. Do not rerun unaffected GPU/video/SVD evidence.
-
-Documentation impact gate:
-Update STATUS, architecture gap/implemented state, roadmap PR-IMG-100 status, CODEX_MAP concrete image-backend paths, and testing docs only if validation policy changed. Do not narrate commits or update unrelated authorities.
-
-Stop:
-When PR-IMG-100 acceptance is true. Do not begin PR-IMG-110 or any Diffusers/Ideogram work.
-
-Completion report:
-Exact final branch/SHA, acceptance verdict by contract section, focused/local/CI/real-backend evidence, architecture/controller effect, remaining debt, docs changed, and recommended next decision. No next-phase implementation.
-```
-
-## 16. Next decision after PR-IMG-100
-
-PR-IMG-110 should be a separate **Diffusers / Ideogram 4 runtime qualification**, not production integration. It should qualify model access/license, exact Diffusers version floor, local cache policy, VRAM/RAM/offload behavior on target hardware, 1024-class viability, latency, seed behavior, progress/cancellation, unload/reload, and coexistence with A1111/SVD GPU lifecycle.
-
-Production Diffusers/Ideogram support requires a separate owner acceptance decision after qualification evidence.
+- affected image golden-path regressions;
+- one bounded real A1111 acceptance after the adapter cutover because production
+  image execution boundaries changed.
+
+Run focused tests first, then the repository gate once when appropriate. Required
+GitHub Python 3.11/3.12 remains the canonical integration verdict unless the
+live repo changes that policy before implementation.
+
+No second real backend is required for PR-IMG-100 acceptance.
+
+## 11. Implementation discovery gate
+
+Do **not** execute a discovery-era Phase A/B/C prompt from this document or from
+chat history.
+
+At the post-v2.6 decision point:
+
+1. verify exact branch/SHA/worktree and current repo authorities;
+2. establish/review the bounded useful-output-efficiency baseline required by the
+   active roadmap;
+3. inspect the live NJR/backend-options/image compiler/runner/executor/runtime
+   surfaces and current controller ratchets;
+4. identify what 080/090 or intervening work changed;
+5. rewrite the smallest coherent implementation package(s) and validation from
+   current truth;
+6. preserve already-green evidence when relevant source is unchanged;
+7. stop for owner review if live evidence requires per-stage backend composition,
+   a new NJR core field, a new lifecycle authority, or another material
+   architecture change.
+
+The previous estimated three-phase shape—contract/routing proof, A1111 adapter
+cutover, then real acceptance/closeout—remains useful planning context only. It
+may collapse, split, or change if the post-v2.6 repository makes another package
+shape safer or cheaper.
+
+## 12. Next decision after PR-IMG-100
+
+Do not automatically proceed to an Ideogram/Diffusers production path.
+
+The active roadmap next prioritizes **Asset Intelligence + Quality Efficiency**
+so StableNew can reduce bad/unsupported generations, establish exact asset
+identity, support deterministic VAE/compatibility policy, and build controlled
+quality evidence. After that come capability-aware Execution Placement and
+Directed Motion Video. Modern image backend/model expansion is an evidence-
+selected later decision gate.
