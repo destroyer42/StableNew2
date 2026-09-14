@@ -61,8 +61,30 @@ The full approved acceptance contract and phased Codex prompts are in
 Accepted 080 work includes source-aware SVD target selection, readiness
 projection/UI, truthful SVD preset state, explicit SVD geometry enforcement,
 HARDEN-009 runtime timeout/watchdog corrections, canonical txt2img cancellation
-deterministic proof, and a real A1111 operator-cancellation PASS. R1D managed /
-external WebUI stall policy is integrated on the active PR-MVP-080 branch.
+deterministic proof, a real A1111 operator-cancellation PASS, and the
+cancellation/result-publication race repair at
+`d2909e752faaa34f20a49fccc9865a8412c21b15`. R1D managed / external WebUI stall
+policy is integrated on the active PR-MVP-080 branch.
+
+The cancellation repair keeps terminal result publication behind durable
+`RUNNING` ownership. SQLite remains the lifecycle and result authority; a
+cancellation or return-to-queue decision that wins before late backend
+publication prevents successful result data, artifact references, and
+`final_output` checkpoints from being promoted. Normal success, return-to-queue,
+and replay lineage remain unchanged. No lifecycle, schema, architecture, or
+generic image-output cleanup authority changed. Bytes already written by a
+cancelled backend may remain as non-authoritative residue when safe bounded
+cleanup is unavailable.
+
+Repair-SHA validation recorded 31 focused queue/repository tests passed and 10
+cancellation/replay tests passed. An additional adjacent batch had 27 passed
+with 14 unrelated legacy fixture/model-constructor failures. Ruff remained at
+the existing non-increasing baseline and the changed test was clean; the
+controller ratchet was not applicable. One PR-gate attempt was blocked because
+the gate environment could not find local `mypy`. No real A1111 cancellation
+rerun was performed because the existing external API was unreachable and was
+correctly not launched, adopted, or restarted. No GitHub Actions run exists for
+this exact repair SHA, so no Python 3.11/3.12 CI-green claim is made for it.
 
 R1B real-A1111 evidence used WebUI v1.10.1. Operator cancellation during active
 sampling worked with one generation POST and one interrupt; SQLite recorded
@@ -221,14 +243,25 @@ commit `b33d028473f905747ddc19ae394526f5e6531fe8`.
 
 ## Remaining sequence
 
-1. Complete final PR-MVP-080 operator journey / operator-facing verification.
-2. Complete required CI and integration/documentation closeout for PR-MVP-080.
-3. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
-4. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
+The first final PR-MVP-080 operator journey remains **HOLD**, not PASS. It
+accepted queue-first image execution, manual dispatch with Auto-run OFF, replay
+identity/parent lineage, and the cancellation repair above, but it also exposed
+a separate shutdown persistence-order defect: shutdown closes the repository
+before `_save_queue_state()` attempts `set_setting()` on the closed SQLite
+connection.
+
+1. Repair shutdown persistence ordering as the next bounded phase.
+2. Repeat the bounded operator-facing journey and complete still-unobserved
+   history/handoff/UI checks where practical.
+3. Complete required GitHub CI and integration/documentation closeout for
+   PR-MVP-080.
+4. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
+5. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
    exact integrated post-v2.6 parent.
 
-Next action: final PR-MVP-080 operator journey + required CI/integration
-closeout.
+Next action: **PR-MVP-080 shutdown persistence-order repair**.
+
+PR-MVP-080 remains **IN PROGRESS** and is not ready for CI/integration closeout.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is complete and accepted, pulled forward only to unblock PR-MVP-080; the

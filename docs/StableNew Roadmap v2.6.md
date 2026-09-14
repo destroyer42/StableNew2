@@ -154,8 +154,22 @@ outcome. Remaining work is:
   Send Job remains available with Auto-run OFF when safely dispatchable; stale,
   direct, keyboard, and context-menu paths cannot bypass the predicates; and
   false Remove/Clear success is not reported;
+- accepted repair at `d2909e752faaa34f20a49fccc9865a8412c21b15`: terminal result
+  publication requires durable `RUNNING` ownership, so accepted cancellation or
+  return-to-queue decisions cannot acquire late successful result data, artifact
+  references, or `final_output` checkpoints; normal success, replay lineage,
+  lifecycle/schema, and architecture remain unchanged; physical cancelled-job
+  bytes may remain as non-authoritative residue when no safe generic cleanup
+  authority exists;
 - final operator-facing journey verification, documentation consistency,
   required CI, and integration.
+
+The first final operator journey is **HOLD**, not PASS. Queue-first image
+execution, manual dispatch with Auto-run OFF, replay identity/parent lineage,
+and the cancellation repair were accepted. The journey also exposed a separate
+shutdown persistence-order defect: shutdown closes the repository before
+`_save_queue_state()` attempts `set_setting()` on the closed SQLite connection.
+That defect is the next bounded PR-MVP-080 phase.
 
 This is workflow polish, not a GUI rewrite.
 
@@ -281,11 +295,12 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-Complete the final PR-MVP-080 operator journey and required CI/integration
-closeout. Queue/history action-state and no-op cleanup is accepted, alongside
-PromptPack authorship, durable job state, image generation, native SVD XT, the
-Phase 0 runtime/bootstrap prerequisite, real portrait source-aware SVD geometry,
-and duration-preserving RIFE interpolation semantics.
+PR-MVP-080 shutdown persistence-order repair. PR-MVP-080 remains IN PROGRESS;
+the first final operator journey is HOLD and the work is not ready for
+CI/integration closeout. Queue/history action-state and no-op cleanup is
+accepted, alongside PromptPack authorship, durable job state, image generation,
+native SVD XT, the Phase 0 runtime/bootstrap prerequisite, real portrait
+source-aware SVD geometry, and duration-preserving RIFE interpolation semantics.
 
 After PR-MVP-080 and PR-MVP-090 are accepted and integrated, verify the exact
 post-v2.6 parent SHA and begin `PR-IMG-100 Phase A`; do not reuse the discovery
