@@ -37,24 +37,39 @@ required before the release baseline can move.
 
 ## Approved post-v2.6 direction
 
-After PR-MVP-080 and PR-MVP-090 are accepted and integrated, the first approved
-post-v2.6 architecture PR is `PR-IMG-100 — Backend-Neutral Image Execution`.
-The accepted course of action is **one typed image backend per image NJR**.
-A1111/WebUI remains the default/current production image backend and its accepted
-behavior must be preserved behind the new boundary. Newly compiled image NJRs
-will explicitly persist image backend identity through the existing immutable
-`backend_options` workload layer; historical v2.6 image NJRs that lack backend
-identity will resolve deterministically to A1111 through one bounded compatibility
-rule.
+After PR-MVP-080 and PR-MVP-090 are accepted and integrated, first establish a
+bounded post-v2.6 useful-output-efficiency baseline, then begin
+`PR-IMG-100 — Backend-Neutral Image Execution` from the exact integrated
+post-v2.6 branch/SHA. The accepted image architecture remains **one typed image
+backend per image NJR**. A1111/WebUI remains the default/current production
+image backend and its accepted behavior must be preserved behind the new
+boundary. Newly compiled image NJRs will explicitly persist image backend
+identity through the existing immutable `backend_options` workload layer;
+historical v2.6 image NJRs that lack backend identity resolve deterministically
+to A1111 through one bounded compatibility rule.
 
-`PR-IMG-100` does not implement Ideogram, Diffusers image inference, ComfyUI
-still-image execution, or per-stage backend composition. A later Diffusers
-backend may be qualified against Ideogram 4 after PR-IMG-100 is accepted.
+`PR-IMG-100` does not implement a second real image backend, ComfyUI still-image
+execution, or per-stage backend composition. After PR-IMG-100, the accepted
+value sequence is Asset Intelligence + Quality Efficiency, capability-aware
+Execution Placement v1, Directed Motion Video, then evidence-selected image/
+video backend and model expansion. The earlier fixed Ideogram-first
+`PR-IMG-110 -> PR-IMG-120 -> PR-IMG-130` chain is superseded before
+implementation. Ideogram, Qwen, FLUX, Wan, or successor families remain
+qualification candidates only; exact model/runtime choice is evidence-gated and
+must be re-evaluated when that decision point is reached.
+
+Large controller/executor debt is addressed through responsibility extraction
+inside accepted product work, not through a broad cleanup campaign. Asset
+Intelligence discovery plans and the phase/Codex-prompt-like material in them
+remain non-authoritative reference material. Likewise, any phased Codex prompt
+examples in the PR-IMG-100 architecture document must be rewritten from the
+live post-v2.6 repository before execution.
+
 Per-stage backend composition (COA C) and ComfyUI-centric image execution (COA D)
 remain possible future options, but neither may replace StableNew's compiler,
-NJR, queue, runner, artifact, history, replay, cancellation, or process authorities.
-The full approved acceptance contract and phased Codex prompts are in
-`docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`.
+NJR, queue, runner, artifact, history, replay, cancellation, or process
+authorities. The active roadmap owns post-v2.6 sequencing; the Product Owner
+Context & Decision Journal preserves the durable rationale and revisit triggers.
 
 ## Accepted PR-MVP-080 work
 
@@ -201,8 +216,9 @@ commit `b33d028473f905747ddc19ae394526f5e6531fe8`.
 1. Complete queue/history action-state + no-op cleanup.
 2. Finish PR-MVP-080 operator journey/docs/required CI/integration.
 3. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
-4. After v2.6 release acceptance, begin PR-IMG-100 Phase A from the exact
-   integrated post-v2.6 branch/SHA.
+4. After v2.6 release acceptance, establish the bounded post-v2.6 efficiency
+   baseline, then rewrite/authorize PR-IMG-100 from the exact integrated
+   post-v2.6 branch/SHA.
 
 Next action: queue/history action-state + no-op cleanup.
 
