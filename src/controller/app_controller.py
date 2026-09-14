@@ -5040,6 +5040,14 @@ class AppController:
             logger.info("[controller] Step 5/8: Job service shutdown complete")
         except Exception:
             logger.exception("Error shutting down job service")
+
+        # Persist the final queue snapshot after activity quiesces, before repository close.
+        try:
+            logger.info("[controller] Step 5.25/8: Saving queue state...")
+            self._save_queue_state()
+            logger.info("[controller] Step 5.25/8: Queue state saved")
+        except Exception:
+            logger.exception("Error saving queue state during shutdown")
         
         # PR-SHUTDOWN-001: Call enhanced shutdown() for watchdog and thread cleanup
         try:
@@ -5063,14 +5071,6 @@ class AppController:
             logger.info("[controller] Step 7/8: Worker thread joined")
         except Exception:
             logger.exception("Error waiting for worker thread during shutdown")
-
-        # PR-PERSIST-FIX: Ensure queue state is saved before shutdown completes
-        try:
-            logger.info("[controller] Step 7.5/8: Saving queue state...")
-            self._save_queue_state()
-            logger.info("[controller] Step 7.5/8: Queue state saved")
-        except Exception:
-            logger.exception("Error saving queue state during shutdown")
 
         logger.info("[controller] Step 8/8: Closing API clients and finalizing shutdown...")
 

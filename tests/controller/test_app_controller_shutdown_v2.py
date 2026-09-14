@@ -1,16 +1,22 @@
 from __future__ import annotations
 
-import pytest
+from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
+from src.queue.job_repository import JobRepository
 
 
 class FakeJobService:
-    def __init__(self) -> None:
+    def __init__(self, history_store=None) -> None:
         self.cancel_calls = 0
-        self.history_store = type("Store", (), {"list_jobs": lambda self, *args, **kwargs: []})()
+        self.stop_calls = 0
+        self.history_store = history_store or type(
+            "Store", (), {"list_jobs": lambda self, *args, **kwargs: []}
+        )()
 
     def register_callback(self, *args, **kwargs):
         return None
@@ -18,6 +24,31 @@ class FakeJobService:
     def cancel_current(self) -> None:
         self.cancel_calls += 1
         return None
+
+    def stop(self) -> None:
+        self.stop_calls += 1
+
+
+class RecordingJobRepository(JobRepository):
+    def __init__(self, path: Path) -> None:
+        super().__init__(path)
+        self.close_calls = 0
+        self.post_close_write_attempts = 0
+        self.events: list[str] = []
+        self._closed_for_test = False
+
+    def set_setting(self, key: str, value: object) -> None:
+        if self._closed_for_test:
+            self.post_close_write_attempts += 1
+            raise AssertionError(f"post-close setting write: {key}")
+        self.events.append(f"set_setting:{key}")
+        super().set_setting(key, value)
+
+    def close(self) -> None:
+        self.close_calls += 1
+        self.events.append("close")
+        self._closed_for_test = True
+        super().close()
 
 
 class FakeWebUIManager:
@@ -38,8 +69,8 @@ class FakeLearningController:
 
 
 @pytest.fixture
-def controller() -> AppController:
-    job_service = FakeJobService()
+def controller(tmp_path: Path) -> AppController:
+    job_service = FakeJobService(history_store=JobRepository(tmp_path / "jobs.sqlite3"))
     webui = FakeWebUIManager()
     controller = AppController(
         None, threaded=False, job_service=job_service, webui_process_manager=webui
@@ -118,3 +149,44 @@ def test_shutdown_webui_uses_global_manager_fallback(controller: AppController) 
 
     assert controller.webui_process_manager is fallback
     assert fallback.stop_calls == 1
+
+
+def test_shutdown_persists_final_queue_state_before_repository_close(tmp_path: Path) -> None:
+    path = tmp_path / "jobs.sqlite3"
+    repository = RecordingJobRepository(path)
+    service = FakeJobService(history_store=repository)
+    controller = AppController(None, threaded=False, job_service=service)
+    controller.app_state = AppStateV2()
+    job_execution = controller.pipeline_controller._job_controller
+
+    job_execution.set_auto_run_enabled(False)
+    job_execution.set_queue_paused(True)
+    repository.set_setting("auto_run_enabled", True)
+    repository.set_setting("queue_paused", False)
+    repository.events.clear()
+    persist_calls = 0
+    original_persist = job_execution.persist_queue_state
+
+    def record_persist() -> None:
+        nonlocal persist_calls
+        persist_calls += 1
+        original_persist()
+
+    job_execution.persist_queue_state = record_persist  # type: ignore[method-assign]
+
+    controller.shutdown_app("queue-persistence-order")
+    controller.shutdown_app("queue-persistence-order-repeat")
+
+    assert persist_calls == 1
+    assert repository.close_calls == 1
+    assert repository.post_close_write_attempts == 0
+    assert repository.events[-1] == "close"
+    assert repository.events.index("set_setting:auto_run_enabled") < repository.events.index(
+        "close"
+    )
+    assert repository.events.index("set_setting:queue_paused") < repository.events.index("close")
+    assert service.stop_calls == 1
+
+    with JobRepository(path) as reopened:
+        assert reopened.get_setting("auto_run_enabled") is False
+        assert reopened.get_setting("queue_paused") is True

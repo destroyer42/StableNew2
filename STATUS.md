@@ -245,21 +245,22 @@ commit `b33d028473f905747ddc19ae394526f5e6531fe8`.
 
 The first final PR-MVP-080 operator journey remains **HOLD**, not PASS. It
 accepted queue-first image execution, manual dispatch with Auto-run OFF, replay
-identity/parent lineage, and the cancellation repair above, but it also exposed
-a separate shutdown persistence-order defect: shutdown closes the repository
-before `_save_queue_state()` attempts `set_setting()` on the closed SQLite
-connection.
+identity/parent lineage, and the cancellation repair above. Its separate
+shutdown persistence-order defect is repaired: after `JobService` quiesces,
+the final queue control snapshot is persisted before enhanced shutdown closes
+the shared SQLite repository. Focused SQLite-backed coverage proves final
+`auto_run_enabled` and `queue_paused` values survive close/reopen, no setting
+write occurs after close, and repeated shutdown is harmless.
 
-1. Repair shutdown persistence ordering as the next bounded phase.
-2. Repeat the bounded operator-facing journey and complete still-unobserved
+1. Repeat the bounded operator-facing journey and complete still-unobserved
    history/handoff/UI checks where practical.
-3. Complete required GitHub CI and integration/documentation closeout for
+2. Complete required GitHub CI and integration/documentation closeout for
    PR-MVP-080.
-4. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
-5. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
+3. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
+4. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
    exact integrated post-v2.6 parent.
 
-Next action: **PR-MVP-080 shutdown persistence-order repair**.
+Next action: **PR-MVP-080 repeat bounded operator-facing journey**.
 
 PR-MVP-080 remains **IN PROGRESS** and is not ready for CI/integration closeout.
 

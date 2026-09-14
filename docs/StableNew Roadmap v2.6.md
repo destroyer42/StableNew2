@@ -166,10 +166,11 @@ outcome. Remaining work is:
 
 The first final operator journey is **HOLD**, not PASS. Queue-first image
 execution, manual dispatch with Auto-run OFF, replay identity/parent lineage,
-and the cancellation repair were accepted. The journey also exposed a separate
-shutdown persistence-order defect: shutdown closes the repository before
-`_save_queue_state()` attempts `set_setting()` on the closed SQLite connection.
-That defect is the next bounded PR-MVP-080 phase.
+and the cancellation repair were accepted. Its separate shutdown
+persistence-order defect is repaired: the final queue control snapshot is
+persisted after `JobService` quiesces and before enhanced shutdown closes the
+shared SQLite repository. The next bounded PR-MVP-080 phase is the repeat
+operator journey, not CI/integration closeout.
 
 This is workflow polish, not a GUI rewrite.
 
@@ -295,8 +296,8 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-PR-MVP-080 shutdown persistence-order repair. PR-MVP-080 remains IN PROGRESS;
-the first final operator journey is HOLD and the work is not ready for
+PR-MVP-080 repeat bounded operator-facing journey. PR-MVP-080 remains IN
+PROGRESS; the first final operator journey is HOLD and the work is not ready for
 CI/integration closeout. Queue/history action-state and no-op cleanup is
 accepted, alongside PromptPack authorship, durable job state, image generation,
 native SVD XT, the Phase 0 runtime/bootstrap prerequisite, real portrait
