@@ -139,6 +139,14 @@ exact parent is pushed, the relevant tree is clean, the task is source/test/docs
 only, no local hardware/runtime/user state is needed, and deterministic tests
 plus GitHub CI can establish acceptance.
 
+Every authored StableNew PR or bounded work package records an **Execution
+Profile + Model/Reasoning Recommendation**, a **Controller Surface Assessment**
+when controller or coordinator code may be touched, and a **Token-Efficient
+Validation Plan**. Reuse one acquired context set and exact-SHA evidence while
+the relevant source is unchanged; do not turn a documentation or closeout task
+into a new runtime/test pass without a current acceptance need. The reusable
+shape is `docs/CODEX_WORK_PACKAGE_TEMPLATE.md`.
+
 ## Documentation impact gate
 
 After every accepted Codex implementation and before beginning the next

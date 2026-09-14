@@ -243,26 +243,26 @@ commit `b33d028473f905747ddc19ae394526f5e6531fe8`.
 
 ## Remaining sequence
 
-The first final PR-MVP-080 operator journey remains **HOLD**, not PASS. It
-accepted queue-first image execution, manual dispatch with Auto-run OFF, replay
-identity/parent lineage, and the cancellation repair above. Its separate
-shutdown persistence-order defect is repaired: after `JobService` quiesces,
-the final queue control snapshot is persisted before enhanced shutdown closes
-the shared SQLite repository. Focused SQLite-backed coverage proves final
-`auto_run_enabled` and `queue_paused` values survive close/reopen, no setting
-write occurs after close, and repeated shutdown is harmless.
+The final PR-MVP-080 operator journey is **PASS / ACCEPTED**. Rob manually
+verified one normal queue-first run with Auto-run OFF and a second back-to-back
+run; both completed successfully. This closes the repeat-run acceptance while
+retaining the previously accepted queue/history, replay-lineage, cancellation,
+and shutdown-persistence evidence. The separate shutdown persistence-order
+defect remains repaired: after `JobService` quiesces, the final queue control
+snapshot is persisted before enhanced shutdown closes the shared SQLite
+repository. Focused SQLite-backed coverage proves final `auto_run_enabled` and
+`queue_paused` values survive close/reopen, no setting write occurs after close,
+and repeated shutdown is harmless.
 
-1. Repeat the bounded operator-facing journey and complete still-unobserved
-   history/handoff/UI checks where practical.
-2. Complete required GitHub CI and integration/documentation closeout for
+1. Complete required GitHub CI and integration/documentation closeout for
    PR-MVP-080.
-3. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
-4. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
+2. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
+3. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
    exact integrated post-v2.6 parent.
 
-Next action: **PR-MVP-080 repeat bounded operator-facing journey**.
+Next action: **PR-MVP-080 required CI and integration/documentation closeout**.
 
-PR-MVP-080 remains **IN PROGRESS** and is not ready for CI/integration closeout.
+PR-MVP-080 remains **IN PROGRESS** and is ready for CI/integration closeout.
 
 PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
 is complete and accepted, pulled forward only to unblock PR-MVP-080; the

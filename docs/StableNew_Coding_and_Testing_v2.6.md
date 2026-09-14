@@ -84,6 +84,18 @@ repeating real GPU/WebUI acceptance or other expensive runtime checks. Run the
 prescribed gate when source changes or a current CI result is required; do not
 normalize dependencies in a documentation PR.
 
+## Work-package efficiency and acceptance truth
+
+Acquire the repository authorities, exact branch/SHA, worktree state, and
+relevant symbols once, then reuse that context through the bounded task. A
+StableNew work package records its execution profile and model/reasoning
+recommendation, assesses controller/coordinator surface risk when applicable,
+and states a token-efficient validation plan. Stop at the requested outcome or
+after the defined checkpoint; a passing result does not authorize the next
+roadmap phase. Report manual/runtime evidence separately from deterministic
+tests and required CI, and do not claim a broader green result than was run.
+Use `docs/CODEX_WORK_PACKAGE_TEMPLATE.md` for the standard closeout shape.
+
 ## Integration verdict
 
 GitHub required CI runs the required gate on Python 3.11 and 3.12. Both jobs

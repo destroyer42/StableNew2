@@ -164,13 +164,12 @@ outcome. Remaining work is:
 - final operator-facing journey verification, documentation consistency,
   required CI, and integration.
 
-The first final operator journey is **HOLD**, not PASS. Queue-first image
-execution, manual dispatch with Auto-run OFF, replay identity/parent lineage,
-and the cancellation repair were accepted. Its separate shutdown
-persistence-order defect is repaired: the final queue control snapshot is
-persisted after `JobService` quiesces and before enhanced shutdown closes the
-shared SQLite repository. The next bounded PR-MVP-080 phase is the repeat
-operator journey, not CI/integration closeout.
+The final operator journey is **PASS / ACCEPTED**. Rob manually verified one
+normal queue-first run with Auto-run OFF and a second back-to-back run; both
+completed successfully. Queue/history action-state, replay identity/parent
+lineage, cancellation safety, and the shutdown persistence-order repair remain
+accepted evidence. The next PR-MVP-080 phase is required CI and
+integration/documentation closeout.
 
 This is workflow polish, not a GUI rewrite.
 
@@ -296,9 +295,9 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-PR-MVP-080 repeat bounded operator-facing journey. PR-MVP-080 remains IN
-PROGRESS; the first final operator journey is HOLD and the work is not ready for
-CI/integration closeout. Queue/history action-state and no-op cleanup is
+PR-MVP-080 required CI and integration/documentation closeout. PR-MVP-080
+remains IN PROGRESS; the final operator journey is PASS / ACCEPTED and the work
+is ready for CI/integration closeout. Queue/history action-state and no-op cleanup is
 accepted, alongside PromptPack authorship, durable job state, image generation,
 native SVD XT, the Phase 0 runtime/bootstrap prerequisite, real portrait
 source-aware SVD geometry, and duration-preserving RIFE interpolation semantics.
