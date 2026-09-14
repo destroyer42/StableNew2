@@ -12,10 +12,11 @@ from __future__ import annotations
 import heapq
 from collections import deque
 from collections.abc import Callable, Iterable
+from dataclasses import replace
 from threading import Lock
 from typing import Any
 
-from src.queue.job_model import Job, JobStatus
+from src.queue.job_model import Job, JobStatus, StageCheckpoint
 from src.queue.job_repository import JobRepository
 
 
@@ -149,6 +150,27 @@ class JobQueue:
     def mark_cancelled(self, job_id: str, reason: str | None = None) -> Job | None:
         return self._update_status(job_id, JobStatus.CANCELLED, reason or "cancelled")
 
+    def publish_result(
+        self,
+        job_id: str,
+        *,
+        status: JobStatus,
+        result: dict[str, Any],
+        stage_checkpoints: list[StageCheckpoint],
+        error_message: str | None = None,
+    ) -> Job | None:
+        """Publish a terminal runner result only while the job still owns RUNNING."""
+        if status not in {JobStatus.COMPLETED, JobStatus.FAILED}:
+            raise ValueError("Runner results may only publish completed or failed status")
+        return self._update_status(
+            job_id,
+            status,
+            error_message,
+            result=result,
+            stage_checkpoints=stage_checkpoints,
+            require_running=True,
+        )
+
     def list_jobs(self, status_filter: JobStatus | None = None) -> list[Job]:
         with self._lock:
             if status_filter is None:
@@ -183,18 +205,26 @@ class JobQueue:
         status: JobStatus,
         error_message: str | None = None,
         result: dict | None = None,
+        stage_checkpoints: list[StageCheckpoint] | None = None,
+        require_running: bool = False,
     ) -> Job | None:
         with self._lock:
             job = self._jobs.get(job_id)
-        if job is None:
-            return None
-        persisted = self._repository.transition_job(
-            job,
-            status,
-            error_message=error_message,
-            result=result,
-        )
-        with self._lock:
+            if job is None or (require_running and job.status != JobStatus.RUNNING):
+                return None
+            transition_job = job
+            if stage_checkpoints is not None:
+                execution_metadata = replace(
+                    job.execution_metadata,
+                    stage_checkpoints=list(stage_checkpoints),
+                )
+                transition_job = replace(job, execution_metadata=execution_metadata)
+            persisted = self._repository.transition_job(
+                transition_job,
+                status,
+                error_message=error_message,
+                result=result,
+            )
             self._copy_persisted_state(job, persisted)
             should_prune = status in self._FINAL_STATUSES
             if should_prune:

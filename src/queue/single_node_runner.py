@@ -482,13 +482,6 @@ class SingleNodeJobRunner:
                 metadata = canonical_result.get("metadata") or {}
                 metadata["duration_ms"] = duration_ms
                 canonical_result["metadata"] = metadata
-                checkpoints = _extract_stage_checkpoints(canonical_result)
-                if checkpoints:
-                    job.execution_metadata.stage_checkpoints = _merge_stage_checkpoints(
-                        job.execution_metadata.stage_checkpoints,
-                        checkpoints,
-                    )
-                    self.job_queue.persist_runtime_state(job)
                 if self._cancel_current.is_set():
                     queued_job = self.job_queue.cancel_running_job(
                         return_to_queue=self._cancel_return_to_queue
@@ -508,6 +501,10 @@ class SingleNodeJobRunner:
                 if success is None:
                     success = error_message is None
                 logger.debug("[queue/result] after fallback success=%s", success)
+                checkpoints = _merge_stage_checkpoints(
+                    job.execution_metadata.stage_checkpoints,
+                    _extract_stage_checkpoints(canonical_result),
+                )
                 elapsed_s = duration_ms / 1000
                 if elapsed_s > QUEUE_JOB_SOFT_TIMEOUT_SECONDS:
                     # This message is only truthful while this worker still owns
@@ -516,17 +513,27 @@ class SingleNodeJobRunner:
                         "QUEUE_JOB_WARNING | Job appears to be running for a long time",
                         extra={**extra, "elapsed_s": elapsed_s},
                     )
-                if success:
-                    self.job_queue.mark_completed(job.job_id, result=canonical_result)
-                    status_value = "completed"
-                    notify_status = JobStatus.COMPLETED
-                else:
-                    error_msg = error_message or "Job failed without error message"
-                    self.job_queue.mark_failed(
-                        job.job_id, error_message=error_msg, result=canonical_result
+                notify_status = JobStatus.COMPLETED if success else JobStatus.FAILED
+                error_msg = None if success else (
+                    error_message or "Job failed without error message"
+                )
+                published_job = self.job_queue.publish_result(
+                    job.job_id,
+                    status=notify_status,
+                    result=canonical_result,
+                    stage_checkpoints=checkpoints,
+                    error_message=error_msg,
+                )
+                if published_job is None:
+                    durable_job = self.job_queue.get_job(job.job_id)
+                    durable_status = durable_job.status if durable_job is not None else job.status
+                    if durable_status in {JobStatus.CANCELLED, JobStatus.QUEUED}:
+                        self._notify(durable_job or job, durable_status)
+                        continue
+                    raise RuntimeError(
+                        f"Job {job.job_id} lost RUNNING ownership before result publication"
                     )
-                    status_value = "failed"
-                    notify_status = JobStatus.FAILED
+                status_value = notify_status.value
                 log_with_ctx(
                     logger,
                     logging.INFO,
@@ -616,13 +623,6 @@ class SingleNodeJobRunner:
             else:
                 result = None
             canonical_result = normalize_run_result(result, default_run_id=job.job_id)
-            checkpoints = _extract_stage_checkpoints(canonical_result)
-            if checkpoints:
-                job.execution_metadata.stage_checkpoints = _merge_stage_checkpoints(
-                    job.execution_metadata.stage_checkpoints,
-                    checkpoints,
-                )
-                self.job_queue.persist_runtime_state(job)
             if self._cancel_current.is_set():
                 queued_job = self.job_queue.cancel_running_job(
                     return_to_queue=self._cancel_return_to_queue
@@ -636,15 +636,28 @@ class SingleNodeJobRunner:
             success = canonical_result.get("success")
             if success is None:
                 success = error_message is None
-            if success:
-                self.job_queue.mark_completed(job.job_id, result=canonical_result)
-                notify_status = JobStatus.COMPLETED
-            else:
-                error_msg = error_message or "Job failed without error message"
-                self.job_queue.mark_failed(
-                    job.job_id, error_message=error_msg, result=canonical_result
+            checkpoints = _merge_stage_checkpoints(
+                job.execution_metadata.stage_checkpoints,
+                _extract_stage_checkpoints(canonical_result),
+            )
+            notify_status = JobStatus.COMPLETED if success else JobStatus.FAILED
+            error_msg = None if success else error_message or "Job failed without error message"
+            published_job = self.job_queue.publish_result(
+                job.job_id,
+                status=notify_status,
+                result=canonical_result,
+                stage_checkpoints=checkpoints,
+                error_message=error_msg,
+            )
+            if published_job is None:
+                durable_job = self.job_queue.get_job(job.job_id)
+                durable_status = durable_job.status if durable_job is not None else job.status
+                if durable_status in {JobStatus.CANCELLED, JobStatus.QUEUED}:
+                    self._notify(durable_job or job, durable_status)
+                    return None
+                raise RuntimeError(
+                    f"Job {job.job_id} lost RUNNING ownership before result publication"
                 )
-                notify_status = JobStatus.FAILED
             log_with_ctx(
                 logger,
                 logging.INFO,
