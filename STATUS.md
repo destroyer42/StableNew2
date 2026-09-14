@@ -1,16 +1,16 @@
 # StableNew current state
 
-Updated: 2026-09-13
+Updated: 2026-09-14
 
 ## Repository
 
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
-- Current remote `origin/main`: `4982e7672573927cc3bab0f5074123e5ba06207b`
-- Active integration branch: `mvp/080-operator-readiness`
+- Current release baseline: `main` (PR-MVP-080 integrated)
+- Active objective: PR-MVP-090 release proof
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
-`main` remains the release baseline until PR-MVP-080 integration is complete.
+`main` is the release baseline and now contains the integrated PR-MVP-080 line.
 The canonical documentation order is `AGENTS.md`, `STATUS.md`,
 `docs/CODEX_MAP.md`, the relevant architecture section, the relevant coding and
 testing section, the roadmap for sequencing, and Git history only when current
@@ -21,7 +21,8 @@ evidence is insufficient or history is explicitly requested.
 StableNew has one queue-first NJR/runner spine, transactional SQLite lifecycle
 state, versioned JSON PromptPack storage, and accepted image and native SVD XT
 vertical slices. PR-MVP-060 is **COMPLETE / ACCEPTED**. PR-MVP-070 is
-**COMPLETE / ACCEPTED**. PR-MVP-080 is **IN PROGRESS**. PR-MVP-090 is planned.
+**COMPLETE / ACCEPTED**. PR-MVP-080 is **COMPLETE / ACCEPTED / INTEGRATED**.
+PR-MVP-090 is **IN PROGRESS** for the remaining release proof.
 
 The runtime invariant remains:
 
@@ -31,9 +32,9 @@ Fresh work is queued, NJRs are immutable, lifecycle state belongs to queue and
 history, replay creates a new NJR with lineage, and GUI/controllers do not
 create an alternate runner path.
 
-The current branch is an integration checkpoint, not a release declaration:
-remaining 080 acceptance and the later 090 clean-machine proof are still
-required before the release baseline can move.
+`main` now contains the accepted PR-MVP-080 operator-readiness feature line.
+The remaining release-proof work belongs to PR-MVP-090; it is not authorized to
+change the accepted 080 runtime behavior in this closeout.
 
 ## Approved post-v2.6 direction
 
@@ -243,30 +244,23 @@ commit `b33d028473f905747ddc19ae394526f5e6531fe8`.
 
 ## Remaining sequence
 
-The final PR-MVP-080 operator journey is **PASS / ACCEPTED**. Rob manually
-verified one normal queue-first run with Auto-run OFF and a second back-to-back
-run; both completed successfully. This closes the repeat-run acceptance while
-retaining the previously accepted queue/history, replay-lineage, cancellation,
-and shutdown-persistence evidence. The separate shutdown persistence-order
-defect remains repaired: after `JobService` quiesces, the final queue control
-snapshot is persisted before enhanced shutdown closes the shared SQLite
-repository. Focused SQLite-backed coverage proves final `auto_run_enabled` and
-`queue_paused` values survive close/reopen, no setting write occurs after close,
-and repeated shutdown is harmless.
+PR-MVP-080 is **COMPLETE / ACCEPTED / INTEGRATED**. The final operator journey
+passed: Rob manually verified one normal queue-first run with Auto-run OFF and
+a second back-to-back run; both completed successfully. Previously accepted
+queue/history, replay-lineage, cancellation, shutdown-persistence, SVD, and
+provenance evidence remains valid. The accepted feature line was fast-forwarded
+into `main` without a merge commit, rebase, or force push. StableNew CI run 317
+passed on the accepted source tree, including required Python 3.11 and 3.12.
 
-1. Complete required GitHub CI and integration/documentation closeout for
-   PR-MVP-080.
-2. Return to the remaining PR-MVP-090 clean-machine/release-proof work.
-3. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
+1. Execute the remaining PR-MVP-090 clean-machine/release-proof work.
+2. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
    exact integrated post-v2.6 parent.
 
-Next action: **PR-MVP-080 required CI and integration/documentation closeout**.
+Next action: **PR-MVP-090 remaining release proof**.
 
-PR-MVP-080 remains **IN PROGRESS** and is ready for CI/integration closeout.
-
-PR-MVP-090 remains planned overall. Its Phase 0 runtime/bootstrap prerequisite
-is complete and accepted, pulled forward only to unblock PR-MVP-080; the
-remaining clean-machine and release-proof work stays after PR-MVP-080.
+PR-MVP-090 is **IN PROGRESS** for release proof. Its Phase 0
+runtime/bootstrap prerequisite was completed and accepted early only to unblock
+PR-MVP-080; its remaining clean-machine and release-proof work is now active.
 
 ## Known non-blocking debt
 
