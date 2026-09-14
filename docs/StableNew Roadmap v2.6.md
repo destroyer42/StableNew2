@@ -149,8 +149,27 @@ outcome. Remaining work is:
   `INTERRUPTED_RESTART_ACTION_REQUIRED`, preserves available recovery evidence,
   prevents automatic requeue/replay, and renders the record as `Interrupted`;
   explicit Replay creates a new NJR/job identity with parent lineage;
-- remaining queue/history action-state + no-op cleanup;
-- final operator journey, documentation, required CI, and integration.
+- accepted evidence: queue/history action-state and no-op cleanup combines
+  legal state, callable boundaries, and real artifact/replay evidence; manual
+  Send Job remains available with Auto-run OFF when safely dispatchable; stale,
+  direct, keyboard, and context-menu paths cannot bypass the predicates; and
+  false Remove/Clear success is not reported;
+- accepted repair at `d2909e752faaa34f20a49fccc9865a8412c21b15`: terminal result
+  publication requires durable `RUNNING` ownership, so accepted cancellation or
+  return-to-queue decisions cannot acquire late successful result data, artifact
+  references, or `final_output` checkpoints; normal success, replay lineage,
+  lifecycle/schema, and architecture remain unchanged; physical cancelled-job
+  bytes may remain as non-authoritative residue when no safe generic cleanup
+  authority exists;
+- final operator-facing journey verification, documentation consistency,
+  required CI, and integration.
+
+The final operator journey is **PASS / ACCEPTED**. Rob manually verified one
+normal queue-first run with Auto-run OFF and a second back-to-back run; both
+completed successfully. Queue/history action-state, replay identity/parent
+lineage, cancellation safety, and the shutdown persistence-order repair remain
+accepted evidence. The next PR-MVP-080 phase is required CI and
+integration/documentation closeout.
 
 This is workflow polish, not a GUI rewrite.
 
@@ -408,10 +427,13 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-Complete queue/history action-state + no-op cleanup. PromptPack authorship,
-durable job state, image generation, native SVD XT, the Phase 0 runtime/bootstrap
-prerequisite, real portrait source-aware SVD geometry, and duration-preserving
-RIFE interpolation semantics already have single accepted product paths.
+PR-MVP-080 required CI and integration/documentation closeout. PR-MVP-080
+remains IN PROGRESS; the final operator journey is PASS / ACCEPTED and the work
+is ready for CI/integration closeout. Queue/history action-state and no-op cleanup
+is accepted, alongside PromptPack authorship, durable job state, image
+generation, native SVD XT, the Phase 0 runtime/bootstrap prerequisite, real
+portrait source-aware SVD geometry, and duration-preserving RIFE interpolation
+semantics.
 
 After PR-MVP-080 and PR-MVP-090 are accepted and integrated, verify the exact
 post-v2.6 parent SHA, establish the bounded P0 efficiency baseline, and then
