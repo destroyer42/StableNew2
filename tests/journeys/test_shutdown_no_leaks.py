@@ -1,10 +1,7 @@
-"""Shutdown journey test ensuring StableNew and WebUI exit without stray processes.
+"""Shutdown journey test ensuring StableNew exits without stray processes.
 
-Local entrypoint (Windows PowerShell):
-    scripts\run_journey_tests.ps1
-
-CI entrypoint:
-    GitHub Actions → Journey Tests (Shutdown / No-Leaks)
+The journey explicitly disables backend autostart. External A1111/ComfyUI
+processes are outside this test's ownership and are never inspected or touched.
 """
 
 from __future__ import annotations
@@ -28,8 +25,6 @@ from tools.test_helpers.process_inspection import (
 @pytest.mark.skipif(
     sys.platform != "win32" and sys.platform != "linux", reason="Platform-specific stability test"
 )
-@pytest.mark.journey
-@pytest.mark.slow
 def test_shutdown_relaunch_leaves_no_processes() -> None:
     attempts = int(os.environ.get("STABLENEW_SHUTDOWN_LEAK_ATTEMPTS", "3"))
     auto_exit_seconds = float(
@@ -47,6 +42,10 @@ def test_shutdown_relaunch_leaves_no_processes() -> None:
         extra_env = {
             "STABLENEW_DEBUG_SHUTDOWN": "1",
             "STABLENEW_LOG_FILE": str(log_file),
+            "STABLENEW_WEBUI_AUTOSTART": "0",
+            "STABLENEW_COMFY_AUTOSTART": "0",
+            "STABLENEW_WEBUI_BASE_URL": "http://127.0.0.1:9",
+            "STABLENEW_COMFY_BASE_URL": "http://127.0.0.1:9",
         }
         if os.environ.get("STABLENEW_FILE_ACCESS_LOG") == "1":
             extra_env["STABLENEW_FILE_ACCESS_LOG"] = "1"

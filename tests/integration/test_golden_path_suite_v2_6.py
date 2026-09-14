@@ -29,12 +29,10 @@ from src.api.client import SDWebUIClient
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.pipeline.animatediff_models import AnimateDiffCapability
 from src.pipeline.job_models_v2 import StageConfig
-from src.pipeline.pipeline_runner import PipelineRunner
-from src.pipeline.prompt_pack_job_builder import PromptPackNormalizedJobBuilder
 from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
 from src.queue.job_model import JobStatus
-from src.utils import StructuredLogger
 from tests.helpers.job_helpers import make_test_njr
+from tests.helpers.njr_factory import make_pipeline_njr
 from tests.journeys.journey_helpers_v2 import run_njr_journey
 
 # ============================================================================
@@ -181,7 +179,8 @@ class TestGP1SingleSimpleRun:
             assert entry.status == JobStatus.COMPLETED
             snapshot = (entry.snapshot or {}).get("normalized_job", {})
             assert snapshot
-            assert snapshot.get("positive_prompt") == pack.slots[0].text
+            workload = snapshot.get("workload", {})
+            assert workload.get("positive_prompt") == pack.slots[0].text
 
     def test_gp1_debug_hub_explain_job_works(self):
         """GP1.4: Debug Hub can explain job with full builder trace."""
@@ -473,7 +472,9 @@ class TestGP6MultiStagePipeline:
             # Verify NJR snapshot has stage flags enabled
             snapshot = (entry.snapshot or {}).get("normalized_job", {})
             assert snapshot
-            config = snapshot.get("config", {})
+            workload = snapshot.get("workload", {})
+            assert workload.get("positive_prompt") == pack.slots[0].text
+            config = workload.get("config", {})
             assert config.get("enable_hr") is True
             assert config.get("adetailer_enabled") is True
 
@@ -482,9 +483,10 @@ class TestGP6MultiStagePipeline:
         seed_path = tmp_path / "seed.png"
         seed_path.write_bytes(base64.b64decode(_TINY_PNG_BASE64))
 
-        njr = make_test_njr(
+        njr = make_pipeline_njr(
             job_id="gp6-animatediff-001",
-            prompt="portrait photo of a woman subtly turning her head, cinematic lighting",
+            positive_prompt="portrait photo of a woman subtly turning her head, cinematic lighting",
+            negative_prompt="blurry, distorted, bad anatomy",
             base_model="realismFromHadesXL_2ndAnniversary",
             config={
                 "model": "realismFromHadesXL_2ndAnniversary",
@@ -495,33 +497,31 @@ class TestGP6MultiStagePipeline:
                 "width": 512,
                 "height": 768,
             },
+            stage_chain=(
+                StageConfig(
+                    stage_type="animatediff",
+                    enabled=True,
+                    steps=6,
+                    cfg_scale=5.5,
+                    sampler_name="Euler a",
+                    scheduler="Automatic",
+                    model="realismFromHadesXL_2ndAnniversary",
+                    extra={
+                        "enabled": True,
+                        "motion_module": "mm_sdxl_hs.safetensors",
+                        "fps": 8,
+                        "video_length": 4,
+                        "batch_size": 4,
+                        "format": ["PNG", "Frame"],
+                    },
+                ),
+            ),
+            path_output_dir=str(tmp_path / "output"),
+            input_image_paths=(str(seed_path),),
+            start_stage="animatediff",
         )
-        njr.path_output_dir = str(tmp_path / "output")
-        njr.negative_prompt = "blurry, distorted, bad anatomy"
-        njr.stage_chain = [
-            StageConfig(
-                stage_type="animatediff",
-                enabled=True,
-                steps=6,
-                cfg_scale=5.5,
-                sampler_name="Euler a",
-                scheduler="Automatic",
-                model="realismFromHadesXL_2ndAnniversary",
-                extra={
-                    "enabled": True,
-                    "motion_module": "mm_sdxl_hs.safetensors",
-                    "fps": 8,
-                    "video_length": 4,
-                    "batch_size": 4,
-                    "format": ["PNG", "Frame"],
-                },
-            )
-        ]
-        njr.input_image_paths = [str(seed_path)]
-        njr.start_stage = "animatediff"
 
         api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
-        runner = PipelineRunner(api_client=api_client, structured_logger=StructuredLogger())
 
         mock_http_response = {
             "images": [_TINY_PNG_BASE64, _TINY_PNG_BASE64, _TINY_PNG_BASE64, _TINY_PNG_BASE64],
@@ -567,10 +567,17 @@ class TestGP6MultiStagePipeline:
             mock_response.raise_for_status = Mock()
             mock_request.return_value = mock_response
 
-            result = runner.run_njr(njr, cancel_token=None)
+            entry = run_njr_journey(
+                njr,
+                api_client,
+                timeout_seconds=10.0,
+                mock_http_response=mock_http_response,
+                artifact_root=tmp_path / "journey-workspace",
+            )
 
-        assert result.success is True
-        artifact = result.metadata.get("animatediff_artifact")
+        assert entry.status is JobStatus.COMPLETED
+        result = entry.result or {}
+        artifact = (result.get("metadata") or {}).get("animatediff_artifact")
         assert artifact is not None
         assert artifact["count"] == 1
         clip_path = Path(artifact["video_paths"][0])

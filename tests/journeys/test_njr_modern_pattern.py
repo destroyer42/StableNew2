@@ -14,7 +14,6 @@ This is the preferred pattern for new journey tests.
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
@@ -37,8 +36,7 @@ def test_njr_txt2img_canonical_path():
     # Step 1: Create a test NJR
     njr = make_test_njr(
         job_id="test-njr-001",
-        positive_prompt="A beautiful sunset over mountains, photorealistic",
-        negative_prompt="blurry, ugly, distorted",
+        prompt="A beautiful sunset over mountains, photorealistic",
         base_model="sdxl",
         config={
             "sampler": "Euler",

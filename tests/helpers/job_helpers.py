@@ -43,9 +43,16 @@ def make_test_njr(
         "reprocess": SourceKind.REPROCESS.value,
         "learning": SourceKind.LEARNING.value,
     }
+    config_data = dict(config) if isinstance(config, dict) else {
+        "model": base_model,
+        "prompt": prompt,
+        "prompt_pack_id": prompt_pack_id,
+    }
+    config_data.setdefault("model", base_model)
+    config_data.setdefault("prompt", prompt)
     return make_pipeline_njr(
         job_id=job_id,
-        config=config or {"model": base_model, "prompt": prompt, "prompt_pack_id": prompt_pack_id},
+        config=config_data,
         positive_prompt=prompt,
         base_model=base_model,
         stage_chain=(make_test_stage(),),

@@ -165,7 +165,6 @@ if ($CheckOnly) {
         -Executable $VenvPython `
         -Arguments @("-m", "pip", "install", "--index-url", $CudaIndexUrl, "torch") `
         -FailureMessage "Could not install CUDA-enabled Torch from '$CudaIndexUrl'." | Out-Null
-    Assert-CudaTorch
 
     Invoke-CheckedProcess `
         -Executable $VenvPython `
@@ -175,6 +174,10 @@ if ($CheckOnly) {
         -Executable $VenvPython `
         -Arguments @("-m", "pip", "install", "-r", $svdRequirements) `
         -FailureMessage "Could not install the SVD requirements from '$svdRequirements'." | Out-Null
+
+    # Keep CUDA Torch installation first so requirements resolution cannot select
+    # a CPU-only build, then probe after its declared runtime dependencies exist.
+    Assert-CudaTorch
 }
 
 $verificationCode = @'
@@ -183,6 +186,12 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
+# The verification payload is materialized in a temporary file, so restore the
+# repository import root that `python -c` would otherwise provide implicitly.
+repository_root = Path.cwd()
+if str(repository_root) not in sys.path:
+    sys.path.insert(0, str(repository_root))
 
 import accelerate
 import diffusers
@@ -241,14 +250,22 @@ print(json.dumps({
 }, indent=2))
 '@
 
+$verificationScript = [IO.Path]::ChangeExtension([IO.Path]::GetTempFileName(), ".py")
+[IO.File]::WriteAllText(
+    $verificationScript,
+    $verificationCode,
+    [Text.UTF8Encoding]::new($false)
+)
+
 Push-Location $RepoRoot
 try {
     Invoke-CheckedProcess `
         -Executable $VenvPython `
-        -Arguments @("-c", $verificationCode) `
+        -Arguments @($verificationScript) `
         -FailureMessage "Native-SVD runtime verification failed. Resolve the reported prerequisite and retry." | Out-Null
 } finally {
     Pop-Location
+    Remove-Item -LiteralPath $verificationScript -Force -ErrorAction SilentlyContinue
 }
 
 Write-Host "Windows native-SVD bootstrap verification passed."

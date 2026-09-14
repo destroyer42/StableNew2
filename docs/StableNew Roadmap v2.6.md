@@ -195,6 +195,16 @@ remaining clean-machine/release-proof work is now the active objective:
 - restart/replay/artifact proof;
 - final limitations and rollback documentation.
 
+The release-harness integrity checkpoint is **COMPLETE / ACCEPTED**. Modern
+NJR journeys use the immutable contract and the canonical
+`JobService.submit_njrs` → SQLite queue/repository → production dispatch path;
+history is persisted and read back rather than fabricated. Shutdown journeys
+disable backend autostart and process assertions are scoped to explicit
+test-owned StableNew or managed-backend processes. The Windows bootstrap and
+journey wrappers retain their approved interpreter/dependency normalization.
+Focused validation passed; no real A1111, ComfyUI, SVD, or GPU execution was
+introduced by this checkpoint.
+
 ## Approved post-v2.6 sequence
 
 This sequence is approved architecture direction but is not part of the current
@@ -296,8 +306,8 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-PR-MVP-090 remaining clean-machine/release-proof work. PR-MVP-080 is COMPLETE /
-ACCEPTED / INTEGRATED; its final operator journey, required CI, and
+PR-MVP-090 Ruff-zero, migration/recovery, and final release acceptance.
+PR-MVP-080 is COMPLETE / ACCEPTED / INTEGRATED; its final operator journey, required CI, and
 documentation closeout are complete. Queue/history action-state and no-op cleanup is
 accepted, alongside PromptPack authorship, durable job state, image generation,
 native SVD XT, the Phase 0 runtime/bootstrap prerequisite, real portrait

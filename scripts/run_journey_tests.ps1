@@ -20,9 +20,9 @@ $env:STABLENEW_AUTO_EXIT_SECONDS = "$UptimeSeconds"
 $env:STABLENEW_SHUTDOWN_LEAK_TIMEOUT_BUFFER = "$TimeoutBuffer"
 $env:STABLENEW_DEBUG_SHUTDOWN = "1"
 
-# Set Tkinter environment variables for GUI tests
-$env:TCL_LIBRARY = "C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tcl8.6"
-$env:TK_LIBRARY = "C:\Users\rob\AppData\Local\Programs\Python\Python310\tcl\tk8.6"
+# The selected supported interpreter resolves its own Tcl/Tk runtime. Callers
+# may still provide standard Tcl/Tk environment overrides when their platform
+# requires them; this wrapper must not hard-code one user's Python 3.10 paths.
 
 # Optional: activate your Python virtualenv for journey tests
 # . "$PSScriptRoot\..\venv\Scripts\Activate.ps1"

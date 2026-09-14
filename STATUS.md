@@ -170,6 +170,18 @@ Local PR-gate execution was blocked by missing local `mypy`; the required
 GitHub mypy/smoke gates passed, so this is not an active blocker. Zero NJR
 submissions and zero SVD inference jobs occurred during Phase 0.
 
+The PR-MVP-090 release-harness integrity checkpoint is **COMPLETE / ACCEPTED**.
+The modern NJR journey now uses the immutable NJR contract and traverses
+`JobService.submit_njrs` through a temporary SQLite queue/repository and the
+production controller-to-runner bridge; history is read back from that
+repository rather than synthesized. Shutdown journeys disable backend
+autostart, use bounded unavailable endpoints, and inspect only test-owned
+processes. Process cleanup is ownership-scoped, so unrelated user A1111,
+ComfyUI, and Python processes are ignored and never targeted. Bootstrap and
+journey wrappers retain the approved interpreter/dependency normalization.
+Focused release-harness validation passed; the disposable `.venv-release-proof`
+was removed after confirming no process used it.
+
 XT 1.1 remains a distinct supported model and must not be substituted for the
 accepted plain-XT baseline merely because it is cached.
 
@@ -256,7 +268,7 @@ passed on the accepted source tree, including required Python 3.11 and 3.12.
 2. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
    exact integrated post-v2.6 parent.
 
-Next action: **PR-MVP-090 remaining release proof**.
+Next action: **PR-MVP-090 Ruff-zero, migration/recovery, and final release acceptance**.
 
 PR-MVP-090 is **IN PROGRESS** for release proof. Its Phase 0
 runtime/bootstrap prerequisite was completed and accepted early only to unblock

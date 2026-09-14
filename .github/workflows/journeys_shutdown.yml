@@ -20,13 +20,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
           if (Test-Path dev-requirements.txt) {
-            pip install -r dev-requirements.txt
+            python -m pip install -r dev-requirements.txt
           }
 
       - name: Run shutdown journey tests
@@ -45,13 +46,14 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.10"
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
           if (Test-Path dev-requirements.txt) {
-            pip install -r dev-requirements.txt
+            python -m pip install -r dev-requirements.txt
           }
 
       - name: Run full journey suite

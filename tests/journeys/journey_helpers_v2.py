@@ -20,18 +20,27 @@ Modern Journey Test Pattern (PR-TEST-003):
 
 from __future__ import annotations
 
-import time
 import base64
+import tempfile
+import time
 from collections.abc import Iterable
-from datetime import datetime
+from contextlib import nullcontext
+from dataclasses import replace
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, patch
 
 from src.controller.app_controller import AppController
+from src.controller.job_service import JobService
+from src.controller.pipeline_controller import PipelineController
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
+from src.queue.job_queue import JobQueue
+from src.queue.job_repository import JobRepository
+from src.queue.single_node_runner import SingleNodeJobRunner
 
 if TYPE_CHECKING:
     from src.api.client import SDWebUIClient
@@ -56,13 +65,7 @@ def _wait_for_history_entry(
             if entry.job_id not in known_ids:
                 return entry
         time.sleep(0.1)
-    return JobHistoryEntry(
-        job_id="synthetic-jt",
-        created_at=datetime.utcnow(),
-        status=JobStatus.COMPLETED,
-        run_mode="queue",
-        payload_summary="synthetic",
-    )
+    raise TimeoutError("No new repository-backed history entry appeared before timeout.")
 
 
 def _wait_for_job_completion(
@@ -128,19 +131,8 @@ def start_run_and_wait(
     else:
         controller.start_run_v2()
 
-    # Wait for a new job to appear in history
-    try:
-        entry = _wait_for_history_entry(history_store, known_ids, timeout=timeout_seconds)
-    except TimeoutError:
-        entry = JobHistoryEntry(
-            job_id="synthetic-timeout",
-            created_at=datetime.utcnow(),
-            status=JobStatus.COMPLETED,
-            run_mode="queue",
-            payload_summary="synthetic",
-        )
-    if entry.job_id.startswith("synthetic"):
-        return entry
+    # Wait for a new job to appear in repository-backed history.
+    entry = _wait_for_history_entry(history_store, known_ids, timeout=timeout_seconds)
 
     # Wait for job completion
     completed_entry = _wait_for_job_completion(
@@ -158,6 +150,7 @@ def run_njr_journey(
     *,
     timeout_seconds: float = _DEFAULT_TIMEOUT,
     mock_http_response: dict | None = None,
+    artifact_root: Path | None = None,
 ) -> JobHistoryEntry:
     """Execute NJR through the canonical runner path with mocked HTTP transport.
 
@@ -192,7 +185,6 @@ def run_njr_journey(
             assert entry.status == JobStatus.COMPLETED
         ```
     """
-    from src.pipeline.pipeline_runner import PipelineRunner
     from src.utils import StructuredLogger
 
     # Generate default mock response if not provided
@@ -214,95 +206,101 @@ def run_njr_journey(
             },
         }
 
-    # Create runner with the api_client
-    runner = PipelineRunner(api_client=api_client, structured_logger=StructuredLogger())
+    if artifact_root is None:
+        workspace_context = tempfile.TemporaryDirectory(prefix="stablenew-journey-")
+    else:
+        artifact_root.mkdir(parents=True, exist_ok=True)
+        workspace_context = nullcontext(str(artifact_root))
+    with workspace_context as temp_root:
+        root = Path(temp_root)
+        output_root = root / "output"
+        isolated_njr = replace(
+            njr,
+            output_plan=replace(njr.output_plan, base_output_dir=str(output_root)),
+        )
+        repository = JobRepository(root / "state" / "jobs.sqlite3")
+        queue = JobQueue(repository=repository)
+        queue_runner = SingleNodeJobRunner(queue, run_callable=None, poll_interval=0.01)
+        job_service = JobService(queue, runner=queue_runner, history_store=repository)
+        pipeline_runner = PipelineRunner(
+            api_client=api_client,
+            structured_logger=StructuredLogger(),
+            runs_base_dir=str(output_root),
+        )
+        pipeline_controller = PipelineController(
+            pipeline_runner=pipeline_runner,
+            job_service=job_service,
+        )
+        # The production controller owns the NJR-to-runner bridge. The queue
+        # worker invokes it only after JobService has submitted and claimed the job.
+        queue_runner.run_callable = pipeline_controller._run_job
+        job_service.auto_run_enabled = True
 
-    original_request = getattr(api_client._session, "request", None)
-    if callable(original_request):
+        original_request = getattr(api_client._session, "request", None)
+
         def _request_with_normalized_response(*args, **kwargs):
+            if not callable(original_request):
+                raise RuntimeError("Journey API client has no HTTP transport")
             response = original_request(*args, **kwargs)
             if isinstance(response, Mock):
-                if isinstance(getattr(response, "content", None), Mock):
-                    response.content = b"{}"
-                if isinstance(getattr(response, "text", None), Mock):
-                    response.text = "{}"
-                if isinstance(getattr(response, "headers", None), Mock):
-                    response.headers = {}
-                if not callable(getattr(response, "raise_for_status", None)):
-                    response.raise_for_status = Mock()
+                response.content = b"{}"
+                response.text = "{}"
+                response.headers = {}
+                response.raise_for_status = Mock()
                 json_fn = getattr(response, "json", None)
                 if callable(json_fn):
                     try:
                         payload = json_fn()
-                        if isinstance(payload, dict):
-                            images = payload.get("images")
-                            if isinstance(images, list):
-                                tiny_png = (
-                                    "data:image/png;base64,"
-                                    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
-                                )
-                                fixed = []
-                                changed = False
-                                for item in images:
-                                    value = str(item or "")
-                                    is_valid = False
-                                    if "base64," in value:
-                                        try:
-                                            raw = value.split("base64,", 1)[1]
-                                            decoded = base64.b64decode(raw, validate=True)
-                                            is_valid = bool(decoded.startswith(b"\x89PNG"))
-                                        except Exception:
-                                            is_valid = False
-                                    if not is_valid:
-                                        value = tiny_png
-                                        changed = True
-                                    fixed.append(value)
-                                if changed:
-                                    payload["images"] = fixed
-                                    response.json = Mock(return_value=payload)
+                        if isinstance(payload, dict) and isinstance(payload.get("images"), list):
+                            tiny_png = (
+                                "data:image/png;base64,"
+                                "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+                            )
+                            fixed = []
+                            for item in payload["images"]:
+                                value = str(item or "")
+                                try:
+                                    raw = value.split("base64,", 1)[1]
+                                    valid = base64.b64decode(raw, validate=True).startswith(b"\x89PNG")
+                                except (IndexError, ValueError):
+                                    valid = False
+                                fixed.append(value if valid else tiny_png)
+                            payload["images"] = fixed
+                            response.json = Mock(return_value=payload)
                     except Exception:
                         pass
             return response
 
         try:
-            setattr(api_client._session, "request", _request_with_normalized_response)
-        except Exception:
-            pass
+            if callable(original_request):
+                api_client._session.request = _request_with_normalized_response
+            from src.api.webui_api import WebUIAPI
 
-    # Bypass readiness gate in deterministic tests where transport is fully mocked.
-    from src.api.webui_api import WebUIAPI
+            with (
+                patch.object(WebUIAPI, "wait_until_true_ready", return_value=True),
+                patch("src.api.client.wait_for_webui_ready", return_value=True),
+                patch("src.api.client.validate_webui_health", return_value=True),
+                patch.object(
+                    api_client,
+                    "get_current_model",
+                    return_value=isolated_njr.base_model or "sdxl",
+                ),
+                patch.object(api_client, "set_model", return_value=True),
+            ):
+                job_ids = job_service.submit_njrs(
+                    [isolated_njr], SubmissionPolicy(start_when_idle=True)
+                )
+                entry = _wait_for_job_completion(
+                    job_service, job_ids[0], timeout=timeout_seconds
+                )
+        finally:
+            job_service.stop()
+            repository.close()
+            if callable(original_request):
+                api_client._session.request = original_request
 
-    try:
-        with (
-            patch.object(WebUIAPI, "wait_until_true_ready", return_value=True),
-            patch("src.api.client.wait_for_webui_ready", return_value=True),
-            patch("src.api.client.validate_webui_health", return_value=True),
-        ):
-            result = runner.run_njr(njr)
-    finally:
-        if callable(original_request):
-            try:
-                setattr(api_client._session, "request", original_request)
-            except Exception:
-                pass
-
-    # Convert result to JobHistoryEntry
-    entry = JobHistoryEntry(
-        job_id=njr.job_id,
-        created_at=datetime.utcnow(),
-        status=JobStatus.COMPLETED if result.success else JobStatus.FAILED,
-        run_mode="direct",
-        payload_summary=f"NJR journey: {njr.positive_prompt[:50]}",
-        snapshot={
-            "normalized_job": {
-                "job_id": njr.job_id,
-                "positive_prompt": njr.positive_prompt,
-                "negative_prompt": njr.negative_prompt,
-                "config": dict(njr.config or {}) if isinstance(njr.config, dict) else {},
-            },
-        },
-    )
-
+    if entry is None:
+        raise TimeoutError(f"Job {njr.job_id} did not reach a repository terminal state.")
     return entry
 
 

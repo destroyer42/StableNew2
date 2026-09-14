@@ -7,6 +7,13 @@ import subprocess
 import sys
 from collections.abc import Mapping
 from subprocess import CompletedProcess
+from uuid import uuid4
+
+from tools.test_helpers.process_inspection import (
+    STABLENEW_OWNER_ENV,
+    STABLENEW_RUN_ENV,
+    register_test_owned_process,
+)
 
 
 def build_env(extra: Mapping[str, str] | None = None) -> dict[str, str]:
@@ -27,6 +34,8 @@ def run_app_once(
     env = build_env(extra_env or {})
     env["STABLENEW_AUTO_EXIT_SECONDS"] = str(auto_exit_seconds)
     env["STABLENEW_DEBUG_SHUTDOWN"] = env.get("STABLENEW_DEBUG_SHUTDOWN", "1")
+    env[STABLENEW_OWNER_ENV] = str(os.getpid())
+    env[STABLENEW_RUN_ENV] = str(uuid4())
 
     timeout = auto_exit_seconds + timeout_buffer
 
@@ -37,11 +46,12 @@ def run_app_once(
         stderr=subprocess.PIPE,
         text=True,
     )
+    register_test_owned_process(proc)
     try:
         stdout, stderr = proc.communicate(timeout=timeout)
     except subprocess.TimeoutExpired as err:
         proc.kill()
-        stdout, stderr = proc.communicate(timeout=5)
+        proc.wait(timeout=5)
         raise RuntimeError(
             f"StableNew did not exit within {timeout} seconds (returncode={proc.returncode})"
         ) from err
