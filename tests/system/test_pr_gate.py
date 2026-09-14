@@ -5,18 +5,24 @@ from types import SimpleNamespace
 from tools.ci import run_pr_gate
 
 
+def _command_name(command: tuple[str, ...]) -> str:
+    if command[0] == "ruff":
+        return command[0]
+    return command[1].replace("\\", "/").split("/")[-1]
+
+
 def test_pr_gate_runs_each_authority_in_order(monkeypatch) -> None:
     observed: list[str] = []
 
     def fake_run(command, **_kwargs):
-        observed.append(command[1].replace("\\", "/").split("/")[-1])
+        observed.append(_command_name(command))
         return SimpleNamespace(returncode=0)
 
     monkeypatch.setattr(run_pr_gate.subprocess, "run", fake_run)
     monkeypatch.setattr(run_pr_gate, "missing_required_tools", lambda: [])
 
     assert run_pr_gate.main() == 0
-    assert observed == [step.split("/")[-1] for _, step in run_pr_gate.GATE_STEPS]
+    assert observed == [_command_name(command) for _, command in run_pr_gate.GATE_STEPS]
 
 
 def test_pr_gate_stops_and_returns_underlying_failure(monkeypatch) -> None:

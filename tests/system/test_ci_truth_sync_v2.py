@@ -13,7 +13,8 @@ def test_ci_workflow_uses_named_required_smoke_script() -> None:
     workflow = _read(".github/workflows/ci.yml")
     assert "python tools/ci/check_repository_completeness.py" in workflow
     assert "python tools/ci/check_controller_surface.py" in workflow
-    assert "python tools/ci/run_ruff_baseline.py" in workflow
+    assert "ruff check ." in workflow
+    assert "run_ruff_baseline.py" not in workflow
     assert "python tools/ci/run_collection_gate.py" in workflow
     assert "python tools/ci/run_required_smoke.py" in workflow
     assert "python tools/ci/run_mypy_smoke.py" in workflow
@@ -56,16 +57,14 @@ def test_required_smoke_is_a_positive_architecture_current_list() -> None:
     assert "TestDirectQueueParity" not in runner
 
 
-def test_ruff_gate_is_version_pinned_and_non_increasing() -> None:
+def test_ruff_gate_is_version_pinned_and_raw_zero() -> None:
     pyproject = _read("pyproject.toml")
-    runner = _read("tools/ci/run_ruff_baseline.py")
-    baseline = _read("tools/ci/ruff_baseline.json")
+    runner = _read("tools/ci/run_pr_gate.py")
 
     assert '"ruff==0.14.9"' in pyproject
-    assert '"ruff_version": "0.14.9"' in baseline
-    assert '"total": 2208' in baseline
-    assert "count > allowed.get(key, 0)" in runner
-    assert "actual_version != expected_version" in runner
+    assert '("Ruff", ("ruff", "check", "."))' in runner
+    assert not (ROOT / "tools/ci/run_ruff_baseline.py").exists()
+    assert not (ROOT / "tools/ci/ruff_baseline.json").exists()
 
 
 def test_journeys_require_explicit_real_backend_opt_in() -> None:
@@ -90,9 +89,9 @@ def test_local_pr_gate_delegates_to_each_required_authority() -> None:
     for script in (
         "check_repository_completeness.py",
         "check_controller_surface.py",
-        "run_ruff_baseline.py",
         "run_mypy_smoke.py",
         "run_collection_gate.py",
         "run_required_smoke.py",
     ):
         assert script in runner
+    assert '("Ruff", ("ruff", "check", "."))' in runner
