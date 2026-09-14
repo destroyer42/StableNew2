@@ -182,15 +182,16 @@ journey wrappers retain the approved interpreter/dependency normalization.
 Focused release-harness validation passed; the disposable `.venv-release-proof`
 was removed after confirming no process used it.
 
-The PR-MVP-090 raw-Ruff hygiene checkpoint is **LOCAL PASS / CI PENDING**.
+The PR-MVP-090 raw-Ruff hygiene checkpoint is **COMPLETE / ACCEPTED**.
 Pinned Ruff 0.14.9 found 3,553 active findings on the feature tree; after
 reviewed mechanical cleanup and narrow defect repairs, `ruff check .` is zero.
 The legacy baseline file and baseline-comparison gate were removed. The local
 PR gate and required CI now enforce raw `ruff check .` directly. Controller
 ceilings were not increased; the AppController ceiling was tightened by one
-physical line. Required Python 3.11/3.12 CI remains the integration verdict.
+physical line. StableNew CI run 328 passed both required Python 3.11 and 3.12
+jobs; informational full-suite legacy failures remain non-blocking.
 
-The managed-runtime ownership safety repair is **LOCAL PASS / CI PENDING**.
+The managed-runtime ownership safety repair is **COMPLETE / ACCEPTED**.
 WebUI launch now refuses an occupied configured endpoint without killing or
 adopting its process. Stop, restart, orphan monitoring, process-container
 teardown, and emergency cleanup require explicit manager ownership and may act
@@ -288,7 +289,7 @@ passed on the accepted source tree, including required Python 3.11 and 3.12.
 2. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
    exact integrated post-v2.6 parent.
 
-Next action: **push the PR-MVP-090 ownership/Ruff package and obtain required CI before migration/recovery acceptance**.
+Next action: **PR-MVP-090 migration/recovery and final release acceptance**.
 
 PR-MVP-090 is **IN PROGRESS** for release proof. Its Phase 0
 runtime/bootstrap prerequisite was completed and accepted early only to unblock
