@@ -2,7 +2,7 @@
 
 Status: Canonical, Binding
 Updated: 2026-09-13
-Decision: MVP architecture reconciliation plus approved post-v2.6 image-backend target
+Decision: MVP architecture reconciliation plus approved post-v2.6 backend/value targets
 
 ## 0. Purpose and truth model
 
@@ -49,6 +49,16 @@ the current/default production image backend and must preserve accepted behavior
 behind that boundary. Per-stage backend composition and ComfyUI-centric image
 execution remain possible future options, but neither is part of the first
 backend-neutralization PR.
+
+The approved post-v2.6 product sequence is value-oriented rather than model-
+centric. After the release proof and a bounded useful-output-efficiency baseline,
+PR-IMG-100 remains first. Later planning direction is Asset Intelligence +
+Quality Efficiency, capability-aware Execution Placement, Directed Motion Video,
+and only then evidence-selected model/backend expansion. Those later outcomes
+are roadmap direction, not pre-authorized implementation architectures: each
+requires fresh repo-grounded discovery and a new bounded architecture/acceptance
+decision before implementation. No current model family, cloud provider, or
+worker transport is selected merely by this sequence.
 
 ## 2. Canonical runtime
 
@@ -200,7 +210,11 @@ process/lifecycle logic, progress integrations, and result translation. Those
 backend details must not become the public StableNew runner contract.
 
 A child runtime host, daemon, distributed scheduler, or multi-node executor is
-post-MVP work and requires a new architecture decision.
+post-MVP work and requires a new architecture decision. The accepted roadmap
+places capability-aware execution placement after Asset Intelligence so worker
+eligibility can use exact runtime/asset capability rather than machine names or
+filenames; that sequencing does not itself approve a distributed scheduler
+implementation.
 
 ## 7. Image execution and PromptPack
 
@@ -253,10 +267,11 @@ stages. PR-IMG-100 introduces a StableNew-owned image backend capability/request
 result/interface/registry boundary below `PipelineRunner.run_njr` and wraps the
 existing A1111 executor/client behavior rather than rewriting it.
 
-A future `diffusers` image backend may host multiple model families. Ideogram 4
-is the first planned qualification target after PR-IMG-100, but Ideogram is a
-model family, not the public backend architecture. Backend/runtime, model family,
-and model identity must remain separate concepts.
+Future image backends may host multiple model families. No specific second model
+family is preselected by the architecture. When model/backend expansion is
+reconsidered, current candidates must be compared through the roadmap's
+evidence gate; backend/runtime, model family, and exact model identity remain
+separate concepts.
 
 An image NJR whose selected backend does not support every requested image stage
 must fail deterministically before backend dispatch. The first backend-neutral
@@ -269,8 +284,10 @@ ComfyUI-centric image execution (COA D) is also deferred. ComfyUI may later be
 an image execution backend, but it may not replace StableNew's compiler, NJR,
 queue, runner, artifact, history, replay, cancellation, or process authorities.
 
-The binding PR-IMG-100 acceptance contract is
+The binding PR-IMG-100 architecture/acceptance contract is
 `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`.
+Implementation prompts/file lists in that document are reference material only
+and must be rewritten from the exact live post-v2.6 repository before use.
 
 ## 8. Video execution
 
@@ -289,6 +306,14 @@ The model is not bundled. Setup must provide:
 ComfyUI, LTX, AnimateDiff, multi-shot sequencing, stitching, and secondary-motion
 systems are post-MVP. Existing code for them may remain quarantined during
 recovery but must not be on the MVP execution path or presented as MVP-ready.
+
+The approved post-v2.6 roadmap keeps native SVD XT as the reliable lightweight
+baseline and makes **directed articulated motion** the next major video
+capability objective after the execution-placement wave. StableNew should own
+motion intent/control semantics independently from backend/model choice; the
+exact control vocabulary and runtime require fresh qualification and an explicit
+architecture decision before implementation. Whole-frame secondary motion must
+not be represented as articulated limb/body control.
 
 Raw backend workflow JSON is private to its backend adapter. It must not leak
 into NJR core, controllers, GUI state, queue records, or history as a public
@@ -335,6 +360,12 @@ durable identity. Portable metadata does not authorize replay or automatically
 restore history, and metadata survival is not guaranteed after third-party
 transcoding or stripping.
 
+Asset Intelligence and quality-efficiency work may later provide factual asset
+identity, compatibility projections, known-good operating profiles, and
+controlled Learning evidence. Those systems remain advisory or compile-time
+resolution inputs as explicitly accepted; they must not create a second
+execution, history, or mutable-learning authority.
+
 ## 11. Application and GUI ownership
 
 Application services coordinate compilers, repository operations, queue policy,
@@ -349,6 +380,12 @@ Capability-aware backend/model selection may later change what image settings a
 GUI presents, but GUI surfaces may only express intent/configuration and render
 projections; they may never build A1111, Diffusers, ComfyUI, or model-family
 payloads directly.
+
+Future local/LAN/cloud execution placement must preserve the same central
+lifecycle authority. A worker may execute an authorized request and return
+normalized results/artifacts, but it may not become an alternate compiler,
+queue/history database, replay authority, or GUI execution path. Exact worker
+lease/failure/security/transport semantics require a separate approved design.
 
 ## 12. Forbidden patterns
 
@@ -365,6 +402,7 @@ payloads directly.
 - implicit per-stage fallback from one image backend to another;
 - model-family branches such as Ideogram/FLUX/Qwen embedded in generic runner
   orchestration instead of backend/model-family adapters;
+- provider-owned LAN/cloud queues becoming StableNew's lifecycle authority;
 - import-time network calls, worker startup, or repository mutation;
 - untracked production modules hidden by broad `.gitignore` rules;
 - reviving the failed child runtime host during MVP recovery.
@@ -390,7 +428,9 @@ implemented:
 
 Closing a row requires implementation evidence and tests. Updating prose alone
 does not close a gap. The backend-neutral image row begins only after the v2.6
-MVP/release rows are accepted and integrated.
+MVP/release rows are accepted and integrated. Later value-roadmap outcomes do
+not become architecture gap rows until their fresh bounded architecture
+contracts are approved.
 
 ## 14. Change control
 
@@ -407,6 +447,13 @@ core field, a new persistence authority, a new public runner, or replacement of
 StableNew orchestration with ComfyUI/another runtime is a new material decision
 and requires owner review before implementation.
 
+The active roadmap now owns the accepted post-v2.6 value sequence. Asset
+Intelligence discovery documents, execution-placement ideas, directed-motion
+research, model-qualification notes, and any Codex-prompt-like drafts are
+reference material until rewritten against the live repository and promoted by
+an explicit architecture/product decision.
+
 This amendment preserves version v2.6 because it corrects and records the
-unfinished v2.6 architecture plus the first approved post-release target; it does
-not claim PR-IMG-100 has been implemented inside the v2.6 release.
+unfinished v2.6 architecture plus approved post-release direction; it does not
+claim PR-IMG-100 or later value-roadmap outcomes have been implemented inside
+the v2.6 release.
