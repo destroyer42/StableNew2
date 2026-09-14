@@ -1,9 +1,7 @@
 """Tests for image utility functions."""
 
-import io
 from pathlib import Path
 
-import pytest
 from PIL import Image as PILImage
 
 from src.utils.image_utils import generate_thumbnail, load_image_thumbnail

@@ -11,12 +11,12 @@ from src.gui_v2.adapters.learning_adapter_v2 import (
     list_recent_learning_records,
     update_record_feedback,
 )
-from src.learning.learning_paths import get_learning_records_path
 from src.learning.learning_execution import (
     LearningExecutionContext,
     LearningExecutionResult,
     LearningExecutionRunner,
 )
+from src.learning.learning_paths import get_learning_records_path
 from src.learning.learning_plan import LearningPlan
 from src.pipeline.pipeline_runner import PipelineRunResult
 

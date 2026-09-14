@@ -16,9 +16,7 @@ DEFAULT_GLOBAL_NEGATIVE_PROMPT = (
     "sexual content, adult content, immodest"
 )
 
-DEFAULT_GLOBAL_POSITIVE_PROMPT = (
-    ""
-)
+DEFAULT_GLOBAL_POSITIVE_PROMPT = ""
 
 logger = logging.getLogger(__name__)
 LAST_RUN_PATH = workspace_paths.last_run_v2()
@@ -558,7 +556,7 @@ class ConfigManager:
         try:
             with open(config_path, encoding="utf-8") as f:
                 data = json.load(f)
-            
+
             # Handle unified format (v2.6+) vs legacy format
             if "preset_data" in data:
                 config = data["preset_data"]
@@ -572,7 +570,7 @@ class ConfigManager:
                 else:
                     # It's a legacy pack data file, no config
                     config = {}
-            
+
             logger.debug(f"Loaded pack config: {pack_name}")
             return config
         except Exception as e:
@@ -587,7 +585,7 @@ class ConfigManager:
         if not config_path.exists():
             return None
         raw = self.get_pack_config(pack_name)
-        
+
         # Debug: Log raw config before merging
         raw_pipeline = raw.get("pipeline", {})
         logger.info(
@@ -598,9 +596,9 @@ class ConfigManager:
             raw_pipeline.get("adetailer_enabled"),
             raw_pipeline.get("upscale_enabled"),
         )
-        
+
         merged = self._merge_config_with_defaults(raw)
-        
+
         # Debug: Log merged config after merging
         merged_pipeline = merged.get("pipeline", {})
         logger.info(
@@ -611,7 +609,7 @@ class ConfigManager:
             merged_pipeline.get("adetailer_enabled"),
             merged_pipeline.get("upscale_enabled"),
         )
-        
+
         return merged
 
     def save_pack_config(self, pack_name: str, config: dict[str, Any]) -> bool:
@@ -652,7 +650,7 @@ class ConfigManager:
                         existing_data = json.load(f)
                 except Exception:
                     pass  # If load fails, start fresh
-            
+
             # Build unified structure
             if "pack_data" in existing_data:
                 # Unified format - preserve pack_data, update preset_data
@@ -667,7 +665,11 @@ class ConfigManager:
             else:
                 # No existing data or legacy config-only format
                 unified_data = {
-                    "pack_data": {"name": Path(pack_name).stem, "slots": [], "matrix": {"enabled": False, "mode": "fanout", "limit": 8, "slots": []}},
+                    "pack_data": {
+                        "name": Path(pack_name).stem,
+                        "slots": [],
+                        "matrix": {"enabled": False, "mode": "fanout", "limit": 8, "slots": []},
+                    },
                     "preset_data": config,
                 }
 
@@ -726,7 +728,9 @@ class ConfigManager:
         stored = self._load_settings()
         merged = dict(defaults)
         merged.update(stored)
-        if isinstance(defaults.get("prompt_optimizer"), dict) and isinstance(stored.get("prompt_optimizer"), dict):
+        if isinstance(defaults.get("prompt_optimizer"), dict) and isinstance(
+            stored.get("prompt_optimizer"), dict
+        ):
             prompt_optimizer = dict(defaults["prompt_optimizer"])
             prompt_optimizer.update(stored["prompt_optimizer"])
             merged["prompt_optimizer"] = prompt_optimizer
@@ -977,4 +981,3 @@ class ConfigManager:
         except Exception as exc:
             logger.warning("Failed to load last run configuration: %s", exc)
             return None
-

@@ -51,7 +51,9 @@ def test_recommendation_engine_requires_sufficient_learning_records(tmp_path: Pa
     assert result.recommendations, "Expected recommendations from sparse+review evidence"
 
 
-def test_recommendation_engine_ignores_review_tab_feedback_for_learning_recommendations(tmp_path: Path) -> None:
+def test_recommendation_engine_ignores_review_tab_feedback_for_learning_recommendations(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "records.jsonl"
     records = []
     for idx, rating in enumerate((4, 5, 5), start=1):
@@ -83,10 +85,15 @@ def test_recommendation_engine_ignores_review_tab_feedback_for_learning_recommen
     result = engine.recommend("portrait", "txt2img")
 
     assert result.recommendations
-    assert all(rec.parameter_name != "sampler" or rec.recommended_value == "Euler a" for rec in result.recommendations)
+    assert all(
+        rec.parameter_name != "sampler" or rec.recommended_value == "Euler a"
+        for rec in result.recommendations
+    )
 
 
-def test_recommendation_engine_refinement_context_does_not_bypass_sparse_evidence_guard(tmp_path: Path) -> None:
+def test_recommendation_engine_refinement_context_does_not_bypass_sparse_evidence_guard(
+    tmp_path: Path,
+) -> None:
     path = tmp_path / "records.jsonl"
     _write_records(
         path,
@@ -101,7 +108,10 @@ def test_recommendation_engine_refinement_context_does_not_bypass_sparse_evidenc
                 "metadata": {
                     "record_kind": "learning_experiment_rating",
                     "user_rating": 4,
-                    "adaptive_refinement": {"policy_id": "full_upscale_detail_v1", "scale_band": "small"},
+                    "adaptive_refinement": {
+                        "policy_id": "full_upscale_detail_v1",
+                        "scale_band": "small",
+                    },
                 },
             }
         ],

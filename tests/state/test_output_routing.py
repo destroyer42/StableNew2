@@ -31,7 +31,9 @@ def test_classify_njr_output_route_uses_testing_under_pytest(monkeypatch) -> Non
     assert route == OUTPUT_ROUTE_TESTING
 
 
-def test_classify_njr_output_route_uses_testing_under_pytest_even_with_pack_name(monkeypatch) -> None:
+def test_classify_njr_output_route_uses_testing_under_pytest_even_with_pack_name(
+    monkeypatch,
+) -> None:
     monkeypatch.setenv("PYTEST_CURRENT_TEST", "tests/state/test_output_routing.py::test")
 
     route = classify_njr_output_route(_build_njr(prompt_pack_name="NamedPack"))
@@ -49,9 +51,7 @@ def test_classify_njr_output_route_uses_testing_under_explicit_test_mode(monkeyp
 
 
 def test_classify_njr_output_route_uses_testing_for_debug_replay() -> None:
-    route = classify_njr_output_route(
-        _build_njr(intent_config={"source": "debug_replay"})
-    )
+    route = classify_njr_output_route(_build_njr(intent_config={"source": "debug_replay"}))
 
     assert route == OUTPUT_ROUTE_TESTING
 
@@ -101,6 +101,7 @@ def test_classify_existing_output_dir_uses_testing_for_cfg_check_name(tmp_path) 
     run_dir.mkdir()
 
     assert classify_existing_output_dir(run_dir) == OUTPUT_ROUTE_TESTING
+
 
 def test_classify_existing_output_dir_uses_testing_for_test_pack_name(tmp_path) -> None:
     run_dir = tmp_path / "20260329_120000_Test_Pack-sdxl-none"

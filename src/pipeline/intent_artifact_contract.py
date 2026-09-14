@@ -6,7 +6,6 @@ from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any
 
-
 INTENT_ARTIFACT_SCHEMA_V1 = "stablenew.intent-artifact.v1"
 INTENT_ARTIFACT_VERSION_V1 = "1.0"
 _INTENT_TOP_LEVEL_KEYS = (

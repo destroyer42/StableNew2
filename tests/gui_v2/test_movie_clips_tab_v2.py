@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import tkinter as tk
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -26,7 +26,6 @@ from src.gui.view_contracts.movie_clips_contract import (
     sort_image_names,
 )
 from src.gui.views.movie_clips_tab_frame_v2 import MovieClipsTabFrameV2
-
 
 # ---------------------------------------------------------------------------
 # Contract helpers – unit tests (no Tk required)
@@ -329,7 +328,9 @@ def test_set_source_frame_paths_loads_valid_images(tk_root: tk.Tk, tmp_path: Pat
 
 
 @pytest.mark.gui
-def test_set_source_frame_paths_filters_non_image_extensions(tk_root: tk.Tk, tmp_path: Path) -> None:
+def test_set_source_frame_paths_filters_non_image_extensions(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
     """set_source_frame_paths ignores non-image file extensions."""
     tab = MovieClipsTabFrameV2(tk_root)
     try:
@@ -360,7 +361,9 @@ def test_set_source_frame_paths_empty_list_sets_status(tk_root: tk.Tk) -> None:
 
 
 @pytest.mark.gui
-def test_set_source_frame_paths_accepts_custom_status_message(tk_root: tk.Tk, tmp_path: Path) -> None:
+def test_set_source_frame_paths_accepts_custom_status_message(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
     """set_source_frame_paths applies a caller-provided status message."""
     tab = MovieClipsTabFrameV2(tk_root)
     try:
@@ -401,7 +404,9 @@ def test_set_source_bundle_loads_sequence_segments(tk_root: tk.Tk, tmp_path: Pat
 
 
 @pytest.mark.gui
-def test_set_source_bundle_prefers_frame_paths_for_video_bundle(tk_root: tk.Tk, tmp_path: Path) -> None:
+def test_set_source_bundle_prefers_frame_paths_for_video_bundle(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
     tab = MovieClipsTabFrameV2(tk_root)
     try:
         frame0 = tmp_path / "frame_000.png"
@@ -540,4 +545,3 @@ def test_tab_build_passes_settings_to_controller(tk_root: tk.Tk, tmp_path: Path)
         assert settings["mode"] == "slideshow"
     finally:
         tab.destroy()
-

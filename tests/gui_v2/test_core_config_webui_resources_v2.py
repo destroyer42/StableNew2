@@ -150,8 +150,6 @@ def test_core_config_refresh_triggered_on_ready(monkeypatch):
     )
 
     window = FakeWindow()
-    window.app_controller = SimpleNamespace(
-        webui_connection_controller=FakeConnectionController()
-    )
+    window.app_controller = SimpleNamespace(webui_connection_controller=FakeConnectionController())
     _update_window_webui_manager(window, window.webui_process_manager)
     assert window.sidebar_panel_v2.refresh_calls == 1

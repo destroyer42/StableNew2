@@ -43,12 +43,8 @@ def test_support_labels_follow_phase_one_policy() -> None:
 
     assert MainWindowV2._support_tab_title("prompt", "Prompt") == "Prompt"
     assert MainWindowV2._support_tab_title("svd", "SVD Img2Vid") == "SVD Img2Vid"
-    assert "- Adv" in format_product_support_label(
-        "Learning", surfaces["learning"].state
-    )
-    assert "- Deferred" in format_product_support_label(
-        "Future", ProductSupportState.DEFERRED
-    )
+    assert "- Adv" in format_product_support_label("Learning", surfaces["learning"].state)
+    assert "- Deferred" in format_product_support_label("Future", ProductSupportState.DEFERRED)
     assert surfaces["prompt"].state is ProductSupportState.SUPPORTED
     assert surfaces["pipeline"].state is ProductSupportState.SUPPORTED
     assert surfaces["svd"].state is ProductSupportState.SUPPORTED

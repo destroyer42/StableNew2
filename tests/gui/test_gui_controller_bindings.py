@@ -142,7 +142,9 @@ def test_queue_panel_invokes_controller_actions(tk_root: tk.Tk) -> None:
 
 def test_queue_panel_disables_remove_and_clear_for_running_only_queue(tk_root: tk.Tk) -> None:
     panel = QueuePanelV2(tk_root)
-    running_job = SimpleNamespace(job_id="job-1", status="RUNNING", get_display_summary=lambda: "job")
+    running_job = SimpleNamespace(
+        job_id="job-1", status="RUNNING", get_display_summary=lambda: "job"
+    )
 
     panel.update_jobs([running_job])
     panel.job_listbox.selection_set(0)
@@ -160,8 +162,12 @@ def test_queue_panel_move_buttons_use_queued_position_not_visual_index(tk_root: 
         tk_root,
         controller=SimpleNamespace(on_queue_remove_job_v2=lambda _job_id: True),
     )
-    running_job = SimpleNamespace(job_id="running", status="RUNNING", get_display_summary=lambda: "running")
-    queued_job = SimpleNamespace(job_id="queued", status="QUEUED", get_display_summary=lambda: "queued")
+    running_job = SimpleNamespace(
+        job_id="running", status="RUNNING", get_display_summary=lambda: "running"
+    )
+    queued_job = SimpleNamespace(
+        job_id="queued", status="QUEUED", get_display_summary=lambda: "queued"
+    )
 
     panel.update_jobs([running_job, queued_job])
     panel.job_listbox.selection_set(1)
@@ -184,9 +190,15 @@ def test_queue_panel_enables_move_up_for_second_queued_job_below_running(tk_root
             on_queue_move_to_front_v2=lambda _job_id: True,
         ),
     )
-    running_job = SimpleNamespace(job_id="running", status="RUNNING", get_display_summary=lambda: "running")
-    queued_job_1 = SimpleNamespace(job_id="queued-1", status="QUEUED", get_display_summary=lambda: "queued-1")
-    queued_job_2 = SimpleNamespace(job_id="queued-2", status="QUEUED", get_display_summary=lambda: "queued-2")
+    running_job = SimpleNamespace(
+        job_id="running", status="RUNNING", get_display_summary=lambda: "running"
+    )
+    queued_job_1 = SimpleNamespace(
+        job_id="queued-1", status="QUEUED", get_display_summary=lambda: "queued-1"
+    )
+    queued_job_2 = SimpleNamespace(
+        job_id="queued-2", status="QUEUED", get_display_summary=lambda: "queued-2"
+    )
 
     panel.update_jobs([running_job, queued_job_1, queued_job_2])
     panel.job_listbox.selection_set(2)

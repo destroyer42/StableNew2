@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import hashlib
 import shutil
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from PIL import Image
-
 
 DEFAULT_DEPTH_ESTIMATOR_MODEL_ID = "Intel/dpt-hybrid-midas"
 VALID_DEPTH_INPUT_MODES = {"auto", "upload"}
@@ -166,9 +166,7 @@ class DepthMapResolver:
 
     def _build_cache_key(self, source_image_path: Path) -> str:
         source_digest = _sha256_file(source_image_path)
-        return hashlib.sha256(
-            f"{source_digest}:{self._model_id}".encode("utf-8")
-        ).hexdigest()
+        return hashlib.sha256(f"{source_digest}:{self._model_id}".encode()).hexdigest()
 
     def _materialize_output_copy(
         self,
@@ -232,7 +230,9 @@ class DepthMapResolver:
         try:
             import numpy as np
         except Exception as exc:
-            raise RuntimeError("Auto depth generation requires numpy to normalize tensor output.") from exc
+            raise RuntimeError(
+                "Auto depth generation requires numpy to normalize tensor output."
+            ) from exc
 
         if hasattr(candidate, "detach"):
             array = candidate.detach().cpu().numpy()
@@ -248,7 +248,9 @@ class DepthMapResolver:
         if max_value <= min_value:
             normalized = np.zeros_like(array, dtype="uint8")
         else:
-            normalized = ((array - min_value) / (max_value - min_value) * 255.0).clip(0, 255).astype("uint8")
+            normalized = (
+                ((array - min_value) / (max_value - min_value) * 255.0).clip(0, 255).astype("uint8")
+            )
         return Image.fromarray(normalized, mode="L")
 
     @staticmethod

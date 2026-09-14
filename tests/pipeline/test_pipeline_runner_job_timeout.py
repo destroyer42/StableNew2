@@ -81,6 +81,7 @@ class TestJobTimeoutInRunNjr(unittest.TestCase):
 
     def setUp(self) -> None:
         from src.api.client import SDWebUIClient
+
         self.client = Mock(spec=SDWebUIClient)
         self.logger = Mock(spec=StructuredLogger)
         self.runner = PipelineRunner(self.client, self.logger)
@@ -116,13 +117,19 @@ class TestJobTimeoutInRunNjr(unittest.TestCase):
         with patch.object(
             self.runner,
             "_check_job_deadline",
-            side_effect=PipelineJobTimeoutError("Job exceeded 600s (elapsed: 601.0s) before stage 'txt2img'"),
+            side_effect=PipelineJobTimeoutError(
+                "Job exceeded 600s (elapsed: 601.0s) before stage 'txt2img'"
+            ),
         ):
             result = self.runner.run_njr(record, cancel_token=None)
 
         assert result.success is False
         assert result.error is not None
-        assert "600" in str(result.error) or "timeout" in str(result.error).lower() or "exceeded" in str(result.error).lower()
+        assert (
+            "600" in str(result.error)
+            or "timeout" in str(result.error).lower()
+            or "exceeded" in str(result.error).lower()
+        )
 
 
 if __name__ == "__main__":

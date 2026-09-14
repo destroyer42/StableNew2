@@ -115,7 +115,9 @@ def test_source_file_sha_and_valid_stablenew_image_lineage_are_preserved(tmp_pat
     source_payload = _source_payload()
     assert write_image_metadata(
         source,
-        build_contract_kv(source_payload, job_id="image-job-1", run_id="image-run-1", stage="txt2img"),
+        build_contract_kv(
+            source_payload, job_id="image-job-1", run_id="image-run-1", stage="txt2img"
+        ),
     )
 
     payload = provenance.build_svd_portable_provenance(
@@ -147,9 +149,7 @@ def test_source_file_sha_and_valid_stablenew_image_lineage_are_preserved(tmp_pat
     assert payload["lineage"]["parent_job_id"] == "parent-job-1"
     assert payload["lineage"]["parent_artifact_id"] == "parent-artifact-1"
     assert payload["svd"]["config"] == {"inference": {"fps": 7}}
-    assert payload["svd"]["preprocess"] == {
-        "source_dimensions": {"width": 32, "height": 48}
-    }
+    assert payload["svd"]["preprocess"] == {"source_dimensions": {"width": 32, "height": 48}}
     assert payload["svd"]["postprocess"]["interpolation"]["output_fps"] == 14
 
 
@@ -211,7 +211,9 @@ def test_absent_parent_artifact_id_is_not_fabricated(tmp_path: Path) -> None:
     assert "parent_artifact_id" not in payload["lineage"]
 
 
-def test_media_hash_verification_uses_embedded_video_media_identity(monkeypatch, tmp_path: Path) -> None:
+def test_media_hash_verification_uses_embedded_video_media_identity(
+    monkeypatch, tmp_path: Path
+) -> None:
     payload = _portable_payload(video={"media_content_sha256": "f" * 64})
     monkeypatch.setattr(
         provenance,

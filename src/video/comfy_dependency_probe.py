@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping
+from typing import Any
 
 from src.video.comfy_api_client import ComfyApiClient
-from src.video.workflow_contracts import WorkflowDependencySpec, WorkflowSpec
+from src.video.workflow_contracts import WorkflowSpec
 
 
 def _contains_locator(payload: Any, locator: str) -> bool:
@@ -69,7 +70,9 @@ class ComfyDependencyProbe:
         elif self._client is not None:
             payload = self._client.get_object_info()
         else:
-            raise ValueError("ComfyDependencyProbe requires a client or explicit object_info payload")
+            raise ValueError(
+                "ComfyDependencyProbe requires a client or explicit object_info payload"
+            )
 
         present: list[str] = []
         missing_required: list[str] = []

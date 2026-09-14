@@ -5,8 +5,12 @@ import pytest
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.panels_v2.debug_hub_panel_v2 import DebugHubPanelV2
-from src.pipeline.job_models_v2 import NormalizedJobRecord, PackUsageInfo, StagePromptInfo
-from src.pipeline.job_models_v2 import UnifiedJobSummary
+from src.pipeline.job_models_v2 import (
+    NormalizedJobRecord,
+    PackUsageInfo,
+    StagePromptInfo,
+    UnifiedJobSummary,
+)
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
 from src.utils import InMemoryLogHandler

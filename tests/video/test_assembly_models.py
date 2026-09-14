@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from src.video.assembly_models import (
     AssembledSequenceInput,
     AssembledVideoResult,
     AssemblyRequest,
-    AssemblySegmentSource,
     ExportReadyOutputBundle,
 )
 
@@ -67,7 +64,9 @@ def test_assembled_sequence_input_from_video_artifact_bundle() -> None:
 
 def test_assembly_request_validate() -> None:
     request = AssemblyRequest(
-        source=AssembledSequenceInput.from_paths(["C:/tmp/frame0.png"], source_kind="manual_frames"),
+        source=AssembledSequenceInput.from_paths(
+            ["C:/tmp/frame0.png"], source_kind="manual_frames"
+        ),
         output_dir="",
         fps=0,
         mode="invalid",
@@ -84,7 +83,9 @@ def test_assembly_request_validate() -> None:
 def test_assembled_video_result_to_dict() -> None:
     result = AssembledVideoResult(
         success=True,
-        source=AssembledSequenceInput.from_paths(["C:/tmp/frame0.png"], source_kind="manual_frames"),
+        source=AssembledSequenceInput.from_paths(
+            ["C:/tmp/frame0.png"], source_kind="manual_frames"
+        ),
         export_settings={"fps": 24},
         export_output=ExportReadyOutputBundle(
             primary_path="C:/tmp/final.mp4",

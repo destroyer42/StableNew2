@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 CORE_FILES = [
     Path("src/controller/core_pipeline_controller.py"),
     Path("src/controller/pipeline_controller.py"),

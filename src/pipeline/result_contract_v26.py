@@ -75,7 +75,9 @@ def _artifact_from_aggregate(aggregate: Mapping[str, Any] | None) -> dict[str, A
             output_paths=output_paths if isinstance(output_paths, list) else [],
             manifest_path=str(manifest_path) if manifest_path else None,
             thumbnail_path=str(data.get("thumbnail_path")) if data.get("thumbnail_path") else None,
-            input_image_path=str(data.get("input_image_path")) if data.get("input_image_path") else None,
+            input_image_path=str(data.get("input_image_path"))
+            if data.get("input_image_path")
+            else None,
         )
     return {}
 
@@ -264,7 +266,9 @@ def build_replay_descriptor(
             {"path": primary_artifact.get("primary_path")},
         )
     )
-    primary_paths = extract_artifact_paths({"artifact": primary_artifact}) if primary_artifact else []
+    primary_paths = (
+        extract_artifact_paths({"artifact": primary_artifact}) if primary_artifact else []
+    )
 
     return {
         "schema": REPLAY_DESCRIPTOR_SCHEMA_VERSION,
@@ -304,7 +308,9 @@ def build_diagnostics_descriptor(
     artifacts = collect_canonical_artifacts(result)
     primary_artifact = extract_primary_artifact(result)
     variant_count = len(canonicalize_variant_entries(result.get("variants") or []))
-    output_count = len(extract_artifact_paths({"artifact": primary_artifact})) if primary_artifact else 0
+    output_count = (
+        len(extract_artifact_paths({"artifact": primary_artifact})) if primary_artifact else 0
+    )
     if output_count <= 0:
         output_count = variant_count
 

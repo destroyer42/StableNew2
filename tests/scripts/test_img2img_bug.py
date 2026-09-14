@@ -1,4 +1,5 @@
 """Test to reproduce img2img_enabled defaulting bug."""
+
 import json
 from pathlib import Path
 
@@ -90,12 +91,14 @@ def main() -> None:
     print("\n" + "=" * 80)
     print("RESULT:")
     print("=" * 80)
-    if stage_defaults["img2img"] == False and stage_defaults["adetailer"] == True:
+    if not stage_defaults["img2img"] and stage_defaults["adetailer"]:
         print("OK. BUG FIXED - Values are correct!")
     else:
         print("FAIL. BUG STILL PRESENT")
         print("   Expected: img2img=False, adetailer=True")
-        print(f"   Got: img2img={stage_defaults['img2img']}, adetailer={stage_defaults['adetailer']}")
+        print(
+            f"   Got: img2img={stage_defaults['img2img']}, adetailer={stage_defaults['adetailer']}"
+        )
 
     # Cleanup
     test_pack_path.unlink()

@@ -23,7 +23,11 @@ class _RuntimePortsStub:
 
     def create_runner(self, *, api_client, structured_logger, status_callback=None):
         self.created_runner = (api_client, structured_logger)
-        return {"client": api_client, "logger": structured_logger, "status_callback": status_callback}
+        return {
+            "client": api_client,
+            "logger": structured_logger,
+            "status_callback": status_callback,
+        }
 
 
 def test_build_application_kernel_uses_shared_runtime_ports_and_snapshot() -> None:

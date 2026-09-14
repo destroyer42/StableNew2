@@ -73,7 +73,9 @@ def _wait_for_status(repository: JobRepository, job_id: str, status: JobStatus) 
     assert entry.status is status
 
 
-def test_phase1b_repeats_preview_submission_and_manual_dispatch(tmp_path: Path, monkeypatch) -> None:
+def test_phase1b_repeats_preview_submission_and_manual_dispatch(
+    tmp_path: Path, monkeypatch
+) -> None:
     monkeypatch.chdir(tmp_path)
     pack_paths = [
         tmp_path / "packs" / "pack-a.json",

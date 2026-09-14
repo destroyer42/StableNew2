@@ -36,7 +36,9 @@ def test_style_lora_manager_resolves_available_style_selection(tmp_path: Path) -
     catalog_path = _write_style_catalog(tmp_path, file_path=weight_path)
     manager = StyleLoRAManager(catalog_path=catalog_path, webui_root=None)
 
-    resolved = manager.resolve_selection({"style_id": "cinematic_grit"}, base_model="juggernautXL.safetensors")
+    resolved = manager.resolve_selection(
+        {"style_id": "cinematic_grit"}, base_model="juggernautXL.safetensors"
+    )
 
     assert resolved is not None
     assert resolved.applied is True
@@ -49,7 +51,9 @@ def test_style_lora_manager_warns_when_weight_file_is_missing(tmp_path: Path) ->
     catalog_path = _write_style_catalog(tmp_path, file_path=tmp_path / "missing.safetensors")
     manager = StyleLoRAManager(catalog_path=catalog_path, webui_root=None)
 
-    resolved = manager.resolve_selection({"style_id": "cinematic_grit"}, base_model="juggernautXL.safetensors")
+    resolved = manager.resolve_selection(
+        {"style_id": "cinematic_grit"}, base_model="juggernautXL.safetensors"
+    )
 
     assert resolved is not None
     assert resolved.applied is False
@@ -67,7 +71,9 @@ def test_style_lora_manager_skips_incompatible_model_family(tmp_path: Path) -> N
     )
     manager = StyleLoRAManager(catalog_path=catalog_path, webui_root=None)
 
-    resolved = manager.resolve_selection({"style_id": "cinematic_grit"}, base_model="sd15_model.safetensors")
+    resolved = manager.resolve_selection(
+        {"style_id": "cinematic_grit"}, base_model="sd15_model.safetensors"
+    )
 
     assert resolved is not None
     assert resolved.applied is False

@@ -1,35 +1,37 @@
 """Test ADetailer metadata generation and apply_global handling."""
+
 import logging
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, Mock, patch
+
 from src.pipeline.executor import Pipeline
 
 
 def test_adetailer_metadata_apply_global_defined():
     """Ensure apply_global is defined and False in ADetailer metadata."""
     pipeline = Pipeline(Mock(), Mock())
-    
-    with patch.object(pipeline, '_load_image_base64', return_value="fake_b64"), \
-         patch.object(pipeline, '_generate_images', return_value={"images": ["result_b64"]}), \
-         patch('src.pipeline.executor.save_image_from_base64', return_value=True), \
-         patch('builtins.open', MagicMock()):
-        
+
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(pipeline, "_generate_images", return_value={"images": ["result_b64"]}),
+        patch("src.pipeline.executor.save_image_from_base64", return_value=True),
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
             "adetailer_steps": 28,
         }
-        
+
         result = pipeline.run_adetailer(
             input_image_path=Path("input.png"),
             prompt="test prompt",
             negative_prompt="test negative",
             config=config,
             run_dir=Path("output"),
-            image_name="test"
+            image_name="test",
         )
-        
+
         assert result is not None
         assert "global_negative_applied" in result
         assert result["global_negative_applied"] is False
@@ -39,28 +41,29 @@ def test_adetailer_metadata_apply_global_defined():
 def test_adetailer_custom_negative_no_global():
     """ADetailer with custom negative prompt should not apply global terms."""
     pipeline = Pipeline(Mock(), Mock())
-    
-    with patch.object(pipeline, '_load_image_base64', return_value="fake_b64"), \
-         patch.object(pipeline, '_generate_images', return_value={"images": ["result_b64"]}), \
-         patch('src.pipeline.executor.save_image_from_base64', return_value=True), \
-         patch('builtins.open', MagicMock()):
-        
+
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(pipeline, "_generate_images", return_value={"images": ["result_b64"]}),
+        patch("src.pipeline.executor.save_image_from_base64", return_value=True),
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
             "adetailer_steps": 28,
             "adetailer_negative_prompt": "custom negative",
         }
-        
+
         result = pipeline.run_adetailer(
             input_image_path=Path("input.png"),
             prompt="test prompt",
             negative_prompt="fallback negative",
             config=config,
             run_dir=Path("output"),
-            image_name="test"
+            image_name="test",
         )
-        
+
         assert result is not None
         assert result["global_negative_applied"] is False
         assert result["original_negative_prompt"] == "custom negative"
@@ -70,27 +73,28 @@ def test_adetailer_custom_negative_no_global():
 def test_adetailer_inherits_txt2img_negative():
     """ADetailer without custom negative should inherit txt2img negative."""
     pipeline = Pipeline(Mock(), Mock())
-    
-    with patch.object(pipeline, '_load_image_base64', return_value="fake_b64"), \
-         patch.object(pipeline, '_generate_images', return_value={"images": ["result_b64"]}), \
-         patch('src.pipeline.executor.save_image_from_base64', return_value=True), \
-         patch('builtins.open', MagicMock()):
-        
+
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(pipeline, "_generate_images", return_value={"images": ["result_b64"]}),
+        patch("src.pipeline.executor.save_image_from_base64", return_value=True),
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
             "adetailer_steps": 28,
         }
-        
+
         result = pipeline.run_adetailer(
             input_image_path=Path("input.png"),
             prompt="test prompt",
             negative_prompt="inherited negative",
             config=config,
             run_dir=Path("output"),
-            image_name="test"
+            image_name="test",
         )
-        
+
         assert result is not None
         assert result["global_negative_applied"] is False
         assert result["original_negative_prompt"] == ""
@@ -101,11 +105,12 @@ def test_adetailer_fallback_name_uses_input_stem():
     """Fallback naming should be deterministic when image_name is omitted."""
     pipeline = Pipeline(Mock(), Mock())
 
-    with patch.object(pipeline, '_load_image_base64', return_value="fake_b64"), \
-         patch.object(pipeline, '_generate_images', return_value={"images": ["result_b64"]}), \
-         patch('src.pipeline.executor.save_image_from_base64', return_value=True), \
-         patch('builtins.open', MagicMock()):
-
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(pipeline, "_generate_images", return_value={"images": ["result_b64"]}),
+        patch("src.pipeline.executor.save_image_from_base64", return_value=True),
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
@@ -128,11 +133,14 @@ def test_adetailer_payload_uses_adaptive_refinement_overrides():
     """Executor should honor runner-provided ADetailer refinement overrides."""
     pipeline = Pipeline(Mock(), Mock())
 
-    with patch.object(pipeline, '_load_image_base64', return_value="fake_b64"), \
-         patch.object(pipeline, '_generate_images_with_progress', return_value={"images": ["result_b64"]}) as generate_mock, \
-         patch('src.pipeline.executor.save_image_from_base64', return_value=Path("output/test.png")), \
-         patch('builtins.open', MagicMock()):
-
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}
+        ) as generate_mock,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
@@ -165,7 +173,7 @@ def test_adetailer_payload_uses_adaptive_refinement_overrides():
             negative_prompt="test negative",
             config=config,
             run_dir=Path("output"),
-            image_name="test"
+            image_name="test",
         )
 
         assert result is not None
@@ -185,11 +193,14 @@ def test_adetailer_payload_pins_requested_sd_checkpoint_and_manifest_prefers_it(
     pipeline.client.set_model = Mock()
     pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
 
-    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
-         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}) as generate_mock, \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch("builtins.open", MagicMock()):
-
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}
+        ) as generate_mock,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
@@ -223,11 +234,14 @@ def test_adetailer_defaults_to_global_model_switch_without_request_override() ->
     pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
     pipeline.client.get_current_vae = Mock(return_value="ambient-vae.safetensors")
 
-    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
-         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}) as generate_mock, \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch("builtins.open", MagicMock()):
-
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}
+        ) as generate_mock,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
@@ -263,11 +277,14 @@ def test_adetailer_request_local_pinning_opt_in_uses_request_override(monkeypatc
     pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
     pipeline.client.get_current_vae = Mock(return_value="ambient-vae.safetensors")
 
-    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
-         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}) as generate_mock, \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch("builtins.open", MagicMock()):
-
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}
+        ) as generate_mock,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
@@ -302,12 +319,15 @@ def test_adetailer_diagnostics_log_request_payload_fields(monkeypatch, caplog) -
     pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
     pipeline.client.get_current_vae = Mock(return_value="ambient-vae.safetensors")
 
-    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
-         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}), \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch("builtins.open", MagicMock()), \
-         caplog.at_level(logging.INFO):
-
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}
+        ),
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch("builtins.open", MagicMock()),
+        caplog.at_level(logging.INFO),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
@@ -332,20 +352,27 @@ def test_adetailer_diagnostics_log_request_payload_fields(monkeypatch, caplog) -
     ]
     assert diagnostic_messages
     assert any("payload_sd_vae=base-vae.safetensors" in message for message in diagnostic_messages)
-    assert any("payload_override_vae=base-vae.safetensors" in message for message in diagnostic_messages)
-    assert any("payload_sd_model=base-model.safetensors" in message for message in diagnostic_messages)
+    assert any(
+        "payload_override_vae=base-vae.safetensors" in message for message in diagnostic_messages
+    )
+    assert any(
+        "payload_sd_model=base-model.safetensors" in message for message in diagnostic_messages
+    )
     assert all("actual_webui_vae" not in message for message in diagnostic_messages)
 
 
 def test_adetailer_logs_exact_request_args_block(caplog) -> None:
     pipeline = Pipeline(Mock(), Mock())
 
-    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
-         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}), \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch("builtins.open", MagicMock()), \
-         caplog.at_level(logging.INFO):
-
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}
+        ),
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch("builtins.open", MagicMock()),
+        caplog.at_level(logging.INFO),
+    ):
         config = {
             "adetailer_enabled": True,
             "enable_face_pass": True,
@@ -373,7 +400,9 @@ def test_adetailer_logs_exact_request_args_block(caplog) -> None:
 
     assert result is not None
     args_messages = [
-        record.message for record in caplog.records if record.message.startswith("[adetailer/args] ")
+        record.message
+        for record in caplog.records
+        if record.message.startswith("[adetailer/args] ")
     ]
     assert len(args_messages) == 1
     args_message = args_messages[0]
@@ -388,11 +417,14 @@ def test_adetailer_logs_exact_request_args_block(caplog) -> None:
 def test_adetailer_normalizes_scheduler_and_respects_explicit_pass_enables() -> None:
     pipeline = Pipeline(Mock(), Mock())
 
-    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
-         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}) as generate_mock, \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch("builtins.open", MagicMock()):
-
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}
+        ) as generate_mock,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "enable_face_pass": False,
@@ -432,12 +464,15 @@ def test_adetailer_experiment_legacy_safe_payload_sanitizes_pass_args(monkeypatc
     monkeypatch.setenv("STABLENEW_ADETAILER_EXPERIMENT_LEGACY_SAFE_PAYLOAD", "1")
     pipeline = Pipeline(Mock(), Mock())
 
-    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
-         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}) as generate_mock, \
-         patch("src.pipeline.executor.Image.open", side_effect=FileNotFoundError), \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch("builtins.open", MagicMock()):
-
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}
+        ) as generate_mock,
+        patch("src.pipeline.executor.Image.open", side_effect=FileNotFoundError),
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "enable_face_pass": True,
@@ -485,7 +520,9 @@ def test_adetailer_experiment_legacy_safe_payload_sanitizes_pass_args(monkeypatc
 
 def test_check_model_drift_downgrades_request_local_ambient_mismatch(caplog) -> None:
     pipeline = Pipeline(Mock(), Mock())
-    pipeline.client.get_current_model = Mock(return_value="juggernautXL_ragnarokBy.safetensors [dd08fa32f9]")
+    pipeline.client.get_current_model = Mock(
+        return_value="juggernautXL_ragnarokBy.safetensors [dd08fa32f9]"
+    )
 
     with caplog.at_level(logging.INFO):
         warning = pipeline._check_model_drift(

@@ -59,7 +59,9 @@ class SecondaryMotionPolicyService:
         subject_summary: Mapping[str, Any] | None = None,
     ) -> SecondaryMotionPolicy:
         motion_intent = (
-            intent if isinstance(intent, SecondaryMotionIntent) else SecondaryMotionIntent.from_dict(intent)
+            intent
+            if isinstance(intent, SecondaryMotionIntent)
+            else SecondaryMotionIntent.from_dict(intent)
         )
         if not motion_intent.enabled or motion_intent.mode == "disabled":
             return SecondaryMotionPolicy(reasons=("secondary_motion_disabled",))
@@ -139,7 +141,16 @@ class SecondaryMotionPolicyService:
     ) -> dict[str, Any]:
         text = f"{prompt} {intent_label}".lower()
         negative = negative_prompt.lower()
-        action_tokens = ("running", "jump", "jumping", "dance", "dancing", "flying", "action", "spinning")
+        action_tokens = (
+            "running",
+            "jump",
+            "jumping",
+            "dance",
+            "dancing",
+            "flying",
+            "action",
+            "spinning",
+        )
         calm_tokens = ("portrait", "still", "calm", "steady", "resting", "posed")
         float_tokens = ("floating", "hovering", "drifting")
         action_score = sum(1 for token in action_tokens if token in text)

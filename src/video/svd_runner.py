@@ -199,7 +199,9 @@ class SVDRunner:
                 if config.output.save_frames:
                     frame_dir = self._output_root / f"{stem}_frames"
                     self._track_output(frame_dir, owned_outputs, output_existence)
-                    frame_paths = save_video_frames(frames=frames, output_dir=frame_dir, prefix="frame")
+                    frame_paths = save_video_frames(
+                        frames=frames, output_dir=frame_dir, prefix="frame"
+                    )
                     for frame_path in frame_paths:
                         self._track_output(frame_path, owned_outputs, output_existence)
 
@@ -224,7 +226,9 @@ class SVDRunner:
                 elif not frame_paths:
                     frame_dir = self._output_root / f"{stem}_frames"
                     self._track_output(frame_dir, owned_outputs, output_existence)
-                    frame_paths = save_video_frames(frames=frames, output_dir=frame_dir, prefix="frame")
+                    frame_paths = save_video_frames(
+                        frames=frames, output_dir=frame_dir, prefix="frame"
+                    )
                     for frame_path in frame_paths:
                         self._track_output(frame_path, owned_outputs, output_existence)
 
@@ -308,7 +312,9 @@ class SVDRunner:
                     result=result,
                     artifact_stem=stem,
                     portable_provenance_summary=portable_provenance_summary,
-                    before_write=lambda path: self._track_output(path, owned_outputs, output_existence),
+                    before_write=lambda path: self._track_output(
+                        path, owned_outputs, output_existence
+                    ),
                 )
             except SVDExportError:
                 raise

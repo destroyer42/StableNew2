@@ -37,7 +37,8 @@ class SVDService:
         try:
             importlib.import_module("torch")
             diffusers = importlib.import_module("diffusers")
-            getattr(diffusers, "StableVideoDiffusionPipeline")
+            if not hasattr(diffusers, "StableVideoDiffusionPipeline"):
+                raise ImportError("diffusers does not provide StableVideoDiffusionPipeline")
         except Exception as exc:
             return False, self._format_dependency_error(exc)
         return True, None
@@ -285,7 +286,7 @@ class SVDService:
         try:
             torch = importlib.import_module("torch")
             diffusers = importlib.import_module("diffusers")
-            pipeline_cls = getattr(diffusers, "StableVideoDiffusionPipeline")
+            pipeline_cls = diffusers.StableVideoDiffusionPipeline
         except Exception as exc:
             raise SVDModelLoadError(self._format_dependency_error(exc)) from exc
 
@@ -348,7 +349,9 @@ class SVDService:
 
         return self._initialize_pipeline_device(pipeline, torch=torch, config=config)
 
-    def _initialize_pipeline_device(self, pipeline: Any, *, torch: Any, config: SVDInferenceConfig) -> Any:
+    def _initialize_pipeline_device(
+        self, pipeline: Any, *, torch: Any, config: SVDInferenceConfig
+    ) -> Any:
         try:
             if config.cpu_offload and hasattr(pipeline, "enable_model_cpu_offload"):
                 pipeline.enable_model_cpu_offload()
@@ -444,9 +447,9 @@ class SVDService:
     @staticmethod
     def _resolve_torch_dtype(torch_module: Any, torch_dtype: str) -> Any:
         mapping = {
-            "float16": getattr(torch_module, "float16"),
-            "bfloat16": getattr(torch_module, "bfloat16"),
-            "float32": getattr(torch_module, "float32"),
+            "float16": torch_module.float16,
+            "bfloat16": torch_module.bfloat16,
+            "float32": torch_module.float32,
         }
         try:
             return mapping[torch_dtype]

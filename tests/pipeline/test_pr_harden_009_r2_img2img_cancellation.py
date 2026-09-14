@@ -21,10 +21,8 @@ from src.queue.single_node_runner import SingleNodeJobRunner
 from src.utils.logger import StructuredLogger
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
-
 _TINY_PNG = (
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgWJ9"
-    "awAAAABJRU5ErkJggg=="
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgWJ9awAAAABJRU5ErkJggg=="
 )
 
 

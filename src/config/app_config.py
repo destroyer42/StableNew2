@@ -640,8 +640,10 @@ def recommend_webui_launch_profile_for_workload(
 
     if stage_key in {"adetailer", "upscale"} and megapixels >= 1.2:
         return "sdxl_guarded"
-    if stage_key == "txt2img" and megapixels >= 1.4 and (
-        "adetailer" in downstream or "upscale" in downstream
+    if (
+        stage_key == "txt2img"
+        and megapixels >= 1.4
+        and ("adetailer" in downstream or "upscale" in downstream)
     ):
         return "sdxl_guarded"
     if effective_load >= 3.0:

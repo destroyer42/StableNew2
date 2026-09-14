@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.queue.job_model import Job, JobStatus
+from src.queue.job_model import Job
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import (
     _TIMEOUT_ESCALATION_THRESHOLD,
@@ -205,11 +205,11 @@ class TestTimeoutEscalation:
     def test_two_timeouts_no_crash(self):
         """Two consecutive timeouts should not trigger crash recovery."""
         exc = _build_timeout_exception(message="Read timed out")
-        
+
         # First timeout
         crash_eligible, _ = _is_webui_crash_exception(exc, job_id="test-job")
         assert crash_eligible is False
-        
+
         # Second timeout
         crash_eligible, _ = _is_webui_crash_exception(exc, job_id="test-job")
         assert crash_eligible is False
@@ -218,12 +218,12 @@ class TestTimeoutEscalation:
     def test_three_timeouts_triggers_crash(self):
         """Three consecutive timeouts should trigger crash recovery."""
         exc = _build_timeout_exception(message="Read timed out")
-        
+
         # First two timeouts - no crash
         for _ in range(_TIMEOUT_ESCALATION_THRESHOLD - 1):
             crash_eligible, _ = _is_webui_crash_exception(exc, job_id="test-job")
             assert crash_eligible is False
-        
+
         # Third timeout - should escalate to crash
         crash_eligible, stage = _is_webui_crash_exception(exc, job_id="test-job")
         assert crash_eligible is True
@@ -233,12 +233,12 @@ class TestTimeoutEscalation:
         """Non-timeout error should reset the timeout counter."""
         timeout_exc = _build_timeout_exception(message="Read timed out")
         crash_exc = _build_crash_exception(status=500)
-        
+
         # Build up timeout count
         _is_webui_crash_exception(timeout_exc, job_id="test-job")
         _is_webui_crash_exception(timeout_exc, job_id="test-job")
         assert _consecutive_timeout_counts.get("test-job") == 2
-        
+
         # Non-timeout error resets counter
         _is_webui_crash_exception(crash_exc, job_id="test-job")
         assert _consecutive_timeout_counts.get("test-job") is None
@@ -252,25 +252,25 @@ class TestTimeoutEscalation:
     def test_different_jobs_tracked_separately(self):
         """Timeout counts should be tracked separately per job."""
         exc = _build_timeout_exception(message="Read timed out")
-        
+
         # Job 1 gets 2 timeouts
         _is_webui_crash_exception(exc, job_id="job-1")
         _is_webui_crash_exception(exc, job_id="job-1")
-        
+
         # Job 2 gets 1 timeout
         _is_webui_crash_exception(exc, job_id="job-2")
-        
+
         assert _consecutive_timeout_counts.get("job-1") == 2
         assert _consecutive_timeout_counts.get("job-2") == 1
 
     def test_timeout_without_job_id_no_tracking(self):
         """Timeout without job_id should not track or escalate."""
         exc = _build_timeout_exception(message="Read timed out")
-        
+
         # Call many times without job_id
         for _ in range(10):
             crash_eligible, _ = _is_webui_crash_exception(exc, job_id=None)
             assert crash_eligible is False
-        
+
         # No tracking occurred
         assert len(_consecutive_timeout_counts) == 0

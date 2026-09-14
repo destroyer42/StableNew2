@@ -20,7 +20,6 @@ from src.queue.single_node_runner import SingleNodeJobRunner
 from src.utils.logger import StructuredLogger
 from tests.helpers.njr_factory import make_pipeline_njr
 
-
 _TINY_PNG = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9"
     "awAAAABJRU5ErkJggg=="
@@ -88,7 +87,9 @@ def _wait_until(predicate, *, timeout: float = 2.0) -> bool:
     return bool(predicate())
 
 
-def _build_pipeline_runner(monkeypatch, tmp_path: Path, client: _BlockingTxt2ImgClient) -> PipelineRunner:
+def _build_pipeline_runner(
+    monkeypatch, tmp_path: Path, client: _BlockingTxt2ImgClient
+) -> PipelineRunner:
     runner = PipelineRunner(
         api_client=client,
         structured_logger=StructuredLogger(output_dir=tmp_path / "logs"),
@@ -126,7 +127,9 @@ def _production_thread_names() -> set[str]:
     }
 
 
-def test_canonical_txt2img_cancel_interrupts_once_and_persists_cancelled(monkeypatch, tmp_path: Path) -> None:
+def test_canonical_txt2img_cancel_interrupts_once_and_persists_cancelled(
+    monkeypatch, tmp_path: Path
+) -> None:
     client = _BlockingTxt2ImgClient()
     pipeline_runner = _build_pipeline_runner(monkeypatch, tmp_path, client)
     repository = JobRepository(tmp_path / "jobs.sqlite3")
@@ -169,7 +172,9 @@ def test_canonical_txt2img_cancel_interrupts_once_and_persists_cancelled(monkeyp
         assert persisted.result is None
         assert repository.get_artifact_references(record.job_id) == []
         assert not list((tmp_path / "runs").rglob("*.png"))
-        assert _wait_until(lambda: not any(name.startswith("progress_poll") for name in _production_thread_names()))
+        assert _wait_until(
+            lambda: not any(name.startswith("progress_poll") for name in _production_thread_names())
+        )
     finally:
         service.stop()
 

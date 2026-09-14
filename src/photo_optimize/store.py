@@ -150,7 +150,9 @@ class PhotoOptimizeStore:
             asset.baseline = baseline
         return self.save_asset(asset)
 
-    def append_baseline_snapshot(self, asset_id: str, *, reason: str) -> PhotoOptimizeBaselineSnapshot:
+    def append_baseline_snapshot(
+        self, asset_id: str, *, reason: str
+    ) -> PhotoOptimizeBaselineSnapshot:
         asset = self.get_asset(asset_id)
         if asset is None:
             raise KeyError(asset_id)

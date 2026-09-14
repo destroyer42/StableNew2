@@ -38,7 +38,7 @@ class DummyJobService:
                         },
                     },
                 }
-            ]
+            ],
         }
 
 
@@ -101,7 +101,9 @@ def test_build_crash_bundle_skips_default_image_tree_scan_under_pytest(
 ) -> None:
     monkeypatch.setattr(
         "src.utils.diagnostics_bundle_v2._collect_image_paths",
-        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("should not scan default roots")),
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(
+            AssertionError("should not scan default roots")
+        ),
     )
 
     bundle = build_crash_bundle(

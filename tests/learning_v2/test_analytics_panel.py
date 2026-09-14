@@ -2,6 +2,7 @@
 
 PR-LEARN-010: Analytics Dashboard
 """
+
 from __future__ import annotations
 
 import tkinter as tk

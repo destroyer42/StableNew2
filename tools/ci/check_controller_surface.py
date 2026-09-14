@@ -64,9 +64,7 @@ def inspect_controller_surfaces(
 
     repo_root = Path(root).resolve()
     baseline_file = (
-        Path(baseline_path).resolve()
-        if baseline_path is not None
-        else repo_root / DEFAULT_BASELINE
+        Path(baseline_path).resolve() if baseline_path is not None else repo_root / DEFAULT_BASELINE
     )
     new_limit, ceilings = _load_baseline(baseline_file)
     issues: list[ControllerSurfaceIssue] = []

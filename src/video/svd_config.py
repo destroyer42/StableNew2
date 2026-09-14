@@ -23,7 +23,9 @@ _VALID_UPSCALE_METHODS = {"RealESRGAN"}
 
 
 def _default_codeformer_weight_path() -> str | None:
-    candidate = Path.home() / "stable-diffusion-webui" / "models" / "Codeformer" / "codeformer-v0.1.0.pth"
+    candidate = (
+        Path.home() / "stable-diffusion-webui" / "models" / "Codeformer" / "codeformer-v0.1.0.pth"
+    )
     return str(candidate) if candidate.exists() else None
 
 
@@ -33,7 +35,9 @@ def _default_gfpgan_weight_path() -> str | None:
 
 
 def _default_realesrgan_weight_path() -> str | None:
-    candidate = Path.home() / "stable-diffusion-webui" / "models" / "RealESRGAN" / "RealESRGAN_x4plus.pth"
+    candidate = (
+        Path.home() / "stable-diffusion-webui" / "models" / "RealESRGAN" / "RealESRGAN_x4plus.pth"
+    )
     return str(candidate) if candidate.exists() else None
 
 
@@ -59,9 +63,14 @@ class SVDPreprocessConfig:
     def __post_init__(self) -> None:
         _require(self.target_width > 0, "target_width must be positive")
         _require(self.target_height > 0, "target_height must be positive")
-        _require(self.resize_mode in _VALID_RESIZE_MODES, f"Invalid resize_mode: {self.resize_mode}")
+        _require(
+            self.resize_mode in _VALID_RESIZE_MODES, f"Invalid resize_mode: {self.resize_mode}"
+        )
         _require(len(self.pad_color) == 3, "pad_color must contain exactly 3 integers")
-        _require(all(0 <= int(value) <= 255 for value in self.pad_color), "pad_color values must be in 0..255")
+        _require(
+            all(0 <= int(value) <= 255 for value in self.pad_color),
+            "pad_color values must be in 0..255",
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> SVDPreprocessConfig:
@@ -111,7 +120,10 @@ class SVDInferenceConfig:
         _require(self.decode_chunk_size > 0, "decode_chunk_size must be positive")
         _require(self.num_inference_steps > 0, "num_inference_steps must be positive")
         _require(self.min_guidance_scale > 0, "min_guidance_scale must be positive")
-        _require(self.max_guidance_scale >= self.min_guidance_scale, "max_guidance_scale must be >= min_guidance_scale")
+        _require(
+            self.max_guidance_scale >= self.min_guidance_scale,
+            "max_guidance_scale must be >= min_guidance_scale",
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> SVDInferenceConfig:
@@ -147,7 +159,10 @@ class SVDOutputConfig:
     save_preview_image: bool = True
 
     def __post_init__(self) -> None:
-        _require(self.output_format in _VALID_OUTPUT_FORMATS, f"Invalid output_format: {self.output_format}")
+        _require(
+            self.output_format in _VALID_OUTPUT_FORMATS,
+            f"Invalid output_format: {self.output_format}",
+        )
 
     @classmethod
     def from_dict(cls, data: dict[str, Any] | None) -> SVDOutputConfig:
@@ -202,7 +217,10 @@ class SVDFaceRestoreConfig:
     facelib_model_root: str | None = field(default_factory=_default_facelib_model_root)
 
     def __post_init__(self) -> None:
-        _require(self.method in _VALID_FACE_RESTORE_METHODS, f"Invalid face restore method: {self.method}")
+        _require(
+            self.method in _VALID_FACE_RESTORE_METHODS,
+            f"Invalid face restore method: {self.method}",
+        )
         _require(0.0 <= self.fidelity_weight <= 1.0, "fidelity_weight must be in 0.0..1.0")
 
     @classmethod
@@ -277,8 +295,12 @@ class SVDSecondaryMotionConfig:
         payload = dict(data or {})
         raw_seed = payload.get("seed")
         seed = None if raw_seed in (None, "") else int(raw_seed)
-        intent = dict(payload.get("intent") or {}) if isinstance(payload.get("intent"), dict) else {}
-        policy = dict(payload.get("policy") or {}) if isinstance(payload.get("policy"), dict) else {}
+        intent = (
+            dict(payload.get("intent") or {}) if isinstance(payload.get("intent"), dict) else {}
+        )
+        policy = (
+            dict(payload.get("policy") or {}) if isinstance(payload.get("policy"), dict) else {}
+        )
         regions_raw = payload.get("regions", intent.get("regions"))
         if isinstance(regions_raw, str):
             regions = (regions_raw.strip(),) if regions_raw.strip() else ()

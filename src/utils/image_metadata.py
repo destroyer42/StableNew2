@@ -4,15 +4,16 @@ from __future__ import annotations
 
 import base64
 import gzip
+import hashlib
 import json
 import logging
-import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from PIL import Image, PngImagePlugin
+
 from src.pipeline.artifact_contract import artifact_manifest_payload
 
 logger = logging.getLogger(__name__)
@@ -83,7 +84,9 @@ PORTABLE_REVIEW_SIDECAR_SUFFIX = ".review.json"
 
 
 def canonical_json_bytes(obj: Any) -> bytes:
-    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return json.dumps(obj, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode(
+        "utf-8"
+    )
 
 
 def sha256_hex(data: bytes) -> str:
@@ -138,7 +141,7 @@ def build_contract_kv(
     njr_sha256: str | None = None,
     history_ref: dict[str, Any] | str | None = None,
 ) -> dict[str, str]:
-    created_value = created_utc or datetime.now(timezone.utc).isoformat()
+    created_value = created_utc or datetime.now(UTC).isoformat()
     encoded = encode_payload(payload)
     kv: dict[str, str] = {
         ImageMetadataContractV26.KEY_SCHEMA: ImageMetadataContractV26.SCHEMA,
@@ -161,7 +164,9 @@ def build_contract_kv(
         if isinstance(history_ref, str):
             kv[ImageMetadataContractV26.KEY_HISTORY_REF] = history_ref
         else:
-            kv[ImageMetadataContractV26.KEY_HISTORY_REF] = canonical_json_bytes(history_ref).decode("utf-8")
+            kv[ImageMetadataContractV26.KEY_HISTORY_REF] = canonical_json_bytes(history_ref).decode(
+                "utf-8"
+            )
     for key, value in build_public_metadata_kv(payload).items():
         if value:
             kv.setdefault(key, value)
@@ -241,7 +246,9 @@ def write_jpg_metadata(path: Path, kv: dict[str, str]) -> bool:
                 or kv.get(ImageMetadataContractV26.PUBLIC_KEY_DESCRIPTION)
                 or ""
             ).strip()
-            software = str(kv.get(ImageMetadataContractV26.PUBLIC_KEY_SOFTWARE) or "StableNew").strip()
+            software = str(
+                kv.get(ImageMetadataContractV26.PUBLIC_KEY_SOFTWARE) or "StableNew"
+            ).strip()
             if description:
                 exif[270] = description
             if software:
@@ -334,7 +341,9 @@ def read_embedded_review_metadata(image_path: Path) -> PortableReviewMetadataRes
     except Exception as exc:
         return PortableReviewMetadataResult(None, "embedded", path=str(image_path), error=str(exc))
     if not isinstance(payload, dict):
-        return PortableReviewMetadataResult(None, "embedded", path=str(image_path), error="payload_not_dict")
+        return PortableReviewMetadataResult(
+            None, "embedded", path=str(image_path), error="payload_not_dict"
+        )
     return PortableReviewMetadataResult(payload, "embedded", path=str(image_path))
 
 
@@ -342,7 +351,9 @@ def build_review_sidecar_path(image_path: Path) -> Path:
     return image_path.with_name(f"{image_path.name}{PORTABLE_REVIEW_SIDECAR_SUFFIX}")
 
 
-def write_review_sidecar(image_path: Path, payload: dict[str, Any]) -> PortableReviewMetadataWriteResult:
+def write_review_sidecar(
+    image_path: Path, payload: dict[str, Any]
+) -> PortableReviewMetadataWriteResult:
     sidecar_path = build_review_sidecar_path(image_path)
     try:
         sidecar_path.write_text(
@@ -376,7 +387,9 @@ def read_review_sidecar(image_path: Path) -> PortableReviewMetadataResult:
         return PortableReviewMetadataResult(None, "sidecar", path=str(sidecar_path), error=str(exc))
     review_payload = payload.get(PORTABLE_REVIEW_KEY) if isinstance(payload, dict) else None
     if not isinstance(review_payload, dict):
-        return PortableReviewMetadataResult(None, "sidecar", path=str(sidecar_path), error="payload_not_dict")
+        return PortableReviewMetadataResult(
+            None, "sidecar", path=str(sidecar_path), error="payload_not_dict"
+        )
     return PortableReviewMetadataResult(review_payload, "sidecar", path=str(sidecar_path))
 
 
@@ -451,13 +464,21 @@ def build_public_parameters_text(metadata_payload: dict[str, Any] | None) -> str
         f"Steps: {generation.get('steps')}" if generation.get("steps") is not None else "",
         f"Sampler: {generation.get('sampler_name')}" if generation.get("sampler_name") else "",
         f"Scheduler: {generation.get('scheduler')}" if generation.get("scheduler") else "",
-        f"CFG scale: {generation.get('cfg_scale')}" if generation.get("cfg_scale") is not None else "",
-        f"Seed: {seeds.get('actual_seed') or seeds.get('requested_seed')}" if (seeds.get("actual_seed") is not None or seeds.get("requested_seed") is not None) else "",
+        f"CFG scale: {generation.get('cfg_scale')}"
+        if generation.get("cfg_scale") is not None
+        else "",
+        f"Seed: {seeds.get('actual_seed') or seeds.get('requested_seed')}"
+        if (seeds.get("actual_seed") is not None or seeds.get("requested_seed") is not None)
+        else "",
         f"Size: {width}x{height}" if width and height else "",
         f"Model: {generation.get('model')}" if generation.get("model") else "",
         f"VAE: {generation.get('vae')}" if generation.get("vae") else "",
-        f"Clip skip: {generation.get('clip_skip')}" if generation.get("clip_skip") is not None else "",
-        f"Denoising strength: {generation.get('denoising_strength')}" if generation.get("denoising_strength") is not None else "",
+        f"Clip skip: {generation.get('clip_skip')}"
+        if generation.get("clip_skip") is not None
+        else "",
+        f"Denoising strength: {generation.get('denoising_strength')}"
+        if generation.get("denoising_strength") is not None
+        else "",
         f"Stage: {public_payload.get('stage')}" if public_payload.get("stage") else "",
     ]
     lines = [prompt]
@@ -473,7 +494,9 @@ def build_public_metadata_kv(metadata_payload: dict[str, Any] | None) -> dict[st
     public_payload = build_public_metadata_payload(metadata_payload)
     comment = _first_non_empty_string(
         public_payload.get("stage"),
-        public_payload.get("generation", {}).get("model") if isinstance(public_payload.get("generation"), dict) else "",
+        public_payload.get("generation", {}).get("model")
+        if isinstance(public_payload.get("generation"), dict)
+        else "",
     )
     prompt = ""
     if isinstance(public_payload.get("generation"), dict):
@@ -481,9 +504,13 @@ def build_public_metadata_kv(metadata_payload: dict[str, Any] | None) -> dict[st
     if prompt:
         comment = f"{comment} | {prompt}" if comment else prompt
     return {
-        ImageMetadataContractV26.PUBLIC_KEY_DESCRIPTION: json.dumps(public_payload, ensure_ascii=False, sort_keys=True),
+        ImageMetadataContractV26.PUBLIC_KEY_DESCRIPTION: json.dumps(
+            public_payload, ensure_ascii=False, sort_keys=True
+        ),
         ImageMetadataContractV26.PUBLIC_KEY_COMMENT: comment.strip() or "StableNew image export",
-        ImageMetadataContractV26.PUBLIC_KEY_PARAMETERS: build_public_parameters_text(metadata_payload),
+        ImageMetadataContractV26.PUBLIC_KEY_PARAMETERS: build_public_parameters_text(
+            metadata_payload
+        ),
         ImageMetadataContractV26.PUBLIC_KEY_SOFTWARE: "StableNew",
     }
 
@@ -683,7 +710,9 @@ def build_payload_from_manifest(
         "denoising_strength": config_dict.get("denoising_strength"),
         "prompt": resolved_prompt,
         "negative_prompt": resolved_negative,
-        "original_prompt": _first_non_empty_string(manifest.get("original_prompt"), config_dict.get("prompt")),
+        "original_prompt": _first_non_empty_string(
+            manifest.get("original_prompt"), config_dict.get("prompt")
+        ),
         "final_prompt": _first_non_empty_string(manifest.get("final_prompt"), resolved_prompt),
         "original_negative_prompt": _first_non_empty_string(
             manifest.get("original_negative_prompt"),
@@ -695,7 +724,7 @@ def build_payload_from_manifest(
         ),
     }
     generation_params = {k: v for k, v in generation_params.items() if v is not None}
-    
+
     # Extract seeds metadata (D-MANIFEST-001)
     seeds_data = manifest.get("seeds", {})
     if not isinstance(seeds_data, dict):
@@ -704,7 +733,7 @@ def build_payload_from_manifest(
             "actual_seed": manifest.get("actual_seed"),
             "actual_subseed": manifest.get("actual_subseed"),
         }
-    
+
     payload = {
         "job_id": manifest.get("job_id") or "",
         "run_id": run_dir.name,
@@ -744,14 +773,22 @@ def build_payload_from_manifest(
     payload["artifact"] = artifact_manifest_payload(
         stage=stage,
         image_or_output_path=image_path,
-        manifest_path=manifest.get("artifact", {}).get("manifest_path") if isinstance(manifest.get("artifact"), dict) else None,
-        output_paths=manifest.get("artifact", {}).get("output_paths") if isinstance(manifest.get("artifact"), dict) else manifest.get("all_paths"),
-        thumbnail_path=manifest.get("artifact", {}).get("thumbnail_path") if isinstance(manifest.get("artifact"), dict) else None,
-        input_image_path=manifest.get("input_image") or manifest.get("input_image_path") or manifest.get("source_image_path"),
+        manifest_path=manifest.get("artifact", {}).get("manifest_path")
+        if isinstance(manifest.get("artifact"), dict)
+        else None,
+        output_paths=manifest.get("artifact", {}).get("output_paths")
+        if isinstance(manifest.get("artifact"), dict)
+        else manifest.get("all_paths"),
+        thumbnail_path=manifest.get("artifact", {}).get("thumbnail_path")
+        if isinstance(manifest.get("artifact"), dict)
+        else None,
+        input_image_path=manifest.get("input_image")
+        or manifest.get("input_image_path")
+        or manifest.get("source_image_path"),
     )
-    
+
     # Add refiner info if present (PR-GUI-DATA-001)
     if "refiner" in manifest:
         payload["refiner"] = manifest["refiner"]
-    
+
     return payload

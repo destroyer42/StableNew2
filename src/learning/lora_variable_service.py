@@ -17,7 +17,11 @@ def collect_available_loras(
             return
         current = merged.setdefault(
             key,
-            {"name": key, "strength": float(strength if strength is not None else 1.0), "enabled": bool(enabled)},
+            {
+                "name": key,
+                "strength": float(strength if strength is not None else 1.0),
+                "enabled": bool(enabled),
+            },
         )
         if strength is not None:
             current["strength"] = float(strength)

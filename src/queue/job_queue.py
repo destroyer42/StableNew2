@@ -103,16 +103,22 @@ class JobQueue:
     def pause_running_job(self) -> Job | None:
         self.pause()
         with self._lock:
-            return next((job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None)
+            return next(
+                (job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None
+            )
 
     def resume_running_job(self) -> Job | None:
         self.resume()
         with self._lock:
-            return next((job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None)
+            return next(
+                (job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None
+            )
 
     def cancel_running_job(self, *, return_to_queue: bool = False) -> Job | None:
         with self._lock:
-            running = next((job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None)
+            running = next(
+                (job for job in self._jobs.values() if job.status == JobStatus.RUNNING), None
+            )
             if running is None:
                 return None
         if return_to_queue:
@@ -261,20 +267,20 @@ class JobQueue:
 
     def _add_finalized_job(self, job_id: str, job: Job) -> None:
         """Add job to bounded finalized collection.
-        
+
         PR-MEMORY-001: Maintains max 100 finalized jobs. When full, evicts oldest.
         Also clears job payload to free memory.
         """
         # Clear payload to free memory (PR-MEMORY-001)
         job.payload = None
-        
+
         # Check if deque is full and will evict oldest
         if len(self._finalized_jobs_order) == self._finalized_jobs_order.maxlen:
             # Get the oldest job_id that will be evicted
             oldest_jid = self._finalized_jobs_order[0] if self._finalized_jobs_order else None
             if oldest_jid and oldest_jid in self._finalized_jobs:
                 self._finalized_jobs.pop(oldest_jid, None)
-        
+
         # Add new job (deque will auto-evict if at maxlen)
         self._finalized_jobs_order.append(job_id)
         self._finalized_jobs[job_id] = job
@@ -391,32 +397,32 @@ class JobQueue:
             queued = self._get_ordered_queued_jobs()
             if not queued:
                 return False
-            
+
             # Find the job
             job_index = None
             job_priority = None
-            for i, (priority, counter, jid) in enumerate(queued):
+            for i, (priority, _counter, jid) in enumerate(queued):
                 if jid == job_id:
                     job_index = i
                     job_priority = priority
                     break
-            
+
             if job_index is None:
                 return False  # Job not found
-            
+
             if job_index == 0:
                 return False  # Already at front
-            
+
             # Get the minimum counter value (front of queue) for this priority
             # We want to assign a counter lower than the first job in the same priority level
-            min_counter_for_priority = float('inf')
-            for priority, counter, jid in queued:
+            min_counter_for_priority = float("inf")
+            for priority, counter, _jid in queued:
                 if priority == job_priority:
                     min_counter_for_priority = min(min_counter_for_priority, counter)
-            
+
             # Assign a new lower counter (move to front)
             new_counter = min_counter_for_priority - 1
-            
+
             candidate = [item for item in queued if item[2] != job_id]
             insert_at = next(
                 (index for index, item in enumerate(candidate) if item[0] == job_priority),
@@ -453,37 +459,40 @@ class JobQueue:
             queued = self._get_ordered_queued_jobs()
             if not queued:
                 return False
-            
+
             # Find the job
             job_index = None
             job_priority = None
-            for i, (priority, counter, jid) in enumerate(queued):
+            for i, (priority, _counter, jid) in enumerate(queued):
                 if jid == job_id:
                     job_index = i
                     job_priority = priority
                     break
-            
+
             if job_index is None:
                 return False  # Job not found
-            
+
             if job_index == len(queued) - 1:
                 return False  # Already at back
-            
+
             # Get the maximum counter value (back of queue) for this priority
             # We want to assign a counter higher than the last job in the same priority level
-            max_counter_for_priority = float('-inf')
-            for priority, counter, jid in queued:
+            max_counter_for_priority = float("-inf")
+            for priority, counter, _jid in queued:
                 if priority == job_priority:
                     max_counter_for_priority = max(max_counter_for_priority, counter)
-            
+
             # Assign a new higher counter (move to back)
             new_counter = max_counter_for_priority + 1
-            
+
             candidate = [item for item in queued if item[2] != job_id]
-            insert_at = max(
-                (index for index, item in enumerate(candidate) if item[0] == job_priority),
-                default=len(candidate) - 1,
-            ) + 1
+            insert_at = (
+                max(
+                    (index for index, item in enumerate(candidate) if item[0] == job_priority),
+                    default=len(candidate) - 1,
+                )
+                + 1
+            )
             candidate.insert(insert_at, queued[job_index])
             self._repository.update_queue_order([item[2] for item in candidate])
 

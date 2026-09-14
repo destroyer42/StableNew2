@@ -8,13 +8,13 @@ from unittest.mock import Mock, patch
 
 from src.api.client import (
     DEFAULT_GENERATION_TIMEOUT,
+    STALL_INTERRUPT_THRESHOLD_SEC,
     ProgressInfo,
     SDWebUIClient,
-    STALL_INTERRUPT_THRESHOLD_SEC,
 )
 from src.pipeline.executor import (
-    Pipeline,
     STALL_INTERRUPT_THRESHOLD_BY_STAGE,
+    Pipeline,
 )
 from src.prompting.contracts import (
     PromptContext,
@@ -243,9 +243,7 @@ class TestPollProgressLoop(unittest.TestCase):
         self.pipeline._current_stage_start_time = None
         self.pipeline._status_callback = Mock()
 
-        self.client.get_progress.return_value = ProgressInfo(
-            1.0, None, 30, 30, None, {}
-        )
+        self.client.get_progress.return_value = ProgressInfo(1.0, None, 30, 30, None, {})
 
         stop_event = threading.Event()
         thread = threading.Thread(
@@ -270,9 +268,7 @@ class TestGenerateWithProgress(unittest.TestCase):
         self.pipeline = Pipeline(self.client, self.logger)
 
         # Mock _generate_images to return test data
-        self.pipeline._generate_images = Mock(
-            return_value={"images": ["base64_data"], "info": {}}
-        )
+        self.pipeline._generate_images = Mock(return_value={"images": ["base64_data"], "info": {}})
 
     def test_generate_with_progress_completes(self) -> None:
         """Test generation with progress polling completes successfully."""
@@ -392,9 +388,7 @@ class TestGenerateWithProgress(unittest.TestCase):
             return {"images": ["test"], "info": {}}
 
         self.pipeline._generate_images = slow_generate
-        self.client.get_progress.return_value = ProgressInfo(
-            0.5, 5.0, 20, 40, None, {}
-        )
+        self.client.get_progress.return_value = ProgressInfo(0.5, 5.0, 20, 40, None, {})
 
         payload = {"prompt": "test", "steps": 20}
 
@@ -424,9 +418,7 @@ class TestGenerateWithProgress(unittest.TestCase):
         ) -> None:
             call_count[0] += 1
 
-        self.client.get_progress.return_value = ProgressInfo(
-            0.5, 5.0, None, None, None, {}
-        )
+        self.client.get_progress.return_value = ProgressInfo(0.5, 5.0, None, None, None, {})
 
         payload = {"prompt": "test", "steps": 20}
 
@@ -455,9 +447,7 @@ class TestGenerateWithProgress(unittest.TestCase):
         """Progress polling should not leave executor worker threads alive after completion."""
         before = sum(1 for t in threading.enumerate() if t.name.startswith("progress_poll"))
         self.pipeline._generate_images.return_value = {"images": ["test"], "info": {}}
-        self.client.get_progress.return_value = ProgressInfo(
-            0.5, 5.0, None, None, None, {}
-        )
+        self.client.get_progress.return_value = ProgressInfo(0.5, 5.0, None, None, None, {})
 
         self.pipeline._generate_images_with_progress(
             "txt2img",
@@ -710,7 +700,9 @@ class TestStallInterrupt(unittest.TestCase):
         self.client.interrupt.assert_called_once_with()
         self.client.get_progress.assert_not_called()
 
-    def test_completed_steps_enable_fast_response_stall_without_lowering_percent_fallback(self) -> None:
+    def test_completed_steps_enable_fast_response_stall_without_lowering_percent_fallback(
+        self,
+    ) -> None:
         clock = _FakeMonotonicClock()
         interrupt_times: list[float] = []
         self.client.get_progress.return_value = ProgressInfo(0.981, None, 20, 20, None, {})
@@ -813,6 +805,7 @@ class TestStallInterrupt(unittest.TestCase):
             stop_event = threading.Event()
 
             import logging as _logging
+
             with self.assertLogs("src.pipeline.executor", level=_logging.WARNING) as log_ctx:
                 thread = threading.Thread(
                     target=self.pipeline._poll_progress_loop,
@@ -823,11 +816,11 @@ class TestStallInterrupt(unittest.TestCase):
                 stop_event.set()
                 thread.join(timeout=2.0)
 
-        stall_warnings = [
-            m for m in log_ctx.output if "WebUI generation stall:" in m
-        ]
+        stall_warnings = [m for m in log_ctx.output if "WebUI generation stall:" in m]
         # 30s throttle means only 1 log in 150ms run
-        assert len(stall_warnings) == 1, f"Expected 1 stall log, got {len(stall_warnings)}: {stall_warnings}"
+        assert len(stall_warnings) == 1, (
+            f"Expected 1 stall log, got {len(stall_warnings)}: {stall_warnings}"
+        )
 
     def test_interrupt_sent_only_once(self) -> None:
         """Even if stall persists, interrupt is only sent once per stall episode."""
@@ -885,6 +878,7 @@ class TestProgressThreadSafety(unittest.TestCase):
 
     def test_concurrent_progress_updates_thread_safe(self) -> None:
         """Test concurrent progress updates don't cause race conditions."""
+
         # Simulate multiple concurrent progress updates
         def update_progress() -> None:
             for i in range(10):

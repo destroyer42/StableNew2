@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import tkinter as tk
-
 import pytest
 
 from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame

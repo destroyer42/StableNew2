@@ -1,4 +1,5 @@
 """Integration tests for LearningController + LearningExecutionController (PR-LEARN-002)."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from unittest.mock import MagicMock
 @dataclass
 class MockPipelineResult:
     """Mock pipeline result for testing."""
+
     success: bool = True
     output_path: str = "/fake/path/image.png"
 
@@ -15,7 +17,6 @@ class MockPipelineResult:
 def test_app_controller_creates_learning_execution_controller():
     """Verify AppController initializes LearningExecutionController."""
     from src.controller.app_controller import AppController
-    from src.gui.main_window_v2 import MainWindow
 
     # Create minimal AppController (no GUI to avoid Tk)
     controller = AppController(
@@ -89,7 +90,7 @@ def test_learning_tab_frame_passes_execution_controller():
 def test_learning_controller_handles_missing_execution_controller():
     """Verify LearningController auto-creates the canonical execution controller."""
     from src.gui.controllers.learning_controller import LearningController
-    from src.gui.learning_state import LearningState, LearningExperiment, LearningVariant
+    from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 
     # Create learning state with experiment
     learning_state = LearningState()

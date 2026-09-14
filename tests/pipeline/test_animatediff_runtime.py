@@ -7,7 +7,6 @@ from unittest.mock import Mock
 from src.pipeline.animatediff_models import AnimateDiffCapability
 from src.pipeline.executor import Pipeline
 
-
 _TINY_PNG_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRX0AAAAASUVORK5CYII="
 )
@@ -36,7 +35,9 @@ def test_run_animatediff_stage_saves_frames_and_video(tmp_path: Path, monkeypatc
     pipeline._check_webui_health_before_stage = lambda stage: None
     pipeline._load_image_base64 = lambda path: _TINY_PNG_BASE64
 
-    def _fake_create_video(self, image_paths, output_path, fps=24, codec="libx264", quality="medium"):
+    def _fake_create_video(
+        self, image_paths, output_path, fps=24, codec="libx264", quality="medium"
+    ):
         output_path.write_bytes(b"video")
         return True
 
@@ -77,7 +78,9 @@ def test_run_animatediff_stage_saves_frames_and_video(tmp_path: Path, monkeypatc
     assert write_video_container_metadata.call_args.args[0] == Path(result["video_path"])
 
 
-def test_run_animatediff_stage_applies_secondary_motion_between_frames_and_encode(tmp_path: Path, monkeypatch) -> None:
+def test_run_animatediff_stage_applies_secondary_motion_between_frames_and_encode(
+    tmp_path: Path, monkeypatch
+) -> None:
     client = Mock()
     client.get_animatediff_capability.return_value = AnimateDiffCapability(
         available=True,
@@ -115,13 +118,19 @@ def test_run_animatediff_stage_applies_secondary_motion_between_frames_and_encod
     encoded_paths: list[str] = []
     container_payloads: list[dict[str, object]] = []
 
-    def _fake_create_video(self, image_paths, output_path, fps=24, codec="libx264", quality="medium"):
+    def _fake_create_video(
+        self, image_paths, output_path, fps=24, codec="libx264", quality="medium"
+    ):
         encoded_paths[:] = [str(path) for path in image_paths]
         output_path.write_bytes(b"video")
         return True
 
-    monkeypatch.setattr("src.pipeline.executor._apply_secondary_motion_frame_directory", _fake_apply)
-    monkeypatch.setattr("src.pipeline.executor.VideoCreator.create_video_from_images", _fake_create_video)
+    monkeypatch.setattr(
+        "src.pipeline.executor._apply_secondary_motion_frame_directory", _fake_apply
+    )
+    monkeypatch.setattr(
+        "src.pipeline.executor.VideoCreator.create_video_from_images", _fake_create_video
+    )
     monkeypatch.setattr(
         "src.pipeline.executor.write_video_container_metadata",
         lambda _path, payload: container_payloads.append(dict(payload)) or True,
@@ -201,7 +210,9 @@ def test_run_animatediff_stage_auto_selects_sdxl_motion_module(tmp_path: Path, m
     pipeline._ensure_webui_true_ready = lambda: None
     pipeline._check_webui_health_before_stage = lambda stage: None
 
-    def _fake_create_video(self, image_paths, output_path, fps=24, codec="libx264", quality="medium"):
+    def _fake_create_video(
+        self, image_paths, output_path, fps=24, codec="libx264", quality="medium"
+    ):
         output_path.write_bytes(b"video")
         return True
 
@@ -229,7 +240,9 @@ def test_run_animatediff_stage_auto_selects_sdxl_motion_module(tmp_path: Path, m
     assert script_args["model"] == "mm_sdxl_hs.safetensors"
 
 
-def test_run_animatediff_stage_defaults_img2img_denoising_strength(tmp_path: Path, monkeypatch) -> None:
+def test_run_animatediff_stage_defaults_img2img_denoising_strength(
+    tmp_path: Path, monkeypatch
+) -> None:
     client = Mock()
     client.get_animatediff_capability.return_value = AnimateDiffCapability(
         available=True,
@@ -253,7 +266,9 @@ def test_run_animatediff_stage_defaults_img2img_denoising_strength(tmp_path: Pat
     pipeline._check_webui_health_before_stage = lambda stage: None
     pipeline._load_image_base64 = lambda path: _TINY_PNG_BASE64
 
-    def _fake_create_video(self, image_paths, output_path, fps=24, codec="libx264", quality="medium"):
+    def _fake_create_video(
+        self, image_paths, output_path, fps=24, codec="libx264", quality="medium"
+    ):
         output_path.write_bytes(b"video")
         return True
 

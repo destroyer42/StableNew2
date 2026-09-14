@@ -157,6 +157,7 @@ def test_svd_runner_exports_effective_duration_preserving_fps(
         return [Image.new("RGB", (16, 16), "white") for _ in range(output_frame_count)], metadata
 
     monkeypatch.setattr("src.video.svd_runner.SVDPostprocessRunner.process_frames", _postprocess)
+
     def _export(**kwargs):
         captured["export_fps"] = kwargs["fps"]
         return output_video
@@ -170,7 +171,9 @@ def test_svd_runner_exports_effective_duration_preserving_fps(
 
     monkeypatch.setattr("src.video.svd_runner.write_svd_run_manifest", _write_manifest)
     write_container_metadata = Mock(return_value=True)
-    monkeypatch.setattr("src.video.svd_runner.write_video_container_metadata", write_container_metadata)
+    monkeypatch.setattr(
+        "src.video.svd_runner.write_video_container_metadata", write_container_metadata
+    )
 
     class _FakeService:
         def prepare_runtime(self, **_kwargs) -> None:
@@ -200,7 +203,9 @@ def test_svd_runner_exports_effective_duration_preserving_fps(
         write_container_metadata.assert_not_called()
 
 
-def test_svd_runner_rejects_unsupported_rife_multiplier_before_model_prepare(tmp_path: Path) -> None:
+def test_svd_runner_rejects_unsupported_rife_multiplier_before_model_prepare(
+    tmp_path: Path,
+) -> None:
     calls: list[str] = []
 
     class _FakeService:
@@ -273,7 +278,9 @@ def test_svd_runner_emits_live_stage_status_details(tmp_path: Path, monkeypatch)
             )
         return kwargs["frames"], {"applied": ["interpolation"]}
 
-    monkeypatch.setattr("src.video.svd_runner.SVDPostprocessRunner.process_frames", _fake_process_frames)
+    monkeypatch.setattr(
+        "src.video.svd_runner.SVDPostprocessRunner.process_frames", _fake_process_frames
+    )
 
     class _FakeService:
         def generate_frames(self, **_kwargs):
@@ -289,7 +296,13 @@ def test_svd_runner_emits_live_stage_status_details(tmp_path: Path, monkeypatch)
     executable.write_bytes(b"exe")
     runner.run(
         source_image_path=source_path,
-        config=SVDConfig.from_dict({"postprocess": {"interpolation": {"enabled": True, "executable_path": str(executable)}}}),
+        config=SVDConfig.from_dict(
+            {
+                "postprocess": {
+                    "interpolation": {"enabled": True, "executable_path": str(executable)}
+                }
+            }
+        ),
         job_id="job-1",
     )
 
@@ -297,11 +310,15 @@ def test_svd_runner_emits_live_stage_status_details(tmp_path: Path, monkeypatch)
     assert details[:4] == ["preflight", "loading_model", "preprocess", "inference"]
     assert "postprocess: interpolation" in details
     assert details[-2:] == ["encoding", "complete"]
-    postprocess_update = next(update for update in updates if update.get("stage_detail") == "postprocess: interpolation")
+    postprocess_update = next(
+        update for update in updates if update.get("stage_detail") == "postprocess: interpolation"
+    )
     assert postprocess_update["progress"] == pytest.approx(0.725)
 
 
-def test_svd_runner_stamps_secondary_motion_summary_into_container_metadata(tmp_path: Path, monkeypatch) -> None:
+def test_svd_runner_stamps_secondary_motion_summary_into_container_metadata(
+    tmp_path: Path, monkeypatch
+) -> None:
     source_path = tmp_path / "source.png"
     source_path.write_bytes(b"png")
     prepared_path = tmp_path / "_svd_temp" / "job-1" / "prepared.png"
@@ -324,8 +341,16 @@ def test_svd_runner_stamps_secondary_motion_summary_into_container_metadata(tmp_
     secondary_motion_block = {
         "schema": "stablenew.secondary-motion-provenance.v1",
         "intent": {"enabled": True, "mode": "apply", "intent": "micro_sway"},
-        "policy": {"enabled": True, "policy_id": "svd_secondary_motion_v1", "backend_mode": "apply_shared_postprocess_candidate"},
-        "apply_result": {"status": "applied", "application_path": "frame_directory_worker", "metrics": {"frames_in": 1, "frames_out": 1}},
+        "policy": {
+            "enabled": True,
+            "policy_id": "svd_secondary_motion_v1",
+            "backend_mode": "apply_shared_postprocess_candidate",
+        },
+        "apply_result": {
+            "status": "applied",
+            "application_path": "frame_directory_worker",
+            "metrics": {"frames_in": 1, "frames_out": 1},
+        },
         "summary": {
             "schema": "stablenew.secondary-motion-summary.v1",
             "enabled": True,
@@ -342,12 +367,19 @@ def test_svd_runner_stamps_secondary_motion_summary_into_container_metadata(tmp_
     monkeypatch.setattr("src.video.svd_runner.prepare_svd_input", lambda **_kwargs: preprocess)
     monkeypatch.setattr(
         "src.video.svd_runner.SVDPostprocessRunner.process_frames",
-        lambda self, **kwargs: (kwargs["frames"], {"applied": ["secondary_motion"], "secondary_motion": secondary_motion_block}),
+        lambda self, **kwargs: (
+            kwargs["frames"],
+            {"applied": ["secondary_motion"], "secondary_motion": secondary_motion_block},
+        ),
     )
     monkeypatch.setattr("src.video.svd_runner.export_video_mp4", lambda **_kwargs: output_video)
-    monkeypatch.setattr("src.video.svd_runner.write_svd_run_manifest", lambda **_kwargs: manifest_path)
+    monkeypatch.setattr(
+        "src.video.svd_runner.write_svd_run_manifest", lambda **_kwargs: manifest_path
+    )
     write_container_metadata = Mock(return_value=True)
-    monkeypatch.setattr("src.video.svd_runner.write_video_container_metadata", write_container_metadata)
+    monkeypatch.setattr(
+        "src.video.svd_runner.write_video_container_metadata", write_container_metadata
+    )
 
     class _FakeService:
         def generate_frames(self, **_kwargs):
@@ -397,7 +429,10 @@ def test_svd_runner_fails_and_cleans_outputs_when_required_provenance_fails(
     with pytest.raises(SVDExportError, match="portable provenance export failed"):
         run_job("provenance-failure", SVDConfig())
 
-    assert not (_expected_job_paths(tmp_path, source_path, "provenance-failure") & set(tmp_path.glob("**/*")))
+    assert not (
+        _expected_job_paths(tmp_path, source_path, "provenance-failure")
+        & set(tmp_path.glob("**/*"))
+    )
 
 
 def _patch_fake_svd_run(tmp_path: Path, monkeypatch):
@@ -484,14 +519,18 @@ def test_svd_job_stem_replaces_source_only_collision(tmp_path: Path) -> None:
     old_job_b = f"svd_{source.stem}"
 
     assert old_job_a == old_job_b
-    assert build_svd_artifact_stem(source_image_path=source, job_id="job-a") != build_svd_artifact_stem(
+    assert build_svd_artifact_stem(
+        source_image_path=source, job_id="job-a"
+    ) != build_svd_artifact_stem(
         source_image_path=source,
         job_id="job-b",
     )
 
 
 @pytest.mark.parametrize("output_format", ["mp4", "gif", "frames"])
-def test_svd_jobs_have_unique_outputs_and_scoped_history(tmp_path: Path, monkeypatch, output_format: str) -> None:
+def test_svd_jobs_have_unique_outputs_and_scoped_history(
+    tmp_path: Path, monkeypatch, output_format: str
+) -> None:
     source_path, _active, run_job = _patch_fake_svd_run(tmp_path, monkeypatch)
     config = SVDConfig.from_dict(
         {"output": {"output_format": output_format, "save_preview_image": True}}
@@ -514,7 +553,11 @@ def test_svd_jobs_have_unique_outputs_and_scoped_history(tmp_path: Path, monkeyp
         assert set(payload["output_paths"]) == {
             str(path)
             for path in (
-                [result.video_path] if result.video_path else [result.gif_path] if result.gif_path else result.frame_paths
+                [result.video_path]
+                if result.video_path
+                else [result.gif_path]
+                if result.gif_path
+                else result.frame_paths
             )
         }
         history = build_svd_history_record(config=config, result=result)
@@ -539,7 +582,9 @@ def test_svd_job_b_failure_preserves_job_a_artifacts(tmp_path: Path, monkeypatch
     assert all(not path.exists() for path in _expected_job_paths(tmp_path, source_path, "job-b"))
 
 
-def test_svd_job_b_cancellation_after_manifest_preserves_job_a_artifacts(tmp_path: Path, monkeypatch) -> None:
+def test_svd_job_b_cancellation_after_manifest_preserves_job_a_artifacts(
+    tmp_path: Path, monkeypatch
+) -> None:
     source_path, active, run_job = _patch_fake_svd_run(tmp_path, monkeypatch)
     config = SVDConfig.from_dict({"output": {"output_format": "gif", "save_preview_image": True}})
     result_a = run_job("job-a", config)

@@ -26,7 +26,9 @@ def _job(job_id: str) -> Job:
 
 
 def _queued_ids(queue: JobQueue) -> list[str]:
-    return [job.job_id for job in queue.list_active_jobs_ordered() if job.status == JobStatus.QUEUED]
+    return [
+        job.job_id for job in queue.list_active_jobs_ordered() if job.status == JobStatus.QUEUED
+    ]
 
 
 def test_queue_controls_reorder_remove_and_clear_preserve_running() -> None:

@@ -1,6 +1,13 @@
 from __future__ import annotations
 
-from src.video.story_plan_models import Actor, AnchorPlan, ScenePlan, ShotPlan, StoryPlan, merge_actor_lists
+from src.video.story_plan_models import (
+    Actor,
+    AnchorPlan,
+    ScenePlan,
+    ShotPlan,
+    StoryPlan,
+    merge_actor_lists,
+)
 
 
 def _make_plan() -> StoryPlan:

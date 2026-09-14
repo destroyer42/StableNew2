@@ -3,15 +3,17 @@ from __future__ import annotations
 from pathlib import Path
 
 from src.pipeline.reprocess_builder import (
-    ReprocessEffectiveSettingsPreview,
     ImageEditSpec,
+    ReprocessEffectiveSettingsPreview,
     ReprocessJobBuilder,
     ReprocessSourceItem,
     extract_reprocess_output_paths,
 )
 
 
-def test_reprocess_builder_populates_img2img_stage_defaults_from_root_config(tmp_path: Path) -> None:
+def test_reprocess_builder_populates_img2img_stage_defaults_from_root_config(
+    tmp_path: Path,
+) -> None:
     image_path = tmp_path / "input.png"
     image_path.write_bytes(b"")
     builder = ReprocessJobBuilder()

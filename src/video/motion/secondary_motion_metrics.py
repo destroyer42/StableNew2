@@ -43,7 +43,12 @@ def _resolve_quality_risk_score(
     return round(
         max(
             0.0,
-            min(1.0, (bounded_intensity * 0.5) + (mean_shift_component * 0.25) + (peak_shift_component * 0.25)),
+            min(
+                1.0,
+                (bounded_intensity * 0.5)
+                + (mean_shift_component * 0.25)
+                + (peak_shift_component * 0.25),
+            ),
         ),
         4,
     )
@@ -104,7 +109,9 @@ def build_secondary_motion_learning_context(payload: Mapping[str, Any] | None) -
         "frames_out": frames_out,
         "frame_count_delta": frames_out - frames_in,
         "applied_frame_count": applied_frame_count,
-        "applied_frame_ratio": round(applied_frame_count / max(1, frames_in), 4) if frames_in > 0 else 0.0,
+        "applied_frame_ratio": round(applied_frame_count / max(1, frames_in), 4)
+        if frames_in > 0
+        else 0.0,
         "applied_motion_strength": round(intensity if status == "applied" else 0.0, 4),
         "quality_risk_score": _resolve_quality_risk_score(
             status=status,

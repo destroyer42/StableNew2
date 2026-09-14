@@ -134,7 +134,11 @@ class DummyController:
                         "ident": 1,
                         "daemon": False,
                         "tracked": False,
-                        "top_frame": {"file": "app_controller.py", "line": 123, "function": "get_diagnostics_snapshot"},
+                        "top_frame": {
+                            "file": "app_controller.py",
+                            "line": 123,
+                            "function": "get_diagnostics_snapshot",
+                        },
                     }
                 ],
             },

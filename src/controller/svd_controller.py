@@ -72,7 +72,9 @@ class SVDController:
         )
         return base_config
 
-    def get_postprocess_capabilities(self, config: SVDConfig | None = None) -> dict[str, dict[str, object]]:
+    def get_postprocess_capabilities(
+        self, config: SVDConfig | None = None
+    ) -> dict[str, dict[str, object]]:
         return {
             name: capability.to_dict()
             for name, capability in get_svd_postprocess_capabilities(config).items()

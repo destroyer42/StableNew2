@@ -17,11 +17,15 @@ def test_resolve_queue_status_display_prioritizes_running_and_pause() -> None:
 
 
 def test_resolve_queue_status_display_pending_and_idle() -> None:
-    pending_one = resolve_queue_status_display(is_paused=False, has_running_job=False, queue_count=1)
+    pending_one = resolve_queue_status_display(
+        is_paused=False, has_running_job=False, queue_count=1
+    )
     assert pending_one.severity == "pending"
     assert pending_one.text == "Queue: 1 job pending"
 
-    pending_many = resolve_queue_status_display(is_paused=False, has_running_job=False, queue_count=4)
+    pending_many = resolve_queue_status_display(
+        is_paused=False, has_running_job=False, queue_count=4
+    )
     assert pending_many.text == "Queue: 4 jobs pending"
 
     idle = resolve_queue_status_display(is_paused=False, has_running_job=False, queue_count=0)

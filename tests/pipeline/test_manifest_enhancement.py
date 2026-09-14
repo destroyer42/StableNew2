@@ -6,9 +6,7 @@ Tests that manifests contain model, VAE, actual seed, and timing data.
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 from src.pipeline.executor import Pipeline
 
@@ -19,7 +17,7 @@ class TestSeedExtraction:
     def test_extract_generation_info_with_valid_dict(self):
         """Should extract seed from response with dict info."""
         executor = Pipeline(client=MagicMock(), structured_logger=MagicMock())
-        
+
         response = {
             "images": ["base64data"],
             "info": {
@@ -27,11 +25,11 @@ class TestSeedExtraction:
                 "subseed": 98765,
                 "all_seeds": [12345678],
                 "all_subseeds": [98765],
-            }
+            },
         }
-        
+
         result = executor._extract_generation_info(response)
-        
+
         assert result["seed"] == 12345678
         assert result["subseed"] == 98765
         assert result["all_seeds"] == [12345678]
@@ -40,71 +38,67 @@ class TestSeedExtraction:
     def test_extract_generation_info_with_json_string(self):
         """Should parse JSON string info field."""
         executor = Pipeline(client=MagicMock(), structured_logger=MagicMock())
-        
-        info_json = json.dumps({
-            "seed": 42,
-            "subseed": 84,
-            "all_seeds": [42],
-            "all_subseeds": [84],
-        })
-        
-        response = {
-            "images": ["base64data"],
-            "info": info_json
-        }
-        
+
+        info_json = json.dumps(
+            {
+                "seed": 42,
+                "subseed": 84,
+                "all_seeds": [42],
+                "all_subseeds": [84],
+            }
+        )
+
+        response = {"images": ["base64data"], "info": info_json}
+
         result = executor._extract_generation_info(response)
-        
+
         assert result["seed"] == 42
         assert result["subseed"] == 84
 
     def test_extract_generation_info_with_missing_info(self):
         """Should return empty dict when info field missing."""
         executor = Pipeline(client=MagicMock(), structured_logger=MagicMock())
-        
+
         response = {"images": ["base64data"]}
-        
+
         result = executor._extract_generation_info(response)
-        
+
         assert result == {}
 
     def test_extract_generation_info_with_malformed_json(self):
         """Should handle malformed JSON gracefully."""
         executor = Pipeline(client=MagicMock(), structured_logger=MagicMock())
-        
+
         response = {
             "images": ["base64data"],
-            "info": "{'invalid json"  # Malformed JSON
+            "info": "{'invalid json",  # Malformed JSON
         }
-        
+
         result = executor._extract_generation_info(response)
-        
+
         assert result == {}
 
     def test_extract_generation_info_with_none_info(self):
         """Should return empty dict when info is None."""
         executor = Pipeline(client=MagicMock(), structured_logger=MagicMock())
-        
-        response = {
-            "images": ["base64data"],
-            "info": None
-        }
-        
+
+        response = {"images": ["base64data"], "info": None}
+
         result = executor._extract_generation_info(response)
-        
+
         assert result == {}
 
     def test_extract_generation_info_with_invalid_type(self):
         """Should return empty dict when info is not dict or string."""
         executor = Pipeline(client=MagicMock(), structured_logger=MagicMock())
-        
+
         response = {
             "images": ["base64data"],
-            "info": 12345  # Invalid type
+            "info": 12345,  # Invalid type
         }
-        
+
         result = executor._extract_generation_info(response)
-        
+
         assert result == {}
 
 
@@ -131,7 +125,7 @@ class TestManifestEnhancement:
             "actual_subseed",
             "stage_duration_ms",
         }
-        
+
         # This test would be implemented as an integration test
         # with a real WebUI mock that returns proper seed data
         assert len(expected_fields) == 13
@@ -155,7 +149,7 @@ class TestManifestEnhancement:
             "actual_subseed",
             "stage_duration_ms",
         }
-        
+
         assert len(expected_fields) == 14
 
     def test_adetailer_manifest_contains_new_fields(self):
@@ -182,7 +176,7 @@ class TestManifestEnhancement:
             "actual_subseed",
             "stage_duration_ms",
         }
-        
+
         assert len(expected_fields) == 19
 
     def test_upscale_manifest_contains_new_fields(self):
@@ -206,7 +200,7 @@ class TestManifestEnhancement:
             "actual_subseed",
             "stage_duration_ms",
         }
-        
+
         assert len(expected_fields) == 16
 
 
@@ -217,12 +211,12 @@ class TestJobIDTracking:
         """Executor should receive job_id from pipeline runner."""
         # This would be tested in integration tests with real pipeline execution
         # For now, we document the expected behavior
-        
+
         # Expected flow:
         # 1. PipelineRunner.run_njr sets self._pipeline._current_job_id = njr.job_id
         # 2. Executor stages use getattr(self, "_current_job_id", None) in manifests
         # 3. Finally block clears self._pipeline._current_job_id = None
-        
+
         pass  # Placeholder for integration test
 
     def test_job_id_cleared_after_execution(self):
@@ -238,12 +232,12 @@ class TestTimingAccuracy:
         """Stage timing should use time.monotonic() for accuracy."""
         # Verify that timing is done with monotonic clock
         # This ensures timing is not affected by system clock changes
-        
+
         # Expected pattern in code:
         # stage_start = time.monotonic()
         # response = self._generate_images(...)
         # stage_duration_ms = int((time.monotonic() - stage_start) * 1000)
-        
+
         pass  # Placeholder - verified by code review
 
     def test_duration_in_milliseconds(self):
@@ -267,7 +261,7 @@ class TestBackwardCompatibility:
             "config": {},
             "path": "/path/to/image.png",
         }
-        
+
         # Should be able to read without errors
         # New fields would be None/missing but that's acceptable
         assert old_manifest["name"] == "test_image"
@@ -285,7 +279,7 @@ class TestModelVAEExtraction:
             "model": "epicrealismXL_v5.safetensors",
             "seed": -1,
         }
-        
+
         # Expected: metadata["model"] = config.get("model") or config.get("sd_model_checkpoint")
         model = config.get("model") or config.get("sd_model_checkpoint")
         assert model == "epicrealismXL_v5.safetensors"
@@ -296,14 +290,14 @@ class TestModelVAEExtraction:
             "sd_model_checkpoint": "someOtherModel.safetensors",
             "seed": -1,
         }
-        
+
         model = config.get("model") or config.get("sd_model_checkpoint")
         assert model == "someOtherModel.safetensors"
 
     def test_vae_defaults_to_automatic(self):
         """VAE should default to 'Automatic' if not specified."""
         config = {"seed": -1}
-        
+
         vae = config.get("vae") or "Automatic"
         assert vae == "Automatic"
 
@@ -313,6 +307,6 @@ class TestModelVAEExtraction:
             "vae": "vae-ft-mse-840000-ema-pruned.safetensors",
             "seed": -1,
         }
-        
+
         vae = config.get("vae") or "Automatic"
         assert vae == "vae-ft-mse-840000-ema-pruned.safetensors"

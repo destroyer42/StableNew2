@@ -125,16 +125,18 @@ def test_gui_duration_formatting_consistency(tmp_path):
 
     # Test various durations match expected format
     test_cases = [
-        (500, "0s"),       # Less than 1 second
-        (5000, "5s"),      # 5 seconds
-        (45000, "45s"),    # 45 seconds
-        (90000, "1m 30s"), # 1.5 minutes
-        (3661000, "1h 1m"), # Just over 1 hour
+        (500, "0s"),  # Less than 1 second
+        (5000, "5s"),  # 5 seconds
+        (45000, "45s"),  # 45 seconds
+        (90000, "1m 30s"),  # 1.5 minutes
+        (3661000, "1h 1m"),  # Just over 1 hour
     ]
 
     for duration_ms, expected in test_cases:
         result = JobHistoryPanelV2._format_duration_ms(duration_ms)
-        assert result == expected, f"Duration {duration_ms}ms formatted as '{result}', expected '{expected}'"
+        assert result == expected, (
+            f"Duration {duration_ms}ms formatted as '{result}', expected '{expected}'"
+        )
 
 
 def test_running_job_elapsed_time_calculation():
@@ -160,8 +162,8 @@ def test_queue_eta_estimation_placeholder():
 
     # Test with various queue sizes
     test_cases = [
-        (1, 60),      # 1 job = 60s
-        (5, 300),     # 5 jobs = 300s = 5m
+        (1, 60),  # 1 job = 60s
+        (5, 300),  # 5 jobs = 300s = 5m
         (120, 7200),  # 120 jobs = 7200s = 2h
     ]
 
@@ -177,4 +179,3 @@ def test_queue_eta_estimation_placeholder():
             assert "m" in eta_text
         else:
             assert "h" in eta_text
-

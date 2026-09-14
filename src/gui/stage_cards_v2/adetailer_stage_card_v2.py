@@ -6,8 +6,8 @@ from collections.abc import Iterable
 from tkinter import ttk
 from typing import Any
 
-from src.gui.layout_v2 import configure_grid_columns
 from src.gui.help_text.stage_setting_help_v2 import ADETAILER_STAGE_HELP
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import (
     BODY_LABEL_STYLE,
@@ -336,7 +336,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
             command=self._sync_pass_states,
         )
         inpaint_wh.pack(side="left")
-        self._attach_setting_help("use_inpaint_wh", ADETAILER_STAGE_HELP["use_inpaint_wh"], inpaint_wh)
+        self._attach_setting_help(
+            "use_inpaint_wh", ADETAILER_STAGE_HELP["use_inpaint_wh"], inpaint_wh
+        )
         self._face_widgets.extend([masked, inpaint_wh])
 
     def _build_hand_tab(self, parent: ttk.Frame) -> None:
@@ -439,7 +441,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
             command=self._sync_pass_states,
         )
         inpaint_wh.pack(side="left")
-        self._attach_setting_help("use_inpaint_wh", ADETAILER_STAGE_HELP["use_inpaint_wh"], inpaint_wh)
+        self._attach_setting_help(
+            "use_inpaint_wh", ADETAILER_STAGE_HELP["use_inpaint_wh"], inpaint_wh
+        )
         self._hand_widgets.extend([hand_masked, inpaint_wh])
 
     def _build_prompt_tab(self, parent: ttk.Frame) -> None:
@@ -450,9 +454,13 @@ class ADetailerStageCardV2(BaseStageCardV2):
 
         face_prompt_label = ttk.Label(face_frame, text="Prompt", style=BODY_LABEL_STYLE)
         face_prompt_label.grid(row=0, column=0, sticky="w", pady=2)
-        face_prompt = ttk.Entry(face_frame, textvariable=self.face_prompt_var, style=DARK_ENTRY_STYLE)
+        face_prompt = ttk.Entry(
+            face_frame, textvariable=self.face_prompt_var, style=DARK_ENTRY_STYLE
+        )
         face_prompt.grid(row=0, column=1, sticky="ew", pady=2, padx=(8, 0))
-        self._attach_setting_help("prompt", ADETAILER_STAGE_HELP["prompt"], face_prompt_label, face_prompt)
+        self._attach_setting_help(
+            "prompt", ADETAILER_STAGE_HELP["prompt"], face_prompt_label, face_prompt
+        )
         face_negative_label = ttk.Label(face_frame, text="Negative", style=BODY_LABEL_STYLE)
         face_negative_label.grid(row=1, column=0, sticky="w", pady=2)
         face_negative = ttk.Entry(
@@ -474,9 +482,13 @@ class ADetailerStageCardV2(BaseStageCardV2):
 
         hand_prompt_label = ttk.Label(hand_frame, text="Prompt", style=BODY_LABEL_STYLE)
         hand_prompt_label.grid(row=0, column=0, sticky="w", pady=2)
-        hand_prompt = ttk.Entry(hand_frame, textvariable=self.hands_prompt_var, style=DARK_ENTRY_STYLE)
+        hand_prompt = ttk.Entry(
+            hand_frame, textvariable=self.hands_prompt_var, style=DARK_ENTRY_STYLE
+        )
         hand_prompt.grid(row=0, column=1, sticky="ew", pady=2, padx=(8, 0))
-        self._attach_setting_help("prompt", ADETAILER_STAGE_HELP["prompt"], hand_prompt_label, hand_prompt)
+        self._attach_setting_help(
+            "prompt", ADETAILER_STAGE_HELP["prompt"], hand_prompt_label, hand_prompt
+        )
         hand_negative_label = ttk.Label(hand_frame, text="Negative", style=BODY_LABEL_STYLE)
         hand_negative_label.grid(row=1, column=0, sticky="w", pady=2)
         hand_negative = ttk.Entry(
@@ -550,13 +562,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
 
     def _sync_pass_states(self) -> None:
         self._set_widgets_enabled(self._face_widgets, bool(self.enable_face_pass_var.get()))
-        self._set_widgets_enabled(
-            self._face_prompt_widgets, bool(self.enable_face_pass_var.get())
-        )
+        self._set_widgets_enabled(self._face_prompt_widgets, bool(self.enable_face_pass_var.get()))
         self._set_widgets_enabled(self._hand_widgets, bool(self.enable_hands_pass_var.get()))
-        self._set_widgets_enabled(
-            self._hand_prompt_widgets, bool(self.enable_hands_pass_var.get())
-        )
+        self._set_widgets_enabled(self._hand_prompt_widgets, bool(self.enable_hands_pass_var.get()))
 
     def _set_widgets_enabled(self, widgets: Iterable[tk.Widget], enabled: bool) -> None:
         for widget in widgets:
@@ -647,14 +655,22 @@ class ADetailerStageCardV2(BaseStageCardV2):
             int(cfg.get("ad_dilate_erode", cfg.get("mask_dilate_erode", 4)))
         )
         self.face_mask_feather_var.set(
-            int(cfg.get("ad_mask_feather", cfg.get("adetailer_mask_feather", cfg.get("mask_feather", 4))))
+            int(
+                cfg.get(
+                    "ad_mask_feather", cfg.get("adetailer_mask_feather", cfg.get("mask_feather", 4))
+                )
+            )
         )
 
         self.enable_hands_pass_var.set(
             bool(cfg.get("enable_hands_pass", cfg.get("ad_hands_enabled", False)))
         )
         self.hands_model_var.set(
-            str(cfg.get("adetailer_hands_model") or cfg.get("hands_model") or self.HAND_MODEL_OPTIONS[0])
+            str(
+                cfg.get("adetailer_hands_model")
+                or cfg.get("hands_model")
+                or self.HAND_MODEL_OPTIONS[0]
+            )
         )
         self.hands_confidence_var.set(float(cfg.get("adetailer_hands_confidence", 0.30)))
         self.hands_steps_var.set(int(cfg.get("adetailer_hands_steps", 12)))
@@ -664,7 +680,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
             self._normalize_scheduler_value(cfg.get("adetailer_hands_scheduler"))
         )
         self.hands_denoise_var.set(float(cfg.get("adetailer_hands_denoise", 0.25)))
-        self.hands_prompt_var.set(str(cfg.get("adetailer_hands_prompt", self.hands_prompt_var.get())))
+        self.hands_prompt_var.set(
+            str(cfg.get("adetailer_hands_prompt", self.hands_prompt_var.get()))
+        )
         self.hands_negative_var.set(
             str(cfg.get("adetailer_hands_negative_prompt", self.hands_negative_var.get()))
         )
@@ -814,7 +832,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
     def apply_webui_resources(self, resources: dict[str, Any] | None) -> None:
         if resources is None:
             resources = {}
-        detector_models = [str(v) for v in (resources.get("adetailer_models") or []) if str(v).strip()]
+        detector_models = [
+            str(v) for v in (resources.get("adetailer_models") or []) if str(v).strip()
+        ]
         checkpoint_models = []
         for item in resources.get("models") or []:
             name = getattr(item, "display_name", None) or getattr(item, "name", None) or str(item)
@@ -832,10 +852,16 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self._configure_combo(self._hand_sampler_combo, samplers, self.hands_sampler_var)
 
         if self._stage_model_combo is not None:
-            stage_values = [self.STAGE_MODEL_INHERIT] + checkpoint_models if checkpoint_models else [self.STAGE_MODEL_INHERIT]
+            stage_values = (
+                [self.STAGE_MODEL_INHERIT] + checkpoint_models
+                if checkpoint_models
+                else [self.STAGE_MODEL_INHERIT]
+            )
             current = self.stage_model_override_var.get().strip() or self.STAGE_MODEL_INHERIT
             self._stage_model_combo.configure(values=tuple(stage_values), state="readonly")
-            self.stage_model_override_var.set(current if current in stage_values else self.STAGE_MODEL_INHERIT)
+            self.stage_model_override_var.set(
+                current if current in stage_values else self.STAGE_MODEL_INHERIT
+            )
 
     def _configure_combo(
         self, combo: ttk.Combobox | None, values: Iterable[str], variable: tk.StringVar

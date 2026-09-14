@@ -24,31 +24,42 @@ def _native_document() -> dict[str, object]:
 
 def test_resolver_precedence_and_platform_locations(tmp_path: Path) -> None:
     injected = tmp_path / "injected"
-    assert resolve_prompt_pack_dir(
-        injected,
-        environ={"STABLENEW_PROMPTPACK_DIR": str(tmp_path / "environment")},
-        system_name="Windows",
-    ) == injected
-    assert resolve_prompt_pack_dir(
-        environ={"STABLENEW_PROMPTPACK_DIR": str(tmp_path / "environment")},
-        system_name="Windows",
-    ) == tmp_path / "environment"
-    assert resolve_prompt_pack_dir(
-        environ={"LOCALAPPDATA": str(tmp_path / "local")},
-        system_name="Windows",
-    ) == tmp_path / "local" / "StableNew" / "PromptPacks"
-    assert resolve_prompt_pack_dir(
-        environ={"XDG_DATA_HOME": str(tmp_path / "xdg")},
-        system_name="Linux",
-    ) == tmp_path / "xdg" / "StableNew" / "PromptPacks"
-    assert resolve_prompt_pack_dir(
-        environ={}, system_name="Linux", home_dir=tmp_path / "home"
-    ) == tmp_path / "home" / ".local" / "share" / "StableNew" / "PromptPacks"
+    assert (
+        resolve_prompt_pack_dir(
+            injected,
+            environ={"STABLENEW_PROMPTPACK_DIR": str(tmp_path / "environment")},
+            system_name="Windows",
+        )
+        == injected
+    )
+    assert (
+        resolve_prompt_pack_dir(
+            environ={"STABLENEW_PROMPTPACK_DIR": str(tmp_path / "environment")},
+            system_name="Windows",
+        )
+        == tmp_path / "environment"
+    )
+    assert (
+        resolve_prompt_pack_dir(
+            environ={"LOCALAPPDATA": str(tmp_path / "local")},
+            system_name="Windows",
+        )
+        == tmp_path / "local" / "StableNew" / "PromptPacks"
+    )
+    assert (
+        resolve_prompt_pack_dir(
+            environ={"XDG_DATA_HOME": str(tmp_path / "xdg")},
+            system_name="Linux",
+        )
+        == tmp_path / "xdg" / "StableNew" / "PromptPacks"
+    )
+    assert (
+        resolve_prompt_pack_dir(environ={}, system_name="Linux", home_dir=tmp_path / "home")
+        == tmp_path / "home" / ".local" / "share" / "StableNew" / "PromptPacks"
+    )
 
 
-def test_config_manager_uses_override_or_exact_injected_path(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_config_manager_uses_override_or_exact_injected_path(tmp_path: Path, monkeypatch) -> None:
     environment_dir = tmp_path / "environment"
     monkeypatch.setenv("STABLENEW_PROMPTPACK_DIR", str(environment_dir))
     defaulted = ConfigManager(presets_dir=tmp_path / "default-presets")

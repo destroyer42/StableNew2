@@ -5,22 +5,22 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any, cast
 
-from src.gui.layout_v2 import configure_grid_columns
-from src.gui.help_text.workflow_guidance_v2 import build_video_workflow_guidance
 from src.gui.help_text.stage_setting_help_v2 import VIDEO_WORKFLOW_SETTING_HELP
+from src.gui.help_text.workflow_guidance_v2 import build_video_workflow_guidance
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.theme_v2 import style_text_widget
 from src.gui.tooltip import attach_tooltip
-from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
-from src.state.output_routing import (
-    OUTPUT_ROUTE_MOVIE_CLIPS,
-    OUTPUT_ROUTE_REPROCESS,
-    OUTPUT_ROUTE_TESTING,
-)
-from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.view_contracts.pipeline_layout_contract import build_form_column_specs
 from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
+)
+from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
+from src.state.output_routing import (
+    OUTPUT_ROUTE_MOVIE_CLIPS,
+    OUTPUT_ROUTE_REPROCESS,
+    OUTPUT_ROUTE_TESTING,
 )
 
 _IMAGE_FILETYPES = [
@@ -72,16 +72,32 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.source_image_var = tk.StringVar(value=str(defaults.get("source_image_path") or ""))
         self.end_anchor_var = tk.StringVar(value=str(defaults.get("end_anchor_path") or ""))
         self.mid_anchors_var = tk.StringVar(value="; ".join(defaults.get("mid_anchor_paths") or []))
-        self.motion_profile_var = tk.StringVar(value=str(defaults.get("motion_profile") or "gentle"))
-        self.camera_preset_var = tk.StringVar(value=str(camera_intent_defaults.get("preset") or "none"))
-        self.camera_strength_var = tk.StringVar(value=str(camera_intent_defaults.get("strength") or 0.35))
+        self.motion_profile_var = tk.StringVar(
+            value=str(defaults.get("motion_profile") or "gentle")
+        )
+        self.camera_preset_var = tk.StringVar(
+            value=str(camera_intent_defaults.get("preset") or "none")
+        )
+        self.camera_strength_var = tk.StringVar(
+            value=str(camera_intent_defaults.get("strength") or 0.35)
+        )
         self.depth_mode_var = tk.StringVar(value=str(depth_input_defaults.get("mode") or "none"))
         self.depth_path_var = tk.StringVar(value=str(depth_input_defaults.get("path") or ""))
-        self.controlnet_model_var = tk.StringVar(value=str(controlnet_defaults.get("model") or "depth"))
-        self.controlnet_weight_var = tk.StringVar(value=str(controlnet_defaults.get("weight") or 1.0))
-        self.controlnet_guidance_start_var = tk.StringVar(value=str(controlnet_defaults.get("guidance_start") or 0.0))
-        self.controlnet_guidance_end_var = tk.StringVar(value=str(controlnet_defaults.get("guidance_end") or 1.0))
-        self.output_route_var = tk.StringVar(value=str(defaults.get("output_route") or OUTPUT_ROUTE_REPROCESS))
+        self.controlnet_model_var = tk.StringVar(
+            value=str(controlnet_defaults.get("model") or "depth")
+        )
+        self.controlnet_weight_var = tk.StringVar(
+            value=str(controlnet_defaults.get("weight") or 1.0)
+        )
+        self.controlnet_guidance_start_var = tk.StringVar(
+            value=str(controlnet_defaults.get("guidance_start") or 0.0)
+        )
+        self.controlnet_guidance_end_var = tk.StringVar(
+            value=str(controlnet_defaults.get("guidance_end") or 1.0)
+        )
+        self.output_route_var = tk.StringVar(
+            value=str(defaults.get("output_route") or OUTPUT_ROUTE_REPROCESS)
+        )
         self.status_var = tk.StringVar(value="Ready to queue a workflow-driven video job.")
         self.workflow_detail_var = tk.StringVar(value="No workflow selected.")
         self.source_summary_var = tk.StringVar(value="Source: none selected")
@@ -130,7 +146,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.output_route_var,
         ):
             variable.trace_add("write", lambda *_args: self._refresh_workspace_summary())
-        self.depth_mode_var.trace_add("write", lambda *_args: self._refresh_conditioning_controls_state())
+        self.depth_mode_var.trace_add(
+            "write", lambda *_args: self._refresh_conditioning_controls_state()
+        )
         self._refresh_conditioning_controls_state()
         self._refresh_workspace_summary()
         self.on_content_visibility_mode_changed()
@@ -153,7 +171,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             "negative_prompt": "",
             "motion_profile": "gentle",
             "camera_intent": {"preset": "none", "strength": 0.35},
-            "controlnet": {"model": "depth", "weight": 1.0, "guidance_start": 0.0, "guidance_end": 1.0},
+            "controlnet": {
+                "model": "depth",
+                "weight": 1.0,
+                "guidance_start": 0.0,
+                "guidance_end": 1.0,
+            },
             "depth_input": {"mode": "none", "path": ""},
             "output_route": OUTPUT_ROUTE_REPROCESS,
         }
@@ -169,9 +192,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         ttk.Entry(header, textvariable=self.source_image_var, style="Dark.TEntry").grid(
             row=0, column=1, sticky="ew", padx=(0, 6)
         )
-        ttk.Button(header, text="Browse...", style="Dark.TButton", command=self._on_browse_source).grid(
-            row=0, column=2, sticky="ew", padx=(0, 6)
-        )
+        ttk.Button(
+            header, text="Browse...", style="Dark.TButton", command=self._on_browse_source
+        ).grid(row=0, column=2, sticky="ew", padx=(0, 6))
         self.use_latest_output_button = ttk.Button(
             header,
             text="Use Latest Output",
@@ -214,17 +237,21 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.workflow_combo: ttk.Combobox = cast(
             ttk.Combobox,
             self._add_labeled_entry(
-            body,
-            0,
-            "Workflow",
-            combo=True,
-            variable=self.workflow_var,
-            help_key="workflow",
+                body,
+                0,
+                "Workflow",
+                combo=True,
+                variable=self.workflow_var,
+                help_key="workflow",
             ),
         )
-        ttk.Label(body, textvariable=self.workflow_detail_var, style="Muted.TLabel", wraplength=640, justify="left").grid(
-            row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6)
-        )
+        ttk.Label(
+            body,
+            textvariable=self.workflow_detail_var,
+            style="Muted.TLabel",
+            wraplength=640,
+            justify="left",
+        ).grid(row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
         self._add_labeled_entry(
             body,
             1,
@@ -232,9 +259,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             variable=self.end_anchor_var,
             help_key="end_anchor",
         )
-        ttk.Button(body, text="Browse...", style="Dark.TButton", command=self._on_browse_end_anchor).grid(
-            row=1, column=2, sticky="ew", padx=(6, 0)
-        )
+        ttk.Button(
+            body, text="Browse...", style="Dark.TButton", command=self._on_browse_end_anchor
+        ).grid(row=1, column=2, sticky="ew", padx=(6, 0))
 
         self._add_labeled_entry(
             body,
@@ -245,9 +272,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             helper="Optional, separated by ';'",
             help_key="mid_anchors",
         )
-        ttk.Button(body, text="Browse...", style="Dark.TButton", command=self._on_browse_mid_anchors).grid(
-            row=2, column=2, sticky="ew", padx=(6, 0)
-        )
+        ttk.Button(
+            body, text="Browse...", style="Dark.TButton", command=self._on_browse_mid_anchors
+        ).grid(row=2, column=2, sticky="ew", padx=(6, 0))
 
         self._add_labeled_entry(
             body,
@@ -432,7 +459,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             widget = ttk.Entry(parent, textvariable=variable, style="Dark.TEntry", width=width)
         widget.grid(row=row, column=1, sticky="ew", pady=(0, 6))
         if help_key:
-            self._attach_setting_help(help_key, VIDEO_WORKFLOW_SETTING_HELP[help_key], label_widget, widget)
+            self._attach_setting_help(
+                help_key, VIDEO_WORKFLOW_SETTING_HELP[help_key], label_widget, widget
+            )
         if helper:
             ttk.Label(parent, text=helper, style="Muted.TLabel").grid(
                 row=row, column=3, sticky="w", padx=(8, 0), pady=(0, 6)
@@ -541,7 +570,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         else:
             text = "; ".join(str(item) for item in mid_anchors if item)
         self.mid_anchors_var.set(text)
-        self.motion_profile_var.set(str(state.get("motion_profile") or self.motion_profile_var.get()))
+        self.motion_profile_var.set(
+            str(state.get("motion_profile") or self.motion_profile_var.get())
+        )
         camera_intent = dict(state.get("camera_intent") or {})
         controlnet = dict(state.get("controlnet") or {})
         depth_input = dict(state.get("depth_input") or {})
@@ -589,12 +620,21 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         output_value = self.output_route_var.get().strip() or OUTPUT_ROUTE_REPROCESS
         output_source = (
             "default"
-            if output_value == str(self._defaults.get("output_route") or OUTPUT_ROUTE_REPROCESS).strip()
+            if output_value
+            == str(self._defaults.get("output_route") or OUTPUT_ROUTE_REPROCESS).strip()
             else "selected here"
         )
-        anchor_state = "explicit anchors" if (self.end_anchor_var.get().strip() or self.mid_anchors_var.get().strip()) else "source-only"
+        anchor_state = (
+            "explicit anchors"
+            if (self.end_anchor_var.get().strip() or self.mid_anchors_var.get().strip())
+            else "source-only"
+        )
         depth_mode = self.depth_mode_var.get().strip() or "none"
-        depth_path = Path(self.depth_path_var.get().strip()).name if self.depth_path_var.get().strip() else ""
+        depth_path = (
+            Path(self.depth_path_var.get().strip()).name
+            if self.depth_path_var.get().strip()
+            else ""
+        )
         if depth_mode == "upload" and depth_path:
             conditioning_depth = f"depth=upload[{depth_path}]"
         elif depth_mode == "auto":
@@ -603,12 +643,18 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             conditioning_depth = "depth=off"
         camera_preset = self.camera_preset_var.get().strip() or "none"
         camera_strength = self.camera_strength_var.get().strip() or "0.35"
-        camera_summary = "camera=off" if camera_preset == "none" else f"camera={camera_preset}@{camera_strength}"
+        camera_summary = (
+            "camera=off" if camera_preset == "none" else f"camera={camera_preset}@{camera_strength}"
+        )
         control_model = self.controlnet_model_var.get().strip() or "depth"
         control_weight = self.controlnet_weight_var.get().strip() or "1.0"
         guide_start = self.controlnet_guidance_start_var.get().strip() or "0.0"
         guide_end = self.controlnet_guidance_end_var.get().strip() or "1.0"
-        control_summary = "controlnet=off" if depth_mode == "none" else f"controlnet={control_model}@{control_weight}[{guide_start}-{guide_end}]"
+        control_summary = (
+            "controlnet=off"
+            if depth_mode == "none"
+            else f"controlnet={control_model}@{control_weight}[{guide_start}-{guide_end}]"
+        )
         self.effective_settings_var.set(
             f"Effective settings: workflow={workflow_value} [{workflow_source}] | motion={motion_value} [{motion_source}] | output={output_value} [{output_source}] | anchor plan={anchor_state} | {conditioning_depth} | {camera_summary} | {control_summary}"
         )

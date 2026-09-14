@@ -130,7 +130,9 @@ def canonicalize_variant_entry(
     return data
 
 
-def canonicalize_variant_entries(entries: Sequence[Mapping[str, Any] | None] | None) -> list[dict[str, Any]]:
+def canonicalize_variant_entries(
+    entries: Sequence[Mapping[str, Any] | None] | None,
+) -> list[dict[str, Any]]:
     return [canonicalize_variant_entry(entry) for entry in entries or [] if entry is not None]
 
 

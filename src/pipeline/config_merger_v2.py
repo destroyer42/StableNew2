@@ -470,7 +470,9 @@ class ConfigMergerV2:
         if override_adetailer.inpaint_padding is not None:
             merged["inpaint_padding"] = override_adetailer.inpaint_padding
             merged["adetailer_padding"] = override_adetailer.inpaint_padding  # Dual key
-            merged["ad_inpaint_only_masked_padding"] = override_adetailer.inpaint_padding  # Dual key
+            merged["ad_inpaint_only_masked_padding"] = (
+                override_adetailer.inpaint_padding
+            )  # Dual key
         if override_adetailer.inpaint_only_masked is not None:
             merged["ad_inpaint_only_masked"] = override_adetailer.inpaint_only_masked
         if override_adetailer.use_inpaint_width_height is not None:

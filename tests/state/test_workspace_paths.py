@@ -197,6 +197,7 @@ class TestLearningPathsConsistency:
             CANONICAL_LEARNING_EXPERIMENTS_ROOT,
             CANONICAL_LEARNING_RECORDS_PATH,
         )
+
         assert CANONICAL_LEARNING_RECORDS_PATH.is_absolute()
         assert CANONICAL_LEARNING_EXPERIMENTS_ROOT.is_absolute()
         assert CANONICAL_DISCOVERED_EXPERIMENTS_ROOT.is_absolute()
@@ -207,6 +208,7 @@ class TestLearningPathsConsistency:
             CANONICAL_LEARNING_EXPERIMENTS_ROOT,
             CANONICAL_LEARNING_RECORDS_PATH,
         )
+
         assert CANONICAL_LEARNING_RECORDS_PATH == workspace_paths.learning_records(
             create_parent=False
         )

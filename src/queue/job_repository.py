@@ -415,12 +415,16 @@ class JobRepository(JobHistoryStore):
         result: dict[str, Any] | None = None,
     ) -> Job:
         with self.transaction() as connection:
-            row = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job.job_id,)).fetchone()
+            row = connection.execute(
+                "SELECT * FROM jobs WHERE job_id = ?", (job.job_id,)
+            ).fetchone()
             if row is None:
                 raise JobRepositoryError(f"Unknown job identity {job.job_id!r}")
             current = JobStatus(row["status"])
             if status != current and status not in _ALLOWED_TRANSITIONS[current]:
-                raise InvalidLifecycleTransition(f"Cannot transition {job.job_id} from {current.value} to {status.value}")
+                raise InvalidLifecycleTransition(
+                    f"Cannot transition {job.job_id} from {current.value} to {status.value}"
+                )
             now = datetime.utcnow()
             started_at = row["started_at"]
             completed_at = row["completed_at"]
@@ -499,7 +503,9 @@ class JobRepository(JobHistoryStore):
             }
             requested = set(ordered_job_ids)
             if requested != stored or len(requested) != len(ordered_job_ids):
-                raise JobRepositoryError("Queue order update must contain every queued identity exactly once")
+                raise JobRepositoryError(
+                    "Queue order update must contain every queued identity exactly once"
+                )
             for position, job_id in enumerate(ordered_job_ids, start=1):
                 connection.execute(
                     "UPDATE jobs SET queue_order = ?, updated_at = ? WHERE job_id = ?",
@@ -518,9 +524,7 @@ class JobRepository(JobHistoryStore):
             for row in rows:
                 metadata = _execution_metadata_from_dict(_json_loads(row["execution_metadata"], {}))
                 metadata.last_control_action = "restart_interrupted_action_required"
-                prior_envelope = deserialize_envelope(
-                    _json_loads(row["error_envelope"], None)
-                )
+                prior_envelope = deserialize_envelope(_json_loads(row["error_envelope"], None))
                 message = (
                     "StableNew exited while this job was running. Its generation outcome may "
                     "be ambiguous, so it was not automatically replayed. Inspect available "
@@ -582,7 +586,9 @@ class JobRepository(JobHistoryStore):
 
     def get_job_model(self, job_id: str) -> Job | None:
         with self._lock:
-            row = self._connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+            row = self._connection.execute(
+                "SELECT * FROM jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
         return self._row_to_job(row) if row is not None else None
 
     def list_job_models(self, statuses: Iterable[JobStatus] | None = None) -> list[Job]:
@@ -628,7 +634,9 @@ class JobRepository(JobHistoryStore):
 
     def get_job(self, job_id: str) -> JobHistoryEntry | None:
         with self._lock:
-            row = self._connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+            row = self._connection.execute(
+                "SELECT * FROM jobs WHERE job_id = ?", (job_id,)
+            ).fetchone()
         return self._row_to_history(row) if row is not None else None
 
     def record_status_change(
@@ -651,11 +659,15 @@ class JobRepository(JobHistoryStore):
     def save_entry(self, entry: JobHistoryEntry) -> None:
         job = self.get_job_model(entry.job_id)
         if job is None:
-            raise JobRepositoryError("History is a projection; submit the NJR before recording history")
+            raise JobRepositoryError(
+                "History is a projection; submit the NJR before recording history"
+            )
         job.started_at = entry.started_at
         job.completed_at = entry.completed_at
         job.error_envelope = entry.error_envelope
-        self.transition_job(job, entry.status, error_message=entry.error_message, result=entry.result)
+        self.transition_job(
+            job, entry.status, error_message=entry.error_message, result=entry.result
+        )
 
     def register_callback(self, callback: Any) -> None:
         if callback not in self._callbacks:
@@ -758,9 +770,7 @@ class JobRepository(JobHistoryStore):
                     "SELECT status FROM jobs WHERE job_id = ?", (job.job_id,)
                 ).fetchone()
                 if stored is None or stored["status"] != job.status.value:
-                    raise JobRepositoryError(
-                        f"Atomic import validation failed for {job.job_id!r}"
-                    )
+                    raise JobRepositoryError(f"Atomic import validation failed for {job.job_id!r}")
         return imported, duplicates
 
     def _insert_imported_job(self, connection: sqlite3.Connection, job: Job) -> None:
@@ -785,16 +795,34 @@ class JobRepository(JobHistoryStore):
                       ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                job.job_id, serialized_snapshot, fingerprint, int(job.priority), int(next_order),
-                job.status.value, created, created, _iso(job.started_at), _iso(job.completed_at),
-                _iso(job.updated_at) or created, float(job.progress), job.eta_seconds,
-                str(job.worker_id) if job.worker_id is not None else None, job.run_mode,
-                job.source, job.prompt_source, job.prompt_pack_id,
-                _json_dumps(job.randomizer_metadata or {}), job.variant_index, job.variant_total,
-                _json_dumps(_execution_metadata_to_dict(job.execution_metadata)), job.error_message,
+                job.job_id,
+                serialized_snapshot,
+                fingerprint,
+                int(job.priority),
+                int(next_order),
+                job.status.value,
+                created,
+                created,
+                _iso(job.started_at),
+                _iso(job.completed_at),
+                _iso(job.updated_at) or created,
+                float(job.progress),
+                job.eta_seconds,
+                str(job.worker_id) if job.worker_id is not None else None,
+                job.run_mode,
+                job.source,
+                job.prompt_source,
+                job.prompt_pack_id,
+                _json_dumps(job.randomizer_metadata or {}),
+                job.variant_index,
+                job.variant_total,
+                _json_dumps(_execution_metadata_to_dict(job.execution_metadata)),
+                job.error_message,
                 _json_dumps(serialize_envelope(job.error_envelope)) if job.error_envelope else None,
                 _json_dumps(job.result) if job.result is not None else None,
-                _json_dumps(_artifact_references(job.result)), parent_job_id, parent_artifact_id,
+                _json_dumps(_artifact_references(job.result)),
+                parent_job_id,
+                parent_artifact_id,
                 job.summary(),
             ),
         )

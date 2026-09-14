@@ -34,7 +34,9 @@ class QueueRunSubmissionService:
         elif button_source == "run_now":
             self._append_log("[controller] Normalizing run_mode to 'queue' for Run Now button.")
         elif button_source == "add_to_queue":
-            self._append_log("[controller] Normalizing run_mode to 'queue' for Add to Queue button.")
+            self._append_log(
+                "[controller] Normalizing run_mode to 'queue' for Add to Queue button."
+            )
 
     def build_run_config(self, app_state: Any, *, mode: str, source: str) -> dict[str, Any]:
         cfg: dict[str, Any] = {"run_mode": mode, "source": source}
@@ -84,7 +86,9 @@ class QueueRunSubmissionService:
         run_config = self.build_run_config(app_state, mode=mode, source=source)
         set_last_run_config(dict(run_config))
         if pipeline_controller is None:
-            self._append_log("[controller] _start_run_v2 aborted: pipeline_controller is unavailable.")
+            self._append_log(
+                "[controller] _start_run_v2 aborted: pipeline_controller is unavailable."
+            )
             return False
         try:
             pytest_flag = os.environ.get("PYTEST_CURRENT_TEST")

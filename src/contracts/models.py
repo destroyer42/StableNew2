@@ -80,4 +80,3 @@ class CurrentConfig:
     hires_steps: int | None = None
     hires_denoise: float = 0.3
     hires_use_base_model_for_hires: bool = True
-

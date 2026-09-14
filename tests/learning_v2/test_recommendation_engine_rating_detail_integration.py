@@ -8,12 +8,11 @@ Verifies that:
 5. Metadata normalization (LearningRecord.extract_rating_detail) works for all shapes.
 6. People-context mismatch penalty is applied conservatively.
 """
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
-
-import pytest
 
 from src.learning.learning_record import LearningRecord
 from src.learning.recommendation_engine import (
@@ -22,10 +21,10 @@ from src.learning.recommendation_engine import (
     RecommendationEngine,
 )
 
-
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
+
 
 def _write(path: Path, records: list[dict]) -> None:
     with open(path, "w", encoding="utf-8") as fh:
@@ -108,6 +107,7 @@ def _review_record(
 # LearningRecord.extract_rating_detail normalization tests
 # ---------------------------------------------------------------------------
 
+
 class TestExtractRatingDetail:
     def test_empty_metadata_returns_safe_defaults(self) -> None:
         result = LearningRecord.extract_rating_detail({})
@@ -172,6 +172,7 @@ class TestExtractRatingDetail:
 # Backward compatibility: flat-rating records still produce recommendations
 # ---------------------------------------------------------------------------
 
+
 def test_flat_rating_records_still_produce_recommendations(tmp_path: Path) -> None:
     """Old records without any subscore detail must not be silently filtered."""
     path = tmp_path / "r.jsonl"
@@ -206,17 +207,21 @@ def test_flat_and_detailed_records_mixed(tmp_path: Path) -> None:
 # Subscore quality adjustment
 # ---------------------------------------------------------------------------
 
+
 def test_high_subscores_increase_weight(tmp_path: Path) -> None:
     """Records with avg subscore > 3 should not disappear or be penalised."""
     path = tmp_path / "r.jsonl"
-    _write(path, [
-        _detailed_exp_record(
-            sampler="Euler a",
-            rating=5,
-            subscores={"anatomy": 5, "composition": 5, "prompt_adherence": 5},
-        )
-        for _ in range(3)
-    ])
+    _write(
+        path,
+        [
+            _detailed_exp_record(
+                sampler="Euler a",
+                rating=5,
+                subscores={"anatomy": 5, "composition": 5, "prompt_adherence": 5},
+            )
+            for _ in range(3)
+        ],
+    )
     engine = RecommendationEngine(path)
     result = engine.recommend("portrait, woman", "txt2img")
     assert result.recommendations
@@ -242,6 +247,7 @@ def test_low_subscores_do_not_suppress_recommendations(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # Context-mismatch penalty
 # ---------------------------------------------------------------------------
+
 
 def test_context_mismatch_penalty_applied_conservatively(tmp_path: Path) -> None:
     """Records with no-people context + low anatomy should lose weight when query has people.

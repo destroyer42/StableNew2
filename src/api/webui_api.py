@@ -222,7 +222,9 @@ class WebUIAPI:
                         is_idle = progress_data.get("progress", 1.0) == 0.0
                         checks_status["progress_idle"] = is_idle
                         if not is_idle:
-                            logger.debug("WebUI is busy (progress: %.2f)", progress_data.get("progress", 0))
+                            logger.debug(
+                                "WebUI is busy (progress: %.2f)", progress_data.get("progress", 0)
+                            )
                     else:
                         checks_status["progress_idle"] = False
                 else:
@@ -233,10 +235,7 @@ class WebUIAPI:
 
             # A boot marker is observability only. A later job must wait until
             # the progress endpoint confirms that no earlier generation is active.
-            api_ready = (
-                checks_status["models_endpoint"]
-                and checks_status["options_endpoint"]
-            )
+            api_ready = checks_status["models_endpoint"] and checks_status["options_endpoint"]
             progress_ready = checks_status.get("progress_idle", False)
             if api_ready and progress_ready:
                 elapsed = time.time() - start_time

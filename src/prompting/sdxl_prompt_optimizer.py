@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections import OrderedDict
 import re
+from collections import OrderedDict
 from typing import Literal, cast
 
 from src.prompting.prompt_bucket_rules import PromptBucketRules
@@ -79,7 +79,10 @@ class SDXLPromptOptimizer:
         buckets = self._bucketize(prompt_chunks, POSITIVE_BUCKET_ORDER)
         if prefix_embeddings:
             buckets["embedding_tokens"] = prefix_embeddings
-        if self.config.allow_subject_anchor_boost and len(prompt_chunks) >= self.config.subject_anchor_boost_min_chunk_count:
+        if (
+            self.config.allow_subject_anchor_boost
+            and len(prompt_chunks) >= self.config.subject_anchor_boost_min_chunk_count
+        ):
             buckets = self._apply_subject_anchor_boost(buckets)
         dropped: list[str] = []
         if self.config.dedupe_enabled:
@@ -245,11 +248,15 @@ class SDXLPromptOptimizer:
             anchored_buckets.add("leftover_unknown")
         if self.config.preserve_lora_relative_order:
             anchored_buckets.add("lora_tokens")
-        return _rebuild_chunk_order_with_anchors(ordered_chunks, POSITIVE_BUCKET_ORDER, anchored_buckets)
+        return _rebuild_chunk_order_with_anchors(
+            ordered_chunks, POSITIVE_BUCKET_ORDER, anchored_buckets
+        )
 
     def _ordered_negative_chunks_with_anchors(self, buckets: BucketMap) -> list[str]:
         ordered_chunks = _all_prompt_chunks(buckets, NEGATIVE_BUCKET_ORDER)
-        return _rebuild_chunk_order_with_anchors(ordered_chunks, NEGATIVE_BUCKET_ORDER, {"leftover_unknown"})
+        return _rebuild_chunk_order_with_anchors(
+            ordered_chunks, NEGATIVE_BUCKET_ORDER, {"leftover_unknown"}
+        )
 
     def _apply_subject_anchor_boost(self, buckets: BucketMap) -> BucketMap:
         return dict(buckets)
@@ -304,13 +311,16 @@ def _rebuild_chunk_order_with_anchors(
     if not chunks:
         return []
     anchored_positions = {
-        chunk.sequence_index: chunk
-        for chunk in chunks
-        if chunk.bucket in anchored_buckets
+        chunk.sequence_index: chunk for chunk in chunks if chunk.bucket in anchored_buckets
     }
     movable = sorted(
         [chunk for chunk in chunks if chunk.bucket not in anchored_buckets],
-        key=lambda chunk: (ordered_buckets.index(chunk.bucket) if chunk.bucket in ordered_buckets else len(ordered_buckets), chunk.sequence_index),
+        key=lambda chunk: (
+            ordered_buckets.index(chunk.bucket)
+            if chunk.bucket in ordered_buckets
+            else len(ordered_buckets),
+            chunk.sequence_index,
+        ),
     )
     movable_iter = iter(movable)
     ordered_text: list[str] = []

@@ -265,7 +265,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
     def _build_resolution_row(self, parent: ttk.Frame, row_idx: int) -> None:
         preset_label = ttk.Label(parent, text="Preset", style=BODY_LABEL_STYLE)
         preset_label.grid(row=row_idx, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
-        self._preset_combo = self._build_combo(parent, self.resolution_preset_var, tuple(self._preset_map.keys()))
+        self._preset_combo = self._build_combo(
+            parent, self.resolution_preset_var, tuple(self._preset_map.keys())
+        )
         self._preset_combo.grid(row=row_idx, column=1, columnspan=3, sticky="ew", pady=(0, 4))
         self._preset_combo.bind("<<ComboboxSelected>>", self._on_resolution_preset_selected)
         self._attach_setting_help(
@@ -338,9 +340,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         subseed_button = ttk.Button(parent, text="Rand", width=6, command=self._randomize_subseed)
         subseed_button.grid(row=row_idx + 1, column=3, sticky="w", pady=(0, 4))
 
-        subseed_strength_label = ttk.Label(
-            parent, text="Subseed Strength", style=BODY_LABEL_STYLE
-        )
+        subseed_strength_label = ttk.Label(parent, text="Subseed Strength", style=BODY_LABEL_STYLE)
         subseed_strength_label.grid(row=row_idx + 2, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
         subseed_strength_entry = ttk.Entry(
             parent, textvariable=self.subseed_strength_var, style="Dark.TEntry"
@@ -414,7 +414,10 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 pass
             try:
                 if hasattr(controller, "on_resolution_changed"):
-                    controller.on_resolution_changed(self._safe_int(self.width_var.get(), 768), self._safe_int(self.height_var.get(), 768))
+                    controller.on_resolution_changed(
+                        self._safe_int(self.width_var.get(), 768),
+                        self._safe_int(self.height_var.get(), 768),
+                    )
             except Exception:
                 pass
         self._update_current_config()
@@ -447,7 +450,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             else:
                 cfg.seed = self._safe_int(seed_text, -1)
             subseed_text = str(self.subseed_var.get()).strip()
-            cfg.subseed = -1 if not subseed_text or subseed_text == "-1" else self._safe_int(subseed_text, -1)
+            cfg.subseed = (
+                -1 if not subseed_text or subseed_text == "-1" else self._safe_int(subseed_text, -1)
+            )
             cfg.subseed_strength = self._safe_float(self.subseed_strength_var.get(), 0.0)
         except Exception:
             pass
@@ -535,7 +540,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         combo["values"] = new_values
         reverse_lookup = {}
         if variable is self.model_var:
-            reverse_lookup = {internal: display for display, internal in self._model_name_map.items()}
+            reverse_lookup = {
+                internal: display for display, internal in self._model_name_map.items()
+            }
         elif variable is self.vae_var:
             reverse_lookup = {internal: display for display, internal in self._vae_name_map.items()}
         if current in new_values:
@@ -668,7 +675,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         else:
             seed_value = self._safe_int(seed_text, -1)
         subseed_text = str(self.subseed_var.get()).strip()
-        subseed_value = -1 if not subseed_text or subseed_text == "-1" else self._safe_int(subseed_text, -1)
+        subseed_value = (
+            -1 if not subseed_text or subseed_text == "-1" else self._safe_int(subseed_text, -1)
+        )
         return {
             "model": self._normalize_model_name(self.model_var.get()),
             "model_name": self._normalize_model_name(self.model_var.get()),
@@ -694,13 +703,21 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             return
         self._sync_enabled = False
         try:
-            model_value = str(overrides.get("model") or overrides.get("model_name") or self.model_var.get())
+            model_value = str(
+                overrides.get("model") or overrides.get("model_name") or self.model_var.get()
+            )
             model_display = self._display_model_name(model_value)
             self.model_var.set(model_display)
             vae_value = str(overrides.get("vae") or overrides.get("vae_name") or self.vae_var.get())
             vae_display = self._display_vae_name(vae_value)
             self.vae_var.set(vae_display)
-            self.sampler_var.set(str(overrides.get("sampler") or overrides.get("sampler_name") or self.sampler_var.get()))
+            self.sampler_var.set(
+                str(
+                    overrides.get("sampler")
+                    or overrides.get("sampler_name")
+                    or self.sampler_var.get()
+                )
+            )
             self.scheduler_var.set(str(overrides.get("scheduler") or self.scheduler_var.get()))
             self.steps_var.set(self._safe_int(overrides.get("steps", self.steps_var.get()), 20))
             self.cfg_var.set(self._safe_float(overrides.get("cfg_scale", self.cfg_var.get()), 7.0))
@@ -710,7 +727,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 self.width_var.set(str(self._safe_int(width, 768)))
                 self.height_var.set(str(self._safe_int(height, 768)))
                 self.resolution_preset_var.set(
-                    self._preset_label_from_dimensions(self._safe_int(width, 768), self._safe_int(height, 768))
+                    self._preset_label_from_dimensions(
+                        self._safe_int(width, 768), self._safe_int(height, 768)
+                    )
                 )
             else:
                 preset = overrides.get("resolution_preset")
@@ -725,9 +744,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             )
             subseed_strength = overrides.get("subseed_strength")
             if subseed_strength is not None:
-                self.subseed_strength_var.set(
-                    str(self._safe_float(subseed_strength, 0.0))
-                )
+                self.subseed_strength_var.set(str(self._safe_float(subseed_strength, 0.0)))
         finally:
             self._sync_enabled = True
         self._update_current_config()
@@ -840,7 +857,11 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             mapping: dict[str, str] = {}
             try:
                 for item in controller.list_models() or []:
-                    display = getattr(item, "display_name", None) or getattr(item, "name", None) or str(item)
+                    display = (
+                        getattr(item, "display_name", None)
+                        or getattr(item, "name", None)
+                        or str(item)
+                    )
                     internal = getattr(item, "name", None) or str(item)
                     if display:
                         values.append(str(display))
@@ -851,7 +872,10 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             if values:
                 self._model_name_map = mapping
                 return tuple(values)
-        values = tuple(self._models or self._names_from_adapter(self._model_adapter, "get_model_names", "list_models"))
+        values = tuple(
+            self._models
+            or self._names_from_adapter(self._model_adapter, "get_model_names", "list_models")
+        )
         self._model_name_map = {value: value for value in values}
         return values
 
@@ -862,7 +886,11 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             mapping: dict[str, str] = {"No VAE (model default)": ""}
             try:
                 for item in controller.list_vaes() or []:
-                    display = getattr(item, "display_name", None) or getattr(item, "name", None) or str(item)
+                    display = (
+                        getattr(item, "display_name", None)
+                        or getattr(item, "name", None)
+                        or str(item)
+                    )
                     internal = getattr(item, "name", None) or str(item)
                     if display:
                         values.append(str(display))
@@ -872,7 +900,9 @@ class BaseGenerationPanelV2(BaseStageCardV2):
                 mapping = {"No VAE (model default)": ""}
             self._vae_name_map = mapping
             return tuple(values)
-        values = tuple(self._vaes or self._names_from_adapter(self._vae_adapter, "get_vae_names", "list_vaes"))
+        values = tuple(
+            self._vaes or self._names_from_adapter(self._vae_adapter, "get_vae_names", "list_vaes")
+        )
         full_values = ("No VAE (model default)",) + values
         self._vae_name_map = {"No VAE (model default)": "", **{value: value for value in values}}
         return full_values

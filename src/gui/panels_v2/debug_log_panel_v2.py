@@ -56,9 +56,9 @@ class DebugLogPanelV2(ttk.Frame):
 
     def _format_event(self, event: JobLifecycleLogEvent) -> str:
         """Format lifecycle event with user-friendly messages.
-        
+
         PR-GUI-DATA-006: Enhanced lifecycle log formatting for better readability.
-        
+
         Displays human-readable messages with visual indicators:
         - job_created → "Job abc123 created"
         - stage_completed → "Completed txt2img stage ✓"
@@ -67,7 +67,7 @@ class DebugLogPanelV2(ttk.Frame):
         """
         ts = event.timestamp.strftime("%H:%M:%S")
         job_id_short = event.job_id[:8] if event.job_id else "-"
-        
+
         # Format event-specific message
         if event.event_type == "job_created":
             msg = f"Job {job_id_short} created"
@@ -95,5 +95,5 @@ class DebugLogPanelV2(ttk.Frame):
                 msg += f" | job={job_id_short}"
             if event.message:
                 msg += f" | {event.message}"
-        
+
         return f"{ts} | {msg}"

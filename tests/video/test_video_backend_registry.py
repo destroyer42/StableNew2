@@ -104,7 +104,9 @@ def test_animatediff_backend_normalizes_executor_result(tmp_path: Path) -> None:
     variant_payload = result.to_variant_payload()
     assert variant_payload["video_backend_id"] == "animatediff"
     assert variant_payload["artifact"]["primary_path"] == str(tmp_path / "clip.mp4")
-    assert variant_payload["video_replay_manifest"]["secondary_motion_summary"]["status"] == "applied"
+    assert (
+        variant_payload["video_replay_manifest"]["secondary_motion_summary"]["status"] == "applied"
+    )
 
 
 def test_svd_native_backend_normalizes_executor_result(tmp_path: Path) -> None:
@@ -258,5 +260,9 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
     variant_payload = result.to_variant_payload()
     assert variant_payload["video_backend_id"] == "comfy"
     assert variant_payload["artifact"]["primary_path"] == str(promoted_video)
-    assert variant_payload["video_replay_manifest"]["secondary_motion_summary"]["status"] == "applied"
-    assert variant_payload["video_replay_manifest"]["secondary_motion_source_video_path"] == str(output_video)
+    assert (
+        variant_payload["video_replay_manifest"]["secondary_motion_summary"]["status"] == "applied"
+    )
+    assert variant_payload["video_replay_manifest"]["secondary_motion_source_video_path"] == str(
+        output_video
+    )

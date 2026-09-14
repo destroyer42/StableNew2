@@ -257,6 +257,7 @@ def test_job_history_panel_uses_generic_video_artifact_metadata(tk_root, tmp_pat
 # PR-VIDEO-215: video_workflow_artifact key and separate button states
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.gui
 def test_panel_video_workflow_artifact_enables_video_workflow_button(tk_root, tmp_path) -> None:
     """Video Workflow button must be ENABLED for workflow-video outputs.
@@ -323,8 +324,12 @@ def test_panel_video_workflow_artifact_enables_video_workflow_button(tk_root, tm
     # SVD stays disabled for video results
     assert panel.svd_btn.instate(["disabled"]), "SVD must be disabled for video outputs"
     # Video Workflow should be enabled — we can route the thumbnail as a new input
-    assert panel.video_workflow_btn.instate(["!disabled"]), "Video Workflow must be enabled for video outputs"
-    assert panel.movie_clips_btn.instate(["!disabled"]), "Movie Clips must be enabled for video outputs"
+    assert panel.video_workflow_btn.instate(["!disabled"]), (
+        "Video Workflow must be enabled for video outputs"
+    )
+    assert panel.movie_clips_btn.instate(["!disabled"]), (
+        "Movie Clips must be enabled for video outputs"
+    )
 
 
 @pytest.mark.gui

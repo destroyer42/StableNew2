@@ -91,6 +91,7 @@ from src.controller.process_auto_scanner_service import (
     ProcessAutoScannerConfig,
     ProcessAutoScannerService,
 )
+from src.controller.runtime_state import GUIState
 from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.webui_connection_controller import (
     WebUIConnectionController,
@@ -107,6 +108,7 @@ from src.pipeline.config_contract_v26 import (
     validate_svd_native_execution_config,
     validate_train_lora_execution_config,
 )
+from src.pipeline.config_merger_v2 import StageOverridesBundle
 from src.pipeline.job_models_v2 import JobStatusV2, UnifiedJobSummary
 from src.pipeline.last_run_store_v2_5 import (
     LastRunStoreV2_5,
@@ -306,7 +308,7 @@ class AppController:
         self._queue_submit_in_progress = True
         jobs = getattr(self, "_draft_job_bundle", [])
         self._draft_job_bundle = []
-        
+
         # PR-THREAD-001: Use tracked thread for clean shutdown
         self._spawn_tracked_thread(
             target=self._submit_jobs_async,
@@ -321,7 +323,7 @@ class AppController:
                 self.job_service.submit_queued(job)
         finally:
             self._queue_submit_in_progress = False
-    
+
     def _spawn_tracked_thread(
         self,
         target: Callable,
@@ -333,10 +335,10 @@ class AppController:
     ) -> threading.Thread:
         """
         Spawn a tracked thread for clean shutdown.
-        
+
         PR-THREAD-001: All background operations must use this method
         to ensure proper cleanup during shutdown.
-        
+
         Args:
             target: Function to run in thread
             args: Positional arguments for target
@@ -344,13 +346,13 @@ class AppController:
             name: Thread name (required)
             daemon: Whether to use daemon mode (discouraged)
             purpose: Description of thread purpose
-        
+
         Returns:
             The spawned thread
         """
         if kwargs is None:
             kwargs = {}
-        
+
         return self._thread_registry.spawn(
             target=target,
             args=args,
@@ -397,11 +399,11 @@ class AppController:
         self.last_ui_heartbeat_ts = time.monotonic()
         self.last_queue_activity_ts = time.monotonic()
         self.last_runner_activity_ts = time.monotonic()
-        
+
         # PR-HB-002: Operation tracking for heartbeat stall diagnostics
         self.current_operation_label: str | None = None
         self.last_ui_action: str | None = None
-        
+
         # PR-HB-003: UI update debouncing to prevent heartbeat stalls
         self._ui_preview_dirty = False
         self._ui_job_list_dirty = False
@@ -420,7 +422,7 @@ class AppController:
         self._last_runtime_status = None
         self._last_runtime_status_flush_ts = 0.0
         self._runtime_status_min_interval_ms = 250
-        
+
         self.main_window = main_window
         self.app_state = getattr(main_window, "app_state", None)
         if self.app_state is None:
@@ -467,7 +469,7 @@ class AppController:
         root_logger.addHandler(self.gui_log_handler)
         json_config = get_jsonl_log_config()
         self.json_log_handler = attach_jsonl_log_handler(json_config, level=logging.INFO)
-        
+
         # Pipeline runner and controller setup
         # Don't do port discovery on startup - too slow (50+ seconds if WebUI not running)
         # Use default port and discover later if connection fails
@@ -476,7 +478,7 @@ class AppController:
         default_url = str(settings.get("webui_base_url") or "").strip() or os.getenv(
             "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
         )
-        
+
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
             self._api_client = api_client or self._runtime_ports.create_client(base_url=default_url)
@@ -542,9 +544,9 @@ class AppController:
                 app_controller=self,  # PR-HEARTBEAT-FIX: Pass self for heartbeat updates
             )
         try:
-            setattr(self.pipeline_controller, "_app_state_queue_updates_managed_externally", True)
-            setattr(self.pipeline_controller, "_app_state_runtime_updates_managed_externally", True)
-            setattr(self.pipeline_controller, "_app_state_preview_updates_managed_externally", True)
+            self.pipeline_controller._app_state_queue_updates_managed_externally = True
+            self.pipeline_controller._app_state_runtime_updates_managed_externally = True
+            self.pipeline_controller._app_state_preview_updates_managed_externally = True
         except Exception:
             pass
 
@@ -570,15 +572,15 @@ class AppController:
                 self._duration_stats_service.refresh()
             except Exception as exc:
                 self._append_log(f"[duration_stats] Initial refresh failed: {exc}")
-        
+
         # PR-LEARN-012: Initialize LearningExecutionController (NEW implementation)
         from src.gui.learning_state import LearningState
         from src.learning.execution_controller import LearningExecutionController
-        
+
         # Initialize learning state if not exists
         if not hasattr(self, '_learning_state'):
             self._learning_state = LearningState()
-        
+
         self.learning_execution_controller = LearningExecutionController(
             learning_state=self._learning_state,
             job_service=self.job_service,
@@ -588,7 +590,7 @@ class AppController:
             self.learning_execution_controller._run_callable = self._learning_run_callable  # type: ignore[attr-defined]
         except Exception:
             pass
-        
+
         # PR-LEARN-003: Register learning completion handler
         if self.job_service:
             self._learning_completion_handler = self._create_learning_completion_handler()
@@ -598,7 +600,7 @@ class AppController:
             self._photo_optimize_completion_handler = self._create_photo_optimize_completion_handler()
             if callable(register_completion):
                 register_completion(self._photo_optimize_completion_handler)
-        
+
         self.webui_connection_controller = getattr(
             self.pipeline_controller, "_webui_connection", None
         )
@@ -609,7 +611,7 @@ class AppController:
             webui_connection_controller=self.webui_connection_controller,
             logger=logger,
         )
-        
+
         # Override pack config state (for ConfigMergerV2 integration)
         self.override_pack_config_enabled = False
         try:
@@ -656,7 +658,7 @@ class AppController:
             protected_pids=self._get_protected_process_pids,
             start_thread=False,  # DISABLED - prevents GUI from being killed
         )
-        
+
         # PR-HB-004: Initialize persistence worker with UI callback dispatcher
         try:
             from src.services.persistence_worker import get_persistence_worker
@@ -666,7 +668,7 @@ class AppController:
             logger.debug("[controller] Persistence worker initialized")
         except Exception as e:
             logger.error(f"[controller] Failed to initialize persistence worker: {e}")
-        
+
         # Wire GUI overrides into PipelineController so config assembler can access GUI state
         if hasattr(self.pipeline_controller, "get_gui_overrides"):
             self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
@@ -687,7 +689,7 @@ class AppController:
     def shutdown(self) -> None:
         """
         Shutdown the AppController and all background services cleanly.
-        
+
         PR-SHUTDOWN-001: Enhanced to stop SystemWatchdog, join all tracked threads,
         close file handles, and verify clean exit.
         """
@@ -698,7 +700,7 @@ class AppController:
                 logger.info("[controller] shutdown(): System watchdog stopped")
             except Exception as e:
                 logger.error(f"[controller] shutdown(): Error stopping watchdog: {e}")
-        
+
         # PR-HB-004: Shutdown persistence worker
         logger.info("[controller] shutdown(): Shutting down persistence worker...")
         try:
@@ -707,7 +709,7 @@ class AppController:
             logger.info("[controller] shutdown(): Persistence worker shut down")
         except Exception as e:
             logger.error(f"[controller] shutdown(): Error shutting down persistence worker: {e}")
-        
+
         logger.info("[controller] shutdown(): Closing job repository...")
         if self.job_service:
             history_store = getattr(self.job_service, "history_store", None)
@@ -720,7 +722,7 @@ class AppController:
                     logger.info("[controller] shutdown(): Job repository closed")
                 except Exception as e:
                     logger.error(f"[controller] shutdown(): Error closing job repository: {e}")
-        
+
         # PR-THREAD-001: Join all tracked threads
         logger.info("[controller] shutdown(): Joining all tracked threads...")
         try:
@@ -818,7 +820,7 @@ class AppController:
         if self._dispatch_via_root_after(delay, fn):
             return
         self._ui_dispatch(fn)
-    
+
     def _mark_ui_dirty(
         self,
         preview: bool = False,
@@ -827,7 +829,7 @@ class AppController:
         queue: bool = False,
     ) -> None:
         """Mark UI components as needing refresh and schedule debounced update.
-        
+
         PR-HB-003: Coalesces multiple rapid update requests into a single
         periodic refresh to prevent heartbeat stalls.
         """
@@ -851,31 +853,31 @@ class AppController:
             self._ui_history_dirty = True
         if queue:
             self._ui_queue_dirty = True
-        
+
         # Schedule debounced update if not already pending
         if not self._ui_debounce_pending:
             self._ui_debounce_pending = True
             self._schedule_debounced_ui_update()
-    
+
     def _schedule_debounced_ui_update(self) -> None:
         """Schedule a debounced UI update after delay.
-        
+
         PR-HB-003: Uses UI scheduler to coalesce updates into a single refresh.
         """
         self._ui_dispatch_later(self._ui_debounce_delay_ms, self._apply_pending_ui_updates)
-    
+
     def _apply_pending_ui_updates(self) -> None:
         """Apply all pending UI updates and clear dirty flags.
-        
+
         PR-HB-003: Central UI update sink that processes all coalesced updates.
         """
         try:
             self._ui_debounce_pending = False
-            
+
             # Update last heartbeat timestamp
             import time
             self.last_ui_heartbeat_ts = time.monotonic()
-            
+
             # Apply updates based on dirty flags
             if self._ui_preview_dirty:
                 self._ui_preview_dirty = False
@@ -883,7 +885,7 @@ class AppController:
                     self._refresh_preview_from_state_async()
                 except Exception as exc:
                     logger.exception(f"[AppController] Error refreshing preview: {exc}")
-            
+
             if self._ui_job_list_dirty:
                 self._ui_job_list_dirty = False
                 try:
@@ -892,7 +894,7 @@ class AppController:
                         self.main_window.refresh_job_list()
                 except Exception as exc:
                     logger.exception(f"[AppController] Error refreshing job list: {exc}")
-            
+
             if self._ui_history_dirty:
                 self._ui_history_dirty = False
                 try:
@@ -908,7 +910,7 @@ class AppController:
                     self._refresh_app_state_queue()
                 except Exception as exc:
                     logger.exception(f"[AppController] Error refreshing queue state: {exc}")
-        
+
         except Exception as exc:
             logger.exception(f"[AppController] Error in _apply_pending_ui_updates: {exc}")
 
@@ -931,7 +933,7 @@ class AppController:
 
     def _get_runtime_status_callback(self) -> Callable[[dict[str, Any]], None]:
         """Return a callback for runtime status updates from pipeline execution.
-        
+
         This callback receives status updates during job execution and forwards them
         to app_state for display in the running job panel.
         """
@@ -1015,7 +1017,7 @@ class AppController:
                 self._queue_runtime_status_update(runtime_status)
             except Exception as exc:
                 logger.warning(f"Failed to process runtime status update: {exc}")
-        
+
         return _status_callback
 
     def _get_latest_runtime_status(self) -> Any | None:
@@ -1207,7 +1209,7 @@ class AppController:
                 "success": False,
                 "error": str(exc),
             })
-    
+
     def _create_learning_completion_handler(self):
         """Create a completion handler that routes to learning subsystem.
 
@@ -1259,26 +1261,26 @@ class AppController:
     def _create_api_client_with_discovery(self) -> Any:
         """
         Create API client with automatic port discovery.
-        
+
         WebUI auto-increments ports (7860 → 7861 → 7862...) when instances collide.
         This scans ports 7860-7869 to find the active WebUI instance.
-        
+
         Returns:
             SDWebUIClient configured with discovered or default URL
         """
         import logging
 
         from src.utils.webui_discovery import find_webui_api_port
-        
+
         logger = logging.getLogger(__name__)
-        
+
         # Try to discover actual WebUI port
         discovered_url = find_webui_api_port(
             base_url="http://127.0.0.1",
             start_port=7860,
             max_attempts=10  # Check ports 7860-7869
         )
-        
+
         if discovered_url:
             logger.info(f"[controller] Discovered WebUI at {discovered_url}")
             return self._runtime_ports.create_client(base_url=discovered_url)
@@ -1597,7 +1599,7 @@ class AppController:
             else:
                 ready = True
             if ready:
-                preview_jobs = list(getattr(controller, "get_preview_jobs")() or [])
+                preview_jobs = list(controller.get_preview_jobs() or [])
                 had_preview_jobs = bool(preview_jobs)
                 if preview_jobs:
                     submitted = int(
@@ -1868,21 +1870,21 @@ class AppController:
         return False
 
     def on_reprocess_images(
-        self, 
-        image_paths: list[str], 
+        self,
+        image_paths: list[str],
         stages: list[str],
         batch_size: int = 1,
     ) -> int:
         """Reprocess existing images through specified pipeline stages.
-        
+
         Args:
             image_paths: List of paths to images to reprocess
             stages: List of stage names to apply (e.g., ["img2img", "adetailer", "upscale"])
             batch_size: Number of images per job (default 1 = one job per image)
-            
+
         Returns:
             Number of jobs submitted to queue
-            
+
         Raises:
             ValueError: If no images or stages provided, or if invalid stage names
         """
@@ -1890,19 +1892,19 @@ class AppController:
             raise ValueError("No images provided for reprocessing")
         if not stages:
             raise ValueError("No stages specified for reprocessing")
-        
+
         # Validate stages
         valid_stages = {"adetailer", "upscale", "img2img"}
         invalid_stages = set(stages) - valid_stages
         if invalid_stages:
             raise ValueError(f"Invalid stages: {invalid_stages}. Valid: {valid_stages}")
-        
+
         builder = ReprocessJobBuilder()
-        
+
         try:
             # Get current GUI configs for stages
             config = self._build_reprocess_config(stages)
-            
+
             # Debug logging
             self._append_log(f"[reprocess] Stages enabled: {', '.join(stages)}")
             if "upscale" in stages:
@@ -1918,16 +1920,16 @@ class AppController:
                 pack_name="Reprocess",
                 source="reprocess_panel",
             )
-            
+
             submitted_count = self._submit_reprocess_njrs(plan.jobs, source="reprocess_panel")
-            
+
             self._append_log(
                 f"[reprocess] Submitted {submitted_count} job(s) for {len(image_paths)} image(s) "
                 f"through stages: {' → '.join(stages)}"
             )
-            
+
             return submitted_count
-                
+
         except Exception as exc:
             self._append_log(f"[reprocess] Failed to submit reprocess jobs: {exc!r}")
             raise
@@ -2473,35 +2475,35 @@ class AppController:
             return 0
         job_ids = self.job_service.submit_njrs(njrs, SubmissionPolicy())
         return len(job_ids)
-    
+
     def _build_reprocess_config(self, stages: list[str]) -> dict[str, Any]:
         """Build configuration dict for reprocess jobs.
-        
+
         Respects the "Override pack configs with current stages" checkbox:
         - When checked: Uses current stage card GUI values
         - When unchecked: Uses pack config values
-        
+
         Args:
             stages: List of stage names that will be used
-            
+
         Returns:
             Config dict with both nested stage-specific settings and flat global settings
         """
         config: dict[str, Any] = {}
-        
+
         # Check if override is enabled
         override_enabled = getattr(self, 'override_pack_config_enabled', False)
-        
+
         if override_enabled:
             # Override enabled: Extract configs from current stage card GUI values
             try:
                 current_stage_configs = self._collect_current_stage_configs()
-                
+
                 # Extract global settings from current configs
                 config["cfg_scale"] = current_stage_configs.get("cfg_scale", 7.0)
                 config["sampler_name"] = current_stage_configs.get("sampler_name", "DPM++ 2M Karras")
                 config["steps"] = current_stage_configs.get("steps", 28)
-                
+
                 # Extract stage-specific configs from current GUI
                 if "img2img" in stages:
                     img2img_cfg = current_stage_configs.get("img2img", {})
@@ -2518,7 +2520,7 @@ class AppController:
                     config["img2img_cfg_scale"] = config["img2img"]["cfg_scale"]
                     config["img2img_sampler_name"] = config["img2img"]["sampler_name"]
                     config["img2img_denoising_strength"] = config["img2img"]["denoising_strength"]
-                
+
                 if "adetailer" in stages:
                     ad_cfg = current_stage_configs.get("adetailer", {})
                     config["adetailer"] = {
@@ -2538,7 +2540,7 @@ class AppController:
                         config["adetailer_steps"] = ad_cfg["adetailer_steps"]
                     if ad_cfg.get("adetailer_cfg") is not None:
                         config["adetailer_cfg_scale"] = ad_cfg["adetailer_cfg"]
-                
+
                 if "upscale" in stages:
                     upscale_cfg = current_stage_configs.get("upscale", {})
                     config["upscale"] = {
@@ -2550,16 +2552,16 @@ class AppController:
                     config["upscale_denoising_strength"] = config["upscale"]["denoising_strength"]
                     config["upscaler"] = config["upscale"]["upscaler"]
                     config["upscale_factor"] = config["upscale"]["upscale_by"]
-                
+
                 self._append_log("[reprocess] Using current stage configs (override enabled)")
             except Exception as e:
                 self._append_log(f"[reprocess] Failed to extract current stage configs: {e}, falling back to pack config")
                 override_enabled = False  # Fall back to pack config
-        
+
         if not override_enabled:
             # Override disabled: Extract configs from currently selected pack
             pack_config = {}
-            
+
             # Get currently selected pack from GUI dropdown
             selected_pack = self._get_selected_pack()
             if selected_pack and hasattr(selected_pack, 'config'):
@@ -2567,12 +2569,12 @@ class AppController:
                 self._append_log(f"[reprocess] Using config from selected pack: {selected_pack.name}")
             else:
                 self._append_log("[reprocess] WARNING: No pack selected, using defaults")
-            
+
             # Extract global settings (flat keys at root level)
             config["cfg_scale"] = pack_config.get("cfg_scale", 7.0)
             config["sampler_name"] = pack_config.get("sampler_name", "DPM++ 2M Karras")
             config["steps"] = pack_config.get("steps", 28)
-            
+
             # Extract stage-specific configs (nested dicts)
             if "img2img" in stages:
                 img2img_config = pack_config.get("img2img", {})
@@ -2590,7 +2592,7 @@ class AppController:
                 config["img2img_sampler_name"] = config["img2img"]["sampler_name"]
                 # Also set flat key for builder
                 config["img2img_denoising_strength"] = config["img2img"]["denoising_strength"]
-            
+
             # adetailer config (use current pack's adetailer settings)
             if "adetailer" in stages:
                 ad_config = pack_config.get("adetailer", {})
@@ -2612,7 +2614,7 @@ class AppController:
                     config["adetailer_steps"] = ad_config["adetailer_steps"]
                 if ad_config.get("adetailer_cfg") is not None:
                     config["adetailer_cfg_scale"] = ad_config["adetailer_cfg"]
-            
+
             # upscale config (use current pack's upscale settings)
             if "upscale" in stages:
                 upscale_config = pack_config.get("upscale", {})
@@ -2626,9 +2628,9 @@ class AppController:
                 config["upscale_denoising_strength"] = config["upscale"]["denoising_strength"]
                 config["upscaler"] = config["upscale"]["upscaler"]
                 config["upscale_factor"] = config["upscale"]["upscale_by"]
-            
+
             self._append_log("[reprocess] Using pack config (override disabled)")
-        
+
         return config
 
     def set_main_window(self, main_window: Any) -> None:
@@ -2696,7 +2698,6 @@ class AppController:
 
         header = mw.header_zone
         left = mw.left_zone
-        bottom = mw.bottom_zone
 
         # Header events
         header.run_button.configure(command=self.run_txt2img_once)
@@ -3347,7 +3348,7 @@ class AppController:
         if not self.app_state or not self.job_service:
             return
         self._runtime_projection_coordinator.publish_history_refresh(limit=limit)
-        
+
         # PR-PIPE-002: Refresh duration stats when history updates
         if hasattr(self, "_duration_stats_service") and self._duration_stats_service:
             try:
@@ -4759,10 +4760,10 @@ class AppController:
         pipeline_section = executor_config.get("pipeline") or {}
         # Get stage flags directly from config without defaults - if missing, will be None
         txt2img_val = pipeline_section.get("txt2img_enabled")
-        img2img_val = pipeline_section.get("img2img_enabled") 
+        img2img_val = pipeline_section.get("img2img_enabled")
         adetailer_val = pipeline_section.get("adetailer_enabled")
         upscale_val = pipeline_section.get("upscale_enabled")
-        
+
         stage_defaults = {
             "txt2img": bool(txt2img_val) if txt2img_val is not None else True,
             "img2img": bool(img2img_val) if img2img_val is not None else False,
@@ -4844,7 +4845,7 @@ class AppController:
         if not sidebar:
             return
         sidebar.set_stage_state(stage, enabled, emit_change=False)
-        
+
         # Also update pipeline_tab flags to keep them in sync
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
         if pipeline_tab:
@@ -4868,12 +4869,12 @@ class AppController:
         if not pipeline_section:
             logger.warning("[controller] _apply_pipeline_stage_flags called with empty pipeline_section")
             return
-        
+
         logger.info(
             "[controller] Applying stage flags from pipeline section: %s",
             {k: v for k, v in pipeline_section.items() if k.endswith("_enabled")},
         )
-        
+
         for stage in ("txt2img", "img2img", "upscale", "adetailer"):
             key = f"{stage}_enabled"
             if key in pipeline_section:
@@ -4997,7 +4998,7 @@ class AppController:
         self._is_shutting_down = True
         label = reason or "shutdown"
         logger.info("[controller] ===== SHUTDOWN_APP CALLED (%s) =====", label)
-        
+
         if self._shutdown_started_at is None:
             self._shutdown_started_at = time.time()
             self._shutdown_watchdog_thread = self._spawn_tracked_thread(
@@ -5006,7 +5007,7 @@ class AppController:
                 daemon=True,
                 purpose="Monitor shutdown progress",
             )
-        
+
         try:
             logger.info("[controller] Step 1/8: Cancelling active jobs...")
             self._cancel_active_jobs(label)
@@ -5048,7 +5049,7 @@ class AppController:
             logger.info("[controller] Step 5.25/8: Queue state saved")
         except Exception:
             logger.exception("Error saving queue state during shutdown")
-        
+
         # PR-SHUTDOWN-001: Call enhanced shutdown() for watchdog and thread cleanup
         try:
             logger.info("[controller] Step 5.5/8: Running enhanced shutdown sequence...")
@@ -5181,14 +5182,14 @@ class AppController:
         # PR-SHUTDOWN-FIX: Poll shutdown_completed periodically instead of one long sleep
         timeout = float(os.environ.get("STABLENEW_SHUTDOWN_WATCHDOG_DELAY", "15"))
         hard_exit = os.environ.get("STABLENEW_HARD_EXIT_ON_SHUTDOWN_HANG", "0") == "1"
-        
+
         # Poll every 0.5s for early exit when shutdown completes
         deadline = time.time() + timeout
         while time.time() < deadline:
             if self._shutdown_completed:
                 return
             time.sleep(0.5)
-        
+
         # Timeout reached - check if shutdown completed
         if not self._shutdown_completed:
             logger.error(
@@ -5743,14 +5744,14 @@ class AppController:
 
     def refresh_resources_from_webui(self) -> dict[str, list[Any]] | None:
         """Refresh resources from WebUI API and update GUI dropdowns.
-        
+
         PR-HB-003: This method is now designed to run on a worker thread.
         It makes potentially slow HTTP calls to fetch resources, then
         dispatches all GUI updates back to the main thread.
         """
         if not getattr(self, "resource_service", None):
             return None
-        
+
         # PR-HB-003: This can take 3-10 seconds with large model collections
         # Now safe to block since we're on a worker thread
         try:
@@ -5788,7 +5789,7 @@ class AppController:
 
     def on_webui_ready(self) -> None:
         """Handle WebUI transitioning to READY.
-        
+
         PR-HB-003: Spawns worker thread for resource refresh to avoid blocking
         the calling thread (which may be UI thread or connection thread).
         """
@@ -5798,7 +5799,7 @@ class AppController:
         except Exception:
             pass
         self._append_log("[webui] READY received, refreshing resource lists asynchronously.")
-        
+
         # PR-HB-003: Set operation label for diagnostics
         self.current_operation_label = "Refreshing WebUI resources"
         self.last_ui_action = "on_webui_ready()"
@@ -5880,13 +5881,13 @@ class AppController:
 
     def on_stage_toggled(self, stage: str, enabled: bool) -> None:
         """Sync sidebar checkbox changes to pipeline_tab variables.
-        
+
         This ensures that when user toggles a stage checkbox in the sidebar,
         the corresponding pipeline_tab.{stage}_enabled variable is updated
         so that Apply Config saves the correct state.
         """
         normalized = bool(enabled)
-        
+
         # Sync to pipeline_tab so Apply Config captures the checkbox state
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
         if pipeline_tab:
@@ -5905,7 +5906,7 @@ class AppController:
                         stage,
                         exc,
                     )
-        
+
         # Handle adetailer-specific app_state updates
         if stage == "adetailer" and self.app_state:
             self.app_state.set_adetailer_enabled(normalized)
@@ -5915,7 +5916,7 @@ class AppController:
 
     def on_override_pack_config_changed(self, enabled: bool) -> None:
         """Handle override pack config checkbox state change.
-        
+
         When enabled=True, current stage card configs will override pack configs.
         When enabled=False, pack configs are used as-is.
         This state is consumed by ConfigMergerV2 when building StageOverrideFlags.
@@ -5928,19 +5929,17 @@ class AppController:
 
     def _build_stage_override_flags(self):  # type: ignore[no-untyped-def]
         """Build StageOverrideFlags based on override checkbox state.
-        
+
         When override checkbox is ON, all stage overrides are enabled.
         When OFF, all overrides are disabled (pack configs used as-is).
-        
+
         Returns:
             StageOverrideFlags instance for use with ConfigMergerV2.merge_pipeline().
         """
         from src.pipeline.config_merger_v2 import (
-            ConfigMergerV2,
             StageOverrideFlags,
-            StageOverridesBundle,
         )
-        
+
         enabled = self.override_pack_config_enabled
         return StageOverrideFlags(
             txt2img_override_enabled=enabled,
@@ -6127,7 +6126,7 @@ class AppController:
                 self._load_stage_card(card, pack_config)
             stage_panel.load_adetailer_config(pack_config.get("adetailer") or {})
         self._apply_adetailer_config_section(pack_config)
-        
+
         # Apply output settings from pack config to output panel
         pipeline_section = pack_config.get("pipeline", {})
         sidebar = getattr(self.main_window, "sidebar_panel_v2", None)
@@ -6145,7 +6144,7 @@ class AppController:
             }
             try:
                 output_panel.apply_from_overrides(output_overrides)
-                self._append_log(f"[controller] Applied output settings from pack config")
+                self._append_log("[controller] Applied output settings from pack config")
             except Exception as e:
                 self._append_log(f"[controller] Error applying output settings: {e}")
 
@@ -6164,7 +6163,7 @@ class AppController:
 
         # Gather CURRENT config from ALL stage cards
         current_config: dict[str, Any] = {}
-        
+
         # Get stage cards panel
         stage_panel = self._get_stage_cards_panel()
         if stage_panel:
@@ -6177,7 +6176,7 @@ class AppController:
                     self._append_log("[controller] Gathered txt2img config from GUI")
                 except Exception as e:
                     self._append_log(f"[controller] Error gathering txt2img config: {e}")
-            
+
             # Gather from img2img card
             img2img_card = getattr(stage_panel, "img2img_card", None)
             if img2img_card and hasattr(img2img_card, "to_config_dict"):
@@ -6187,7 +6186,7 @@ class AppController:
                     self._append_log("[controller] Gathered img2img config from GUI")
                 except Exception as e:
                     self._append_log(f"[controller] Error gathering img2img config: {e}")
-            
+
             # Gather from upscale card
             upscale_card = getattr(stage_panel, "upscale_card", None)
             if upscale_card and hasattr(upscale_card, "to_config_dict"):
@@ -6197,7 +6196,7 @@ class AppController:
                     self._append_log("[controller] Gathered upscale config from GUI")
                 except Exception as e:
                     self._append_log(f"[controller] Error gathering upscale config: {e}")
-            
+
             # Gather from adetailer card (returns flat dict)
             adetailer_card = getattr(stage_panel, "adetailer_card", None)
             if adetailer_card and hasattr(adetailer_card, "to_config_dict"):
@@ -6207,7 +6206,7 @@ class AppController:
                     if "adetailer" not in current_config:
                         current_config["adetailer"] = {}
                     current_config["adetailer"].update(adetailer_config)
-                    
+
                     # CRITICAL: Also include enabled flag in adetailer section
                     # Get it from pipeline_tab since adetailer card doesn't track it
                     pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
@@ -6215,31 +6214,31 @@ class AppController:
                         adetailer_enabled_var = getattr(pipeline_tab, "adetailer_enabled", None)
                         if adetailer_enabled_var is not None:
                             current_config["adetailer"]["adetailer_enabled"] = bool(adetailer_enabled_var.get())
-                    
+
                     self._append_log("[controller] Gathered adetailer config from GUI")
                 except Exception as e:
                     self._append_log(f"[controller] Error gathering adetailer config: {e}")
-        
+
         # Add randomizer config
         panel_randomizer = self._get_panel_randomizer_config()
         if panel_randomizer:
             current_config.update(panel_randomizer)
-        
+
         # Add LoRA settings
         if self.app_state and self.app_state.lora_strengths:
             current_config["lora_strengths"] = [cfg.to_dict() for cfg in self.app_state.lora_strengths]
         prompt_optimizer_config = self._read_prompt_optimizer_ui_config()
         if prompt_optimizer_config is not None:
             current_config["prompt_optimizer"] = prompt_optimizer_config
-        
+
         if not current_config:
             self._append_log("[controller] No current config to apply")
             return
-        
+
         # Update app_state with gathered config
         if self.app_state:
             self.app_state.set_run_config(current_config)
-        
+
         # Gather output settings from GUI output panel
         sidebar = getattr(self.main_window, "sidebar_panel_v2", None)
         output_card = getattr(sidebar, "output_settings_card", None) if sidebar else None
@@ -6258,10 +6257,10 @@ class AppController:
                 current_config["pipeline"]["image_format"] = output_overrides.get("image_format", "png")
                 current_config["pipeline"]["seed_mode"] = output_overrides.get("seed_mode", "fixed")
                 current_config["pipeline"]["output_route"] = output_overrides.get("output_route", "Auto")
-                self._append_log(f"[controller] Gathered output settings from GUI")
+                self._append_log("[controller] Gathered output settings from GUI")
             except Exception as e:
                 self._append_log(f"[controller] Error gathering output settings: {e}")
-        
+
         # Gather pipeline stage flags from pipeline_tab
         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
         if pipeline_tab:
@@ -6269,14 +6268,14 @@ class AppController:
                 # Ensure pipeline section exists
                 if "pipeline" not in current_config:
                     current_config["pipeline"] = {}
-                
+
                 # CRITICAL: Always gather ALL stage flags to ensure complete pipeline section
                 # This prevents merge-with-defaults from using old default values
                 txt2img_enabled_var = getattr(pipeline_tab, "txt2img_enabled", None)
                 img2img_enabled_var = getattr(pipeline_tab, "img2img_enabled", None)
                 adetailer_enabled_var = getattr(pipeline_tab, "adetailer_enabled", None)
                 upscale_enabled_var = getattr(pipeline_tab, "upscale_enabled", None)
-                
+
                 # Set all flags explicitly (use True as default for txt2img, False for others)
                 current_config["pipeline"]["txt2img_enabled"] = (
                     bool(txt2img_enabled_var.get()) if txt2img_enabled_var is not None else True
@@ -6290,7 +6289,7 @@ class AppController:
                 current_config["pipeline"]["upscale_enabled"] = (
                     bool(upscale_enabled_var.get()) if upscale_enabled_var is not None else False
                 )
-                
+
                 self._append_log(
                     f"[controller] Gathered pipeline stage flags: "
                     f"txt2img={current_config['pipeline'].get('txt2img_enabled')}, "
@@ -6330,18 +6329,18 @@ class AppController:
 
     def _collect_current_stage_configs(self) -> dict[str, Any]:
         """Collect current stage configurations from the GUI cards.
-        
+
         This is similar to the logic in on_pipeline_pack_apply_config but returns
         the config instead of applying it to packs.
         """
         current_config: dict[str, Any] = {}
-        
+
         # Get stage cards panel (defensive check)
         try:
             stage_panel = self._get_stage_cards_panel()
         except (AttributeError, TypeError):
             stage_panel = None
-            
+
         if stage_panel:
             # Gather from txt2img card
             txt2img_card = getattr(stage_panel, "txt2img_card", None)
@@ -6351,7 +6350,7 @@ class AppController:
                     current_config.update(txt2img_config)
                 except Exception as e:
                     self._append_log(f"[controller] Error gathering txt2img config: {e}")
-            
+
             # Gather from img2img card
             img2img_card = getattr(stage_panel, "img2img_card", None)
             if img2img_card and hasattr(img2img_card, "to_config_dict"):
@@ -6360,7 +6359,7 @@ class AppController:
                     current_config.update(img2img_config)
                 except Exception as e:
                     self._append_log(f"[controller] Error gathering img2img config: {e}")
-            
+
             # Gather from upscale card
             upscale_card = getattr(stage_panel, "upscale_card", None)
             if upscale_card and hasattr(upscale_card, "to_config_dict"):
@@ -6369,7 +6368,7 @@ class AppController:
                     current_config.update(upscale_config)
                 except Exception as e:
                     self._append_log(f"[controller] Error gathering upscale config: {e}")
-            
+
             # Gather from adetailer card
             adetailer_card = getattr(stage_panel, "adetailer_card", None)
             if adetailer_card and hasattr(adetailer_card, "to_config_dict"):
@@ -6379,7 +6378,7 @@ class AppController:
                     if "adetailer" not in current_config:
                         current_config["adetailer"] = {}
                     current_config["adetailer"].update(adetailer_config)
-                    
+
                     # Include enabled flag in adetailer section
                     if hasattr(self, 'main_window') and self.main_window:
                         pipeline_tab = getattr(self.main_window, "pipeline_tab", None)
@@ -6389,7 +6388,7 @@ class AppController:
                                 current_config["adetailer"]["adetailer_enabled"] = bool(adetailer_enabled_var.get())
                 except Exception as e:
                     self._append_log(f"[controller] Error gathering adetailer config: {e}")
-        
+
         # Add randomizer config (defensive check)
         try:
             panel_randomizer = self._get_panel_randomizer_config()
@@ -6400,12 +6399,12 @@ class AppController:
         prompt_optimizer_config = self._read_prompt_optimizer_ui_config()
         if prompt_optimizer_config is not None:
             current_config["prompt_optimizer"] = prompt_optimizer_config
-        
+
         return current_config
 
     def _add_global_prompt_flags(self, config: dict[str, Any]) -> None:
         """Add global prompt application flags from sidebar checkboxes to config.
-        
+
         Args:
             config: Configuration dict to modify (modifies in-place)
         """
@@ -6413,23 +6412,23 @@ class AppController:
         main_window = getattr(self, "main_window", None)
         if not main_window:
             return
-        
+
         sidebar = getattr(main_window, "sidebar_panel_v2", None)
         if not sidebar:
             return
-        
+
         # Get global prompt configurations from sidebar
         try:
             global_positive_config = sidebar.get_global_positive_config()
             global_negative_config = sidebar.get_global_negative_config()
-            
+
             # Add flags to pipeline section
             pipeline_section = config.setdefault("pipeline", {})
             pipeline_section["apply_global_positive_txt2img"] = global_positive_config.get("enabled", False)
             pipeline_section["apply_global_negative_txt2img"] = global_negative_config.get("enabled", True)
             config["global_positive_prompt"] = global_positive_config.get("text", "")
             config["global_negative_prompt"] = global_negative_config.get("text", "")
-            
+
         except Exception as e:
             # Fallback: if anything goes wrong, default to safe values
             self._append_log(f"[controller] Failed to read global prompt flags: {e}")
@@ -6439,19 +6438,19 @@ class AppController:
 
     def _build_config_snapshot_with_override(self, pack_config: dict[str, Any]) -> dict[str, Any]:
         """Build config snapshot considering the override checkbox state.
-        
+
         Args:
             pack_config: The base configuration from the pack
-            
+
         Returns:
             A configuration dict that either uses the pack config as-is (override disabled)
             or merges pack config with current GUI stage configs (override enabled)
         """
         base_config = self._run_config_with_lora()
-        
+
         # Check if override is enabled (defensive check for tests/incomplete setup)
         override_enabled = getattr(self, 'override_pack_config_enabled', False)
-        
+
         if not override_enabled:
             # Override disabled: use pack config merged with base run config
             merged_config = {**base_config, **pack_config}
@@ -6459,33 +6458,33 @@ class AppController:
             self._add_global_prompt_flags(merged_config)
             self._append_log("[controller] Override disabled: using pack config as-is")
             return merged_config
-        
+
         # Override enabled: merge current stage configs into pack config
         try:
             current_stage_configs = self._collect_current_stage_configs()
-            
+
             # Build stage overrides bundle from current GUI configs
             stage_overrides = self._build_stage_overrides_from_current_config(current_stage_configs)
-            
+
             # Build override flags (all enabled when override checkbox is on)
             override_flags = self._build_stage_override_flags()
-            
+
             # Merge pack config with stage overrides using ConfigMergerV2
             from src.pipeline.config_merger_v2 import ConfigMergerV2
-            
+
             base_merged = {**base_config, **pack_config}
             final_config = ConfigMergerV2().merge_pipeline(
                 base_config=base_merged,
                 stage_overrides=stage_overrides,
                 override_flags=override_flags
             )
-            
+
             # Add global prompt flags from sidebar checkboxes
             self._add_global_prompt_flags(final_config)
-            
+
             self._append_log("[controller] Override enabled: merged current stage configs with pack config")
             return final_config
-        
+
         except Exception as e:
             # Fallback: if anything goes wrong with override merging, use base config
             self._append_log(f"[controller] Override merge failed: {e}, falling back to pack config")
@@ -6508,7 +6507,7 @@ class AppController:
                 if value is not None:
                     return value
             return None
-        
+
         # Extract txt2img settings (stage cards export under "txt2img")
         txt2img_overrides = None
         txt2img_config = current_config.get("txt2img", {}) or {}
@@ -6526,7 +6525,7 @@ class AppController:
                 width=txt2img_config.get("width"),
                 height=txt2img_config.get("height"),
             )
-        
+
         # Extract img2img settings (if any)
         img2img_overrides = None
         img2img_config = current_config.get("img2img", {})
@@ -6535,7 +6534,7 @@ class AppController:
                 enabled=img2img_config.get("enabled", False),
                 denoise_strength=img2img_config.get("denoising_strength"),  # Note: field is "denoise_strength"
             )
-        
+
         # Extract upscale settings (if any)
         upscale_overrides = None
         upscale_config = current_config.get("upscale", {})
@@ -6546,7 +6545,7 @@ class AppController:
                 scale_factor=upscale_config.get("scale_factor"),
                 denoise_strength=upscale_config.get("denoise_strength"),
             )
-        
+
         # Extract refiner settings (if any)
         refiner_overrides = None
         if any(key.startswith("refiner_") for key in txt2img_config.keys()) or "use_refiner" in txt2img_config:
@@ -6555,7 +6554,7 @@ class AppController:
                 model_name=txt2img_config.get("refiner_model_name") or txt2img_config.get("refiner_checkpoint"),
                 switch_at=txt2img_config.get("refiner_switch_at"),
             )
-        
+
         # Extract hires fix settings (if any)
         hires_overrides = None
         if any(key.startswith("hr_") for key in txt2img_config.keys()) or "enable_hr" in txt2img_config:
@@ -6566,7 +6565,7 @@ class AppController:
                 steps=txt2img_config.get("hr_second_pass_steps"),
                 denoise_strength=txt2img_config.get("denoising_strength"),
             )
-        
+
         # Extract adetailer settings (if any)
         adetailer_overrides = None
         adetailer_config = current_config.get("adetailer", {})
@@ -6699,7 +6698,7 @@ class AppController:
                 hands_mask_feather=adetailer_config.get("ad_hands_mask_feather"),
                 hands_mask_merge_invert=adetailer_config.get("ad_hands_mask_merge_invert"),
             )
-        
+
         return StageOverridesBundle(
             txt2img=txt2img_overrides,
             img2img=img2img_overrides,
@@ -6712,30 +6711,30 @@ class AppController:
     def on_pipeline_add_packs_to_job(self, pack_ids: list[str]) -> None:
         """
         Add one or more packs to the current job draft.
-        
+
         PR-HB-002: This method now spawns a worker thread to avoid blocking the UI thread
         during heavy I/O operations (reading pack files with 100s of prompts).
         """
         if not pack_ids:
             return
-        
+
         # PR-HB-002: Set operation label for heartbeat stall diagnostics
         self.current_operation_label = f"Adding {len(pack_ids)} pack(s) to job"
         self.last_ui_action = f"on_pipeline_add_packs_to_job({pack_ids})"
-        
+
         logger.debug(f"[AppController] on_pipeline_add_packs_to_job called with pack_ids: {pack_ids}")
         self._append_log(f"[controller] Adding packs to job: {pack_ids}")
-        
+
         # Validate inputs and collect metadata on UI thread (fast)
         stage_flags = self._build_stage_flags()
         randomizer_metadata = self._build_randomizer_metadata()
-        
+
         # PR-HB-002: Spawn worker thread for I/O-heavy work
         def _worker():
             try:
                 entries = []
                 logger.debug(f"[AppController] Stage flags: {stage_flags}")
-                
+
                 for pack_id in pack_ids:
                     pack = self._find_pack_by_id(pack_id)
                     logger.debug(f"[AppController] Looking for pack '{pack_id}': {pack}")
@@ -6769,25 +6768,25 @@ class AppController:
                         config_snapshot["randomization_enabled"] = (
                             self.state.current_config.randomization_enabled
                         )
-                    
+
                     # Read all prompts from pack file (not just first)
                     try:
                         all_prompts = read_prompt_pack(pack.path)
                     except Exception as e:
                         self._append_log(f"[controller] Failed to read pack '{pack_id}': {e}")
                         all_prompts = []
-                    
+
                     if not all_prompts:
                         self._append_log(f"[controller] Pack '{pack_id}' has no prompts")
                         continue
-                    
+
                     logger.debug(f"[AppController] Pack '{pack_id}' has {len(all_prompts)} prompts")
-                    
+
                     # Create one PackJobEntry per prompt row
                     for row_index, prompt_row in enumerate(all_prompts):
                         prompt_text = prompt_row.get("positive", "").strip()
                         negative_prompt_text = prompt_row.get("negative", "").strip()
-                        
+
                         entry = PackJobEntry(
                             pack_id=pack_id,
                             pack_name=pack.name,
@@ -6799,7 +6798,7 @@ class AppController:
                             pack_row_index=row_index,
                         )
                         entries.append(entry)
-                    
+
                     logger.debug(f"[AppController] Created {len(all_prompts)} PackJobEntry objects for '{pack_id}'")
 
                 # PR-HB-003: Schedule UI updates on main thread using debounced refresh
@@ -6809,25 +6808,25 @@ class AppController:
                         self._append_log(f"[controller] Added {len(entries)} pack entry(s) to job draft")
                         # Use debounced refresh instead of direct call
                         self._mark_ui_dirty(preview=True)
-                    
+
                     # Clear operation label
                     self.current_operation_label = None
                     self.last_ui_action = None
-                
+
                 # Schedule callback on UI thread
                 if self.main_window and hasattr(self.main_window, "run_in_main_thread"):
                     self.main_window.run_in_main_thread(_update_ui)
                 else:
                     # Fallback: direct call (for tests without GUI)
                     _update_ui()
-                    
+
             except Exception as exc:
                 logger.exception(f"[AppController] Worker error in on_pipeline_add_packs_to_job: {exc}")
                 self._append_log(f"[controller] Error adding packs: {exc}")
                 # Clear operation label on error
                 self.current_operation_label = None
                 self.last_ui_action = None
-        
+
         can_schedule_back_to_ui = bool(
             getattr(self, "main_window", None)
             and callable(getattr(self.main_window, "run_in_main_thread", None))
@@ -7096,7 +7095,7 @@ class AppController:
             except Exception as exc:
                 logger.exception("[controller] on_build_movie_clip worker failed")
                 if callable(on_error):
-                    self._run_in_gui_thread(lambda: on_error(str(exc)))
+                    self._run_in_gui_thread(lambda error=exc: on_error(str(error)))
 
         self._spawn_tracked_thread(
             target=_worker,
@@ -7133,7 +7132,7 @@ class AppController:
             except Exception as exc:
                 logger.exception("[controller] on_load_movie_clip_source worker failed")
                 if callable(on_error):
-                    self._run_in_gui_thread(lambda: on_error(str(exc)))
+                    self._run_in_gui_thread(lambda error=exc: on_error(str(error)))
 
         self._spawn_tracked_thread(
             target=_worker,

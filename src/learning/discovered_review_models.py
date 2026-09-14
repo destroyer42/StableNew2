@@ -9,13 +9,9 @@ inferred comparison groups from historical outputs, not user-designed sweeps.
 
 from __future__ import annotations
 
-import json
 import time
-import uuid
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
+from dataclasses import dataclass, field
 from typing import Any
-
 
 DISCOVERED_REVIEW_SCHEMA_VERSION = "1.0"
 
@@ -25,9 +21,7 @@ STATUS_IN_REVIEW = "in_review"
 STATUS_CLOSED = "closed"
 STATUS_IGNORED = "ignored"
 
-VALID_STATUSES = frozenset(
-    {STATUS_WAITING_REVIEW, STATUS_IN_REVIEW, STATUS_CLOSED, STATUS_IGNORED}
-)
+VALID_STATUSES = frozenset({STATUS_WAITING_REVIEW, STATUS_IN_REVIEW, STATUS_CLOSED, STATUS_IGNORED})
 
 # Review item ratings
 RATING_UNRATED = 0
@@ -48,8 +42,8 @@ class DiscoveredReviewItem:
     """
 
     item_id: str
-    artifact_path: str           # Absolute/relative path to the image
-    manifest_path: str = ""      # Path to the originating manifest (if any)
+    artifact_path: str  # Absolute/relative path to the image
+    manifest_path: str = ""  # Path to the originating manifest (if any)
     stage: str = ""
     model: str = ""
     sampler: str = ""
@@ -123,7 +117,7 @@ class DiscoveredReviewExperiment:
     group_id: str
     display_name: str
     stage: str
-    prompt_hash: str             # Hash of normalized positive prompt
+    prompt_hash: str  # Hash of normalized positive prompt
     input_lineage_key: str = ""  # Hash of input-image lineage (empty for txt2img)
     status: str = STATUS_WAITING_REVIEW
     created_at: str = field(default_factory=_utc_now_iso)
@@ -144,9 +138,7 @@ class DiscoveredReviewExperiment:
         self.updated_at = _utc_now_iso()
 
     def is_fully_rated(self) -> bool:
-        return bool(self.items) and all(
-            i.rating > RATING_UNRATED for i in self.items
-        )
+        return bool(self.items) and all(i.rating > RATING_UNRATED for i in self.items)
 
     def to_meta_dict(self) -> dict[str, Any]:
         """Serialise non-item fields."""
@@ -235,9 +227,9 @@ class OutputScanIndexEntry:
     """Tracks a single scanned artifact to enable incremental rescans."""
 
     artifact_path: str
-    scan_key: str          # Stable hash of artifact content or metadata
+    scan_key: str  # Stable hash of artifact content or metadata
     scanned_at: str
-    group_id: str = ""     # Which group this was assigned to (empty if ineligible)
+    group_id: str = ""  # Which group this was assigned to (empty if ineligible)
     eligible: bool = False
 
     def to_dict(self) -> dict[str, Any]:

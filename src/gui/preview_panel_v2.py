@@ -18,7 +18,8 @@ from tkinter import ttk
 from types import SimpleNamespace
 from typing import Any
 
-from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
+from src.controller.content_visibility_resolver import ContentVisibilityResolver
+from src.controller.ports.runtime_ports import NJRSummaryPort, NJRUISummaryPort
 from src.gui.design_system_v2 import DANGER_BUTTON
 from src.gui.theme_v2 import (
     BACKGROUND_ELEVATED,
@@ -30,10 +31,9 @@ from src.gui.theme_v2 import (
     SURFACE_FRAME_STYLE,
     TEXT_PRIMARY,
 )
-from src.gui.utils.display_helpers import extract_seed_from_job, format_seed_display
+from src.gui.utils.display_helpers import format_seed_display
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
-from src.controller.ports.runtime_ports import NJRSummaryPort, NJRUISummaryPort
 from src.state.workspace_paths import workspace_paths
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,7 @@ _THUMBNAIL_CACHE_MISS = object()
 
 class PreviewPanelV2(ttk.Frame):
     """Container for preview/inspector content (structure only)."""
+
     NEGATIVE_THUMBNAIL_CACHE_TTL_S = 1.0
     POSITIVE_THUMBNAIL_CACHE_TTL_S = 15.0
     SLOW_REFRESH_THRESHOLD_MS = 20.0
@@ -193,7 +194,8 @@ class PreviewPanelV2(ttk.Frame):
 
         self.randomizer_label = ttk.Label(
             left_frame,  # PR-GUI-FIX: pack into left_frame, not body
-            text="Randomizer: OFF", style=STATUS_LABEL_STYLE
+            text="Randomizer: OFF",
+            style=STATUS_LABEL_STYLE,
         )
         self.randomizer_label.pack(anchor=tk.W, pady=(0, 4))
 
@@ -204,7 +206,9 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.learning_metadata_label.pack(anchor=tk.W)
 
-        self.actions_frame = ttk.Frame(left_frame, style=SURFACE_FRAME_STYLE)  # PR-GUI-FIX: parent is left_frame
+        self.actions_frame = ttk.Frame(
+            left_frame, style=SURFACE_FRAME_STYLE
+        )  # PR-GUI-FIX: parent is left_frame
         self.actions_frame.pack(fill=tk.X, pady=(12, 0))
         self.actions_frame.columnconfigure((0, 1), weight=1)
 
@@ -226,7 +230,7 @@ class PreviewPanelV2(ttk.Frame):
 
         self._update_action_states(None)
         self._bind_app_state_previews()
-        
+
         # PR-PERSIST-001: Restore saved state
         self.restore_state()
 
@@ -250,11 +254,15 @@ class PreviewPanelV2(ttk.Frame):
         if self._dispatch_to_ui(lambda: self.set_preview_jobs(jobs)):
             logger.debug("[PreviewPanel] Dispatched to UI thread, returning")
             return
-        logger.debug(f"[PreviewPanel] Building summary entries from {len(jobs) if jobs else 0} jobs")
+        logger.debug(
+            f"[PreviewPanel] Building summary entries from {len(jobs) if jobs else 0} jobs"
+        )
         summary_entries: list[Any] = []
         for job in jobs or []:
             summary_entries.append(self._summary_from_normalized_job(job))
-        logger.debug(f"[PreviewPanel] Created {len(summary_entries)} summary entries, calling set_job_summaries")
+        logger.debug(
+            f"[PreviewPanel] Created {len(summary_entries)} summary entries, calling set_job_summaries"
+        )
         self.set_job_summaries(summary_entries)
 
     def _summary_from_normalized_job(self, job: NormalizedJobRecord) -> Any:
@@ -392,7 +400,9 @@ class PreviewPanelV2(ttk.Frame):
         prompt_text = entry.prompt_text or str(config.get("prompt") or "")
         negative = entry.negative_prompt_text or str(config.get("negative_prompt", "") or "")
 
-        logger.debug(f"[PreviewPanel] _summary_from_pack_entry: prompt_text length={len(prompt_text)}")
+        logger.debug(
+            f"[PreviewPanel] _summary_from_pack_entry: prompt_text length={len(prompt_text)}"
+        )
 
         stage_flags = entry.stage_flags or {}
         stages = []
@@ -539,7 +549,9 @@ class PreviewPanelV2(ttk.Frame):
     def _bind_app_state_previews(self) -> None:
         logger.debug(f"[PreviewPanel] _bind_app_state_previews called, app_state={self.app_state}")
         if not self.app_state or not hasattr(self.app_state, "subscribe"):
-            logger.debug(f"[PreviewPanel] Cannot subscribe - app_state={self.app_state}, has_subscribe={hasattr(self.app_state, 'subscribe') if self.app_state else False}")
+            logger.debug(
+                f"[PreviewPanel] Cannot subscribe - app_state={self.app_state}, has_subscribe={hasattr(self.app_state, 'subscribe') if self.app_state else False}"
+            )
             return
         if self._manage_app_state_subscriptions:
             try:
@@ -550,7 +562,9 @@ class PreviewPanelV2(ttk.Frame):
                 logger.debug(f"[PreviewPanel] Failed to subscribe: {e}")
                 pass
         try:
-            self.app_state.subscribe("content_visibility_mode", self._on_content_visibility_mode_changed)
+            self.app_state.subscribe(
+                "content_visibility_mode", self._on_content_visibility_mode_changed
+            )
         except Exception:
             pass
         if self._manage_app_state_subscriptions:
@@ -558,7 +572,9 @@ class PreviewPanelV2(ttk.Frame):
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(
-            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            mode
+            or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw")
+            or "nsfw"
         )
         last_summary = self._job_summaries[-1] if self._job_summaries else None
         self._render_summary(last_summary, len(self._job_summaries))
@@ -572,7 +588,9 @@ class PreviewPanelV2(ttk.Frame):
             logger.debug("[PreviewPanel] No app_state, returning")
             return
         records = getattr(self.app_state, "preview_jobs", None)
-        logger.debug(f"[PreviewPanel] Got {len(records) if records else 0} preview jobs from app_state")
+        logger.debug(
+            f"[PreviewPanel] Got {len(records) if records else 0} preview jobs from app_state"
+        )
         self.set_preview_jobs(records)
 
     def _build_render_signature(self, summary: Any | None, total: int) -> tuple[Any, ...]:
@@ -591,7 +609,11 @@ class PreviewPanelV2(ttk.Frame):
             self._content_visibility_mode,
             bool(self._show_preview_var.get()),
             str(getattr(summary_obj, "job_id", "") or ""),
-            str(getattr(summary_obj, "label", None) or getattr(summary_obj, "base_model", "-") or "-"),
+            str(
+                getattr(summary_obj, "label", None)
+                or getattr(summary_obj, "base_model", "-")
+                or "-"
+            ),
             str(getattr(summary_obj, "positive_preview", "") or ""),
             str(getattr(summary_obj, "negative_preview", "") or ""),
             str(getattr(summary_obj, "stages_display", "-") or "-"),
@@ -611,11 +633,17 @@ class PreviewPanelV2(ttk.Frame):
             return
         widget.config(text=value)
 
-    def _resolve_pack_name(self, summary_obj: Any | None, raw_summary: Any | None = None) -> str | None:
-        candidate = getattr(summary_obj, "pack_name", None) or getattr(summary_obj, "prompt_pack_name", None)
+    def _resolve_pack_name(
+        self, summary_obj: Any | None, raw_summary: Any | None = None
+    ) -> str | None:
+        candidate = getattr(summary_obj, "pack_name", None) or getattr(
+            summary_obj, "prompt_pack_name", None
+        )
         if candidate:
             return str(candidate)
-        candidate = getattr(raw_summary, "pack_name", None) or getattr(raw_summary, "prompt_pack_name", None)
+        candidate = getattr(raw_summary, "pack_name", None) or getattr(
+            raw_summary, "prompt_pack_name", None
+        )
         if candidate:
             return str(candidate)
         candidate = getattr(summary_obj, "label", None) or getattr(raw_summary, "label", None)
@@ -623,7 +651,9 @@ class PreviewPanelV2(ttk.Frame):
 
     def _render_summary(self, summary: Any | None, total: int) -> None:
         start = time.perf_counter()
-        logger.debug(f"[PreviewPanel] _render_summary called: summary={bool(summary)}, total={total}")
+        logger.debug(
+            f"[PreviewPanel] _render_summary called: summary={bool(summary)}, total={total}"
+        )
         render_signature = self._build_render_signature(summary, total)
 
         if summary is None:
@@ -694,7 +724,9 @@ class PreviewPanelV2(ttk.Frame):
             },
         )
         self._set_label_text(self.visibility_banner, "")
-        logger.debug(f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}")
+        logger.debug(
+            f"[PreviewPanel] Positive preview length: {len(positive)}, Negative: {len(negative)}"
+        )
         self._set_text_widget(self.prompt_text, positive, cache_attr_name="_prompt_text_value")
         self._set_text_widget(
             self.negative_prompt_text,
@@ -720,7 +752,9 @@ class PreviewPanelV2(ttk.Frame):
         self._set_label_text(self.cfg_label, f"CFG: {cfg_text}")
         # PR-PIPE-007: Show resolved seed when available
         requested_seed = getattr(summary_obj, "seed", None)
-        actual_seed = getattr(summary_obj, "actual_seed", None) or getattr(summary_obj, "resolved_seed", None)
+        actual_seed = getattr(summary_obj, "actual_seed", None) or getattr(
+            summary_obj, "resolved_seed", None
+        )
         seed_text = format_seed_display(requested_seed, actual_seed)
         self._set_label_text(self.seed_label, f"Seed: {seed_text}")
 
@@ -749,7 +783,7 @@ class PreviewPanelV2(ttk.Frame):
 
         # Update thumbnail with pack info from summary
         pack_name = self._resolve_pack_name(summary_obj, summary)
-        
+
         # PR-PREVIEW-001: Don't override user's checkbox preference from pack config
         # The checkbox state is the authoritative source, not the pack
         # Store current state for checkbox handler
@@ -871,6 +905,7 @@ class PreviewPanelV2(ttk.Frame):
         part_summary = getattr(job_draft, "summary", None)
         has_parts = bool(getattr(part_summary, "part_count", 0))
         return bool(packs) or has_parts
+
     def _show_preview_details(self) -> None:
         """Display a detailed breakdown of what will be queued."""
         if not self._job_summaries and not self.app_state:
@@ -887,11 +922,11 @@ class PreviewPanelV2(ttk.Frame):
 
         # Build detailed information
         details_lines = []
-        
+
         # Summary header
         packs = getattr(job_draft, "packs", []) if job_draft else []
         total_jobs = len(preview_jobs) if preview_jobs else len(packs)
-        details_lines.append(f"PREVIEW SUMMARY")
+        details_lines.append("PREVIEW SUMMARY")
         details_lines.append(f"{'=' * 60}")
         details_lines.append(f"Total Jobs to Queue: {total_jobs}")
         details_lines.append("")
@@ -934,9 +969,9 @@ class PreviewPanelV2(ttk.Frame):
         """Format details for a single NormalizedJobRecord."""
         lines = []
         lines.append(f"\nJob #{index}: {job.job_id}")
-        
+
         config = getattr(job, "config", {}) or {}
-        
+
         # Model and settings
         model = config.get("model", "unknown")
         sampler = config.get("sampler_name", config.get("sampler", "unknown"))
@@ -946,12 +981,12 @@ class PreviewPanelV2(ttk.Frame):
         batch_size = config.get("batch_size", 1)
         n_iter = config.get("n_iter", 1)
         images_per_job = batch_size * n_iter
-        
+
         lines.append(f"  Model: {model}")
         lines.append(f"  Sampler: {sampler} / Scheduler: {scheduler}")
         lines.append(f"  Steps: {steps}, CFG: {cfg}")
         lines.append(f"  Batch Size: {batch_size}, Iterations: {n_iter} ({images_per_job} images)")
-        
+
         # Stages
         stages = []
         if getattr(job, "stage_chain", None):
@@ -959,9 +994,9 @@ class PreviewPanelV2(ttk.Frame):
             stages = stage_names
         else:
             stages = ["txt2img"]  # default
-            
+
         lines.append(f"  Stages: {' → '.join(stages)}")
-        
+
         # Special features
         features = []
         if config.get("enable_hr"):
@@ -972,14 +1007,14 @@ class PreviewPanelV2(ttk.Frame):
             features.append(f"Refiner ({config.get('refiner_checkpoint')})")
         if features:
             lines.append(f"  Features: {', '.join(features)}")
-        
+
         # Prompts (truncated)
         prompt = getattr(job, "prompt", "") or config.get("prompt", "")
         negative = getattr(job, "negative_prompt", "") or config.get("negative_prompt", "")
         lines.append(f"  Prompt: {self._truncate_text(prompt, 80)}")
         if negative:
             lines.append(f"  Negative: {self._truncate_text(negative, 80)}")
-        
+
         return lines
 
     def _format_pack_details(self, pack: Any, index: int) -> list[str]:
@@ -987,10 +1022,10 @@ class PreviewPanelV2(ttk.Frame):
         lines = []
         pack_name = getattr(pack, "pack_name", f"Pack {index}")
         lines.append(f"\nPack #{index}: {pack_name}")
-        
+
         config = getattr(pack, "config_snapshot", {}) or {}
         txt2img_config = config.get("txt2img", config)
-        
+
         # Model and settings
         model = txt2img_config.get("model", config.get("model", "unknown"))
         sampler = txt2img_config.get("sampler_name", config.get("sampler", "unknown"))
@@ -1000,12 +1035,12 @@ class PreviewPanelV2(ttk.Frame):
         batch_size = txt2img_config.get("batch_size", config.get("batch_size", 1))
         n_iter = txt2img_config.get("n_iter", config.get("n_iter", 1))
         images_per_pack = batch_size * n_iter
-        
+
         lines.append(f"  Model: {model}")
         lines.append(f"  Sampler: {sampler} / Scheduler: {scheduler}")
         lines.append(f"  Steps: {steps}, CFG: {cfg}")
         lines.append(f"  Batch Size: {batch_size}, Iterations: {n_iter} ({images_per_pack} images)")
-        
+
         # Stages
         stage_flags = getattr(pack, "stage_flags", {}) or {}
         stages = []
@@ -1016,7 +1051,7 @@ class PreviewPanelV2(ttk.Frame):
         if not stages:
             stages = ["txt2img"]
         lines.append(f"  Stages: {' → '.join(stages)}")
-        
+
         # Special features
         features = []
         if txt2img_config.get("enable_hr", config.get("enable_hr")):
@@ -1028,27 +1063,31 @@ class PreviewPanelV2(ttk.Frame):
             features.append(f"Refiner ({refiner})")
         if features:
             lines.append(f"  Features: {', '.join(features)}")
-        
+
         # Prompts (truncated)
         prompt = getattr(pack, "prompt_text", "") or txt2img_config.get("prompt", "")
-        negative = getattr(pack, "negative_prompt_text", "") or txt2img_config.get("negative_prompt", "")
+        negative = getattr(pack, "negative_prompt_text", "") or txt2img_config.get(
+            "negative_prompt", ""
+        )
         lines.append(f"  Prompt: {self._truncate_text(prompt, 80)}")
         if negative:
             lines.append(f"  Negative: {self._truncate_text(negative, 80)}")
-        
+
         return lines
 
-    def _show_info_dialog(self, title: str, message: str, width: int = 500, height: int = 300) -> None:
+    def _show_info_dialog(
+        self, title: str, message: str, width: int = 500, height: int = 300
+    ) -> None:
         """Show a dialog with detailed information."""
         dialog = tk.Toplevel(self)
         dialog.title(title)
         dialog.geometry(f"{width}x{height}")
         dialog.transient(self.winfo_toplevel())
-        
+
         # Text widget with scrollbar
         text_frame = ttk.Frame(dialog)
         text_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-        
+
         text_widget = tk.Text(
             text_frame,
             wrap="word",
@@ -1058,25 +1097,25 @@ class PreviewPanelV2(ttk.Frame):
             borderwidth=1,
         )
         text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        
+
         scrollbar = ttk.Scrollbar(text_frame, orient=tk.VERTICAL, command=text_widget.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         text_widget.configure(yscrollcommand=scrollbar.set)
-        
+
         text_widget.insert("1.0", message)
         text_widget.configure(state="disabled")
-        
+
         # Close button
         button_frame = ttk.Frame(dialog)
         button_frame.pack(fill=tk.X, padx=10, pady=(0, 10))
-        
+
         close_button = ttk.Button(
             button_frame,
             text="Close",
             command=dialog.destroy,
         )
         close_button.pack(side=tk.RIGHT)
-        
+
         # Center the dialog
         dialog.update_idletasks()
         x = (dialog.winfo_screenwidth() // 2) - (width // 2)
@@ -1304,7 +1343,9 @@ class PreviewPanelV2(ttk.Frame):
         else:
             self.thumbnail.set_placeholder("No generated preview yet")
 
-    def _update_thumbnail(self, job: Any | None = None, pack_name: str | None = None, show_preview: bool = True) -> None:
+    def _update_thumbnail(
+        self, job: Any | None = None, pack_name: str | None = None, show_preview: bool = True
+    ) -> None:
         """Update the thumbnail display for the current preview job."""
         start = time.perf_counter()
         # Check if preview is disabled
@@ -1393,13 +1434,13 @@ class PreviewPanelV2(ttk.Frame):
                     # Update show_preview for the current pack
                     # This would require storing it in the pack model
                     pass
-        
+
         # PR-PERSIST-001: Save state on checkbox change
         self.save_state()
 
     def update_with_summary(self, summary: UnifiedJobSummary | None) -> None:
         """Update the preview thumbnail based on a UnifiedJobSummary.
-        
+
         PR-GUI-DATA-005: Load and display latest output image as thumbnail.
         """
         if self._dispatch_to_ui(lambda: self.update_with_summary(summary)):
@@ -1414,10 +1455,7 @@ class PreviewPanelV2(ttk.Frame):
     def save_state(self) -> None:
         """Save preview panel state to disk."""
         try:
-            state = {
-                "show_preview": self._show_preview_var.get(),
-                "schema_version": "2.6"
-            }
+            state = {"show_preview": self._show_preview_var.get(), "schema_version": "2.6"}
             PREVIEW_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
             PREVIEW_STATE_PATH.write_text(json.dumps(state, indent=2))
         except Exception as e:
@@ -1427,15 +1465,15 @@ class PreviewPanelV2(ttk.Frame):
         """Restore preview panel state from disk."""
         if not PREVIEW_STATE_PATH.exists():
             return
-        
+
         try:
             state = json.loads(PREVIEW_STATE_PATH.read_text())
-            
+
             # Validate schema version
             if state.get("schema_version") != "2.6":
                 logger.warning("Unsupported preview state schema, ignoring")
                 return
-            
+
             show_preview = bool(state.get("show_preview", False))
             self._show_preview_var.set(show_preview)
             logger.debug("Restored preview panel state")

@@ -7,8 +7,8 @@ from unittest.mock import Mock, patch
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.learning_state import LearningExperiment, LearningVariant
-from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.gui.views.learning_review_panel import LearningReviewPanel
+from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.learning.discovered_review_models import DiscoveredReviewExperiment, DiscoveredReviewItem
 from src.learning.discovered_review_store import DiscoveredReviewStore
 from src.services.ui_state_store import UIStateStore
@@ -35,9 +35,12 @@ def test_learning_tab_persists_and_restores_resume_session() -> None:
         experiments_root = Path(tmp_dir) / "experiments"
         store = UIStateStore(state_path)
 
-        with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-            return_value=experiments_root,
+        with (
+            patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+            patch(
+                "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+                return_value=experiments_root,
+            ),
         ):
             tab = LearningTabFrame(
                 root,
@@ -80,7 +83,10 @@ def test_learning_tab_persists_and_restores_resume_session() -> None:
             )
             assert restored_tab.restore_learning_session_state(saved["learning"]) is True
             assert restored_tab.learning_controller.learning_state.current_experiment is not None
-            assert restored_tab.learning_controller.learning_state.current_experiment.name == "Resume Test"
+            assert (
+                restored_tab.learning_controller.learning_state.current_experiment.name
+                == "Resume Test"
+            )
             assert restored_tab.experiment_panel.name_var.get() == "Resume Test"
             assert restored_tab.experiment_panel.variable_var.get() == "Steps"
 
@@ -98,9 +104,12 @@ def test_learning_tab_places_review_panel_below_plan_for_larger_preview() -> Non
         experiments_root = Path(tmp_dir) / "experiments"
         store = UIStateStore(state_path)
 
-        with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-            return_value=experiments_root,
+        with (
+            patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+            patch(
+                "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+                return_value=experiments_root,
+            ),
         ):
             tab = LearningTabFrame(
                 root,
@@ -137,7 +146,9 @@ def test_learning_review_panel_prioritizes_image_column() -> None:
         assert int(side_grid["column"]) == 1
         assert int(image_grid["row"]) == 0
         assert int(rating_grid["row"]) == 3
-        assert int(panel.grid_columnconfigure(0)["weight"]) > int(panel.grid_columnconfigure(1)["weight"])
+        assert int(panel.grid_columnconfigure(0)["weight"]) > int(
+            panel.grid_columnconfigure(1)["weight"]
+        )
     finally:
         panel.destroy()
 
@@ -177,9 +188,12 @@ def test_learning_tab_includes_staged_curation_mode() -> None:
         experiments_root = Path(tmp_dir) / "experiments"
         store = UIStateStore(state_path)
 
-        with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-            return_value=experiments_root,
+        with (
+            patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+            patch(
+                "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+                return_value=experiments_root,
+            ),
         ):
             tab = LearningTabFrame(
                 root,
@@ -205,9 +219,12 @@ def test_learning_tab_staged_curation_persists_selection_event(tmp_path) -> None
     discovered_root = tmp_path / "discovered"
     store = UIStateStore(state_path)
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             root,
@@ -275,9 +292,12 @@ def test_learning_tab_staged_curation_face_tier_and_submit_hooks(tmp_path) -> No
     discovered_root = tmp_path / "discovered"
     store = UIStateStore(state_path)
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             root,
@@ -340,9 +360,12 @@ def test_learning_tab_staged_curation_affordances_distinguish_queue_vs_review(tm
     discovered_root = tmp_path / "discovered"
     store = UIStateStore(state_path)
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             root,
@@ -420,9 +443,12 @@ def test_learning_tab_opens_staged_curation_selection_in_review(tmp_path) -> Non
         main_window=SimpleNamespace(review_tab=review_tab, center_notebook=notebook)
     )
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             root,
@@ -461,38 +487,44 @@ def test_learning_tab_opens_staged_curation_selection_in_review(tmp_path) -> Non
             tab._on_staged_open_group("disc-handoff")  # noqa: SLF001
             tab._apply_staged_decision("advanced_to_face_triage")  # noqa: SLF001
 
-            with patch(
-                "src.gui.controllers.learning_controller.extract_embedded_metadata",
-                return_value=ReadPayloadResult(
-                    payload={
-                        "stage_manifest": {
-                            "stage": "txt2img",
-                            "config": {
-                                "steps": 30,
-                                "cfg_scale": 6.5,
-                                "sampler_name": "DPM++ 2M",
-                                "scheduler": "Karras",
-                            },
-                        }
-                    },
-                    status="ok",
+            with (
+                patch(
+                    "src.gui.controllers.learning_controller.extract_embedded_metadata",
+                    return_value=ReadPayloadResult(
+                        payload={
+                            "stage_manifest": {
+                                "stage": "txt2img",
+                                "config": {
+                                    "steps": 30,
+                                    "cfg_scale": 6.5,
+                                    "sampler_name": "DPM++ 2M",
+                                    "scheduler": "Karras",
+                                },
+                            }
+                        },
+                        status="ok",
+                    ),
                 ),
-            ), patch(
-                "src.gui.controllers.learning_controller.resolve_prompt_fields",
-                return_value=(
-                    "cinematic portrait with dramatic backlight",
-                    "blurry, lowres",
+                patch(
+                    "src.gui.controllers.learning_controller.resolve_prompt_fields",
+                    return_value=(
+                        "cinematic portrait with dramatic backlight",
+                        "blurry, lowres",
+                    ),
                 ),
-            ), patch(
-                "src.gui.controllers.learning_controller.resolve_model_vae_fields",
-                return_value=("juggernautXL", "Automatic"),
-            ), patch(
-                "src.gui.controllers.learning_controller.ConfigManager.get_setting",
-                return_value="output",
-            ), patch.object(
-                tab.learning_controller,
-                "submit_staged_curation_advancement",
-            ) as submit_mock:
+                patch(
+                    "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+                    return_value=("juggernautXL", "Automatic"),
+                ),
+                patch(
+                    "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+                    return_value="output",
+                ),
+                patch.object(
+                    tab.learning_controller,
+                    "submit_staged_curation_advancement",
+                ) as submit_mock,
+            ):
                 tab._open_staged_in_review("face_triage")  # noqa: SLF001
 
             submit_mock.assert_not_called()
@@ -502,7 +534,10 @@ def test_learning_tab_opens_staged_curation_selection_in_review(tmp_path) -> Non
             assert [str(path) for path in handoff.image_paths] == [str(image_path)]
             assert handoff.stage_adetailer is True
             assert notebook.selected is review_tab
-            assert "Opened the selected face triage candidate in Review" in tab._staged_job_status_var.get()  # noqa: SLF001
+            assert (
+                "Opened the selected face triage candidate in Review"
+                in tab._staged_job_status_var.get()
+            )  # noqa: SLF001
             assert "enqueue 1 marked candidate" in tab._staged_job_status_var.get().lower()  # noqa: SLF001
         finally:
             tab.destroy()
@@ -536,9 +571,12 @@ def test_learning_tab_review_handoff_uses_selected_candidate_only(tmp_path) -> N
         main_window=SimpleNamespace(review_tab=review_tab, center_notebook=notebook)
     )
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             root,
@@ -594,31 +632,36 @@ def test_learning_tab_review_handoff_uses_selected_candidate_only(tmp_path) -> N
             tab._staged_candidate_tree.selection_set("item-2")  # noqa: SLF001
             tab._update_staged_preview("item-2")  # noqa: SLF001
 
-            with patch(
-                "src.gui.controllers.learning_controller.extract_embedded_metadata",
-                return_value=ReadPayloadResult(
-                    payload={
-                        "stage_manifest": {
-                            "stage": "txt2img",
-                            "config": {
-                                "steps": 30,
-                                "cfg_scale": 6.5,
-                                "sampler_name": "DPM++ 2M",
-                                "scheduler": "Karras",
-                            },
-                        }
-                    },
-                    status="ok",
+            with (
+                patch(
+                    "src.gui.controllers.learning_controller.extract_embedded_metadata",
+                    return_value=ReadPayloadResult(
+                        payload={
+                            "stage_manifest": {
+                                "stage": "txt2img",
+                                "config": {
+                                    "steps": 30,
+                                    "cfg_scale": 6.5,
+                                    "sampler_name": "DPM++ 2M",
+                                    "scheduler": "Karras",
+                                },
+                            }
+                        },
+                        status="ok",
+                    ),
                 ),
-            ), patch(
-                "src.gui.controllers.learning_controller.resolve_prompt_fields",
-                side_effect=[("prompt a", "negative a"), ("prompt b", "negative b")],
-            ), patch(
-                "src.gui.controllers.learning_controller.resolve_model_vae_fields",
-                return_value=("juggernautXL", "Automatic"),
-            ), patch(
-                "src.gui.controllers.learning_controller.ConfigManager.get_setting",
-                return_value="output",
+                patch(
+                    "src.gui.controllers.learning_controller.resolve_prompt_fields",
+                    side_effect=[("prompt a", "negative a"), ("prompt b", "negative b")],
+                ),
+                patch(
+                    "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+                    return_value=("juggernautXL", "Automatic"),
+                ),
+                patch(
+                    "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+                    return_value="output",
+                ),
             ):
                 tab._open_staged_in_review("face_triage")  # noqa: SLF001
 
@@ -642,9 +685,12 @@ def test_learning_tab_staged_curation_surfaces_prior_review_summary(tmp_path) ->
     discovered_root = tmp_path / "discovered"
     store = UIStateStore(state_path)
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             root,
@@ -710,9 +756,12 @@ def test_learning_tab_opens_staged_metadata_inspector(tmp_path) -> None:
     store = UIStateStore(state_path)
     opened: list[dict[str, object]] = []
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             root,
@@ -744,26 +793,32 @@ def test_learning_tab_opens_staged_metadata_inspector(tmp_path) -> None:
             )
             discovered_store.save_group(experiment)
 
-            with patch.object(
-                tab.learning_controller,
-                "get_prior_review_summary",
-                return_value=None,
-            ), patch.object(
-                tab.learning_controller,
-                "inspect_artifact_metadata",
-                return_value={
-                    "artifact_path": str(image_path),
-                    "normalized_generation_summary": {"stage": "txt2img"},
-                    "normalized_review_summary": None,
-                    "source_diagnostics": {"active_review_precedence": "none"},
-                    "raw_embedded_payload": {"stage": "txt2img"},
-                    "raw_embedded_review_payload": None,
-                    "raw_sidecar_review_payload": None,
-                    "raw_internal_review_summary": None,
-                },
-            ), patch(
-                "src.gui.views.learning_tab_frame_v2.ArtifactMetadataInspectorDialog",
-                lambda parent, *, inspection_payload, on_refresh=None: opened.append(inspection_payload),
+            with (
+                patch.object(
+                    tab.learning_controller,
+                    "get_prior_review_summary",
+                    return_value=None,
+                ),
+                patch.object(
+                    tab.learning_controller,
+                    "inspect_artifact_metadata",
+                    return_value={
+                        "artifact_path": str(image_path),
+                        "normalized_generation_summary": {"stage": "txt2img"},
+                        "normalized_review_summary": None,
+                        "source_diagnostics": {"active_review_precedence": "none"},
+                        "raw_embedded_payload": {"stage": "txt2img"},
+                        "raw_embedded_review_payload": None,
+                        "raw_sidecar_review_payload": None,
+                        "raw_internal_review_summary": None,
+                    },
+                ),
+                patch(
+                    "src.gui.views.learning_tab_frame_v2.ArtifactMetadataInspectorDialog",
+                    lambda parent, *, inspection_payload, on_refresh=None: opened.append(
+                        inspection_payload
+                    ),
+                ),
             ):
                 tab._on_staged_open_group("disc-inspect")  # noqa: SLF001
                 tab._open_staged_metadata_inspector()  # noqa: SLF001
@@ -784,9 +839,12 @@ def test_learning_tab_defers_visibility_refresh_until_mapped(tmp_path) -> None:
     store = UIStateStore(state_path)
     app_state = AppStateV2()
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             root,

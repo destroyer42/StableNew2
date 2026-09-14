@@ -5,9 +5,10 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
+from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.app_state_v2 import AppStateV2
-from src.gui.layout_v2 import configure_grid_columns
+from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
+from src.gui.controllers.learning_controller import LearningController
 from src.gui.help_text.workflow_guidance_v2 import (
     build_discovered_review_guidance,
     build_staged_queue_guidance,
@@ -15,10 +16,15 @@ from src.gui.help_text.workflow_guidance_v2 import (
     get_staged_queue_runtime_guidance,
     get_staged_review_runtime_guidance,
 )
-from src.gui.controllers.learning_controller import LearningController
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.learning_review_dialog_v2 import LearningReviewDialogV2
 from src.gui.learning_state import LearningState
-from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE, style_text_widget
+from src.gui.theme_v2 import (
+    BODY_LABEL_STYLE,
+    CARD_FRAME_STYLE,
+    SURFACE_FRAME_STYLE,
+    style_text_widget,
+)
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.pipeline_layout_contract import (
@@ -32,9 +38,8 @@ from src.gui.views.experiment_design_panel import ExperimentDesignPanel
 from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
-from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
-from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
 from src.gui.widgets.image_thumbnail import ImageThumbnail
+from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.learning.experiment_store import LearningExperimentStore
 from src.learning.learning_paths import get_learning_experiments_root, get_learning_records_path
 from src.learning.learning_record import LearningRecordWriter
@@ -63,7 +68,7 @@ class LearningTabFrame(ttk.Frame):
         self._pending_visibility_refresh = False
         self.pipeline_controller = pipeline_controller
         self.app_controller = app_controller  # PR-LEARN-002: Store app_controller reference
-        
+
         # Initialize learning record writer
         self.learning_record_writer = LearningRecordWriter(get_learning_records_path())
         self.experiment_store = LearningExperimentStore(get_learning_experiments_root())
@@ -72,17 +77,22 @@ class LearningTabFrame(ttk.Frame):
         # Initialize learning state and controller
         self.learning_state = LearningState()
         self._custom_discovered_scan_root: str | None = None
-        
+
         # PR-LEARN-002: Get LearningExecutionController from app_controller if available
-        execution_controller = getattr(app_controller, "learning_execution_controller", None) if app_controller else None
-        
+        execution_controller = (
+            getattr(app_controller, "learning_execution_controller", None)
+            if app_controller
+            else None
+        )
+
         # PR-LEARN-012: If execution controller doesn't exist on app_controller, create it
         if not execution_controller and app_controller:
             from src.learning.execution_controller import LearningExecutionController
+
             job_service = getattr(app_controller, "job_service", None)
             if not job_service and pipeline_controller:
                 job_service = getattr(pipeline_controller, "_job_service", None)
-            
+
             if job_service:
                 execution_controller = LearningExecutionController(
                     learning_state=self.learning_state,
@@ -91,7 +101,7 @@ class LearningTabFrame(ttk.Frame):
                 # Store on app_controller for future use
                 if hasattr(app_controller, "__dict__"):
                     app_controller.learning_execution_controller = execution_controller
-        
+
         self.learning_controller = LearningController(
             learning_state=self.learning_state,
             prompt_workspace_state=getattr(self.app_state, "prompt_workspace_state", None)
@@ -148,7 +158,9 @@ class LearningTabFrame(ttk.Frame):
         learning_toggle.grid(row=0, column=4, sticky="e")
         mode_row = ttk.Frame(self.header_frame, style=SURFACE_FRAME_STYLE)
         mode_row.grid(row=0, column=3, sticky="e", padx=(8, 0))
-        ttk.Label(mode_row, text="Automation", style=BODY_LABEL_STYLE).pack(side="left", padx=(0, 4))
+        ttk.Label(mode_row, text="Automation", style=BODY_LABEL_STYLE).pack(
+            side="left", padx=(0, 4)
+        )
         mode_combo = ttk.Combobox(
             mode_row,
             textvariable=self._automation_mode_var,
@@ -250,7 +262,9 @@ class LearningTabFrame(ttk.Frame):
             prompt_workspace_state=getattr(self.app_state, "prompt_workspace_state", None)
             if self.app_state
             else None,
-            packs_dir=getattr(getattr(self.pipeline_controller, "_config_manager", None), "packs_dir", None),
+            packs_dir=getattr(
+                getattr(self.pipeline_controller, "_config_manager", None), "packs_dir", None
+            ),
             style=CARD_FRAME_STYLE,
         )
         self.experiment_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 2), pady=4)
@@ -269,7 +283,9 @@ class LearningTabFrame(ttk.Frame):
 
         # Connect controller to review panel (bidirectional)
         self.learning_controller._review_panel = self.review_panel
-        self.review_panel.learning_controller = self.learning_controller  # PR-LEARN-014: Fix rating submission
+        self.review_panel.learning_controller = (
+            self.learning_controller
+        )  # PR-LEARN-014: Fix rating submission
 
         # ---- Tab 2: Discovered Review Inbox ----
         self._discovered_tab_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
@@ -283,7 +299,9 @@ class LearningTabFrame(ttk.Frame):
             app_state=self.app_state,
             wraplength=980,
         )
-        self.discovered_help_panel.grid(row=0, column=0, columnspan=2, sticky="ew", padx=2, pady=(4, 0))
+        self.discovered_help_panel.grid(
+            row=0, column=0, columnspan=2, sticky="ew", padx=2, pady=(4, 0)
+        )
 
         self.discovered_inbox_panel = DiscoveredReviewInboxPanel(
             self._discovered_tab_frame,
@@ -319,7 +337,9 @@ class LearningTabFrame(ttk.Frame):
         self._staged_workflow_summary_var = tk.StringVar(value="Workflow summary: n/a")
         self._staged_replay_summary_var = tk.StringVar(value="Replay chain: n/a")
         self._staged_plan_preview_var = tk.StringVar(value="Derived plan preview: n/a")
-        self._staged_effective_settings_var = tk.StringVar(value="Effective settings: select a candidate")
+        self._staged_effective_settings_var = tk.StringVar(
+            value="Effective settings: select a candidate"
+        )
         self._staged_prior_review_var = tk.StringVar(value="Prior Review: none")
         self._staged_queue_guidance_var = tk.StringVar(
             value=get_staged_queue_runtime_guidance(0, 0, 0)
@@ -350,7 +370,9 @@ class LearningTabFrame(ttk.Frame):
         staged_center.columnconfigure(0, weight=1)
         staged_center.rowconfigure(2, weight=1)
 
-        self._staged_group_var = tk.StringVar(value="Open a discovered group to start staged curation")
+        self._staged_group_var = tk.StringVar(
+            value="Open a discovered group to start staged curation"
+        )
         ttk.Label(
             staged_center,
             textvariable=self._staged_group_var,
@@ -501,7 +523,9 @@ class LearningTabFrame(ttk.Frame):
 
         reason_frame = ttk.LabelFrame(staged_right, text="Reason Tags", padding=(6, 4))
         reason_frame.grid(row=8, column=0, sticky="ew", pady=(6, 0))
-        for index, tag in enumerate(self.learning_controller.get_staged_curation_reason_tag_options()):
+        for index, tag in enumerate(
+            self.learning_controller.get_staged_curation_reason_tag_options()
+        ):
             var = tk.BooleanVar(value=False)
             self._staged_reason_tag_vars[tag] = var
             ttk.Checkbutton(
@@ -891,9 +915,7 @@ class LearningTabFrame(ttk.Frame):
             if hasattr(panel, "stage_var"):
                 panel.stage_var.set(str(getattr(experiment, "stage", "txt2img") or "txt2img"))
             if hasattr(panel, "variable_var"):
-                panel.variable_var.set(
-                    str(getattr(experiment, "variable_under_test", "") or "")
-                )
+                panel.variable_var.set(str(getattr(experiment, "variable_under_test", "") or ""))
             if hasattr(panel, "images_var"):
                 panel.images_var.set(int(getattr(experiment, "images_per_value", 1) or 1))
             if hasattr(panel, "prompt_source_var"):
@@ -1070,7 +1092,9 @@ class LearningTabFrame(ttk.Frame):
         self._clear_staged_reason_tags()
         self._staged_notes_text.delete("1.0", tk.END)
 
-    def _render_staged_candidates(self, candidates: list[Any], latest_events: dict[str, Any]) -> None:
+    def _render_staged_candidates(
+        self, candidates: list[Any], latest_events: dict[str, Any]
+    ) -> None:
         self._staged_candidate_tree.delete(*self._staged_candidate_tree.get_children())
         self._staged_candidates_by_id = {}
         for candidate in candidates:
@@ -1098,7 +1122,9 @@ class LearningTabFrame(ttk.Frame):
             self._staged_candidate_tree.insert("", "end", iid=candidate.candidate_id, values=values)
         children = self._staged_candidate_tree.get_children()
         if children:
-            selected_item_id = self.learning_controller.learning_state.selected_staged_curation_item_id
+            selected_item_id = (
+                self.learning_controller.learning_state.selected_staged_curation_item_id
+            )
             first = selected_item_id if selected_item_id in children else children[0]
             self._staged_candidate_tree.selection_set(first)
             self._staged_candidate_tree.focus(first)
@@ -1137,7 +1163,9 @@ class LearningTabFrame(ttk.Frame):
         if item is None:
             return
         self.learning_controller.learning_state.selected_staged_curation_item_id = candidate_id
-        self.learning_controller.learning_state.selected_staged_curation_group_id = self._staged_current_group_id
+        self.learning_controller.learning_state.selected_staged_curation_group_id = (
+            self._staged_current_group_id
+        )
         latest = self._staged_latest_events.get(candidate_id)
         replay_summary = None
         source_context = None
@@ -1161,7 +1189,9 @@ class LearningTabFrame(ttk.Frame):
                         str(getattr(item, "stage", "") or ""),
                         str(getattr(item, "model", "") or ""),
                         dimensions,
-                        f"sampler={getattr(item, 'sampler', '')}" if getattr(item, "sampler", "") else "",
+                        f"sampler={getattr(item, 'sampler', '')}"
+                        if getattr(item, "sampler", "")
+                        else "",
                     )
                     if part
                 ]
@@ -1179,7 +1209,9 @@ class LearningTabFrame(ttk.Frame):
         if isinstance(source_context, dict):
             source_prompt = str(source_context.get("source_prompt") or "")
             source_negative_prompt = str(source_context.get("source_negative_prompt") or "")
-            effective_settings_summary = str(source_context.get("effective_settings_summary") or "").strip()
+            effective_settings_summary = str(
+                source_context.get("effective_settings_summary") or ""
+            ).strip()
             target_stage = str(source_context.get("target_stage") or "").replace("_", " ")
             path_label = str(source_context.get("path_label") or "Queue Now")
             if target_stage:
@@ -1187,7 +1219,9 @@ class LearningTabFrame(ttk.Frame):
                     f"Target stage: {target_stage} | Path: {path_label}"
                 )
             else:
-                self._staged_plan_preview_var.set(f"Target stage: not queued yet | Path: {path_label}")
+                self._staged_plan_preview_var.set(
+                    f"Target stage: not queued yet | Path: {path_label}"
+                )
         else:
             effective_settings_summary = ""
             self._staged_plan_preview_var.set("Derived plan preview: n/a")
@@ -1223,7 +1257,9 @@ class LearningTabFrame(ttk.Frame):
             source_summary = " / ".join([part for part in (source_stage, source_model) if part])
             if source_summary:
                 replay_bits.append(f"source={source_summary}")
-            prompt_summary = _truncate(" ".join(source_prompt.split()), 56) if source_prompt.strip() else ""
+            prompt_summary = (
+                _truncate(" ".join(source_prompt.split()), 56) if source_prompt.strip() else ""
+            )
             if prompt_summary:
                 replay_bits.append(f"prompt={prompt_summary}")
             face_tier = str(replay_summary.get("face_triage_tier") or "").strip()
@@ -1273,9 +1309,13 @@ class LearningTabFrame(ttk.Frame):
             return
         row = self._staged_candidates_by_id.get(candidate_id) or {}
         item = row.get("item")
-        image_path = str(getattr(item, "artifact_path", "") or "").strip() if item is not None else ""
+        image_path = (
+            str(getattr(item, "artifact_path", "") or "").strip() if item is not None else ""
+        )
         if not image_path:
-            messagebox.showinfo("Metadata Inspector", "Selected candidate does not have an artifact path.")
+            messagebox.showinfo(
+                "Metadata Inspector", "Selected candidate does not have an artifact path."
+            )
             return
 
         def _refresh() -> dict[str, Any] | None:
@@ -1336,7 +1376,9 @@ class LearningTabFrame(ttk.Frame):
     def _count_marked_candidates_for_stage(self, target_stage: str) -> int:
         count = 0
         for event in self._staged_latest_events.values():
-            event_target = self._target_stage_for_decision(str(getattr(event, "decision", "") or ""))
+            event_target = self._target_stage_for_decision(
+                str(getattr(event, "decision", "") or "")
+            )
             if event_target == target_stage:
                 count += 1
         return count
@@ -1345,7 +1387,9 @@ class LearningTabFrame(ttk.Frame):
         selected_target = None
         if candidate_id:
             latest = self._staged_latest_events.get(candidate_id)
-            selected_target = self._target_stage_for_decision(str(getattr(latest, "decision", "") or ""))
+            selected_target = self._target_stage_for_decision(
+                str(getattr(latest, "decision", "") or "")
+            )
 
         for target_stage, button in self._staged_queue_buttons.items():
             marked_count = self._count_marked_candidates_for_stage(target_stage)
@@ -1435,7 +1479,9 @@ class LearningTabFrame(ttk.Frame):
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(
-            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            mode
+            or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw")
+            or "nsfw"
         )
         self._pending_visibility_refresh = False
         self._visibility_banner.configure(text="")
@@ -1459,7 +1505,8 @@ class LearningTabFrame(ttk.Frame):
         if not bool(self.winfo_ismapped()):
             self._pending_visibility_refresh = True
             self._content_visibility_mode = str(
-                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw")
+                or "nsfw"
             )
             return
         self.on_content_visibility_mode_changed()
@@ -1467,7 +1514,9 @@ class LearningTabFrame(ttk.Frame):
     def _on_map(self, _event: Any = None) -> None:
         if not self._pending_visibility_refresh:
             return
-        self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
+        self.after_idle(
+            lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode)
+        )
 
     def _submit_staged_jobs(self, target_stage: str) -> None:
         if not self._staged_current_group_id:
@@ -1484,7 +1533,9 @@ class LearningTabFrame(ttk.Frame):
             return
         if submitted <= 0:
             label = target_stage.replace("_", " ")
-            self._staged_job_status_var.set(f"No staged-curation candidates are marked for {label}.")
+            self._staged_job_status_var.set(
+                f"No staged-curation candidates are marked for {label}."
+            )
             messagebox.showinfo(
                 "Staged Curation",
                 f"No candidates are currently marked for {label}.",
@@ -1506,7 +1557,9 @@ class LearningTabFrame(ttk.Frame):
             return
 
         latest = self._staged_latest_events.get(candidate_id)
-        selected_target = self._target_stage_for_decision(str(getattr(latest, "decision", "") or ""))
+        selected_target = self._target_stage_for_decision(
+            str(getattr(latest, "decision", "") or "")
+        )
         if selected_target != target_stage:
             label = target_stage.replace("_", " ")
             self._staged_job_status_var.set(
@@ -1527,19 +1580,25 @@ class LearningTabFrame(ttk.Frame):
             )
         except Exception as exc:
             self._staged_job_status_var.set(f"Failed to open {target_stage} in Review: {exc}")
-            messagebox.showerror("Staged Curation", f"Failed to open {target_stage} in Review:\n{exc}")
+            messagebox.showerror(
+                "Staged Curation", f"Failed to open {target_stage} in Review:\n{exc}"
+            )
             return
 
         if handoff is None or not handoff.image_paths:
             label = target_stage.replace("_", " ")
-            self._staged_job_status_var.set(f"No staged-curation candidates are marked for {label}.")
+            self._staged_job_status_var.set(
+                f"No staged-curation candidates are marked for {label}."
+            )
             messagebox.showinfo(
                 "Staged Curation",
                 f"No candidates are currently marked for {label}.",
             )
             return
 
-        main_window = getattr(self.app_controller, "main_window", None) if self.app_controller else None
+        main_window = (
+            getattr(self.app_controller, "main_window", None) if self.app_controller else None
+        )
         review_tab = getattr(main_window, "review_tab", None)
         if review_tab is None:
             messagebox.showerror("Review unavailable", "Review tab is not connected.")
@@ -1578,12 +1637,20 @@ class LearningTabFrame(ttk.Frame):
 
         row = self._staged_candidates_by_id.get(candidate_id) or {}
         item = row.get("item")
-        image_path = Path(str(getattr(item, "artifact_path", "") or "").strip()) if item is not None else None
+        image_path = (
+            Path(str(getattr(item, "artifact_path", "") or "").strip())
+            if item is not None
+            else None
+        )
         if image_path is None or not str(image_path):
-            messagebox.showinfo("Staged Curation", "The selected candidate does not have a source image.")
+            messagebox.showinfo(
+                "Staged Curation", "The selected candidate does not have a source image."
+            )
             return
 
-        main_window = getattr(self.app_controller, "main_window", None) if self.app_controller else None
+        main_window = (
+            getattr(self.app_controller, "main_window", None) if self.app_controller else None
+        )
         review_tab = getattr(main_window, "review_tab", None)
         if review_tab is None:
             messagebox.showerror("Review unavailable", "Review tab is not connected.")

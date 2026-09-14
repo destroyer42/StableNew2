@@ -44,19 +44,23 @@ class WebUIResourceService(BaseWebUIResourceService):
 
     def refresh_all(self, timeout: float = 5.0) -> dict[str, list[Any]]:
         """Fetch the canonical resource sets defined by the UI dropdowns.
-        
+
         Args:
             timeout: Maximum seconds to wait for each resource fetch. Default 5.0.
-        
+
         Returns:
             Dictionary of resource lists. Empty lists returned on timeout/error.
         """
         # Use ThreadPoolExecutor with timeout to prevent indefinite blocking
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(CANONICAL_WEBUI_RESOURCE_KEYS)) as executor:
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=len(CANONICAL_WEBUI_RESOURCE_KEYS)
+        ) as executor:
             futures = {
                 "models": executor.submit(self.list_models),
                 "vaes": executor.submit(self.list_vaes),
-                "samplers": executor.submit(lambda: self._normalize_sampler_names(self.client.get_samplers() or [])),
+                "samplers": executor.submit(
+                    lambda: self._normalize_sampler_names(self.client.get_samplers() or [])
+                ),
                 "schedulers": executor.submit(self._fetch_schedulers),
                 "upscalers": executor.submit(self.list_upscalers),
                 "hypernetworks": executor.submit(self.list_hypernetworks),

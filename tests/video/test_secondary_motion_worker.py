@@ -12,7 +12,9 @@ def test_secondary_motion_worker_round_trip(tmp_path: Path) -> None:
     output_dir = tmp_path / "output"
     input_dir.mkdir()
     for index in range(3):
-        Image.new("RGBA", (10, 10), (255, index * 20, 0, 255)).save(input_dir / f"frame_{index:04d}.png")
+        Image.new("RGBA", (10, 10), (255, index * 20, 0, 255)).save(
+            input_dir / f"frame_{index:04d}.png"
+        )
 
     result = run_secondary_motion_worker(
         {

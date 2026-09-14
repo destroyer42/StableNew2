@@ -230,7 +230,10 @@ only when `WebUIProcessManager` owns and tracks the process it launched.
 but must not infer process ownership from endpoint, PID, or port health and must
 never automatically adopt, terminate, restart, or launch a second process as
 recovery. Ambiguous generation after a dispatched POST is never automatically
-replayed.
+replayed. Working-directory, executable-name, command-line, and orphan/reparented
+process heuristics are also not ownership proof. The same rule applies to
+secondary managed runtimes such as ComfyUI: only the manager that launched the
+current process/session may terminate it or its proven descendants.
 
 ### 7.1 Current v2.6 implementation
 

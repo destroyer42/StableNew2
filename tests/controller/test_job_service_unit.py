@@ -143,7 +143,9 @@ def test_submit_jobs_with_run_mode_batches_queue_update(service: JobService) -> 
 
     service.register_callback(JobService.EVENT_QUEUE_UPDATED, lambda items: received.append(items))
 
-    service.submit_jobs_with_run_mode([make_job("job-a"), make_job("job-b")], batch_queue_update=True)
+    service.submit_jobs_with_run_mode(
+        [make_job("job-a"), make_job("job-b")], batch_queue_update=True
+    )
 
     assert len(received) == 1
     assert len(received[0]) == 2

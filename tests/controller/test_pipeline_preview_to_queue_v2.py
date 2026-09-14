@@ -73,7 +73,9 @@ def test_enqueue_draft_jobs_reuses_cached_preview_jobs() -> None:
     record = make_test_njr(job_id="job-cached", prompt_source="manual", prompt_pack_id="")
     controller._app_state.preview_jobs = [record]
     controller.submit_preview_jobs_to_queue = Mock(return_value=1)
-    controller.get_preview_jobs = lambda: (_ for _ in ()).throw(AssertionError("should not rebuild preview"))
+    controller.get_preview_jobs = lambda: (_ for _ in ()).throw(
+        AssertionError("should not rebuild preview")
+    )
 
     submitted = controller.enqueue_draft_jobs(run_config={"run_mode": "queue"})
 

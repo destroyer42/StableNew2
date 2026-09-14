@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import subprocess
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from src.pipeline.video import resolve_ffmpeg_executable
 from src.video.motion.secondary_motion_engine import SECONDARY_MOTION_APPLY_SCHEMA_V1
@@ -96,7 +97,9 @@ def apply_secondary_motion_to_video(
     motion_dir = work_dir / "motion_frames"
     promoted_video_path = root / f"{source_video_path.stem}_secondary_motion.mp4"
     try:
-        extracted_frames = _extract_video_frames(video_path=source_video_path, output_dir=extracted_dir)
+        extracted_frames = _extract_video_frames(
+            video_path=source_video_path, output_dir=extracted_dir
+        )
     except Exception as exc:
         skip_reason = "ffmpeg_unavailable"
         if not isinstance(exc, SVDExportError) or "ffmpeg is not available" not in str(exc).lower():

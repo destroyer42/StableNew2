@@ -5,7 +5,6 @@ PR-GUI-TOOLTIPS-001: Comprehensive tooltips and inline help for ADetailer.
 
 from __future__ import annotations
 
-
 # ADetailer help text dictionary
 # Format: "key": {"short": "Brief one-line description", "long": "Detailed hover tooltip"}
 ADETAILER_HELP_TEXT = {

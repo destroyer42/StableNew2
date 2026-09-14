@@ -21,7 +21,9 @@ class DummyMainWindow:
         self.app_state = MagicMock()
 
 
-@pytest.mark.parametrize("status", [JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.COMPLETED, JobStatus.FAILED])
+@pytest.mark.parametrize(
+    "status", [JobStatus.QUEUED, JobStatus.RUNNING, JobStatus.COMPLETED, JobStatus.FAILED]
+)
 def test_on_job_status_for_panels_requests_projection_refresh(status):
     mw = DummyMainWindow()
     controller = AppController(main_window=mw)

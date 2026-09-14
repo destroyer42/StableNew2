@@ -30,7 +30,6 @@ from src.pipeline.job_models_v2 import RuntimeJobStatus, UnifiedJobSummary
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
 from src.services import ui_state_store
-from src.services.persistence_worker import get_persistence_worker
 from src.utils.thread_registry import get_thread_registry
 from tests.helpers.factories import update_current_config
 from tests.helpers.gui_harness import pipeline_harness
@@ -117,10 +116,10 @@ def _run_synthetic_hot_state_batch(
                 current_stage="txt2img",
                 stage_index=0,
                 total_stages=1,
-                    progress=min(1.0, (index + 1) / max(1, jobs_to_queue)),
-                    eta_seconds=float(max(0, jobs_to_queue - index - 1)) * 0.02,
-                    started_at=datetime.utcnow(),
-                    actual_seed=getattr(records[index], "seed", None),
+                progress=min(1.0, (index + 1) / max(1, jobs_to_queue)),
+                eta_seconds=float(max(0, jobs_to_queue - index - 1)) * 0.02,
+                started_at=datetime.utcnow(),
+                actual_seed=getattr(records[index], "seed", None),
                 current_step=index + 1,
                 total_steps=jobs_to_queue,
                 stage_detail="synthetic-busy-run",
@@ -137,16 +136,16 @@ def _run_synthetic_hot_state_batch(
 
         history_entries.insert(
             0,
-                JobHistoryEntry(
-                    job_id=summary.job_id,
-                    created_at=datetime.utcnow(),
-                    completed_at=datetime.utcnow(),
-                    status=JobStatus.COMPLETED,
-                    payload_summary=summary.positive_prompt_preview or summary.job_id,
-                    run_mode="queue",
-                    prompt_source="pack",
-                    prompt_pack_id=summary.prompt_pack_id,
-                ),
+            JobHistoryEntry(
+                job_id=summary.job_id,
+                created_at=datetime.utcnow(),
+                completed_at=datetime.utcnow(),
+                status=JobStatus.COMPLETED,
+                payload_summary=summary.positive_prompt_preview or summary.job_id,
+                run_mode="queue",
+                prompt_source="pack",
+                prompt_pack_id=summary.prompt_pack_id,
+            ),
         )
 
     app_state.set_queue_jobs([])
@@ -178,7 +177,7 @@ def _run_synthetic_hot_state_batch(
 @pytest.mark.slow
 class TestJT07LargeBatchExecution:
     """JT-07: Validates large batch execution without GUI freeze or memory leaks.
-    
+
     PR-QUEUE-001D: Tests the async history writer and ensures GUI thread
     is not blocked by file I/O during job completion.
     """
@@ -199,9 +198,9 @@ class TestJT07LargeBatchExecution:
     @patch("src.api.webui_api.WebUIAPI")
     def test_jt07_small_batch_no_stall(self, mock_webui_api, app_root):
         """Test small batch (3 jobs) executes without GUI stall.
-        
+
         Scenario: Queue 3 jobs, verify no watchdog stalls detected.
-        
+
         Assertions:
         - All 3 jobs complete successfully
         - No UI heartbeat stalls detected
@@ -218,7 +217,7 @@ class TestJT07LargeBatchExecution:
             app_state = harness.app_state
             app_controller = harness.controller
             window = harness.window
-            
+
             # Configure for fast execution
             update_current_config(
                 app_state,
@@ -226,17 +225,17 @@ class TestJT07LargeBatchExecution:
                 sampler_name="Euler a",
                 steps=5,  # Fast
             )
-            
+
             # Enable only txt2img
             window.pipeline_tab.txt2img_enabled.set(True)
             window.pipeline_tab.upscale_enabled.set(False)
             window.pipeline_tab.img2img_enabled.set(False)
             window.pipeline_tab.adetailer_enabled.set(False)
-            
+
             # Track UI heartbeat before execution
             initial_heartbeat = getattr(app_controller, "last_ui_heartbeat_ts", 0)
             logger.info(f"Initial UI heartbeat: {initial_heartbeat}")
-            
+
             metrics = _run_synthetic_hot_state_batch(
                 window=window,
                 app_state=app_state,

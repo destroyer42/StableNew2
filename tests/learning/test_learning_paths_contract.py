@@ -15,4 +15,3 @@ def test_learning_paths_has_no_legacy_fallback_exports() -> None:
     assert not hasattr(learning_paths, "LEGACY_LEARNING_RECORDS_PATHS")
     assert not hasattr(learning_paths, "iter_learning_records_candidates")
     assert not hasattr(learning_paths, "pick_existing_learning_records_path")
-

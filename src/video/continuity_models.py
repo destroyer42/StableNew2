@@ -2,15 +2,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
-
 
 CONTINUITY_PACK_SCHEMA_V26 = "stablenew.continuity_pack.v2.6"
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -45,7 +44,7 @@ class ContinuityAnchorReference:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any] | None) -> "ContinuityAnchorReference":
+    def from_dict(cls, data: Mapping[str, Any] | None) -> ContinuityAnchorReference:
         payload = _mapping_dict(data)
         return cls(
             anchor_id=str(payload.get("anchor_id") or ""),
@@ -75,7 +74,7 @@ class ContinuityAnchorSet:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any] | None) -> "ContinuityAnchorSet":
+    def from_dict(cls, data: Mapping[str, Any] | None) -> ContinuityAnchorSet:
         payload = _mapping_dict(data)
         return cls(
             anchor_set_id=str(payload.get("anchor_set_id") or ""),
@@ -106,7 +105,7 @@ class ContinuityCharacterReference:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any] | None) -> "ContinuityCharacterReference":
+    def from_dict(cls, data: Mapping[str, Any] | None) -> ContinuityCharacterReference:
         payload = _mapping_dict(data)
         anchor_set_id = str(payload.get("anchor_set_id") or "").strip() or None
         return cls(
@@ -141,7 +140,7 @@ class ContinuityWardrobeReference:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any] | None) -> "ContinuityWardrobeReference":
+    def from_dict(cls, data: Mapping[str, Any] | None) -> ContinuityWardrobeReference:
         payload = _mapping_dict(data)
         character_id = str(payload.get("character_id") or "").strip() or None
         anchor_set_id = str(payload.get("anchor_set_id") or "").strip() or None
@@ -176,7 +175,7 @@ class ContinuitySceneReference:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any] | None) -> "ContinuitySceneReference":
+    def from_dict(cls, data: Mapping[str, Any] | None) -> ContinuitySceneReference:
         payload = _mapping_dict(data)
         anchor_set_id = str(payload.get("anchor_set_id") or "").strip() or None
         return cls(
@@ -217,7 +216,7 @@ class ContinuityPackSummary:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any] | None) -> "ContinuityPackSummary":
+    def from_dict(cls, data: Mapping[str, Any] | None) -> ContinuityPackSummary:
         payload = _mapping_dict(data)
         return cls(
             pack_id=str(payload.get("pack_id") or ""),
@@ -245,7 +244,7 @@ class ContinuityPackLink:
         return payload
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any] | None) -> "ContinuityPackLink | None":
+    def from_dict(cls, data: Mapping[str, Any] | None) -> ContinuityPackLink | None:
         payload = _mapping_dict(data)
         pack_id = str(payload.get("pack_id") or payload.get("id") or "").strip()
         if not pack_id:
@@ -289,7 +288,7 @@ class ContinuityPack:
         }
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any] | None) -> "ContinuityPack":
+    def from_dict(cls, data: Mapping[str, Any] | None) -> ContinuityPack:
         payload = _mapping_dict(data)
         return cls(
             pack_id=str(payload.get("pack_id") or ""),
@@ -365,10 +364,7 @@ def normalize_continuity_link(value: Any) -> dict[str, Any] | None:
         return None
 
     display_name = str(
-        payload.get("display_name")
-        or payload.get("pack_name")
-        or payload.get("name")
-        or pack_id
+        payload.get("display_name") or payload.get("pack_name") or payload.get("name") or pack_id
     )
     summary = ContinuityPackSummary(
         pack_id=pack_id,

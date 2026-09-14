@@ -8,11 +8,12 @@ Tests:
 """
 
 from pathlib import Path
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 
 import pytest
+
 from src.gui.controllers.learning_controller import LearningController
-from src.gui.learning_state import LearningState, LearningExperiment, LearningVariant
+from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 
 
@@ -36,7 +37,7 @@ class TestLearningControllerNJR:
     def mock_app_controller(self):
         """Mock app controller with stage cards."""
         app_controller = Mock()
-        
+
         # Mock stage panel
         stage_panel = Mock()
         txt2img_card = Mock()
@@ -100,14 +101,14 @@ class TestLearningControllerNJR:
         stage_panel.adetailer_card = adetailer_card
         stage_panel.upscale_card = upscale_card
         app_controller._get_stage_cards_panel.return_value = stage_panel
-        
+
         return app_controller
 
     @pytest.fixture
     def mock_pipeline_controller(self):
         """Mock pipeline controller with job service."""
         pipeline_controller = Mock()
-        
+
         # Mock job service
         job_service = Mock()
         job_service.submit_njrs = Mock(return_value=["learning-job-1"])
@@ -129,13 +130,13 @@ class TestLearningControllerNJR:
         # Create variant
         variant = LearningVariant(param_value=8.5, planned_images=1)
         experiment = learning_state.current_experiment
-        
+
         # Build NJR
         record = controller._build_variant_njr(variant, experiment)
-        
+
         # Verify NJR is created
         assert isinstance(record, NormalizedJobRecord)
-        
+
         # Verify explicit config fields (from stage cards)
         assert record.base_model == "test_model.safetensors"
         assert record.vae == "test_vae.safetensors"
@@ -144,18 +145,18 @@ class TestLearningControllerNJR:
         assert record.steps == 20
         assert record.width == 512
         assert record.height == 512
-        
+
         # Verify CFG override was applied
         assert record.cfg_scale == 8.5  # variant value, not baseline 7.0
         assert record.config["txt2img"]["cfg_scale"] == 8.5
         assert record.prompt_pack_name == "TestExperiment"
         assert record.extra_metadata["submission_source"] == "learning"
         assert record.extra_metadata["learning"]["config"]["txt2img"]["cfg_scale"] == 8.5
-        
+
         # Verify prompt (NO DUPLICATION)
         assert record.positive_prompt == "a beautiful landscape"
         # Note: negative_prompt comes from experiment or fallback
-        
+
         # Verify learning metadata
         assert record.extra_metadata is not None
         assert record.extra_metadata["learning_enabled"] is True
@@ -176,20 +177,22 @@ class TestLearningControllerNJR:
         """Test 2: Verify single prompt occurrence in NJR."""
         variant = LearningVariant(param_value=7.0, planned_images=1)
         experiment = learning_state.current_experiment
-        
+
         # Build NJR
         record = controller._build_variant_njr(variant, experiment)
-        
+
         # Verify prompt appears exactly once
         assert record.positive_prompt == "a beautiful landscape"
         assert record.positive_prompt.count("a beautiful landscape") == 1
-        
+
         # Verify no prompt in extra_metadata (metadata only)
         metadata = record.extra_metadata
         assert "prompt" not in metadata
         assert "positive_prompt" not in metadata
 
-    def test_build_variant_njr_for_img2img_uses_input_image(self, controller, learning_state, tmp_path: Path):
+    def test_build_variant_njr_for_img2img_uses_input_image(
+        self, controller, learning_state, tmp_path: Path
+    ):
         input_image = tmp_path / "input.png"
         input_image.write_bytes(b"fake")
 
@@ -223,14 +226,16 @@ class TestLearningControllerNJR:
         assert record.learning_context is not None
         assert record.learning_context.variant_index == 1
 
-    def test_submit_variant_job_uses_job_service(self, controller, learning_state, mock_pipeline_controller):
+    def test_submit_variant_job_uses_job_service(
+        self, controller, learning_state, mock_pipeline_controller
+    ):
         """Test 3: Job submission uses canonical NJR submission path."""
         variant = LearningVariant(param_value=7.0, planned_images=1)
         learning_state.plan.append(variant)
-        
+
         # Submit job
         controller._submit_variant_job(variant)
-        
+
         # Verify JobService was called
         job_service = mock_pipeline_controller._job_service
         assert job_service.submit_njrs.called
@@ -238,27 +243,29 @@ class TestLearningControllerNJR:
         assert len(submitted_records) == 1
         record = submitted_records[0]
         assert isinstance(record, NormalizedJobRecord)
-        
+
         # Verify config propagation
         assert record.base_model == "test_model.safetensors"
         assert record.vae == "test_vae.safetensors"
         assert policy.start_when_idle is False
-        
+
         # Verify variant status updated
         assert variant.status == "queued"
 
-    def test_learning_job_full_config_propagation(self, controller, learning_state, mock_pipeline_controller):
+    def test_learning_job_full_config_propagation(
+        self, controller, learning_state, mock_pipeline_controller
+    ):
         """Test 4: End-to-end config propagation from stage cards to NJR."""
         variant = LearningVariant(param_value=9.0, planned_images=1)
         learning_state.plan.append(variant)
-        
+
         # Submit and capture job
         controller._submit_variant_job(variant)
-        
+
         job_service = mock_pipeline_controller._job_service
         submitted_records, _policy = job_service.submit_njrs.call_args[0]
         record = submitted_records[0]
-        
+
         # Verify complete config chain
         assert record.base_model == "test_model.safetensors"
         assert record.vae == "test_vae.safetensors"
@@ -269,21 +276,22 @@ class TestLearningControllerNJR:
         assert record.width == 512
         assert record.height == 512
         assert record.config["txt2img"]["cfg_scale"] == 9.0
-        
+
     def test_no_packjobentry_imports(self, controller):
         """Test 5: Verify no PackJobEntry or manual queue job shims remain."""
         import inspect
+
         source = inspect.getsource(controller._submit_variant_job)
-        
+
         # Verify no PackJobEntry references (but comment is OK)
-        source_lines = [line for line in source.split('\n') if not line.strip().startswith('#')]
-        source_code = '\n'.join(source_lines)
-        
+        source_lines = [line for line in source.split("\n") if not line.strip().startswith("#")]
+        source_code = "\n".join(source_lines)
+
         assert "from src.gui.app_state_v2 import PackJobEntry" not in source_code
         assert "job_draft.packs" not in source_code
         assert "on_add_job_to_queue_v2" not in source_code
         assert "submit_job_with_run_mode" not in source_code
-        
+
         # Verify NJR usage
         assert "_build_variant_njr" in source
         assert "submit_variant_job" in source

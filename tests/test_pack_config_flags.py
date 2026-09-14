@@ -46,7 +46,9 @@ def test_pack_config_preserves_stage_flags():
         print("  Saved config:")
         print(f"    txt2img_enabled: {pack_config['preset_data']['pipeline']['txt2img_enabled']}")
         print(f"    img2img_enabled: {pack_config['preset_data']['pipeline']['img2img_enabled']}")
-        print(f"    adetailer_enabled: {pack_config['preset_data']['pipeline']['adetailer_enabled']}")
+        print(
+            f"    adetailer_enabled: {pack_config['preset_data']['pipeline']['adetailer_enabled']}"
+        )
         print(f"    upscale_enabled: {pack_config['preset_data']['pipeline']['upscale_enabled']}")
 
         print("\nStep 2: Loading config via ConfigManager.load_pack_config()...")
@@ -158,9 +160,7 @@ def test_different_flag_combinations():
                 print(f"\n  {name}:")
                 for flag_name, expected_value in flags.items():
                     actual_value = loaded_flags.get(flag_name)
-                    print(
-                        f"    {flag_name}: expected={expected_value}, actual={actual_value}"
-                    )
+                    print(f"    {flag_name}: expected={expected_value}, actual={actual_value}")
                     assert actual_value == expected_value, f"{name}: {flag_name} mismatch!"
         finally:
             os.chdir(previous_cwd)

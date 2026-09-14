@@ -91,12 +91,20 @@ def test_main_window_visibility_setting_moves_into_settings_dialog(
             assert harness.controller.app_state.content_visibility_mode == "nsfw"
             assert not hasattr(harness.window.header_zone, "visibility_button")
 
-            harness.window.open_engine_settings_dialog(config_manager=ConfigManager(tmp_path / "presets"))
+            harness.window.open_engine_settings_dialog(
+                config_manager=ConfigManager(tmp_path / "presets")
+            )
             tk_root.update()
             dialog = next(
-                child for child in harness.window.root.winfo_children() if isinstance(child, tk.Toplevel)
+                child
+                for child in harness.window.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
             )
-            panel = next(child for child in dialog.winfo_children() if isinstance(child, EngineSettingsDialog))
+            panel = next(
+                child
+                for child in dialog.winfo_children()
+                if isinstance(child, EngineSettingsDialog)
+            )
             panel._webui_base_url_var.set("http://127.0.0.1:7860")
             panel._content_visibility_mode_var.set("sfw")
             panel._handle_save()
@@ -217,9 +225,7 @@ def test_preview_panel_redacts_explicit_preview_text_live(tk_root: tk.Tk) -> Non
 
 
 @pytest.mark.gui
-def test_review_tab_redacts_source_prompts_live(
-    tk_root: tk.Tk, tmp_path: Path
-) -> None:
+def test_review_tab_redacts_source_prompts_live(tk_root: tk.Tk, tmp_path: Path) -> None:
     image_path = tmp_path / "review" / "explicit.png"
     _write_image(image_path)
     app_state = AppStateV2()
@@ -249,13 +255,13 @@ def test_review_tab_redacts_source_prompts_live(
 
 
 @pytest.mark.gui
-def test_photo_optimize_tab_redacts_baseline_prompts_live(
-    tk_root: tk.Tk, tmp_path: Path
-) -> None:
+def test_photo_optimize_tab_redacts_baseline_prompts_live(tk_root: tk.Tk, tmp_path: Path) -> None:
     store = PhotoOptimizeStore(tmp_path / "photo_optimize")
     image_path = tmp_path / "source" / "portrait.png"
     _write_image(image_path)
-    asset = store.import_photo(image_path, baseline_defaults={"prompt": "nude portrait", "negative_prompt": "bad hands"})
+    asset = store.import_photo(
+        image_path, baseline_defaults={"prompt": "nude portrait", "negative_prompt": "bad hands"}
+    )
     app_state = AppStateV2()
     tab = PhotoOptimizeTabFrameV2(tk_root, app_state=app_state, store=store)
     try:

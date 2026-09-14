@@ -1,4 +1,5 @@
 """Tests for ImageThumbnail widget."""
+
 from __future__ import annotations
 
 import tempfile

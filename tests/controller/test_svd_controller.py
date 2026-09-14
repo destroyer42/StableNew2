@@ -74,7 +74,10 @@ def test_submit_svd_job_persists_resolved_target_dimensions(tmp_path, monkeypatc
         }
     )
 
-    assert controller.submit_svd_job(source_image_path=source_path, config=config) == "job-svd-portrait"
+    assert (
+        controller.submit_svd_job(source_image_path=source_path, config=config)
+        == "job-svd-portrait"
+    )
 
     preprocess = captured["njr"].config["svd_native"]["preprocess"]
     assert preprocess["target_width"] == 640
@@ -143,7 +146,9 @@ def test_submit_svd_job_rejects_missing_rife_runtime(tmp_path, monkeypatch) -> N
         assert "RIFE" in str(exc)
 
 
-def test_submit_svd_job_rejects_unsupported_rife_multiplier_before_preflight(tmp_path, monkeypatch) -> None:
+def test_submit_svd_job_rejects_unsupported_rife_multiplier_before_preflight(
+    tmp_path, monkeypatch
+) -> None:
     source_path = tmp_path / "source.png"
     source_path.write_bytes(b"png")
     app_controller = SimpleNamespace(

@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import logging
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from src.learning.learning_record import LearningRecord
 from src.utils.image_metadata import (
@@ -113,8 +113,12 @@ class ReviewMetadataService:
         return PortableReviewSummary(
             source_type=source_type,
             schema=schema,
-            review_timestamp=self._clean_text(payload.get("review_timestamp") or payload.get("timestamp")),
-            user_rating=payload.get("user_rating") if payload.get("user_rating") is not None else payload.get("rating"),
+            review_timestamp=self._clean_text(
+                payload.get("review_timestamp") or payload.get("timestamp")
+            ),
+            user_rating=payload.get("user_rating")
+            if payload.get("user_rating") is not None
+            else payload.get("rating"),
             user_rating_raw=payload.get("user_rating_raw"),
             quality_label=self._clean_text(payload.get("quality_label")),
             subscores=dict(subscores),
@@ -130,7 +134,9 @@ class ReviewMetadataService:
             negative_prompt_mode=self._clean_text(payload.get("negative_prompt_mode")),
             stages=[str(stage) for stage in stages if str(stage or "").strip()],
             review_context=dict(review_context),
-            review_record_id=self._clean_text(payload.get("review_record_id") or payload.get("run_id")),
+            review_record_id=self._clean_text(
+                payload.get("review_record_id") or payload.get("run_id")
+            ),
         )
 
     def build_review_payload(
@@ -146,7 +152,9 @@ class ReviewMetadataService:
 
         payload: dict[str, Any] = {
             "schema": REVIEW_METADATA_SCHEMA,
-            "review_timestamp": str(getattr(record, "timestamp", "") or metadata.get("review_timestamp") or ""),
+            "review_timestamp": str(
+                getattr(record, "timestamp", "") or metadata.get("review_timestamp") or ""
+            ),
             "source": str(metadata.get("source") or "review_tab"),
             "image_path": str(image_path),
             "user_rating": metadata.get("user_rating"),
@@ -208,7 +216,9 @@ class ReviewMetadataService:
         record: LearningRecord,
     ) -> ReviewMetadataStampResult:
         target_path = Path(image_path)
-        payload = self.build_review_payload(image_path=target_path, feedback=feedback, record=record)
+        payload = self.build_review_payload(
+            image_path=target_path, feedback=feedback, record=record
+        )
 
         embedded_result = write_portable_review_metadata(target_path, payload)
         if embedded_result.success:

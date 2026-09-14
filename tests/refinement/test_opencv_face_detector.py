@@ -4,11 +4,10 @@ from pathlib import Path
 
 import pytest
 
+from src.refinement.detectors.opencv_face_detector import OpenCvFaceDetector
 
 cv2 = pytest.importorskip("cv2")
 np = pytest.importorskip("numpy")
-
-from src.refinement.detectors.opencv_face_detector import OpenCvFaceDetector
 
 
 class _CascadeStub:
@@ -29,8 +28,12 @@ def test_opencv_face_detector_dedupes_overlapping_detections(monkeypatch, tmp_pa
     image_path.write_bytes(b"png")
     detector = OpenCvFaceDetector()
 
-    monkeypatch.setattr(detector._cv2, "imread", lambda _path: np.zeros((100, 100, 3), dtype=np.uint8))
-    monkeypatch.setattr(detector._cv2, "cvtColor", lambda image, _code: np.zeros((100, 100), dtype=np.uint8))
+    monkeypatch.setattr(
+        detector._cv2, "imread", lambda _path: np.zeros((100, 100, 3), dtype=np.uint8)
+    )
+    monkeypatch.setattr(
+        detector._cv2, "cvtColor", lambda image, _code: np.zeros((100, 100), dtype=np.uint8)
+    )
     monkeypatch.setattr(detector._cv2, "flip", lambda image, _flip_code: image)
     detector._frontal = _CascadeStub([[(10, 10, 30, 30)]])
     detector._profile = _CascadeStub([[(12, 12, 30, 30)], []])
@@ -46,8 +49,12 @@ def test_opencv_face_detector_maps_flipped_profile_coordinates(monkeypatch, tmp_
     image_path.write_bytes(b"png")
     detector = OpenCvFaceDetector()
 
-    monkeypatch.setattr(detector._cv2, "imread", lambda _path: np.zeros((80, 100, 3), dtype=np.uint8))
-    monkeypatch.setattr(detector._cv2, "cvtColor", lambda image, _code: np.zeros((80, 100), dtype=np.uint8))
+    monkeypatch.setattr(
+        detector._cv2, "imread", lambda _path: np.zeros((80, 100, 3), dtype=np.uint8)
+    )
+    monkeypatch.setattr(
+        detector._cv2, "cvtColor", lambda image, _code: np.zeros((80, 100), dtype=np.uint8)
+    )
     monkeypatch.setattr(detector._cv2, "flip", lambda image, _flip_code: image)
     detector._frontal = _CascadeStub([[]])
     detector._profile = _CascadeStub([[], [(10, 5, 20, 20)]])

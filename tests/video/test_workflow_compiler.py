@@ -5,7 +5,9 @@ from pathlib import Path
 from src.video import VideoExecutionRequest, WorkflowCompiler, build_default_workflow_registry
 
 
-def test_workflow_compiler_builds_deterministic_payload_for_builtin_ltx_workflow(tmp_path: Path) -> None:
+def test_workflow_compiler_builds_deterministic_payload_for_builtin_ltx_workflow(
+    tmp_path: Path,
+) -> None:
     registry = build_default_workflow_registry()
     compiler = WorkflowCompiler()
     request = VideoExecutionRequest(
@@ -71,7 +73,9 @@ def test_workflow_compiler_fails_fast_when_required_anchor_is_missing(tmp_path: 
         raise AssertionError("Expected missing required workflow anchor to fail compilation")
 
 
-def test_workflow_compiler_builds_conditioned_payload_from_nested_stage_config(tmp_path: Path) -> None:
+def test_workflow_compiler_builds_conditioned_payload_from_nested_stage_config(
+    tmp_path: Path,
+) -> None:
     registry = build_default_workflow_registry()
     compiler = WorkflowCompiler()
     request = VideoExecutionRequest(
@@ -117,4 +121,6 @@ def test_workflow_compiler_builds_conditioned_payload_from_nested_stage_config(t
     assert compiled.compiled_inputs["guidance_end"] == 0.9
     assert compiled.backend_payload["prompt"]["3"]["inputs"]["image"] == str(tmp_path / "depth.png")
     assert compiled.backend_payload["prompt"]["4"]["inputs"]["controlnet_model"] == "depth"
-    assert compiled.backend_payload["prompt"]["5"]["inputs"]["filename_prefix"] == "clip_conditioned"
+    assert (
+        compiled.backend_payload["prompt"]["5"]["inputs"]["filename_prefix"] == "clip_conditioned"
+    )

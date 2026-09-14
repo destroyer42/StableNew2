@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-
 LABEL_COLUMN_MIN_WIDTH = 88
 PRIMARY_CONTROL_MIN_WIDTH = 180
 SECONDARY_CONTROL_MIN_WIDTH = 110
@@ -26,7 +25,7 @@ def build_form_column_specs(
     secondary_weight: int = 1,
 ) -> tuple[dict[str, int], ...]:
     """Return normalized grid column specs for shared form rows."""
-    columns = set(int(index) for index in label_columns)
+    columns = {int(index) for index in label_columns}
     columns.update(int(index) for index in primary_columns)
     columns.update(int(index) for index in secondary_columns)
     specs: list[dict[str, int]] = []
@@ -34,10 +33,16 @@ def build_form_column_specs(
         if index in label_columns:
             specs.append({"index": index, "weight": 0, "minsize": int(label_min_width)})
         elif index in primary_columns:
-            specs.append({"index": index, "weight": int(primary_weight), "minsize": int(primary_min_width)})
+            specs.append(
+                {"index": index, "weight": int(primary_weight), "minsize": int(primary_min_width)}
+            )
         else:
             specs.append(
-                {"index": index, "weight": int(secondary_weight), "minsize": int(secondary_min_width)}
+                {
+                    "index": index,
+                    "weight": int(secondary_weight),
+                    "minsize": int(secondary_min_width),
+                }
             )
     return tuple(specs)
 

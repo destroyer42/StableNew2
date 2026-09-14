@@ -1,10 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
-from tempfile import TemporaryDirectory
-from unittest.mock import patch
-
 import tkinter as tk
+from pathlib import Path
+from unittest.mock import patch
 
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
@@ -69,7 +67,9 @@ def test_review_tab_exposes_overview_panel(tk_root: tk.Tk) -> None:
         assert isinstance(tab.overview_panel, TabOverviewPanel)
         assert tab.overview_panel.content.tab_id == "review"
         assert tab.overview_panel.content.tab_name == "Review"
-        assert "advanced reprocess workspace" in tab.overview_panel.details_label.cget("text").lower()
+        assert (
+            "advanced reprocess workspace" in tab.overview_panel.details_label.cget("text").lower()
+        )
     finally:
         tab.destroy()
 
@@ -79,9 +79,12 @@ def test_learning_tab_exposes_overview_panel(tk_root: tk.Tk, tmp_path: Path) -> 
     experiments_root = tmp_path / "experiments"
     store = UIStateStore(state_path)
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             tk_root,
@@ -91,7 +94,9 @@ def test_learning_tab_exposes_overview_panel(tk_root: tk.Tk, tmp_path: Path) -> 
         try:
             assert isinstance(tab.overview_panel, TabOverviewPanel)
             assert tab.overview_panel.content.tab_id == "learning"
-            assert "evidence-and-experiment" in tab.overview_panel.details_label.cget("text").lower()
+            assert (
+                "evidence-and-experiment" in tab.overview_panel.details_label.cget("text").lower()
+            )
         finally:
             tab.destroy()
 

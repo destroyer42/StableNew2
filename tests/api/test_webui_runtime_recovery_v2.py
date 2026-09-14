@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from types import SimpleNamespace
-
 from src.api.webui_process_manager import WebUIProcessConfig, WebUIProcessManager
 
 
@@ -14,6 +12,7 @@ def test_restart_webui_applies_guarded_profile_override(monkeypatch, tmp_path) -
             base_url="http://127.0.0.1:7860",
         )
     )
+    monkeypatch.setattr(WebUIProcessManager, "owns_process", property(lambda self: True))
 
     monkeypatch.setattr(
         "src.utils.single_instance.SingleInstanceLock.is_gui_running",
@@ -42,4 +41,3 @@ def test_restart_webui_applies_guarded_profile_override(monkeypatch, tmp_path) -
     assert manager.restart_webui(profile_override="sdxl_guarded", max_attempts=1) is True
     assert manager.get_launch_profile() == "sdxl_guarded"
     assert "--medvram-sdxl" in manager._config.command
-

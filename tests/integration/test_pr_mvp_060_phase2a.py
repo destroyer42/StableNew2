@@ -10,7 +10,6 @@ import pytest
 from src.controller.job_execution_controller import JobExecutionController
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
-from src.controller.runtime_state import CancellationError
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.pipeline.executor import Pipeline
 from src.queue.job_model import JobStatus
@@ -114,7 +113,9 @@ def test_queued_cancel_is_durable_and_never_dispatches_cancelled_job(tmp_path) -
 
     service.cancel_job(cancelled.job_id, reason="user_cancelled")
     runner.start()
-    _wait_until(lambda: queue.repository.get_job_model(following.job_id).status == JobStatus.COMPLETED)
+    _wait_until(
+        lambda: queue.repository.get_job_model(following.job_id).status == JobStatus.COMPLETED
+    )
     runner.stop()
 
     stored = queue.repository.get_job_model(cancelled.job_id)

@@ -1,6 +1,5 @@
 """Tests for JobHistoryPanelV2 display enhancements (model, seed, duration)."""
 
-import tkinter as tk
 import unittest
 from datetime import datetime, timedelta
 from unittest.mock import Mock
@@ -23,7 +22,7 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
 
     def tearDown(self) -> None:
         """Clean up test fixtures."""
-        if hasattr(self, 'panel'):
+        if hasattr(self, "panel"):
             try:
                 self.panel.destroy()
             except Exception:
@@ -32,11 +31,13 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
     def test_columns_include_model_and_seed(self) -> None:
         """Test that column configuration includes model and seed columns."""
         columns = self.panel.history_tree["columns"]
-        
+
         assert "model" in columns
         assert "seed" in columns
-        assert len(columns) == 11  # time, status, model, pack, row, v, b, duration, seed, images, output
-        
+        assert (
+            len(columns) == 11
+        )  # time, status, model, pack, row, v, b, duration, seed, images, output
+
         # Verify correct order
         column_list = list(columns)
         assert column_list[2] == "model"
@@ -54,9 +55,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
                 }
             },
         )
-        
+
         model = self.panel._extract_model(entry)
-        
+
         assert "epicrealismXL" in model  # May be truncated
         assert model != "-"
 
@@ -68,9 +69,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
             status=JobStatus.COMPLETED,
             result={"model": "sd_xl_base_1.0"},
         )
-        
+
         model = self.panel._extract_model(entry)
-        
+
         assert "sd_xl_base" in model
         assert model != "-"
 
@@ -81,9 +82,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
             created_at=datetime.now(),
             status=JobStatus.COMPLETED,
         )
-        
+
         model = self.panel._extract_model(entry)
-        
+
         assert model == "-"
 
     def test_extract_seed_from_result(self) -> None:
@@ -94,9 +95,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
             status=JobStatus.COMPLETED,
             result={"actual_seed": 123456789},
         )
-        
+
         seed = self.panel._extract_seed(entry)
-        
+
         assert seed == "123456789"
 
     def test_extract_seed_random_display(self) -> None:
@@ -111,9 +112,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
                 }
             },
         )
-        
+
         seed = self.panel._extract_seed(entry)
-        
+
         assert seed == "Random"
 
     def test_extract_seed_from_snapshot(self) -> None:
@@ -128,9 +129,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
                 }
             },
         )
-        
+
         seed = self.panel._extract_seed(entry)
-        
+
         assert seed == "987654321"
 
     def test_ensure_duration_from_duration_ms(self) -> None:
@@ -141,16 +142,16 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
             status=JobStatus.COMPLETED,
             duration_ms=120000,  # 2 minutes
         )
-        
+
         duration = self.panel._ensure_duration(entry)
-        
+
         assert duration == "2m 0s"
 
     def test_ensure_duration_from_timestamps(self) -> None:
         """Test duration calculates from timestamps when duration_ms missing."""
         now = datetime.now()
         start = now - timedelta(seconds=75)
-        
+
         entry = JobHistoryEntry(
             job_id="test-123",
             created_at=start,
@@ -158,9 +159,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
             completed_at=now,
             status=JobStatus.COMPLETED,
         )
-        
+
         duration = self.panel._ensure_duration(entry)
-        
+
         # Should be around 1m 15s
         assert "1m" in duration or "75s" in duration
         assert duration != "-"
@@ -172,9 +173,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
             created_at=datetime.now(),
             status=JobStatus.COMPLETED,
         )
-        
+
         duration = self.panel._ensure_duration(entry)
-        
+
         assert duration == "-"
 
     def test_entry_values_returns_all_columns(self) -> None:
@@ -191,9 +192,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
             },
             duration_ms=30000,
         )
-        
+
         values = self.panel._entry_values(entry)
-        
+
         assert len(values) == 11
         assert isinstance(values, tuple)
         # Verify all fields are strings
@@ -208,9 +209,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
             status=JobStatus.COMPLETED,
             payload_summary="Old job without NJR snapshot",
         )
-        
+
         values = self.panel._entry_values(entry)
-        
+
         # Should not raise error and return all visible columns
         assert len(values) == 11
         # Model and seed should show '-'
@@ -229,9 +230,9 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
                 }
             },
         )
-        
+
         full_model = self.panel._extract_full_model(entry)
-        
+
         assert full_model == "very_long_model_name_that_would_be_truncated_in_column"
         assert len(full_model) > 18  # Would be truncated in display
 
@@ -239,10 +240,10 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
         """Test duration formatting for various time spans."""
         # Test seconds
         assert self.panel._format_duration_ms(5000) == "5s"
-        
+
         # Test minutes
         assert self.panel._format_duration_ms(90000) == "1m 30s"
-        
+
         # Test hours
         assert self.panel._format_duration_ms(7260000) == "2h 1m"
 
@@ -274,13 +275,13 @@ class TestJobHistoryPanelDisplay(unittest.TestCase):
                 duration_ms=25000,
             ),
         ]
-        
+
         self.panel._populate_history(entries)
-        
+
         # Verify entries were added
         children = self.panel.history_tree.get_children()
         assert len(children) == 2
-        
+
         # Verify first entry has correct number of columns
         values = self.panel.history_tree.item(children[0])["values"]
         assert len(values) == 11

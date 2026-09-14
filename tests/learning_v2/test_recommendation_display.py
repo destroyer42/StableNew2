@@ -2,6 +2,7 @@
 
 PR-LEARN-008: Live Recommendation Display
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -205,8 +206,8 @@ def test_rating_triggers_recommendation_refresh():
         )
 
         # Mock the refresh_recommendations method
-        with patch.object(controller, 'refresh_recommendations') as mock_refresh:
-            with patch.object(controller, '_update_variant_ratings') as mock_update:
+        with patch.object(controller, "refresh_recommendations") as mock_refresh:
+            with patch.object(controller, "_update_variant_ratings") as mock_update:
                 # Record rating
                 controller.record_rating("test_image.png", 4, "Test note")
 

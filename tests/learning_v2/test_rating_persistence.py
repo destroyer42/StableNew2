@@ -1,4 +1,5 @@
 """Tests for rating persistence and retrieval."""
+
 from __future__ import annotations
 
 import json
@@ -103,7 +104,9 @@ def test_get_ratings_malformed_json():
         # Write malformed JSON
         with open(path, "w") as f:
             f.write("{invalid json}\n")
-            f.write('{"metadata": {"experiment_name": "exp", "image_path": "a.png", "user_rating": 5}}\n')
+            f.write(
+                '{"metadata": {"experiment_name": "exp", "image_path": "a.png", "user_rating": 5}}\n'
+            )
 
         # Should skip malformed line and read valid one
         ratings = writer.get_ratings_for_experiment("exp")
@@ -134,7 +137,9 @@ def test_get_ratings_missing_fields():
         records = [
             {"metadata": {"experiment_name": "exp", "image_path": "a.png"}},  # Missing rating
             {"metadata": {"experiment_name": "exp", "user_rating": 4}},  # Missing image_path
-            {"metadata": {"experiment_name": "exp", "image_path": "b.png", "user_rating": 5}},  # Valid
+            {
+                "metadata": {"experiment_name": "exp", "image_path": "b.png", "user_rating": 5}
+            },  # Valid
         ]
 
         with open(path, "w") as f:

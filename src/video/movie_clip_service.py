@@ -129,7 +129,9 @@ class MovieClipService:
             has_frame_source=bool(frame_paths),
         )
         output_path = Path(assembly_result.primary_path)
-        manifest_path = Path(assembly_result.manifest_path) if assembly_result.manifest_path else None
+        manifest_path = (
+            Path(assembly_result.manifest_path) if assembly_result.manifest_path else None
+        )
 
         logger.info(
             f"[MovieClipService] Clip built: {output_path.name} "
@@ -164,7 +166,12 @@ class MovieClipService:
             return ClipResult.failure(f"Invalid source bundle: {exc}")
 
         request = ClipRequest(
-            image_paths=[Path(item) for item in (source.resolved_frame_paths() or source.resolved_segment_output_paths())],
+            image_paths=[
+                Path(item)
+                for item in (
+                    source.resolved_frame_paths() or source.resolved_segment_output_paths()
+                )
+            ],
             output_dir=output_dir,
             settings=settings or ClipSettings(),
             clip_name=clip_name or source.source_id or "clip",

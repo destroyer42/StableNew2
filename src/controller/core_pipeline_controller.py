@@ -45,7 +45,9 @@ class CorePipelineController:
 
     _JOIN_TIMEOUT = 5.0
 
-    def __init__(self, state_manager: StateManager | None = None, app_controller: Any | None = None):
+    def __init__(
+        self, state_manager: StateManager | None = None, app_controller: Any | None = None
+    ):
         self.state_manager = state_manager or StateManager()
         self.cancel_token = CancelToken()
         self.log_queue: queue.Queue[LogMessage] = queue.Queue()
@@ -202,10 +204,9 @@ class CorePipelineController:
 
         with self._progress_lock:
             previous_progress = self._last_progress
-            meaningful_progress = (
-                str(previous_progress.get("stage") or "") != str(stage or "")
-                or float(percent) > float(previous_progress.get("percent") or 0.0)
-            )
+            meaningful_progress = str(previous_progress.get("stage") or "") != str(
+                stage or ""
+            ) or float(percent) > float(previous_progress.get("percent") or 0.0)
             self._last_progress = {
                 "stage": stage,
                 "percent": float(percent),
@@ -213,7 +214,9 @@ class CorePipelineController:
             }
             if meaningful_progress and self._app_controller is not None:
                 try:
-                    notify_runner_activity = getattr(self._app_controller, "notify_runner_activity", None)
+                    notify_runner_activity = getattr(
+                        self._app_controller, "notify_runner_activity", None
+                    )
                     if callable(notify_runner_activity):
                         notify_runner_activity()
                 except Exception:

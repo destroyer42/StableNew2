@@ -8,10 +8,9 @@ assembly has one provenance-aware result surface.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal
-
 
 AssemblySourceKind = Literal[
     "sequence",
@@ -38,7 +37,7 @@ class AssemblySegmentSource:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AssemblySegmentSource":
+    def from_dict(cls, data: dict[str, Any]) -> AssemblySegmentSource:
         return cls(
             segment_index=int(data.get("segment_index", 0)),
             segment_id=str(data.get("segment_id", "")),
@@ -76,7 +75,7 @@ class AssembledSequenceInput:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AssembledSequenceInput":
+    def from_dict(cls, data: dict[str, Any]) -> AssembledSequenceInput:
         return cls(
             source_kind=data.get("source_kind", "manual_frames"),
             source_id=str(data.get("source_id", "")),
@@ -93,7 +92,7 @@ class AssembledSequenceInput:
         )
 
     @classmethod
-    def from_sequence_artifact(cls, data: dict[str, Any]) -> "AssembledSequenceInput":
+    def from_sequence_artifact(cls, data: dict[str, Any]) -> AssembledSequenceInput:
         segment_sources = [
             AssemblySegmentSource.from_dict(item)
             for item in data.get("segment_provenance") or []
@@ -129,7 +128,7 @@ class AssembledSequenceInput:
         data: dict[str, Any],
         *,
         source_kind: AssemblySourceKind = "video_bundle",
-    ) -> "AssembledSequenceInput":
+    ) -> AssembledSequenceInput:
         source_paths: list[str] = [str(item) for item in data.get("output_paths") or [] if item]
         if not source_paths and data.get("primary_path"):
             source_paths = [str(data.get("primary_path"))]
@@ -166,7 +165,7 @@ class AssembledSequenceInput:
         *,
         source_kind: AssemblySourceKind,
         source_id: str = "manual",
-    ) -> "AssembledSequenceInput":
+    ) -> AssembledSequenceInput:
         resolved_paths = [str(Path(item)) for item in paths if item]
         frame_paths = list(resolved_paths) if source_kind == "manual_frames" else []
         return cls(
@@ -312,7 +311,7 @@ class AssembledVideoResult:
     manifest_path: str | None = None
     clip_name: str = ""
     error: str = ""
-    created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
 
     @classmethod
     def failure(
@@ -322,7 +321,7 @@ class AssembledVideoResult:
         source: AssembledSequenceInput | None = None,
         clip_name: str = "",
         export_settings: dict[str, Any] | None = None,
-    ) -> "AssembledVideoResult":
+    ) -> AssembledVideoResult:
         return cls(
             success=False,
             source=source,

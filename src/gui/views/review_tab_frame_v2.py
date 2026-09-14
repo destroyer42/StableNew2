@@ -5,17 +5,24 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
-from src.gui.layout_v2 import configure_grid_columns
-from src.queue.job_history_store import JobHistoryEntry
+from src.controller.content_visibility_resolver import ContentVisibilityResolver
+from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
+from src.gui.controllers.review_workflow_adapter import (
+    ReviewWorkflowAdapter,
+    ReviewWorkspaceHandoff,
+)
 from src.gui.help_text.workflow_guidance_v2 import (
     REVIEW_DEFAULT_WORKFLOW_HINT,
     build_review_action_guidance,
     get_review_handoff_hint,
 )
-from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
-from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter, ReviewWorkspaceHandoff
-from src.gui.theme_v2 import apply_toplevel_theme, style_canvas_widget, style_listbox_widget, style_text_widget
+from src.gui.layout_v2 import configure_grid_columns
+from src.gui.theme_v2 import (
+    apply_toplevel_theme,
+    style_canvas_widget,
+    style_listbox_widget,
+    style_text_widget,
+)
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
 from src.gui.view_contracts.pipeline_layout_contract import (
@@ -26,6 +33,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
+from src.queue.job_history_store import JobHistoryEntry
 from src.utils.image_metadata import (
     extract_embedded_metadata,
     resolve_model_vae_fields,
@@ -281,7 +289,9 @@ class ReviewTabFrame(ttk.Frame):
             command=self._open_metadata_inspector,
         ).pack(side="left", padx=(6, 0))
 
-        self.preview = ThumbnailWidget(right, width=620, height=620, placeholder_text="Select an image")
+        self.preview = ThumbnailWidget(
+            right, width=620, height=620, placeholder_text="Select an image"
+        )
         self.preview.grid(row=1, column=0, sticky="n", pady=(0, 8))
         self.preview._canvas.bind("<Double-Button-1>", lambda _event: self._open_compare_viewer())
 
@@ -634,7 +644,9 @@ class ReviewTabFrame(ttk.Frame):
             width=4,
             style="Dark.TSpinbox",
         ).grid(row=0, column=1, sticky="w", padx=(6, 12))
-        ttk.Label(subscores, text="Composition", style="Dark.TLabel").grid(row=0, column=2, sticky="w")
+        ttk.Label(subscores, text="Composition", style="Dark.TLabel").grid(
+            row=0, column=2, sticky="w"
+        )
         ttk.Spinbox(
             subscores,
             from_=1,
@@ -644,7 +656,9 @@ class ReviewTabFrame(ttk.Frame):
             width=4,
             style="Dark.TSpinbox",
         ).grid(row=0, column=3, sticky="w", padx=(6, 12))
-        ttk.Label(subscores, text="Prompt Fit", style="Dark.TLabel").grid(row=0, column=4, sticky="w")
+        ttk.Label(subscores, text="Prompt Fit", style="Dark.TLabel").grid(
+            row=0, column=4, sticky="w"
+        )
         ttk.Spinbox(
             subscores,
             from_=1,
@@ -823,7 +837,11 @@ class ReviewTabFrame(ttk.Frame):
 
     def _refresh_prior_review_summary(self, image_path: Path) -> None:
         learning_controller = self._resolve_learning_controller()
-        getter = getattr(learning_controller, "get_prior_review_summary", None) if learning_controller is not None else None
+        getter = (
+            getattr(learning_controller, "get_prior_review_summary", None)
+            if learning_controller is not None
+            else None
+        )
         if not callable(getter):
             self._prior_review_summary_var.set("Prior Review Summary: unavailable")
             return
@@ -853,8 +871,10 @@ class ReviewTabFrame(ttk.Frame):
         prompt_changed = bool(
             str(summary.get("prompt_delta") or "").strip()
             or str(summary.get("negative_prompt_delta") or "").strip()
-            or str(summary.get("prompt_before") or "").strip() != str(summary.get("prompt_after") or "").strip()
-            or str(summary.get("negative_prompt_before") or "").strip() != str(summary.get("negative_prompt_after") or "").strip()
+            or str(summary.get("prompt_before") or "").strip()
+            != str(summary.get("prompt_after") or "").strip()
+            or str(summary.get("negative_prompt_before") or "").strip()
+            != str(summary.get("negative_prompt_after") or "").strip()
         )
         bits = [f"Source: {source_label}"]
         if rating is not None:
@@ -906,7 +926,11 @@ class ReviewTabFrame(ttk.Frame):
             messagebox.showinfo("Metadata Inspector", "Select an image first.")
             return
         learning_controller = self._resolve_learning_controller()
-        inspector = getattr(learning_controller, "inspect_artifact_metadata", None) if learning_controller is not None else None
+        inspector = (
+            getattr(learning_controller, "inspect_artifact_metadata", None)
+            if learning_controller is not None
+            else None
+        )
         if not callable(inspector):
             messagebox.showerror("Metadata Inspector", "Metadata inspector is unavailable.")
             return
@@ -937,7 +961,11 @@ class ReviewTabFrame(ttk.Frame):
         if image_path is None:
             return None
         source_metadata = self._lookup_handoff_source_metadata(image_path)
-        selection_meta = source_metadata.get("curation_source_selection") if isinstance(source_metadata, dict) else None
+        selection_meta = (
+            source_metadata.get("curation_source_selection")
+            if isinstance(source_metadata, dict)
+            else None
+        )
         if not isinstance(selection_meta, dict):
             return None
         candidate_id = str(selection_meta.get("candidate_id") or "").strip()
@@ -946,7 +974,9 @@ class ReviewTabFrame(ttk.Frame):
         learning_controller = self._resolve_learning_controller()
         if learning_controller is None:
             return None
-        getter = getattr(learning_controller, "get_staged_curation_candidate_latest_descendant", None)
+        getter = getattr(
+            learning_controller, "get_staged_curation_candidate_latest_descendant", None
+        )
         if not callable(getter):
             return None
         latest = getter(candidate_id)
@@ -956,7 +986,9 @@ class ReviewTabFrame(ttk.Frame):
         image_path = self._selected_image_path
         if image_path is None:
             if show_errors:
-                messagebox.showinfo("Compare unavailable", "Select a staged-curation source image first.")
+                messagebox.showinfo(
+                    "Compare unavailable", "Select a staged-curation source image first."
+                )
             return False
         if not PIL_AVAILABLE:
             if show_errors:
@@ -1065,8 +1097,15 @@ class ReviewTabFrame(ttk.Frame):
 
         nav = ttk.Frame(frame, style="Panel.TFrame")
         nav.grid(row=0, column=0, sticky="ew", pady=(0, 6))
-        ttk.Button(nav, text="Prev", style="Dark.TButton", command=self._show_previous_image_and_refresh_viewer).pack(side="left")
-        ttk.Button(nav, text="Next", style="Dark.TButton", command=self._show_next_image_and_refresh_viewer).pack(side="left", padx=(6, 0))
+        ttk.Button(
+            nav,
+            text="Prev",
+            style="Dark.TButton",
+            command=self._show_previous_image_and_refresh_viewer,
+        ).pack(side="left")
+        ttk.Button(
+            nav, text="Next", style="Dark.TButton", command=self._show_next_image_and_refresh_viewer
+        ).pack(side="left", padx=(6, 0))
         ttk.Label(
             nav,
             text="Left/Right arrows cycle through the loaded review images",
@@ -1130,13 +1169,23 @@ class ReviewTabFrame(ttk.Frame):
             return
         importer = getattr(learning_controller, "import_review_images_to_staged_curation", None)
         if not callable(importer):
-            messagebox.showerror("Unsupported", "Connected learning controller does not support staged-curation import.")
+            messagebox.showerror(
+                "Unsupported",
+                "Connected learning controller does not support staged-curation import.",
+            )
             return
-        group_id = importer([str(path) for path in selected], display_name=self._build_import_display_name(selected))
+        group_id = importer(
+            [str(path) for path in selected], display_name=self._build_import_display_name(selected)
+        )
         if not group_id:
-            messagebox.showerror("Import failed", "Unable to build a staged-curation group from the selected images.")
+            messagebox.showerror(
+                "Import failed", "Unable to build a staged-curation group from the selected images."
+            )
             return
-        messagebox.showinfo("Imported", f"Imported {len(selected)} image(s) into Staged Curation.\nGroup: {group_id}")
+        messagebox.showinfo(
+            "Imported",
+            f"Imported {len(selected)} image(s) into Staged Curation.\nGroup: {group_id}",
+        )
 
     def _on_open_history_import_picker(self) -> None:
         history_items = list(getattr(self.app_state, "history_items", []) or [])
@@ -1220,15 +1269,21 @@ class ReviewTabFrame(ttk.Frame):
             return
         importer = getattr(learning_controller, "import_history_entry_to_staged_curation", None)
         if not callable(importer):
-            messagebox.showerror("Unsupported", "Connected learning controller does not support history import.")
+            messagebox.showerror(
+                "Unsupported", "Connected learning controller does not support history import."
+            )
             return
         group_id = importer(entry)
         if not group_id:
-            messagebox.showerror("Import failed", "No image outputs were found for the selected history job.")
+            messagebox.showerror(
+                "Import failed", "No image outputs were found for the selected history job."
+            )
             return
         if self._history_import_window and self._history_import_window.winfo_exists():
             self._history_import_window.destroy()
-        messagebox.showinfo("Imported", f"Imported history job into Staged Curation.\nGroup: {group_id}")
+        messagebox.showinfo(
+            "Imported", f"Imported history job into Staged Curation.\nGroup: {group_id}"
+        )
 
     def _find_history_entry(self, job_id: str) -> JobHistoryEntry | None:
         history_items = list(getattr(self.app_state, "history_items", []) or [])
@@ -1271,7 +1326,9 @@ class ReviewTabFrame(ttk.Frame):
 
     def _apply_content_visibility_mode(self) -> None:
         resolver = self._visibility_resolver()
-        prompt_value = resolver.redact_text(self._selected_base_prompt, item=self._current_visibility_subject())
+        prompt_value = resolver.redact_text(
+            self._selected_base_prompt, item=self._current_visibility_subject()
+        )
         negative_value = resolver.redact_text(
             self._selected_base_negative_prompt,
             item=self._current_visibility_subject(),
@@ -1282,7 +1339,9 @@ class ReviewTabFrame(ttk.Frame):
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(
-            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            mode
+            or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw")
+            or "nsfw"
         )
         self._pending_visibility_refresh = False
         self._apply_content_visibility_mode()
@@ -1292,7 +1351,8 @@ class ReviewTabFrame(ttk.Frame):
         if not bool(self.winfo_ismapped()):
             self._pending_visibility_refresh = True
             self._content_visibility_mode = str(
-                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw")
+                or "nsfw"
             )
             return
         self.on_content_visibility_mode_changed()
@@ -1300,7 +1360,9 @@ class ReviewTabFrame(ttk.Frame):
     def _on_map(self, _event=None) -> None:
         if not self._pending_visibility_refresh:
             return
-        self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
+        self.after_idle(
+            lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode)
+        )
 
     def _set_readonly_text(self, widget: tk.Text, value: str) -> None:
         widget.configure(state="normal")
@@ -1389,7 +1451,11 @@ class ReviewTabFrame(ttk.Frame):
         widget.insert("1.0", value or "")
 
     def _reset_mode_edits_for_current_image(self) -> None:
-        self._prompt_mode_edits = {"append": "", "replace": "", "modify": self._selected_base_prompt}
+        self._prompt_mode_edits = {
+            "append": "",
+            "replace": "",
+            "modify": self._selected_base_prompt,
+        }
         self._negative_mode_edits = {
             "append": "",
             "replace": "",
@@ -1460,11 +1526,15 @@ class ReviewTabFrame(ttk.Frame):
             if callable(handler):
                 source_metadata_by_image = None
                 if self._active_handoff is not None:
-                    source_map = dict(getattr(self._active_handoff, "source_metadata_by_path", {}) or {})
+                    source_map = dict(
+                        getattr(self._active_handoff, "source_metadata_by_path", {}) or {}
+                    )
                     if source_map:
                         source_metadata_by_image = {}
                         for target in targets:
-                            source_metadata = source_map.get(str(target)) or source_map.get(str(target.resolve()))
+                            source_metadata = source_map.get(str(target)) or source_map.get(
+                                str(target.resolve())
+                            )
                             if isinstance(source_metadata, dict):
                                 source_metadata_by_image[str(target)] = source_metadata
                 submitted = handler(
@@ -1524,7 +1594,9 @@ class ReviewTabFrame(ttk.Frame):
             return
         payload = self._build_feedback_payload(self._selected_image_path)
         if payload is None:
-            messagebox.showerror("Save failed", "Unable to build feedback payload for selected image.")
+            messagebox.showerror(
+                "Save failed", "Unable to build feedback payload for selected image."
+            )
             return
         try:
             record = save(payload)
@@ -1595,7 +1667,9 @@ class ReviewTabFrame(ttk.Frame):
             return
         undo = getattr(learning_controller, "undo_review_feedback", None)
         if not callable(undo):
-            messagebox.showerror("Unsupported", "Connected learning controller does not support undo.")
+            messagebox.showerror(
+                "Unsupported", "Connected learning controller does not support undo."
+            )
             return
         if not self._feedback_undo_stack:
             messagebox.showinfo("Nothing to undo", "No saved feedback actions to undo.")

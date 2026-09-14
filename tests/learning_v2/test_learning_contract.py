@@ -12,7 +12,10 @@ def test_learning_contract_imports_and_returns_placeholders() -> None:
         {
             "runs": [
                 {"id": 1, "prompt_optimizer_learning": {"preset_id": "score_classifier_v1"}},
-                {"id": 2, "metadata": {"prompt_optimizer_learning": {"preset_id": "score_classifier_v1"}}},
+                {
+                    "id": 2,
+                    "metadata": {"prompt_optimizer_learning": {"preset_id": "score_classifier_v1"}},
+                },
             ]
         }
     )

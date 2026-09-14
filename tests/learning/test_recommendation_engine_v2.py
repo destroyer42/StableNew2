@@ -85,7 +85,9 @@ def test_recommendations_stratify_by_secondary_motion_context(tmp_path) -> None:
         records_path,
         [
             {
-                **_record(rating=5, stage="video_workflow", sampler="Euler a", prompt="portrait studio"),
+                **_record(
+                    rating=5, stage="video_workflow", sampler="Euler a", prompt="portrait studio"
+                ),
                 "metadata": {
                     "user_rating": 5,
                     "stage": "video_workflow",
@@ -101,7 +103,9 @@ def test_recommendations_stratify_by_secondary_motion_context(tmp_path) -> None:
                 },
             },
             {
-                **_record(rating=2, stage="video_workflow", sampler="DPM++ 2M", prompt="portrait studio"),
+                **_record(
+                    rating=2, stage="video_workflow", sampler="DPM++ 2M", prompt="portrait studio"
+                ),
                 "metadata": {
                     "user_rating": 2,
                     "stage": "video_workflow",
@@ -139,4 +143,3 @@ def test_recommendations_stratify_by_secondary_motion_context(tmp_path) -> None:
     assert best.recommended_value == "Euler a"
     assert "comfy" in best.context_key
     assert "workflow_motion_v1" in best.context_key
-

@@ -59,6 +59,7 @@ _LOG_REQUIRED_FIELDS: tuple[str, ...] = (
     "outcome",
 )
 
+
 def get_structured_logger_registry_count() -> int:
     """Return the current count of active StructuredLogger instances."""
     return len(_structured_logger_registry)
@@ -102,54 +103,54 @@ def install_async_logging(
 ) -> QueueListener | None:
     """
     PR-HARDEN-002: Install async logging to prevent UI thread blocking.
-    
+
     Wraps the provided handlers with a QueueHandler/QueueListener pattern.
     Log records are placed on a queue and processed by a background thread,
     preventing synchronous file I/O from blocking the calling thread.
-    
+
     Args:
         *handlers: One or more logging handlers to wrap asynchronously
         queue_size: Maximum queue size (default 10000, drops oldest on overflow)
-        
+
     Returns:
         QueueListener if installed, None if no handlers provided
-        
+
     Usage:
         handler = logging.FileHandler("app.log")
         listener = install_async_logging(handler)
         # At shutdown: listener.stop()
     """
     global _async_log_queue, _async_queue_listener
-    
+
     if not handlers:
         return None
-    
+
     # Create bounded queue to prevent memory exhaustion
     _async_log_queue = queue.Queue(maxsize=queue_size)
-    
+
     # Create listener that processes records from queue
     _async_queue_listener = QueueListener(
         _async_log_queue,
         *handlers,
         respect_handler_level=True,
     )
-    
+
     # Start background processing thread
     _async_queue_listener.start()
-    
+
     # Register cleanup at exit
     atexit.register(_shutdown_async_logging)
-    
+
     return _async_queue_listener
 
 
 def get_async_queue_handler() -> QueueHandler | None:
     """
     PR-HARDEN-002: Get a QueueHandler for the async logging queue.
-    
+
     Returns a handler that can be added to loggers. Records sent to this
     handler are processed asynchronously by the background listener.
-    
+
     Returns:
         QueueHandler if async logging is installed, None otherwise
     """
@@ -225,7 +226,7 @@ class JsonlFileHandler(RotatingFileHandler):
     def doRollover(self) -> None:
         """
         Override doRollover to handle Windows file locking issues.
-        
+
         On Windows, os.rename() fails with PermissionError if the target file
         is open by another process/thread. This override closes the file first,
         does the rotation, then reopens it.
@@ -233,11 +234,11 @@ class JsonlFileHandler(RotatingFileHandler):
         if self.stream:
             self.stream.close()
             self.stream = None  # type: ignore
-        
+
         try:
             # Perform rotation with file closed
             super().doRollover()
-        except (PermissionError, OSError) as e:
+        except (PermissionError, OSError):
             # Windows file locking issue - log silently failed, continue without rotation
             # This prevents crash but means log file may grow beyond maxBytes temporarily
             pass
@@ -385,7 +386,9 @@ class InMemoryLogHandler(logging.Handler):
             return False
         if left.get("message") != right.get("message"):
             return False
-        return self._entry_signature(left.get("payload")) == self._entry_signature(right.get("payload"))
+        return self._entry_signature(left.get("payload")) == self._entry_signature(
+            right.get("payload")
+        )
 
     def _entry_signature(self, payload: Any) -> tuple[Any, ...] | None:
         if not isinstance(payload, dict):
@@ -402,7 +405,7 @@ class InMemoryLogHandler(logging.Handler):
 
 def attach_gui_log_handler(max_entries: int = 500) -> InMemoryLogHandler:
     """Attach an in-memory log handler to the root logger for GUI mode.
-    
+
     Captures DEBUG and above for GUI log panel display with filtering.
     """
     handler = InMemoryLogHandler(max_entries=max_entries, level=logging.DEBUG)
@@ -761,7 +764,7 @@ class StructuredLogger:
 def setup_logging(log_level: str = "INFO", log_file: str | None = None):
     """
     Setup logging configuration for console and file output.
-    
+
     Note: The root logger level may be set to DEBUG by the GUI log handler
     to capture all messages for GUI display. This function sets the level
     for console/file handlers only.
@@ -771,14 +774,14 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None):
         log_file: Optional log file path
     """
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    
+
     # Create console handler with specified level
     console_handler = logging.StreamHandler()
     console_handler.setLevel(getattr(logging, log_level.upper()))
     console_handler.setFormatter(logging.Formatter(log_format))
-    
+
     handlers = [console_handler]
-    
+
     if log_file:
         # Ensure the log file directory exists
         log_path = Path(log_file)
@@ -790,14 +793,14 @@ def setup_logging(log_level: str = "INFO", log_file: str | None = None):
 
     # Configure root logger - but don't force its level if GUI handler needs DEBUG
     root_logger = logging.getLogger()
-    
+
     # Only set root level if it's higher than the console level or not set
     # This allows GUI handler to capture DEBUG while console shows WARNING
     current_level = root_logger.level
     desired_level = getattr(logging, log_level.upper())
     if current_level == logging.NOTSET or current_level > desired_level:
         root_logger.setLevel(desired_level)
-    
+
     # Add handlers
     for handler in handlers:
         root_logger.addHandler(handler)

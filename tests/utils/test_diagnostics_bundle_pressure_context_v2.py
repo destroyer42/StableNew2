@@ -7,7 +7,9 @@ from pathlib import Path
 from src.utils.diagnostics_bundle_v2 import build_crash_bundle
 
 
-def test_pressure_reason_bundle_includes_process_state_webui_tail_and_gpu(monkeypatch, tmp_path: Path) -> None:
+def test_pressure_reason_bundle_includes_process_state_webui_tail_and_gpu(
+    monkeypatch, tmp_path: Path
+) -> None:
     monkeypatch.setattr(
         "src.utils.diagnostics_bundle_v2._collect_process_inspector_lines",
         lambda: ["pid=1 StableNew"],
@@ -19,7 +21,11 @@ def test_pressure_reason_bundle_includes_process_state_webui_tail_and_gpu(monkey
 
     class _Manager:
         def get_recent_output_tail(self, max_lines: int = 200):  # noqa: ARG002
-            return {"stdout_tail": "webui tail", "stderr_tail": "", "launch_profile": "sdxl_guarded"}
+            return {
+                "stdout_tail": "webui tail",
+                "stderr_tail": "",
+                "launch_profile": "sdxl_guarded",
+            }
 
     monkeypatch.setattr(
         "src.utils.diagnostics_bundle_v2.get_global_webui_process_manager",

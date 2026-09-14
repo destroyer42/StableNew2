@@ -82,6 +82,3 @@ def test_auto_run_can_be_explicitly_disabled():
 
     # Should still be disabled
     assert job_service.auto_run_enabled is False
-
-
-

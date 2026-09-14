@@ -6,13 +6,11 @@ decomposition of LearningController does not inadvertently change semantics.
 
 from __future__ import annotations
 
-import pytest
-
 from src.learning.learning_controller_services.experiment_persistence import (
     RESUME_SCHEMA_VERSION,
     build_resume_payload,
-    validate_resume_payload,
     extract_workflow_state,
+    validate_resume_payload,
 )
 
 

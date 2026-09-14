@@ -252,8 +252,8 @@ class TestQueuePanelHasControls:
         """Pause button should show 'Resume Queue' when paused."""
         root = _skip_if_no_tk()
         try:
-            from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
             from src.gui.app_state_v2 import AppStateV2
+            from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
             from src.gui.theme_v2 import apply_theme
 
             apply_theme(root)

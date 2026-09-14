@@ -118,7 +118,11 @@ def _read_records(path: Path, kind: str) -> tuple[list[dict[str, Any]], SourceEv
             parsed = [json.loads(line) for line in text.splitlines() if line.strip()]
         if kind == "queue" and isinstance(parsed, Mapping) and isinstance(parsed.get("jobs"), list):
             parsed = parsed["jobs"]
-        records = [dict(item) for item in (parsed if isinstance(parsed, list) else [parsed]) if isinstance(item, Mapping)]
+        records = [
+            dict(item)
+            for item in (parsed if isinstance(parsed, list) else [parsed])
+            if isinstance(item, Mapping)
+        ]
         total_items = len(parsed) if isinstance(parsed, list) else 1
         if len(records) != total_items:
             raise LegacyImportError(f"{path}: contains non-object records")
@@ -210,7 +214,12 @@ def _build_migrated_njr(raw: Mapping[str, Any], source_schema: str) -> Normalize
     created = _parse_datetime(raw.get("created_at") or raw.get("timestamp"))
     return migrate_legacy_njr(
         {
-            "job_id": str(raw.get("queue_id") or raw.get("job_id") or raw.get("id") or f"migrated-{time.time_ns()}"),
+            "job_id": str(
+                raw.get("queue_id")
+                or raw.get("job_id")
+                or raw.get("id")
+                or f"migrated-{time.time_ns()}"
+            ),
             "config": config,
             "path_output_dir": str(raw.get("path_output_dir") or raw.get("output_dir") or "output"),
             "filename_template": str(raw.get("filename_template") or "{seed}"),
@@ -226,20 +235,28 @@ def _build_migrated_njr(raw: Mapping[str, Any], source_schema: str) -> Normalize
             "prompt_pack_name": str(raw.get("prompt_pack_name") or ""),
             "prompt_pack_row_index": max(0, _coerce_int(raw.get("prompt_pack_row_index"), 0)),
             "positive_prompt": str(raw.get("prompt") or config.get("prompt") or ""),
-            "negative_prompt": str(raw.get("negative_prompt") or config.get("negative_prompt") or ""),
+            "negative_prompt": str(
+                raw.get("negative_prompt") or config.get("negative_prompt") or ""
+            ),
             "positive_embeddings": list(config.get("positive_embeddings") or []),
             "negative_embeddings": list(config.get("negative_embeddings") or []),
             "lora_tags": [asdict(tag) for tag in _legacy_loras(config)],
             "matrix_slot_values": dict(config.get("matrix_slot_values") or {}),
-            "stage_chain": [asdict(StageConfig(
-                stage_type="txt2img",
-                enabled=True,
-                steps=_coerce_int(config.get("steps"), 20),
-                cfg_scale=_coerce_float(config.get("cfg_scale"), 7.0),
-                sampler_name=str(config.get("sampler") or config.get("sampler_name") or "Euler a"),
-                model=str(config.get("model") or config.get("model_name") or "unknown"),
-                extra={"migration_tool": "PR-MVP-040"},
-            ))],
+            "stage_chain": [
+                asdict(
+                    StageConfig(
+                        stage_type="txt2img",
+                        enabled=True,
+                        steps=_coerce_int(config.get("steps"), 20),
+                        cfg_scale=_coerce_float(config.get("cfg_scale"), 7.0),
+                        sampler_name=str(
+                            config.get("sampler") or config.get("sampler_name") or "Euler a"
+                        ),
+                        model=str(config.get("model") or config.get("model_name") or "unknown"),
+                        extra={"migration_tool": "PR-MVP-040"},
+                    )
+                )
+            ],
             "loop_type": "pipeline",
             "loop_count": max(1, _coerce_int(config.get("n_iter"), 1)),
             "images_per_prompt": max(1, _coerce_int(config.get("batch_size"), 1)),
@@ -256,28 +273,34 @@ def _build_migrated_njr(raw: Mapping[str, Any], source_schema: str) -> Normalize
 
 
 def _execution_metadata(raw: Mapping[str, Any], interrupted: bool) -> JobExecutionMetadata:
-    container = raw.get("execution_metadata") or (raw.get("metadata") or {}).get("execution_metadata") or {}
+    container = (
+        raw.get("execution_metadata") or (raw.get("metadata") or {}).get("execution_metadata") or {}
+    )
     if not isinstance(container, Mapping):
         container = {}
     retries = []
     for item in container.get("retry_attempts") or []:
         if isinstance(item, Mapping):
-            retries.append(RetryAttempt(
-                stage=str(item.get("stage") or "pipeline"),
-                attempt_index=int(item.get("attempt_index") or 0),
-                max_attempts=int(item.get("max_attempts") or 0),
-                reason=str(item.get("reason") or "legacy import"),
-                timestamp=float(item.get("timestamp") or 0.0),
-            ))
+            retries.append(
+                RetryAttempt(
+                    stage=str(item.get("stage") or "pipeline"),
+                    attempt_index=int(item.get("attempt_index") or 0),
+                    max_attempts=int(item.get("max_attempts") or 0),
+                    reason=str(item.get("reason") or "legacy import"),
+                    timestamp=float(item.get("timestamp") or 0.0),
+                )
+            )
     checkpoints = []
     for item in container.get("stage_checkpoints") or []:
         if isinstance(item, Mapping):
-            checkpoints.append(StageCheckpoint(
-                stage_name=str(item.get("stage_name") or ""),
-                completed_at=float(item.get("completed_at") or 0.0),
-                output_paths=[str(path) for path in item.get("output_paths") or [] if path],
-                metadata=dict(item.get("metadata") or {}),
-            ))
+            checkpoints.append(
+                StageCheckpoint(
+                    stage_name=str(item.get("stage_name") or ""),
+                    completed_at=float(item.get("completed_at") or 0.0),
+                    output_paths=[str(path) for path in item.get("output_paths") or [] if path],
+                    metadata=dict(item.get("metadata") or {}),
+                )
+            )
     action = "legacy_running_requeued" if interrupted else container.get("last_control_action")
     return JobExecutionMetadata(
         external_pids=[],
@@ -304,7 +327,9 @@ def _record_to_job(raw: Mapping[str, Any], source_kind: str) -> Job:
     if record is None:
         record = _build_migrated_njr(dict(raw), f"legacy-{source_kind}")
         snapshot = {"normalized_job": record.to_dict()}
-    identity = str(raw.get("queue_id") or raw.get("job_id") or raw.get("id") or record.job_id).strip()
+    identity = str(
+        raw.get("queue_id") or raw.get("job_id") or raw.get("id") or record.job_id
+    ).strip()
     if not identity:
         raise LegacyImportError("record has no stable job identity")
     if identity != record.job_id:
@@ -328,7 +353,9 @@ def _record_to_job(raw: Mapping[str, Any], source_kind: str) -> Job:
         started_at=_parse_datetime(raw.get("started_at")),
         completed_at=_parse_datetime(raw.get("completed_at")),
         error_message=(str(raw["error_message"]) if raw.get("error_message") else None),
-        error_envelope=deserialize_envelope(raw.get("error_envelope") if isinstance(raw.get("error_envelope"), Mapping) else None),
+        error_envelope=deserialize_envelope(
+            raw.get("error_envelope") if isinstance(raw.get("error_envelope"), Mapping) else None
+        ),
         result=_extract_result(raw),
         run_mode=str(metadata.get("run_mode") or raw.get("run_mode") or "queue"),
         source=str(metadata.get("source") or raw.get("source") or "legacy_import"),
@@ -337,7 +364,10 @@ def _record_to_job(raw: Mapping[str, Any], source_kind: str) -> Job:
         snapshot=dict(snapshot_mapping),
         execution_metadata=_execution_metadata(raw, raw_status == "running"),
     )
-    if status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED} and job.completed_at is None:
+    if (
+        status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}
+        and job.completed_at is None
+    ):
         job.completed_at = job.updated_at
     job._normalized_record = record
     return job
@@ -351,7 +381,9 @@ def _existing_state(database_path: Path) -> tuple[int, dict[str, str]]:
         connection = sqlite3.connect(uri, uri=True)
         rows = connection.execute("SELECT job_id, njr_fingerprint FROM jobs").fetchall()
     except sqlite3.Error as exc:
-        raise LegacyImportError(f"Cannot inspect existing repository {database_path}: {exc}") from exc
+        raise LegacyImportError(
+            f"Cannot inspect existing repository {database_path}: {exc}"
+        ) from exc
     finally:
         if "connection" in locals():
             connection.close()
@@ -397,11 +429,13 @@ def analyze_legacy_state(
                         analysis.conflicts.append(f"legacy records disagree for {job.job_id}")
                     continue
                 canonical_fingerprint = _sha256_bytes(
-                    _canonical_json({
-                        "schema_version": "2.6",
-                        "job_id": job.job_id,
-                        "normalized_job": job._normalized_record.to_dict(),
-                    }).encode("utf-8")
+                    _canonical_json(
+                        {
+                            "schema_version": "2.6",
+                            "job_id": job.job_id,
+                            "normalized_job": job._normalized_record.to_dict(),
+                        }
+                    ).encode("utf-8")
                 )
                 if job.job_id in existing and existing[job.job_id] != canonical_fingerprint:
                     analysis.conflicts.append(f"repository identity conflict for {job.job_id}")
@@ -453,11 +487,13 @@ def _backup_state(
     for source in paths:
         destination = directory / source.name
         shutil.copy2(source, destination)
-        manifest["files"].append({
-            "source": str(source.resolve()),
-            "backup": str(destination.resolve()),
-            "sha256": _sha256_bytes(destination.read_bytes()),
-        })
+        manifest["files"].append(
+            {
+                "source": str(source.resolve()),
+                "backup": str(destination.resolve()),
+                "sha256": _sha256_bytes(destination.read_bytes()),
+            }
+        )
     (directory / "manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=True), encoding="utf-8"
     )
@@ -472,7 +508,11 @@ def _restore_database_backup(database_path: Path, backup_directory: Path) -> Non
         return
     for item in manifest.get("files") or []:
         source = Path(str(item.get("source") or ""))
-        if source in {database_path.resolve(), Path(f"{database_path.resolve()}-wal"), Path(f"{database_path.resolve()}-shm")}:
+        if source in {
+            database_path.resolve(),
+            Path(f"{database_path.resolve()}-wal"),
+            Path(f"{database_path.resolve()}-shm"),
+        }:
             shutil.copy2(Path(item["backup"]), source)
 
 
@@ -503,20 +543,21 @@ def import_legacy_state(
             )
             actual_ids = repository.identities()
             expected_ids = set(analysis.valid_identities)
-            statuses = {
-                job.job_id: job.status.value for job in repository.list_job_models()
-            }
+            statuses = {job.job_id: job.status.value for job in repository.list_job_models()}
             validation = {
                 "expected_count": analysis.expected_resulting_count,
                 "actual_count": repository.count(),
                 "missing_identities": sorted(expected_ids - actual_ids),
                 "status_by_identity": statuses,
                 "runnable_count": repository.count([JobStatus.QUEUED]),
-                "terminal_count": repository.count([
-                    JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED
-                ]),
+                "terminal_count": repository.count(
+                    [JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED]
+                ),
             }
-            if validation["actual_count"] != validation["expected_count"] or validation["missing_identities"]:
+            if (
+                validation["actual_count"] != validation["expected_count"]
+                or validation["missing_identities"]
+            ):
                 raise LegacyImportError(f"Post-import validation failed: {validation}")
             result.imported = imported
             result.idempotent_duplicates = duplicates

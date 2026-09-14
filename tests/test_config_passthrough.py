@@ -46,7 +46,9 @@ class _CapturingClient:
 
 def test_txt2img_config_passes_through_canonical_runner_path(tmp_path: Path) -> None:
     client = _CapturingClient()
-    runner = PipelineRunner(client, StructuredLogger(output_dir=tmp_path / "logs"), runs_base_dir=str(tmp_path / "runs"))
+    runner = PipelineRunner(
+        client, StructuredLogger(output_dir=tmp_path / "logs"), runs_base_dir=str(tmp_path / "runs")
+    )
     config = {
         "txt2img": {
             "steps": 28,
@@ -68,7 +70,9 @@ def test_txt2img_config_passes_through_canonical_runner_path(tmp_path: Path) -> 
         "pipeline": {"txt2img_enabled": True},
         "aesthetic": {"enabled": False},
     }
-    record = build_cli_njr(prompt="validation prompt", config=config, batch_size=2, run_name="cfg-check")
+    record = build_cli_njr(
+        prompt="validation prompt", config=config, batch_size=2, run_name="cfg-check"
+    )
 
     def _fake_save(_image_data, output_path, metadata_builder=None):
         output_path = Path(output_path)
@@ -107,7 +111,9 @@ def test_txt2img_config_passes_through_canonical_runner_path(tmp_path: Path) -> 
 
 def test_txt2img_disabled_hires_does_not_emit_synthetic_denoise(tmp_path: Path) -> None:
     client = _CapturingClient()
-    runner = PipelineRunner(client, StructuredLogger(output_dir=tmp_path / "logs"), runs_base_dir=str(tmp_path / "runs"))
+    runner = PipelineRunner(
+        client, StructuredLogger(output_dir=tmp_path / "logs"), runs_base_dir=str(tmp_path / "runs")
+    )
     config = {
         "txt2img": {
             "steps": 28,
@@ -137,7 +143,9 @@ def test_txt2img_disabled_hires_does_not_emit_synthetic_denoise(tmp_path: Path) 
         "pipeline": {"txt2img_enabled": True},
         "aesthetic": {"enabled": False},
     }
-    record = build_cli_njr(prompt="validation prompt", config=config, batch_size=1, run_name="cfg-check")
+    record = build_cli_njr(
+        prompt="validation prompt", config=config, batch_size=1, run_name="cfg-check"
+    )
 
     def _fake_save(_image_data, output_path, metadata_builder=None):
         output_path = Path(output_path)

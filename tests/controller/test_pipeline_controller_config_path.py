@@ -20,15 +20,15 @@ def _make_pack_files(tmp_path: Path, pack_id: str, prompt: str) -> None:
             "slots": [{"index": 0, "text": prompt, "negative": "bad"}],
         },
         "preset_data": {
-        "pipeline": {"images_per_prompt": 1, "loop_count": 1},
-        "txt2img": {
-            "model": "test-model",
-            "sampler_name": "Euler",
-            "steps": 1,
-            "cfg_scale": 7.0,
-            "width": 256,
-            "height": 256,
-        },
+            "pipeline": {"images_per_prompt": 1, "loop_count": 1},
+            "txt2img": {
+                "model": "test-model",
+                "sampler_name": "Euler",
+                "steps": 1,
+                "cfg_scale": 7.0,
+                "width": 256,
+                "height": 256,
+            },
         },
     }
     (packs_dir / f"{pack_id}.json").write_text(json.dumps(config), encoding="utf-8")

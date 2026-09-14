@@ -8,10 +8,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import pytest
-
 from src.learning.discovered_review_models import OutputScanIndexEntry
-from src.learning.output_scan_models import ScanRecord
 from src.learning.output_scanner import (
     OutputScanner,
     _manifest_scan_key,
@@ -19,7 +16,6 @@ from src.learning.output_scanner import (
     _prompt_hash,
     _record_from_manifest,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -62,16 +58,20 @@ def _make_manifest(
 
 def _make_image(img_path: Path) -> Path:
     """Create a minimal 1×1 PNG so the file exists."""
-    import struct, zlib
+    import struct
+    import zlib
+
     img_path.parent.mkdir(parents=True, exist_ok=True)
     # Minimal valid 1x1 PNG bytes
-    sig = b'\x89PNG\r\n\x1a\n'
+    sig = b"\x89PNG\r\n\x1a\n"
+
     def chunk(ctype, data):
-        c = struct.pack('>I', len(data)) + ctype + data
-        return c + struct.pack('>I', zlib.crc32(ctype + data) & 0xffffffff)
-    ihdr = chunk(b'IHDR', struct.pack('>IIBBBBB', 1, 1, 8, 2, 0, 0, 0))
-    idat = chunk(b'IDAT', zlib.compress(b'\x00\xff\xff\xff'))
-    iend = chunk(b'IEND', b'')
+        c = struct.pack(">I", len(data)) + ctype + data
+        return c + struct.pack(">I", zlib.crc32(ctype + data) & 0xFFFFFFFF)
+
+    ihdr = chunk(b"IHDR", struct.pack(">IIBBBBB", 1, 1, 8, 2, 0, 0, 0))
+    idat = chunk(b"IDAT", zlib.compress(b"\x00\xff\xff\xff"))
+    iend = chunk(b"IEND", b"")
     img_path.write_bytes(sig + ihdr + idat + iend)
     return img_path
 
@@ -249,12 +249,12 @@ def test_scanner_mark_group_assignment(tmp_path):
 def test_scanner_deterministic_order(tmp_path):
     for i in range(5):
         _make_scan_fixture(tmp_path, f"img{i:03d}", seed=i * 10)
-    
+
     scanner1 = OutputScanner(tmp_path)
     records1 = scanner1.scan_incremental()
     scanner2 = OutputScanner(tmp_path)
     records2 = scanner2.scan_incremental()
-    
+
     assert [r.artifact_path for r in records1] == [r.artifact_path for r in records2]
 
 

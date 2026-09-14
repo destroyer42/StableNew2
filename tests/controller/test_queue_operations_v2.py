@@ -201,7 +201,7 @@ class TestControllerQueueMethods:
         controller.job_service = mock_job_service
         controller._append_log = MagicMock()
         controller._refresh_app_state_queue = MagicMock()  # Add missing method
-        
+
         result = controller.on_queue_move_up_v2("j1")
 
         assert result is True

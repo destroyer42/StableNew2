@@ -84,7 +84,9 @@ def test_conditioned_video_workflow_requires_depth_input_mode(tmp_path: Path) ->
         path.write_bytes(b"png")
 
     controller = VideoWorkflowController(
-        app_controller=SimpleNamespace(job_service=_JobServiceStub(), output_dir=str(tmp_path / "output"))
+        app_controller=SimpleNamespace(
+            job_service=_JobServiceStub(), output_dir=str(tmp_path / "output")
+        )
     )
 
     valid, reason = controller.validate_form_data(
@@ -93,7 +95,12 @@ def test_conditioned_video_workflow_requires_depth_input_mode(tmp_path: Path) ->
             "workflow_version": "1.0.0",
             "end_anchor_path": str(end),
             "camera_intent": {"preset": "dolly_in", "strength": 0.4},
-            "controlnet": {"model": "depth", "weight": 0.9, "guidance_start": 0.1, "guidance_end": 0.9},
+            "controlnet": {
+                "model": "depth",
+                "weight": 0.9,
+                "guidance_start": 0.1,
+                "guidance_end": 0.9,
+            },
             "depth_input": {"mode": "none", "path": ""},
         }
     )
@@ -124,7 +131,12 @@ def test_submit_conditioned_video_workflow_job_carries_conditioning_payload(tmp_
             "negative_prompt": "negative text",
             "motion_profile": "balanced",
             "camera_intent": {"preset": "dolly_in", "strength": 0.4},
-            "controlnet": {"model": "depth", "weight": 0.9, "guidance_start": 0.1, "guidance_end": 0.9},
+            "controlnet": {
+                "model": "depth",
+                "weight": 0.9,
+                "guidance_start": 0.1,
+                "guidance_end": 0.9,
+            },
             "depth_input": {"mode": "upload", "path": str(depth)},
             "output_route": "Testing",
         },

@@ -26,7 +26,6 @@ def test_runtime_state_files_are_not_tracked_by_git() -> None:
         check=True,
     )
     tracked = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    assert tracked == [], (
-        "Runtime state files must not be tracked by git:\n"
-        + "\n".join(sorted(tracked))
+    assert tracked == [], "Runtime state files must not be tracked by git:\n" + "\n".join(
+        sorted(tracked)
     )

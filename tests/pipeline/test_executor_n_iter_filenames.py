@@ -45,14 +45,12 @@ class TestNIterFilenames:
     ):
         """
         Test that n_iter > 1 with batch_size = 1 creates unique filenames.
-        
+
         REGRESSION: Previously, when n_iter=3 and batch_size=1, all 3 images
         were saved to the same filename, clobbering each other.
         """
         # Setup: n_iter=3, batch_size=1 → WebUI returns 3 images
-        mock_generate.return_value = {
-            "images": ["base64_img0", "base64_img1", "base64_img2"]
-        }
+        mock_generate.return_value = {"images": ["base64_img0", "base64_img1", "base64_img2"]}
         mock_save.side_effect = lambda _image, image_path, metadata_builder=None: image_path
 
         config = {
@@ -99,9 +97,7 @@ class TestNIterFilenames:
     ):
         """Test that batch_size > 1 creates unique filenames."""
         # Setup: batch_size=3, n_iter=1 → WebUI returns 3 images
-        mock_generate.return_value = {
-            "images": ["base64_img0", "base64_img1", "base64_img2"]
-        }
+        mock_generate.return_value = {"images": ["base64_img0", "base64_img1", "base64_img2"]}
         mock_save.side_effect = lambda _image, image_path, metadata_builder=None: image_path
 
         config = {
@@ -175,7 +171,7 @@ class TestNIterFilenames:
         assert mock_save.call_count == 1
 
         saved_path = mock_save.call_args[0][1]
-        
+
         # Filename should NOT have _batch suffix
         assert saved_path.name == "test_image.png"
 
@@ -189,9 +185,7 @@ class TestNIterFilenames:
     ):
         """Test combined n_iter and batch_size creates unique filenames."""
         # Setup: batch_size=2, n_iter=2 → WebUI returns 4 images
-        mock_generate.return_value = {
-            "images": ["img0", "img1", "img2", "img3"]
-        }
+        mock_generate.return_value = {"images": ["img0", "img1", "img2", "img3"]}
         mock_save.side_effect = lambda _image, image_path, metadata_builder=None: image_path
 
         config = {
@@ -244,21 +238,19 @@ class TestNIterRegression:
     ):
         """
         REGRESSION TEST: Prevent file clobbering when n_iter > 1.
-        
+
         Background: When n_iter > 1 but batch_size = 1, the save loop
         was taking the else branch and writing every image to the same
         filename, clobbering earlier iterations. This caused:
         1. Duplicate paths in saved_paths list
         2. Only the last image surviving on disk
         3. Downstream stages only seeing a single output
-        
+
         Fix: Use num_images_received instead of batch_size to decide
         whether to add _batch suffix.
         """
         # Simulate the problematic scenario
-        mock_generate.return_value = {
-            "images": ["iter0", "iter1", "iter2", "iter3", "iter4"]
-        }
+        mock_generate.return_value = {"images": ["iter0", "iter1", "iter2", "iter3", "iter4"]}
         mock_save.side_effect = lambda _image, image_path, metadata_builder=None: image_path
 
         config = {
@@ -289,7 +281,9 @@ class TestNIterRegression:
 
         # 2. All paths must be unique (no clobbering)
         unique_paths = {str(p) for p in saved_paths}
-        assert len(unique_paths) == 5, f"Files were clobbered! Unique: {len(unique_paths)}, Expected: 5"
+        assert len(unique_paths) == 5, (
+            f"Files were clobbered! Unique: {len(unique_paths)}, Expected: 5"
+        )
 
         # 3. All filenames must be unique
         saved_filenames = [p.name for p in saved_paths]

@@ -5,7 +5,9 @@ from pathlib import Path
 from src.video.motion.secondary_motion_video_reencode import apply_secondary_motion_to_video
 
 
-def test_apply_secondary_motion_to_video_promotes_reencoded_artifact(tmp_path: Path, monkeypatch) -> None:
+def test_apply_secondary_motion_to_video_promotes_reencoded_artifact(
+    tmp_path: Path, monkeypatch
+) -> None:
     source_video = tmp_path / "clip.mp4"
     source_video.write_bytes(b"mp4")
     extracted_frame = tmp_path / "extracted_000001.png"

@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import cast
-from typing import Any, Protocol
+from typing import Any, Protocol, cast
 
 from .refinement_policy_models import RefinementDecisionBundle
 
 
 class RefinementPolicyRegistry(Protocol):
-    def build_decision_bundle(self, *, mode: str, observation: dict[str, Any] | None = None) -> RefinementDecisionBundle:
-        ...
+    def build_decision_bundle(
+        self, *, mode: str, observation: dict[str, Any] | None = None
+    ) -> RefinementDecisionBundle: ...
 
 
 @dataclass(slots=True)
@@ -58,7 +58,11 @@ class NoOpRefinementPolicyRegistry:
                 "ad_inpaint_only_masked_padding": 40,
             }
             notes.append("small_subject_recovery")
-        elif wants_profile or wants_face_detail or (face_width_ratio is not None and face_width_ratio < 0.22):
+        elif (
+            wants_profile
+            or wants_face_detail
+            or (face_width_ratio is not None and face_width_ratio < 0.22)
+        ):
             policy_id = "adetailer_profile_detail_v1"
             overrides = {
                 "ad_confidence": 0.30,
@@ -126,7 +130,9 @@ class NoOpRefinementPolicyRegistry:
         mode: str,
         observation: dict[str, Any] | None = None,
     ) -> RefinementDecisionBundle:
-        normalized_mode = mode if mode in {"disabled", "observe", "adetailer", "full"} else "disabled"
+        normalized_mode = (
+            mode if mode in {"disabled", "observe", "adetailer", "full"} else "disabled"
+        )
         observation_payload = dict(observation or {})
         policy_id: str | None = None
         applied_overrides: dict[str, Any] = {}
@@ -153,7 +159,9 @@ class NoOpRefinementPolicyRegistry:
             algorithm_version=self.algorithm_version,
             mode=normalized_mode,
             policy_id=policy_id,
-            detector_id=str(observation_payload.get("subject_assessment", {}).get("detector_id") or "null"),
+            detector_id=str(
+                observation_payload.get("subject_assessment", {}).get("detector_id") or "null"
+            ),
             observation=observation_payload,
             applied_overrides=applied_overrides,
             prompt_patch=prompt_patch,

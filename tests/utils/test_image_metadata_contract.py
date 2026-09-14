@@ -8,8 +8,8 @@ from PIL import Image
 
 from src.utils.image_metadata import (
     ImageMetadataContractV26,
-    build_payload_from_manifest,
     build_contract_kv,
+    build_payload_from_manifest,
     decode_payload,
     encode_payload,
     extract_embedded_metadata,
@@ -56,7 +56,7 @@ def test_png_roundtrip_metadata_contract(tmp_path: Path) -> None:
     assert decoded.payload == payload
     assert "txt2img" in stored[ImageMetadataContractV26.PUBLIC_KEY_COMMENT]
     assert "StableNew" == stored[ImageMetadataContractV26.PUBLIC_KEY_SOFTWARE]
-    assert "\"media_type\": \"image\"" in stored[ImageMetadataContractV26.PUBLIC_KEY_DESCRIPTION]
+    assert '"media_type": "image"' in stored[ImageMetadataContractV26.PUBLIC_KEY_DESCRIPTION]
     assert "Steps:" not in stored[ImageMetadataContractV26.PUBLIC_KEY_PARAMETERS]
 
 
@@ -96,7 +96,12 @@ def test_jpg_roundtrip_preserves_stablenew_and_public_metadata(tmp_path: Path) -
             "vae": "Automatic",
         },
         "seeds": {"requested_seed": 111, "actual_seed": 222},
-        "stage_manifest": {"name": "sample", "timestamp": "t", "config_hash": "h", "config": {"steps": 15}},
+        "stage_manifest": {
+            "name": "sample",
+            "timestamp": "t",
+            "config_hash": "h",
+            "config": {"steps": 15},
+        },
     }
     kv = build_contract_kv(payload, job_id="job-jpg-1", run_id="run-jpg-1", stage="upscale")
     assert write_image_metadata(image_path, kv) is True

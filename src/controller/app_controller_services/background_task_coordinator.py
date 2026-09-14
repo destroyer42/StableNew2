@@ -145,4 +145,3 @@ class BackgroundTaskCoordinator:
             dispatcher(_deliver)
             return
         _deliver()
-

@@ -4,7 +4,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any
 
-
 WORKFLOW_CAP_SINGLE_IMAGE_TO_VIDEO = "single_image_to_video"
 WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO = "multi_frame_anchor_video"
 WORKFLOW_CAP_SEGMENT_STITCHABLE = "segment_stitchable"
@@ -161,7 +160,9 @@ class WorkflowSpec:
 
         input_names = [binding.binding_name for binding in self.input_bindings]
         if len(input_names) != len(set(input_names)):
-            raise ValueError(f"Workflow '{self.workflow_id}' declares duplicate input binding names")
+            raise ValueError(
+                f"Workflow '{self.workflow_id}' declares duplicate input binding names"
+            )
         input_backend_keys = [
             binding.backend_key or binding.binding_name for binding in self.input_bindings
         ]
@@ -170,12 +171,16 @@ class WorkflowSpec:
 
         output_names = [binding.binding_name for binding in self.output_bindings]
         if len(output_names) != len(set(output_names)):
-            raise ValueError(f"Workflow '{self.workflow_id}' declares duplicate output binding names")
+            raise ValueError(
+                f"Workflow '{self.workflow_id}' declares duplicate output binding names"
+            )
         output_backend_keys = [
             binding.backend_key or binding.binding_name for binding in self.output_bindings
         ]
         if len(output_backend_keys) != len(set(output_backend_keys)):
-            raise ValueError(f"Workflow '{self.workflow_id}' declares duplicate output backend keys")
+            raise ValueError(
+                f"Workflow '{self.workflow_id}' declares duplicate output backend keys"
+            )
 
         dependency_ids = [dependency.dependency_id for dependency in self.dependency_specs]
         if len(dependency_ids) != len(set(dependency_ids)):
@@ -184,7 +189,11 @@ class WorkflowSpec:
         object.__setattr__(
             self,
             "capability_tags",
-            tuple(sorted({_normalized_text(tag) for tag in self.capability_tags if _normalized_text(tag)})),
+            tuple(
+                sorted(
+                    {_normalized_text(tag) for tag in self.capability_tags if _normalized_text(tag)}
+                )
+            ),
         )
         object.__setattr__(self, "backend_defaults", _mapping_dict(self.backend_defaults))
         object.__setattr__(self, "governance_state", governance_state)
@@ -196,9 +205,8 @@ class WorkflowSpec:
 
     @property
     def is_runnable(self) -> bool:
-        return (
-            self.governance_state == WORKFLOW_GOVERNANCE_APPROVED
-            and bool(_normalized_text(self.pinned_revision))
+        return self.governance_state == WORKFLOW_GOVERNANCE_APPROVED and bool(
+            _normalized_text(self.pinned_revision)
         )
 
     @property

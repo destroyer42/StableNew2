@@ -60,7 +60,9 @@ def test_run_job_callback_replay_exception_logs_and_raises(caplog) -> None:
 def test_handle_runtime_status_update_preserves_stage_detail() -> None:
     captured = {}
     controller = JobExecutionController(replay_runner=SimpleNamespace(run_njr=lambda record: {}))
-    controller.set_app_state(SimpleNamespace(set_runtime_status=lambda status: captured.setdefault("status", status)))
+    controller.set_app_state(
+        SimpleNamespace(set_runtime_status=lambda status: captured.setdefault("status", status))
+    )
 
     controller._handle_runtime_status_update(
         {

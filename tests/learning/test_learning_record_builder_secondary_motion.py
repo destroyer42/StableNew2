@@ -33,7 +33,14 @@ def test_learning_record_builder_secondary_motion_uses_top_level_backend_metadat
         steps=20,
         cfg_scale=7.5,
         base_model="m",
-        config={"model": "m", "sampler": "Euler", "steps": 20, "cfg_scale": 7.5, "width": 512, "height": 512},
+        config={
+            "model": "m",
+            "sampler": "Euler",
+            "steps": 20,
+            "cfg_scale": 7.5,
+            "width": 512,
+            "height": 512,
+        },
     )
     result = _run_result_stub("run-secondary-motion-learning")
     result.metadata.update(

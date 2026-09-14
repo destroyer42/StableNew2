@@ -86,7 +86,9 @@ def compute_video_media_content_sha256(path: str | Path) -> str:
         "-",
     ]
     try:
-        completed = subprocess.run(command, capture_output=True, text=True, timeout=300, check=False)
+        completed = subprocess.run(
+            command, capture_output=True, text=True, timeout=300, check=False
+        )
     except Exception as exc:
         raise PortableVideoProvenanceError(f"Unable to hash video media content: {exc}") from exc
     if completed.returncode != 0:
@@ -172,11 +174,18 @@ def encode_portable_video_provenance(payload: Mapping[str, Any]) -> EncodedPorta
     raw = canonical_json_bytes(dict(payload))
     payload_sha256 = sha256_hex(raw)
     if len(raw) <= PortableVideoProvenanceContractV26.RAW_SOFT_LIMIT_BYTES:
-        return EncodedPortableVideoProvenance("raw", raw.decode("utf-8"), payload_sha256, len(raw), None)
+        return EncodedPortableVideoProvenance(
+            "raw", raw.decode("utf-8"), payload_sha256, len(raw), None
+        )
     compressed = gzip.compress(raw, compresslevel=6)
     encoded = base64.b64encode(compressed).decode("ascii")
-    if len(encoded.encode("ascii")) > PortableVideoProvenanceContractV26.COMPRESSED_HARD_LIMIT_BYTES:
-        raise PortableVideoProvenanceError("Portable SVD provenance exceeds the supported embedded size limit")
+    if (
+        len(encoded.encode("ascii"))
+        > PortableVideoProvenanceContractV26.COMPRESSED_HARD_LIMIT_BYTES
+    ):
+        raise PortableVideoProvenanceError(
+            "Portable SVD provenance exceeds the supported embedded size limit"
+        )
     return EncodedPortableVideoProvenance(
         "gzip+base64", encoded, payload_sha256, len(raw), len(compressed)
     )
@@ -219,7 +228,10 @@ def write_portable_svd_video_provenance(
 
 
 def read_portable_svd_video_provenance(path: str | Path) -> PortableVideoProvenanceReadResult:
-    tags = {str(key).lower(): str(value) for key, value in read_video_container_metadata(path).items()}
+    tags = {
+        str(key).lower(): str(value) for key, value in read_video_container_metadata(path).items()
+    }
+
     def _tag(name: str) -> str:
         return tags.get(name.lower(), "")
 
@@ -241,19 +253,29 @@ def read_portable_svd_video_provenance(path: str | Path) -> PortableVideoProvena
                 )
             )
         except Exception as exc:
-            return PortableVideoProvenanceReadResult(None, "corrupt", str(exc), mode, expected_sha256)
+            return PortableVideoProvenanceReadResult(
+                None, "corrupt", str(exc), mode, expected_sha256
+            )
     else:
-        return PortableVideoProvenanceReadResult(None, "unsupported", "unsupported_encoding", mode, expected_sha256)
+        return PortableVideoProvenanceReadResult(
+            None, "unsupported", "unsupported_encoding", mode, expected_sha256
+        )
     if not expected_sha256 or sha256_hex(raw) != expected_sha256:
-        return PortableVideoProvenanceReadResult(None, "corrupt", "payload_sha256_mismatch", mode, expected_sha256)
+        return PortableVideoProvenanceReadResult(
+            None, "corrupt", "payload_sha256_mismatch", mode, expected_sha256
+        )
     try:
         payload = json.loads(raw.decode("utf-8"))
     except Exception as exc:
         return PortableVideoProvenanceReadResult(None, "corrupt", str(exc), mode, expected_sha256)
     if not isinstance(payload, dict):
-        return PortableVideoProvenanceReadResult(None, "corrupt", "payload_not_dict", mode, expected_sha256)
+        return PortableVideoProvenanceReadResult(
+            None, "corrupt", "payload_not_dict", mode, expected_sha256
+        )
     if payload.get("schema") != PortableVideoProvenanceContractV26.SCHEMA:
-        return PortableVideoProvenanceReadResult(None, "corrupt", "payload_schema_mismatch", mode, expected_sha256)
+        return PortableVideoProvenanceReadResult(
+            None, "corrupt", "payload_schema_mismatch", mode, expected_sha256
+        )
     return PortableVideoProvenanceReadResult(payload, "ok", None, mode, expected_sha256)
 
 
@@ -261,7 +283,9 @@ def verify_portable_svd_video_media_content(path: str | Path) -> PortableVideoPr
     read_result = read_portable_svd_video_provenance(path)
     if read_result.status != "ok" or read_result.payload is None:
         return read_result
-    expected = str(dict(read_result.payload.get("video") or {}).get("media_content_sha256") or "").strip()
+    expected = str(
+        dict(read_result.payload.get("video") or {}).get("media_content_sha256") or ""
+    ).strip()
     if not expected:
         return PortableVideoProvenanceReadResult(None, "corrupt", "missing_media_content_sha256")
     try:

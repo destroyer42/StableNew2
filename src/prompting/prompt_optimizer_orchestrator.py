@@ -14,7 +14,11 @@ from src.prompting.contracts import (
 from src.prompting.prompt_intent_analyzer import PromptIntentAnalyzer
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.prompting.prompt_splitter import split_prompt_chunks
-from src.prompting.prompt_types import POSITIVE_BUCKET_ORDER, NEGATIVE_BUCKET_ORDER, PromptOptimizationPairResult
+from src.prompting.prompt_types import (
+    NEGATIVE_BUCKET_ORDER,
+    POSITIVE_BUCKET_ORDER,
+    PromptOptimizationPairResult,
+)
 from src.utils.embedding_prompt_utils import extract_embedding_entries
 
 
@@ -90,7 +94,10 @@ class PromptOptimizerOrchestrator:
         prompt_optimizer_cfg = dict(config_payload.get("prompt_optimizer") or {})
         large_chunk_threshold = int(prompt_optimizer_cfg.get("large_chunk_warning_threshold") or 18)
         warnings: list[str] = []
-        if len(positive_chunks) >= large_chunk_threshold or len(negative_chunks) >= large_chunk_threshold:
+        if (
+            len(positive_chunks) >= large_chunk_threshold
+            or len(negative_chunks) >= large_chunk_threshold
+        ):
             warnings.append("large_chunk_count")
         source = PromptSourceContext(
             prompt_source=str(config_payload.get("prompt_source") or ""),
@@ -105,8 +112,12 @@ class PromptOptimizerOrchestrator:
             pipeline_name=stage_name,
             positive_chunk_count=len(positive_chunks),
             negative_chunk_count=len(negative_chunks),
-            positive_bucket_counts=_bucket_counts(optimization.positive.buckets, POSITIVE_BUCKET_ORDER),
-            negative_bucket_counts=_bucket_counts(optimization.negative.buckets, NEGATIVE_BUCKET_ORDER),
+            positive_bucket_counts=_bucket_counts(
+                optimization.positive.buckets, POSITIVE_BUCKET_ORDER
+            ),
+            negative_bucket_counts=_bucket_counts(
+                optimization.negative.buckets, NEGATIVE_BUCKET_ORDER
+            ),
             loras=_extract_loras(positive_prompt),
             embeddings=_extract_embeddings(positive_prompt),
             source=source,
@@ -121,7 +132,11 @@ class PromptOptimizerOrchestrator:
         intent: PromptIntentBundle,
     ) -> list[PromptRecommendation]:
         recommendations: list[PromptRecommendation] = []
-        if stage_name in {"txt2img", "img2img"} and intent.has_people_tokens and intent.wants_face_detail:
+        if (
+            stage_name in {"txt2img", "img2img"}
+            and intent.has_people_tokens
+            and intent.wants_face_detail
+        ):
             recommendations.append(
                 PromptRecommendation(
                     recommendation_id="consider_face_pass",
@@ -172,7 +187,9 @@ class PromptOptimizerOrchestrator:
         return recommendations
 
 
-def _bucket_counts(buckets: dict[str, list[str]], ordered_buckets: tuple[str, ...]) -> dict[str, int]:
+def _bucket_counts(
+    buckets: dict[str, list[str]], ordered_buckets: tuple[str, ...]
+) -> dict[str, int]:
     counts: dict[str, int] = {}
     for bucket in ordered_buckets:
         size = len(list(buckets.get(bucket) or []))

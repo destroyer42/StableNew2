@@ -899,7 +899,9 @@ Errors and warnings appear in the Validation tab.
         if not self.is_modified:
             self.is_modified = True
             if self.current_pack_path:
-                self.window.title(f"Advanced Prompt Pack Editor v2.6 - {self.current_pack_path.name} *")
+                self.window.title(
+                    f"Advanced Prompt Pack Editor v2.6 - {self.current_pack_path.name} *"
+                )
             else:
                 self.window.title("Advanced Prompt Pack Editor v2.6 - Untitled *")
 

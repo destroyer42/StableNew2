@@ -7,8 +7,8 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 
-from PIL import Image
 import pytest
+from PIL import Image
 
 from src.contracts import PackJobEntry
 from src.controller.app_controller import AppController
@@ -410,7 +410,7 @@ def test_phase2d_consolidated_selector_queue_send_and_replay(tmp_path: Path, mon
             _wait_until(lambda: not service.runner.is_running())
             controller.on_queue_send_job_v2()
             _wait_until(
-                lambda: any(
+                lambda queued_ids=queued_ids: any(
                     repository.get_job(job_id).status is JobStatus.COMPLETED
                     for job_id in queued_ids
                 )

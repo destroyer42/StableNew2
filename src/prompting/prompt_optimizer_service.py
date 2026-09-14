@@ -35,7 +35,9 @@ class PromptOptimizerService:
         name = str(pipeline_name or "").strip().lower()
         if not name:
             return True
-        return name not in {item.strip().lower() for item in (self.config.opt_out_pipeline_names or [])}
+        return name not in {
+            item.strip().lower() for item in (self.config.opt_out_pipeline_names or [])
+        }
 
 
 def optimize_with_config(
@@ -52,7 +54,9 @@ def optimize_with_config(
         return _unchanged_pair(str(positive_prompt or ""), str(negative_prompt or ""))
     try:
         service = PromptOptimizerService(config)
-        return service.optimize_prompts(positive_prompt, negative_prompt, pipeline_name=pipeline_name)
+        return service.optimize_prompts(
+            positive_prompt, negative_prompt, pipeline_name=pipeline_name
+        )
     except Exception as exc:
         logger.warning("Prompt optimization failed for %s: %s", pipeline_name or "unknown", exc)
         return _unchanged_pair(str(positive_prompt or ""), str(negative_prompt or ""))

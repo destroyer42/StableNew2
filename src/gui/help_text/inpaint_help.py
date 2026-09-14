@@ -5,7 +5,6 @@ PR-GUI-TOOLTIPS-001: Comprehensive tooltips and inline help for Inpaint settings
 
 from __future__ import annotations
 
-
 # Inpaint help text dictionary
 INPAINT_HELP_TEXT = {
     "mask_blur": {

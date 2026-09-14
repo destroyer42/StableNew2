@@ -10,7 +10,7 @@ from typing import Any
 @dataclass
 class LearningExperiment:
     """Represents a learning experiment definition.
-    
+
     PR-LEARN-020: Added metadata field for variable specifications.
     """
 
@@ -40,7 +40,7 @@ class LearningExperiment:
         }
 
     @staticmethod
-    def from_dict(payload: dict[str, Any]) -> "LearningExperiment":
+    def from_dict(payload: dict[str, Any]) -> LearningExperiment:
         return LearningExperiment(
             name=str(payload.get("name", "")),
             description=str(payload.get("description", "")),
@@ -77,7 +77,7 @@ class LearningVariant:
         }
 
     @staticmethod
-    def from_dict(payload: dict[str, Any]) -> "LearningVariant":
+    def from_dict(payload: dict[str, Any]) -> LearningVariant:
         return LearningVariant(
             experiment_id=str(payload.get("experiment_id", "")),
             param_value=payload.get("param_value"),
@@ -132,7 +132,7 @@ class LearningState:
         }
 
     @staticmethod
-    def from_dict(payload: dict[str, Any]) -> "LearningState":
+    def from_dict(payload: dict[str, Any]) -> LearningState:
         state = LearningState()
         experiment_payload = payload.get("current_experiment")
         if isinstance(experiment_payload, dict):
@@ -146,7 +146,9 @@ class LearningState:
         if 0 <= selected_variant_index < len(state.plan):
             state.selected_variant = state.plan[selected_variant_index]
         state.selected_image_index = int(payload.get("selected_image_index", 0) or 0)
-        selected_discovered_group_id = str(payload.get("selected_discovered_group_id") or "").strip()
+        selected_discovered_group_id = str(
+            payload.get("selected_discovered_group_id") or ""
+        ).strip()
         state.selected_discovered_group_id = selected_discovered_group_id or None
         selected_staged_curation_group_id = str(
             payload.get("selected_staged_curation_group_id") or ""

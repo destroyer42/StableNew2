@@ -7,10 +7,10 @@ from src.pipeline.config_contract_v26 import (
     attach_config_layers,
     build_config_layers,
     extract_adaptive_refinement_intent,
-    extract_secondary_motion_intent,
     extract_continuity_linkage,
     extract_execution_config,
     extract_plan_origin_linkage,
+    extract_secondary_motion_intent,
     validate_svd_native_execution_config,
 )
 

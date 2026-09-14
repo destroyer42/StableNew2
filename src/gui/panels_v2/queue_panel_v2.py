@@ -16,8 +16,6 @@ from dataclasses import dataclass
 from tkinter import ttk
 from typing import Any
 
-logger = logging.getLogger(__name__)
-
 from src.gui.theme_v2 import (
     SECONDARY_BUTTON_STYLE,
     STATUS_LABEL_STYLE,
@@ -36,6 +34,8 @@ from src.pipeline.job_models_v2 import (
     NormalizedJobRecord,
     UnifiedJobSummary,
 )
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -269,12 +269,24 @@ class QueuePanelV2(ttk.Frame):
             width=8,
         )
         self.clear_button.grid(row=0, column=5, sticky="ew", padx=(2, 0))
-        attach_tooltip(self.move_to_front_button, "Move the selected job to the top so it will dispatch before the other queued jobs.")
-        attach_tooltip(self.move_up_button, "Move the selected job one position earlier in queue order.")
-        attach_tooltip(self.move_down_button, "Move the selected job one position later in queue order.")
+        attach_tooltip(
+            self.move_to_front_button,
+            "Move the selected job to the top so it will dispatch before the other queued jobs.",
+        )
+        attach_tooltip(
+            self.move_up_button, "Move the selected job one position earlier in queue order."
+        )
+        attach_tooltip(
+            self.move_down_button, "Move the selected job one position later in queue order."
+        )
         attach_tooltip(self.move_to_back_button, "Move the selected job to the end of the queue.")
-        attach_tooltip(self.remove_button, "Remove only the selected queued job before it starts running.")
-        attach_tooltip(self.clear_button, "Remove every pending queued job. Running work is not rewritten, but pending jobs will be dropped.")
+        attach_tooltip(
+            self.remove_button, "Remove only the selected queued job before it starts running."
+        )
+        attach_tooltip(
+            self.clear_button,
+            "Remove every pending queued job. Running work is not rewritten, but pending jobs will be dropped.",
+        )
 
         # Initial button state
         self._update_button_states()
@@ -282,7 +294,11 @@ class QueuePanelV2(ttk.Frame):
         # PR-PIPE-003: Bind keyboard shortcuts
         self._bind_keyboard_shortcuts()
 
-        if self._manage_app_state_subscriptions and self.app_state and hasattr(self.app_state, "subscribe"):
+        if (
+            self._manage_app_state_subscriptions
+            and self.app_state
+            and hasattr(self.app_state, "subscribe")
+        ):
             try:
                 self.app_state.subscribe("queue_job_summaries", self._on_queue_summaries_changed)
             except Exception:
@@ -350,9 +366,7 @@ class QueuePanelV2(ttk.Frame):
 
     def _queued_job_indices(self) -> list[int]:
         return [
-            index
-            for index, job in enumerate(self._jobs)
-            if self._job_status_value(job) == "queued"
+            index for index, job in enumerate(self._jobs) if self._job_status_value(job) == "queued"
         ]
 
     def _selected_queued_position(self) -> tuple[int, list[int]] | tuple[None, list[int]]:
@@ -398,7 +412,7 @@ class QueuePanelV2(ttk.Frame):
 
     def _compute_queue_eta(self) -> tuple[float, str]:
         """Compute queue ETA using duration stats service.
-        
+
         Returns:
             Tuple of (total_seconds, confidence_indicator)
             confidence_indicator: '~' for history-based, '?' for fallback, '~?' for mixed
@@ -417,9 +431,7 @@ class QueuePanelV2(ttk.Frame):
             return (count * 60.0, "?")
 
         try:
-            total_seconds, jobs_with_estimates = stats_service.get_queue_total_estimate(
-                self._jobs
-            )
+            total_seconds, jobs_with_estimates = stats_service.get_queue_total_estimate(self._jobs)
         except Exception:
             return (count * 60.0, "?")
 
@@ -485,13 +497,9 @@ class QueuePanelV2(ttk.Frame):
             ),
             move_to_back=(
                 selected_before_last
-                and self._controller_supports(
-                    "move_queue_job_to_back", "on_queue_move_to_back_v2"
-                )
+                and self._controller_supports("move_queue_job_to_back", "on_queue_move_to_back_v2")
             ),
-            remove=(
-                selected_is_queued and self._controller_supports("on_queue_remove_job_v2")
-            ),
+            remove=(selected_is_queued and self._controller_supports("on_queue_remove_job_v2")),
             clear=has_queued_jobs and self._controller_supports("on_queue_clear_v2"),
         )
 
@@ -525,16 +533,16 @@ class QueuePanelV2(ttk.Frame):
             return
         job = self._get_selected_job()
         queued_position, _ = self._selected_queued_position()
-        
+
         if not job or queued_position is None:
             return
-        
+
         # Check if already at top
         if queued_position == 0:
             # Subtle feedback: item is already at top
             self._show_boundary_feedback("top")
             return
-        
+
         # Perform the move
         if self.controller:
             move_fn = getattr(self.controller, "move_queue_job_up", None) or getattr(
@@ -543,6 +551,7 @@ class QueuePanelV2(ttk.Frame):
             if callable(move_fn):
                 moved = bool(move_fn(job.job_id))
                 if moved:
+
                     def _apply_feedback() -> None:
                         new_idx = self._select_job_id(job.job_id)
                         if new_idx is not None:
@@ -558,15 +567,15 @@ class QueuePanelV2(ttk.Frame):
             return
         job = self._get_selected_job()
         queued_position, queued_indices = self._selected_queued_position()
-        
+
         if not job or queued_position is None:
             return
-        
+
         # Check if already at bottom
         if queued_position >= len(queued_indices) - 1:
             self._show_boundary_feedback("bottom")
             return
-        
+
         # Perform the move
         if self.controller:
             move_fn = getattr(self.controller, "move_queue_job_down", None) or getattr(
@@ -575,6 +584,7 @@ class QueuePanelV2(ttk.Frame):
             if callable(move_fn):
                 moved = bool(move_fn(job.job_id))
                 if moved:
+
                     def _apply_feedback() -> None:
                         new_idx = self._select_job_id(job.job_id)
                         if new_idx is not None:
@@ -590,15 +600,15 @@ class QueuePanelV2(ttk.Frame):
             return
         job = self._get_selected_job()
         queued_position, _ = self._selected_queued_position()
-        
+
         if not job or queued_position is None:
             return
-        
+
         # Check if already at front
         if queued_position == 0:
             self._show_boundary_feedback("top")
             return
-        
+
         # Perform the move
         if self.controller:
             move_fn = getattr(self.controller, "move_queue_job_to_front", None) or getattr(
@@ -607,6 +617,7 @@ class QueuePanelV2(ttk.Frame):
             if callable(move_fn):
                 moved = bool(move_fn(job.job_id))
                 if moved:
+
                     def _apply_feedback() -> None:
                         new_idx = self._select_job_id(job.job_id)
                         if new_idx is not None:
@@ -622,15 +633,15 @@ class QueuePanelV2(ttk.Frame):
             return
         job = self._get_selected_job()
         queued_position, queued_indices = self._selected_queued_position()
-        
+
         if not job or queued_position is None:
             return
-        
+
         # Check if already at back
         if queued_position >= len(queued_indices) - 1:
             self._show_boundary_feedback("bottom")
             return
-        
+
         # Perform the move
         if self.controller:
             move_fn = getattr(self.controller, "move_queue_job_to_back", None) or getattr(
@@ -639,6 +650,7 @@ class QueuePanelV2(ttk.Frame):
             if callable(move_fn):
                 moved = bool(move_fn(job.job_id))
                 if moved:
+
                     def _apply_feedback() -> None:
                         new_idx = self._select_job_id(job.job_id)
                         if new_idx is not None:
@@ -711,34 +723,36 @@ class QueuePanelV2(ttk.Frame):
         return cleared
 
     # PR-PIPE-003: Visual feedback methods
-    
+
     def _flash_item(
         self, index: int, color: str = TOKENS.colors.status_info, duration_ms: int = 300
     ) -> None:
         """Briefly highlight a listbox item to indicate action completion."""
         if index < 0 or index >= self.job_listbox.size():
             return
-        
+
         # Store original colors
         try:
             original_bg = self.job_listbox.cget("bg")
             original_select_bg = self.job_listbox.cget("selectbackground")
         except Exception:
             return
-        
+
         # Apply highlight to the specific item
         try:
             self.job_listbox.itemconfig(index, bg=color, selectbackground=color)
         except Exception:
             return
-        
+
         def _restore() -> None:
             try:
                 if self.job_listbox.winfo_exists():
-                    self.job_listbox.itemconfig(index, bg=original_bg, selectbackground=original_select_bg)
+                    self.job_listbox.itemconfig(
+                        index, bg=original_bg, selectbackground=original_select_bg
+                    )
             except tk.TclError:
                 pass  # Widget destroyed
-        
+
         # Schedule restore
         self.after(duration_ms, _restore)
 
@@ -765,10 +779,10 @@ class QueuePanelV2(ttk.Frame):
                 "info": "[queue]",
                 "success": "[queue] ✓",
                 "warning": "[queue] ⚠",
-                "error": "[queue] ✗"
+                "error": "[queue] ✗",
             }
             self.controller._append_log(f"{prefix.get(level, '[queue]')} {message}")
-        
+
         # Try status bar if available
         if self.app_state and hasattr(self.app_state, "set_status_message"):
             try:
@@ -780,13 +794,13 @@ class QueuePanelV2(ttk.Frame):
         """Bind keyboard shortcuts for queue operations."""
         # Alt+Up: Move selected job up
         self.job_listbox.bind("<Alt-Up>", lambda e: self._on_move_up())
-        
+
         # Alt+Down: Move selected job down
         self.job_listbox.bind("<Alt-Down>", lambda e: self._on_move_down())
-        
+
         # Delete: Remove selected job
         self.job_listbox.bind("<Delete>", lambda e: self._on_remove())
-        
+
         # Ctrl+Delete: Clear all (with confirmation)
         self.job_listbox.bind("<Control-Delete>", lambda e: self._on_clear_with_confirm())
 
@@ -797,6 +811,7 @@ class QueuePanelV2(ttk.Frame):
             return
         queued_count = sum(self._job_status_value(job) == "queued" for job in self._jobs)
         from tkinter import messagebox
+
         if messagebox.askyesno("Clear Queue", f"Remove all {queued_count} queued jobs from queue?"):
             self._on_clear()
 
@@ -1092,7 +1107,9 @@ class QueuePanelV2(ttk.Frame):
             "pending": TOKENS.colors.text_primary,
             "idle": TOKENS.colors.text_primary,
         }
-        return severity_to_color.get(str(severity or "").strip().lower(), TOKENS.colors.text_primary)
+        return severity_to_color.get(
+            str(severity or "").strip().lower(), TOKENS.colors.text_primary
+        )
 
     def refresh_states(self) -> None:
         """Refresh control states from current app state."""
@@ -1147,7 +1164,7 @@ class QueuePanelV2(ttk.Frame):
         if self._dispatch_to_ui(lambda: self.upsert_job(dto)):
             return
         # Check if job already exists
-        for i, job in enumerate(self._jobs):
+        for _i, job in enumerate(self._jobs):
             if job.job_id == dto.job_id:
                 # Job already in list - update_jobs will be called by controller
                 # We don't modify in place since UnifiedJobSummary is frozen
@@ -1155,7 +1172,9 @@ class QueuePanelV2(ttk.Frame):
 
         # Job not found - this method is deprecated in favor of update_jobs with full list
         # Just trigger a refresh from app state
-        logger.warning(f"upsert_job called for new job {dto.job_id} - should use update_jobs instead")
+        logger.warning(
+            f"upsert_job called for new job {dto.job_id} - should use update_jobs instead"
+        )
         self.update_from_app_state()
 
     def remove_job(self, job_id: str) -> None:
@@ -1209,7 +1228,9 @@ class QueuePanelV2(ttk.Frame):
             return
 
         queue_jobs = getattr(self.app_state, "queue_jobs", None)
-        logger.debug(f"_on_queue_jobs_changed: Received {len(queue_jobs) if queue_jobs else 0} jobs")
+        logger.debug(
+            f"_on_queue_jobs_changed: Received {len(queue_jobs) if queue_jobs else 0} jobs"
+        )
         if queue_jobs is not None:
             self.update_jobs(queue_jobs)
 

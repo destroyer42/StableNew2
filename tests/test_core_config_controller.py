@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Test script to verify BaseGenerationPanelV2 uses controller methods for data sources."""
+
 from unittest.mock import Mock
 
 from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
@@ -22,14 +23,10 @@ def test_controller_priority(tk_root):
     controller = Mock()
     controller.list_models.return_value = [
         Mock(display_name="controller_model1"),
-        Mock(display_name="controller_model2")
+        Mock(display_name="controller_model2"),
     ]
-    controller.list_vaes.return_value = [
-        Mock(display_name="controller_vae1")
-    ]
-    controller.get_available_samplers.return_value = [
-        Mock(display_name="controller_sampler1")
-    ]
+    controller.list_vaes.return_value = [Mock(display_name="controller_vae1")]
+    controller.get_available_samplers.return_value = [Mock(display_name="controller_sampler1")]
 
     # Create adapters with different data
     adapter = DummyAdapter()

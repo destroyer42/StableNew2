@@ -28,7 +28,7 @@ class SingleInstanceLock:
     @staticmethod
     def is_gui_running(host: str = "127.0.0.1", port: int = 47631) -> bool:
         """Check if StableNew GUI is currently running by attempting to connect.
-        
+
         Returns:
             True if GUI is running (port is bound), False otherwise
         """
@@ -39,7 +39,7 @@ class SingleInstanceLock:
             sock.connect((host, port))
             sock.close()
             return True
-        except (ConnectionRefusedError, OSError, socket.timeout):
+        except (TimeoutError, ConnectionRefusedError, OSError):
             # Port is not bound or connection refused/timed out = GUI is not running
             return False
         finally:
@@ -50,15 +50,15 @@ class SingleInstanceLock:
 
     def _accept_loop(self) -> None:
         """Background thread that accepts and immediately closes connections.
-        
+
         This allows is_gui_running() checks to succeed by accepting connections
         from the backlog.
         """
         if self._socket is None:
             return
-        
+
         self._socket.settimeout(1.0)  # Non-blocking accept with timeout
-        
+
         while not self._stop_accepting.is_set():
             try:
                 client_sock, _addr = self._socket.accept()
@@ -67,7 +67,7 @@ class SingleInstanceLock:
                     client_sock.close()
                 except Exception:
                     pass
-            except socket.timeout:
+            except TimeoutError:
                 # Timeout is normal - just check stop flag and continue
                 continue
             except Exception:
@@ -88,13 +88,14 @@ class SingleInstanceLock:
             sock.close()
             return False
         self._socket = sock
-        
+
         # Start accept loop thread to handle is_gui_running() checks
         # PR-THREAD-001: Use ThreadRegistry for accept loop
         # PR-SHUTDOWN-003: Made daemon=True to prevent blocking shutdown
         # This thread is not critical - it only services is_gui_running() checks
         self._stop_accepting.clear()
         from src.utils.thread_registry import get_thread_registry
+
         registry = get_thread_registry()
         self._accept_thread = registry.spawn(
             target=self._accept_loop,
@@ -103,12 +104,12 @@ class SingleInstanceLock:
             purpose="Accept socket connections for single instance lock",
             suppress_daemon_warning=True,  # Intentional daemon - self-unregisters on exit
         )
-        
+
         return True
 
     def is_acquired(self) -> bool:
         """Check if this instance currently holds the lock.
-        
+
         Returns:
             True if the lock is currently held by this instance, False otherwise
         """
@@ -119,7 +120,7 @@ class SingleInstanceLock:
 
         # Stop accept thread first
         self._stop_accepting.set()
-        
+
         # Close socket BEFORE joining thread to force accept() to fail immediately
         # This prevents the thread from waiting up to 1 second in socket.accept()
         if self._socket is not None:
@@ -128,15 +129,14 @@ class SingleInstanceLock:
             except Exception:
                 pass
             self._socket = None
-        
+
         # Now wait for thread - should exit quickly since socket is closed
         if self._accept_thread and self._accept_thread.is_alive():
             # Since we closed the socket first, thread should exit almost immediately
             # But still use a reasonable timeout in case of unexpected delays
             self._accept_thread.join(timeout=2.0)
-            
+
             # If still alive after join timeout, it's a daemon so Python will clean it up
             # No need to log warning - daemon threads are expected to be orphaned
-        
-        self._accept_thread = None
 
+        self._accept_thread = None

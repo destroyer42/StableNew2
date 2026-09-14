@@ -101,9 +101,7 @@ class WebUIResourceService:
             if api_vaes:
                 resources: list[WebUIResource] = []
                 for item in api_vaes:
-                    name = normalize_vae_config_value(
-                        item.get("model_name", item.get("title", ""))
-                    )
+                    name = normalize_vae_config_value(item.get("model_name", item.get("title", "")))
                     if not name:
                         continue
                     resources.append(

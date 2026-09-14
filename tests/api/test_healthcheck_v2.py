@@ -4,10 +4,10 @@ import pytest
 import requests
 
 from src.api.healthcheck import (
+    _READINESS_FAILURE_STATE,
     MODELS_PATH,
     OPTIONS_PATH,
     PROGRESS_PATH,
-    _READINESS_FAILURE_STATE,
     WebUIHealthCheckTimeout,
     wait_for_webui_ready,
 )

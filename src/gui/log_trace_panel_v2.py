@@ -231,7 +231,9 @@ class LogTracePanelV2(ttk.Frame):
     def refresh(self, *, force: bool = False) -> None:
         start = time.perf_counter()
         if not force and not self._expanded.get():
-            self._record_refresh_metric((time.perf_counter() - start) * 1000.0, skipped_collapsed=True)
+            self._record_refresh_metric(
+                (time.perf_counter() - start) * 1000.0, skipped_collapsed=True
+            )
             return
         filter_signature = self._current_filter_signature()
         log_version = self._log_handler.get_version()
@@ -240,7 +242,9 @@ class LogTracePanelV2(ttk.Frame):
             and log_version == self._last_log_version
             and filter_signature == self._last_filter_signature
         ):
-            self._record_refresh_metric((time.perf_counter() - start) * 1000.0, skipped_unchanged=True)
+            self._record_refresh_metric(
+                (time.perf_counter() - start) * 1000.0, skipped_unchanged=True
+            )
             return
         entries = list(self._log_handler.get_entries())
         filtered = self._apply_filter(entries)
@@ -252,14 +256,18 @@ class LogTracePanelV2(ttk.Frame):
             level = str(entry.get("level", "")).upper()
             payload = self._get_payload(entry)
             base_message = normalize_log_message(str(entry.get("message", "") or ""))
-            line = self._format_line(level=level, message=base_message, payload=payload, entry=entry)
+            line = self._format_line(
+                level=level, message=base_message, payload=payload, entry=entry
+            )
             lines.append((level, line))
 
         rendered_lines = tuple(lines)
         if rendered_lines == self._last_rendered_lines:
             self._last_log_version = log_version
             self._last_filter_signature = filter_signature
-            self._record_refresh_metric((time.perf_counter() - start) * 1000.0, skipped_unchanged=True)
+            self._record_refresh_metric(
+                (time.perf_counter() - start) * 1000.0, skipped_unchanged=True
+            )
             return
         previous_lines = self._last_rendered_lines
         append_only = (
@@ -372,9 +380,9 @@ class LogTracePanelV2(ttk.Frame):
         skipped_unchanged: bool = False,
     ) -> None:
         self._refresh_metrics["count"] = int(self._refresh_metrics.get("count", 0) or 0) + 1
-        self._refresh_metrics["total_ms"] = (
-            float(self._refresh_metrics.get("total_ms", 0.0) or 0.0) + float(elapsed_ms)
-        )
+        self._refresh_metrics["total_ms"] = float(
+            self._refresh_metrics.get("total_ms", 0.0) or 0.0
+        ) + float(elapsed_ms)
         self._refresh_metrics["last_ms"] = float(elapsed_ms)
         self._refresh_metrics["max_ms"] = max(
             float(self._refresh_metrics.get("max_ms", 0.0) or 0.0),
@@ -501,7 +509,9 @@ class LogTracePanelV2(ttk.Frame):
                 entry.get("last_created", entry.get("created", 0.0)),
                 0.0,
             )
-            line += f" [repeated {repeat_count}x over {max(0.0, last_created - first_created):.1f}s]"
+            line += (
+                f" [repeated {repeat_count}x over {max(0.0, last_created - first_created):.1f}s]"
+            )
         return line
 
     def _format_timestamp(self, created: float) -> str:

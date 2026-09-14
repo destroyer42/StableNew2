@@ -7,7 +7,9 @@ from src.prompting.prompt_optimizer_service import PromptOptimizerService
 def test_service_bypasses_opted_out_pipeline() -> None:
     config = PromptOptimizerConfig(opt_out_pipeline_names=["adetailer"])
     service = PromptOptimizerService(config)
-    result = service.optimize_prompts("masterpiece, beautiful woman", "blurry, bad anatomy", pipeline_name="adetailer")
+    result = service.optimize_prompts(
+        "masterpiece, beautiful woman", "blurry, bad anatomy", pipeline_name="adetailer"
+    )
     assert result.positive.optimized_prompt == "masterpiece, beautiful woman"
     assert result.negative.optimized_prompt == "blurry, bad anatomy"
 

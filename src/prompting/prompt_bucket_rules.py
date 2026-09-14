@@ -1,28 +1,27 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Set
 
 from src.config.prompting_defaults import DEFAULT_NEGATIVE_KEYWORDS, DEFAULT_POSITIVE_KEYWORDS
 
 
 @dataclass(frozen=True, slots=True)
 class PromptBucketRules:
-    positive_subject_markers: Set[str]
-    positive_environment_keywords: Set[str]
-    positive_pose_keywords: Set[str]
-    positive_composition_keywords: Set[str]
-    positive_lighting_keywords: Set[str]
-    positive_camera_keywords: Set[str]
-    positive_material_keywords: Set[str]
-    positive_style_keywords: Set[str]
-    positive_quality_keywords: Set[str]
-    negative_anatomy_keywords: Set[str]
-    negative_face_hand_keywords: Set[str]
-    negative_render_keywords: Set[str]
-    negative_composition_keywords: Set[str]
-    negative_text_keywords: Set[str]
-    negative_style_blocker_keywords: Set[str]
+    positive_subject_markers: set[str]
+    positive_environment_keywords: set[str]
+    positive_pose_keywords: set[str]
+    positive_composition_keywords: set[str]
+    positive_lighting_keywords: set[str]
+    positive_camera_keywords: set[str]
+    positive_material_keywords: set[str]
+    positive_style_keywords: set[str]
+    positive_quality_keywords: set[str]
+    negative_anatomy_keywords: set[str]
+    negative_face_hand_keywords: set[str]
+    negative_render_keywords: set[str]
+    negative_composition_keywords: set[str]
+    negative_text_keywords: set[str]
+    negative_style_blocker_keywords: set[str]
 
 
 def build_default_prompt_bucket_rules() -> PromptBucketRules:

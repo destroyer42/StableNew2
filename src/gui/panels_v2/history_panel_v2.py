@@ -159,7 +159,7 @@ class HistoryPanelV2(ttk.Frame):
             # Row/prompt number FIRST
             if row_idx is not None:
                 pack_text = f"R{row_idx + 1}: "
-            
+
             pack_text += pack_name
 
             # PR-CORE-E: Add config variant label if present

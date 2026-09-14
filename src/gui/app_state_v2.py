@@ -6,7 +6,10 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from src.contracts import CurrentConfig, JobDraft, JobDraftPart, JobDraftSummary, PackJobEntry
+from src.api.webui_resource_service import build_empty_resource_map, normalize_resource_map
+from src.contracts import CurrentConfig, JobDraft, JobDraftPart, PackJobEntry
+from src.gui.config_adapter_v26 import GuiConfigAdapterV26
+from src.gui.content_visibility import ContentVisibilityMode, normalize_content_visibility_mode
 from src.gui.gui_invoker import GuiInvoker
 from src.pipeline.job_models_v2 import (
     JobLifecycleLogEvent,
@@ -15,9 +18,6 @@ from src.pipeline.job_models_v2 import (
     UnifiedJobSummary,
 )
 from src.queue.job_history_store import JobHistoryEntry
-from src.api.webui_resource_service import build_empty_resource_map, normalize_resource_map
-from src.gui.config_adapter_v26 import GuiConfigAdapterV26
-from src.gui.content_visibility import ContentVisibilityMode, normalize_content_visibility_mode
 from src.utils.config import LoraRuntimeConfig
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -49,7 +49,9 @@ class AppStateV2:
     _listeners: dict[str, list[Listener]] = field(default_factory=dict)
     _invoker: GuiInvoker | None = None
     _notifications_enabled: bool = True
-    _notification_lock: threading.RLock = field(default_factory=threading.RLock, init=False, repr=False)
+    _notification_lock: threading.RLock = field(
+        default_factory=threading.RLock, init=False, repr=False
+    )
     _batched_dirty_keys: set[str] = field(default_factory=set, init=False, repr=False)
     _batched_flush_scheduled: bool = field(default=False, init=False, repr=False)
     _batched_flush_delay_ms: int = field(default=75, init=False, repr=False)
@@ -273,7 +275,9 @@ class AppStateV2:
         self.set_help_mode_enabled(enabled)
         return enabled
 
-    def set_content_visibility_mode(self, mode: str | ContentVisibilityMode) -> ContentVisibilityMode:
+    def set_content_visibility_mode(
+        self, mode: str | ContentVisibilityMode
+    ) -> ContentVisibilityMode:
         normalized = normalize_content_visibility_mode(mode)
         value = normalized.value
         if self.content_visibility_mode != value:
@@ -430,6 +434,7 @@ class AppStateV2:
     def set_queue_jobs(self, jobs: list[UnifiedJobSummary] | None) -> None:
         if jobs is None:
             jobs = []
+
         # Order, identity, and lifecycle state define the active queue
         # projection. A QUEUED -> RUNNING transition keeps the same ID and
         # length but must still reach observers.
@@ -444,7 +449,9 @@ class AppStateV2:
 
         changed = _signature(self.queue_jobs) != _signature(jobs)
         if changed:
-            logger.debug(f"set_queue_jobs: Updating from {len(self.queue_jobs)} to {len(jobs)} jobs")
+            logger.debug(
+                f"set_queue_jobs: Updating from {len(self.queue_jobs)} to {len(jobs)} jobs"
+            )
             self.queue_jobs = list(jobs)
             self._notify("queue_jobs")
         else:
@@ -457,7 +464,7 @@ class AppStateV2:
 
     def set_runtime_status(self, status: RuntimeJobStatus | None) -> None:
         """Set the runtime execution status for the currently running job.
-        
+
         This should be updated periodically during job execution to reflect
         current stage, progress, seed, and ETA information.
         """
@@ -485,7 +492,9 @@ class AppStateV2:
         self._notify("history_items")
 
     def add_packs_to_job_draft(self, entries: list[PackJobEntry]) -> None:
-        logger.info(f"[AppState] add_packs_to_job_draft received {len(entries)} PackJobEntry objects")
+        logger.info(
+            f"[AppState] add_packs_to_job_draft received {len(entries)} PackJobEntry objects"
+        )
         self.job_draft.packs.extend(entries)
         logger.info(f"[AppState] Total packs in draft: {len(self.job_draft.packs)}")
         self._notify("job_draft")
@@ -517,11 +526,11 @@ class AppStateV2:
         if jobs is None:
             jobs = []
         if self.preview_jobs != jobs:
-            logger.debug(f"[AppState] preview_jobs changed, notifying subscribers")
+            logger.debug("[AppState] preview_jobs changed, notifying subscribers")
             self.preview_jobs = list(jobs)
             self._notify("preview_jobs")
         else:
-            logger.debug(f"[AppState] preview_jobs unchanged, not notifying")
+            logger.debug("[AppState] preview_jobs unchanged, not notifying")
 
     def append_log_event(self, event: JobLifecycleLogEvent) -> None:
         self.log_events.append(event)

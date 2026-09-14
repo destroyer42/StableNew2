@@ -31,7 +31,6 @@ from src.learning.discovered_review_models import (
     VALID_STATUSES,
     DiscoveredReviewExperiment,
     DiscoveredReviewHandle,
-    DiscoveredReviewItem,
     OutputScanIndexEntry,
     _utc_now_iso,
 )
@@ -131,6 +130,7 @@ class DiscoveredReviewStore:
     def delete_group(self, group_id: str) -> bool:
         """Remove all files for *group_id*. Returns True if anything was removed."""
         import shutil
+
         group_dir = self._groups_root / group_id
         if group_dir.exists():
             shutil.rmtree(group_dir, ignore_errors=True)
@@ -283,9 +283,7 @@ class DiscoveredReviewStore:
                 handles.append(handle)
         return handles
 
-    def list_handles_by_status(
-        self, statuses: list[str]
-    ) -> list[DiscoveredReviewHandle]:
+    def list_handles_by_status(self, statuses: list[str]) -> list[DiscoveredReviewHandle]:
         """Return handles whose status is in *statuses*."""
         desired = set(statuses)
         return [h for h in self.list_handles() if h.status in desired]
@@ -312,9 +310,7 @@ class DiscoveredReviewStore:
             {k: v.to_dict() for k, v in index.items()},
         )
 
-    def update_scan_index_entries(
-        self, entries: list[OutputScanIndexEntry]
-    ) -> None:
+    def update_scan_index_entries(self, entries: list[OutputScanIndexEntry]) -> None:
         """Merge *entries* into the existing scan index."""
         index = self.load_scan_index()
         for entry in entries:

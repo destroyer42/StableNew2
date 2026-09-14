@@ -205,6 +205,21 @@ journey wrappers retain their approved interpreter/dependency normalization.
 Focused validation passed; no real A1111, ComfyUI, SVD, or GPU execution was
 introduced by this checkpoint.
 
+The PR-MVP-090 raw-Ruff portion is **LOCAL PASS / CI PENDING**. Pinned Ruff
+0.14.9 reached zero findings across the active repository, and the legacy
+non-increasing baseline was removed. Both the local PR gate and required CI
+now enforce direct raw `ruff check .`; no controller ceiling was increased.
+Required Python 3.11/3.12 CI remains pending before this checkpoint is
+accepted for integration.
+
+The managed-runtime ownership safety repair is also **LOCAL PASS / CI
+PENDING**. WebUI and ComfyUI termination/restart paths now require explicit
+manager ownership of the launched process/session. Automatic port,
+working-directory, process-appearance, and orphan/reparented-process kill
+heuristics were removed from runtime recovery and shutdown. Deterministic tests
+cover unmanaged external runtimes, owned roots/descendants, orphan monitoring,
+and isolated emergency cleanup without using a real backend.
+
 ## Approved post-v2.6 sequence
 
 This sequence is approved architecture direction but is not part of the current
@@ -306,7 +321,8 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-PR-MVP-090 Ruff-zero, migration/recovery, and final release acceptance.
+Push the PR-MVP-090 ownership/Ruff package and obtain required CI before
+migration/recovery and final release acceptance.
 PR-MVP-080 is COMPLETE / ACCEPTED / INTEGRATED; its final operator journey, required CI, and
 documentation closeout are complete. Queue/history action-state and no-op cleanup is
 accepted, alongside PromptPack authorship, durable job state, image generation,

@@ -32,7 +32,13 @@ def test_runtime_admission_recovers_guarded_profile_for_heavy_stage(monkeypatch)
             {
                 "status": "degraded",
                 "launch_profile": "standard",
-                "runtime_causes": [{"code": "unguarded_heavy_workload", "severity": "degraded", "message": "guarded WebUI launch profile not active for heavy workload"}],
+                "runtime_causes": [
+                    {
+                        "code": "unguarded_heavy_workload",
+                        "severity": "degraded",
+                        "message": "guarded WebUI launch profile not active for heavy workload",
+                    }
+                ],
                 "reasons": ["guarded WebUI launch profile not active for heavy workload"],
             },
             [{"step": "reprobe", "status": "degraded"}],
@@ -55,7 +61,9 @@ def test_runtime_admission_recovers_guarded_profile_for_heavy_stage(monkeypatch)
     assert recovered[0]["profile_override"] == "sdxl_guarded"
 
 
-def test_runtime_admission_recovers_unsafe_txt2img_by_switching_to_guarded_profile(monkeypatch) -> None:
+def test_runtime_admission_recovers_unsafe_txt2img_by_switching_to_guarded_profile(
+    monkeypatch,
+) -> None:
     client = Mock()
     pipeline = Pipeline(client, Mock())
 
@@ -64,8 +72,16 @@ def test_runtime_admission_recovers_unsafe_txt2img_by_switching_to_guarded_profi
             "status": "poisoned",
             "launch_profile": "standard",
             "runtime_causes": [
-                {"code": "connection_dead", "severity": "poisoned", "message": "webui connection check failed"},
-                {"code": "unsafe_pressure", "severity": "degraded", "message": "stage pressure classified unsafe"},
+                {
+                    "code": "connection_dead",
+                    "severity": "poisoned",
+                    "message": "webui connection check failed",
+                },
+                {
+                    "code": "unsafe_pressure",
+                    "severity": "degraded",
+                    "message": "stage pressure classified unsafe",
+                },
             ],
             "reasons": ["webui connection check failed", "stage pressure classified unsafe"],
         },
@@ -73,7 +89,11 @@ def test_runtime_admission_recovers_unsafe_txt2img_by_switching_to_guarded_profi
             "status": "degraded",
             "launch_profile": "sdxl_guarded",
             "runtime_causes": [
-                {"code": "unsafe_pressure", "severity": "degraded", "message": "stage pressure classified unsafe"},
+                {
+                    "code": "unsafe_pressure",
+                    "severity": "degraded",
+                    "message": "stage pressure classified unsafe",
+                },
             ],
             "reasons": ["stage pressure classified unsafe"],
         },
@@ -88,8 +108,16 @@ def test_runtime_admission_recovers_unsafe_txt2img_by_switching_to_guarded_profi
                 "status": "poisoned",
                 "launch_profile": "standard",
                 "runtime_causes": [
-                    {"code": "connection_dead", "severity": "poisoned", "message": "webui connection check failed"},
-                    {"code": "unsafe_pressure", "severity": "degraded", "message": "stage pressure classified unsafe"},
+                    {
+                        "code": "connection_dead",
+                        "severity": "poisoned",
+                        "message": "webui connection check failed",
+                    },
+                    {
+                        "code": "unsafe_pressure",
+                        "severity": "degraded",
+                        "message": "stage pressure classified unsafe",
+                    },
                 ],
                 "reasons": ["webui connection check failed", "stage pressure classified unsafe"],
             },
@@ -120,7 +148,11 @@ def test_runtime_admission_refuses_unsafe_upscale_when_runtime_stays_poisoned(mo
     monkeypatch.setattr(
         pipeline,
         "_assess_runtime_state",
-        lambda **kwargs: {"status": "poisoned", "launch_profile": "standard", "reasons": ["webui connection check failed"]},
+        lambda **kwargs: {
+            "status": "poisoned",
+            "launch_profile": "standard",
+            "reasons": ["webui connection check failed"],
+        },
     )
     monkeypatch.setattr(pipeline, "_attempt_webui_recovery", lambda **kwargs: False)
 
@@ -133,7 +165,9 @@ def test_runtime_admission_refuses_unsafe_upscale_when_runtime_stays_poisoned(mo
     assert "Runtime admission refused before upscale" in str(excinfo.value)
 
 
-def test_runtime_admission_does_not_restart_guarded_high_pressure_runtime_when_only_degraded(monkeypatch) -> None:
+def test_runtime_admission_does_not_restart_guarded_high_pressure_runtime_when_only_degraded(
+    monkeypatch,
+) -> None:
     client = Mock()
     pipeline = Pipeline(client, Mock())
 
@@ -171,7 +205,9 @@ def test_assess_runtime_state_marks_unsafe_txt2img_pressure_as_degraded(monkeypa
         def get_launch_profile(self) -> str:
             return "sdxl_guarded"
 
-    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: _Manager())
+    monkeypatch.setattr(
+        "src.pipeline.executor.get_global_webui_process_manager", lambda: _Manager()
+    )
     monkeypatch.setattr(
         "src.pipeline.executor.collect_process_risk_snapshot",
         lambda: {"status": "normal"},
@@ -193,7 +229,9 @@ def test_assess_runtime_state_marks_unsafe_txt2img_pressure_as_degraded(monkeypa
     ]
 
 
-def test_runtime_admission_uses_soft_recovery_for_stale_progress_before_restart(monkeypatch) -> None:
+def test_runtime_admission_uses_soft_recovery_for_stale_progress_before_restart(
+    monkeypatch,
+) -> None:
     client = Mock()
     pipeline = Pipeline(client, Mock())
 
@@ -203,7 +241,13 @@ def test_runtime_admission_uses_soft_recovery_for_stale_progress_before_restart(
         lambda **kwargs: {
             "status": "poisoned",
             "launch_profile": "sdxl_guarded",
-            "runtime_causes": [{"code": "stale_progress", "severity": "poisoned", "message": "stale progress state present (job)"}],
+            "runtime_causes": [
+                {
+                    "code": "stale_progress",
+                    "severity": "poisoned",
+                    "message": "stale progress state present (job)",
+                }
+            ],
             "reasons": ["stale progress state present (job)"],
         },
     )
@@ -269,7 +313,9 @@ def test_workload_launch_policy_upgrades_standard_profile_for_heavy_sdxl(monkeyp
         def get_launch_profile(self) -> str:
             return "standard"
 
-    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: _Manager())
+    monkeypatch.setattr(
+        "src.pipeline.executor.get_global_webui_process_manager", lambda: _Manager()
+    )
     recovered = []
     monkeypatch.setattr(
         pipeline,
@@ -303,8 +349,12 @@ def test_workload_launch_policy_respects_existing_low_memory_profile(monkeypatch
         def get_launch_profile(self) -> str:
             return "low_memory"
 
-    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: _Manager())
-    monkeypatch.setattr(pipeline, "_attempt_webui_recovery", lambda **kwargs: pytest.fail("recovery should not run"))
+    monkeypatch.setattr(
+        "src.pipeline.executor.get_global_webui_process_manager", lambda: _Manager()
+    )
+    monkeypatch.setattr(
+        pipeline, "_attempt_webui_recovery", lambda **kwargs: pytest.fail("recovery should not run")
+    )
 
     profile = pipeline._maybe_apply_workload_launch_policy(
         stage_name="upscale",
@@ -334,7 +384,9 @@ def test_workload_launch_policy_can_force_adetailer_experiment_profile(monkeypat
         "STABLENEW_ADETAILER_EXPERIMENT_LAUNCH_PROFILE",
         "sdxl_adetailer_guarded",
     )
-    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: _Manager())
+    monkeypatch.setattr(
+        "src.pipeline.executor.get_global_webui_process_manager", lambda: _Manager()
+    )
     recovered = []
     monkeypatch.setattr(
         pipeline,

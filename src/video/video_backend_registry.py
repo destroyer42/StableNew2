@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 from src.video.animatediff_backend import AnimateDiffVideoBackend
 from src.video.comfy_workflow_backend import ComfyWorkflowVideoBackend
 from src.video.svd_native_backend import SVDNativeVideoBackend

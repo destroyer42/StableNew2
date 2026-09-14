@@ -5,10 +5,9 @@
 
 from __future__ import annotations
 
-from src.learning.discovered_grouping import GroupingEngine, _find_varying_fields, _group_key
-from src.learning.output_scan_models import ScanRecord
+from src.learning.discovered_grouping import GroupingEngine, _find_varying_fields
 from src.learning.discovered_review_models import STATUS_WAITING_REVIEW
-
+from src.learning.output_scan_models import ScanRecord
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -36,8 +35,9 @@ def _make_record(
         negative_prompt="",
     )
     # Compute derived keys manually
-    from src.learning.output_scanner import _normalize_prompt, _sha256_short, _dedupe_key
     import json
+
+    from src.learning.output_scanner import _normalize_prompt, _sha256_short
 
     def _ph(pos: str, neg: str) -> str:
         combined = f"{_normalize_prompt(pos)}||{_normalize_prompt(neg)}"
@@ -182,6 +182,7 @@ def test_engine_groups_separate_prompts_separately():
     engine = GroupingEngine()
 
     from src.learning.output_scanner import _normalize_prompt, _sha256_short
+
     def _ph(pos: str) -> str:
         combined = f"{_normalize_prompt(pos)}||"
         return _sha256_short(combined.encode("utf-8"))

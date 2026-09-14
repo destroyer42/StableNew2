@@ -52,7 +52,9 @@ def test_run_svd_native_stage_returns_artifact_metadata(tmp_path: Path, monkeypa
             self.output_root = output_root
             self.status_callback = status_callback
 
-        def run(self, *, source_image_path, config, job_id, cancel_token=None, provenance_context=None):
+        def run(
+            self, *, source_image_path, config, job_id, cancel_token=None, provenance_context=None
+        ):
             assert Path(source_image_path) == input_path
             assert job_id == "job-123"
             assert Path(self.output_root) == tmp_path
@@ -98,7 +100,9 @@ def test_run_svd_native_stage_requires_input_image(tmp_path: Path) -> None:
     assert result is None
 
 
-def test_run_svd_native_stage_propagates_the_canonical_cancel_token(tmp_path: Path, monkeypatch) -> None:
+def test_run_svd_native_stage_propagates_the_canonical_cancel_token(
+    tmp_path: Path, monkeypatch
+) -> None:
     input_path = tmp_path / "source.png"
     input_path.write_bytes(b"seed")
     token = CancelToken()
@@ -123,7 +127,9 @@ def test_run_svd_native_stage_propagates_the_canonical_cancel_token(tmp_path: Pa
         )
 
 
-def test_run_svd_native_stage_emits_runtime_stage_detail_updates(tmp_path: Path, monkeypatch) -> None:
+def test_run_svd_native_stage_emits_runtime_stage_detail_updates(
+    tmp_path: Path, monkeypatch
+) -> None:
     input_path = tmp_path / "source.png"
     input_path.write_bytes(b"seed")
 
@@ -158,7 +164,9 @@ def test_run_svd_native_stage_emits_runtime_stage_detail_updates(tmp_path: Path,
             self.output_root = output_root
             self.status_callback = status_callback
 
-        def run(self, *, source_image_path, config, job_id, cancel_token=None, provenance_context=None):
+        def run(
+            self, *, source_image_path, config, job_id, cancel_token=None, provenance_context=None
+        ):
             assert Path(source_image_path) == input_path
             assert Path(self.output_root) == tmp_path
             assert job_id == "job-123"
@@ -191,6 +199,8 @@ def test_run_svd_native_stage_emits_runtime_stage_detail_updates(tmp_path: Path,
     )
 
     assert result is not None
-    matching_update = next(update for update in updates if update.get("stage_detail") == "postprocess: interpolation")
+    matching_update = next(
+        update for update in updates if update.get("stage_detail") == "postprocess: interpolation"
+    )
     assert matching_update["current_stage"] == "svd_native"
     assert matching_update["progress"] == 0.75

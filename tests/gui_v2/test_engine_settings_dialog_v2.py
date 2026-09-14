@@ -51,7 +51,9 @@ def test_engine_settings_dialog_restore_defaults(tmp_path: Path, tk_root: tk.Tk)
 
     defaults = config_manager.get_default_engine_settings()
     assert dialog._webui_base_url_var.get() == defaults["webui_base_url"]
-    assert dialog._prompt_optimizer_vars["enabled"].get() == bool(defaults["prompt_optimizer"]["enabled"])
+    assert dialog._prompt_optimizer_vars["enabled"].get() == bool(
+        defaults["prompt_optimizer"]["enabled"]
+    )
 
     dialog.master.destroy()
 

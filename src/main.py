@@ -55,33 +55,35 @@ _emergency_cleanup_registered = False
 def _emergency_webui_cleanup() -> None:
     """
     Emergency cleanup for WebUI processes.
-    
+
     Runs via atexit if app crashes before normal shutdown completes.
     This is a last-resort safety net — normal shutdown should handle cleanup.
-    
+
     PR-PROCESS-001: Ensures WebUI is killed even if GUI crashes during startup
     before graceful_exit() can run.
     """
-    if _webui_manager_global is None:
+    manager = _webui_manager_global
+    if manager is None or not bool(getattr(manager, "owns_process", False)):
         return
-    
+
     logger = logging.getLogger(__name__)
     try:
         logger.warning("EMERGENCY CLEANUP: Killing WebUI processes via atexit handler")
-        _webui_manager_global.stop_webui(grace_seconds=1.0)
+        manager.stop_webui(grace_seconds=1.0)
         logger.warning("EMERGENCY CLEANUP: Complete")
     except Exception as exc:
         logger.error("EMERGENCY CLEANUP: Failed - %s", exc, exc_info=True)
 
 
 def _emergency_comfy_cleanup() -> None:
-    if _comfy_manager_global is None:
+    manager = _comfy_manager_global
+    if manager is None or not bool(getattr(manager, "owns_process", False)):
         return
 
     logger = logging.getLogger(__name__)
     try:
         logger.warning("EMERGENCY CLEANUP: Stopping ComfyUI via atexit handler")
-        _comfy_manager_global.stop(grace_seconds=1.0)
+        manager.stop(grace_seconds=1.0)
         logger.warning("EMERGENCY CLEANUP: ComfyUI cleanup complete")
     except Exception as exc:
         logger.error("EMERGENCY CLEANUP: ComfyUI cleanup failed - %s", exc, exc_info=True)
@@ -90,19 +92,19 @@ def _emergency_comfy_cleanup() -> None:
 def _register_emergency_cleanup(window) -> None:
     """
     Register emergency cleanup handler once WebUI manager is available.
-    
+
     PR-PROCESS-001: Called asynchronously after WebUI bootstrap completes.
     """
     global _webui_manager_global, _comfy_manager_global, _emergency_cleanup_registered
-    
+
     if _emergency_cleanup_registered:
         return
-    
-    webui_mgr = getattr(window, 'webui_process_manager', None)
+
+    webui_mgr = getattr(window, "webui_process_manager", None)
     if webui_mgr:
         _webui_manager_global = webui_mgr
         atexit.register(_emergency_webui_cleanup)
-    comfy_mgr = getattr(window, 'comfy_process_manager', None)
+    comfy_mgr = getattr(window, "comfy_process_manager", None)
     if comfy_mgr:
         _comfy_manager_global = comfy_mgr
         atexit.register(_emergency_comfy_cleanup)
@@ -307,7 +309,6 @@ def _load_comfy_config() -> dict[str, Any]:
 
 def _async_bootstrap_webui(root: Any, app_state, window) -> None:
     """Asynchronously bootstrap WebUI after GUI is loaded."""
-    import threading
 
     def _bootstrap_worker():
         try:
@@ -330,6 +331,7 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
 
     # Start bootstrap in background thread (PR-THREAD-001)
     from src.utils.thread_registry import get_thread_registry
+
     registry = get_thread_registry()
     registry.spawn(
         target=_bootstrap_worker,
@@ -388,9 +390,7 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                 if connection_controller is None:
                     connection_controller = getattr(status_bar, "_webui_controller", None)
                 if connection_controller is None:
-                    logging.warning(
-                        "WebUI connection authority is not available for status wiring"
-                    )
+                    logging.warning("WebUI connection authority is not available for status wiring")
                     return
 
                 # Connect the status panel to the controller
@@ -544,7 +544,7 @@ def _update_window_comfy_manager(window, comfy_manager: ComfyProcessManager) -> 
     window.comfy_process_manager = comfy_manager
     controller = getattr(window, "app_controller", None)
     if controller:
-        setattr(controller, "comfy_process_manager", comfy_manager)
+        controller.comfy_process_manager = comfy_manager
 
 
 def _install_file_access_hooks(logger: "FileAccessLogger") -> None:
@@ -642,13 +642,13 @@ def main() -> None:
         file_access_logger = FileAccessLogger(log_path)
         logging.getLogger(__name__).info("File access tracing enabled at %s", log_path)
         _install_file_access_hooks(file_access_logger)
-    
+
     logging.info("Starting StableNew V2 GUI (MainWindowV2)")
     # Don't bootstrap WebUI synchronously - do it asynchronously after GUI loads
     webui_manager = None
 
     single_instance_lock = SingleInstanceLock()
-    
+
     if not single_instance_lock.acquire():
         msg = (
             "StableNew is already running.\n\n"
@@ -662,7 +662,7 @@ def main() -> None:
         else:
             print(msg, file=sys.stderr)
         return
-    
+
     if tk is None:
         print("Tkinter is not available; cannot start StableNew GUI.", file=sys.stderr)
         single_instance_lock.release()
@@ -675,13 +675,13 @@ def main() -> None:
             auto_exit_seconds = float(auto_exit_env)
         except Exception:
             auto_exit_seconds = 0.0
-    
+
     root, app_state, app_controller, window = build_v2_app(
         root=tk.Tk(),
         webui_manager=webui_manager,
         threaded=True,
     )
-    
+
     window.set_graceful_exit_handler(
         lambda reason=None: graceful_exit(
             app_controller,
@@ -698,11 +698,11 @@ def main() -> None:
             window.schedule_auto_exit(auto_exit_seconds)
         except Exception:
             pass
-    
+
     # PR-PROCESS-001: Register emergency cleanup after WebUI bootstrap
     # Delayed by 1000ms to allow WebUI manager to initialize
     root.after(1000, lambda: _register_emergency_cleanup(window))
-    
+
     root.after(500, lambda: _async_bootstrap_webui(root, app_state, window))
     root.after(700, lambda: _async_bootstrap_comfy(root, app_state, window))
 

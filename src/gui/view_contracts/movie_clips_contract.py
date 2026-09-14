@@ -9,7 +9,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-
 # ---------------------------------------------------------------------------
 # Source mode labels
 # ---------------------------------------------------------------------------
@@ -72,10 +71,16 @@ def extract_source_paths_from_bundle(bundle: dict[str, Any] | None) -> list[str]
         return paths
 
     if kind == CANONICAL_SOURCE_ASSEMBLED:
-        export_output = bundle.get("export_output") if isinstance(bundle.get("export_output"), dict) else bundle
-        artifact_bundle = export_output.get("artifact_bundle") if isinstance(export_output, dict) else None
-        resolved = artifact_bundle if isinstance(artifact_bundle, dict) else (
-            export_output if isinstance(export_output, dict) else {}
+        export_output = (
+            bundle.get("export_output") if isinstance(bundle.get("export_output"), dict) else bundle
+        )
+        artifact_bundle = (
+            export_output.get("artifact_bundle") if isinstance(export_output, dict) else None
+        )
+        resolved = (
+            artifact_bundle
+            if isinstance(artifact_bundle, dict)
+            else (export_output if isinstance(export_output, dict) else {})
         )
         output_paths = [str(item) for item in resolved.get("output_paths") or [] if item]
         if output_paths:
@@ -110,6 +115,7 @@ def format_canonical_source_summary(bundle: dict[str, Any] | None) -> str:
 # Image list ordering
 # ---------------------------------------------------------------------------
 
+
 def sort_image_names(names: list[str]) -> list[str]:
     """Return image names in deterministic alphabetical order."""
     return sorted(names)
@@ -127,6 +133,7 @@ def format_image_list_summary(count: int) -> str:
 # ---------------------------------------------------------------------------
 # Clip settings summary
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True)
 class ClipSettingsSummary:
@@ -163,6 +170,16 @@ DEFAULT_CODEC = "libx264"
 DEFAULT_QUALITY = "medium"
 DEFAULT_MODE = "sequence"
 
-QUALITY_OPTIONS = ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"]
+QUALITY_OPTIONS = [
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow",
+]
 CODEC_OPTIONS = ["libx264", "libx265", "vp9"]
 MODE_OPTIONS = ["sequence", "slideshow"]

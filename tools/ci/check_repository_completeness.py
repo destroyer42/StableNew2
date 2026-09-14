@@ -12,9 +12,9 @@ import argparse
 import ast
 import subprocess
 import tokenize
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Sequence
 
 
 @dataclass(frozen=True, order=True)
@@ -121,9 +121,7 @@ def _imported_internal_modules(path: str, tree: ast.AST) -> set[str]:
                 resolved = _relative_import_name(path, node.level, node.module)
                 if resolved and resolved.startswith("src"):
                     modules.add(resolved)
-            elif node.module and (
-                node.module == "src" or node.module.startswith("src.")
-            ):
+            elif node.module and (node.module == "src" or node.module.startswith("src.")):
                 modules.add(node.module)
     return modules
 
@@ -136,13 +134,9 @@ def inspect_repository(root: Path | str) -> list[CompletenessIssue]:
     issues: set[CompletenessIssue] = set()
 
     for path in sorted(working - tracked):
-        issues.add(
-            CompletenessIssue("UNTRACKED_SOURCE", path, "Python source is not tracked")
-        )
+        issues.add(CompletenessIssue("UNTRACKED_SOURCE", path, "Python source is not tracked"))
     for path in sorted(tracked - working):
-        issues.add(
-            CompletenessIssue("MISSING_TRACKED_SOURCE", path, "tracked source is absent")
-        )
+        issues.add(CompletenessIssue("MISSING_TRACKED_SOURCE", path, "tracked source is absent"))
     for path in sorted(_ignored_paths(repo_root, working)):
         issues.add(
             CompletenessIssue("IGNORED_SOURCE", path, "an ignore rule matches Python source")
@@ -154,9 +148,7 @@ def inspect_repository(root: Path | str) -> list[CompletenessIssue]:
             with tokenize.open(source_path) as source_file:
                 tree = ast.parse(source_file.read(), filename=path)
         except (OSError, UnicodeError, SyntaxError) as exc:
-            issues.add(
-                CompletenessIssue("UNREADABLE_SOURCE", path, str(exc).replace("\n", " "))
-            )
+            issues.add(CompletenessIssue("UNREADABLE_SOURCE", path, str(exc).replace("\n", " ")))
             continue
         for module in sorted(_imported_internal_modules(path, tree)):
             if not _module_exists(repo_root, module):

@@ -5,13 +5,9 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import time
 from dataclasses import asdict, dataclass, field
-from pathlib import Path
 from typing import Any
-
 
 OUTPUT_SCAN_SCHEMA_VERSION = "1.0"
 
@@ -50,8 +46,8 @@ class ScanRecord:
     DiscoveredReviewItems.
     """
 
-    artifact_path: str            # Resolved string path
-    manifest_path: str = ""       # Originating manifest path (if any)
+    artifact_path: str  # Resolved string path
+    manifest_path: str = ""  # Originating manifest path (if any)
     stage: str = ""
     model: str = ""
     vae: str = ""
@@ -64,7 +60,7 @@ class ScanRecord:
     height: int = 0
     positive_prompt: str = ""
     negative_prompt: str = ""
-    input_image_path: str = ""    # img2img source
+    input_image_path: str = ""  # img2img source
     denoising_strength: float = 0.0
     clip_skip: int = 0
     lora: str = ""
@@ -75,9 +71,9 @@ class ScanRecord:
     schema_version: str = OUTPUT_SCAN_SCHEMA_VERSION
 
     # Derived / computed
-    prompt_hash: str = ""   # Set by scanner after normalisation
+    prompt_hash: str = ""  # Set by scanner after normalisation
     input_lineage_key: str = ""  # Set by scanner after normalisation
-    dedupe_key: str = ""    # Set by scanner
+    dedupe_key: str = ""  # Set by scanner
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -115,8 +111,4 @@ class ScanRecord:
 
     def get_meaningful_field_map(self) -> dict[str, Any]:
         """Return only the fields that count as 'meaningful' for comparison."""
-        return {
-            f: getattr(self, f, None)
-            for f in MEANINGFUL_FIELDS
-            if hasattr(self, f)
-        }
+        return {f: getattr(self, f, None) for f in MEANINGFUL_FIELDS if hasattr(self, f)}

@@ -15,7 +15,10 @@ def test_apply_prompt_patch_removes_exact_chunks_and_appends_deterministically()
         },
     )
 
-    assert result.positive.patched == "portrait woman, cinematic lighting, clear irises, natural skin texture"
+    assert (
+        result.positive.patched
+        == "portrait woman, cinematic lighting, clear irises, natural skin texture"
+    )
     assert result.negative.patched == "low detail, blurred eyes"
     assert result.applied_patch["remove_positive"] == ["soft face"]
     assert result.applied_patch["add_negative"] == ["blurred eyes"]
@@ -26,8 +29,18 @@ def test_apply_prompt_patch_ignores_lora_embedding_and_weight_tokens() -> None:
         "portrait woman",
         "bad anatomy",
         {
-            "add_positive": ["<lora:detail:1>", "embedding:foo", "(sharp eyes:1.2)", "clear irises"],
-            "remove_negative": ["(bad anatomy:1.2)", "<lora:neg:1>", "embedding:badneg", "bad anatomy"],
+            "add_positive": [
+                "<lora:detail:1>",
+                "embedding:foo",
+                "(sharp eyes:1.2)",
+                "clear irises",
+            ],
+            "remove_negative": [
+                "(bad anatomy:1.2)",
+                "<lora:neg:1>",
+                "embedding:badneg",
+                "bad anatomy",
+            ],
         },
     )
 

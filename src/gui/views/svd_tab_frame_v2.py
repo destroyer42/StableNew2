@@ -352,7 +352,9 @@ class SVDTabFrameV2(ttk.Frame):
             help_key="model",
         )
         row += 1
-        self._add_spinbox(settings, row, "Frames", self.frames_var, from_=1, to=64, help_key="frames")
+        self._add_spinbox(
+            settings, row, "Frames", self.frames_var, from_=1, to=64, help_key="frames"
+        )
         row += 1
         self._add_spinbox(settings, row, "FPS", self.fps_var, from_=1, to=30, help_key="fps")
         row += 1
@@ -390,7 +392,9 @@ class SVDTabFrameV2(ttk.Frame):
 
         seed_label = ttk.Label(settings, text="Seed", style="Dark.TLabel")
         seed_label.grid(row=row, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
-        self.seed_entry = ttk.Entry(settings, textvariable=self.seed_var, style="Dark.TEntry", width=14)
+        self.seed_entry = ttk.Entry(
+            settings, textvariable=self.seed_var, style="Dark.TEntry", width=14
+        )
         self.seed_entry.grid(row=row, column=1, sticky="ew", pady=(0, 6))
         self._attach_setting_help("seed", SVD_SETTING_HELP["seed"], seed_label, self.seed_entry)
         row += 1
@@ -493,7 +497,9 @@ class SVDTabFrameV2(ttk.Frame):
         cache_frame = ttk.Frame(settings, style="Panel.TFrame")
         cache_frame.grid(row=row, column=1, sticky="ew", pady=(0, 6))
         cache_frame.columnconfigure(0, weight=1)
-        self.cache_entry = ttk.Entry(cache_frame, textvariable=self.cache_dir_var, style="Dark.TEntry", width=22)
+        self.cache_entry = ttk.Entry(
+            cache_frame, textvariable=self.cache_dir_var, style="Dark.TEntry", width=22
+        )
         self.cache_entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         ttk.Button(
             cache_frame,
@@ -502,7 +508,9 @@ class SVDTabFrameV2(ttk.Frame):
             style="Dark.TButton",
             command=self._on_browse_cache_dir,
         ).grid(row=0, column=1, sticky="e")
-        self._attach_setting_help("cache_dir", SVD_SETTING_HELP["cache_dir"], cache_label, self.cache_entry)
+        self._attach_setting_help(
+            "cache_dir", SVD_SETTING_HELP["cache_dir"], cache_label, self.cache_entry
+        )
         row += 1
 
         face_cleanup_check = ttk.Checkbutton(
@@ -512,7 +520,9 @@ class SVDTabFrameV2(ttk.Frame):
             style="Dark.TCheckbutton",
         )
         face_cleanup_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
-        self._attach_setting_help("face_cleanup", SVD_SETTING_HELP["face_cleanup"], face_cleanup_check)
+        self._attach_setting_help(
+            "face_cleanup", SVD_SETTING_HELP["face_cleanup"], face_cleanup_check
+        )
         row += 1
         self._add_combo(
             settings,
@@ -561,7 +571,9 @@ class SVDTabFrameV2(ttk.Frame):
         rife_frame = ttk.Frame(settings, style="Panel.TFrame")
         rife_frame.grid(row=row, column=1, sticky="ew", pady=(0, 6))
         rife_frame.columnconfigure(0, weight=1)
-        self.rife_entry = ttk.Entry(rife_frame, textvariable=self.rife_executable_var, style="Dark.TEntry", width=22)
+        self.rife_entry = ttk.Entry(
+            rife_frame, textvariable=self.rife_executable_var, style="Dark.TEntry", width=22
+        )
         self.rife_entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
         ttk.Button(
             rife_frame,
@@ -570,7 +582,9 @@ class SVDTabFrameV2(ttk.Frame):
             style="Dark.TButton",
             command=self._on_browse_rife_executable,
         ).grid(row=0, column=1, sticky="e")
-        self._attach_setting_help("rife_exe", SVD_SETTING_HELP["rife_exe"], rife_label, self.rife_entry)
+        self._attach_setting_help(
+            "rife_exe", SVD_SETTING_HELP["rife_exe"], rife_label, self.rife_entry
+        )
         row += 1
         upscale_frames_check = ttk.Checkbutton(
             settings,
@@ -579,7 +593,9 @@ class SVDTabFrameV2(ttk.Frame):
             style="Dark.TCheckbutton",
         )
         upscale_frames_check.grid(row=row, column=0, columnspan=2, sticky="w", pady=(0, 4))
-        self._attach_setting_help("upscale_frames", SVD_SETTING_HELP["upscale_frames"], upscale_frames_check)
+        self._attach_setting_help(
+            "upscale_frames", SVD_SETTING_HELP["upscale_frames"], upscale_frames_check
+        )
         row += 1
         self._add_spinbox(
             settings,
@@ -613,7 +629,9 @@ class SVDTabFrameV2(ttk.Frame):
             "Queue a native SVD animation job using the source image and settings shown here.",
         )
 
-        recent = ttk.LabelFrame(body, text="Recent SVD Outputs", style="Dark.TLabelframe", padding=8)
+        recent = ttk.LabelFrame(
+            body, text="Recent SVD Outputs", style="Dark.TLabelframe", padding=8
+        )
         recent.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 0))
         recent.columnconfigure(0, weight=1)
         recent.columnconfigure(1, weight=0)
@@ -846,7 +864,9 @@ class SVDTabFrameV2(ttk.Frame):
 
     def _on_browse_image(self) -> None:
         initial_dir = self._last_folder or None
-        path = filedialog.askopenfilename(title="Select source image", initialdir=initial_dir, filetypes=_IMAGE_FILETYPES)
+        path = filedialog.askopenfilename(
+            title="Select source image", initialdir=initial_dir, filetypes=_IMAGE_FILETYPES
+        )
         if path:
             self.set_source_image_path(path, status_message=f"Selected {Path(path).name}")
 
@@ -864,7 +884,9 @@ class SVDTabFrameV2(ttk.Frame):
         if not latest_path:
             messagebox.showinfo("No output found", "No recent image output is available.")
             return
-        self.set_source_image_path(latest_path, status_message=f"Using latest output: {Path(latest_path).name}")
+        self.set_source_image_path(
+            latest_path, status_message=f"Using latest output: {Path(latest_path).name}"
+        )
 
     def _on_submit(self) -> None:
         controller = self.app_controller
@@ -984,7 +1006,11 @@ class SVDTabFrameV2(ttk.Frame):
             available = bool(admission.get("available"))
             blockers = [str(item) for item in admission.get("blocking_reasons", []) if item]
             warnings = [str(item) for item in admission.get("warnings", []) if item]
-            message = "SVD admission: ready" if available else "SVD admission blocked: " + "; ".join(blockers)
+            message = (
+                "SVD admission: ready"
+                if available
+                else "SVD admission blocked: " + "; ".join(blockers)
+            )
             if warnings:
                 message += " | " + "; ".join(warnings)
             self.admission_label.configure(text=message)
@@ -1034,14 +1060,28 @@ class SVDTabFrameV2(ttk.Frame):
                 self.model_var.set(model_id)
             self.frames_var.set(int(inference.get("num_frames", self.frames_var.get())))
             self.fps_var.set(int(inference.get("fps", self.fps_var.get())))
-            self.motion_bucket_var.set(int(inference.get("motion_bucket_id", self.motion_bucket_var.get())))
-            self.noise_aug_var.set(float(inference.get("noise_aug_strength", self.noise_aug_var.get())))
-            self.inference_steps_var.set(int(inference.get("num_inference_steps", self.inference_steps_var.get())))
-            self.decode_chunk_size_var.set(int(inference.get("decode_chunk_size", self.decode_chunk_size_var.get())))
+            self.motion_bucket_var.set(
+                int(inference.get("motion_bucket_id", self.motion_bucket_var.get()))
+            )
+            self.noise_aug_var.set(
+                float(inference.get("noise_aug_strength", self.noise_aug_var.get()))
+            )
+            self.inference_steps_var.set(
+                int(inference.get("num_inference_steps", self.inference_steps_var.get()))
+            )
+            self.decode_chunk_size_var.set(
+                int(inference.get("decode_chunk_size", self.decode_chunk_size_var.get()))
+            )
             self.cpu_offload_var.set(bool(inference.get("cpu_offload", self.cpu_offload_var.get())))
-            self.forward_chunking_var.set(bool(inference.get("forward_chunking", self.forward_chunking_var.get())))
-            self.local_files_only_var.set(bool(inference.get("local_files_only", self.local_files_only_var.get())))
-            self.cache_dir_var.set(str(inference.get("cache_dir") or self.cache_dir_var.get() or ""))
+            self.forward_chunking_var.set(
+                bool(inference.get("forward_chunking", self.forward_chunking_var.get()))
+            )
+            self.local_files_only_var.set(
+                bool(inference.get("local_files_only", self.local_files_only_var.get()))
+            )
+            self.cache_dir_var.set(
+                str(inference.get("cache_dir") or self.cache_dir_var.get() or "")
+            )
 
         output = defaults.get("output")
         if isinstance(output, dict):
@@ -1056,7 +1096,9 @@ class SVDTabFrameV2(ttk.Frame):
 
         face_restore = postprocess.get("face_restore")
         if isinstance(face_restore, dict):
-            self.face_restore_enabled_var.set(bool(face_restore.get("enabled", self.face_restore_enabled_var.get())))
+            self.face_restore_enabled_var.set(
+                bool(face_restore.get("enabled", self.face_restore_enabled_var.get()))
+            )
             method = str(face_restore.get("method") or self.face_restore_method_var.get())
             if method in _FACE_RESTORE_METHODS:
                 self.face_restore_method_var.set(method)
@@ -1066,16 +1108,24 @@ class SVDTabFrameV2(ttk.Frame):
 
         interpolation = postprocess.get("interpolation")
         if isinstance(interpolation, dict):
-            self.interpolation_enabled_var.set(bool(interpolation.get("enabled", self.interpolation_enabled_var.get())))
+            self.interpolation_enabled_var.set(
+                bool(interpolation.get("enabled", self.interpolation_enabled_var.get()))
+            )
             self.interpolation_multiplier_var.set(
                 int(interpolation.get("multiplier", self.interpolation_multiplier_var.get()))
             )
-            self.rife_executable_var.set(str(interpolation.get("executable_path") or self.rife_executable_var.get() or ""))
+            self.rife_executable_var.set(
+                str(interpolation.get("executable_path") or self.rife_executable_var.get() or "")
+            )
 
         upscale = postprocess.get("upscale")
         if isinstance(upscale, dict):
-            self.frame_upscale_enabled_var.set(bool(upscale.get("enabled", self.frame_upscale_enabled_var.get())))
-            self.frame_upscale_factor_var.set(float(upscale.get("scale", self.frame_upscale_factor_var.get())))
+            self.frame_upscale_enabled_var.set(
+                bool(upscale.get("enabled", self.frame_upscale_enabled_var.get()))
+            )
+            self.frame_upscale_factor_var.set(
+                float(upscale.get("scale", self.frame_upscale_factor_var.get()))
+            )
 
     def _refresh_summary(self, source: str | None = None) -> None:
         source_name = Path(source or self.source_image_var.get() or "").name or "No source image"
@@ -1199,7 +1249,9 @@ class SVDTabFrameV2(ttk.Frame):
             self.fps_var.set(int(payload["fps"]))
             self.output_format_var.set(str(payload["output_format"]))
             self.save_frames_var.set(bool(payload["save_frames"]))
-            self.inference_steps_var.set(int(payload.get("num_inference_steps", self.inference_steps_var.get())))
+            self.inference_steps_var.set(
+                int(payload.get("num_inference_steps", self.inference_steps_var.get()))
+            )
             self.decode_chunk_size_var.set(int(payload["decode_chunk_size"]))
             self.motion_bucket_var.set(int(payload["motion_bucket"]))
             self.noise_aug_var.set(float(payload["noise_aug"]))
@@ -1304,7 +1356,11 @@ class SVDTabFrameV2(ttk.Frame):
                 "",
                 "end",
                 values=(
-                    self._format_time(record.get("completed_at") or record.get("started_at") or record.get("created_at")),
+                    self._format_time(
+                        record.get("completed_at")
+                        or record.get("started_at")
+                        or record.get("created_at")
+                    ),
                     self._shorten_model(record.get("model_id")),
                     record.get("frame_count") or record.get("count") or "-",
                     self._format_postprocess_compact(record),
@@ -1364,9 +1420,7 @@ class SVDTabFrameV2(ttk.Frame):
         self.use_recent_btn.configure(
             state=tk.NORMAL if record.get("source_image_path") else tk.DISABLED
         )
-        self.open_recent_btn.configure(
-            state=tk.NORMAL if record.get("output_dir") else tk.DISABLED
-        )
+        self.open_recent_btn.configure(state=tk.NORMAL if record.get("output_dir") else tk.DISABLED)
         self.open_manifest_btn.configure(
             state=tk.NORMAL if record.get("manifest_path") else tk.DISABLED
         )
@@ -1382,8 +1436,7 @@ class SVDTabFrameV2(ttk.Frame):
         if not applied:
             return "-"
         return "+".join(
-            "interp" if item == "interpolation" else item.replace("_", "")
-            for item in applied
+            "interp" if item == "interpolation" else item.replace("_", "") for item in applied
         )
 
     @classmethod
@@ -1479,9 +1532,15 @@ class SVDTabFrameV2(ttk.Frame):
                 self.model_var.set(model_id)
             self.frames_var.set(int(payload.get("num_frames", self.frames_var.get())))
             self.fps_var.set(int(payload.get("fps", self.fps_var.get())))
-            self.motion_bucket_var.set(int(payload.get("motion_bucket_id", self.motion_bucket_var.get())))
-            self.noise_aug_var.set(float(payload.get("noise_aug_strength", self.noise_aug_var.get())))
-            self.inference_steps_var.set(int(payload.get("num_inference_steps", self.inference_steps_var.get())))
+            self.motion_bucket_var.set(
+                int(payload.get("motion_bucket_id", self.motion_bucket_var.get()))
+            )
+            self.noise_aug_var.set(
+                float(payload.get("noise_aug_strength", self.noise_aug_var.get()))
+            )
+            self.inference_steps_var.set(
+                int(payload.get("num_inference_steps", self.inference_steps_var.get()))
+            )
             seed = payload.get("seed")
             self.seed_var.set("" if seed in (None, "") else str(seed))
             target_preset = str(payload.get("target_preset") or _DEFAULT_TARGET_PRESET)
@@ -1498,21 +1557,43 @@ class SVDTabFrameV2(ttk.Frame):
                 self.output_route_var.set(output_route)
             self.save_frames_var.set(bool(payload.get("save_frames", self.save_frames_var.get())))
             self.cpu_offload_var.set(bool(payload.get("cpu_offload", self.cpu_offload_var.get())))
-            self.forward_chunking_var.set(bool(payload.get("forward_chunking", self.forward_chunking_var.get())))
-            self.local_files_only_var.set(bool(payload.get("local_files_only", self.local_files_only_var.get())))
-            self.decode_chunk_size_var.set(int(payload.get("decode_chunk_size", self.decode_chunk_size_var.get())))
+            self.forward_chunking_var.set(
+                bool(payload.get("forward_chunking", self.forward_chunking_var.get()))
+            )
+            self.local_files_only_var.set(
+                bool(payload.get("local_files_only", self.local_files_only_var.get()))
+            )
+            self.decode_chunk_size_var.set(
+                int(payload.get("decode_chunk_size", self.decode_chunk_size_var.get()))
+            )
             self.cache_dir_var.set(str(payload.get("cache_dir") or ""))
             self._refresh_model_options()
-            self.face_restore_enabled_var.set(bool(payload.get("face_restore_enabled", self.face_restore_enabled_var.get())))
-            face_restore_method = str(payload.get("face_restore_method") or self.face_restore_method_var.get())
+            self.face_restore_enabled_var.set(
+                bool(payload.get("face_restore_enabled", self.face_restore_enabled_var.get()))
+            )
+            face_restore_method = str(
+                payload.get("face_restore_method") or self.face_restore_method_var.get()
+            )
             if face_restore_method in _FACE_RESTORE_METHODS:
                 self.face_restore_method_var.set(face_restore_method)
-            self.face_restore_fidelity_var.set(float(payload.get("face_restore_fidelity", self.face_restore_fidelity_var.get())))
-            self.interpolation_enabled_var.set(bool(payload.get("interpolation_enabled", self.interpolation_enabled_var.get())))
-            self.interpolation_multiplier_var.set(int(payload.get("interpolation_multiplier", self.interpolation_multiplier_var.get())))
+            self.face_restore_fidelity_var.set(
+                float(payload.get("face_restore_fidelity", self.face_restore_fidelity_var.get()))
+            )
+            self.interpolation_enabled_var.set(
+                bool(payload.get("interpolation_enabled", self.interpolation_enabled_var.get()))
+            )
+            self.interpolation_multiplier_var.set(
+                int(
+                    payload.get("interpolation_multiplier", self.interpolation_multiplier_var.get())
+                )
+            )
             self.rife_executable_var.set(str(payload.get("rife_executable_path") or ""))
-            self.frame_upscale_enabled_var.set(bool(payload.get("frame_upscale_enabled", self.frame_upscale_enabled_var.get())))
-            self.frame_upscale_factor_var.set(float(payload.get("frame_upscale_factor", self.frame_upscale_factor_var.get())))
+            self.frame_upscale_enabled_var.set(
+                bool(payload.get("frame_upscale_enabled", self.frame_upscale_enabled_var.get()))
+            )
+            self.frame_upscale_factor_var.set(
+                float(payload.get("frame_upscale_factor", self.frame_upscale_factor_var.get()))
+            )
             self._refresh_capabilities()
             self._reconcile_preset()
             self._refresh_summary(source_path or None)

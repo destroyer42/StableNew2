@@ -2,18 +2,17 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from src.video.continuity_models import normalize_continuity_link
 
-
 STORY_PLAN_SCHEMA_V26 = "stablenew.story_plan.v2.6"
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:

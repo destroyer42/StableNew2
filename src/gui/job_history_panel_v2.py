@@ -136,7 +136,19 @@ class JobHistoryPanelV2(ttk.Frame):
         self.explain_btn.pack(side=tk.LEFT, padx=(4, 0))
 
         # D-GUI-003: Enhanced columns with row/variant/batch info
-        columns = ("time", "status", "model", "pack", "row", "v", "b", "duration", "seed", "images", "output")
+        columns = (
+            "time",
+            "status",
+            "model",
+            "pack",
+            "row",
+            "v",
+            "b",
+            "duration",
+            "seed",
+            "images",
+            "output",
+        )
         headings = {
             "time": "Completed",
             "status": "Status",
@@ -150,24 +162,20 @@ class JobHistoryPanelV2(ttk.Frame):
             "images": "Images",
             "output": "Output Folder",
         }
-        
+
         # D-GUI-003: Add container frame with scrollbar
         tree_frame = ttk.Frame(self, style=style_name)
         tree_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         # Create scrollbar
         scrollbar = ttk.Scrollbar(tree_frame, orient="vertical")
-        
+
         # Create treeview with scrollbar
         self.history_tree = ttk.Treeview(
-            tree_frame,
-            columns=columns,
-            show="headings",
-            height=6,
-            yscrollcommand=scrollbar.set
+            tree_frame, columns=columns, show="headings", height=6, yscrollcommand=scrollbar.set
         )
         scrollbar.configure(command=self.history_tree.yview)
-        
+
         for col in columns:
             self.history_tree.heading(col, text=headings[col])
             width = {
@@ -184,7 +192,7 @@ class JobHistoryPanelV2(ttk.Frame):
                 "output": 150,
             }.get(col, 100)
             self.history_tree.column(col, anchor=tk.W, width=width, stretch=True)
-        
+
         # Layout treeview and scrollbar
         self.history_tree.grid(row=0, column=0, sticky="nsew")
         scrollbar.grid(row=0, column=1, sticky="ns")
@@ -195,11 +203,17 @@ class JobHistoryPanelV2(ttk.Frame):
         self.history_tree.bind("<Leave>", self._hide_tooltip)
         self._history_menu = tk.Menu(self, tearoff=0)
         self._history_menu.add_command(label="Animate with SVD", command=self._on_send_to_svd)
-        self._history_menu.add_command(label="Send to Video Workflow", command=self._on_send_to_video_workflow)
-        self._history_menu.add_command(label="Send to Movie Clips", command=self._on_send_to_movie_clips)
+        self._history_menu.add_command(
+            label="Send to Video Workflow", command=self._on_send_to_video_workflow
+        )
+        self._history_menu.add_command(
+            label="Send to Movie Clips", command=self._on_send_to_movie_clips
+        )
         self._history_menu.add_command(label="Explain This Job", command=self._on_explain_job)
         self.history_tree.bind("<Button-3>", self._on_context_menu)
-        self.empty_state_var = tk.StringVar(value="No recent jobs yet. Queue an image or video job to populate history.")
+        self.empty_state_var = tk.StringVar(
+            value="No recent jobs yet. Queue an image or video job to populate history."
+        )
         ttk.Label(self, textvariable=self.empty_state_var, style=theme_mod.MUTED_LABEL_STYLE).pack(
             anchor=tk.W, pady=(4, 0)
         )
@@ -239,10 +253,7 @@ class JobHistoryPanelV2(ttk.Frame):
     def _populate_history(self, entries: list[JobHistoryEntry]) -> None:
         start = time.perf_counter()
         selected_job_id = self._selected_job_id
-        rows = [
-            (entry, self._entry_values(entry))
-            for entry in entries
-        ]
+        rows = [(entry, self._entry_values(entry)) for entry in entries]
         signature = tuple((entry.job_id, values) for entry, values in rows)
         if signature == self._last_history_signature:
             self.empty_state_var.set(
@@ -321,29 +332,41 @@ class JobHistoryPanelV2(ttk.Frame):
     def _entry_values(self, entry: JobHistoryEntry) -> tuple[str, ...]:
         time_text = self._format_time(entry.completed_at or entry.started_at or entry.created_at)
         status = self._get_display_status(entry)  # D-GUI-003: Success/Failed instead of Completed
-        
+
         # Extract model
         model = self._extract_model(entry)
-        
+
         # D-GUI-003: Extract pack name (never show full prompt or hash)
         pack_name = self._extract_pack_name(entry)
-        
+
         # D-GUI-003: Extract row, variant, batch indices
         row_idx, variant_idx, batch_idx = self._extract_indices(entry)
-        
+
         # Calculate duration more robustly
         duration = self._ensure_duration(entry)
-        
+
         # D-GUI-003: Extract seed (use final_seed from seeds object)
         seed = self._extract_seed(entry)
-        
+
         # Extract image count from result or NJR snapshot
         images = self._extract_image_count(entry)
-        
+
         # D-GUI-003: Get actual output folder name (20251226_HHMMSS_PackName format)
         output = self._extract_output_folder(entry)
-        
-        return (time_text, status, model, pack_name, row_idx, variant_idx, batch_idx, duration, seed, images, output)
+
+        return (
+            time_text,
+            status,
+            model,
+            pack_name,
+            row_idx,
+            variant_idx,
+            batch_idx,
+            duration,
+            seed,
+            images,
+            output,
+        )
 
     def _on_select(self, event=None) -> None:
         selection = self.history_tree.selection()
@@ -496,9 +519,7 @@ class JobHistoryPanelV2(ttk.Frame):
     def _usable_video_workflow_source(self, entry: JobHistoryEntry) -> str | None:
         result = entry.result if isinstance(entry.result, dict) else {}
         bundles = [result.get("video_bundle")]
-        bundles.extend(
-            self._iter_video_artifact_aggregates(self._extract_result_metadata(entry))
-        )
+        bundles.extend(self._iter_video_artifact_aggregates(self._extract_result_metadata(entry)))
         for bundle in bundles:
             if not isinstance(bundle, dict):
                 continue
@@ -510,9 +531,7 @@ class JobHistoryPanelV2(ttk.Frame):
     def _usable_movie_clips_source(self, entry: JobHistoryEntry) -> str | None:
         result = entry.result if isinstance(entry.result, dict) else {}
         bundles = [result.get("video_bundle")]
-        bundles.extend(
-            self._iter_video_artifact_aggregates(self._extract_result_metadata(entry))
-        )
+        bundles.extend(self._iter_video_artifact_aggregates(self._extract_result_metadata(entry)))
         for bundle in bundles:
             if not isinstance(bundle, dict):
                 continue
@@ -597,37 +616,39 @@ class JobHistoryPanelV2(ttk.Frame):
             error = entry.result.get("error")
             if error:
                 return "Failed"
-        
+
         # Check snapshot for error
         if entry.snapshot:
             njr = entry.snapshot.get("normalized_job", {})
             if njr.get("error"):
                 return "Failed"
-        
+
         # Check for cancellation
         if entry.status.value.lower() in ("cancelled", "canceled"):
             return "Cancelled"
-        
+
         # Default: Success if completed without error
         if entry.status.value.lower() == "completed":
             return "Success"
-        
+
         return entry.status.value.title()
-    
+
     def _extract_pack_name(self, entry: JobHistoryEntry) -> str:
         """D-GUI-003: Extract pack name, never show full prompt or hash."""
         if entry.snapshot:
             njr = entry.snapshot.get("normalized_job", {})
             if njr:
                 # Priority: pack name > job_id
-                pack_name = njr.get("prompt_pack_name") or njr.get("pack_name") or njr.get("prompt_pack_id")
+                pack_name = (
+                    njr.get("prompt_pack_name") or njr.get("pack_name") or njr.get("prompt_pack_id")
+                )
                 if pack_name:
                     return str(pack_name)
-        
+
         # Fall back to truncated job_id
         job_id = entry.job_id or "unknown"
         return job_id[:12] if len(job_id) > 12 else job_id
-    
+
     def _extract_indices(self, entry: JobHistoryEntry) -> tuple[str, str, str]:
         """D-GUI-003: Extract row, variant, batch indices (1-based for display)."""
         if entry.snapshot:
@@ -636,16 +657,16 @@ class JobHistoryPanelV2(ttk.Frame):
                 row = njr.get("prompt_pack_row_index")
                 variant = njr.get("variant_index")
                 batch = njr.get("batch_index")
-                
+
                 # Convert to 1-based display
                 row_str = str(row + 1) if row is not None else "-"
                 variant_str = str(variant + 1) if variant is not None else "-"
                 batch_str = str(batch + 1) if batch is not None else "-"
-                
+
                 return (row_str, variant_str, batch_str)
-        
+
         return ("-", "-", "-")
-    
+
     def _extract_summary(self, entry: JobHistoryEntry) -> str:
         """Extract pack name + prompt preview when available."""
         if entry.snapshot:
@@ -664,7 +685,7 @@ class JobHistoryPanelV2(ttk.Frame):
             return self._shorten(entry.payload_summary, width=60)
         job_id = entry.job_id or "unknown"
         return f"Job {job_id[:8]}"
-    
+
     def _extract_model(self, entry: JobHistoryEntry) -> str:
         """Extract model name from NJR snapshot or result."""
         if entry.snapshot:
@@ -679,7 +700,7 @@ class JobHistoryPanelV2(ttk.Frame):
         if model:
             return Path(str(model)).stem
         return "-"
-    
+
     def _extract_seed(self, entry: JobHistoryEntry) -> str:
         """D-GUI-003: Extract actual seed from seeds.final_seed, never show 'Random'."""
         # Try manifest seeds structure first (D-MANIFEST-001)
@@ -689,7 +710,7 @@ class JobHistoryPanelV2(ttk.Frame):
             final_seed = seeds.get("final_seed")
             if final_seed is not None and final_seed != -1:
                 return str(final_seed)
-        
+
         # Fall back to legacy fields
         seed = metadata.get("actual_seed") or metadata.get("final_seed")
         if seed is not None and seed != -1:
@@ -702,7 +723,7 @@ class JobHistoryPanelV2(ttk.Frame):
                 return str(seed)
             if seed == -1:
                 return "Random"
-        
+
         # Try NJR snapshot
         if entry.snapshot:
             njr = entry.snapshot.get("normalized_job", {})
@@ -715,34 +736,34 @@ class JobHistoryPanelV2(ttk.Frame):
                 return "Random"
             if seed is not None and seed != -1:
                 return str(seed)
-        
+
         return "-"
-    
+
     def _ensure_duration(self, entry: JobHistoryEntry) -> str:
         """Ensure duration is calculated and formatted."""
         # Prefer pre-calculated duration_ms
         if entry.duration_ms is not None and entry.duration_ms > 0:
             return self._format_duration_ms(entry.duration_ms)
-        
+
         # Calculate from timestamps if available
         if (entry.started_at or entry.created_at) and entry.completed_at:
             try:
                 start = entry.started_at or entry.created_at
                 end = entry.completed_at
-                
+
                 # Handle string timestamps
                 if isinstance(start, str):
-                    start = datetime.fromisoformat(start.replace('Z', '+00:00'))
+                    start = datetime.fromisoformat(start.replace("Z", "+00:00"))
                 if isinstance(end, str):
-                    end = datetime.fromisoformat(end.replace('Z', '+00:00'))
-                
+                    end = datetime.fromisoformat(end.replace("Z", "+00:00"))
+
                 delta = end - start
                 duration_ms = int(delta.total_seconds() * 1000)
                 if duration_ms > 0:
                     return self._format_duration_ms(duration_ms)
             except Exception:
                 pass
-        
+
         return "-"
 
     def _extract_result_metadata(self, entry: JobHistoryEntry) -> dict[str, Any]:
@@ -804,7 +825,9 @@ class JobHistoryPanelV2(ttk.Frame):
             primary_path = aggregate.get("primary_path")
             output_paths = aggregate.get("output_paths") or aggregate.get("video_paths")
             manifest_paths = aggregate.get("manifest_paths")
-            manifest_path = manifest_paths[0] if isinstance(manifest_paths, list) and manifest_paths else None
+            manifest_path = (
+                manifest_paths[0] if isinstance(manifest_paths, list) and manifest_paths else None
+            )
             if primary_path or output_paths:
                 return {
                     "artifact_type": "video",
@@ -823,7 +846,7 @@ class JobHistoryPanelV2(ttk.Frame):
                     return dict(artifact)
 
         return {}
-    
+
     def _extract_image_count(self, entry: JobHistoryEntry) -> str:
         """Extract image count from result or NJR snapshot."""
         artifact = self._extract_primary_artifact(entry)
@@ -841,7 +864,7 @@ class JobHistoryPanelV2(ttk.Frame):
             count = entry.result.get("image_count") or entry.result.get("images_generated")
             if count is not None:
                 return str(count)
-        
+
         # Try NJR snapshot
         if entry.snapshot:
             njr = entry.snapshot.get("normalized_job", {})
@@ -850,9 +873,9 @@ class JobHistoryPanelV2(ttk.Frame):
                 batch_total = njr.get("batch_total", 1)
                 if variant_total and batch_total:
                     return str(variant_total * batch_total)
-        
+
         return "-"
-    
+
     def _extract_output_folder(self, entry: JobHistoryEntry) -> str:
         """D-GUI-003: Extract actual output folder name (20251226_HHMMSS_PackName)."""
         artifact = self._extract_primary_artifact(entry)
@@ -866,18 +889,18 @@ class JobHistoryPanelV2(ttk.Frame):
             if output_dir:
                 folder_name = Path(output_dir).name
                 return folder_name if folder_name else "-"
-        
+
         # Try to derive from NJR snapshot run_id
         if entry.snapshot:
             njr = entry.snapshot.get("normalized_job", {})
             run_id = njr.get("run_id")
             if run_id:
                 return str(run_id)
-        
+
         # Fall back to job_id (truncated)
         job_id = entry.job_id or "unknown"
         return job_id[:20] if len(job_id) > 20 else job_id
-    
+
     def _derive_output_folder(self, entry: JobHistoryEntry) -> str:
         """Return only a current folder proven by canonical result/artifact evidence."""
         return self._usable_output_folder(entry) or ""
@@ -886,21 +909,21 @@ class JobHistoryPanelV2(ttk.Frame):
         """Show tooltip with full model name and efficiency metrics on hover."""
         item = self.history_tree.identify_row(event.y)
         column = self.history_tree.identify_column(event.x)
-        
+
         if not item or column != "#3":  # Model column (0-indexed: #1=time, #2=status, #3=model)
             self._hide_tooltip()
             return
-        
+
         job_id = self._item_to_job.get(item)
         if not job_id:
             self._hide_tooltip()
             return
-        
+
         entry = self._entries.get(job_id)
         if not entry:
             self._hide_tooltip()
             return
-        
+
         # Get full model name
         full_model = self._extract_full_model(entry)
         if not full_model or full_model == "-":
@@ -910,7 +933,7 @@ class JobHistoryPanelV2(ttk.Frame):
         efficiency_text = self._extract_efficiency_summary(entry)
         tooltip_text = full_model if not efficiency_text else f"{full_model}\n{efficiency_text}"
         self._show_tooltip(event.x_root, event.y_root, tooltip_text)
-    
+
     def _extract_full_model(self, entry: JobHistoryEntry) -> str:
         """Extract full model name without truncation."""
         if entry.snapshot:
@@ -918,12 +941,12 @@ class JobHistoryPanelV2(ttk.Frame):
             model = njr.get("base_model") or njr.get("model")
             if model:
                 return str(model)
-        
+
         if entry.result and isinstance(entry.result, dict):
             model = entry.result.get("model") or entry.result.get("sd_model_checkpoint")
             if model:
                 return str(model)
-        
+
         return "-"
 
     def _extract_efficiency_summary(self, entry: JobHistoryEntry) -> str:
@@ -957,15 +980,15 @@ class JobHistoryPanelV2(ttk.Frame):
         if vae_switches is not None:
             parts.append(f"vae_sw={vae_switches}")
         return " | ".join(parts)
-    
+
     def _show_tooltip(self, x: int, y: int, text: str) -> None:
         """Display tooltip near cursor."""
         self._hide_tooltip()
-        
+
         self._tooltip = tk.Toplevel(self)
         self._tooltip.wm_overrideredirect(True)
         self._tooltip.wm_geometry(f"+{x + 10}+{y + 10}")
-        
+
         label = tk.Label(
             self._tooltip,
             text=text,
@@ -978,7 +1001,7 @@ class JobHistoryPanelV2(ttk.Frame):
             pady=2,
         )
         label.pack()
-    
+
     def _hide_tooltip(self, event: tk.Event | None = None) -> None:
         """Hide the tooltip."""
         if self._tooltip:
@@ -995,11 +1018,11 @@ class JobHistoryPanelV2(ttk.Frame):
         try:
             # Parse as UTC datetime, convert to local
             if isinstance(value, str):
-                dt = datetime.fromisoformat(value.replace('Z', '+00:00'))
+                dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
             else:
                 dt = value
             # Convert to local time if it's a datetime
-            if hasattr(dt, 'astimezone'):
+            if hasattr(dt, "astimezone"):
                 dt = dt.astimezone()
             return dt.strftime("%m-%d-%Y %H:%M:%S")
         except Exception:

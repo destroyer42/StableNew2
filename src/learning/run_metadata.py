@@ -26,9 +26,9 @@ def write_run_metadata(
     async_write: bool = True,
 ) -> Path:
     """Persist run metadata to runs/<run_id>/run_metadata.json.
-    
+
     PR-HB-004: Now uses async persistence worker by default to avoid UI blocking.
-    
+
     Args:
         async_write: If True (default), enqueue write to background worker.
                      If False, write synchronously (for tests or critical paths).
@@ -48,11 +48,11 @@ def write_run_metadata(
     }
 
     path = run_dir / "run_metadata.json"
-    
+
     if async_write:
         # PR-HB-004: Enqueue to background worker
-        from src.services.persistence_worker import get_persistence_worker, PersistenceTask
-        
+        from src.services.persistence_worker import PersistenceTask, get_persistence_worker
+
         worker = get_persistence_worker()
         task = PersistenceTask(
             task_type="run_metadata",
@@ -63,5 +63,5 @@ def write_run_metadata(
     else:
         # Synchronous write (tests, critical paths)
         path.write_text(json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8")
-    
+
     return path

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from pathlib import Path
 from collections.abc import Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 from src.controller.content_visibility_resolver import (
@@ -231,6 +231,7 @@ class PromptWorkspaceState:
         if not self.current_pack:
             raise RuntimeError("No prompt pack loaded")
         from src.gui.models.prompt_pack_model import PromptSlot
+
         new_index = len(self.current_pack.slots)
         self.current_pack.slots.append(PromptSlot(index=new_index))
         self.dirty = True
@@ -254,6 +255,7 @@ class PromptWorkspaceState:
             raise RuntimeError("No prompt pack loaded")
         if 0 <= index < len(self.current_pack.slots):
             from dataclasses import replace
+
             original = self.current_pack.get_slot(index)
             # Create a deep copy
             copy = replace(
@@ -264,7 +266,7 @@ class PromptWorkspaceState:
                 template_variables=dict(getattr(original, "template_variables", {}) or {}),
                 positive_embeddings=getattr(original, "positive_embeddings", []).copy(),
                 negative_embeddings=getattr(original, "negative_embeddings", []).copy(),
-                loras=getattr(original, "loras", []).copy()
+                loras=getattr(original, "loras", []).copy(),
             )
             self.current_pack.slots.insert(index + 1, copy)
             self.dirty = True

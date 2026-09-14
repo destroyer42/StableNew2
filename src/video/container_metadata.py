@@ -8,7 +8,7 @@ import os
 import shutil
 import subprocess
 from collections.abc import Mapping
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -95,12 +95,14 @@ def build_public_media_payload(
         "created_utc": _first_non_empty_string(
             payload.get("created_utc"),
             payload.get("timestamp"),
-            datetime.now(timezone.utc).isoformat(),
+            datetime.now(UTC).isoformat(),
         ),
         "title": _first_non_empty_string(
             payload.get("title"),
             Path(str(file_path)).stem if file_path else "",
-            Path(_first_non_empty_string(payload.get("primary_path"), payload.get("output_path"))).stem,
+            Path(
+                _first_non_empty_string(payload.get("primary_path"), payload.get("output_path"))
+            ).stem,
         ),
         "prompt": _first_non_empty_string(
             payload.get("prompt"),
@@ -150,11 +152,7 @@ def build_public_media_payload(
     secondary_motion_summary = extract_secondary_motion_summary(payload)
     if secondary_motion_summary:
         public_payload["secondary_motion"] = secondary_motion_summary
-    return {
-        key: value
-        for key, value in public_payload.items()
-        if value not in (None, "", [], {})
-    }
+    return {key: value for key, value in public_payload.items() if value not in (None, "", [], {})}
 
 
 def build_video_container_tags(
@@ -162,7 +160,9 @@ def build_video_container_tags(
     *,
     file_path: str | Path | None = None,
 ) -> dict[str, str]:
-    public_payload = build_public_media_payload(metadata_payload, media_type="video", file_path=file_path)
+    public_payload = build_public_media_payload(
+        metadata_payload, media_type="video", file_path=file_path
+    )
     description = _canonical_json(public_payload)
     if len(description.encode("utf-8")) > _PUBLIC_DESCRIPTION_SOFT_LIMIT:
         reduced_payload = dict(public_payload)
@@ -182,7 +182,7 @@ def build_video_container_tags(
         "description": description,
         "comment": comment or "StableNew video export",
         "software": "StableNew",
-        "creation_time": str(public_payload.get("created_utc") or datetime.now(timezone.utc).isoformat()),
+        "creation_time": str(public_payload.get("created_utc") or datetime.now(UTC).isoformat()),
         "artist": "StableNew",
         "genre": "AI-generated video",
         "stablenew_schema": VIDEO_CONTAINER_METADATA_SCHEMA,
@@ -213,7 +213,9 @@ def write_video_container_metadata(
         return False
     ffmpeg_executable = resolve_ffmpeg_executable()
     if ffmpeg_executable is None:
-        logger.debug("Skipping video container metadata for %s because FFmpeg is unavailable", output_path)
+        logger.debug(
+            "Skipping video container metadata for %s because FFmpeg is unavailable", output_path
+        )
         return False
     tags = build_video_container_tags(metadata_payload, file_path=output_path)
     for key, value in (additional_tags or {}).items():
@@ -260,7 +262,9 @@ def write_video_container_metadata(
 
 def _write_gif_metadata(path: Path, metadata_payload: Mapping[str, Any] | None) -> bool:
     temp_path = path.with_name(f"{path.stem}.metadata_tmp{path.suffix}")
-    comment_value = build_video_container_tags(metadata_payload, file_path=path).get("description", "")
+    comment_value = build_video_container_tags(metadata_payload, file_path=path).get(
+        "description", ""
+    )
     try:
         with Image.open(path) as image:
             frames = [frame.copy() for frame in ImageSequence.Iterator(image)]

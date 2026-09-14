@@ -58,9 +58,7 @@ class CharacterEmbedder:
         output_dir.mkdir(parents=True, exist_ok=True)
         working_dir = Path(
             str(
-                normalized.get("trainer_working_dir")
-                or normalized.get("working_dir")
-                or output_dir
+                normalized.get("trainer_working_dir") or normalized.get("working_dir") or output_dir
             )
         ).expanduser()
         working_dir.mkdir(parents=True, exist_ok=True)
@@ -216,18 +214,20 @@ class CharacterEmbedder:
                 f"or set {_ENV_TRAIN_COMMAND}."
             )
 
-        command.extend([
-            "--character_name",
-            str(payload["character_name"]),
-            "--image_dir",
-            str(payload["image_dir"]),
-            "--output_dir",
-            str(payload["output_dir"]),
-            "--epochs",
-            str(payload["epochs"]),
-            "--learning_rate",
-            str(payload["learning_rate"]),
-        ])
+        command.extend(
+            [
+                "--character_name",
+                str(payload["character_name"]),
+                "--image_dir",
+                str(payload["image_dir"]),
+                "--output_dir",
+                str(payload["output_dir"]),
+                "--epochs",
+                str(payload["epochs"]),
+                "--learning_rate",
+                str(payload["learning_rate"]),
+            ]
+        )
 
         for field_name in (
             "base_model",
@@ -283,7 +283,9 @@ class CharacterEmbedder:
                 pass
 
     def _resolve_weight_path(self, session: CharacterTrainingSession) -> str | None:
-        explicit_path = session.payload.get("produced_weight_path") or session.payload.get("weight_path")
+        explicit_path = session.payload.get("produced_weight_path") or session.payload.get(
+            "weight_path"
+        )
         if explicit_path:
             return str(Path(str(explicit_path)).expanduser().resolve())
         output_name = str(session.payload.get("output_name") or "").strip()

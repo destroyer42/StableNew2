@@ -6,7 +6,7 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
-from src.controller.content_visibility_resolver import REDACTED_TEXT, ContentVisibilityResolver
+from src.controller.content_visibility_resolver import ContentVisibilityResolver
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
@@ -123,10 +123,18 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         ):
             variable.trace_add("write", lambda *_: self._persist_current_asset_baseline())
 
-        self.baseline_prompt_text.bind("<KeyRelease>", lambda _e: self._persist_current_asset_baseline())
-        self.baseline_prompt_text.bind("<FocusOut>", lambda _e: self._persist_current_asset_baseline())
-        self.baseline_negative_text.bind("<KeyRelease>", lambda _e: self._persist_current_asset_baseline())
-        self.baseline_negative_text.bind("<FocusOut>", lambda _e: self._persist_current_asset_baseline())
+        self.baseline_prompt_text.bind(
+            "<KeyRelease>", lambda _e: self._persist_current_asset_baseline()
+        )
+        self.baseline_prompt_text.bind(
+            "<FocusOut>", lambda _e: self._persist_current_asset_baseline()
+        )
+        self.baseline_negative_text.bind(
+            "<KeyRelease>", lambda _e: self._persist_current_asset_baseline()
+        )
+        self.baseline_negative_text.bind(
+            "<FocusOut>", lambda _e: self._persist_current_asset_baseline()
+        )
         self.notes_text.bind("<KeyRelease>", lambda _e: self._persist_current_asset_baseline())
         self.notes_text.bind("<FocusOut>", lambda _e: self._persist_current_asset_baseline())
         self.prompt_delta_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
@@ -233,7 +241,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         )
         self.assets_list.grid(row=0, column=0, sticky="nsew")
         self.assets_list.bind("<<ListboxSelect>>", self._on_asset_select)
-        assets_scroll = ttk.Scrollbar(assets_frame, orient="vertical", command=self.assets_list.yview)
+        assets_scroll = ttk.Scrollbar(
+            assets_frame, orient="vertical", command=self.assets_list.yview
+        )
         assets_scroll.grid(row=0, column=1, sticky="ns")
         self.assets_list.configure(yscrollcommand=assets_scroll.set)
 
@@ -328,17 +338,19 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         model_row.grid(row=4, column=0, sticky="ew", pady=(0, 6))
         model_row.columnconfigure(1, weight=1)
         model_row.columnconfigure(3, weight=1)
-        ttk.Label(model_row, text="Model", style="Dark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        ttk.Label(model_row, text="Model", style="Dark.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 6)
+        )
         self.model_combo = ttk.Combobox(
             model_row,
             textvariable=self.model_var,
             style="Dark.TCombobox",
             state="readonly",
         )
-        self.model_combo.grid(
-            row=0, column=1, sticky="ew", padx=(0, 8)
+        self.model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        ttk.Label(model_row, text="VAE", style="Dark.TLabel").grid(
+            row=0, column=2, sticky="w", padx=(0, 6)
         )
-        ttk.Label(model_row, text="VAE", style="Dark.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 6))
         self.vae_combo = ttk.Combobox(
             model_row,
             textvariable=self.vae_var,
@@ -566,7 +578,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         )
         self.history_list.grid(row=0, column=0, sticky="nsew")
         self.history_list.bind("<<ListboxSelect>>", self._on_history_select)
-        history_scroll = ttk.Scrollbar(history_box, orient="vertical", command=self.history_list.yview)
+        history_scroll = ttk.Scrollbar(
+            history_box, orient="vertical", command=self.history_list.yview
+        )
         history_scroll.grid(row=0, column=1, sticky="ns")
         self.history_list.configure(yscrollcommand=history_scroll.set)
 
@@ -641,14 +655,18 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         img2img_box.grid(row=0, column=0, sticky="ew", pady=(0, 6))
         img2img_box.columnconfigure(1, weight=1)
         img2img_box.columnconfigure(3, weight=1)
-        ttk.Label(img2img_box, text="Sampler", style="Dark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        ttk.Label(img2img_box, text="Sampler", style="Dark.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 6)
+        )
         self.img2img_sampler_combo = ttk.Combobox(
             img2img_box,
             textvariable=self.img2img_sampler_var,
             style="Dark.TCombobox",
         )
         self.img2img_sampler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(img2img_box, text="Steps", style="Dark.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 6))
+        ttk.Label(img2img_box, text="Steps", style="Dark.TLabel").grid(
+            row=0, column=2, sticky="w", padx=(0, 6)
+        )
         ttk.Spinbox(
             img2img_box,
             from_=1,
@@ -658,7 +676,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=0, column=3, sticky="ew")
-        ttk.Label(img2img_box, text="CFG", style="Dark.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(img2img_box, text="CFG", style="Dark.TLabel").grid(
+            row=1, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         ttk.Spinbox(
             img2img_box,
             from_=1.0,
@@ -668,7 +688,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
-        ttk.Label(img2img_box, text="Denoise", style="Dark.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(img2img_box, text="Denoise", style="Dark.TLabel").grid(
+            row=1, column=2, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         ttk.Spinbox(
             img2img_box,
             from_=0.0,
@@ -678,7 +700,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=1, column=3, sticky="ew", pady=(6, 0))
-        ttk.Label(img2img_box, text="Width", style="Dark.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(img2img_box, text="Width", style="Dark.TLabel").grid(
+            row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         ttk.Spinbox(
             img2img_box,
             from_=0,
@@ -688,7 +712,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=2, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
-        ttk.Label(img2img_box, text="Height", style="Dark.TLabel").grid(row=2, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(img2img_box, text="Height", style="Dark.TLabel").grid(
+            row=2, column=2, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         ttk.Spinbox(
             img2img_box,
             from_=0,
@@ -708,14 +734,18 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         adetailer_box.grid(row=1, column=0, sticky="ew", pady=(0, 6))
         adetailer_box.columnconfigure(1, weight=1)
         adetailer_box.columnconfigure(3, weight=1)
-        ttk.Label(adetailer_box, text="Model", style="Dark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        ttk.Label(adetailer_box, text="Model", style="Dark.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 6)
+        )
         self.adetailer_model_combo = ttk.Combobox(
             adetailer_box,
             textvariable=self.adetailer_model_var,
             style="Dark.TCombobox",
         )
         self.adetailer_model_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(adetailer_box, text="Confidence", style="Dark.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 6))
+        ttk.Label(adetailer_box, text="Confidence", style="Dark.TLabel").grid(
+            row=0, column=2, sticky="w", padx=(0, 6)
+        )
         ttk.Spinbox(
             adetailer_box,
             from_=0.0,
@@ -725,7 +755,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=0, column=3, sticky="ew")
-        ttk.Label(adetailer_box, text="Steps", style="Dark.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(adetailer_box, text="Steps", style="Dark.TLabel").grid(
+            row=1, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         ttk.Spinbox(
             adetailer_box,
             from_=1,
@@ -735,7 +767,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
-        ttk.Label(adetailer_box, text="CFG", style="Dark.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(adetailer_box, text="CFG", style="Dark.TLabel").grid(
+            row=1, column=2, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         ttk.Spinbox(
             adetailer_box,
             from_=1.0,
@@ -745,7 +779,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=1, column=3, sticky="ew", pady=(6, 0))
-        ttk.Label(adetailer_box, text="Denoise", style="Dark.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(adetailer_box, text="Denoise", style="Dark.TLabel").grid(
+            row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         ttk.Spinbox(
             adetailer_box,
             from_=0.0,
@@ -755,14 +791,18 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=2, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
-        ttk.Label(adetailer_box, text="Sampler", style="Dark.TLabel").grid(row=2, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(adetailer_box, text="Sampler", style="Dark.TLabel").grid(
+            row=2, column=2, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         self.adetailer_sampler_combo = ttk.Combobox(
             adetailer_box,
             textvariable=self.adetailer_sampler_var,
             style="Dark.TCombobox",
         )
         self.adetailer_sampler_combo.grid(row=2, column=3, sticky="ew", pady=(6, 0))
-        ttk.Label(adetailer_box, text="Scheduler", style="Dark.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(adetailer_box, text="Scheduler", style="Dark.TLabel").grid(
+            row=3, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         self.adetailer_scheduler_combo = ttk.Combobox(
             adetailer_box,
             textvariable=self.adetailer_scheduler_var,
@@ -779,14 +819,18 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         upscale_box.grid(row=2, column=0, sticky="ew")
         upscale_box.columnconfigure(1, weight=1)
         upscale_box.columnconfigure(3, weight=1)
-        ttk.Label(upscale_box, text="Upscaler", style="Dark.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        ttk.Label(upscale_box, text="Upscaler", style="Dark.TLabel").grid(
+            row=0, column=0, sticky="w", padx=(0, 6)
+        )
         self.upscale_upscaler_combo = ttk.Combobox(
             upscale_box,
             textvariable=self.upscale_upscaler_var,
             style="Dark.TCombobox",
         )
         self.upscale_upscaler_combo.grid(row=0, column=1, sticky="ew", padx=(0, 8))
-        ttk.Label(upscale_box, text="Factor", style="Dark.TLabel").grid(row=0, column=2, sticky="w", padx=(0, 6))
+        ttk.Label(upscale_box, text="Factor", style="Dark.TLabel").grid(
+            row=0, column=2, sticky="w", padx=(0, 6)
+        )
         ttk.Spinbox(
             upscale_box,
             from_=1.0,
@@ -796,7 +840,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=0, column=3, sticky="ew")
-        ttk.Label(upscale_box, text="Steps", style="Dark.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(upscale_box, text="Steps", style="Dark.TLabel").grid(
+            row=1, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         ttk.Spinbox(
             upscale_box,
             from_=1,
@@ -806,7 +852,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=1, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
-        ttk.Label(upscale_box, text="Denoise", style="Dark.TLabel").grid(row=1, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(upscale_box, text="Denoise", style="Dark.TLabel").grid(
+            row=1, column=2, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         ttk.Spinbox(
             upscale_box,
             from_=0.0,
@@ -816,21 +864,27 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             width=8,
             style="Dark.TSpinbox",
         ).grid(row=1, column=3, sticky="ew", pady=(6, 0))
-        ttk.Label(upscale_box, text="Sampler", style="Dark.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(upscale_box, text="Sampler", style="Dark.TLabel").grid(
+            row=2, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         self.upscale_sampler_combo = ttk.Combobox(
             upscale_box,
             textvariable=self.upscale_sampler_var,
             style="Dark.TCombobox",
         )
         self.upscale_sampler_combo.grid(row=2, column=1, sticky="ew", padx=(0, 8), pady=(6, 0))
-        ttk.Label(upscale_box, text="Scheduler", style="Dark.TLabel").grid(row=2, column=2, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(upscale_box, text="Scheduler", style="Dark.TLabel").grid(
+            row=2, column=2, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         self.upscale_scheduler_combo = ttk.Combobox(
             upscale_box,
             textvariable=self.upscale_scheduler_var,
             style="Dark.TCombobox",
         )
         self.upscale_scheduler_combo.grid(row=2, column=3, sticky="ew", pady=(6, 0))
-        ttk.Label(upscale_box, text="Tile Size", style="Dark.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 6), pady=(6, 0))
+        ttk.Label(upscale_box, text="Tile Size", style="Dark.TLabel").grid(
+            row=3, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
         ttk.Spinbox(
             upscale_box,
             from_=0,
@@ -925,7 +979,8 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             self._set_text(self.baseline_negative_text, asset.baseline.negative_prompt)
             self._set_text(self.notes_text, asset.notes)
             self.model_var.set(
-                self._display_for_internal(asset.baseline.model, self._model_name_map) or asset.baseline.model
+                self._display_for_internal(asset.baseline.model, self._model_name_map)
+                or asset.baseline.model
             )
             self.vae_var.set(
                 self._display_for_internal(asset.baseline.vae, self._vae_name_map)
@@ -933,7 +988,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             )
             self.tags_var.set(", ".join(asset.tags))
             self.stage_img2img_var.set(bool(asset.baseline.stage_defaults.get("img2img", True)))
-            self.stage_adetailer_var.set(bool(asset.baseline.stage_defaults.get("adetailer", False)))
+            self.stage_adetailer_var.set(
+                bool(asset.baseline.stage_defaults.get("adetailer", False))
+            )
             self.stage_upscale_var.set(bool(asset.baseline.stage_defaults.get("upscale", False)))
             self._load_baseline_config_form(asset.baseline.config)
             self._apply_content_visibility_mode()
@@ -956,7 +1013,11 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         else:
             self.latest_preview.clear()
         last_run = asset.history[-1].run_id if asset.history else "none"
-        working_name = Path(asset.current_input_path).name if asset.current_input_path else asset.source_filename
+        working_name = (
+            Path(asset.current_input_path).name
+            if asset.current_input_path
+            else asset.source_filename
+        )
         self.meta_label.config(
             text=(
                 f"Asset: {asset.source_filename}\n"
@@ -1023,7 +1084,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         controller = self.app_controller
         handler = getattr(controller, "on_optimize_photo_assets", None)
         if not callable(handler):
-            messagebox.showerror("Controller missing", "Photo optimize controller is not connected.")
+            messagebox.showerror(
+                "Controller missing", "Photo optimize controller is not connected."
+            )
             return
 
         assets_payload: list[dict[str, Any]] = []
@@ -1216,7 +1279,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         self._sync_edit_box_to_mode("prompt")
 
     def _on_negative_mode_changed(self) -> None:
-        self._negative_mode_edits[self._negative_prev_mode] = self._get_text(self.negative_delta_text)
+        self._negative_mode_edits[self._negative_prev_mode] = self._get_text(
+            self.negative_delta_text
+        )
         self._negative_prev_mode = self.negative_mode_var.get() or "append"
         self._sync_edit_box_to_mode("negative")
 
@@ -1267,7 +1332,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(
-            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            mode
+            or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw")
+            or "nsfw"
         )
         self._pending_visibility_refresh = False
         self._apply_content_visibility_mode()
@@ -1297,13 +1364,23 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         upscale = data.get("upscale") if isinstance(data.get("upscale"), dict) else {}
 
         self.img2img_sampler_var.set(
-            str(img2img.get("sampler_name") or data.get("img2img_sampler_name") or data.get("sampler_name") or "")
+            str(
+                img2img.get("sampler_name")
+                or data.get("img2img_sampler_name")
+                or data.get("sampler_name")
+                or ""
+            )
         )
         self.img2img_steps_var.set(
-            self._safe_int(img2img.get("steps") or data.get("img2img_steps") or data.get("steps"), 20)
+            self._safe_int(
+                img2img.get("steps") or data.get("img2img_steps") or data.get("steps"), 20
+            )
         )
         self.img2img_cfg_var.set(
-            self._safe_float(img2img.get("cfg_scale") or data.get("img2img_cfg_scale") or data.get("cfg_scale"), 7.0)
+            self._safe_float(
+                img2img.get("cfg_scale") or data.get("img2img_cfg_scale") or data.get("cfg_scale"),
+                7.0,
+            )
         )
         self.img2img_denoise_var.set(
             self._safe_float(
@@ -1325,7 +1402,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         )
         self.adetailer_steps_var.set(
             self._safe_int(
-                adetailer.get("adetailer_steps") or adetailer.get("ad_steps") or data.get("adetailer_steps"),
+                adetailer.get("adetailer_steps")
+                or adetailer.get("ad_steps")
+                or data.get("adetailer_steps"),
                 28,
             )
         )
@@ -1354,7 +1433,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             )
         )
         self.adetailer_scheduler_var.set(
-            str(adetailer.get("scheduler") or adetailer.get("ad_scheduler") or "Use sampler default")
+            str(
+                adetailer.get("scheduler") or adetailer.get("ad_scheduler") or "Use sampler default"
+            )
         )
 
         self.upscale_upscaler_var.set(str(upscale.get("upscaler") or data.get("upscaler") or ""))
@@ -1429,7 +1510,8 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             "scheduler": self.upscale_scheduler_var.get().strip() or "normal",
             "tile_size": self._safe_int(self.upscale_tile_size_var.get(), 0),
             "face_restore": bool(self.upscale_face_restore_var.get()),
-            "face_restore_method": self.upscale_face_restore_method_var.get().strip() or "CodeFormer",
+            "face_restore_method": self.upscale_face_restore_method_var.get().strip()
+            or "CodeFormer",
         }
 
         config: dict[str, Any] = {
@@ -1458,7 +1540,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
     def _refresh_resource_options(self, resources: dict[str, list[Any]] | None = None) -> None:
         resource_map = resources
         if resource_map is None:
-            resource_map = getattr(self.app_state, "resources", {}) if self.app_state is not None else {}
+            resource_map = (
+                getattr(self.app_state, "resources", {}) if self.app_state is not None else {}
+            )
         model_values, model_map = self._normalize_dropdown_entries(
             self._resource_entries(resource_map, "models")
         )
@@ -1479,16 +1563,22 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             fallback=["face_yolov8n.pt", "hand_yolov8n.pt", "mediapipe_face_full"],
         )
         self._set_combobox_values(self.img2img_sampler_combo, self.img2img_sampler_var, samplers)
-        self._set_combobox_values(self.adetailer_sampler_combo, self.adetailer_sampler_var, samplers)
+        self._set_combobox_values(
+            self.adetailer_sampler_combo, self.adetailer_sampler_var, samplers
+        )
         self._set_combobox_values(self.upscale_sampler_combo, self.upscale_sampler_var, samplers)
         self._set_combobox_values(
             self.adetailer_scheduler_combo,
             self.adetailer_scheduler_var,
             ["Use sampler default"] + schedulers,
         )
-        self._set_combobox_values(self.upscale_scheduler_combo, self.upscale_scheduler_var, schedulers)
+        self._set_combobox_values(
+            self.upscale_scheduler_combo, self.upscale_scheduler_var, schedulers
+        )
         self._set_combobox_values(self.upscale_upscaler_combo, self.upscale_upscaler_var, upscalers)
-        self._set_combobox_values(self.adetailer_model_combo, self.adetailer_model_var, adetailer_models)
+        self._set_combobox_values(
+            self.adetailer_model_combo, self.adetailer_model_var, adetailer_models
+        )
 
     @staticmethod
     def _resource_entries(
@@ -1602,7 +1692,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
         merged = deepcopy(base or {})
         for key, value in (update or {}).items():
             if isinstance(value, dict) and isinstance(merged.get(key), dict):
-                merged[key] = PhotoOptimizeTabFrameV2._merge_nested_dicts(merged.get(key, {}), value)
+                merged[key] = PhotoOptimizeTabFrameV2._merge_nested_dicts(
+                    merged.get(key, {}), value
+                )
             else:
                 merged[key] = deepcopy(value)
         return merged
@@ -1626,7 +1718,9 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             "selected_asset_id": self._current_asset_id,
         }
 
-    def _on_app_state_resources_changed(self, resources: dict[str, list[Any]] | None = None) -> None:
+    def _on_app_state_resources_changed(
+        self, resources: dict[str, list[Any]] | None = None
+    ) -> None:
         resource_map = resources if isinstance(resources, dict) else None
         if not bool(self.winfo_ismapped()):
             self._pending_resources_payload = resource_map
@@ -1645,7 +1739,11 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
                 old_state.unsubscribe("resources", old_listener)
             except Exception:
                 pass
-        if old_state is not None and old_visibility_listener is not None and hasattr(old_state, "unsubscribe"):
+        if (
+            old_state is not None
+            and old_visibility_listener is not None
+            and hasattr(old_state, "unsubscribe")
+        ):
             try:
                 old_state.unsubscribe("content_visibility_mode", old_visibility_listener)
             except Exception:
@@ -1704,21 +1802,29 @@ class PhotoOptimizeTabFrameV2(ttk.Frame):
             self._pending_asset_refresh_target = None
             self.after_idle(lambda target=target: self._refresh_assets(select_asset_id=target))
         if self._pending_visibility_refresh:
-            self.after_idle(lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode))
+            self.after_idle(
+                lambda: self.on_content_visibility_mode_changed(self._content_visibility_mode)
+            )
 
     def destroy(self) -> None:
-        if self.app_state is not None and self._app_state_resource_listener is not None and hasattr(
-            self.app_state, "unsubscribe"
+        if (
+            self.app_state is not None
+            and self._app_state_resource_listener is not None
+            and hasattr(self.app_state, "unsubscribe")
         ):
             try:
                 self.app_state.unsubscribe("resources", self._app_state_resource_listener)
             except Exception:
                 pass
-        if self.app_state is not None and self._app_state_visibility_listener is not None and hasattr(
-            self.app_state, "unsubscribe"
+        if (
+            self.app_state is not None
+            and self._app_state_visibility_listener is not None
+            and hasattr(self.app_state, "unsubscribe")
         ):
             try:
-                self.app_state.unsubscribe("content_visibility_mode", self._app_state_visibility_listener)
+                self.app_state.unsubscribe(
+                    "content_visibility_mode", self._app_state_visibility_listener
+                )
             except Exception:
                 pass
         self._app_state_resource_listener = None

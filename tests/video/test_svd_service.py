@@ -136,7 +136,9 @@ def test_generate_frames_passes_prepared_geometry_to_diffusers(
     assert captured["height"] == prepared_size[1]
 
 
-def test_generate_frames_rejects_mismatched_output_geometry_without_repair(monkeypatch, tmp_path) -> None:
+def test_generate_frames_rejects_mismatched_output_geometry_without_repair(
+    monkeypatch, tmp_path
+) -> None:
     prepared_size = (576, 1024)
     actual_size = (1024, 576)
     prepared_path = tmp_path / "prepared.png"
@@ -205,7 +207,9 @@ def test_load_pipeline_prefers_cached_local_snapshot_before_network(monkeypatch,
     assert calls[0]["cache_dir"] == str(tmp_path / "cache")
 
 
-def test_load_pipeline_permits_online_acquisition_when_local_only_is_disabled(monkeypatch, tmp_path) -> None:
+def test_load_pipeline_permits_online_acquisition_when_local_only_is_disabled(
+    monkeypatch, tmp_path
+) -> None:
     calls: list[dict[str, object]] = []
 
     class _FakePipeline:

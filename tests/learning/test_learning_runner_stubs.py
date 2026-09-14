@@ -55,7 +55,10 @@ def test_prepare_learning_batches_supports_prompt_optimizer_preset_comparison():
     assert [step.value for step in steps] == ["baseline_safe_v1", "subject_anchor_v1"]
     assert steps[0].config_snapshot["prompt_optimizer"]["enabled"] is True
     assert steps[0].config_snapshot["metadata"]["prompt_optimizer_learning_enabled"] is True
-    assert steps[1].config_snapshot["metadata"]["prompt_optimizer_learning_preset"] == "subject_anchor_v1"
+    assert (
+        steps[1].config_snapshot["metadata"]["prompt_optimizer_learning_preset"]
+        == "subject_anchor_v1"
+    )
 
 
 def test_run_learning_batches_summarizes_compared_presets():

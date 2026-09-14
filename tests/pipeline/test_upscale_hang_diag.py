@@ -9,7 +9,9 @@ from src.utils.logger import StructuredLogger
 
 
 def _make_runner(tmp_path: Path) -> PipelineRunner:
-    return PipelineRunner(Mock(), StructuredLogger(output_dir=tmp_path / "logs"), runs_base_dir=str(tmp_path / "runs"))
+    return PipelineRunner(
+        Mock(), StructuredLogger(output_dir=tmp_path / "logs"), runs_base_dir=str(tmp_path / "runs")
+    )
 
 
 def _seed_image(path: Path) -> str:
@@ -35,7 +37,9 @@ def test_runner_processes_upscale_stage_serially_for_each_input_image(tmp_path: 
         def get_run_efficiency_metrics(self, _images_processed):
             return {}
 
-        def run_upscale_stage(self, input_image_path, config, output_dir, image_name, cancel_token=None):
+        def run_upscale_stage(
+            self, input_image_path, config, output_dir, image_name, cancel_token=None
+        ):
             calls.append(str(input_image_path))
             output_path = Path(output_dir) / f"{image_name}.png"
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -53,7 +57,9 @@ def test_runner_processes_upscale_stage_serially_for_each_input_image(tmp_path: 
         config={},
         path_output_dir=str(tmp_path / "runs"),
         filename_template="{seed}",
-        stage_chain=[StageConfig(stage_type="upscale", enabled=True, extra={"upscaler": "nearest"})],
+        stage_chain=[
+            StageConfig(stage_type="upscale", enabled=True, extra={"upscaler": "nearest"})
+        ],
         input_image_paths=inputs,
         start_stage="upscale",
     )
@@ -82,7 +88,9 @@ def test_runner_skips_missing_upscale_outputs_without_failing_prior_inputs(tmp_p
         def get_run_efficiency_metrics(self, _images_processed):
             return {}
 
-        def run_upscale_stage(self, input_image_path, config, output_dir, image_name, cancel_token=None):
+        def run_upscale_stage(
+            self, input_image_path, config, output_dir, image_name, cancel_token=None
+        ):
             calls.append(Path(input_image_path).name)
             if Path(input_image_path).name == "img_1.png":
                 return None
@@ -102,7 +110,9 @@ def test_runner_skips_missing_upscale_outputs_without_failing_prior_inputs(tmp_p
         config={},
         path_output_dir=str(tmp_path / "runs"),
         filename_template="{seed}",
-        stage_chain=[StageConfig(stage_type="upscale", enabled=True, extra={"upscaler": "nearest"})],
+        stage_chain=[
+            StageConfig(stage_type="upscale", enabled=True, extra={"upscaler": "nearest"})
+        ],
         input_image_paths=inputs,
         start_stage="upscale",
     )

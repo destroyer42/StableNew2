@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from copy import deepcopy
 import json
 from collections.abc import Mapping
+from copy import deepcopy
 from dataclasses import dataclass
 from pathlib import Path
 from string import Formatter
@@ -52,7 +52,7 @@ _FALLBACK_PROMPT_TEMPLATE_PAYLOAD: dict[str, Any] = {
     },
 }
 
-_PROMPT_TEMPLATE_CACHE: dict[str, tuple[int | None, dict[str, "PromptTemplateDefinition"]]] = {}
+_PROMPT_TEMPLATE_CACHE: dict[str, tuple[int | None, dict[str, PromptTemplateDefinition]]] = {}
 
 
 @dataclass(frozen=True)
@@ -177,7 +177,9 @@ def get_prompt_template(
 def extract_template_placeholders(
     template: PromptTemplateDefinition | str,
 ) -> tuple[str, ...]:
-    template_text = template.template if isinstance(template, PromptTemplateDefinition) else str(template)
+    template_text = (
+        template.template if isinstance(template, PromptTemplateDefinition) else str(template)
+    )
     placeholders: list[str] = []
     seen: set[str] = set()
     for _, field_name, _, _ in Formatter().parse(template_text):

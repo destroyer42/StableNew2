@@ -6,7 +6,6 @@ from typing import Any
 
 from src.pipeline.config_contract_v26 import extract_execution_config
 
-
 _COMMON_TOP_LEVEL_KEYS = {
     "prompt",
     "negative_prompt",

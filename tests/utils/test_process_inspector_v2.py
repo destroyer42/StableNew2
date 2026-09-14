@@ -348,7 +348,9 @@ def test_collect_process_risk_snapshot_ignores_comfyui_runtime_high_rss(monkeypa
     assert result["suspicious_processes"] == []
 
 
-def test_collect_process_risk_snapshot_does_not_treat_duplicate_comfyui_as_duplicate_webui(monkeypatch) -> None:
+def test_collect_process_risk_snapshot_does_not_treat_duplicate_comfyui_as_duplicate_webui(
+    monkeypatch,
+) -> None:
     main_process = process_inspector_v2.ProcessInfo(
         pid=1,
         parent_pid=None,

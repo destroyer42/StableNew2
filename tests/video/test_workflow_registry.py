@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from src.video import (
-    WORKFLOW_GOVERNANCE_DISABLED,
     WORKFLOW_CAP_SINGLE_IMAGE_TO_VIDEO,
+    WORKFLOW_GOVERNANCE_DISABLED,
     WorkflowDependencySpec,
     WorkflowInputBinding,
     WorkflowOutputBinding,

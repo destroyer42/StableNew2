@@ -12,23 +12,16 @@ from __future__ import annotations
 import json
 import tkinter as tk
 from pathlib import Path
-from types import SimpleNamespace
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
 from src.gui.view_contracts.movie_clips_contract import (
-    DEFAULT_CODEC,
-    DEFAULT_FPS,
-    DEFAULT_MODE,
-    DEFAULT_QUALITY,
-    SOURCE_MODE_FOLDER,
     SOURCE_MODE_MANUAL,
 )
 from src.gui.views.movie_clips_tab_frame_v2 import MovieClipsTabFrameV2
-from src.video.movie_clip_models import ClipManifest, ClipRequest, ClipResult, ClipSettings
+from src.video.movie_clip_models import ClipRequest, ClipSettings
 from src.video.movie_clip_service import MovieClipService
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -215,6 +208,7 @@ def test_jt_movie_clips_manifest_is_written(tmp_path: Path):
 @pytest.mark.journey
 def test_jt_movie_clips_manifest_is_deterministic(tmp_path: Path):
     """Journey: two identical builds produce manifests with identical non-path fields."""
+
     def _build(out_dir: Path) -> dict:
         svc = _mocked_service(success=True)
         imgs = _make_images(tmp_path / "src", 2)

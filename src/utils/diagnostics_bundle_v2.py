@@ -48,7 +48,12 @@ def _resolve_output_dir(output_dir: Path | None) -> Path:
 # Single-flight / cooldown guards for async bundle creation
 _LAST_BUNDLE_TS: dict[str, float] = {}
 _IN_FLIGHT: set[str] = set()
-_PRESSURE_REASON_HINTS = {"ui_heartbeat_stall", "queue_runner_stall", "webui_pressure", "webui_unavailable"}
+_PRESSURE_REASON_HINTS = {
+    "ui_heartbeat_stall",
+    "queue_runner_stall",
+    "webui_pressure",
+    "webui_unavailable",
+}
 
 
 def _is_pressure_reason(reason: str) -> bool:
@@ -269,11 +274,13 @@ def build_crash_bundle(
             inspector_lines = _collect_process_inspector_lines()
             with zipfile.ZipFile(bundle_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
                 zf.writestr("metadata/info.json", json.dumps(_anonymize(metadata), indent=2))
-                
+
                 # PR-HB-003: Always write thread dumps, even if capture failed
                 zf.writestr("metadata/thread_dump.txt", thread_dump_text)
-                zf.writestr("metadata/thread_dump.json", json.dumps(_anonymize(thread_dump_json), indent=2))
-                
+                zf.writestr(
+                    "metadata/thread_dump.json", json.dumps(_anonymize(thread_dump_json), indent=2)
+                )
+
                 if entries:
                     zf.writestr("logs/gui_logs.json", json.dumps(_anonymize(entries), indent=2))
                 if job_snapshot:
@@ -303,7 +310,9 @@ def build_crash_bundle(
                 if inspector_lines and effective_include_process_state:
                     zf.writestr("metadata/process_inspector.txt", "\n".join(inspector_lines))
                 if gpu_snapshot:
-                    zf.writestr("metadata/gpu_snapshot.json", json.dumps(_anonymize(gpu_snapshot), indent=2))
+                    zf.writestr(
+                        "metadata/gpu_snapshot.json", json.dumps(_anonymize(gpu_snapshot), indent=2)
+                    )
                 _include_jsonl_logs(zf)
                 _include_image_metadata(zf, image_roots)
                 if include_queue_state:
@@ -435,38 +444,38 @@ def _collect_image_paths(roots: list[Path], *, limit: int = 25) -> list[Path]:
 def _capture_thread_dump() -> tuple[str, dict]:
     """
     PR-HB-003: Capture current thread stacks for heartbeat stall diagnostics.
-    
+
     Returns:
         tuple of (text_dump, json_dump) for both human-readable and structured formats.
-    
+
     PR-HB-003: Fixed to use sys._current_frames() for real frame objects and
     traceback.extract_stack() for FrameSummary objects (not frame.f_code access).
     """
     text_lines = []
     json_threads = {}
-    
+
     try:
         frames = sys._current_frames()
         thread_map = {t.ident: t for t in threading.enumerate() if t.ident is not None}
-        
+
         for thread_id, frame in frames.items():
             # Get thread object for name/metadata
             thread_obj = thread_map.get(thread_id)
             thread_name = thread_obj.name if thread_obj else f"Thread-{thread_id}"
             is_daemon = thread_obj.daemon if thread_obj else False
             is_alive = thread_obj.is_alive() if thread_obj else False
-            
+
             # PR-HB-003: Use format_stack for text, extract_stack for structured data
             stack_lines = traceback.format_stack(frame)
             stack_text = "".join(stack_lines)
-            
+
             # Add to text dump
-            text_lines.append(f"\n{'='*80}")
+            text_lines.append(f"\n{'=' * 80}")
             text_lines.append(f"Thread: {thread_name} (ID: {thread_id})")
             text_lines.append(f"  Daemon: {is_daemon}, Alive: {is_alive}")
-            text_lines.append(f"{'-'*80}")
+            text_lines.append(f"{'-' * 80}")
             text_lines.append(stack_text)
-            
+
             # PR-HB-003: extract_stack returns FrameSummary objects, not frames
             extracted_frames = traceback.extract_stack(frame)
             json_threads[str(thread_id)] = {
@@ -484,15 +493,15 @@ def _capture_thread_dump() -> tuple[str, dict]:
                     for fs in extracted_frames
                 ],
             }
-        
+
         text_dump = "\n".join(text_lines) if text_lines else "(No threads found)"
-        
+
     except Exception as e:
         text_dump = f"ERROR capturing thread dump: {e!r}\n{traceback.format_exc()}"
         json_threads = {"error": str(e)}
-    
+
     return text_dump, json_threads
-    
+
     return text_dump, json_threads
 
 

@@ -8,21 +8,18 @@ import tkinter as tk
 from collections.abc import Callable
 from datetime import datetime
 from tkinter import ttk
-from typing import Any, TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from src.gui.panels_v2.widgets.stage_timeline_widget import (
+    StageTimelineWidget,
+)
 from src.gui.theme_v2 import (
     SECONDARY_BUTTON_STYLE,
     STATUS_LABEL_STYLE,  # PR-GUI-DARKMODE-002: Import for pack/stage/seed labels
     STATUS_STRONG_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
-from src.gui.panels_v2.widgets.stage_timeline_widget import (
-    StageTimelineWidget,
-    TimelineData,
-    create_timeline_from_stage_chain,
-)
-from src.gui.utils.display_helpers import format_seed_display
-from src.pipeline.job_models_v2 import JobStatusV2, RuntimeJobStatus, UnifiedJobSummary
+from src.pipeline.job_models_v2 import RuntimeJobStatus, UnifiedJobSummary
 
 if TYPE_CHECKING:
     from src.queue.job_model import Job
@@ -224,9 +221,9 @@ class RunningJobPanelV2(ttk.Frame):
 
     def _record_update_metric(self, elapsed_ms: float, *, skipped: bool = False) -> None:
         self._refresh_metrics["count"] = int(self._refresh_metrics.get("count", 0) or 0) + 1
-        self._refresh_metrics["total_ms"] = (
-            float(self._refresh_metrics.get("total_ms", 0.0) or 0.0) + float(elapsed_ms)
-        )
+        self._refresh_metrics["total_ms"] = float(
+            self._refresh_metrics.get("total_ms", 0.0) or 0.0
+        ) + float(elapsed_ms)
         self._refresh_metrics["last_ms"] = float(elapsed_ms)
         self._refresh_metrics["max_ms"] = max(
             float(self._refresh_metrics.get("max_ms", 0.0) or 0.0),
@@ -251,16 +248,14 @@ class RunningJobPanelV2(ttk.Frame):
             "last_ms": round(float(self._refresh_metrics.get("last_ms", 0.0) or 0.0), 3),
             "slow_count": int(self._refresh_metrics.get("slow_count", 0) or 0),
             "skipped_count": int(self._refresh_metrics.get("skipped_count", 0) or 0),
-            "timeline_clear_count": int(
-                self._refresh_metrics.get("timeline_clear_count", 0) or 0
-            ),
+            "timeline_clear_count": int(self._refresh_metrics.get("timeline_clear_count", 0) or 0),
             "timer_active": bool(self._timer_id),
             "slow_threshold_ms": float(self.SLOW_UPDATE_THRESHOLD_MS),
         }
 
     def _format_eta(self, seconds: float | None) -> str:
         """Format ETA seconds to a human-readable string.
-        
+
         PR-GUI-DATA-005: Display estimated time remaining.
         """
         if seconds is None or seconds <= 0:
@@ -394,7 +389,7 @@ class RunningJobPanelV2(ttk.Frame):
         # Status (progress from runtime if available)
         status_value = job.status if isinstance(job.status, str) else job.status.value
         status_text = f"Status: {status_value.title()}"
-        
+
         if runtime:
             # Use progress from runtime status
             progress_pct = runtime.get_progress_percentage()
@@ -407,7 +402,7 @@ class RunningJobPanelV2(ttk.Frame):
         if runtime:
             started_at = runtime.started_at
         else:
-            started_at = getattr(job, 'created_at', None)
+            started_at = getattr(job, "created_at", None)
         elapsed_text = self._format_elapsed(started_at)
 
         # ETA display
@@ -484,19 +479,21 @@ class RunningJobPanelV2(ttk.Frame):
             return
 
         # Handle status as string or enum (UnifiedJobSummary uses strings)
-        status_str = self._current_job.status if isinstance(self._current_job.status, str) else self._current_job.status.value
+        status_str = (
+            self._current_job.status
+            if isinstance(self._current_job.status, str)
+            else self._current_job.status.value
+        )
         is_paused = status_str.upper() == "PAUSED"
 
         if is_paused:
             # Try multiple method names for compatibility
-            method = (
-                getattr(self.controller, "on_resume_current_job", None) or
-                getattr(self.controller, "on_resume_job_v2", None)
+            method = getattr(self.controller, "on_resume_current_job", None) or getattr(
+                self.controller, "on_resume_job_v2", None
             )
         else:
-            method = (
-                getattr(self.controller, "on_pause_current_job", None) or
-                getattr(self.controller, "on_pause_job_v2", None)
+            method = getattr(self.controller, "on_pause_current_job", None) or getattr(
+                self.controller, "on_pause_job_v2", None
             )
 
         if callable(method):
@@ -508,9 +505,8 @@ class RunningJobPanelV2(ttk.Frame):
             return
 
         # Try multiple method names for compatibility
-        method = (
-            getattr(self.controller, "on_cancel_current_job", None) or
-            getattr(self.controller, "on_cancel_job_v2", None)
+        method = getattr(self.controller, "on_cancel_current_job", None) or getattr(
+            self.controller, "on_cancel_job_v2", None
         )
         if callable(method):
             method()
@@ -566,7 +562,7 @@ class RunningJobPanelV2(ttk.Frame):
 
     def update_progress(self, progress: float, eta_seconds: float | None = None) -> None:
         """Update just the progress display (updates status text with percentage).
-        
+
         Note: Visual progress is shown in the timeline widget, this just updates
         the status text percentage.
         """
@@ -574,20 +570,24 @@ class RunningJobPanelV2(ttk.Frame):
             return
         if self._current_job:
             # Safely set progress if attribute exists
-            if hasattr(self._current_job, 'progress'):
+            if hasattr(self._current_job, "progress"):
                 self._current_job.progress = progress
             if eta_seconds is None:
                 eta_seconds = self._estimate_eta_from_progress(
                     progress, getattr(self._current_job, "started_at", None)
                 )
             # Safely set eta_seconds if attribute exists
-            if hasattr(self._current_job, 'eta_seconds'):
+            if hasattr(self._current_job, "eta_seconds"):
                 self._current_job.eta_seconds = eta_seconds
 
             # Update status text with percentage
             progress_pct = int(progress * 100)
             # Handle status as string or enum (UnifiedJobSummary uses strings)
-            status_value = self._current_job.status if isinstance(self._current_job.status, str) else self._current_job.status.value
+            status_value = (
+                self._current_job.status
+                if isinstance(self._current_job.status, str)
+                else self._current_job.status.value
+            )
             status_text = f"Status: {status_value.title()}"
             if progress_pct > 0:
                 status_text += f" ({progress_pct}%)"
@@ -613,11 +613,13 @@ class RunningJobPanelV2(ttk.Frame):
         # Update elapsed time if job is running
         if self._current_job:
             # Safely access started_at or created_at
-            started_at = getattr(self._current_job, 'started_at', None) or getattr(self._current_job, 'created_at', None)
+            started_at = getattr(self._current_job, "started_at", None) or getattr(
+                self._current_job, "created_at", None
+            )
             if started_at:
                 elapsed_text = self._format_elapsed(started_at)
                 self.elapsed_label.configure(text=elapsed_text)
-        
+
         # Schedule next tick in 1 second
         self._timer_id = self.after(1000, self._tick)
 
@@ -634,11 +636,11 @@ class RunningJobPanelV2(ttk.Frame):
         running_job = getattr(app_state, "running_job", None)
         self._current_job = running_job
         self._current_job_summary = running_job
-        
+
         # Get runtime status (dynamic execution state) from app state
         runtime_status = getattr(app_state, "runtime_status", None)
         self._runtime_status = runtime_status
-        
+
         # Update display with both static and dynamic data
         self._update_display()
 

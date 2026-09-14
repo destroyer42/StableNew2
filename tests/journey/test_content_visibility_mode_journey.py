@@ -41,12 +41,20 @@ def test_content_visibility_mode_journey_filters_live_and_persists(
             assert list(prompt_tab.pack_listbox.get(0, tk.END)) == ["explicit_pack", "safe_pack"]
             assert not hasattr(first.window.header_zone, "visibility_button")
 
-            first.window.open_engine_settings_dialog(config_manager=ConfigManager(tmp_path / "presets"))
+            first.window.open_engine_settings_dialog(
+                config_manager=ConfigManager(tmp_path / "presets")
+            )
             first_root.update()
             dialog = next(
-                child for child in first.window.root.winfo_children() if isinstance(child, tk.Toplevel)
+                child
+                for child in first.window.root.winfo_children()
+                if isinstance(child, tk.Toplevel)
             )
-            panel = next(child for child in dialog.winfo_children() if isinstance(child, EngineSettingsDialog))
+            panel = next(
+                child
+                for child in dialog.winfo_children()
+                if isinstance(child, EngineSettingsDialog)
+            )
             panel._webui_base_url_var.set("http://127.0.0.1:7860")
             panel._content_visibility_mode_var.set("sfw")
             panel._handle_save()

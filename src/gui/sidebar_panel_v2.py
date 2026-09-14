@@ -219,10 +219,10 @@ class SidebarPanelV2(ttk.Frame):
         self.global_negative_text_var = tk.StringVar(value="")
         self.global_positive_enabled_var = tk.BooleanVar(value=False)
         self.global_positive_text_var = tk.StringVar(value="")
-        
+
         # Override checkbox for pack config override
         self.override_pack_config_var = tk.BooleanVar(value=False)
-        
+
         # Load global prompts from config manager
         try:
             if self.config_manager:
@@ -290,18 +290,19 @@ class SidebarPanelV2(ttk.Frame):
             build_child=lambda parent: OutputSettingsPanelV2(parent, embed_mode=True),
         )
         self.output_settings_card.grid(row=4, column=0, sticky="ew", padx=8, pady=(0, 4))
-        
+
         # Reprocess panel for sending existing images through pipeline stages
         # Import inside lambda to avoid circular import at module load time
         def _build_reprocess_panel(parent):
             from src.gui.panels_v2.reprocess_panel_v2 import ReprocessPanelV2
+
             return ReprocessPanelV2(
                 parent,
                 controller=self.controller,
                 app_state=self.app_state,
                 embed_mode=True,
             )
-        
+
         self.reprocess_card = _SidebarCard(
             self,
             title="Reprocess Images",
@@ -310,7 +311,7 @@ class SidebarPanelV2(ttk.Frame):
         )
         self.reprocess_panel = self.reprocess_card.child
         self.reprocess_card.grid(row=5, column=0, sticky="ew", padx=8, pady=(0, 4))
-        
+
         self._bind_app_state()
         # PR-PERSIST-001: Restore saved state
         self.restore_state()
@@ -332,7 +333,9 @@ class SidebarPanelV2(ttk.Frame):
         self.saved_recipe_combo.grid(row=0, column=0, sticky="ew")
         self.saved_recipe_combo.bind("<<ComboboxSelected>>", self._on_saved_recipe_selected)
 
-        self.saved_recipe_menu_button = ttk.Menubutton(combo_frame, text="Actions", direction="below", style="Dark.TButton")
+        self.saved_recipe_menu_button = ttk.Menubutton(
+            combo_frame, text="Actions", direction="below", style="Dark.TButton"
+        )
         self.saved_recipe_menu_button.grid(row=0, column=1, padx=(4, 0))
         self.saved_recipe_dropdown = self.saved_recipe_menu_button
         self.saved_recipe_menu = tk.Menu(self.saved_recipe_menu_button, tearoff=0)
@@ -348,7 +351,9 @@ class SidebarPanelV2(ttk.Frame):
         self.saved_recipe_menu.add_command(
             label="Save Current as Recipe", command=self._on_saved_recipe_save_current
         )
-        self.saved_recipe_menu.add_command(label="Delete Recipe", command=self._on_saved_recipe_delete)
+        self.saved_recipe_menu.add_command(
+            label="Delete Recipe", command=self._on_saved_recipe_delete
+        )
         self.saved_recipe_menu_button.config(menu=self.saved_recipe_menu)
 
         # PR-GUI-H: Bottom row with smaller create button and config source label
@@ -475,7 +480,11 @@ class SidebarPanelV2(ttk.Frame):
         )
         self.add_to_job_button.grid(row=0, column=2, sticky="ew", padx=(0, 2))
         self.preview_toggle_button = ttk.Button(
-            btn_frame, text="Show Preview", command=self._toggle_pack_preview, state=tk.DISABLED, style="Dark.TButton"
+            btn_frame,
+            text="Show Preview",
+            command=self._toggle_pack_preview,
+            state=tk.DISABLED,
+            style="Dark.TButton",
         )
         self.preview_toggle_button.grid(row=0, column=3, sticky="ew")
 
@@ -553,10 +562,12 @@ class SidebarPanelV2(ttk.Frame):
         self._preview_current_path: Path | None = None
 
         # Global Prompts Section
-        global_frame = ttk.LabelFrame(frame, text="Global Prompts", padding=8, style="Dark.TLabelframe")
+        global_frame = ttk.LabelFrame(
+            frame, text="Global Prompts", padding=8, style="Dark.TLabelframe"
+        )
         global_frame.grid(row=4, column=0, sticky="ew", pady=(4, 0))
         global_frame.columnconfigure(1, weight=1)
-        
+
         # Global Positive
         pos_row = 0
         ttk.Label(global_frame, text="✨ Positive:", style="Dark.TLabel").grid(
@@ -569,7 +580,7 @@ class SidebarPanelV2(ttk.Frame):
             style="Dark.TCheckbutton",
         )
         pos_cb.grid(row=pos_row, column=1, sticky="w", padx=(4, 0))
-        
+
         pos_entry = ttk.Entry(
             global_frame,
             textvariable=self.global_positive_text_var,
@@ -577,7 +588,7 @@ class SidebarPanelV2(ttk.Frame):
             style="Dark.TEntry",
         )
         pos_entry.grid(row=pos_row + 1, column=0, columnspan=2, sticky="ew", pady=(2, 0))
-        
+
         save_pos_btn = ttk.Button(
             global_frame,
             text="Save Global Positive",
@@ -586,7 +597,7 @@ class SidebarPanelV2(ttk.Frame):
             style="Dark.TButton",
         )
         save_pos_btn.grid(row=pos_row + 2, column=0, columnspan=2, sticky="ew", pady=(2, 8))
-        
+
         # Global Negative
         neg_row = 3
         ttk.Label(global_frame, text="🛡️ Negative:", style="Dark.TLabel").grid(
@@ -599,7 +610,7 @@ class SidebarPanelV2(ttk.Frame):
             style="Dark.TCheckbutton",
         )
         neg_cb.grid(row=neg_row, column=1, sticky="w", padx=(4, 0))
-        
+
         neg_entry = ttk.Entry(
             global_frame,
             textvariable=self.global_negative_text_var,
@@ -607,7 +618,7 @@ class SidebarPanelV2(ttk.Frame):
             style="Dark.TEntry",
         )
         neg_entry.grid(row=neg_row + 1, column=0, columnspan=2, sticky="ew", pady=(2, 0))
-        
+
         save_neg_btn = ttk.Button(
             global_frame,
             text="Save Global Negative",
@@ -666,11 +677,7 @@ class SidebarPanelV2(ttk.Frame):
             packs = summaries
         if self._manual_pack_names:
             summary_by_name = {summary.name: summary for summary in summaries}
-            packs = [
-                summary_by_name[pn]
-                for pn in self._manual_pack_names
-                if pn in summary_by_name
-            ]
+            packs = [summary_by_name[pn] for pn in self._manual_pack_names if pn in summary_by_name]
             if not packs:
                 packs = summaries
         self._current_pack_names = [summary.name for summary in packs]
@@ -775,7 +782,9 @@ class SidebarPanelV2(ttk.Frame):
         ]
         logger.debug(f"[SidebarPanel] Pack IDs to add: {pack_ids}")
         if controller and hasattr(controller, "on_pipeline_add_packs_to_job"):
-            logger.debug(f"[SidebarPanel] Calling controller.on_pipeline_add_packs_to_job({pack_ids})")
+            logger.debug(
+                f"[SidebarPanel] Calling controller.on_pipeline_add_packs_to_job({pack_ids})"
+            )
             try:
                 controller.on_pipeline_add_packs_to_job(pack_ids)
                 logger.debug("[SidebarPanel] Successfully called on_pipeline_add_packs_to_job")
@@ -994,7 +1003,9 @@ class SidebarPanelV2(ttk.Frame):
 
     def on_content_visibility_mode_changed(self, mode: str | None = None) -> None:
         self._content_visibility_mode = str(
-            mode or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+            mode
+            or getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw")
+            or "nsfw"
         )
         # Visibility changes should rebuild from canonical discovered summaries, not stale
         # controller-pushed name snapshots captured under a different mode.
@@ -1205,7 +1216,7 @@ class SidebarPanelV2(ttk.Frame):
         """
         # Create a frame to hold the pipeline config panel and stage toggles
         frame = ttk.Frame(parent)
-        
+
         # Override checkbox section
         override_frame = ttk.Frame(frame)
         override_frame.pack(fill="x", pady=(0, 8))
@@ -1217,7 +1228,7 @@ class SidebarPanelV2(ttk.Frame):
             style="Dark.TCheckbutton",
         )
         override_cb.pack(anchor="w")
-        
+
         # Stage toggles section
         stage_section = ttk.Frame(frame)
         stage_section.pack(fill="x", pady=(0, 8))
@@ -1287,7 +1298,7 @@ class SidebarPanelV2(ttk.Frame):
             "enabled": bool(self.global_negative_enabled_var.get()),
             "text": self.global_negative_text_var.get().strip(),
         }
-    
+
     def get_global_positive_config(self) -> dict[str, object]:
         return {
             "enabled": bool(self.global_positive_enabled_var.get()),
@@ -1308,7 +1319,7 @@ class SidebarPanelV2(ttk.Frame):
             self.global_positive_text_var.set(str(config.get("global_positive_prompt") or ""))
         if "global_negative_prompt" in config:
             self.global_negative_text_var.set(str(config.get("global_negative_prompt") or ""))
-    
+
     def _save_global_negative(self) -> None:
         """Save global negative prompt to disk."""
         if not self.config_manager:
@@ -1320,7 +1331,7 @@ class SidebarPanelV2(ttk.Frame):
             self.config_manager.save_global_negative_prompt(text)
         except Exception:
             pass
-    
+
     def _save_global_positive(self) -> None:
         """Save global positive prompt to disk."""
         if not self.config_manager:
@@ -1398,11 +1409,11 @@ class SidebarPanelV2(ttk.Frame):
                     for i in selection
                     if i < len(self._current_pack_names)
                 ]
-            
+
             state = {
                 "selected_list": self.pack_list_var.get() if hasattr(self, "pack_list_var") else "",
                 "selected_packs": selected_packs,
-                "schema_version": "2.6"
+                "schema_version": "2.6",
             }
             SIDEBAR_STATE_PATH.parent.mkdir(parents=True, exist_ok=True)
             SIDEBAR_STATE_PATH.write_text(json.dumps(state, indent=2))
@@ -1413,25 +1424,26 @@ class SidebarPanelV2(ttk.Frame):
         """Restore sidebar state from disk."""
         if not SIDEBAR_STATE_PATH.exists():
             return
-        
+
         try:
             state = json.loads(SIDEBAR_STATE_PATH.read_text())
-            
+
             # Validate schema version
             if state.get("schema_version") != "2.6":
                 logger.warning("Unsupported sidebar state schema, ignoring")
                 return
-            
+
             # Restore selected list
             selected_list = state.get("selected_list", "")
             if selected_list and hasattr(self, "pack_list_var"):
                 if selected_list in self.pack_list_names:
                     self.pack_list_var.set(selected_list)
                     self._populate_packs_for_selected_list()
-            
+
             # Restore selected packs (defer to next frame to ensure listbox is populated)
             selected_packs = state.get("selected_packs", [])
             if selected_packs and hasattr(self, "pack_listbox"):
+
                 def restore_selection():
                     try:
                         self.pack_listbox.selection_clear(0, tk.END)
@@ -1441,9 +1453,9 @@ class SidebarPanelV2(ttk.Frame):
                                 self.pack_listbox.selection_set(idx)
                     except Exception as e:
                         logger.warning(f"Failed to restore pack selection: {e}")
-                
+
                 self.after(100, restore_selection)
-            
+
             logger.debug(f"Restored sidebar state: {len(selected_packs)} packs selected")
         except Exception as e:
             logger.warning(f"Failed to restore sidebar state: {e}")

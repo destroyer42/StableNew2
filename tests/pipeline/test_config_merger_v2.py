@@ -515,7 +515,9 @@ class TestPipelineLevelMerge:
         assert result["adetailer"]["confidence"] == 0.5
         assert result["adetailer"]["enabled"] is True
 
-    def test_merge_pipeline_with_adetailer_pass_local_override_fields(self, base_pipeline_config: dict) -> None:
+    def test_merge_pipeline_with_adetailer_pass_local_override_fields(
+        self, base_pipeline_config: dict
+    ) -> None:
         """Override-only ADetailer merges should preserve pass-local enable and inpaint settings."""
         flags = StageOverrideFlags(adetailer_override_enabled=True)
         bundle = StageOverridesBundle(
@@ -543,7 +545,10 @@ class TestPipelineLevelMerge:
             override_flags=flags,
         )
 
-        assert result["adetailer"]["adetailer_checkpoint_model"] == "juggernautXL_ragnarokBy.safetensors"
+        assert (
+            result["adetailer"]["adetailer_checkpoint_model"]
+            == "juggernautXL_ragnarokBy.safetensors"
+        )
         assert result["adetailer"]["sd_model_checkpoint"] == "juggernautXL_ragnarokBy.safetensors"
         assert result["adetailer"]["enable_face_pass"] is False
         assert result["adetailer"]["ad_inpaint_only_masked"] is False

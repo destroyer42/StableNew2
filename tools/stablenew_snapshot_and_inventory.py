@@ -21,7 +21,6 @@ from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 SNAPSHOT_DIR = ROOT / "snapshots"
 

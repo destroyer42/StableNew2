@@ -59,12 +59,16 @@ def test_log_trace_panel_filters_by_level_and_metadata() -> None:
     panel._job_filter.set("")
     panel._stage_filter.set("upscale")
     filtered = panel._apply_filter(entries)
-    assert all((panel._get_payload(entry) or {}).get("stage", "") == "upscale" for entry in filtered)
+    assert all(
+        (panel._get_payload(entry) or {}).get("stage", "") == "upscale" for entry in filtered
+    )
 
     panel._stage_filter.set("")
     panel._event_filter.set("stage_started")
     filtered = panel._apply_filter(entries)
-    assert all((panel._get_payload(entry) or {}).get("event", "") == "stage_started" for entry in filtered)
+    assert all(
+        (panel._get_payload(entry) or {}).get("event", "") == "stage_started" for entry in filtered
+    )
 
     panel.destroy()
     root.destroy()

@@ -15,7 +15,7 @@ import unittest
 from unittest.mock import Mock
 
 from src.controller.job_service import JobService
-from src.queue.job_model import Job, JobPriority
+from src.queue.job_model import JobPriority
 from src.queue.job_queue import JobQueue
 
 
@@ -206,10 +206,7 @@ class TestJobServiceStop(unittest.TestCase):
         service.runner.stop = Mock()
 
         # Create threads that call stop simultaneously
-        threads = [
-            threading.Thread(target=service.stop)
-            for _ in range(5)
-        ]
+        threads = [threading.Thread(target=service.stop) for _ in range(5)]
 
         for t in threads:
             t.start()
@@ -340,9 +337,7 @@ class TestJobServiceLifecycleIntegration(unittest.TestCase):
         # Add a job to the queue
         from tests.helpers.njr_factory import make_queue_job
 
-        job = make_queue_job(
-            "test-job-1", prompt_pack_id="pack-1", priority=JobPriority.NORMAL
-        )
+        job = make_queue_job("test-job-1", prompt_pack_id="pack-1", priority=JobPriority.NORMAL)
         job_queue.submit(job)
 
         service = JobService(job_queue, run_callable=lambda j: None)

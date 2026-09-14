@@ -71,4 +71,3 @@ def test_auto_micro_experiment_respects_queue_cap() -> None:
     assert applied is False
     assert stage_cards.txt2img_card.cfg_var.get() == 7.0
     assert pipeline_controller.submit_preview_jobs_to_queue.call_count == 0
-

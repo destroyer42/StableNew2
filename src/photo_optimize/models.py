@@ -40,7 +40,7 @@ class PhotoOptimizeBaseline:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any] | None) -> "PhotoOptimizeBaseline":
+    def from_dict(cls, payload: dict[str, Any] | None) -> PhotoOptimizeBaseline:
         data = payload or {}
         return cls(
             prompt=str(data.get("prompt") or ""),
@@ -70,7 +70,7 @@ class PhotoOptimizeBaselineSnapshot:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any] | None) -> "PhotoOptimizeBaselineSnapshot | None":
+    def from_dict(cls, payload: dict[str, Any] | None) -> PhotoOptimizeBaselineSnapshot | None:
         if not isinstance(payload, dict):
             return None
         return cls(
@@ -117,7 +117,7 @@ class PhotoOptimizeHistoryEntry:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any] | None) -> "PhotoOptimizeHistoryEntry | None":
+    def from_dict(cls, payload: dict[str, Any] | None) -> PhotoOptimizeHistoryEntry | None:
         if not isinstance(payload, dict):
             return None
         return cls(
@@ -184,7 +184,7 @@ class PhotoOptimizeAsset:
         }
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any] | None) -> "PhotoOptimizeAsset":
+    def from_dict(cls, payload: dict[str, Any] | None) -> PhotoOptimizeAsset:
         data = payload or {}
         history: list[PhotoOptimizeHistoryEntry] = []
         for entry in data.get("history") or []:

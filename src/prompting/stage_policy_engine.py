@@ -80,8 +80,10 @@ class StagePolicyEngine:
                     source_state="heuristic",
                 )
             )
-        if stage_name == "upscale" and str(effective.get("upscale_mode") or "single") != "img2img" and (
-            "large_chunk_count" in prompt_context.warnings or bool(intent.conflicts)
+        if (
+            stage_name == "upscale"
+            and str(effective.get("upscale_mode") or "single") != "img2img"
+            and ("large_chunk_count" in prompt_context.warnings or bool(intent.conflicts))
         ):
             recommended_decisions.append(
                 StagePolicyDecision(
@@ -112,9 +114,14 @@ class StagePolicyEngine:
         prompt_context: PromptContext,
         intent: PromptIntentBundle,
     ) -> list[_PolicyCandidate]:
-        dense_prompt = "large_chunk_count" in prompt_context.warnings or prompt_context.positive_chunk_count >= 18
+        dense_prompt = (
+            "large_chunk_count" in prompt_context.warnings
+            or prompt_context.positive_chunk_count >= 18
+        )
         conflict_heavy = bool(intent.conflicts)
-        portrait_like = intent.intent_band == "portrait" or intent.wants_portrait or intent.wants_face_detail
+        portrait_like = (
+            intent.intent_band == "portrait" or intent.wants_portrait or intent.wants_face_detail
+        )
         full_body = intent.intent_band == "full_body" or intent.wants_full_body
 
         if stage_name == "txt2img":
@@ -189,7 +196,6 @@ class StagePolicyEngine:
         if stage_name == "upscale":
             if str(prompt_context.stage or "") != "upscale":
                 return []
-            upscale_mode = "img2img"
             if portrait_like or dense_prompt or conflict_heavy:
                 cfg = 5.0 if (dense_prompt or conflict_heavy) else 5.5
                 steps = 18 if (dense_prompt or conflict_heavy) else 16

@@ -140,8 +140,7 @@ def test_fifo_order_and_failure_do_not_wedge_following_job(tmp_path: Path) -> No
     runner.start()
     _wait_until(
         lambda: all(
-            queue.repository.get_job_model(job_id).status
-            in {JobStatus.FAILED, JobStatus.COMPLETED}
+            queue.repository.get_job_model(job_id).status in {JobStatus.FAILED, JobStatus.COMPLETED}
             for job_id in ("fifo-a", "fifo-b")
         )
     )
@@ -163,7 +162,9 @@ def test_terminal_and_pending_records_survive_repository_reopen(tmp_path: Path) 
     for job in (completed, failed, pending_a, pending_b):
         queue.submit(job)
     queue.mark_running(completed.job_id)
-    queue.mark_completed(completed.job_id, {"success": True, "variants": [{"path": "output/done.png"}]})
+    queue.mark_completed(
+        completed.job_id, {"success": True, "variants": [{"path": "output/done.png"}]}
+    )
     queue.mark_running(failed.job_id)
     failed_error = RuntimeError("reopen failure")
     wrap_exception(failed_error, subsystem="fake_txt2img", stage="txt2img")

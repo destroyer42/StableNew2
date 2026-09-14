@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
 import time
+from datetime import datetime
 from unittest.mock import Mock
 
 from src.controller.app_controller import AppController
@@ -31,7 +31,9 @@ def test_runtime_status_updates_are_coalesced_before_ui_apply() -> None:
     assert status.progress == 0.25
 
 
-def test_runtime_status_callback_preserves_previous_stage_and_started_at_for_partial_updates() -> None:
+def test_runtime_status_callback_preserves_previous_stage_and_started_at_for_partial_updates() -> (
+    None
+):
     controller = AppController(main_window=None, threaded=False)
     controller.app_state = Mock()
 

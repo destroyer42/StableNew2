@@ -48,4 +48,3 @@ def test_app_state_projection_sink_updates_runtime_surface_fields() -> None:
     assert app_state.runtime_status is runtime
     assert app_state.queue_status == "running"
     assert app_state.webui_state == "connected"
-

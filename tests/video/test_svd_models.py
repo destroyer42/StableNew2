@@ -18,7 +18,9 @@ def test_default_svd_cache_prefers_huggingface_environment(monkeypatch, tmp_path
     assert get_default_svd_cache_dir() == hub_cache
 
 
-def test_default_svd_cache_uses_hf_home_then_user_huggingface_cache(monkeypatch, tmp_path: Path) -> None:
+def test_default_svd_cache_uses_hf_home_then_user_huggingface_cache(
+    monkeypatch, tmp_path: Path
+) -> None:
     monkeypatch.delenv("HUGGINGFACE_HUB_CACHE", raising=False)
     monkeypatch.setenv("HF_HOME", str(tmp_path / "hf-home"))
     assert get_default_svd_cache_dir() == tmp_path / "hf-home" / "hub"
@@ -55,25 +57,30 @@ def test_discover_cached_svd_models_requires_complete_snapshot(tmp_path: Path) -
 def test_is_svd_model_cached_checks_snapshot_integrity(tmp_path: Path) -> None:
     cache_root = tmp_path / "cache"
     snapshot = (
-        cache_root
-        / "models--stabilityai--stable-video-diffusion-img2vid"
-        / "snapshots"
-        / "good123"
+        cache_root / "models--stabilityai--stable-video-diffusion-img2vid" / "snapshots" / "good123"
     )
     snapshot.mkdir(parents=True)
     (snapshot / "model_index.json").write_text("{}", encoding="utf-8")
 
-    assert is_svd_model_cached(
-        "stabilityai/stable-video-diffusion-img2vid",
-        cache_dir=cache_root,
-    ) is True
-    assert is_svd_model_cached(
-        "stabilityai/stable-video-diffusion-img2vid-xt-1-1",
-        cache_dir=cache_root,
-    ) is False
+    assert (
+        is_svd_model_cached(
+            "stabilityai/stable-video-diffusion-img2vid",
+            cache_dir=cache_root,
+        )
+        is True
+    )
+    assert (
+        is_svd_model_cached(
+            "stabilityai/stable-video-diffusion-img2vid-xt-1-1",
+            cache_dir=cache_root,
+        )
+        is False
+    )
 
 
-def test_get_svd_model_options_falls_back_to_supported_models_when_local_only_cache_is_empty(tmp_path: Path) -> None:
+def test_get_svd_model_options_falls_back_to_supported_models_when_local_only_cache_is_empty(
+    tmp_path: Path,
+) -> None:
     cache_root = tmp_path / "cache"
 
     options = get_svd_model_options(cache_dir=cache_root, local_files_only=True)

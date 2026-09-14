@@ -12,7 +12,8 @@ for the callback (PR-049).
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from src.controller.ports.runtime_ports import JobCompletionCallbackPort
 

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Any, Literal
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord
@@ -109,7 +108,9 @@ class CurationWorkflowBuilder:
     @classmethod
     def resolve_face_triage_profile(cls, tier: str | None) -> FaceTriageProfile:
         normalized = str(tier or "medium").strip().lower()
-        return cls.DEFAULT_FACE_TRIAGE_PROFILES.get(normalized, cls.DEFAULT_FACE_TRIAGE_PROFILES["medium"])
+        return cls.DEFAULT_FACE_TRIAGE_PROFILES.get(
+            normalized, cls.DEFAULT_FACE_TRIAGE_PROFILES["medium"]
+        )
 
     @classmethod
     def apply_learning_output_route(cls, config: dict[str, Any]) -> dict[str, Any]:

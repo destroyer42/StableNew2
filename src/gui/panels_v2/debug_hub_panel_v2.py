@@ -207,10 +207,12 @@ class _PipelineTab(ttk.Frame):
             job_id = getattr(entry, "job_id", None)
             if not job_id:
                 continue
-            status = getattr(getattr(entry, "status", None), "value", None) or getattr(entry, "status", "history")
+            status = getattr(getattr(entry, "status", None), "value", None) or getattr(
+                entry, "status", "history"
+            )
             _add(str(job_id), self._format_history_label(str(status).upper(), entry, str(job_id)))
 
-        self._job_value_map = {label: job_id for label, job_id in choices}
+        self._job_value_map = dict(choices)
         return [label for label, _ in choices]
 
     @staticmethod
@@ -223,7 +225,9 @@ class _PipelineTab(ttk.Frame):
             except Exception:
                 display = None
         if not display:
-            pack_name = getattr(summary, "prompt_pack_name", None) or getattr(summary, "base_model", None)
+            pack_name = getattr(summary, "prompt_pack_name", None) or getattr(
+                summary, "base_model", None
+            )
             display = str(pack_name or job_id)
         return f"{prefix} | {display} | {job_id}"
 
@@ -235,7 +239,11 @@ class _PipelineTab(ttk.Frame):
         if isinstance(normalized, dict):
             pack_name = normalized.get("prompt_pack_name") or normalized.get("pack_name")
             stages = normalized.get("stage_chain")
-            stage_text = " -> ".join(str(stage) for stage in stages) if isinstance(stages, list) and stages else ""
+            stage_text = (
+                " -> ".join(str(stage) for stage in stages)
+                if isinstance(stages, list) and stages
+                else ""
+            )
         else:
             stage_text = ""
         payload_summary = getattr(entry, "payload_summary", None) or job_id

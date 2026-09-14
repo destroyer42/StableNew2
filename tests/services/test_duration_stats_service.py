@@ -9,7 +9,7 @@ from __future__ import annotations
 import unittest
 from datetime import datetime
 from typing import Any
-from unittest.mock import MagicMock, Mock
+from unittest.mock import Mock
 
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
@@ -140,10 +140,7 @@ class TestRefresh(unittest.TestCase):
     def test_refresh_max_samples_window(self) -> None:
         """Should keep only max_samples most recent entries."""
         # Create 150 entries
-        entries = [
-            make_entry(f"job{i}", ["txt2img"], 60000 + i * 1000)
-            for i in range(150)
-        ]
+        entries = [make_entry(f"job{i}", ["txt2img"], 60000 + i * 1000) for i in range(150)]
         store = MockHistoryStore(entries)
         service = DurationStatsService(store, max_samples_per_chain=100)
 
@@ -310,9 +307,7 @@ class TestNoneHistoryStore(unittest.TestCase):
         service = DurationStatsService(None)
 
         estimate = service.get_fallback_estimate(["txt2img", "adetailer"])
-        expected = (
-            STAGE_FALLBACK_SECONDS["txt2img"] + STAGE_FALLBACK_SECONDS["adetailer"]
-        )
+        expected = STAGE_FALLBACK_SECONDS["txt2img"] + STAGE_FALLBACK_SECONDS["adetailer"]
         self.assertEqual(estimate, expected)
 
 

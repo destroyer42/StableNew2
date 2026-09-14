@@ -8,7 +8,9 @@ from src.app.optional_dependency_probes import (
 )
 
 
-def test_build_optional_dependency_snapshot_collects_comfy_and_svd_capabilities(monkeypatch) -> None:
+def test_build_optional_dependency_snapshot_collects_comfy_and_svd_capabilities(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(
         "src.app.optional_dependency_probes.build_default_workflow_registry",
         lambda: SimpleNamespace(
@@ -55,7 +57,9 @@ def test_build_optional_dependency_snapshot_collects_comfy_and_svd_capabilities(
     assert snapshot["capabilities"]["svd:rife"]["status"] == "ready"
 
 
-def test_build_optional_dependency_snapshot_reports_unknown_when_comfy_probe_inputs_missing(monkeypatch) -> None:
+def test_build_optional_dependency_snapshot_reports_unknown_when_comfy_probe_inputs_missing(
+    monkeypatch,
+) -> None:
     monkeypatch.setattr(
         "src.app.optional_dependency_probes.build_default_workflow_registry",
         lambda: SimpleNamespace(

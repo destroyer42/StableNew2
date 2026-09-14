@@ -105,7 +105,14 @@ def test_learning_record_builder_includes_compact_adaptive_refinement_metadata(t
         steps=20,
         cfg_scale=7.5,
         base_model="m",
-        config={"model": "m", "sampler": "Euler", "steps": 20, "cfg_scale": 7.5, "width": 512, "height": 512},
+        config={
+            "model": "m",
+            "sampler": "Euler",
+            "steps": 20,
+            "cfg_scale": 7.5,
+            "width": 512,
+            "height": 512,
+        },
     )
     result = _run_result_stub("run-refine")
     result.variants = [{"path": str(output_path)}]
@@ -170,7 +177,14 @@ def test_learning_record_builder_includes_compact_secondary_motion_metadata() ->
         steps=20,
         cfg_scale=7.5,
         base_model="m",
-        config={"model": "m", "sampler": "Euler", "steps": 20, "cfg_scale": 7.5, "width": 512, "height": 512},
+        config={
+            "model": "m",
+            "sampler": "Euler",
+            "steps": 20,
+            "cfg_scale": 7.5,
+            "width": 512,
+            "height": 512,
+        },
     )
     result = _run_result_stub("run-motion")
     result.metadata["video_primary_backend_id"] = "comfy"
@@ -223,7 +237,14 @@ def test_learning_record_builder_includes_opt_in_prompt_optimizer_learning_metad
             "prompt_optimizer_learning_enabled": True,
             "prompt_optimizer_learning_preset": "score_classifier_v1",
         },
-        config={"model": "m", "sampler": "Euler", "steps": 20, "cfg_scale": 7.5, "width": 512, "height": 512},
+        config={
+            "model": "m",
+            "sampler": "Euler",
+            "steps": 20,
+            "cfg_scale": 7.5,
+            "width": 512,
+            "height": 512,
+        },
     )
     result = _run_result_stub("run-prompt-optimizer")
     result.metadata["prompt_optimizer_v3"] = {
@@ -298,10 +319,20 @@ def test_learning_record_builder_skips_prompt_optimizer_learning_without_opt_in(
         steps=20,
         cfg_scale=7.5,
         base_model="m",
-        config={"model": "m", "sampler": "Euler", "steps": 20, "cfg_scale": 7.5, "width": 512, "height": 512},
+        config={
+            "model": "m",
+            "sampler": "Euler",
+            "steps": 20,
+            "cfg_scale": 7.5,
+            "width": 512,
+            "height": 512,
+        },
     )
     result = _run_result_stub("run-prompt-opt-out")
-    result.metadata["prompt_optimizer_v3"] = {"schema": "stablenew.prompt-optimizer.v3", "stage": "txt2img"}
+    result.metadata["prompt_optimizer_v3"] = {
+        "schema": "stablenew.prompt-optimizer.v3",
+        "stage": "txt2img",
+    }
 
     record = build_learning_record(cfg, result)
 

@@ -31,8 +31,12 @@ def test_optimizer_reorders_negative_prompt_into_target_order() -> None:
 
 def test_optimizer_is_deterministic_across_repeated_runs() -> None:
     service = PromptOptimizerService(PromptOptimizerConfig())
-    first = service.optimize_prompts("beautiful woman, cinematic lighting, 85mm lens", "", pipeline_name="txt2img")
-    second = service.optimize_prompts("beautiful woman, cinematic lighting, 85mm lens", "", pipeline_name="txt2img")
+    first = service.optimize_prompts(
+        "beautiful woman, cinematic lighting, 85mm lens", "", pipeline_name="txt2img"
+    )
+    second = service.optimize_prompts(
+        "beautiful woman, cinematic lighting, 85mm lens", "", pipeline_name="txt2img"
+    )
     assert first.positive.optimized_prompt == second.positive.optimized_prompt
     assert first.positive.buckets == second.positive.buckets
 
@@ -105,7 +109,9 @@ def test_optimizer_preserves_negative_embedding_prefix() -> None:
         pipeline_name="txt2img",
     )
 
-    assert result.negative.optimized_prompt == "<embedding:SDXLnegXL>, bad anatomy, blurry, watermark"
+    assert (
+        result.negative.optimized_prompt == "<embedding:SDXLnegXL>, bad anatomy, blurry, watermark"
+    )
     assert result.negative.buckets["embedding_tokens"] == ["<embedding:SDXLnegXL>"]
 
 

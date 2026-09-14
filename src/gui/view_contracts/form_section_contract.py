@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
 
 
 @dataclass(frozen=True)
@@ -20,7 +19,7 @@ def update_form_section(
     edits_by_mode: dict[str, str],
     readonly_text: str,
 ) -> tuple[FormSectionState, dict[str, str]]:
-    mode_from = str(previous_mode or "append")
+    del previous_mode
     mode_to = str(next_mode or "append")
     values = dict(edits_by_mode or {})
     if mode_to == "modify":

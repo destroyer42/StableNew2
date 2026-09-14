@@ -13,7 +13,9 @@ def test_learning_plan_table_variant_numbering_and_stage() -> None:
     table = LearningPlanTable(root)
     table.update_plan(
         [
-            LearningVariant(param_value=7.0, status="pending", planned_images=1, completed_images=0),
+            LearningVariant(
+                param_value=7.0, status="pending", planned_images=1, completed_images=0
+            ),
             LearningVariant(param_value=8.0, status="queued", planned_images=2, completed_images=1),
         ],
         stage_name="img2img",
@@ -36,8 +38,12 @@ def test_learning_plan_table_selection_callback_uses_row_index() -> None:
     table = LearningPlanTable(root)
     table.update_plan(
         [
-            LearningVariant(param_value=7.0, status="pending", planned_images=1, completed_images=0),
-            LearningVariant(param_value=8.0, status="pending", planned_images=1, completed_images=0),
+            LearningVariant(
+                param_value=7.0, status="pending", planned_images=1, completed_images=0
+            ),
+            LearningVariant(
+                param_value=8.0, status="pending", planned_images=1, completed_images=0
+            ),
         ],
         stage_name="txt2img",
     )
@@ -49,4 +55,3 @@ def test_learning_plan_table_selection_callback_uses_row_index() -> None:
     table.tree.selection_set(row)
     table._on_row_selected(None)
     assert selected == [1]
-

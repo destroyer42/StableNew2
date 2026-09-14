@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import tkinter as tk
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-import tkinter as tk
 from PIL import Image
 
 from src.api.webui_resources import WebUIResource, WebUIResourceType
@@ -64,9 +64,7 @@ def test_photo_optimize_use_current_pipeline_settings_updates_baseline(
         tab.destroy()
 
 
-def test_photo_optimize_interrogate_updates_baseline_prompt(
-    tk_root: tk.Tk, tmp_path: Path
-) -> None:
+def test_photo_optimize_interrogate_updates_baseline_prompt(tk_root: tk.Tk, tmp_path: Path) -> None:
     store = PhotoOptimizeStore(tmp_path / "photo_optimize")
     image_path = tmp_path / "source" / "portrait.png"
     _write_image(image_path)
@@ -136,9 +134,7 @@ def test_photo_optimize_stage_config_fields_persist_to_sidecar(
         tab.destroy()
 
 
-def test_photo_optimize_header_exposes_submit_buttons(
-    tk_root: tk.Tk, tmp_path: Path
-) -> None:
+def test_photo_optimize_header_exposes_submit_buttons(tk_root: tk.Tk, tmp_path: Path) -> None:
     store = PhotoOptimizeStore(tmp_path / "photo_optimize")
     image_path = tmp_path / "source" / "portrait.png"
     _write_image(image_path)
@@ -207,9 +203,7 @@ def test_photo_optimize_resources_populate_model_and_vae_dropdowns(
         tab.destroy()
 
 
-def test_photo_optimize_defers_asset_refresh_until_mapped(
-    tk_root: tk.Tk, tmp_path: Path
-) -> None:
+def test_photo_optimize_defers_asset_refresh_until_mapped(tk_root: tk.Tk, tmp_path: Path) -> None:
     store = PhotoOptimizeStore(tmp_path / "photo_optimize")
     image_path = tmp_path / "source" / "portrait.png"
     _write_image(image_path)

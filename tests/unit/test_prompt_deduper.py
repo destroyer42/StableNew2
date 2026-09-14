@@ -12,8 +12,6 @@ def test_deduper_drops_obvious_duplicates_deterministically() -> None:
 
 
 def test_deduper_keeps_distinct_lora_weights() -> None:
-    kept, dropped = dedupe_prompt_chunks(
-        ["<lora:foo:0.8>", "<lora:foo:0.6>", "<lora:foo:0.8>"]
-    )
+    kept, dropped = dedupe_prompt_chunks(["<lora:foo:0.8>", "<lora:foo:0.6>", "<lora:foo:0.8>"])
     assert kept == ["<lora:foo:0.8>", "<lora:foo:0.6>"]
     assert dropped == ["<lora:foo:0.8>"]

@@ -6,7 +6,6 @@ video settings surfaces.
 
 from __future__ import annotations
 
-
 BASE_GENERATION_SETTING_HELP = {
     "model": "Chooses the checkpoint used as the generation baseline. Switch models when style, anatomy, or composition bias is wrong for the prompt. Model changes usually have the largest quality and compatibility impact.",
     "vae": "Controls the VAE used for encode and decode. Leave this on the model default unless colors or contrast look wrong, or a workflow explicitly requires a matching VAE.",

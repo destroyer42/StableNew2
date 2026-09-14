@@ -7,8 +7,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "src"))
 
 try:
-    from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
-
     print("BaseGenerationPanelV2 imports successfully")
 
     width_values = [str(i) for i in range(256, 2049, 128)]

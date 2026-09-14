@@ -42,7 +42,9 @@ class GuiConfigService:
         random_section = config.get("randomization") or {}
         enabled = config.get("randomization_enabled")
         if enabled is None:
-            enabled = random_section.get("enabled", getattr(fallback, "randomization_enabled", False))
+            enabled = random_section.get(
+                "enabled", getattr(fallback, "randomization_enabled", False)
+            )
         max_variants = config.get("max_variants")
         if max_variants is None:
             max_variants = random_section.get("max_variants", getattr(fallback, "max_variants", 1))
@@ -86,7 +88,9 @@ class GuiConfigService:
         adapter = self.get_adapter(app_state)
         if adapter is None:
             return {}
-        lora_strengths = getattr(app_state, "lora_strengths", None) if app_state is not None else None
+        lora_strengths = (
+            getattr(app_state, "lora_strengths", None) if app_state is not None else None
+        )
         return adapter.build_submission_projection(
             lora_strengths=lora_strengths,
             prompt_optimizer_config=prompt_optimizer_config,

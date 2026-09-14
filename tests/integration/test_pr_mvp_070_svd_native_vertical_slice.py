@@ -21,7 +21,9 @@ from src.utils.logger import StructuredLogger
 from src.video.svd_config import SVDConfig
 
 
-def test_svd_native_vertical_slice_queue_artifact_history_and_replay(tmp_path: Path, monkeypatch) -> None:
+def test_svd_native_vertical_slice_queue_artifact_history_and_replay(
+    tmp_path: Path, monkeypatch
+) -> None:
     """Use the production queue/runner path while faking only expensive native inference."""
     source_path = tmp_path / "selected.png"
     Image.new("RGB", (32, 32), "navy").save(source_path)
@@ -37,14 +39,18 @@ def test_svd_native_vertical_slice_queue_artifact_history_and_replay(tmp_path: P
             assert config.inference.local_files_only is False
             assert self.status_callback is not None
             assert cancel_token is not None
-            self.status_callback({"stage_detail": "inference", "progress": 0.5, "current_step": 1, "total_steps": 2})
+            self.status_callback(
+                {"stage_detail": "inference", "progress": 0.5, "current_step": 1, "total_steps": 2}
+            )
             self.output_root.mkdir(parents=True, exist_ok=True)
             video_path = self.output_root / "native-svd.mp4"
             preview_path = self.output_root / "native-svd-preview.png"
             manifest_path = self.output_root / "native-svd.json"
             video_path.write_bytes(b"fake-mp4")
             Image.new("RGB", (8, 8), "teal").save(preview_path)
-            manifest_path.write_text(json.dumps({"job_id": job_id, "source": str(source_image_path)}), encoding="utf-8")
+            manifest_path.write_text(
+                json.dumps({"job_id": job_id, "source": str(source_image_path)}), encoding="utf-8"
+            )
             return SimpleNamespace(
                 source_image_path=source_path,
                 video_path=video_path,
@@ -104,7 +110,11 @@ def test_svd_native_vertical_slice_queue_artifact_history_and_replay(tmp_path: P
     config = SVDConfig.from_dict(
         {
             "inference": {"local_files_only": False, "cache_dir": str(tmp_path / "hf-cache")},
-            "postprocess": {"face_restore": {"enabled": False}, "interpolation": {"enabled": False}, "upscale": {"enabled": False}},
+            "postprocess": {
+                "face_restore": {"enabled": False},
+                "interpolation": {"enabled": False},
+                "upscale": {"enabled": False},
+            },
         }
     )
 
@@ -151,7 +161,9 @@ def test_svd_admission_failure_creates_no_queue_artifact(tmp_path: Path, monkeyp
     controller = SVDController(app_controller=app_surface)
     monkeypatch.setattr(
         "src.controller.svd_controller.get_svd_preflight",
-        lambda config, **_kwargs: SimpleNamespace(available=False, blocking_reasons=("Diffusers is unavailable",)),
+        lambda config, **_kwargs: SimpleNamespace(
+            available=False, blocking_reasons=("Diffusers is unavailable",)
+        ),
     )
 
     try:
@@ -163,7 +175,9 @@ def test_svd_admission_failure_creates_no_queue_artifact(tmp_path: Path, monkeyp
     assert not (tmp_path / "output").exists()
 
 
-def test_svd_runtime_cancellation_marks_canonical_job_cancelled(tmp_path: Path, monkeypatch) -> None:
+def test_svd_runtime_cancellation_marks_canonical_job_cancelled(
+    tmp_path: Path, monkeypatch
+) -> None:
     """A native SVD cancellation must flow through the normal queue terminal state."""
     source_path = tmp_path / "selected.png"
     Image.new("RGB", (32, 32), "navy").save(source_path)

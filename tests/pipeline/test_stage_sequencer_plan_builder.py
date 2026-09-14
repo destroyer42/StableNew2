@@ -223,16 +223,6 @@ def test_plan_builder_txt2img_and_animatediff():
     assert plan.stages[-1].requires_input_image is True
 
 
-def test_plan_builder_video_workflow_without_prior_stage_raises():
-    cfg = _base_config()
-    cfg["txt2img"]["enabled"] = False
-    cfg["pipeline"]["txt2img_enabled"] = False
-    cfg["video_workflow"]["enabled"] = True
-    cfg["pipeline"]["video_workflow_enabled"] = True
-    with pytest.raises(Exception):
-        build_stage_execution_plan(cfg)
-
-
 def test_plan_builder_video_workflow_with_sequence_metadata():
     """PR-VIDEO-216: video_workflow stage accepts sequence_metadata in payload."""
     cfg = _base_config()

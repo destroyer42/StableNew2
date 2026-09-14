@@ -1,410 +1,249 @@
-"""Tests for WebUI process cleanup including CMD/shell wrappers.
+"""Ownership-scoped WebUI/ComfyUI process cleanup tests."""
 
-PR-PROCESS-001: Validates Windows CMD/shell process cleanup and emergency handlers.
-"""
+from __future__ import annotations
 
-import os
-import subprocess
 import sys
 import time
-from contextlib import contextmanager
-from pathlib import Path
-from unittest.mock import Mock, patch
+from unittest.mock import Mock
 
 import pytest
-
-try:
-    import psutil
-except ImportError:
-    psutil = None
 
 from src.api.webui_process_manager import (
     WebUIProcessConfig,
     WebUIProcessManager,
-    _get_webui_python_match_reasons,
-    _get_webui_shell_match_reasons,
+    WebUIStartupError,
     kill_orphaned_webui_processes_blocking_port,
 )
+from src.utils.process_container_v2 import NullProcessContainer
+from src.video.comfy_process_manager import ComfyProcessConfig, ComfyProcessManager
+from tests.helpers.webui_mocks import DummyProcess
 
 
-class TestWebUIProcessMatchers:
-    """Unit tests for conservative WebUI process matching."""
-
-    def test_python_match_requires_webui_workdir_or_launch_path(self):
-        reasons = _get_webui_python_match_reasons(
-            process_name="python.exe",
-            cmdline=["python.exe", "worker.py"],
-            cwd=r"C:\Users\rob\projects\StableNew",
-            working_dir=r"C:\Users\rob\stable-diffusion-webui",
+def _manager(monkeypatch, *, working_dir=None, base_url=None) -> WebUIProcessManager:
+    monkeypatch.setattr(
+        "src.api.webui_process_manager.build_process_container",
+        lambda job_id, config: NullProcessContainer(job_id, config),
+    )
+    manager = WebUIProcessManager(
+        WebUIProcessConfig(
+            command=[sys.executable, "-c", "import time; time.sleep(60)"],
+            working_dir=working_dir,
+            base_url=base_url,
         )
-        assert reasons == []
-
-    def test_python_match_accepts_webui_launch_script(self):
-        reasons = _get_webui_python_match_reasons(
-            process_name="python.exe",
-            cmdline=[
-                r"C:\Users\rob\stable-diffusion-webui\venv\Scripts\python.exe",
-                r"C:\Users\rob\stable-diffusion-webui\launch.py",
-                "--api",
-            ],
-            cwd=r"C:\Users\rob\stable-diffusion-webui",
-            working_dir=r"C:\Users\rob\stable-diffusion-webui",
-        )
-        assert reasons
-
-    def test_python_match_accepts_exact_webui_cwd(self):
-        reasons = _get_webui_python_match_reasons(
-            process_name="python.exe",
-            cmdline=[r"C:\Users\rob\stable-diffusion-webui\venv\Scripts\python.exe"],
-            cwd=r"C:\Users\rob\stable-diffusion-webui",
-            working_dir=r"C:\Users\rob\stable-diffusion-webui",
-        )
-        assert "cwd matches webui_dir" in reasons
-
-    def test_shell_match_requires_launch_target(self):
-        reasons = _get_webui_shell_match_reasons(
-            process_name="cmd.exe",
-            cmdline=["cmd.exe", "/c", "echo hello"],
-            cwd=r"C:\Users\rob\stable-diffusion-webui",
-            working_dir=r"C:\Users\rob\stable-diffusion-webui",
-        )
-        assert reasons == []
-
-    def test_shell_match_accepts_webui_launcher(self):
-        reasons = _get_webui_shell_match_reasons(
-            process_name="cmd.exe",
-            cmdline=[
-                "cmd.exe",
-                "/c",
-                r"C:\Users\rob\stable-diffusion-webui\webui-user.bat",
-            ],
-            cwd=r"C:\Users\rob\stable-diffusion-webui",
-            working_dir=r"C:\Users\rob\stable-diffusion-webui",
-        )
-        assert reasons
+    )
+    manager._start_orphan_monitor = Mock()
+    return manager
 
 
-@pytest.mark.skipif(os.name != "nt", reason="Windows-specific test")
-@pytest.mark.skipif(psutil is None, reason="psutil required")
-class TestCMDShellCleanup:
-    """Test cleanup of cmd.exe and conhost.exe wrappers."""
-    
-    def test_cleanup_kills_cmd_wrapper(self, tmp_path):
-        """Verify that _kill_process_tree includes CMD/shell wrapper scanning logic."""
-        # This test verifies the code paths exist for CMD wrapper cleanup
-        # Rather than trying to catch transient cmd.exe processes,
-        # we verify the manager has the cleanup logic implemented
-        
-        config = WebUIProcessConfig(
-            command=["python", "-c", "print('test')"],
-            working_dir=str(tmp_path),
-            autostart_enabled=False,
-        )
-        
-        manager = WebUIProcessManager(config)
-        
-        # Verify the _kill_process_tree method exists and has CMD cleanup logic
-        import inspect
-        source = inspect.getsource(manager._kill_process_tree)
-        
-        # Verify key CMD/shell cleanup patterns are in the code
-        assert "cmd.exe" in source.lower(), "Should have cmd.exe cleanup logic"
-        assert "conhost.exe" in source.lower(), "Should have conhost.exe cleanup logic"
-        assert "working_dir" in source.lower() or "cwd" in source.lower(), \
-            "Should check working directory for shell wrappers"
-        
-        # Verify stop_webui calls _kill_process_tree (integration check)
-        stop_source = inspect.getsource(manager.stop_webui)
-        assert "_kill_process_tree" in stop_source, \
-            "stop_webui should call _kill_process_tree"
-    
-    def test_orphan_monitor_detects_reparented_process(self, tmp_path):
-        """Verify orphan monitor can detect processes with missing parents."""
-        # This test verifies the _scan_for_orphaned_webui_processes logic
-        # Rather than trying to simulate complex Windows process reparenting,
-        # we test that the method correctly identifies orphaned processes
-        
-        config = WebUIProcessConfig(
-            command=["python", "-c", "print('test')"],
-            working_dir=str(tmp_path),
-            autostart_enabled=False,
-        )
-        
-        manager = WebUIProcessManager(config)
-        
-        # Test the scan method with a mock scenario
-        # Create a temporary process to test detection
-        script = tmp_path / "test_script.py"
-        script.write_text(
-            "import time, sys\n"
-            "print('WEBUI_STARTUP_MARKER', flush=True)\n"
-            "time.sleep(30)\n"
-        )
-        
-        # Launch process directly (not through manager)
-        test_proc = subprocess.Popen(
-            [sys.executable, str(script)],
-            cwd=str(tmp_path),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        
-        try:
-            # Wait for startup marker
-            test_proc.stdout.readline()
-            time.sleep(0.2)
-            
-            # Verify process exists
-            assert psutil.pid_exists(test_proc.pid)
-            
-            # The scan method would detect this as orphaned if GUI wasn't running
-            # (Test validates the detection logic exists, actual orphan cleanup
-            # is tested in integration tests)
-            
-        finally:
-            # Cleanup
-            try:
-                test_proc.terminate()
-                test_proc.wait(timeout=2)
-            except:
-                test_proc.kill()
-    
-    def test_scan_for_orphaned_webui_processes(self, tmp_path):
-        """Test _scan_for_orphaned_webui_processes() method."""
-        # Create a mock WebUI process manager
-        config = WebUIProcessConfig(
-            command=["python", "-c", "import time; time.sleep(1)"],
-            working_dir=str(tmp_path),
-            autostart_enabled=False,
-        )
-        
-        manager = WebUIProcessManager(config)
-        
-        # Test with no orphans
-        orphans = manager._scan_for_orphaned_webui_processes()
-        assert isinstance(orphans, list), "Should return a list"
-        
-        # Note: Full integration test would require actually creating orphaned processes
+@pytest.mark.parametrize("working_dir", [None, r"C:\stable-diffusion-webui"])
+def test_occupied_external_endpoint_is_never_killed(monkeypatch, working_dir) -> None:
+    manager = _manager(
+        monkeypatch,
+        working_dir=working_dir,
+        base_url="http://127.0.0.1:7860",
+    )
+    monkeypatch.setattr(
+        "src.utils.single_instance.SingleInstanceLock.is_gui_running", lambda: True
+    )
+    monkeypatch.setattr(manager, "_configured_endpoint_is_occupied", lambda: True)
+    popen = Mock()
+    monkeypatch.setattr("src.api.webui_process_manager.subprocess.Popen", popen)
+
+    with pytest.raises(WebUIStartupError, match="will not kill or adopt"):
+        manager.start()
+
+    popen.assert_not_called()
+    assert manager.owns_process is False
 
 
-def test_port_cleanup_skips_unrelated_child_processes(monkeypatch):
-    class _FakeConn:
-        def __init__(self, pid):
-            self.laddr = Mock(port=7860)
-            self.status = "LISTEN"
-            self.pid = pid
-
-    class _FakeChild:
-        def __init__(self, pid: int, name: str, cmdline: list[str], cwd: str | None = None):
-            self.pid = pid
-            self._name = name
-            self._cmdline = cmdline
-            self._cwd = cwd
-            self.killed = False
-
-        def name(self):
-            return self._name
-
-        def cmdline(self):
-            return list(self._cmdline)
-
-        def cwd(self):
-            if self._cwd is None:
-                raise RuntimeError("no cwd")
-            return self._cwd
-
-        def kill(self):
-            self.killed = True
-
-    class _FakeProc(_FakeChild):
-        def __init__(self):
-            super().__init__(
-                111,
-                "python.exe",
-                [r"C:\stable-diffusion-webui\venv\Scripts\python.exe", "launch.py"],
-                r"C:\stable-diffusion-webui",
-            )
-            self.webui_child = _FakeChild(
-                222,
-                "cmd.exe",
-                ["cmd.exe", "/c", r"C:\stable-diffusion-webui\webui-user.bat"],
-                r"C:\stable-diffusion-webui",
-            )
-            self.unrelated_child = _FakeChild(
-                333,
-                "git.exe",
-                ["git.exe", "status"],
-                r"C:\Users\rob\projects\StableNew",
-            )
-
-        def children(self, recursive=True):
-            return [self.webui_child, self.unrelated_child]
-
-        def wait(self, timeout=3.0):
-            return 0
-
-    fake_proc = _FakeProc()
-
-    fake_psutil = Mock()
-    fake_psutil.net_connections.return_value = [_FakeConn(fake_proc.pid)]
-    fake_psutil.Process.return_value = fake_proc
-    fake_psutil.NoSuchProcess = RuntimeError
-    fake_psutil.TimeoutExpired = RuntimeError
+def test_heuristic_port_cleanup_is_non_destructive(monkeypatch) -> None:
+    process_iter = Mock(side_effect=AssertionError("machine-wide scan is forbidden"))
+    fake_psutil = Mock(process_iter=process_iter)
     monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
 
-    killed = kill_orphaned_webui_processes_blocking_port(
-        port=7860,
-        working_dir=r"C:\stable-diffusion-webui",
+    assert kill_orphaned_webui_processes_blocking_port(
+        port=7860, working_dir=r"C:\stable-diffusion-webui"
+    ) == []
+    process_iter.assert_not_called()
+
+
+def test_shutdown_without_owned_process_performs_zero_termination(monkeypatch) -> None:
+    manager = _manager(monkeypatch)
+    external = DummyProcess()
+    external.terminate = Mock()
+    external.kill = Mock()
+    manager._process = external
+    manager._pid = external.pid
+    manager._owns_process = False
+    tree_kill = Mock()
+    monkeypatch.setattr(manager, "_kill_process_tree", tree_kill)
+
+    assert manager.stop_webui(grace_seconds=0.01) is True
+
+    external.terminate.assert_not_called()
+    external.kill.assert_not_called()
+    tree_kill.assert_not_called()
+
+
+def test_manager_owned_root_and_only_owned_descendants_are_terminated(monkeypatch) -> None:
+    manager = _manager(monkeypatch, working_dir=r"C:\stable-diffusion-webui")
+    root = DummyProcess(pid=100)
+    root.terminate = Mock(side_effect=root.terminate)
+    owned_child = Mock(pid=101)
+    unrelated_same_directory_process = Mock(pid=102)
+    monkeypatch.setattr("src.api.webui_process_manager.subprocess.Popen", Mock(return_value=root))
+    monkeypatch.setattr(
+        "src.utils.single_instance.SingleInstanceLock.is_gui_running", lambda: True
     )
+    manager.start()
+    monkeypatch.setattr(manager, "_owned_descendants", lambda pid: [owned_child])
 
-    assert 222 in killed
-    assert 333 not in killed
-    assert fake_proc.webui_child.killed is True
-    assert fake_proc.unrelated_child.killed is False
+    assert manager.stop_webui(grace_seconds=0.01) is True
+
+    root.terminate.assert_called_once()
+    owned_child.kill.assert_called_once()
+    unrelated_same_directory_process.kill.assert_not_called()
 
 
-def test_scan_for_orphaned_webui_processes_uses_process_scan_lock(monkeypatch, tmp_path):
-    config = WebUIProcessConfig(
-        command=["python", "-c", "print('test')"],
-        working_dir=str(tmp_path),
-        autostart_enabled=False,
+def test_process_tree_kill_requires_matching_launch_session(monkeypatch) -> None:
+    manager = _manager(monkeypatch)
+    manager._process = DummyProcess(pid=200)
+    manager._pid = 200
+    manager._owns_process = False
+    descendants = Mock()
+    monkeypatch.setattr(manager, "_owned_descendants", descendants)
+
+    manager._kill_process_tree(200)
+    manager._kill_process_tree(201)
+
+    descendants.assert_not_called()
+
+
+def test_restart_refuses_unmanaged_external_process(monkeypatch) -> None:
+    manager = _manager(monkeypatch)
+    manager._process = DummyProcess(pid=300)
+    manager._pid = 300
+    stop = Mock()
+    start = Mock()
+    monkeypatch.setattr(manager, "stop_webui", stop)
+    monkeypatch.setattr(manager, "start", start)
+
+    assert manager.restart_webui(wait_ready=False) is False
+    stop.assert_not_called()
+    start.assert_not_called()
+
+
+def test_orphan_cleanup_targets_only_owned_manager_process(monkeypatch) -> None:
+    manager = _manager(monkeypatch)
+    manager._process = DummyProcess(pid=400)
+    manager._pid = 400
+    kill_tree = Mock()
+    monkeypatch.setattr(manager, "_kill_process_tree", kill_tree)
+
+    manager._kill_all_webui_processes()
+    kill_tree.assert_not_called()
+
+    manager._owns_process = True
+    manager._kill_all_webui_processes()
+    kill_tree.assert_called_once_with(400)
+
+
+def test_emergency_cleanup_is_ownership_scoped(monkeypatch) -> None:
+    import src.main as main_module
+
+    unmanaged_webui = Mock(owns_process=False)
+    unmanaged_comfy = Mock(owns_process=False)
+    monkeypatch.setattr(main_module, "_webui_manager_global", unmanaged_webui)
+    monkeypatch.setattr(main_module, "_comfy_manager_global", unmanaged_comfy)
+
+    main_module._emergency_webui_cleanup()
+    main_module._emergency_comfy_cleanup()
+
+    unmanaged_webui.stop_webui.assert_not_called()
+    unmanaged_comfy.stop.assert_not_called()
+
+
+def test_emergency_cleanup_stops_owned_managers(monkeypatch) -> None:
+    import src.main as main_module
+
+    owned_webui = Mock(owns_process=True)
+    owned_comfy = Mock(owns_process=True)
+    monkeypatch.setattr(main_module, "_webui_manager_global", owned_webui)
+    monkeypatch.setattr(main_module, "_comfy_manager_global", owned_comfy)
+
+    main_module._emergency_webui_cleanup()
+    main_module._emergency_comfy_cleanup()
+
+    owned_webui.stop_webui.assert_called_once_with(grace_seconds=1.0)
+    owned_comfy.stop.assert_called_once_with(grace_seconds=1.0)
+
+
+def test_emergency_registration_is_isolated_and_idempotent(monkeypatch) -> None:
+    import src.main as main_module
+
+    callbacks = []
+    window = Mock()
+    window.webui_process_manager = Mock(owns_process=False)
+    window.comfy_process_manager = Mock(owns_process=False)
+    monkeypatch.setattr(main_module, "_emergency_cleanup_registered", False)
+    monkeypatch.setattr(main_module, "_webui_manager_global", None)
+    monkeypatch.setattr(main_module, "_comfy_manager_global", None)
+    register = Mock(side_effect=callbacks.append)
+    monkeypatch.setattr(main_module.atexit, "register", register)
+
+    main_module._register_emergency_cleanup(window)
+    main_module._register_emergency_cleanup(window)
+
+    assert callbacks == [
+        main_module._emergency_webui_cleanup,
+        main_module._emergency_comfy_cleanup,
+    ]
+    assert register.call_count == 2
+
+
+def test_external_comfy_process_survives_shutdown(monkeypatch) -> None:
+    manager = ComfyProcessManager(ComfyProcessConfig(command=["external-comfy"]))
+    external = DummyProcess(pid=500)
+    external.terminate = Mock()
+    external.kill = Mock()
+    manager._process = external
+
+    manager.stop(grace_seconds=0.01)
+
+    external.terminate.assert_not_called()
+    external.kill.assert_not_called()
+
+
+def test_owned_disposable_process_tree_is_stopped(monkeypatch, tmp_path) -> None:
+    psutil = pytest.importorskip("psutil")
+    child_pid_file = tmp_path / "child.pid"
+    code = (
+        "import pathlib, subprocess, sys, time; "
+        "p=subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)']); "
+        f"pathlib.Path({str(child_pid_file)!r}).write_text(str(p.pid)); "
+        "time.sleep(60)"
     )
-    manager = WebUIProcessManager(config)
+    manager = _manager(monkeypatch, working_dir=str(tmp_path))
+    manager._config.command = [sys.executable, "-c", code]
+    monkeypatch.setattr(
+        "src.utils.single_instance.SingleInstanceLock.is_gui_running", lambda: True
+    )
+    manager.start()
+    deadline = time.monotonic() + 5.0
+    while not child_pid_file.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert child_pid_file.exists()
+    child_pid = int(child_pid_file.read_text())
 
-    class _FakeProc:
-        def __init__(self) -> None:
-            self.pid = 123
-            self.info = {
-                "name": "python.exe",
-                "cmdline": [str(tmp_path / "launch.py")],
-                "ppid": 4,
-            }
-
-        def cwd(self):
-            return str(tmp_path)
-
-    calls: list[str] = []
-
-    @contextmanager
-    def _guard():
-        calls.append("entered")
-        yield
-        calls.append("exited")
-
-    fake_psutil = Mock()
-    fake_psutil.process_iter.return_value = [_FakeProc()]
-    fake_psutil.Process.side_effect = RuntimeError("should not be called for system parent")
-    fake_psutil.NoSuchProcess = RuntimeError
-    fake_psutil.AccessDenied = RuntimeError
-    monkeypatch.setitem(sys.modules, "psutil", fake_psutil)
-    monkeypatch.setattr("src.api.webui_process_manager.hold_process_scan_lock", _guard)
-
-    orphans = manager._scan_for_orphaned_webui_processes()
-
-    assert orphans == [123]
-    assert calls == ["entered", "exited"]
-
-
-@pytest.mark.skipif(os.name != "nt", reason="Windows-specific test")
-class TestEmergencyCleanup:
-    """Test emergency atexit handler for crash scenarios."""
-    
-    def test_atexit_handler_runs_on_crash(self, monkeypatch):
-        """Verify atexit handler kills WebUI if main() crashes."""
-        # This would be an integration test that:
-        # 1. Starts app
-        # 2. Triggers crash
-        # 3. Verifies WebUI is killed
-        
-        # Simplified unit test version:
-        from src.main import _emergency_webui_cleanup
-        
-        mock_manager = Mock()
-        mock_manager.stop_webui = Mock()
-        
-        # Simulate global assignment
-        import src.main as main_module
-        original_global = main_module._webui_manager_global
-        main_module._webui_manager_global = mock_manager
-        
-        try:
-            # Call emergency cleanup
-            _emergency_webui_cleanup()
-            
-            # Verify stop_webui was called
-            mock_manager.stop_webui.assert_called_once()
-        finally:
-            # Restore original global
-            main_module._webui_manager_global = original_global
-    
-    def test_emergency_cleanup_handles_none_manager(self):
-        """Verify emergency cleanup is safe when manager is None."""
-        from src.main import _emergency_webui_cleanup
-        
-        import src.main as main_module
-        original_global = main_module._webui_manager_global
-        main_module._webui_manager_global = None
-        
-        try:
-            # Should not raise exception
-            _emergency_webui_cleanup()
-        finally:
-            main_module._webui_manager_global = original_global
-    
-    def test_register_emergency_cleanup_idempotent(self):
-        """Verify _register_emergency_cleanup() can be called multiple times."""
-        from src.main import _register_emergency_cleanup
-        
-        mock_window = Mock()
-        mock_window.webui_process_manager = Mock()
-        mock_window.webui_process_manager.pid = 12345
-        
-        import src.main as main_module
-        original_registered = main_module._emergency_cleanup_registered
-        main_module._emergency_cleanup_registered = False
-        
-        try:
-            # First call should register
-            _register_emergency_cleanup(mock_window)
-            assert main_module._emergency_cleanup_registered
-            
-            # Second call should be no-op
-            _register_emergency_cleanup(mock_window)
-            assert main_module._emergency_cleanup_registered
-        finally:
-            main_module._emergency_cleanup_registered = original_registered
-
-
-class TestProcessCleanupIntegration:
-    """Integration tests for complete process cleanup flow."""
-    
-    def test_no_cleanup_when_webui_not_started(self):
-        """Verify cleanup is graceful when WebUI was never started."""
-        config = WebUIProcessConfig(
-            command=["python", "-c", "print('test')"],
-            working_dir=None,
-            autostart_enabled=False,
-        )
-        
-        manager = WebUIProcessManager(config)
-        
-        # Should not raise exception
-        manager.stop_webui(grace_seconds=1.0)
-        
-        # Verify no processes remain (should be no-op)
-        assert not manager.is_running()
-    
-    @pytest.mark.skipif(psutil is None, reason="psutil required")
-    def test_kill_process_tree_with_none_pid(self):
-        """Verify _kill_process_tree() handles None PID gracefully."""
-        config = WebUIProcessConfig(
-            command=["python", "-c", "print('test')"],
-            working_dir=None,
-            autostart_enabled=False,
-        )
-        
-        manager = WebUIProcessManager(config)
-        
-        # Should log warning but not crash
-        manager._kill_process_tree(None)
+    try:
+        assert manager.owns_process is True
+        assert psutil.pid_exists(child_pid)
+        assert manager.stop_webui(grace_seconds=0.2) is True
+        deadline = time.monotonic() + 3.0
+        while psutil.pid_exists(child_pid) and time.monotonic() < deadline:
+            time.sleep(0.05)
+        assert not psutil.pid_exists(child_pid)
+    finally:
+        for pid in (child_pid, manager.pid):
+            if pid and psutil.pid_exists(pid):
+                psutil.Process(pid).kill()

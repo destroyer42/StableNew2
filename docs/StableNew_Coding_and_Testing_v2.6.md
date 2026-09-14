@@ -125,11 +125,10 @@ way to approximate the entire historical suite.
 
 ## Lint and types
 
-Ruff 0.14.9 is pinned. `tools/ci/run_ruff_baseline.py` is a non-increasing
-file/rule-count ratchet over legacy debt. A new bucket or increased count fails.
-Every touched source file should be left clean. `PR-MVP-080` owns bounded
-cleanup of untouched findings; `PR-MVP-090` removes the baseline after raw Ruff
-is clean.
+Ruff 0.14.9 is pinned and v2.6 is raw-Ruff clean. `ruff check .` is the sole
+lint authority in both the local PR gate and required CI; the former
+non-increasing baseline was retired by PR-MVP-090. Every touched source file
+must remain raw-Ruff clean.
 
 `tools/ci/run_mypy_smoke.py` checks the typed architecture seams. A broad mypy
 run is useful diagnostic evidence but is not yet a repository-wide green gate.
@@ -159,6 +158,9 @@ requires an explicitly approved architecture exception.
 - Replace timing sleeps with events, fakes, bounded polling, or explicit state
   transitions.
 - Close threads, clients, loggers, temporary servers, and process handles.
+- Process-lifecycle tests may terminate only test-owned disposable processes.
+  Mock `atexit.register` and restore cleanup globals/state so pytest never exits
+  with a real runtime-cleanup callback armed.
 
 ## Job persistence and legacy migration
 

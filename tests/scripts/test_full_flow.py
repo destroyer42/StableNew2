@@ -1,4 +1,5 @@
 """Test the FULL load flow from pack file to GUI."""
+
 import json
 from pathlib import Path
 
@@ -69,7 +70,7 @@ def main() -> None:
     img2img_result = bool(loaded_pipeline.get("img2img_enabled"))
     adetailer_result = bool(loaded_pipeline.get("adetailer_enabled"))
 
-    if img2img_result == False and adetailer_result == True:
+    if not img2img_result and adetailer_result:
         print("OK. VALUES CORRECT")
     else:
         print("FAIL. BUG PRESENT:")

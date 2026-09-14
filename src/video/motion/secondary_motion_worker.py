@@ -1,13 +1,13 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from PIL import Image
 
 from .secondary_motion_engine import apply_secondary_motion_to_frames
 from .secondary_motion_models import SecondaryMotionIntent, SecondaryMotionPolicy
-
 
 _FRAME_SUFFIXES = (".png", ".jpg", ".jpeg", ".webp", ".bmp")
 

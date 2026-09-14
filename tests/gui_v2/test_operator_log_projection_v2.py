@@ -47,7 +47,9 @@ def test_bottom_zone_operator_log_rollover_avoids_full_rebuild(tk_root: tk.Tk) -
         state.flush_now()
         tk_root.update()
 
-        with patch.object(window.bottom_zone.log_text, "delete", wraps=window.bottom_zone.log_text.delete) as delete_spy:
+        with patch.object(
+            window.bottom_zone.log_text, "delete", wraps=window.bottom_zone.log_text.delete
+        ) as delete_spy:
             state.append_operator_log_line("delta")
             state.flush_now()
             tk_root.update()

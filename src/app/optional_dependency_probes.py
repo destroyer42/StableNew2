@@ -7,7 +7,6 @@ from src.video.comfy_dependency_probe import ComfyDependencyProbe
 from src.video.svd_capabilities import get_svd_postprocess_capabilities
 from src.video.workflow_registry import build_default_workflow_registry
 
-
 OPTIONAL_DEPENDENCY_SCHEMA_V1 = "stablenew.optional-dependencies.v1"
 
 
@@ -57,7 +56,10 @@ def build_optional_dependency_snapshot(
                 status="unknown",
                 detail="Comfy object info unavailable during startup probe",
                 source="comfy",
-                metadata={"workflow_id": spec.workflow_id, "workflow_version": spec.workflow_version},
+                metadata={
+                    "workflow_id": spec.workflow_id,
+                    "workflow_version": spec.workflow_version,
+                },
             )
             continue
         try:
@@ -84,7 +86,10 @@ def build_optional_dependency_snapshot(
                 status="error",
                 detail=str(exc),
                 source="comfy",
-                metadata={"workflow_id": spec.workflow_id, "workflow_version": spec.workflow_version},
+                metadata={
+                    "workflow_id": spec.workflow_id,
+                    "workflow_version": spec.workflow_version,
+                },
             )
 
     for key, capability in get_svd_postprocess_capabilities(svd_config).items():

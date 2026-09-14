@@ -174,7 +174,9 @@ class JobExplanationPanelV2(tk.Toplevel):
             self._stage_flow_label.config(text=" -> ".join(str(stage) for stage in stage_flow))
         else:
             self._stage_flow_label.config(text="Stages unknown")
-        self._populate_metadata(payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {})
+        self._populate_metadata(
+            payload.get("metadata") if isinstance(payload.get("metadata"), dict) else {}
+        )
         self.stage_tree.delete(*self.stage_tree.get_children())
         rows = payload.get("stage_prompts") or []
         if isinstance(rows, list) and rows:
@@ -193,7 +195,9 @@ class JobExplanationPanelV2(tk.Toplevel):
                     ),
                 )
         else:
-            self.stage_tree.insert("", "end", values=("?", "No prompt diagnostics", "", "", "missing"))
+            self.stage_tree.insert(
+                "", "end", values=("?", "No prompt diagnostics", "", "", "missing")
+            )
 
     def _populate_stage_prompts(self, run_metadata: dict[str, Any], config: dict[str, Any]) -> None:
         manifest_templates = [

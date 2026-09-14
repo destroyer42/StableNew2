@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import re
 from copy import deepcopy
 from pathlib import Path
-import re
 from typing import Any
 
 from src.video.video_backend_types import VideoExecutionRequest
@@ -76,10 +76,7 @@ def _render_template_value(template: Any, context: dict[str, Any]) -> Any:
     if isinstance(template, list):
         return [_render_template_value(item, context) for item in template]
     if isinstance(template, dict):
-        return {
-            str(key): _render_template_value(value, context)
-            for key, value in template.items()
-        }
+        return {str(key): _render_template_value(value, context) for key, value in template.items()}
     return _normalize_value(template)
 
 

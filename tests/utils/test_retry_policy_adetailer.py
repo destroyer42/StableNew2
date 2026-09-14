@@ -23,7 +23,9 @@ def test_adetailer_policy_is_fail_fast() -> None:
 def test_adetailer_policy_does_not_affect_img2img_policy() -> None:
     """IMG2IMG_RETRY_POLICY must remain independent of ADETAILER_RETRY_POLICY."""
     assert ADETAILER_RETRY_POLICY is not IMG2IMG_RETRY_POLICY
-    assert IMG2IMG_RETRY_POLICY.max_attempts != 1 or IMG2IMG_RETRY_POLICY is not ADETAILER_RETRY_POLICY
+    assert (
+        IMG2IMG_RETRY_POLICY.max_attempts != 1 or IMG2IMG_RETRY_POLICY is not ADETAILER_RETRY_POLICY
+    )
 
 
 def test_adetailer_policy_zero_delay() -> None:

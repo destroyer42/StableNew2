@@ -40,7 +40,9 @@ class OpenCvFaceDetector(SubjectDetector):
         self._frontal = cv2.CascadeClassifier(frontal_path)
         self._profile = cv2.CascadeClassifier(profile_path)
 
-    def _dedupe(self, detections: list[dict[str, Any]], iou_threshold: float = 0.35) -> tuple[dict[str, Any], ...]:
+    def _dedupe(
+        self, detections: list[dict[str, Any]], iou_threshold: float = 0.35
+    ) -> tuple[dict[str, Any], ...]:
         ordered = sorted(detections, key=lambda item: item["w"] * item["h"], reverse=True)
         kept: list[dict[str, Any]] = []
         for candidate in ordered:
@@ -64,7 +66,7 @@ class OpenCvFaceDetector(SubjectDetector):
 
         detections: list[dict[str, Any]] = []
 
-        for (x, y, w, h) in self._frontal.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5):
+        for x, y, w, h in self._frontal.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5):
             detections.append(
                 {
                     "x": int(x),
@@ -75,7 +77,7 @@ class OpenCvFaceDetector(SubjectDetector):
                     "source": "frontal",
                 }
             )
-        for (x, y, w, h) in self._profile.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4):
+        for x, y, w, h in self._profile.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4):
             detections.append(
                 {
                     "x": int(x),
@@ -87,7 +89,9 @@ class OpenCvFaceDetector(SubjectDetector):
                 }
             )
         width = gray.shape[1]
-        for (x, y, w, h) in self._profile.detectMultiScale(flipped_gray, scaleFactor=1.1, minNeighbors=4):
+        for x, y, w, h in self._profile.detectMultiScale(
+            flipped_gray, scaleFactor=1.1, minNeighbors=4
+        ):
             detections.append(
                 {
                     "x": int(width - x - w),

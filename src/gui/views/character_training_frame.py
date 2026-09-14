@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from pathlib import Path
 import tkinter as tk
+from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
-
 
 _DEFAULTS = {
     "character_name": "",
@@ -77,8 +76,12 @@ class CharacterTrainingFrame(ttk.Frame):
         ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
 
         self._add_entry_row(container, 1, "Character Name", self.character_name_var)
-        self._add_path_row(container, 2, "Image Directory", self.image_dir_var, self._browse_image_dir)
-        self._add_path_row(container, 3, "Output Directory", self.output_dir_var, self._browse_output_dir)
+        self._add_path_row(
+            container, 2, "Image Directory", self.image_dir_var, self._browse_image_dir
+        )
+        self._add_path_row(
+            container, 3, "Output Directory", self.output_dir_var, self._browse_output_dir
+        )
         self._add_entry_row(container, 4, "Epochs", self.epochs_var)
         self._add_entry_row(container, 5, "Learning Rate", self.learning_rate_var)
         self._add_entry_row(container, 6, "Base Model", self.base_model_var)
@@ -118,7 +121,9 @@ class CharacterTrainingFrame(ttk.Frame):
     ) -> None:
         ttk.Label(parent, text=label).grid(row=row, column=0, sticky="w", padx=(0, 8), pady=4)
         ttk.Entry(parent, textvariable=variable).grid(row=row, column=1, sticky="ew", pady=4)
-        ttk.Button(parent, text="Browse...", command=command).grid(row=row, column=2, sticky="w", padx=(8, 0), pady=4)
+        ttk.Button(parent, text="Browse...", command=command).grid(
+            row=row, column=2, sticky="w", padx=(8, 0), pady=4
+        )
 
     def _apply_defaults(self, defaults: dict[str, Any]) -> None:
         self.character_name_var.set(str(defaults.get("character_name") or ""))
@@ -141,7 +146,9 @@ class CharacterTrainingFrame(ttk.Frame):
             self.image_dir_var.set(selected)
 
     def _browse_output_dir(self) -> None:
-        selected = filedialog.askdirectory(initialdir=self.output_dir_var.get() or str(Path("data") / "embeddings"))
+        selected = filedialog.askdirectory(
+            initialdir=self.output_dir_var.get() or str(Path("data") / "embeddings")
+        )
         if selected:
             self.output_dir_var.set(selected)
 
@@ -214,7 +221,9 @@ class CharacterTrainingFrame(ttk.Frame):
 
         submit = getattr(self.app_controller, "submit_character_training_job", None)
         if not callable(submit):
-            error = "Character training is unavailable because the AppController entrypoint is missing."
+            error = (
+                "Character training is unavailable because the AppController entrypoint is missing."
+            )
             self._set_status(error)
             messagebox.showerror("Character Training", error)
             return

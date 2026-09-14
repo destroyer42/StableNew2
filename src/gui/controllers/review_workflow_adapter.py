@@ -114,9 +114,7 @@ class ReviewWorkflowAdapter:
         delta_terms = ReviewWorkflowAdapter._split_prompt_terms(delta)
         if not base_terms or not delta_terms:
             return False
-        shared = {
-            term.casefold() for term in base_terms
-        } & {
+        shared = {term.casefold() for term in base_terms} & {
             term.casefold() for term in delta_terms
         }
         overlap_ratio = len(shared) / max(len(base_terms), 1)
@@ -161,7 +159,9 @@ class ReviewWorkflowAdapter:
         replaced = False
         for existing in terms:
             if not replaced and existing.casefold() == old_clean.casefold():
-                if new_clean and not any(item.casefold() == new_clean.casefold() for item in updated):
+                if new_clean and not any(
+                    item.casefold() == new_clean.casefold() for item in updated
+                ):
                     updated.append(new_clean)
                 replaced = True
                 continue
@@ -179,7 +179,7 @@ class ReviewWorkflowAdapter:
             return "(empty)"
         if len(clean) <= max_len:
             return clean
-        return f"{clean[:max_len-3]}..."
+        return f"{clean[: max_len - 3]}..."
 
     def build_staged_curation_handoff(self, *, plan: Any) -> ReviewWorkspaceHandoff | None:
         selections = list(getattr(plan, "selections", []) or [])
@@ -210,16 +210,26 @@ class ReviewWorkflowAdapter:
 
             event = getattr(selection, "selection_event", None)
             if candidate is not None and event is not None and artifact_path:
-                source_metadata_by_path[str(Path(resolve_output_artifact_path(artifact_path)))] = build_serialized_curation_source_metadata(
-                    candidate,
-                    event,
-                    source_stage=str(getattr(source_item, "stage", "") or getattr(candidate, "stage", "") or ""),
-                    face_triage_tier=str(getattr(selection, "face_triage_tier", "") or ""),
+                source_metadata_by_path[str(Path(resolve_output_artifact_path(artifact_path)))] = (
+                    build_serialized_curation_source_metadata(
+                        candidate,
+                        event,
+                        source_stage=str(
+                            getattr(source_item, "stage", "")
+                            or getattr(candidate, "stage", "")
+                            or ""
+                        ),
+                        face_triage_tier=str(getattr(selection, "face_triage_tier", "") or ""),
+                    )
                 )
 
             reprocess_item = getattr(selection, "reprocess_item", None)
             if not base_prompt:
-                base_prompt = str(getattr(reprocess_item, "prompt", "") or getattr(source_item, "positive_prompt", "") or "")
+                base_prompt = str(
+                    getattr(reprocess_item, "prompt", "")
+                    or getattr(source_item, "positive_prompt", "")
+                    or ""
+                )
             if not base_negative_prompt:
                 base_negative_prompt = str(
                     getattr(reprocess_item, "negative_prompt", "")
@@ -300,11 +310,41 @@ class ReviewWorkflowAdapter:
             return f"{name}={value_text} [{source_text}]"
 
         bits = [str(getattr(stage_preview, "stage", "") or "stage")]
-        bits.append(_format_field("sampler", getattr(stage_preview, "sampler", None), getattr(stage_preview, "sampler_source", None)))
-        bits.append(_format_field("scheduler", getattr(stage_preview, "scheduler", None), getattr(stage_preview, "scheduler_source", None)))
-        bits.append(_format_field("steps", getattr(stage_preview, "steps", None), getattr(stage_preview, "steps_source", None)))
-        bits.append(_format_field("cfg", getattr(stage_preview, "cfg_scale", None), getattr(stage_preview, "cfg_scale_source", None)))
-        bits.append(_format_field("denoise", getattr(stage_preview, "denoise", None), getattr(stage_preview, "denoise_source", None)))
+        bits.append(
+            _format_field(
+                "sampler",
+                getattr(stage_preview, "sampler", None),
+                getattr(stage_preview, "sampler_source", None),
+            )
+        )
+        bits.append(
+            _format_field(
+                "scheduler",
+                getattr(stage_preview, "scheduler", None),
+                getattr(stage_preview, "scheduler_source", None),
+            )
+        )
+        bits.append(
+            _format_field(
+                "steps",
+                getattr(stage_preview, "steps", None),
+                getattr(stage_preview, "steps_source", None),
+            )
+        )
+        bits.append(
+            _format_field(
+                "cfg",
+                getattr(stage_preview, "cfg_scale", None),
+                getattr(stage_preview, "cfg_scale_source", None),
+            )
+        )
+        bits.append(
+            _format_field(
+                "denoise",
+                getattr(stage_preview, "denoise", None),
+                getattr(stage_preview, "denoise_source", None),
+            )
+        )
         return " | ".join(bits)
 
     def format_effective_settings_summary(
@@ -359,8 +399,7 @@ class ReviewWorkflowAdapter:
             f"Before -: {self.clip_text(base_negative_prompt)}"
         )
         after_text = (
-            f"After +: {self.clip_text(after_prompt)}\n"
-            f"After -: {self.clip_text(after_negative)}"
+            f"After +: {self.clip_text(after_prompt)}\nAfter -: {self.clip_text(after_negative)}"
         )
         return ReviewPromptDiff(
             before_text=before_text,
@@ -422,7 +461,9 @@ class ReviewWorkflowAdapter:
                 "prompt_adherence": int(prompt_adherence_rating),
             },
             "model": str(model or ""),
-            "sampler": str(stage_manifest.get("sampler_name") or generation.get("sampler_name") or ""),
+            "sampler": str(
+                stage_manifest.get("sampler_name") or generation.get("sampler_name") or ""
+            ),
             "scheduler": str(stage_manifest.get("scheduler") or generation.get("scheduler") or ""),
             "steps": stage_manifest.get("steps") or generation.get("steps"),
             "cfg_scale": stage_manifest.get("cfg_scale") or generation.get("cfg_scale"),

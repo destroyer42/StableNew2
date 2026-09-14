@@ -55,7 +55,9 @@ class _WebUIConnection:
 
     def is_webui_ready_strict(self) -> bool:
         self.probe_calls += 1
-        raise AssertionError("Readiness must use the existing connection state, not probe independently")
+        raise AssertionError(
+            "Readiness must use the existing connection state, not probe independently"
+        )
 
 
 def _preflight(
@@ -115,7 +117,9 @@ def _service(
     )
 
 
-def test_support_policy_is_deterministic_and_only_accepted_journeys_are_supported(tmp_path: Path) -> None:
+def test_support_policy_is_deterministic_and_only_accepted_journeys_are_supported(
+    tmp_path: Path,
+) -> None:
     snapshot = _service(tmp_path).collect()
 
     support = {item.id: item.state for item in snapshot.support_surfaces}
@@ -127,7 +131,9 @@ def test_support_policy_is_deterministic_and_only_accepted_journeys_are_supporte
     assert ProductSupportState.DEFERRED.value == "deferred"
 
 
-def test_ready_webui_and_svd_runtime_are_truthful_when_source_is_not_selected(tmp_path: Path) -> None:
+def test_ready_webui_and_svd_runtime_are_truthful_when_source_is_not_selected(
+    tmp_path: Path,
+) -> None:
     webui = _WebUIConnection("ready")
     snapshot = _service(tmp_path, webui=webui).collect()
 
@@ -165,7 +171,9 @@ def test_unavailable_webui_projects_existing_connection_authority(tmp_path: Path
     assert record.source == "WebUIConnectionController"
 
 
-def test_missing_local_svd_cache_is_action_required_without_blurring_source_state(tmp_path: Path) -> None:
+def test_missing_local_svd_cache_is_action_required_without_blurring_source_state(
+    tmp_path: Path,
+) -> None:
     preflight = _preflight(
         blockers=(
             "Select a source image.",
@@ -201,7 +209,9 @@ def test_promptpack_and_output_failures_are_projected_without_writes(tmp_path: P
     assert snapshot.record_for("output_storage").state is OperatorReadinessState.ACTION_REQUIRED
 
 
-def test_collection_reads_recovery_metadata_without_queue_or_repository_mutation(tmp_path: Path) -> None:
+def test_collection_reads_recovery_metadata_without_queue_or_repository_mutation(
+    tmp_path: Path,
+) -> None:
     repository = _Repository(
         count=2,
         jobs=[_Job(_Metadata("restart_interrupted_action_required")), _Job(_Metadata())],

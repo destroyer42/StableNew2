@@ -182,6 +182,26 @@ journey wrappers retain the approved interpreter/dependency normalization.
 Focused release-harness validation passed; the disposable `.venv-release-proof`
 was removed after confirming no process used it.
 
+The PR-MVP-090 raw-Ruff hygiene checkpoint is **LOCAL PASS / CI PENDING**.
+Pinned Ruff 0.14.9 found 3,553 active findings on the feature tree; after
+reviewed mechanical cleanup and narrow defect repairs, `ruff check .` is zero.
+The legacy baseline file and baseline-comparison gate were removed. The local
+PR gate and required CI now enforce raw `ruff check .` directly. Controller
+ceilings were not increased; the AppController ceiling was tightened by one
+physical line. Required Python 3.11/3.12 CI remains the integration verdict.
+
+The managed-runtime ownership safety repair is **LOCAL PASS / CI PENDING**.
+WebUI launch now refuses an occupied configured endpoint without killing or
+adopting its process. Stop, restart, orphan monitoring, process-container
+teardown, and emergency cleanup require explicit manager ownership and may act
+only on the launched root and proven descendants. The same explicit ownership
+gate now protects ComfyUI cleanup. Machine-wide port, working-directory, and
+process-appearance kill scans are no longer automatic authorities. Focused
+ownership/lifecycle/recovery validation passed using fakes and test-owned
+disposable processes only. The legacy test's live `atexit` registration and
+global-state leak are confirmed; whether that callback caused the previously
+observed external runtime disappearance remains unresolved.
+
 XT 1.1 remains a distinct supported model and must not be substituted for the
 accepted plain-XT baseline merely because it is cached.
 
@@ -268,7 +288,7 @@ passed on the accepted source tree, including required Python 3.11 and 3.12.
 2. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
    exact integrated post-v2.6 parent.
 
-Next action: **PR-MVP-090 Ruff-zero, migration/recovery, and final release acceptance**.
+Next action: **push the PR-MVP-090 ownership/Ruff package and obtain required CI before migration/recovery acceptance**.
 
 PR-MVP-090 is **IN PROGRESS** for release proof. Its Phase 0
 runtime/bootstrap prerequisite was completed and accepted early only to unblock

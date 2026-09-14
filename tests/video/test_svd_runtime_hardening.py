@@ -33,7 +33,9 @@ def _service_with_pipeline(monkeypatch, pipeline):
     return service
 
 
-def test_callback_capable_pipeline_reports_real_denoising_steps(monkeypatch, tmp_path: Path) -> None:
+def test_callback_capable_pipeline_reports_real_denoising_steps(
+    monkeypatch, tmp_path: Path
+) -> None:
     class FakePipeline:
         def __init__(self) -> None:
             self.callback = None
@@ -63,7 +65,9 @@ def test_callback_capable_pipeline_reports_real_denoising_steps(monkeypatch, tmp
         frame.close()
 
 
-def test_callback_unavailable_pipeline_does_not_fabricate_denoising_progress(monkeypatch, tmp_path: Path) -> None:
+def test_callback_unavailable_pipeline_does_not_fabricate_denoising_progress(
+    monkeypatch, tmp_path: Path
+) -> None:
     class FakePipeline:
         def __init__(self) -> None:
             self.kwargs: dict[str, object] = {}
@@ -88,7 +92,9 @@ def test_callback_unavailable_pipeline_does_not_fabricate_denoising_progress(mon
         frame.close()
 
 
-def test_callback_cancellation_propagates_without_inference_failure(monkeypatch, tmp_path: Path) -> None:
+def test_callback_cancellation_propagates_without_inference_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
     token = CancelToken()
 
     class FakePipeline:
@@ -134,7 +140,9 @@ def test_cuda_oom_is_typed_and_does_not_hide_effective_config(monkeypatch, tmp_p
     assert "did not automatically rerun" in str(exc_info.value)
 
 
-def test_runner_cancellation_before_export_produces_no_success_output(tmp_path: Path, monkeypatch) -> None:
+def test_runner_cancellation_before_export_produces_no_success_output(
+    tmp_path: Path, monkeypatch
+) -> None:
     source_path = _prepared_image(tmp_path)
     prepared = SVDPreprocessResult(
         source_path=source_path,
@@ -170,7 +178,12 @@ def test_runner_cancellation_before_export_produces_no_success_output(tmp_path: 
     runner = SVDRunner(service=FakeService(), output_root=tmp_path)
 
     with pytest.raises(CancellationError):
-        runner.run(source_image_path=source_path, config=SVDConfig(), job_id="job-cancel", cancel_token=token)
+        runner.run(
+            source_image_path=source_path,
+            config=SVDConfig(),
+            job_id="job-cancel",
+            cancel_token=token,
+        )
 
     stem = build_svd_artifact_stem(source_image_path=source_path, job_id="job-cancel")
     assert not (tmp_path / f"{stem}.mp4").exists()
@@ -321,12 +334,22 @@ def test_cancellation_after_manifest_removes_exact_outputs(
 
     stem = build_svd_artifact_stem(source_image_path=source_path, job_id="job-after-manifest")
     output_path = tmp_path / (
-        f"{stem}.mp4" if output_format == "mp4" else f"{stem}.gif" if output_format == "gif" else f"{stem}_frames"
+        f"{stem}.mp4"
+        if output_format == "mp4"
+        else f"{stem}.gif"
+        if output_format == "gif"
+        else f"{stem}_frames"
     )
     if output_format == "mp4":
-        monkeypatch.setattr("src.video.svd_runner.export_video_mp4", lambda **_kwargs: _write_and_return(output_path))
+        monkeypatch.setattr(
+            "src.video.svd_runner.export_video_mp4",
+            lambda **_kwargs: _write_and_return(output_path),
+        )
     elif output_format == "gif":
-        monkeypatch.setattr("src.video.svd_runner.export_video_gif", lambda **_kwargs: _write_and_return(output_path))
+        monkeypatch.setattr(
+            "src.video.svd_runner.export_video_gif",
+            lambda **_kwargs: _write_and_return(output_path),
+        )
     frame_dir = tmp_path / f"{stem}_frames"
     frame_path = frame_dir / "frame_000000.png"
     if save_frames:
@@ -358,7 +381,13 @@ def test_cancellation_after_manifest_removes_exact_outputs(
             return None
 
     config = SVDConfig.from_dict(
-        {"output": {"output_format": output_format, "save_frames": save_frames, "save_preview_image": False}}
+        {
+            "output": {
+                "output_format": output_format,
+                "save_frames": save_frames,
+                "save_preview_image": False,
+            }
+        }
     )
     with pytest.raises(CancellationError):
         SVDRunner(service=FakeService(), output_root=tmp_path).run(
@@ -384,7 +413,9 @@ def _write_frame_and_return(path: Path) -> list[Path]:
     return [path]
 
 
-def test_container_metadata_failure_is_typed_and_cleans_manifest(tmp_path: Path, monkeypatch) -> None:
+def test_container_metadata_failure_is_typed_and_cleans_manifest(
+    tmp_path: Path, monkeypatch
+) -> None:
     source_path = _prepared_image(tmp_path)
     prepared = SVDPreprocessResult(
         source_path=source_path,
@@ -406,7 +437,9 @@ def test_container_metadata_failure_is_typed_and_cleans_manifest(tmp_path: Path,
     stem = build_svd_artifact_stem(source_image_path=source_path, job_id="job-metadata")
     output_path = tmp_path / f"{stem}.mp4"
     manifest_path = tmp_path / "manifests" / f"{stem}.json"
-    monkeypatch.setattr("src.video.svd_runner.export_video_mp4", lambda **_kwargs: _write_and_return(output_path))
+    monkeypatch.setattr(
+        "src.video.svd_runner.export_video_mp4", lambda **_kwargs: _write_and_return(output_path)
+    )
 
     def _write_manifest(**_kwargs):
         _kwargs["before_write"](manifest_path)

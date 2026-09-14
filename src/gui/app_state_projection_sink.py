@@ -147,4 +147,3 @@ class AppStateProjectionSink:
         if app_state is None:
             return
         app_state.append_operator_log_line(entry.line)
-

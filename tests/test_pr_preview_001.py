@@ -8,12 +8,12 @@ Tests that:
 4. User checkbox preference is authoritative (not overridden by pack config)
 """
 
-import pytest
 import json
-import tempfile
-from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch
+
+import pytest
+
 from src.gui.preview_panel_v2 import PreviewPanelV2
 
 
@@ -38,8 +38,9 @@ def preview_panel(temp_state_file, tk_root):
 
 def test_default_preview_off(preview_panel):
     """Test that preview checkbox defaults to False."""
-    assert preview_panel._show_preview_var.get() is False, \
+    assert preview_panel._show_preview_var.get() is False, (
         "Preview checkbox should default to False (PR-PREVIEW-001)"
+    )
 
 
 def test_state_persistence_save_restore(preview_panel, temp_state_file):
@@ -47,20 +48,19 @@ def test_state_persistence_save_restore(preview_panel, temp_state_file):
     # Enable preview
     preview_panel._show_preview_var.set(True)
     preview_panel.save_state()
-    
+
     # Verify state file created
     assert temp_state_file.exists(), "State file should be created"
     state = json.loads(temp_state_file.read_text())
     assert state["show_preview"] is True
     assert state["schema_version"] == "2.6"
-    
+
     # Create new panel and restore state
     preview_panel._show_preview_var.set(False)  # Reset to False
     preview_panel.restore_state()
-    
+
     # Verify restored
-    assert preview_panel._show_preview_var.get() is True, \
-        "State should be restored from disk"
+    assert preview_panel._show_preview_var.get() is True, "State should be restored from disk"
 
 
 def test_state_persists_on_checkbox_change(preview_panel, temp_state_file):
@@ -74,25 +74,27 @@ def test_no_reset_on_clear(preview_panel):
     """Test that clearing preview doesn't reset checkbox state."""
     # Set checkbox to False
     preview_panel._show_preview_var.set(False)
-    
+
     # Create mock job_draft with empty packs to trigger "clear" path
     mock_job_draft = SimpleNamespace(packs=[])
-    
+
     # Clear preview
     preview_panel.update_from_job_draft(job_draft=mock_job_draft)
-    
+
     # Verify checkbox state unchanged
-    assert preview_panel._show_preview_var.get() is False, \
+    assert preview_panel._show_preview_var.get() is False, (
         "Checkbox state should not reset when clearing preview"
-    assert preview_panel._current_show_preview is False, \
+    )
+    assert preview_panel._current_show_preview is False, (
         "_current_show_preview should match checkbox state"
+    )
 
 
 def test_no_reset_on_update_with_summary(preview_panel):
     """Test that update_with_summary doesn't reset checkbox state."""
     # Set checkbox to False
     preview_panel._show_preview_var.set(False)
-    
+
     # Create mock summary
     mock_summary = SimpleNamespace(
         job_id="test_job_001",
@@ -107,24 +109,26 @@ def test_no_reset_on_update_with_summary(preview_panel):
         width=1024,
         height=1024,
         batch_size=1,
-        batch_count=1
+        batch_count=1,
     )
-    
+
     # Update with summary
     preview_panel.update_with_summary(mock_summary)
-    
+
     # Verify checkbox state unchanged
-    assert preview_panel._show_preview_var.get() is False, \
+    assert preview_panel._show_preview_var.get() is False, (
         "Checkbox state should not reset when updating with summary"
-    assert preview_panel._current_show_preview is False, \
+    )
+    assert preview_panel._current_show_preview is False, (
         "_current_show_preview should match checkbox state"
+    )
 
 
 def test_checkbox_state_authoritative(preview_panel):
     """Test that user checkbox is authoritative, not pack config."""
     # Set checkbox to False
     preview_panel._show_preview_var.set(False)
-    
+
     # Create mock summary with show_preview=True in pack config
     # (this shouldn't override the user's checkbox)
     mock_summary = SimpleNamespace(
@@ -133,25 +137,26 @@ def test_checkbox_state_authoritative(preview_panel):
         show_preview=True,  # Pack says "show preview"
         positive_preview="test",
         negative_preview="",
-        label="SDXL"
+        label="SDXL",
     )
-    
+
     # Create a mock job_draft with this summary
     mock_job_draft = SimpleNamespace(packs=[mock_summary])
-    
+
     # Update from job draft (which internally calls update methods)
     preview_panel.update_from_job_draft(job_draft=mock_job_draft)
-    
+
     # Verify checkbox state NOT overridden by pack config
-    assert preview_panel._show_preview_var.get() is False, \
+    assert preview_panel._show_preview_var.get() is False, (
         "User checkbox should not be overridden by pack config (PR-PREVIEW-001)"
+    )
 
 
 def test_state_file_schema_version(preview_panel, temp_state_file):
     """Test that state file includes schema version."""
     preview_panel._show_preview_var.set(True)
     preview_panel.save_state()
-    
+
     state = json.loads(temp_state_file.read_text())
     assert "schema_version" in state
     assert state["schema_version"] == "2.6"
@@ -160,20 +165,16 @@ def test_state_file_schema_version(preview_panel, temp_state_file):
 def test_restore_with_invalid_schema(preview_panel, temp_state_file):
     """Test that invalid schema version is ignored."""
     # Write state with old schema
-    temp_state_file.write_text(json.dumps({
-        "show_preview": True,
-        "schema_version": "1.0"
-    }))
-    
+    temp_state_file.write_text(json.dumps({"show_preview": True, "schema_version": "1.0"}))
+
     # Set checkbox to False
     preview_panel._show_preview_var.set(False)
-    
+
     # Try to restore - should be ignored
     preview_panel.restore_state()
-    
+
     # Verify state unchanged
-    assert preview_panel._show_preview_var.get() is False, \
-        "Invalid schema should be ignored"
+    assert preview_panel._show_preview_var.get() is False, "Invalid schema should be ignored"
 
 
 def test_restore_with_missing_file(preview_panel, temp_state_file):
@@ -181,26 +182,27 @@ def test_restore_with_missing_file(preview_panel, temp_state_file):
     # Ensure file doesn't exist
     if temp_state_file.exists():
         temp_state_file.unlink()
-    
+
     # Set checkbox to True
     preview_panel._show_preview_var.set(True)
-    
+
     # Try to restore - should do nothing
     preview_panel.restore_state()
-    
+
     # Verify state unchanged
-    assert preview_panel._show_preview_var.get() is True, \
+    assert preview_panel._show_preview_var.get() is True, (
         "State should remain unchanged when file missing"
+    )
 
 
 def test_save_state_on_destroy(preview_panel, temp_state_file):
     """Test that state is saved when panel is destroyed."""
     # Set checkbox to True
     preview_panel._show_preview_var.set(True)
-    
+
     # Destroy panel
     preview_panel.destroy()
-    
+
     # Verify state saved
     assert temp_state_file.exists(), "State should be saved on destroy"
     state = json.loads(temp_state_file.read_text())

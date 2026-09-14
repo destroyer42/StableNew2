@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from src.controller.runtime_state import CancelToken, CancellationError
+from src.controller.runtime_state import CancellationError, CancelToken
 from src.pipeline.executor import Pipeline
 from src.utils import StructuredLogger
 

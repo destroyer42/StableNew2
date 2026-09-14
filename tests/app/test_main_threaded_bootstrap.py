@@ -67,4 +67,3 @@ def test_main_bootstraps_live_app_in_threaded_mode(monkeypatch) -> None:
 
     assert captured["threaded"] is True
     assert captured["root"] is fake_root
-

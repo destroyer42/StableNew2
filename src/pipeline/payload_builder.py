@@ -25,11 +25,11 @@ from collections.abc import Mapping
 from typing import Any, Protocol
 
 from src.pipeline.config_normalizer import normalize_stage_payload_config
+from src.pipeline.stage_models import StageType
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_orchestrator import PromptOptimizerOrchestrator
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.prompting.stage_policy_engine import StagePolicyEngine
-from src.pipeline.stage_models import StageType
 
 
 class StageExecutionLike(Protocol):
@@ -100,7 +100,9 @@ def _extract_config(stage: StageExecutionLike, stage_type: StageType) -> dict[st
     """Extract the config dict from a stage, handling various formats."""
     # Handle stage_sequencer.StageExecution which has config.payload
     if hasattr(stage, "config") and hasattr(stage.config, "payload"):
-        return normalize_stage_payload_config(dict(stage.config.payload or {}), stage_type=stage_type.value)
+        return normalize_stage_payload_config(
+            dict(stage.config.payload or {}), stage_type=stage_type.value
+        )
     # Handle stage_models.StageExecution which has config as a Mapping
     if hasattr(stage, "config") and isinstance(stage.config, Mapping):
         return normalize_stage_payload_config(dict(stage.config), stage_type=stage_type.value)

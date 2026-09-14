@@ -206,9 +206,7 @@ class ContentVisibilityClassification:
         if not isinstance(payload, Mapping):
             return cls()
         rating = _normalize_rating(
-            payload.get("rating")
-            or payload.get("classification")
-            or payload.get("content_rating")
+            payload.get("rating") or payload.get("classification") or payload.get("content_rating")
         )
         safe_flag = _coerce_optional_bool(payload.get("safe_for_work"))
         if safe_flag is False and rating == CONTENT_RATING_UNKNOWN:
@@ -218,7 +216,11 @@ class ContentVisibilityClassification:
         return cls(
             rating=rating,
             matched_terms=tuple(
-                sorted(str(term).strip().lower() for term in payload.get("matched_terms") or [] if str(term).strip())
+                sorted(
+                    str(term).strip().lower()
+                    for term in payload.get("matched_terms") or []
+                    if str(term).strip()
+                )
             ),
             reason_codes=tuple(
                 str(code).strip() for code in payload.get("reason_codes") or [] if str(code).strip()
@@ -246,7 +248,7 @@ class ContentVisibilityResolver:
         payload = _extract_payload(item)
         payload_classification = ContentVisibilityClassification.from_payload(payload)
         safe_flag = _extract_safe_flag(item)
-        terms = _matched_terms([* _collect_texts(item), * _collect_tags(item)])
+        terms = _matched_terms([*_collect_texts(item), *_collect_tags(item)])
 
         if terms:
             return ContentVisibilityClassification(
@@ -304,7 +306,9 @@ class ContentVisibilityResolver:
         candidate = str(text or "")
         if not candidate.strip():
             return candidate
-        decision = self.decide(item if item is not None else {"prompt": candidate}, allow_redacted=True)
+        decision = self.decide(
+            item if item is not None else {"prompt": candidate}, allow_redacted=True
+        )
         if decision.redacted:
             return REDACTED_TEXT
         return candidate

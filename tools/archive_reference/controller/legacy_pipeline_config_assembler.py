@@ -79,9 +79,7 @@ class PipelineConfigAssembler:
         base = deepcopy(base_config or self._default_txt2img())
         merged = self._merge_base_and_overrides(base, gui_overrides)
 
-        preset_value = gui_overrides.get("resolution_preset") or merged.get(
-            "resolution_preset"
-        )
+        preset_value = gui_overrides.get("resolution_preset") or merged.get("resolution_preset")
         if preset_value:
             merged = self._apply_resolution_preset(merged, preset_value)
 
@@ -106,23 +104,17 @@ class PipelineConfigAssembler:
         }
         if learning_metadata:
             metadata["learning"] = learning_metadata
-            metadata["learning_enabled"] = bool(
-                learning_metadata.get("learning_enabled", True)
-            )
+            metadata["learning_enabled"] = bool(learning_metadata.get("learning_enabled", True))
         if randomizer_metadata:
             metadata["randomizer"] = randomizer_metadata
 
         selected_model = (
-            gui_overrides.get("model_name")
-            or gui_overrides.get("model")
-            or merged.get("model", "")
+            gui_overrides.get("model_name") or gui_overrides.get("model") or merged.get("model", "")
         )
 
         return PipelineConfig(
             prompt=gui_overrides.get("prompt", merged.get("prompt", "")),
-            negative_prompt=gui_overrides.get(
-                "negative_prompt", merged.get("negative_prompt", "")
-            ),
+            negative_prompt=gui_overrides.get("negative_prompt", merged.get("negative_prompt", "")),
             model=selected_model,
             sampler=gui_overrides.get("sampler", merged.get("sampler_name", "")),
             width=int(merged.get("width", 512)),
@@ -213,9 +205,7 @@ class PipelineConfigAssembler:
             merged[key] = value
         return merged
 
-    def _apply_resolution_preset(
-        self, cfg: dict[str, Any], preset: str
-    ) -> dict[str, Any]:
+    def _apply_resolution_preset(self, cfg: dict[str, Any], preset: str) -> dict[str, Any]:
         width_height = self._parse_resolution_preset(preset)
         if width_height:
             cfg["width"], cfg["height"] = width_height

@@ -101,7 +101,7 @@ def _clear_timeout_tracking(job_id: str) -> None:
 
 def _is_webui_crash_exception(exc: Exception, job_id: str | None = None) -> tuple[bool, str | None]:
     """Return (crash_eligible, stage_name) tuple.
-    
+
     Looks for:
     - HTTP 500 POST to crash-eligible stages
     - connection refused / actively refused
@@ -116,11 +116,13 @@ def _is_webui_crash_exception(exc: Exception, job_id: str | None = None) -> tupl
     method = (summary.get("method") or "").upper()
     attempt_stage = _select_request_summary_stage(summary)
     stage_name = attempt_stage or (getattr(exc, "stage", None) or summary.get("stage"))
-    
+
     # Check if this is a timeout error - may escalate to crash after consecutive occurrences
     error_message_lower = str(diag.get("error_message") or exc).lower()
     exc_message_lower = str(exc).lower()
-    is_timeout = any(kw in error_message_lower or kw in exc_message_lower for kw in _TIMEOUT_KEYWORDS)
+    is_timeout = any(
+        kw in error_message_lower or kw in exc_message_lower for kw in _TIMEOUT_KEYWORDS
+    )
     if is_timeout:
         if job_id:
             count = _consecutive_timeout_counts.get(job_id, 0) + 1
@@ -138,11 +140,11 @@ def _is_webui_crash_exception(exc: Exception, job_id: str | None = None) -> tupl
             str(exc)[:200],
         )
         return False, stage_name
-    
+
     # Reset timeout counter on non-timeout error
     if job_id:
         _consecutive_timeout_counts.pop(job_id, None)
-    
+
     try:
         status_code = int(status)
     except (TypeError, ValueError):
@@ -238,6 +240,12 @@ def _restart_webui_process(job_id: str) -> bool:
     manager = get_global_webui_process_manager()
     if manager is None:
         logger.debug("No WebUI process manager available for restart", extra={"job_id": job_id})
+        return False
+    if not bool(getattr(manager, "owns_process", False)):
+        logger.info(
+            "WebUI restart skipped because no manager-owned process exists",
+            extra={"job_id": job_id},
+        )
         return False
     try:
         return manager.restart_webui()
@@ -362,7 +370,7 @@ class SingleNodeJobRunner:
 
     def start(self) -> None:
         """Start the worker thread if not already running.
-        
+
         PR-THREAD-001: Changed to non-daemon thread for clean shutdown.
         """
         if self._worker and self._worker.is_alive():
@@ -372,7 +380,7 @@ class SingleNodeJobRunner:
         self._worker = threading.Thread(
             target=self._worker_loop,
             daemon=False,  # Changed from True for clean shutdown
-            name="QueueWorker"
+            name="QueueWorker",
         )
         self._worker.start()
 
@@ -395,7 +403,7 @@ class SingleNodeJobRunner:
 
     def stop(self) -> None:
         """Stop the worker thread gracefully.
-        
+
         PR-THREAD-001: Increased timeout from 2s to 10s for clean shutdown.
         """
         self._stop_event.set()
@@ -514,8 +522,8 @@ class SingleNodeJobRunner:
                         extra={**extra, "elapsed_s": elapsed_s},
                     )
                 notify_status = JobStatus.COMPLETED if success else JobStatus.FAILED
-                error_msg = None if success else (
-                    error_message or "Job failed without error message"
+                error_msg = (
+                    None if success else (error_message or "Job failed without error message")
                 )
                 published_job = self.job_queue.publish_result(
                     job.job_id,
@@ -713,6 +721,7 @@ class SingleNodeJobRunner:
     def current_job_id(self) -> str | None:
         job = self._current_job
         return job.job_id if job else None
+
     def get_current_job(self) -> Job | None:
         """Get the currently executing job, if any."""
         return self._current_job

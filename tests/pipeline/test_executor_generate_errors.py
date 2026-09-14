@@ -120,8 +120,8 @@ def test_generate_images_still_attempts_restart_on_opaque_http_500():
     )
 
 
-def test_ambiguous_generation_fails_canonical_job_without_replay(monkeypatch):
-    """Client, executor, and queue preserve one POST and a failed job."""
+def test_ambiguous_external_generation_fails_without_recovery_or_replay(monkeypatch):
+    """External client, executor, and queue preserve one POST and a failed job."""
     post_methods: list[str] = []
 
     def _fake_request(self, method: str, url: str, **kwargs: object):
@@ -150,7 +150,7 @@ def test_ambiguous_generation_fails_canonical_job_without_replay(monkeypatch):
 
     stored = queue.get_job(job.job_id)
     assert post_methods == ["POST"]
-    assert recovery.call_count == 1
+    recovery.assert_not_called()
     assert pipeline._true_ready_gated is False
     assert stored is not None
     assert stored.status == JobStatus.FAILED

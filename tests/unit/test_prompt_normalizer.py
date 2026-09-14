@@ -25,7 +25,9 @@ def test_build_dedupe_key_preserves_weighted_syntax_identity() -> None:
 
 
 def test_prompt_optimizer_config_round_trip() -> None:
-    config = PromptOptimizerConfig.from_dict({"enabled": False, "opt_out_pipeline_names": ["adetailer"]})
+    config = PromptOptimizerConfig.from_dict(
+        {"enabled": False, "opt_out_pipeline_names": ["adetailer"]}
+    )
     payload = config.to_dict()
     assert payload["enabled"] is False
     assert payload["opt_out_pipeline_names"] == ["adetailer"]
@@ -39,6 +41,8 @@ def test_prompt_optimizer_config_round_trip() -> None:
         ({"opt_out_pipeline_names": "adetailer"}, "opt_out_pipeline_names"),
     ],
 )
-def test_prompt_optimizer_config_validation_failures(payload: dict[str, object], message: str) -> None:
+def test_prompt_optimizer_config_validation_failures(
+    payload: dict[str, object], message: str
+) -> None:
     with pytest.raises(PromptConfigError, match=message):
         PromptOptimizerConfig.from_dict(payload)

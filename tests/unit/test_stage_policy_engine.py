@@ -4,7 +4,9 @@ from src.prompting.contracts import PromptContext, PromptIntentBundle
 from src.prompting.stage_policy_engine import StagePolicyEngine
 
 
-def _prompt_context(*, stage: str, positive_chunk_count: int = 8, warnings: list[str] | None = None) -> PromptContext:
+def _prompt_context(
+    *, stage: str, positive_chunk_count: int = 8, warnings: list[str] | None = None
+) -> PromptContext:
     return PromptContext(
         stage=stage,
         pipeline_name=stage,
@@ -37,7 +39,12 @@ def test_stage_policy_engine_applies_missing_txt2img_values() -> None:
 
     result = engine.apply(
         stage_name="txt2img",
-        current_config={"steps": 20, "cfg_scale": 7.0, "sampler_name": "Euler a", "scheduler": None},
+        current_config={
+            "steps": 20,
+            "cfg_scale": 7.0,
+            "sampler_name": "Euler a",
+            "scheduler": None,
+        },
         source_config={"sampler_name": "AUTO", "scheduler": "AUTO"},
         prompt_context=_prompt_context(stage="txt2img"),
         intent=_portrait_intent(),
@@ -73,7 +80,14 @@ def test_stage_policy_engine_applies_conservative_upscale_img2img_values() -> No
 
     result = engine.apply(
         stage_name="upscale",
-        current_config={"upscale_mode": "img2img", "sampler_name": "Euler a", "scheduler": "normal", "steps": 20, "cfg_scale": 7.0, "denoising_strength": 0.35},
+        current_config={
+            "upscale_mode": "img2img",
+            "sampler_name": "Euler a",
+            "scheduler": "normal",
+            "steps": 20,
+            "cfg_scale": 7.0,
+            "denoising_strength": 0.35,
+        },
         source_config={
             "upscale_mode": "img2img",
             "sampler_name": "AUTO",
@@ -82,7 +96,9 @@ def test_stage_policy_engine_applies_conservative_upscale_img2img_values() -> No
             "cfg_scale": "AUTO",
             "denoising_strength": "AUTO",
         },
-        prompt_context=_prompt_context(stage="upscale", positive_chunk_count=20, warnings=["large_chunk_count"]),
+        prompt_context=_prompt_context(
+            stage="upscale", positive_chunk_count=20, warnings=["large_chunk_count"]
+        ),
         intent=_portrait_intent(conflicts=["positive_negative_style_conflict"]),
     )
 

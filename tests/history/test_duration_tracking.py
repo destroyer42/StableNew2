@@ -133,4 +133,3 @@ def test_duration_not_calculated_for_failed_jobs(tmp_path):
     # Even failed jobs should have duration tracked
     assert entry.duration_ms is not None
     assert 1400 <= entry.duration_ms <= 1600
-

@@ -12,7 +12,7 @@ import pytest
 
 from src.controller.job_service import JobService
 from src.gui.app_state_v2 import AppStateV2
-from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_model import Job, JobPriority
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 

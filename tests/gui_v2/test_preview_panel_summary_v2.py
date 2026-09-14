@@ -127,12 +127,16 @@ class TestPreviewPanelSummary:
                 "_render_summary",
                 lambda *_args, **_kwargs: pytest.fail("identical summary should not rerender"),
             )
-            preview_panel.set_job_summaries([make_ui_summary(job_id="job-same", positive_preview="same prompt")])
+            preview_panel.set_job_summaries(
+                [make_ui_summary(job_id="job-same", positive_preview="same prompt")]
+            )
 
     def test_render_summary_does_not_force_idle_flush(self, preview_panel):
         summary = make_ui_summary(job_id="job-no-flush", positive_preview="prompt")
 
-        with patch.object(preview_panel, "update_idletasks", wraps=preview_panel.update_idletasks) as idle_spy:
+        with patch.object(
+            preview_panel, "update_idletasks", wraps=preview_panel.update_idletasks
+        ) as idle_spy:
             preview_panel.set_job_summaries([summary])
 
         idle_spy.assert_not_called()

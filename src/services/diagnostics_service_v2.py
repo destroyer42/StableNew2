@@ -57,7 +57,9 @@ class DiagnosticsServiceV2:
 
         def _on_done() -> None:
             with self._lock:
-                self._active_threads = {thread for thread in self._active_threads if thread.is_alive()}
+                self._active_threads = {
+                    thread for thread in self._active_threads if thread.is_alive()
+                }
             if callable(external_on_done):
                 try:
                     external_on_done()
@@ -97,12 +99,13 @@ class DiagnosticsServiceV2:
 
             # PR-THREAD-001: Use ThreadRegistry for diagnostics worker
             from src.utils.thread_registry import get_thread_registry
+
             registry = get_thread_registry()
             worker = registry.spawn(
                 target=_worker,
                 name="DiagnosticsServiceV2-build",
                 daemon=False,
-                purpose="Build diagnostics bundle asynchronously"
+                purpose="Build diagnostics bundle asynchronously",
             )
             with self._lock:
                 self._active_threads.add(worker)

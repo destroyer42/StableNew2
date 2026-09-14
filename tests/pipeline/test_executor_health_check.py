@@ -13,9 +13,9 @@ from unittest.mock import Mock, patch
 
 from src.api.client import SDWebUIClient
 from src.pipeline.executor import (
-    Pipeline,
     POST_RECOVERY_GRACE_WINDOW_SEC,
     POST_RECOVERY_HEALTH_CHECK_TIMEOUT_SEC,
+    Pipeline,
     PipelineStageError,
 )
 from src.utils import StructuredLogger
@@ -57,16 +57,16 @@ class TestPostRecoveryHealthCheckTimeout(unittest.TestCase):
     def test_normal_timeout_after_grace_window_expires(self) -> None:
         """Reverts to 5.0s timeout once POST_RECOVERY_GRACE_WINDOW_SEC has elapsed."""
         # Set recovery time well in the past
-        self.pipeline._last_recovery_time = time.monotonic() - (POST_RECOVERY_GRACE_WINDOW_SEC + 10.0)
+        self.pipeline._last_recovery_time = time.monotonic() - (
+            POST_RECOVERY_GRACE_WINDOW_SEC + 10.0
+        )
         self.client.check_connection.return_value = True
 
         self.pipeline._check_webui_health_before_stage("txt2img")
 
         args, kwargs = self.client.check_connection.call_args
         used_timeout = kwargs.get("timeout", args[0] if args else None)
-        assert used_timeout == 5.0, (
-            f"Expected 5.0s timeout after grace window, got {used_timeout}"
-        )
+        assert used_timeout == 5.0, f"Expected 5.0s timeout after grace window, got {used_timeout}"
 
     def test_last_recovery_time_set_on_successful_recovery(self) -> None:
         """_attempt_webui_recovery must stamp _last_recovery_time on success."""
@@ -79,9 +79,7 @@ class TestPostRecoveryHealthCheckTimeout(unittest.TestCase):
             "src.pipeline.executor.get_global_webui_process_manager",
             return_value=mock_manager,
         ):
-            result = self.pipeline._attempt_webui_recovery(
-                stage="txt2img", reason="test"
-            )
+            result = self.pipeline._attempt_webui_recovery(stage="txt2img", reason="test")
 
         assert result is True
         assert self.pipeline._last_recovery_time is not None

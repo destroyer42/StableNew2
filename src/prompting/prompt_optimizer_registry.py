@@ -2,11 +2,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from src.prompting.contracts import PromptOptimizerAnalysisBundle
 from src.prompting.prompt_types import PromptOptimizationPairResult
-
 
 PROMPT_OPTIMIZER_V3_SCHEMA = "stablenew.prompt-optimizer.v3"
 PROMPT_OPTIMIZER_V3_VERSION = "3.0.0"
@@ -14,7 +13,7 @@ PROMPT_OPTIMIZER_V3_VERSION = "3.0.0"
 
 def build_prompt_optimization_record(
     result: PromptOptimizationPairResult,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return {
         "positive": {
             "original_prompt": result.positive.original_prompt,
@@ -35,7 +34,7 @@ def build_prompt_optimization_record(
 
 def build_prompt_optimizer_analysis_record(
     bundle: PromptOptimizerAnalysisBundle,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return bundle.to_dict()
 
 
@@ -46,12 +45,14 @@ def build_prompt_optimizer_v3_record_from_prompts(
     positive_final: str,
     negative_final: str,
     bundle: PromptOptimizerAnalysisBundle,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     policy_rationales: list[str] = []
     if bundle.stage_policy is not None:
         policy_rationales.extend(item.rationale for item in bundle.stage_policy.applied_decisions)
         policy_rationales.extend(item.rationale for item in bundle.stage_policy.preserved_decisions)
-        policy_rationales.extend(item.rationale for item in bundle.stage_policy.recommended_decisions)
+        policy_rationales.extend(
+            item.rationale for item in bundle.stage_policy.recommended_decisions
+        )
     rationales = list(
         dict.fromkeys([item.rationale for item in bundle.recommendations] + policy_rationales)
     )
@@ -83,7 +84,9 @@ def build_prompt_optimizer_v3_record_from_prompts(
         },
         "intent": bundle.intent.to_dict(),
         "policy": {
-            "stage_policy": bundle.stage_policy.to_dict() if bundle.stage_policy is not None else None,
+            "stage_policy": bundle.stage_policy.to_dict()
+            if bundle.stage_policy is not None
+            else None,
             "recommendations": [item.to_dict() for item in bundle.recommendations],
             "rationale": rationales,
         },
@@ -102,7 +105,7 @@ def build_prompt_optimizer_v3_record_from_prompts(
 def build_prompt_optimizer_v3_record(
     result: PromptOptimizationPairResult,
     bundle: PromptOptimizerAnalysisBundle,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     return build_prompt_optimizer_v3_record_from_prompts(
         positive_original=result.positive.original_prompt,
         negative_original=result.negative.original_prompt,
@@ -149,7 +152,7 @@ def write_prompt_optimizer_v3_record(
 
 def write_prompt_optimizer_v3_payload(
     output_path: Path,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(

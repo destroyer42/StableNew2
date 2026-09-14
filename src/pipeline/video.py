@@ -28,12 +28,9 @@ def _candidate_ffmpeg_paths() -> list[Path]:
             candidates.append(Path(local_appdata) / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe")
             candidates.extend(
                 sorted(
-                    (
-                        Path(local_appdata)
-                        / "Microsoft"
-                        / "WinGet"
-                        / "Packages"
-                    ).glob("*FFmpeg*\\**\\bin\\ffmpeg.exe")
+                    (Path(local_appdata) / "Microsoft" / "WinGet" / "Packages").glob(
+                        "*FFmpeg*\\**\\bin\\ffmpeg.exe"
+                    )
                 )
             )
 
@@ -63,7 +60,9 @@ def resolve_ffmpeg_executable() -> Path | None:
     return None
 
 
-def _write_concat_input_file(image_paths: list[Path], list_file: Path, frame_duration: float) -> None:
+def _write_concat_input_file(
+    image_paths: list[Path], list_file: Path, frame_duration: float
+) -> None:
     """Write an FFmpeg concat-demuxer input file for still images."""
     with list_file.open("w", encoding="utf-8") as f:
         for img_path in image_paths:

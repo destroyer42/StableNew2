@@ -13,12 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 def generate_thumbnail(
-    image: "Image.Image",
+    image: Image.Image,
     max_size: tuple[int, int] = (150, 150),
     *,
     preserve_aspect: bool = True,
     background: str | None = None,
-) -> "Image.Image":
+) -> Image.Image:
     """Generate a thumbnail from a PIL Image.
 
     Args:
@@ -60,7 +60,7 @@ def load_image_thumbnail(
     max_size: tuple[int, int] = (150, 150),
     *,
     background: str | None = "#2a2a2a",
-) -> "Image.Image | None":
+) -> Image.Image | None:
     """Load an image file and return a thumbnail.
 
     Args:

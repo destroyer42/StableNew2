@@ -25,7 +25,11 @@ def _motion_record(
     return {
         "run_id": run_id,
         "timestamp": "2026-03-08T12:00:00",
-        "base_config": {"prompt": "portrait studio", "stage": "video_workflow", "model": "m.safetensors"},
+        "base_config": {
+            "prompt": "portrait studio",
+            "stage": "video_workflow",
+            "model": "m.safetensors",
+        },
         "variant_configs": [],
         "randomizer_mode": "",
         "randomizer_plan_size": 0,
@@ -57,10 +61,26 @@ def test_recommendation_engine_stratifies_by_secondary_motion_backend(tmp_path: 
     _write_records(
         records_path,
         [
-            _motion_record(run_id="comfy-a", rating=5, sampler="Euler a", backend_id="comfy", status="applied"),
-            _motion_record(run_id="comfy-b", rating=4, sampler="Euler a", backend_id="comfy", status="applied"),
-            _motion_record(run_id="animatediff-a", rating=5, sampler="DPM++ 2M", backend_id="animatediff", status="applied"),
-            _motion_record(run_id="animatediff-b", rating=5, sampler="DPM++ 2M", backend_id="animatediff", status="applied"),
+            _motion_record(
+                run_id="comfy-a", rating=5, sampler="Euler a", backend_id="comfy", status="applied"
+            ),
+            _motion_record(
+                run_id="comfy-b", rating=4, sampler="Euler a", backend_id="comfy", status="applied"
+            ),
+            _motion_record(
+                run_id="animatediff-a",
+                rating=5,
+                sampler="DPM++ 2M",
+                backend_id="animatediff",
+                status="applied",
+            ),
+            _motion_record(
+                run_id="animatediff-b",
+                rating=5,
+                sampler="DPM++ 2M",
+                backend_id="animatediff",
+                status="applied",
+            ),
         ],
     )
 
@@ -84,14 +104,30 @@ def test_recommendation_engine_stratifies_by_secondary_motion_backend(tmp_path: 
     assert "comfy" in best.context_key
 
 
-def test_recommendation_engine_excludes_unavailable_motion_runs_from_positive_tuning(tmp_path: Path) -> None:
+def test_recommendation_engine_excludes_unavailable_motion_runs_from_positive_tuning(
+    tmp_path: Path,
+) -> None:
     records_path = tmp_path / "learning_records.jsonl"
     _write_records(
         records_path,
         [
-            _motion_record(run_id="applied", rating=3, sampler="Euler a", backend_id="comfy", status="applied"),
-            _motion_record(run_id="unavailable-a", rating=5, sampler="DPM++ 2M", backend_id="comfy", status="unavailable"),
-            _motion_record(run_id="unavailable-b", rating=5, sampler="DPM++ 2M", backend_id="comfy", status="unavailable"),
+            _motion_record(
+                run_id="applied", rating=3, sampler="Euler a", backend_id="comfy", status="applied"
+            ),
+            _motion_record(
+                run_id="unavailable-a",
+                rating=5,
+                sampler="DPM++ 2M",
+                backend_id="comfy",
+                status="unavailable",
+            ),
+            _motion_record(
+                run_id="unavailable-b",
+                rating=5,
+                sampler="DPM++ 2M",
+                backend_id="comfy",
+                status="unavailable",
+            ),
         ],
     )
 

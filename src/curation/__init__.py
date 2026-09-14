@@ -40,18 +40,45 @@ _EXPORT_MAP = {
     "CURATION_OUTCOME_SCHEMA": ("src.curation.curation_manifest", "CURATION_OUTCOME_SCHEMA"),
     "CURATION_SCHEMA": ("src.curation.curation_manifest", "CURATION_SCHEMA"),
     "SELECTION_EVENT_SCHEMA": ("src.curation.curation_manifest", "SELECTION_EVENT_SCHEMA"),
-    "build_candidate_lineage_block": ("src.curation.curation_manifest", "build_candidate_lineage_block"),
-    "build_curation_outcome_block": ("src.curation.curation_manifest", "build_curation_outcome_block"),
-    "build_selection_event_block": ("src.curation.curation_manifest", "build_selection_event_block"),
+    "build_candidate_lineage_block": (
+        "src.curation.curation_manifest",
+        "build_candidate_lineage_block",
+    ),
+    "build_curation_outcome_block": (
+        "src.curation.curation_manifest",
+        "build_curation_outcome_block",
+    ),
+    "build_selection_event_block": (
+        "src.curation.curation_manifest",
+        "build_selection_event_block",
+    ),
     "CURATION_RECORD_KIND": ("src.curation.learning_bridge", "CURATION_RECORD_KIND"),
     "CurationLearningBridge": ("src.curation.learning_bridge", "CurationLearningBridge"),
     "CurationLearningContext": ("src.curation.learning_bridge", "CurationLearningContext"),
-    "CurationAdvancementPlan": ("src.curation.curation_workflow_builder", "CurationAdvancementPlan"),
-    "CurationSourceSelection": ("src.curation.curation_workflow_builder", "CurationSourceSelection"),
-    "CurationWorkflowBuilder": ("src.curation.curation_workflow_builder", "CurationWorkflowBuilder"),
-    "CURATION_REPLAY_DESCRIPTOR_SCHEMA": ("src.curation.workflow_summary", "CURATION_REPLAY_DESCRIPTOR_SCHEMA"),
-    "CURATION_WORKFLOW_SUMMARY_SCHEMA": ("src.curation.workflow_summary", "CURATION_WORKFLOW_SUMMARY_SCHEMA"),
-    "build_candidate_replay_entry": ("src.curation.workflow_summary", "build_candidate_replay_entry"),
+    "CurationAdvancementPlan": (
+        "src.curation.curation_workflow_builder",
+        "CurationAdvancementPlan",
+    ),
+    "CurationSourceSelection": (
+        "src.curation.curation_workflow_builder",
+        "CurationSourceSelection",
+    ),
+    "CurationWorkflowBuilder": (
+        "src.curation.curation_workflow_builder",
+        "CurationWorkflowBuilder",
+    ),
+    "CURATION_REPLAY_DESCRIPTOR_SCHEMA": (
+        "src.curation.workflow_summary",
+        "CURATION_REPLAY_DESCRIPTOR_SCHEMA",
+    ),
+    "CURATION_WORKFLOW_SUMMARY_SCHEMA": (
+        "src.curation.workflow_summary",
+        "CURATION_WORKFLOW_SUMMARY_SCHEMA",
+    ),
+    "build_candidate_replay_entry": (
+        "src.curation.workflow_summary",
+        "build_candidate_replay_entry",
+    ),
     "build_curation_replay_descriptor_from_snapshot": (
         "src.curation.workflow_summary",
         "build_curation_replay_descriptor_from_snapshot",

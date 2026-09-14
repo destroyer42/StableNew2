@@ -27,9 +27,7 @@ class TestPreviewPanelThumbnail(unittest.TestCase):
         self.app_state = Mock()
         # Configure app_state.preview_jobs as empty list
         self.app_state.preview_jobs = []
-        self.panel = PreviewPanelV2(
-            self.root, controller=self.controller, app_state=self.app_state
-        )
+        self.panel = PreviewPanelV2(self.root, controller=self.controller, app_state=self.app_state)
 
     def tearDown(self) -> None:
         """Clean up test fixtures."""

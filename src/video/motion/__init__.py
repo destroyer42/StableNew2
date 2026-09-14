@@ -1,15 +1,15 @@
 from __future__ import annotations
 
+from .secondary_motion_engine import (
+    SECONDARY_MOTION_APPLY_SCHEMA_V1,
+    SecondaryMotionApplyResult,
+    apply_secondary_motion_to_frames,
+)
 from .secondary_motion_models import (
     SECONDARY_MOTION_POLICY_SCHEMA_V1,
     SECONDARY_MOTION_SCHEMA_V1,
     SecondaryMotionIntent,
     SecondaryMotionPolicy,
-)
-from .secondary_motion_engine import (
-    SECONDARY_MOTION_APPLY_SCHEMA_V1,
-    SecondaryMotionApplyResult,
-    apply_secondary_motion_to_frames,
 )
 from .secondary_motion_policy_service import SecondaryMotionPolicyService
 from .secondary_motion_provenance import (

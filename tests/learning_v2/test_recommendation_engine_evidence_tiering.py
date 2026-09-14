@@ -6,12 +6,11 @@ Verifies that:
 3. automation is blocked for fallback tiers
 4. experiment_strong tier enables automation and ignores review noise
 """
+
 from __future__ import annotations
 
 import json
 from pathlib import Path
-
-import pytest
 
 from src.learning.recommendation_engine import (
     EVIDENCE_TIER_EXPERIMENT_STRONG,
@@ -28,7 +27,9 @@ def _write(path: Path, records: list[dict]) -> None:
             fh.write(json.dumps(record) + "\n")
 
 
-def _exp_record(sampler: str = "Euler a", steps: int = 20, cfg: float = 7.0, rating: int = 4) -> dict:
+def _exp_record(
+    sampler: str = "Euler a", steps: int = 20, cfg: float = 7.0, rating: int = 4
+) -> dict:
     return {
         "timestamp": "2026-03-10T21:00:00",
         "primary_sampler": sampler,
@@ -36,11 +37,17 @@ def _exp_record(sampler: str = "Euler a", steps: int = 20, cfg: float = 7.0, rat
         "primary_steps": steps,
         "primary_cfg_scale": cfg,
         "base_config": {"prompt": "portrait", "stage": "txt2img"},
-        "metadata": {"record_kind": "learning_experiment_rating", "user_rating": rating, "stage": "txt2img"},
+        "metadata": {
+            "record_kind": "learning_experiment_rating",
+            "user_rating": rating,
+            "stage": "txt2img",
+        },
     }
 
 
-def _review_record(sampler: str = "DPM++ 2M", steps: int = 30, cfg: float = 9.0, rating: int = 5) -> dict:
+def _review_record(
+    sampler: str = "DPM++ 2M", steps: int = 30, cfg: float = 9.0, rating: int = 5
+) -> dict:
     return {
         "timestamp": "2026-03-10T21:30:00",
         "primary_sampler": sampler,
@@ -48,11 +55,17 @@ def _review_record(sampler: str = "DPM++ 2M", steps: int = 30, cfg: float = 9.0,
         "primary_steps": steps,
         "primary_cfg_scale": cfg,
         "base_config": {"prompt": "portrait", "stage": "txt2img"},
-        "metadata": {"record_kind": "review_tab_feedback", "user_rating": rating, "stage": "txt2img"},
+        "metadata": {
+            "record_kind": "review_tab_feedback",
+            "user_rating": rating,
+            "stage": "txt2img",
+        },
     }
 
 
-def _curation_record(sampler: str = "DPM++ 2M", steps: int = 28, cfg: float = 6.5, rating: float = 4.3) -> dict:
+def _curation_record(
+    sampler: str = "DPM++ 2M", steps: int = 28, cfg: float = 6.5, rating: float = 4.3
+) -> dict:
     return {
         "timestamp": "2026-03-10T21:45:00",
         "primary_sampler": sampler,
@@ -74,6 +87,7 @@ def _curation_record(sampler: str = "DPM++ 2M", steps: int = 28, cfg: float = 6.
 # no_evidence tier
 # ---------------------------------------------------------------------------
 
+
 def test_no_evidence_returns_empty_and_no_evidence_tier(tmp_path: Path) -> None:
     path = tmp_path / "r.jsonl"
     path.write_text("")
@@ -87,6 +101,7 @@ def test_no_evidence_returns_empty_and_no_evidence_tier(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # review_only tier
 # ---------------------------------------------------------------------------
+
 
 def test_review_only_returns_recommendations_not_empty(tmp_path: Path) -> None:
     """review_only: review feedback alone must produce recommendations (not empty)."""
@@ -122,6 +137,7 @@ def test_staged_curation_records_are_treated_as_review_only_evidence(tmp_path: P
 # ---------------------------------------------------------------------------
 # experiment_sparse_plus_review tier  (PR-044 regression fix)
 # ---------------------------------------------------------------------------
+
 
 def test_sparse_experiment_plus_review_not_empty(tmp_path: Path) -> None:
     """Core regression: 1 experiment record + review feedback must NOT return empty recommendations."""
@@ -171,6 +187,7 @@ def test_two_experiment_records_alone_is_sparse_tier(tmp_path: Path) -> None:
 # experiment_strong tier
 # ---------------------------------------------------------------------------
 
+
 def test_three_experiment_records_gives_strong_tier(tmp_path: Path) -> None:
     path = tmp_path / "r.jsonl"
     _write(path, [_exp_record(rating=4), _exp_record(rating=5), _exp_record(rating=4)])
@@ -215,6 +232,7 @@ def test_strong_tier_many_records(tmp_path: Path) -> None:
 # Stage isolation (records for different stage must not bleed through)
 # ---------------------------------------------------------------------------
 
+
 def test_stage_isolation(tmp_path: Path) -> None:
     path = tmp_path / "r.jsonl"
     img2img_records = [
@@ -225,7 +243,11 @@ def test_stage_isolation(tmp_path: Path) -> None:
             "primary_steps": 20,
             "primary_cfg_scale": 7.0,
             "base_config": {"prompt": "portrait", "stage": "img2img"},
-            "metadata": {"record_kind": "learning_experiment_rating", "user_rating": 5, "stage": "img2img"},
+            "metadata": {
+                "record_kind": "learning_experiment_rating",
+                "user_rating": 5,
+                "stage": "img2img",
+            },
         }
         for _ in range(5)
     ]
@@ -240,6 +262,7 @@ def test_stage_isolation(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 # RecommendationSet field presence (backward compat for callers)
 # ---------------------------------------------------------------------------
+
 
 def test_recommendation_set_has_evidence_tier_and_automation_eligible(tmp_path: Path) -> None:
     path = tmp_path / "r.jsonl"

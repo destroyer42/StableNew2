@@ -1,4 +1,5 @@
 """Integration tests for PromptWorkspaceState negative prompt support."""
+
 from __future__ import annotations
 
 import tempfile

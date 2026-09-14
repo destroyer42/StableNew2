@@ -10,12 +10,16 @@ from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.models.prompt_pack_model import PromptPackModel, PromptSlot
 from src.gui.ui_tokens import TOKENS
 from src.learning.experiment_naming import build_experiment_identity
-from src.learning.stage_capabilities import get_stage_capability, get_variables_for_stage, list_supported_stages
+from src.learning.stage_capabilities import (
+    get_stage_capability,
+    get_variables_for_stage,
+    list_supported_stages,
+)
 from src.learning.variable_selection_contract import normalize_resource_entries
+from src.promptpacks.paths import resolve_prompt_pack_dir
 from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
 from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import discover_packs
-from src.promptpacks.paths import resolve_prompt_pack_dir
 
 
 class ExperimentDesignPanel(ttk.Frame):
@@ -64,7 +68,9 @@ class ExperimentDesignPanel(ttk.Frame):
         title_label.grid(row=0, column=0, pady=(0, 10), sticky="w")
 
         self.stage_hint_var = tk.StringVar(value="")
-        stage_hint = ttk.Label(self, textvariable=self.stage_hint_var, foreground=TOKENS.colors.text_muted)
+        stage_hint = ttk.Label(
+            self, textvariable=self.stage_hint_var, foreground=TOKENS.colors.text_muted
+        )
         stage_hint.grid(row=0, column=0, sticky="e")
 
         # Experiment Name
@@ -119,7 +125,7 @@ class ExperimentDesignPanel(ttk.Frame):
             state="readonly",
         )
         self.variable_combo.grid(row=9, column=0, sticky="ew", pady=(0, 10))
-        
+
         # PR-LEARN-020: Bind variable selection to widget switcher
         self.variable_combo.bind("<<ComboboxSelected>>", self._on_variable_changed)
 
@@ -151,7 +157,7 @@ class ExperimentDesignPanel(ttk.Frame):
             self.value_frame, from_=0.1, to=10.0, increment=0.1, textvariable=self.step_var
         )
         self.step_spin.grid(row=1, column=2, sticky="ew", padx=(2, 0))
-        
+
         # PR-LEARN-020: Build checklist frame (hidden by default)
         self.checklist_frame = ttk.LabelFrame(self, text="Select Items to Test", padding=5)
         self.checklist_canvas = tk.Canvas(self.checklist_frame, height=150)
@@ -160,25 +166,28 @@ class ExperimentDesignPanel(ttk.Frame):
         )
         self.checklist_inner_frame = ttk.Frame(self.checklist_canvas)
         self.checklist_canvas.configure(yscrollcommand=self.checklist_scrollbar.set)
-        
+
         self.checklist_scrollbar.pack(side="right", fill="y")
         self.checklist_canvas.pack(side="left", fill="both", expand=True)
         self.checklist_canvas.create_window((0, 0), window=self.checklist_inner_frame, anchor="nw")
         self.checklist_inner_frame.bind(
-            "<Configure>", lambda e: self.checklist_canvas.configure(scrollregion=self.checklist_canvas.bbox("all"))
+            "<Configure>",
+            lambda e: self.checklist_canvas.configure(
+                scrollregion=self.checklist_canvas.bbox("all")
+            ),
         )
-        
+
         # Initially hide checklist frame
         self.checklist_frame.grid_remove()
-        
+
         # Store checkbox variables
         self.choice_vars: dict[str, tk.BooleanVar] = {}
         self._choice_display_map: dict[str, str] = {}
-        
+
         # PR-LEARN-022: Build LoRA composite frame (hidden by default)
         self.lora_frame = ttk.LabelFrame(self, text="LoRA Configuration", padding=5)
         self.lora_frame.columnconfigure(0, weight=1)
-        
+
         # Initially hide
         self.lora_frame.grid_remove()
 
@@ -186,9 +195,13 @@ class ExperimentDesignPanel(ttk.Frame):
         images_row = ttk.Frame(self)
         images_row.grid(row=11, column=0, sticky="ew", pady=(0, 10))
         images_row.columnconfigure(1, weight=1)
-        ttk.Label(images_row, text="Images per Variant:").grid(row=0, column=0, sticky="w", pady=(0, 2))
+        ttk.Label(images_row, text="Images per Variant:").grid(
+            row=0, column=0, sticky="w", pady=(0, 2)
+        )
         self.images_var = tk.IntVar(value=1)
-        self.images_spin = tk.Spinbox(images_row, from_=1, to=10, textvariable=self.images_var, width=8)
+        self.images_spin = tk.Spinbox(
+            images_row, from_=1, to=10, textvariable=self.images_var, width=8
+        )
         self.images_spin.grid(row=0, column=1, sticky="w", padx=(8, 0))
 
         identity_actions = ttk.Frame(self)
@@ -218,7 +231,9 @@ class ExperimentDesignPanel(ttk.Frame):
             state="readonly",
         )
         self.prompt_source_combo.grid(row=0, column=1, sticky="ew", pady=(0, 8))
-        self.prompt_source_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_prompt_source_changed())
+        self.prompt_source_combo.bind(
+            "<<ComboboxSelected>>", lambda _e: self._on_prompt_source_changed()
+        )
 
         ttk.Label(prompt_frame, text="Prompt Pack:").grid(row=1, column=0, sticky="w", pady=(0, 2))
         self.prompt_pack_var = tk.StringVar(value="")
@@ -228,7 +243,9 @@ class ExperimentDesignPanel(ttk.Frame):
             state="readonly",
         )
         self.prompt_pack_combo.grid(row=1, column=1, sticky="ew", pady=(0, 8))
-        self.prompt_pack_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_prompt_pack_selected())
+        self.prompt_pack_combo.bind(
+            "<<ComboboxSelected>>", lambda _e: self._on_prompt_pack_selected()
+        )
 
         ttk.Label(prompt_frame, text="Prompt:").grid(row=2, column=0, sticky="w", pady=(0, 2))
         self.prompt_item_var = tk.StringVar(value="")
@@ -238,9 +255,13 @@ class ExperimentDesignPanel(ttk.Frame):
             state="readonly",
         )
         self.prompt_item_combo.grid(row=2, column=1, sticky="ew", pady=(0, 8))
-        self.prompt_item_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_prompt_item_selected())
+        self.prompt_item_combo.bind(
+            "<<ComboboxSelected>>", lambda _e: self._on_prompt_item_selected()
+        )
 
-        ttk.Label(prompt_frame, text="Custom prompt text:").grid(row=3, column=0, columnspan=2, sticky="w", pady=(0, 2))
+        ttk.Label(prompt_frame, text="Custom prompt text:").grid(
+            row=3, column=0, columnspan=2, sticky="w", pady=(0, 2)
+        )
 
         self.custom_prompt_var = tk.StringVar(value="")
         self.custom_prompt_text = tk.Text(
@@ -316,8 +337,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _refresh_prompt_pack_choices(self) -> None:
         self._prompt_pack_paths = {
-            info.name: info.path
-            for info in discover_packs(self._resolve_packs_dir())
+            info.name: info.path for info in discover_packs(self._resolve_packs_dir())
         }
         pack_names = list(self._prompt_pack_paths.keys())
         self.prompt_pack_combo.configure(values=pack_names)
@@ -330,7 +350,11 @@ class ExperimentDesignPanel(ttk.Frame):
                     workspace_name = self.prompt_workspace_state.get_current_pack_name()
                 except Exception:
                     workspace_name = ""
-            selected_name = workspace_name if workspace_name in self._prompt_pack_paths else (pack_names[0] if pack_names else "")
+            selected_name = (
+                workspace_name
+                if workspace_name in self._prompt_pack_paths
+                else (pack_names[0] if pack_names else "")
+            )
             self.prompt_pack_var.set(selected_name)
 
         self._refresh_prompt_choices()
@@ -340,7 +364,9 @@ class ExperimentDesignPanel(ttk.Frame):
         parts: list[str] = []
         embeds = normalize_embedding_entries(getattr(slot, "positive_embeddings", []))
         if embeds:
-            parts.append(" ".join(render_embedding_reference(name, weight) for name, weight in embeds))
+            parts.append(
+                " ".join(render_embedding_reference(name, weight) for name, weight in embeds)
+            )
         text = str(getattr(slot, "text", "") or "").strip()
         if text:
             parts.append(text)
@@ -351,14 +377,18 @@ class ExperimentDesignPanel(ttk.Frame):
         parts: list[str] = []
         embeds = normalize_embedding_entries(getattr(slot, "negative_embeddings", []))
         if embeds:
-            parts.append(" ".join(render_embedding_reference(name, weight) for name, weight in embeds))
+            parts.append(
+                " ".join(render_embedding_reference(name, weight) for name, weight in embeds)
+            )
         text = str(getattr(slot, "negative", "") or "").strip()
         if text:
             parts.append(text)
         return "\n".join(parts).strip()
 
     def _load_prompt_payloads_for_pack(self, pack_path: Path) -> list[dict[str, Any]]:
-        json_path = pack_path if pack_path.suffix.lower() == ".json" else pack_path.with_suffix(".json")
+        json_path = (
+            pack_path if pack_path.suffix.lower() == ".json" else pack_path.with_suffix(".json")
+        )
         payloads: list[dict[str, Any]] = []
 
         if json_path.exists():
@@ -368,7 +398,11 @@ class ExperimentDesignPanel(ttk.Frame):
                 slot_negative = self._render_slot_negative_prompt(slot)
                 if not (slot_positive or slot_negative or getattr(slot, "loras", [])):
                     continue
-                preview = (str(getattr(slot, "text", "") or "") or slot_positive).strip().replace("\n", " ")
+                preview = (
+                    (str(getattr(slot, "text", "") or "") or slot_positive)
+                    .strip()
+                    .replace("\n", " ")
+                )
                 preview = preview[:48] + ("..." if len(preview) > 48 else "")
                 label = f"Prompt {int(getattr(slot, 'index', 0)) + 1}"
                 if preview:
@@ -494,20 +528,26 @@ class ExperimentDesignPanel(ttk.Frame):
             "selected_prompt_label": "",
             "selected_prompt_loras": [],
             # PR-LEARN-020: Include selected items for discrete/resource variables
-            "selected_items": [
-                choice for choice, var in self.choice_vars.items() if var.get()
-            ] if hasattr(self, "choice_vars") else [],
+            "selected_items": [choice for choice, var in self.choice_vars.items() if var.get()]
+            if hasattr(self, "choice_vars")
+            else [],
             # PR-LEARN-022: LoRA metadata
             "lora_mode": self.lora_mode_var.get() if hasattr(self, "lora_mode_var") else "strength",
-            "lora_name": self.lora_selector_var.get() if hasattr(self, "lora_selector_var") else None,
+            "lora_name": self.lora_selector_var.get()
+            if hasattr(self, "lora_selector_var")
+            else None,
             "strength_start": self.lora_start_var.get() if hasattr(self, "lora_start_var") else 0.5,
             "strength_end": self.lora_end_var.get() if hasattr(self, "lora_end_var") else 1.5,
             "strength_step": self.lora_step_var.get() if hasattr(self, "lora_step_var") else 0.1,
-            "comparison_mode": (self.lora_mode_var.get() == "comparison") if hasattr(self, "lora_mode_var") else False,
-            "fixed_strength": self.lora_fixed_strength_var.get() if hasattr(self, "lora_fixed_strength_var") else 1.0,
-            "selected_loras": [
-                lora for lora, var in self.lora_choice_vars.items() if var.get()
-            ] if hasattr(self, "lora_choice_vars") else [],
+            "comparison_mode": (self.lora_mode_var.get() == "comparison")
+            if hasattr(self, "lora_mode_var")
+            else False,
+            "fixed_strength": self.lora_fixed_strength_var.get()
+            if hasattr(self, "lora_fixed_strength_var")
+            else 1.0,
+            "selected_loras": [lora for lora, var in self.lora_choice_vars.items() if var.get()]
+            if hasattr(self, "lora_choice_vars")
+            else [],
         }
 
         if experiment_data["prompt_source"] == "pack":
@@ -516,9 +556,15 @@ class ExperimentDesignPanel(ttk.Frame):
                 experiment_data.update(
                     {
                         "selected_prompt_text": str(selected_prompt.get("prompt_text", "") or ""),
-                        "selected_negative_prompt": str(selected_prompt.get("negative_prompt_text", "") or ""),
-                        "selected_prompt_pack_name": str(selected_prompt.get("prompt_pack_name", "") or ""),
-                        "selected_prompt_pack_path": str(selected_prompt.get("prompt_pack_path", "") or ""),
+                        "selected_negative_prompt": str(
+                            selected_prompt.get("negative_prompt_text", "") or ""
+                        ),
+                        "selected_prompt_pack_name": str(
+                            selected_prompt.get("prompt_pack_name", "") or ""
+                        ),
+                        "selected_prompt_pack_path": str(
+                            selected_prompt.get("prompt_pack_path", "") or ""
+                        ),
                         "selected_prompt_index": int(selected_prompt.get("prompt_index", 0) or 0),
                         "selected_prompt_label": str(selected_prompt.get("label", "") or ""),
                         "selected_prompt_loras": list(selected_prompt.get("loras") or []),
@@ -560,11 +606,11 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _validate_experiment_data(self, data: dict[str, Any]) -> str | None:
         """Validate experiment data and return error message if invalid.
-        
+
         PR-LEARN-020: Enhanced with discrete variable validation.
         """
         from src.learning.variable_metadata import get_variable_metadata
-        
+
         if not data["name"]:
             return "Experiment name is required"
 
@@ -581,7 +627,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Get metadata for variable
         meta = get_variable_metadata(data["variable_under_test"])
-        
+
         if meta and meta.value_type in ["discrete", "resource"]:
             # Discrete/resource variable - validate selection
             selected = data.get("selected_items", [])
@@ -590,7 +636,7 @@ class ExperimentDesignPanel(ttk.Frame):
         elif meta and meta.value_type == "composite":
             # PR-LEARN-022: Composite LoRA validation
             comparison_mode = data.get("comparison_mode", False)
-            
+
             if comparison_mode:
                 # Mode 2: Comparison - require at least one LoRA selected
                 selected_loras = data.get("selected_loras", [])
@@ -601,15 +647,15 @@ class ExperimentDesignPanel(ttk.Frame):
                 lora_name = data.get("lora_name")
                 if not lora_name:
                     return "LoRA must be selected for strength sweep mode"
-                
+
                 # Validate strength range
                 start = data.get("strength_start", 0.0)
                 end = data.get("strength_end", 1.0)
                 step = data.get("strength_step", 0.1)
-                
+
                 if start >= end:
                     return "Start strength must be less than end strength"
-                
+
                 if step <= 0:
                     return "Strength step must be positive"
         else:
@@ -635,21 +681,21 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_variable_changed(self, event=None) -> None:
         """Handle variable selection change - show appropriate UI widget.
-        
+
         PR-LEARN-020: Switches between range widget and checklist based on variable type.
         """
         from src.learning.variable_metadata import get_variable_metadata
-        
+
         variable_name = self.variable_var.get()
         if not variable_name:
             return
-        
+
         # Look up metadata
         meta = get_variable_metadata(variable_name)
         if not meta:
             self._show_range_widget()
             return
-        
+
         # Show appropriate widget based on ui_component
         if meta.ui_component == "range":
             self._show_range_widget()
@@ -664,11 +710,9 @@ class ExperimentDesignPanel(ttk.Frame):
     def _on_stage_changed(self, event=None) -> None:
         capability = get_stage_capability(self.stage_var.get())
         self.stage_hint_var.set(
-            (
-                f"{capability.display_name}: requires an input image and stage-specific settings."
-                if capability.requires_input_image
-                else f"{capability.display_name}: generates directly from prompt with no source image."
-            )
+            f"{capability.display_name}: requires an input image and stage-specific settings."
+            if capability.requires_input_image
+            else f"{capability.display_name}: generates directly from prompt with no source image."
         )
         if capability.requires_input_image:
             self.input_image_frame.grid()
@@ -691,7 +735,7 @@ class ExperimentDesignPanel(ttk.Frame):
         if selected:
             self.input_image_var.set(selected)
             self._refresh_identity_preview()
-    
+
     def _show_range_widget(self) -> None:
         """Show numeric range widget (start/stop/step)."""
         # Show value frame
@@ -700,10 +744,10 @@ class ExperimentDesignPanel(ttk.Frame):
         # Hide checklist frame
         self.checklist_frame.grid_remove()
         self.lora_frame.grid_remove()
-    
+
     def _show_checklist_widget(self, meta) -> None:
         """Show checklist widget for discrete choices.
-        
+
         PR-LEARN-020: Displays checkboxes for discrete/resource variables.
         """
         # Hide value frame
@@ -712,26 +756,26 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Show checklist frame at row 10
         self.checklist_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
-        
+
         # Update checklist label
         self.checklist_frame.config(text=f"Select {meta.display_name} to Test")
-        
+
         # Populate checklist with choices
         self._populate_checklist(meta)
-    
+
     def _populate_checklist(self, meta) -> None:
         """Populate checklist with choices from resources.
-        
+
         PR-LEARN-020: Gets available choices from app_state resources.
         PR-LEARN-021: Added search/filter support.
         """
         # Clear existing checkboxes
         for widget in self.checklist_inner_frame.winfo_children():
             widget.destroy()
-        
+
         self.choice_vars.clear()
         self._choice_display_map = {}
-        
+
         # Get available choices from app_state
         choices = []
         if meta.resource_key and self.learning_controller:
@@ -740,59 +784,52 @@ class ExperimentDesignPanel(ttk.Frame):
                 app_state = app_controller._app_state
                 if hasattr(app_state, "resources"):
                     choices = app_state.resources.get(meta.resource_key, [])
-        
+
         if not choices:
             # No choices available
             ttk.Label(
                 self.checklist_inner_frame,
                 text=f"No {meta.display_name} available in WebUI",
-                foreground="red"
+                foreground="red",
             ).pack(anchor="w", pady=2)
             return
-        
+
         # PR-LEARN-021: Add search/filter box for large resource lists
         if meta.constraints.get("supports_filter", False):
             search_frame = ttk.Frame(self.checklist_inner_frame)
             search_frame.pack(fill="x", pady=(0, 10))
-            
+
             ttk.Label(search_frame, text="Search:").pack(side="left", padx=(0, 5))
-            
+
             self.search_var = tk.StringVar()
             search_entry = ttk.Entry(search_frame, textvariable=self.search_var)
             search_entry.pack(side="left", fill="x", expand=True, padx=(0, 5))
-            
+
             # Bind search to filter function
             self.search_var.trace_add("write", lambda *args: self._filter_checklist_items(meta))
-            
+
             # Clear button
             clear_btn = ttk.Button(
-                search_frame,
-                text="Clear",
-                width=8,
-                command=lambda: self.search_var.set("")
+                search_frame, text="Clear", width=8, command=lambda: self.search_var.set("")
             )
             clear_btn.pack(side="left", padx=(5, 0))
-        
+
         # Add Select All / Clear All buttons
         button_frame = ttk.Frame(self.checklist_inner_frame)
         button_frame.pack(fill="x", pady=(0, 5))
-        
+
         ttk.Button(
-            button_frame,
-            text="Select All",
-            command=lambda: self._select_all_choices(True)
+            button_frame, text="Select All", command=lambda: self._select_all_choices(True)
         ).pack(side="left", padx=(0, 5))
-        
+
         ttk.Button(
-            button_frame,
-            text="Clear All",
-            command=lambda: self._select_all_choices(False)
+            button_frame, text="Clear All", command=lambda: self._select_all_choices(False)
         ).pack(side="left")
-        
+
         # Container for checkboxes (for filtering)
         self.checkbox_container = ttk.Frame(self.checklist_inner_frame)
         self.checkbox_container.pack(fill="both", expand=True)
-        
+
         normalized_values, mapping = normalize_resource_entries(list(choices or []))
         entries = normalized_values if mapping else [str(choice) for choice in choices]
         if mapping:
@@ -807,21 +844,19 @@ class ExperimentDesignPanel(ttk.Frame):
 
             # Bind checkbox changes to update count
             var.trace_add("write", lambda *args: self._update_choice_count())
-        
+
         # Add count label
         self.choice_count_var = tk.StringVar(value="0 items selected")
         count_label = ttk.Label(
-            self.checklist_inner_frame,
-            textvariable=self.choice_count_var,
-            foreground="blue"
+            self.checklist_inner_frame, textvariable=self.choice_count_var, foreground="blue"
         )
         count_label.pack(anchor="w", pady=(5, 0))
-    
+
     def _select_all_choices(self, selected: bool) -> None:
         """Select or deselect all checkboxes."""
         for var in self.choice_vars.values():
             var.set(selected)
-    
+
     def _update_choice_count(self) -> None:
         """Update the count label showing selected items."""
         count = sum(1 for var in self.choice_vars.values() if var.get())
@@ -909,14 +944,14 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _filter_checklist_items(self, meta) -> None:
         """Filter checklist items based on search text.
-        
+
         PR-LEARN-021: Real-time filtering of resource lists.
         """
         if not hasattr(self, "search_var") or not hasattr(self, "checkbox_container"):
             return
-        
+
         search_text = self.search_var.get().lower()
-        
+
         # Show/hide checkboxes based on search
         for widget in self.checkbox_container.winfo_children():
             if isinstance(widget, ttk.Checkbutton):
@@ -925,13 +960,13 @@ class ExperimentDesignPanel(ttk.Frame):
                     widget.pack(anchor="w", pady=2)
                 else:
                     widget.pack_forget()
-        
+
         # Update count
         self._update_choice_count()
 
     def _show_lora_composite_widget(self, meta) -> None:
         """Show LoRA composite widget (LoRA selector + strength range OR LoRA comparison).
-        
+
         PR-LEARN-022: Supports two modes:
         - Mode 1: Single LoRA with strength sweep
         - Mode 2: Multiple LoRAs at fixed strength
@@ -942,44 +977,46 @@ class ExperimentDesignPanel(ttk.Frame):
         except Exception:
             pass
         self.checklist_frame.grid_remove()
-        
+
         # Show LoRA frame at row 10
         self.lora_frame.grid(row=10, column=0, sticky="ew", pady=(0, 10))
-        
+
         # Clear existing content
         for widget in self.lora_frame.winfo_children():
             widget.destroy()
-        
+
         # Mode selector
         mode_frame = ttk.Frame(self.lora_frame)
         mode_frame.pack(fill="x", pady=(0, 10))
-        
-        ttk.Label(mode_frame, text="Test Mode:", font=("TkDefaultFont", 10, "bold")).pack(anchor="w", pady=(0, 5))
-        
+
+        ttk.Label(mode_frame, text="Test Mode:", font=("TkDefaultFont", 10, "bold")).pack(
+            anchor="w", pady=(0, 5)
+        )
+
         self.lora_mode_var = tk.StringVar(value="strength")
-        
+
         strength_mode_rb = ttk.Radiobutton(
             mode_frame,
             text="Test single LoRA at multiple strengths",
             variable=self.lora_mode_var,
             value="strength",
-            command=self._on_lora_mode_changed
+            command=self._on_lora_mode_changed,
         )
         strength_mode_rb.pack(anchor="w", pady=2)
-        
+
         comparison_mode_rb = ttk.Radiobutton(
             mode_frame,
             text="Compare different LoRAs at fixed strength",
             variable=self.lora_mode_var,
             value="comparison",
-            command=self._on_lora_mode_changed
+            command=self._on_lora_mode_changed,
         )
         comparison_mode_rb.pack(anchor="w", pady=2)
-        
+
         # Content frame (dynamic based on mode)
         self.lora_content_frame = ttk.Frame(self.lora_frame)
         self.lora_content_frame.pack(fill="both", expand=True)
-        
+
         # Build initial content
         self._build_lora_mode_content()
 
@@ -989,15 +1026,15 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _build_lora_mode_content(self) -> None:
         """Build content based on selected LoRA mode.
-        
+
         PR-LEARN-022: Switches between strength sweep UI and LoRA comparison UI.
         """
         # Clear existing content
         for widget in self.lora_content_frame.winfo_children():
             widget.destroy()
-        
+
         mode = self.lora_mode_var.get() if hasattr(self, "lora_mode_var") else "strength"
-        
+
         if mode == "strength":
             self._build_strength_sweep_ui()
         else:
@@ -1005,73 +1042,81 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _build_strength_sweep_ui(self) -> None:
         """Build UI for single LoRA strength sweep.
-        
+
         Shows: LoRA selector + strength range (start/stop/step)
         """
         # Get available LoRAs from controller
         available_loras = []
-        if hasattr(self, 'learning_controller') and self.learning_controller:
+        if hasattr(self, "learning_controller") and self.learning_controller:
             try:
                 override = (
                     self._build_selected_prompt_workspace_state()
                     if self.prompt_source_var.get() == "pack"
                     else None
                 )
-                loras = self.learning_controller._get_current_loras(prompt_workspace_state_override=override)
-                available_loras = [l["name"] for l in loras]
+                loras = self.learning_controller._get_current_loras(
+                    prompt_workspace_state_override=override
+                )
+                available_loras = [lora["name"] for lora in loras]
             except Exception:
                 pass
-        
+
         # LoRA selector
         lora_select_frame = ttk.Frame(self.lora_content_frame)
         lora_select_frame.pack(fill="x", pady=(0, 10))
-        
+
         ttk.Label(lora_select_frame, text="Select LoRA to test:").pack(anchor="w", pady=(0, 2))
-        
+
         self.lora_selector_var = tk.StringVar()
         if available_loras:
             self.lora_selector_var.set(available_loras[0])
-        
+
         lora_combo = ttk.Combobox(
             lora_select_frame,
             textvariable=self.lora_selector_var,
             values=available_loras,
-            state="readonly"
+            state="readonly",
         )
         lora_combo.pack(fill="x")
-        
+
         if not available_loras:
             ttk.Label(
                 lora_select_frame,
                 text="No enabled LoRAs in current prompt or runtime config",
-                foreground="red"
+                foreground="red",
             ).pack(anchor="w", pady=(2, 0))
-        
+
         # Strength range
         range_frame = ttk.LabelFrame(self.lora_content_frame, text="Strength Range", padding=5)
         range_frame.pack(fill="x")
         range_frame.columnconfigure(0, weight=1)
         range_frame.columnconfigure(1, weight=1)
         range_frame.columnconfigure(2, weight=1)
-        
+
         # Start
         ttk.Label(range_frame, text="Start:").grid(row=0, column=0, sticky="w", pady=2)
         self.lora_start_var = tk.DoubleVar(value=0.5)
-        start_spin = tk.Spinbox(range_frame, from_=0.0, to=2.0, increment=0.1, textvariable=self.lora_start_var)
+        start_spin = tk.Spinbox(
+            range_frame, from_=0.0, to=2.0, increment=0.1, textvariable=self.lora_start_var
+        )
         start_spin.grid(row=1, column=0, sticky="ew", padx=(0, 2))
-        
+
         # End
         ttk.Label(range_frame, text="End:").grid(row=0, column=1, sticky="w", pady=2)
         self.lora_end_var = tk.DoubleVar(value=1.5)
-        end_spin = tk.Spinbox(range_frame, from_=0.0, to=2.0, increment=0.1, textvariable=self.lora_end_var)
+        end_spin = tk.Spinbox(
+            range_frame, from_=0.0, to=2.0, increment=0.1, textvariable=self.lora_end_var
+        )
         end_spin.grid(row=1, column=1, sticky="ew", padx=2)
-        
+
         # Step
         ttk.Label(range_frame, text="Step:").grid(row=0, column=2, sticky="w", pady=2)
         self.lora_step_var = tk.DoubleVar(value=0.1)
-        step_spin = tk.Spinbox(range_frame, from_=0.05, to=1.0, increment=0.05, textvariable=self.lora_step_var)
+        step_spin = tk.Spinbox(
+            range_frame, from_=0.05, to=1.0, increment=0.05, textvariable=self.lora_step_var
+        )
         step_spin.grid(row=1, column=2, sticky="ew", padx=(2, 0))
-        
+
         # Variant count estimate
         def update_variant_count(*args):
             try:
@@ -1085,40 +1130,44 @@ class ExperimentDesignPanel(ttk.Frame):
                     count_label.config(text="Invalid range")
             except Exception:
                 count_label.config(text="")
-        
+
         self.lora_start_var.trace_add("write", update_variant_count)
         self.lora_end_var.trace_add("write", update_variant_count)
         self.lora_step_var.trace_add("write", update_variant_count)
-        
+
         count_label = ttk.Label(self.lora_content_frame, text="", foreground="blue")
         count_label.pack(anchor="w", pady=(5, 0))
         update_variant_count()
 
     def _build_lora_comparison_ui(self) -> None:
         """Build UI for comparing different LoRAs at fixed strength.
-        
+
         Shows: LoRA checklist + fixed strength input
         """
         # Get available LoRAs
         available_loras = []
-        if hasattr(self, 'learning_controller') and self.learning_controller:
+        if hasattr(self, "learning_controller") and self.learning_controller:
             try:
                 override = (
                     self._build_selected_prompt_workspace_state()
                     if self.prompt_source_var.get() == "pack"
                     else None
                 )
-                loras = self.learning_controller._get_current_loras(prompt_workspace_state_override=override)
-                available_loras = [l["name"] for l in loras]
+                loras = self.learning_controller._get_current_loras(
+                    prompt_workspace_state_override=override
+                )
+                available_loras = [lora["name"] for lora in loras]
             except Exception:
                 pass
-        
+
         # Fixed strength input
         strength_frame = ttk.Frame(self.lora_content_frame)
         strength_frame.pack(fill="x", pady=(0, 10))
-        
-        ttk.Label(strength_frame, text="Fixed strength for all LoRAs:").pack(side="left", padx=(0, 5))
-        
+
+        ttk.Label(strength_frame, text="Fixed strength for all LoRAs:").pack(
+            side="left", padx=(0, 5)
+        )
+
         self.lora_fixed_strength_var = tk.DoubleVar(value=1.0)
         strength_spin = tk.Spinbox(
             strength_frame,
@@ -1126,63 +1175,66 @@ class ExperimentDesignPanel(ttk.Frame):
             to=2.0,
             increment=0.1,
             textvariable=self.lora_fixed_strength_var,
-            width=10
+            width=10,
         )
         strength_spin.pack(side="left")
-        
+
         # LoRA checklist
         checklist_label = ttk.Label(self.lora_content_frame, text="Select LoRAs to compare:")
         checklist_label.pack(anchor="w", pady=(0, 5))
-        
+
         # Scrollable checklist
         checklist_canvas = tk.Canvas(self.lora_content_frame, height=150)
-        checklist_scrollbar = ttk.Scrollbar(self.lora_content_frame, orient="vertical", command=checklist_canvas.yview)
+        checklist_scrollbar = ttk.Scrollbar(
+            self.lora_content_frame, orient="vertical", command=checklist_canvas.yview
+        )
         checklist_inner = ttk.Frame(checklist_canvas)
         checklist_canvas.configure(yscrollcommand=checklist_scrollbar.set)
-        
+
         checklist_scrollbar.pack(side="right", fill="y")
         checklist_canvas.pack(side="left", fill="both", expand=True)
         checklist_canvas.create_window((0, 0), window=checklist_inner, anchor="nw")
-        checklist_inner.bind("<Configure>", lambda e: checklist_canvas.configure(scrollregion=checklist_canvas.bbox("all")))
-        
+        checklist_inner.bind(
+            "<Configure>",
+            lambda e: checklist_canvas.configure(scrollregion=checklist_canvas.bbox("all")),
+        )
+
         # Create checkboxes
         self.lora_choice_vars = {}
-        
+
         if not available_loras:
             ttk.Label(
                 checklist_inner,
                 text="No enabled LoRAs in current prompt or runtime config",
-                foreground="red"
+                foreground="red",
             ).pack(anchor="w", pady=2)
         else:
             # Select All / Clear All
             button_frame = ttk.Frame(checklist_inner)
             button_frame.pack(fill="x", pady=(0, 5))
-            
+
             ttk.Button(
-                button_frame,
-                text="Select All",
-                command=lambda: self._select_all_lora_choices(True)
+                button_frame, text="Select All", command=lambda: self._select_all_lora_choices(True)
             ).pack(side="left", padx=(0, 5))
-            
+
             ttk.Button(
-                button_frame,
-                text="Clear All",
-                command=lambda: self._select_all_lora_choices(False)
+                button_frame, text="Clear All", command=lambda: self._select_all_lora_choices(False)
             ).pack(side="left")
-            
+
             # Checkboxes
             for lora in available_loras:
                 var = tk.BooleanVar(value=False)
                 cb = ttk.Checkbutton(checklist_inner, text=lora, variable=var)
                 cb.pack(anchor="w", pady=2)
                 self.lora_choice_vars[lora] = var
-            
+
             # Count label
             self.lora_count_var = tk.StringVar(value="0 LoRAs selected")
-            count_label = ttk.Label(checklist_inner, textvariable=self.lora_count_var, foreground="blue")
+            count_label = ttk.Label(
+                checklist_inner, textvariable=self.lora_count_var, foreground="blue"
+            )
             count_label.pack(anchor="w", pady=(5, 0))
-            
+
             # Bind checkbox changes
             for var in self.lora_choice_vars.values():
                 var.trace_add("write", lambda *args: self._update_lora_choice_count())
@@ -1210,7 +1262,9 @@ class ExperimentDesignPanel(ttk.Frame):
         self.step_var.set(float(metadata.get("step_value", self.step_var.get())))
         self.images_var.set(int(getattr(experiment, "images_per_value", 1) or 1))
         prompt_text = str(getattr(experiment, "prompt_text", "") or "")
-        prompt_source = str(metadata.get("prompt_source", "custom" if prompt_text else "pack") or "pack")
+        prompt_source = str(
+            metadata.get("prompt_source", "custom" if prompt_text else "pack") or "pack"
+        )
         self.prompt_source_var.set(prompt_source)
         selected_pack_name = str(metadata.get("selected_prompt_pack_name", "") or "")
         if selected_pack_name:

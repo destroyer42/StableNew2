@@ -56,11 +56,15 @@ def test_adetailer_manifest_carries_canonical_adaptive_refinement_block() -> Non
         "detector_notes": [],
     }
 
-    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
-         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}), \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch.object(pipeline, "_write_manifest_file") as write_manifest_mock, \
-         patch("builtins.open", MagicMock()):
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}
+        ),
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch.object(pipeline, "_write_manifest_file") as write_manifest_mock,
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
@@ -81,7 +85,9 @@ def test_adetailer_manifest_carries_canonical_adaptive_refinement_block() -> Non
         )
 
     assert result is not None
-    assert result["adaptive_refinement"]["decision_bundle"]["policy_id"] == "adetailer_micro_face_v1"
+    assert (
+        result["adaptive_refinement"]["decision_bundle"]["policy_id"] == "adetailer_micro_face_v1"
+    )
     assert result["adaptive_refinement"]["decision_bundle"]["applied_overrides"] == {
         "ad_confidence": 0.22,
         "ad_mask_min_ratio": 0.003,
@@ -89,12 +95,17 @@ def test_adetailer_manifest_carries_canonical_adaptive_refinement_block() -> Non
     }
     manifest_metadata = write_manifest_mock.call_args.kwargs["metadata"]
     assert manifest_metadata["adaptive_refinement"]["intent"]["mode"] == "adetailer"
-    assert manifest_metadata["adaptive_refinement"]["decision_bundle"]["policy_id"] == "adetailer_micro_face_v1"
-    assert manifest_metadata["adaptive_refinement"]["prompt_patch_provenance"]["stage_name"] == "adetailer"
     assert (
-        manifest_metadata["adaptive_refinement"]["prompt_patch_provenance"]["positive"]["applied_add"]
-        == ["clear irises"]
+        manifest_metadata["adaptive_refinement"]["decision_bundle"]["policy_id"]
+        == "adetailer_micro_face_v1"
     )
+    assert (
+        manifest_metadata["adaptive_refinement"]["prompt_patch_provenance"]["stage_name"]
+        == "adetailer"
+    )
+    assert manifest_metadata["adaptive_refinement"]["prompt_patch_provenance"]["positive"][
+        "applied_add"
+    ] == ["clear irises"]
 
 
 def test_adetailer_manifest_model_prefers_requested_stage_checkpoint() -> None:
@@ -102,11 +113,15 @@ def test_adetailer_manifest_model_prefers_requested_stage_checkpoint() -> None:
     pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
     pipeline.client.get_current_vae = Mock(return_value="vae.pt")
 
-    with patch.object(pipeline, "_load_image_base64", return_value="fake_b64"), \
-         patch.object(pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}), \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch.object(pipeline, "_write_manifest_file") as write_manifest_mock, \
-         patch("builtins.open", MagicMock()):
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["result_b64"]}
+        ),
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch.object(pipeline, "_write_manifest_file") as write_manifest_mock,
+        patch("builtins.open", MagicMock()),
+    ):
         config = {
             "adetailer_enabled": True,
             "adetailer_model": "face_yolov8n.pt",
@@ -144,9 +159,11 @@ def test_upscale_single_mode_uses_extended_timeout_without_global_model_switch()
 
     pipeline.client.upscale_image = Mock(side_effect=_upscale_image)
 
-    with patch.object(pipeline, "_load_image_base64", return_value=_TINY_PNG_BASE64), \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch.object(pipeline, "_write_manifest_file") as write_manifest_mock:
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value=_TINY_PNG_BASE64),
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch.object(pipeline, "_write_manifest_file") as write_manifest_mock,
+    ):
         config = {
             "upscale_mode": "single",
             "upscaler": "R-ESRGAN 4x+",
@@ -179,10 +196,14 @@ def test_upscale_img2img_pins_requested_stage_checkpoint_without_global_switch()
     pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
     pipeline.client.get_current_vae = Mock(return_value="ambient-vae.safetensors")
 
-    with patch.object(pipeline, "_load_image_base64", return_value=_TINY_PNG_BASE64), \
-         patch.object(pipeline, "_generate_images", return_value={"images": ["result_b64"]}) as generate_mock, \
-         patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")), \
-         patch.object(pipeline, "_write_manifest_file") as write_manifest_mock:
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value=_TINY_PNG_BASE64),
+        patch.object(
+            pipeline, "_generate_images", return_value={"images": ["result_b64"]}
+        ) as generate_mock,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=Path("output/test.png")),
+        patch.object(pipeline, "_write_manifest_file") as write_manifest_mock,
+    ):
         config = {
             "upscale_mode": "img2img",
             "upscaler": "R-ESRGAN 4x+",

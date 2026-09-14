@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.queue.job_model import Job, JobPriority, JobStatus
+from src.queue.job_model import Job, JobPriority
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
 from tests.helpers.njr_factory import make_pipeline_njr

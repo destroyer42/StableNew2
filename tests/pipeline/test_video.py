@@ -118,9 +118,7 @@ def test_create_video_from_images_uses_concat_input(monkeypatch, tmp_path: Path)
     assert ffmpeg_cmd[ffmpeg_cmd.index("-frames:v") + 1] == "1"
 
 
-def test_create_video_from_images_limits_to_valid_temp_image_count(
-    monkeypatch, tmp_path: Path
-):
+def test_create_video_from_images_limits_to_valid_temp_image_count(monkeypatch, tmp_path: Path):
     ffmpeg_path = tmp_path / "ffmpeg.exe"
     ffmpeg_path.write_bytes(b"")
     missing_image = tmp_path / "missing.png"
@@ -189,8 +187,7 @@ def test_export_video_mp4_decodes_exact_input_frame_count(tmp_path: Path, frame_
         pytest.skip("ffprobe is not available")
 
     frames = [
-        Image.new("RGB", (64, 64), (index * 37 % 256, 50, 120))
-        for index in range(frame_count)
+        Image.new("RGB", (64, 64), (index * 37 % 256, 50, 120)) for index in range(frame_count)
     ]
     output_path = tmp_path / f"sequence_{frame_count}.mp4"
     assert export_video_mp4(frames=frames, output_path=output_path, fps=7)

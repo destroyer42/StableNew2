@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from src.gui.sidebar_panel_v2 import PromptPackSummary, SidebarPanelV2
 from src.gui.prompt_pack_adapter_v2 import PromptPackAdapterV2
+from src.gui.sidebar_panel_v2 import PromptPackSummary, SidebarPanelV2
 
 
 class DummyPromptPackAdapter:

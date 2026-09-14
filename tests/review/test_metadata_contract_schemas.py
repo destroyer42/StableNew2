@@ -8,9 +8,9 @@ from src.review.review_metadata_service import (
     REVIEW_METADATA_SCHEMA,
 )
 from src.utils.image_metadata import (
-    ImageMetadataContractV26,
     PORTABLE_REVIEW_KEY,
     PORTABLE_REVIEW_SIDECAR_SUFFIX,
+    ImageMetadataContractV26,
 )
 
 

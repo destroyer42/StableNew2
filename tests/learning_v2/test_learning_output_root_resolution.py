@@ -12,7 +12,9 @@ def _build_frame(*, config_manager: object | None = None) -> LearningTabFrame:
     frame.pipeline_controller = SimpleNamespace(_config_manager=config_manager)
     frame.app_state = SimpleNamespace(output_dir="wrong/output/animatediff")
     frame.learning_controller = SimpleNamespace(trigger_background_scan=MagicMock())
-    frame.discovered_inbox_panel = SimpleNamespace(set_scanning=MagicMock(), set_scan_root=MagicMock())
+    frame.discovered_inbox_panel = SimpleNamespace(
+        set_scanning=MagicMock(), set_scan_root=MagicMock()
+    )
     frame.staged_inbox_panel = SimpleNamespace(set_scanning=MagicMock(), set_scan_root=MagicMock())
     frame._custom_discovered_scan_root = None
     frame._on_discovered_scan_complete = MagicMock()

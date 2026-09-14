@@ -299,13 +299,11 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             clip_skip_label,
             self.clip_skip_spin,
         )
-        
+
         # Final Size display (calculated from width x height x hires x upscale)
         final_size_label = ttk.Label(meta, text="Final Size", style=BODY_LABEL_STYLE)
         final_size_label.grid(row=1, column=0, sticky="w", pady=(6, 2))
-        self.final_size_label = ttk.Label(
-            meta, text="512 x 512", style=BODY_LABEL_STYLE
-        )
+        self.final_size_label = ttk.Label(meta, text="512 x 512", style=BODY_LABEL_STYLE)
         self.final_size_label.grid(row=1, column=1, columnspan=3, sticky="w", pady=(6, 2))
         self._attach_setting_help(
             "final_size",
@@ -313,7 +311,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             final_size_label,
             self.final_size_label,
         )
-        
+
         configure_grid_columns(meta, get_two_pair_form_column_specs())
 
         # Seed/randomize
@@ -342,7 +340,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 var.trace_add("write", lambda *_: self._notify_change())
             except Exception:
                 pass
-        
+
         # Add trace for randomize checkbox
         try:
             self.seed_section.randomize_var.trace_add("write", lambda *_: self._notify_change())
@@ -608,7 +606,9 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         # PR-GUI-FUNC-003: Sync hires model when base model changes (if "Use base model" is enabled)
         self.model_var.trace_add("write", lambda *_: self._on_base_model_changed())
         # PR-GUI-FUNC-003: Update hires model and dropdown state when "Use base model" checkbox toggles
-        self.hires_use_base_model_var.trace_add("write", lambda *_: self._on_hires_use_base_model_toggled())
+        self.hires_use_base_model_var.trace_add(
+            "write", lambda *_: self._on_hires_use_base_model_toggled()
+        )
         self.hires_steps_var.trace_add("write", lambda *_: self._on_hires_steps_changed())
         self.hires_denoise_var.trace_add("write", lambda *_: self._on_hires_denoise_changed())
         self.hires_use_base_model_var.trace_add(
@@ -815,7 +815,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             # Base size from width/height
             base_width = int(self.width_var.get() or 512)
             base_height = int(self.height_var.get() or 512)
-            
+
             # Apply hires fix scale if enabled
             if self.hires_enabled_var.get():
                 hires_scale = float(self.hires_factor_var.get() or 1.0)
@@ -824,10 +824,8 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             else:
                 final_width = base_width
                 final_height = base_height
-            
-            self.final_size_label.configure(
-                text=f"{final_width} x {final_height}"
-            )
+
+            self.final_size_label.configure(text=f"{final_width} x {final_height}")
         except (ValueError, AttributeError):
             self.final_size_label.configure(text="-")
 
@@ -838,18 +836,18 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         model_internal = data.get("model") or data.get("model_name", "")
         model_display = next(
             (d for d, n in self._model_name_map.items() if n == model_internal),
-            model_internal  # Fallback to internal name if no match
+            model_internal,  # Fallback to internal name if no match
         )
         self.model_var.set(model_display)
-        
+
         # VAE: config has internal name, need to find matching display name
         vae_internal = data.get("vae") or data.get("vae_name", "")
         vae_display = next(
             (d for d, n in self._vae_name_map.items() if vae_names_match(n, vae_internal)),
-            vae_internal  # Fallback to internal name if no match
+            vae_internal,  # Fallback to internal name if no match
         )
         self.vae_var.set(vae_display)
-        
+
         self.sampler_var.set(data.get("sampler_name", ""))
         self.scheduler_var.set(data.get("scheduler", ""))
         self.steps_var.set(int(self._safe_int(data.get("steps", 20), 20)))
@@ -857,35 +855,41 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         self.width_var.set(int(self._safe_int(data.get("width", 512), 512)))
         self.height_var.set(int(self._safe_int(data.get("height", 512), 512)))
         self.clip_skip_var.set(int(self._safe_int(data.get("clip_skip", 2), 2)))
-        
+
         # Seed (load from seed field)
         seed_value = data.get("seed", -1)
-        if hasattr(self, 'seed_var'):
+        if hasattr(self, "seed_var"):
             self.seed_var.set(str(int(self._safe_int(seed_value, -1))))
-        
+
         # Subseed and strength
-        if hasattr(self.seed_section, 'subseed_var'):
+        if hasattr(self.seed_section, "subseed_var"):
             subseed_value = data.get("subseed", -1)
             self.seed_section.subseed_var.set(str(int(self._safe_int(subseed_value, -1))))
-        if hasattr(self.seed_section, 'subseed_strength_var'):
+        if hasattr(self.seed_section, "subseed_strength_var"):
             subseed_strength = data.get("subseed_strength", 0.0)
-            self.seed_section.subseed_strength_var.set(str(float(self._safe_float(subseed_strength, 0.0))))
-        
+            self.seed_section.subseed_strength_var.set(
+                str(float(self._safe_float(subseed_strength, 0.0)))
+            )
+
         # Refiner fields
         self.refiner_enabled_var.set(bool(data.get("use_refiner", False)))
         refiner_model = data.get("refiner_model_name") or data.get("refiner_checkpoint", "")
         if refiner_model:
             self.refiner_model_var.set(refiner_model)
-        self.refiner_switch_var.set(float(self._safe_float(data.get("refiner_switch_at", 0.8), 0.8)))
-        
-        # Hires fix fields  
+        self.refiner_switch_var.set(
+            float(self._safe_float(data.get("refiner_switch_at", 0.8), 0.8))
+        )
+
+        # Hires fix fields
         self.hires_enabled_var.set(bool(data.get("enable_hr", False)))
         self.hires_upscaler_var.set(data.get("hr_upscaler", "Latent"))
         self.hires_factor_var.set(float(self._safe_float(data.get("hr_scale", 2.0), 2.0)))
         self.hires_steps_var.set(int(self._safe_int(data.get("hr_second_pass_steps", 0), 0)))
-        self.hires_denoise_var.set(float(self._safe_float(data.get("denoising_strength", 0.3), 0.3)))
+        self.hires_denoise_var.set(
+            float(self._safe_float(data.get("denoising_strength", 0.3), 0.3))
+        )
         self.hires_use_base_model_var.set(bool(data.get("hires_use_base_model", True)))
-        
+
         # Hires model override
         hires_model = data.get("hr_checkpoint_name", "")
         if hires_model:
@@ -894,7 +898,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
     def load_from_config(self, cfg: dict[str, Any]) -> None:
         section = (cfg or {}).get("txt2img", {}) or {}
         self.load_from_section(section)
-    
+
     def _log_seed_values(self) -> dict:
         """Debug logging helper for seed values (disabled)."""
         return {}  # Disabled - use DEBUG level if needed
@@ -906,10 +910,10 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         vae_name = normalize_vae_config_value(
             self._vae_name_map.get(vae_display, vae_display.strip() if vae_display else "")
         )
-        
+
         # Store use_refiner flag for conditional field writing
         use_refiner = bool(self.refiner_enabled_var.get())
-        
+
         config = {
             "txt2img": {
                 "model": model_name,
@@ -926,24 +930,23 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 "seed": int(self.seed_var.get() or -1),
                 "subseed": int(self.seed_section.subseed_var.get() or -1),
                 "subseed_strength": float(self.seed_section.subseed_strength_var.get() or 0.0),
-                
                 # Debug logging for seed values
                 **self._log_seed_values(),
-                
                 # Refiner fields - only write if explicitly enabled
                 "use_refiner": use_refiner,
-                **({
-                    "refiner_checkpoint": self._refiner_model_name_map.get(
-                        self.refiner_model_var.get(), 
-                        self.refiner_model_var.get().strip()
-                    ),
-                    "refiner_model_name": self._refiner_model_name_map.get(
-                        self.refiner_model_var.get(), 
-                        self.refiner_model_var.get().strip()
-                    ),
-                    "refiner_switch_at": float(self.refiner_switch_var.get() or 0.8)
-                } if use_refiner else {}),
-                
+                **(
+                    {
+                        "refiner_checkpoint": self._refiner_model_name_map.get(
+                            self.refiner_model_var.get(), self.refiner_model_var.get().strip()
+                        ),
+                        "refiner_model_name": self._refiner_model_name_map.get(
+                            self.refiner_model_var.get(), self.refiner_model_var.get().strip()
+                        ),
+                        "refiner_switch_at": float(self.refiner_switch_var.get() or 0.8),
+                    }
+                    if use_refiner
+                    else {}
+                ),
                 # Hires fix fields
                 "enable_hr": bool(self.hires_enabled_var.get()),
                 "hr_upscaler": self.hires_upscaler_var.get().strip(),
@@ -951,10 +954,12 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 "hr_second_pass_steps": int(self.hires_steps_var.get() or 0),
                 "denoising_strength": float(self.hires_denoise_var.get() or 0.3),
                 "hires_use_base_model": bool(self.hires_use_base_model_var.get()),
-                "hr_checkpoint_name": self.hires_model_var.get().strip() if self.hires_model_var.get() else "",
+                "hr_checkpoint_name": self.hires_model_var.get().strip()
+                if self.hires_model_var.get()
+                else "",
             }
         }
-        
+
         return config
 
     def to_stage_local_config_dict(self) -> dict[str, Any]:
@@ -984,7 +989,9 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 "hr_second_pass_steps": int(self.hires_steps_var.get() or 0),
                 "denoising_strength": float(self.hires_denoise_var.get() or 0.3),
                 "hires_use_base_model": bool(self.hires_use_base_model_var.get()),
-                "hr_checkpoint_name": self.hires_model_var.get().strip() if self.hires_model_var.get() else "",
+                "hr_checkpoint_name": self.hires_model_var.get().strip()
+                if self.hires_model_var.get()
+                else "",
             }
         }
 
@@ -1087,13 +1094,21 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
             for entry in entries
         ]
         values = [str(value).strip() for value in values if str(value).strip()]
-        
+
         # Always include built-in upscalers at the beginning
-        builtin_upscalers = ["Latent", "Latent (antialiased)", "Latent (bicubic)", "Latent (bicubic antialiased)", "Latent (nearest)", "Latent (nearest-exact)", "None"]
+        builtin_upscalers = [
+            "Latent",
+            "Latent (antialiased)",
+            "Latent (bicubic)",
+            "Latent (bicubic antialiased)",
+            "Latent (nearest)",
+            "Latent (nearest-exact)",
+            "None",
+        ]
         for upscaler in reversed(builtin_upscalers):
             if upscaler not in values:
                 values.insert(0, upscaler)
-        
+
         if not values:
             values = ["Latent", "R-ESRGAN 4x+"]
         self._set_combo_values(self.hires_upscaler_combo, self.hires_upscaler_var, values)
@@ -1103,9 +1118,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
         values = [self.USE_BASE_MODEL_LABEL]
         for entry in entries:
             name = (
-                getattr(entry, "display_name", None)
-                or getattr(entry, "name", None)
-                or str(entry)
+                getattr(entry, "display_name", None) or getattr(entry, "name", None) or str(entry)
             )
             if name:
                 values.append(name)
@@ -1168,7 +1181,7 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
 
     def _on_base_model_changed(self) -> None:
         """Sync hires model when base model changes (if 'Use base model' is enabled).
-        
+
         PR-GUI-FUNC-003: When the user changes the base model and 'Use base model during hires'
         is checked, automatically update the hires model dropdown to match.
         """
@@ -1180,12 +1193,12 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
 
     def _on_hires_use_base_model_toggled(self) -> None:
         """Handle 'Use base model during hires' checkbox toggle.
-        
+
         PR-GUI-FUNC-003: When checked, sync hires model to base model and disable dropdown.
         When unchecked, enable dropdown for manual selection.
         """
         use_base = self.hires_use_base_model_var.get()
-        
+
         if use_base:
             # Sync hires model to base model
             base_model = self.model_var.get()
@@ -1201,6 +1214,6 @@ class AdvancedTxt2ImgStageCardV2(BaseStageCardV2):
                 self._hires_model_combo.configure(state="readonly")
             except Exception:
                 pass
-        
+
         # Notify config changed
         self._on_hires_model_changed()

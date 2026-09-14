@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from datetime import datetime
 import tkinter as tk
+from datetime import datetime
 from unittest.mock import Mock
 
 import pytest
@@ -69,7 +69,10 @@ def test_running_job_panel_displays_runtime_stage_detail() -> None:
 
         panel.update_from_app_state(app_state)
 
-        assert panel.stage_chain_label.cget("text") == "Stage: 1/1 svd_native - postprocess: interpolation"
+        assert (
+            panel.stage_chain_label.cget("text")
+            == "Stage: 1/1 svd_native - postprocess: interpolation"
+        )
     finally:
         root.destroy()
 

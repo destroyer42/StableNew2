@@ -3,7 +3,11 @@
 from src.video.animatediff_backend import AnimateDiffVideoBackend
 from src.video.comfy_api_client import ComfyApiClient
 from src.video.comfy_dependency_probe import ComfyDependencyProbe, DependencyProbeResult
-from src.video.comfy_healthcheck import ComfyHealthCheckTimeout, validate_comfy_health, wait_for_comfy_ready
+from src.video.comfy_healthcheck import (
+    ComfyHealthCheckTimeout,
+    validate_comfy_health,
+    wait_for_comfy_ready,
+)
 from src.video.comfy_process_manager import (
     ComfyProcessConfig,
     ComfyProcessManager,
@@ -15,15 +19,18 @@ from src.video.comfy_process_manager import (
 from src.video.comfy_workflow_backend import ComfyWorkflowVideoBackend
 from src.video.depth_map_resolver import (
     DEFAULT_DEPTH_ESTIMATOR_MODEL_ID,
+    VALID_DEPTH_INPUT_MODES,
     DepthMapResolver,
     DepthResolutionResult,
-    VALID_DEPTH_INPUT_MODES,
 )
 from src.video.svd_config import SVDConfig, SVDInferenceConfig, SVDOutputConfig, SVDPreprocessConfig
 from src.video.svd_native_backend import SVDNativeVideoBackend
 from src.video.svd_runner import SVDRunner
 from src.video.svd_service import SVDService
-from src.video.video_backend_registry import VideoBackendRegistry, build_default_video_backend_registry
+from src.video.video_backend_registry import (
+    VideoBackendRegistry,
+    build_default_video_backend_registry,
+)
 from src.video.video_backend_types import (
     VideoBackendCapabilities,
     VideoBackendInterface,
@@ -32,7 +39,6 @@ from src.video.video_backend_types import (
 )
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_contracts import (
-    CompiledWorkflowRequest,
     WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,
     WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO,
     WORKFLOW_CAP_SEGMENT_STITCHABLE,
@@ -40,6 +46,7 @@ from src.video.workflow_contracts import (
     WORKFLOW_GOVERNANCE_APPROVED,
     WORKFLOW_GOVERNANCE_DISABLED,
     WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+    CompiledWorkflowRequest,
     WorkflowDependencySpec,
     WorkflowInputBinding,
     WorkflowOutputBinding,

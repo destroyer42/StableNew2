@@ -13,7 +13,7 @@ Public API:
 Modern Journey Test Pattern (PR-TEST-003):
     Journey tests should use run_njr_journey() to execute the full canonical path:
         PromptPack → Builder → NJR → Queue → Runner → History
-    
+
     Mock only at the HTTP transport layer (requests.Session.request) to avoid
     bypassing pipeline logic while still avoiding real WebUI dependencies.
 """
@@ -171,7 +171,7 @@ def run_njr_journey(
     Example:
         ```python
         njr = builder.build_jobs_from_pack(pack)[0]
-        
+
         with patch.object(api_client._session, 'request') as mock_request:
             mock_response = Mock()
             mock_response.status_code = 200
@@ -180,7 +180,7 @@ def run_njr_journey(
                 "parameters": {...}
             }
             mock_request.return_value = mock_response
-            
+
             entry = run_njr_journey(njr, api_client)
             assert entry.status == JobStatus.COMPLETED
         ```
@@ -261,7 +261,9 @@ def run_njr_journey(
                                 value = str(item or "")
                                 try:
                                     raw = value.split("base64,", 1)[1]
-                                    valid = base64.b64decode(raw, validate=True).startswith(b"\x89PNG")
+                                    valid = base64.b64decode(raw, validate=True).startswith(
+                                        b"\x89PNG"
+                                    )
                                 except (IndexError, ValueError):
                                     valid = False
                                 fixed.append(value if valid else tiny_png)
@@ -290,9 +292,7 @@ def run_njr_journey(
                 job_ids = job_service.submit_njrs(
                     [isolated_njr], SubmissionPolicy(start_when_idle=True)
                 )
-                entry = _wait_for_job_completion(
-                    job_service, job_ids[0], timeout=timeout_seconds
-                )
+                entry = _wait_for_job_completion(job_service, job_ids[0], timeout=timeout_seconds)
         finally:
             job_service.stop()
             repository.close()

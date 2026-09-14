@@ -50,7 +50,7 @@ class CurationWorkflow:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "CurationWorkflow":
+    def from_dict(cls, payload: dict[str, object]) -> CurationWorkflow:
         return cls(
             workflow_id=str(payload.get("workflow_id") or ""),
             title=str(payload.get("title") or ""),
@@ -82,7 +82,7 @@ class CurationCandidate:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "CurationCandidate":
+    def from_dict(cls, payload: dict[str, object]) -> CurationCandidate:
         return cls(
             candidate_id=str(payload.get("candidate_id") or ""),
             workflow_id=str(payload.get("workflow_id") or ""),
@@ -119,7 +119,7 @@ class SelectionEvent:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "SelectionEvent":
+    def from_dict(cls, payload: dict[str, object]) -> SelectionEvent:
         return cls(
             event_id=str(payload.get("event_id") or ""),
             workflow_id=str(payload.get("workflow_id") or ""),
@@ -146,14 +146,16 @@ class RefineProfile:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "RefineProfile":
+    def from_dict(cls, payload: dict[str, object]) -> RefineProfile:
         return cls(
             strength=str(payload.get("strength") or "light"),  # type: ignore[arg-type]
             img2img_denoise=float(payload.get("img2img_denoise") or 0.0),
             steps=int(payload.get("steps") or 0),
             sampler_name=str(payload.get("sampler_name") or ""),
             scheduler=str(payload.get("scheduler") or ""),
-            override_model=str(payload["override_model"]) if payload.get("override_model") is not None else None,
+            override_model=str(payload["override_model"])
+            if payload.get("override_model") is not None
+            else None,
         )
 
 
@@ -169,7 +171,7 @@ class FaceTriageProfile:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "FaceTriageProfile":
+    def from_dict(cls, payload: dict[str, object]) -> FaceTriageProfile:
         return cls(
             tier=str(payload.get("tier") or "skip"),  # type: ignore[arg-type]
             confidence=float(payload.get("confidence") or 0.0),
@@ -193,7 +195,7 @@ class CurationOutcome:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, payload: dict[str, object]) -> "CurationOutcome":
+    def from_dict(cls, payload: dict[str, object]) -> CurationOutcome:
         rating = payload.get("final_rating")
         return cls(
             workflow_id=str(payload.get("workflow_id") or ""),

@@ -132,7 +132,9 @@ class _StubAppState:
         return None
 
 
-def test_save_ui_state_preserves_existing_learning_payload_when_tab_returns_none(tmp_path: Path) -> None:
+def test_save_ui_state_preserves_existing_learning_payload_when_tab_returns_none(
+    tmp_path: Path,
+) -> None:
     store = UIStateStore(tmp_path / "ui_state.json")
     store.save_state(
         {
@@ -344,7 +346,9 @@ def test_save_ui_state_replaces_offscreen_geometry(tmp_path: Path) -> None:
 
     saved = store.load_state()
     assert saved is not None
-    assert saved["window"]["geometry"] == f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+    assert (
+        saved["window"]["geometry"] == f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+    )
 
 
 def test_capture_visible_window_geometry_ignores_iconic_offscreen_geometry() -> None:

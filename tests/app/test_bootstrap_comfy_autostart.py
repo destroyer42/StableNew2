@@ -44,7 +44,10 @@ def test_bootstrap_comfy_unmanaged_probe_is_soft_when_unavailable(monkeypatch) -
 
     assert result is None
     logger.info.assert_any_call("No ComfyUI configuration available")
-    assert any("ComfyUI not available for unmanaged bootstrap probe" in str(call.args[0]) for call in logger.info.call_args_list)
+    assert any(
+        "ComfyUI not available for unmanaged bootstrap probe" in str(call.args[0])
+        for call in logger.info.call_args_list
+    )
 
 
 def test_bootstrap_comfy_unmanaged_manager_does_not_raise_when_server_absent(monkeypatch) -> None:
@@ -64,7 +67,10 @@ def test_bootstrap_comfy_unmanaged_manager_does_not_raise_when_server_absent(mon
     assert result is fake_manager
     fake_manager.start.assert_not_called()
     assert checker.called
-    assert any("ComfyUI not ready at startup; continuing unmanaged" in str(call.args[0]) for call in logger.info.call_args_list)
+    assert any(
+        "ComfyUI not ready at startup; continuing unmanaged" in str(call.args[0])
+        for call in logger.info.call_args_list
+    )
 
 
 def test_async_bootstrap_comfy_uses_daemon_thread(monkeypatch) -> None:

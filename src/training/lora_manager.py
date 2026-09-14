@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
 import json
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -151,15 +151,19 @@ class LoRAManager:
         return str(character_name or "").strip().lower()
 
     def _normalize_manifest_entry(self, entry: Mapping[str, Any]) -> dict[str, Any]:
-        metadata = dict(entry.get("metadata") or {}) if isinstance(entry.get("metadata"), Mapping) else {}
+        metadata = (
+            dict(entry.get("metadata") or {}) if isinstance(entry.get("metadata"), Mapping) else {}
+        )
         weight_path = _normalize_optional_text(entry.get("weight_path"))
         lora_path = _normalize_optional_text(entry.get("lora_path")) or weight_path
-        trigger_phrase = _normalize_optional_text(entry.get("trigger_phrase")) or _normalize_optional_text(
-            metadata.get("trigger_phrase")
+        trigger_phrase = _normalize_optional_text(
+            entry.get("trigger_phrase")
+        ) or _normalize_optional_text(metadata.get("trigger_phrase"))
+        lora_name = (
+            _normalize_optional_text(entry.get("lora_name"))
+            or _normalize_optional_text(metadata.get("lora_name"))
+            or _path_stem(lora_path)
         )
-        lora_name = _normalize_optional_text(entry.get("lora_name")) or _normalize_optional_text(
-            metadata.get("lora_name")
-        ) or _path_stem(lora_path)
         return {
             "character_name": _normalize_optional_text(entry.get("character_name"))
             or _normalize_optional_text(metadata.get("character_name"))
@@ -181,14 +185,30 @@ class LoRAManager:
             return None
         if isinstance(actor, str):
             text = actor.strip()
-            return {"name": text, "character_name": None, "trigger_phrase": None, "lora_name": None, "lora_path": None, "weight": None} if text else None
+            return (
+                {
+                    "name": text,
+                    "character_name": None,
+                    "trigger_phrase": None,
+                    "lora_name": None,
+                    "lora_path": None,
+                    "weight": None,
+                }
+                if text
+                else None
+            )
 
-        lora_path = _normalize_optional_text(_actor_field(actor, "lora_path")) or _normalize_optional_text(
-            _actor_field(actor, "weight_path")
-        )
+        lora_path = _normalize_optional_text(
+            _actor_field(actor, "lora_path")
+        ) or _normalize_optional_text(_actor_field(actor, "weight_path"))
         character_name = _normalize_optional_text(_actor_field(actor, "character_name"))
         lora_name = _normalize_optional_text(_actor_field(actor, "lora_name"))
-        name = _normalize_optional_text(_actor_field(actor, "name")) or character_name or lora_name or _path_stem(lora_path)
+        name = (
+            _normalize_optional_text(_actor_field(actor, "name"))
+            or character_name
+            or lora_name
+            or _path_stem(lora_path)
+        )
         if not name:
             return None
         return {
@@ -266,16 +286,27 @@ class LoRAManager:
         source = "explicit"
 
         if manifest_entry is not None:
-            trigger_phrase = trigger_phrase or _normalize_optional_text(manifest_entry.get("trigger_phrase"))
-            lora_path = lora_path or _normalize_optional_text(manifest_entry.get("lora_path")) or _normalize_optional_text(
-                manifest_entry.get("weight_path")
+            trigger_phrase = trigger_phrase or _normalize_optional_text(
+                manifest_entry.get("trigger_phrase")
             )
-            lora_name = lora_name or _normalize_optional_text(manifest_entry.get("lora_name")) or _path_stem(lora_path)
+            lora_path = (
+                lora_path
+                or _normalize_optional_text(manifest_entry.get("lora_path"))
+                or _normalize_optional_text(manifest_entry.get("weight_path"))
+            )
+            lora_name = (
+                lora_name
+                or _normalize_optional_text(manifest_entry.get("lora_name"))
+                or _path_stem(lora_path)
+            )
             if weight is None:
                 manifest_weight = _normalize_weight(manifest_entry.get("weight"))
                 weight = manifest_weight if manifest_weight is not None else 1.0
             source = "manifest"
-            if any(actor.get(field_name) not in (None, "") for field_name in ("trigger_phrase", "lora_name", "lora_path", "weight")):
+            if any(
+                actor.get(field_name) not in (None, "")
+                for field_name in ("trigger_phrase", "lora_name", "lora_path", "weight")
+            ):
                 source = "manifest+override"
 
         if weight is None:
@@ -283,10 +314,16 @@ class LoRAManager:
         if not lora_name:
             lora_name = _path_stem(lora_path)
 
-        actor_name = str(actor.get("name") or actor.get("character_name") or lora_name or "").strip()
-        character_name = _normalize_optional_text(actor.get("character_name")) or _normalize_optional_text(
-            manifest_entry.get("character_name") if manifest_entry else None
-        ) or actor_name
+        actor_name = str(
+            actor.get("name") or actor.get("character_name") or lora_name or ""
+        ).strip()
+        character_name = (
+            _normalize_optional_text(actor.get("character_name"))
+            or _normalize_optional_text(
+                manifest_entry.get("character_name") if manifest_entry else None
+            )
+            or actor_name
+        )
 
         if not trigger_phrase:
             raise ValueError(

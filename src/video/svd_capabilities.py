@@ -81,7 +81,9 @@ class SVDPreflight:
         }
 
 
-def get_svd_preflight(config: SVDConfig, *, source_image_path: str | Path | None = None) -> SVDPreflight:
+def get_svd_preflight(
+    config: SVDConfig, *, source_image_path: str | Path | None = None
+) -> SVDPreflight:
     """Inspect admission facts without loading a model, downloading, or writing files."""
     inference = config.inference
     blockers: list[str] = []
@@ -107,11 +109,11 @@ def get_svd_preflight(config: SVDConfig, *, source_image_path: str | Path | None
     cache_dir = resolve_svd_cache_dir(inference.cache_dir)
     model_cached = model_supported and is_svd_model_cached(inference.model_id, cache_dir=cache_dir)
     if inference.local_files_only and not model_cached:
-        blockers.append(
-            f"Local-only mode requires a complete cached SVD model at '{cache_dir}'."
-        )
+        blockers.append(f"Local-only mode requires a complete cached SVD model at '{cache_dir}'.")
     elif not model_cached:
-        warnings.append("Model is not cached; online acquisition will be required when the job runs.")
+        warnings.append(
+            "Model is not cached; online acquisition will be required when the job runs."
+        )
 
     torch_available = importlib.util.find_spec("torch") is not None
     diffusers_available = importlib.util.find_spec("diffusers") is not None
@@ -141,9 +143,13 @@ def get_svd_preflight(config: SVDConfig, *, source_image_path: str | Path | None
             cuda_available = bool(torch.cuda.is_available())
             if cuda_available:
                 gpu_name = str(torch.cuda.get_device_name(0))
-                gpu_memory_gb = round(torch.cuda.get_device_properties(0).total_memory / (1024 ** 3), 1)
+                gpu_memory_gb = round(
+                    torch.cuda.get_device_properties(0).total_memory / (1024**3), 1
+                )
             else:
-                warnings.append("CUDA is unavailable; native SVD may be too slow or unsupported on this host.")
+                warnings.append(
+                    "CUDA is unavailable; native SVD may be too slow or unsupported on this host."
+                )
         except Exception:
             warnings.append("CUDA capability could not be inspected.")
 
@@ -205,7 +211,9 @@ def apply_recommended_svd_defaults(config: SVDConfig | None = None) -> SVDConfig
     payload["postprocess"]["interpolation"]["enabled"] = bool(capabilities["rife"].available)
 
     rife_candidate = _find_rife_candidate(active_config)
-    if rife_candidate is not None and not payload["postprocess"]["interpolation"].get("executable_path"):
+    if rife_candidate is not None and not payload["postprocess"]["interpolation"].get(
+        "executable_path"
+    ):
         payload["postprocess"]["interpolation"]["executable_path"] = str(rife_candidate)
 
     return SVDConfig.from_dict(payload)

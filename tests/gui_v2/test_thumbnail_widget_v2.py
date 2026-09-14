@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 import tkinter as tk
+from pathlib import Path
 
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 
 
-def test_thumbnail_widget_open_target_uses_default_viewer(monkeypatch, tk_root: tk.Tk, tmp_path: Path) -> None:
+def test_thumbnail_widget_open_target_uses_default_viewer(
+    monkeypatch, tk_root: tk.Tk, tmp_path: Path
+) -> None:
     target = tmp_path / "clip.mp4"
     target.write_bytes(b"mp4")
 

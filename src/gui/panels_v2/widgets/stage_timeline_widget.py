@@ -21,7 +21,7 @@ from tkinter import ttk
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    pass
 
 
 class StageStatus(Enum):
@@ -231,7 +231,7 @@ class StageTimelineWidget(ttk.Frame):
         bg_color, border_color = self._get_stage_colors(stage)
 
         # Draw background rectangle
-        rect_id = self._canvas.create_rectangle(
+        self._canvas.create_rectangle(
             x,
             y,
             x + width - 1,

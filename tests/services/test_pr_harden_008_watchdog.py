@@ -7,9 +7,9 @@ from unittest.mock import Mock
 from src.controller.app_controller import AppController
 from src.controller.core_pipeline_controller import CorePipelineController
 from src.controller.job_service import JobService
-from src.services.watchdog_system_v2 import SystemWatchdogV2
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
+from src.services.watchdog_system_v2 import SystemWatchdogV2
 from src.utils.config import ConfigManager
 
 
@@ -100,7 +100,9 @@ def test_stall_episode_deduplicates_beyond_cooldown_and_resets_after_activity() 
     watchdog = SystemWatchdogV2(app, diagnostics)
 
     watchdog._check()
-    watchdog._last_trigger_ts["queue_runner_stall"] -= 2 * SystemWatchdogV2.COOLDOWN_S["queue_runner_stall"]
+    watchdog._last_trigger_ts["queue_runner_stall"] -= (
+        2 * SystemWatchdogV2.COOLDOWN_S["queue_runner_stall"]
+    )
     watchdog._check()
     assert len([call for call in diagnostics.calls if call["reason"] == "queue_runner_stall"]) == 1
 
@@ -130,7 +132,7 @@ def test_production_composition_binds_watchdog_to_canonical_service_runner_queue
         assert pipeline_controller.get_job_service() is service
         assert pipeline_controller._job_controller.get_runner() is service.runner
         assert service.runner.job_queue is queue
-        assert getattr(service, "_on_runner_activity").__self__ is app
+        assert service._on_runner_activity.__self__ is app
 
         app.last_runner_activity_ts = 0.0
         service.runner._on_activity()

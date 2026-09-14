@@ -4,10 +4,11 @@ import logging
 import threading
 import time
 import tkinter as tk
-from collections.abc import Callable
 from collections import deque
+from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
+
 
 class GuiInvoker:
     """Thread-safe invoker that schedules work on the Tk main loop."""

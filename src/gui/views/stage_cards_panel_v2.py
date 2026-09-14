@@ -86,6 +86,7 @@ class StageCardsPanel(ttk.Frame):
             except Exception as exc:
                 print(f"[ERROR] Failed to create {stage_name} card: {exc}")
                 import traceback
+
                 traceback.print_exc()
         self._layout_stage_cards()
         self._attach_watchers()

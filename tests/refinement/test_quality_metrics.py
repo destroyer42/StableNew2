@@ -35,7 +35,10 @@ def test_build_refinement_learning_context_extracts_compact_scalar_summary() -> 
                     }
                 },
                 "applied_overrides": {"upscale_steps": 18, "upscale_denoising_strength": 0.18},
-                "prompt_patch": {"add_positive": ["clear irises"], "remove_positive": ["soft face"]},
+                "prompt_patch": {
+                    "add_positive": ["clear irises"],
+                    "remove_positive": ["soft face"],
+                },
             },
             "image_decisions": [{"decision_bundle": {"policy_id": "full_upscale_detail_v1"}}],
         }

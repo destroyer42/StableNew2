@@ -14,7 +14,9 @@ def _write_png(path: Path) -> None:
     image.save(path)
 
 
-def test_artifact_metadata_inspector_reports_generation_and_internal_review_precedence(tmp_path: Path) -> None:
+def test_artifact_metadata_inspector_reports_generation_and_internal_review_precedence(
+    tmp_path: Path,
+) -> None:
     image_path = tmp_path / "artifact.png"
     _write_png(image_path)
     generation_payload = {
@@ -76,7 +78,12 @@ def test_artifact_metadata_inspector_reports_generation_and_internal_review_prec
             "user_notes": "portable review",
         },
     )
-    assert review_service.stamp_review_metadata(image_path=image_path, feedback={}, record=record).success is True
+    assert (
+        review_service.stamp_review_metadata(
+            image_path=image_path, feedback={}, record=record
+        ).success
+        is True
+    )
 
     inspector = ArtifactMetadataInspector(review_service)
     inspection = inspector.inspect_artifact(

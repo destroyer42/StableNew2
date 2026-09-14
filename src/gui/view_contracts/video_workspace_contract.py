@@ -113,7 +113,9 @@ def summarize_movie_clips_source(
             headline = f"Source: {len(normalized_paths)} image/frame item(s)"
         return VideoWorkspaceSummary(
             headline=headline,
-            detail="Manual image sequence" if len(normalized_paths) > 1 else "Single selected source",
+            detail="Manual image sequence"
+            if len(normalized_paths) > 1
+            else "Single selected source",
             empty_state=get_video_workspace_empty_state("movie_clips"),
         )
 

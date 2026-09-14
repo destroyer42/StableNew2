@@ -222,7 +222,9 @@ def test_matching_restored_effective_state_reconciles_to_recommended(tk_root: tk
         tab.destroy()
 
 
-def test_manual_governed_change_marks_custom_and_named_selection_restores_it(tk_root: tk.Tk) -> None:
+def test_manual_governed_change_marks_custom_and_named_selection_restores_it(
+    tk_root: tk.Tk,
+) -> None:
     tab = SVDTabFrameV2(tk_root)
     try:
         tab.frames_var.set(25)
@@ -325,7 +327,10 @@ def test_svd_tab_blocks_admission_without_selected_source(tk_root: tk.Tk) -> Non
     try:
         assert "Select a source image." in tab.admission_label.cget("text")
         assert str(tab.animate_btn.cget("state")) == "disabled"
-        assert controller.get_svd_postprocess_capabilities.call_args.kwargs["source_image_path"] is None
+        assert (
+            controller.get_svd_postprocess_capabilities.call_args.kwargs["source_image_path"]
+            is None
+        )
     finally:
         tab.destroy()
 
@@ -396,7 +401,10 @@ def test_svd_tab_capability_projection_passes_source_without_tk() -> None:
 
     tab.source_image_var.value = "invalid.png"
     tab._refresh_capabilities()
-    assert controller.get_svd_postprocess_capabilities.call_args.kwargs["source_image_path"] == "invalid.png"
+    assert (
+        controller.get_svd_postprocess_capabilities.call_args.kwargs["source_image_path"]
+        == "invalid.png"
+    )
 
     tab.source_image_var.value = "valid.png"
     tab._refresh_capabilities()
@@ -429,7 +437,7 @@ def test_svd_tab_applies_runtime_recommended_defaults(tk_root: tk.Tk) -> None:
                 "enabled": True,
                 "scale": 2.0,
             },
-        }
+        },
     }
     controller.get_svd_postprocess_capabilities.return_value = {}
 
@@ -451,10 +459,14 @@ def test_svd_tab_recommended_preset_matches_controller_core_defaults(tk_root: tk
         "stabilityai/stable-video-diffusion-img2vid-xt"
     ]
     controller.get_svd_postprocess_capabilities.return_value = {}
-    expected = SVDController(
-        app_controller=SimpleNamespace(),
-        svd_service=Mock(),
-    ).build_default_config().to_dict()["inference"]
+    expected = (
+        SVDController(
+            app_controller=SimpleNamespace(),
+            svd_service=Mock(),
+        )
+        .build_default_config()
+        .to_dict()["inference"]
+    )
     controller.build_svd_defaults.return_value = {
         "inference": expected,
     }
@@ -516,9 +528,13 @@ def test_svd_tab_local_files_only_refreshes_model_options(tk_root: tk.Tk) -> Non
 
     tab = SVDTabFrameV2(tk_root, app_controller=controller)
     try:
-        assert "stabilityai/stable-video-diffusion-img2vid-xt" in list(tab.model_combo.cget("values"))
+        assert "stabilityai/stable-video-diffusion-img2vid-xt" in list(
+            tab.model_combo.cget("values")
+        )
         tab.local_files_only_var.set(True)
-        assert list(tab.model_combo.cget("values")) == ["stabilityai/stable-video-diffusion-img2vid-xt-1-1"]
+        assert list(tab.model_combo.cget("values")) == [
+            "stabilityai/stable-video-diffusion-img2vid-xt-1-1"
+        ]
         assert tab.model_var.get() == "stabilityai/stable-video-diffusion-img2vid-xt-1-1"
     finally:
         tab.destroy()
@@ -594,15 +610,15 @@ def test_svd_tab_recent_history_populates_and_reuses_source(tk_root: tk.Tk, tmp_
         "stabilityai/stable-video-diffusion-img2vid-xt"
     ]
     controller.get_recent_svd_history.return_value = [
-            {
-                "job_id": "job-svd-1",
-                "completed_at": "2026-03-14T20:00:00",
-                "source_image_path": str(source_path),
-                "thumbnail_path": str(preview_path),
-                "output_path": str(output_path),
-                "video_path": str(output_path),
-                "output_dir": str(tmp_path),
-                "manifest_path": str(tmp_path / "manifest.json"),
+        {
+            "job_id": "job-svd-1",
+            "completed_at": "2026-03-14T20:00:00",
+            "source_image_path": str(source_path),
+            "thumbnail_path": str(preview_path),
+            "output_path": str(output_path),
+            "video_path": str(output_path),
+            "output_dir": str(tmp_path),
+            "manifest_path": str(tmp_path / "manifest.json"),
             "frame_count": 25,
             "fps": 7,
             "model_id": "stabilityai/stable-video-diffusion-img2vid-xt",

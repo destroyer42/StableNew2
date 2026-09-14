@@ -60,7 +60,10 @@ def test_matrix_tab_panel_random_mode_does_not_materialize_cartesian_product() -
 
     panel = MatrixTabPanel(root, workspace, on_matrix_changed=lambda: None)
 
-    with patch("src.gui.widgets.matrix_tab_panel.itertools.product", side_effect=AssertionError("random mode should not enumerate all combinations")):
+    with patch(
+        "src.gui.widgets.matrix_tab_panel.itertools.product",
+        side_effect=AssertionError("random mode should not enumerate all combinations"),
+    ):
         panel._update_preview()  # noqa: SLF001
 
     text = panel.preview_text.get("1.0", "end")

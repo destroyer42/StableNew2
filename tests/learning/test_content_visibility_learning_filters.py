@@ -29,7 +29,13 @@ def test_output_scanner_normalizes_sfw_nsfw_and_unknown_visibility_payloads(tmp_
         {
             "prompt": "sunlit meadow",
             "content_visibility": {"rating": "sfw", "safe_for_work": True},
-            "generation": {"sampler_name": "Euler", "steps": 20, "cfg_scale": 7.0, "width": 832, "height": 1216},
+            "generation": {
+                "sampler_name": "Euler",
+                "steps": 20,
+                "cfg_scale": 7.0,
+                "width": 832,
+                "height": 1216,
+            },
         },
     )
     _write_manifest_run(
@@ -39,7 +45,13 @@ def test_output_scanner_normalizes_sfw_nsfw_and_unknown_visibility_payloads(tmp_
             "prompt": "portrait study",
             "content_rating": "explicit",
             "safe_for_work": False,
-            "generation": {"sampler_name": "Euler", "steps": 20, "cfg_scale": 7.0, "width": 832, "height": 1216},
+            "generation": {
+                "sampler_name": "Euler",
+                "steps": 20,
+                "cfg_scale": 7.0,
+                "width": 832,
+                "height": 1216,
+            },
         },
     )
     _write_manifest_run(
@@ -48,7 +60,13 @@ def test_output_scanner_normalizes_sfw_nsfw_and_unknown_visibility_payloads(tmp_
         {
             "prompt": "portrait study",
             "content_visibility": {"rating": "not-valid"},
-            "generation": {"sampler_name": "Euler", "steps": 20, "cfg_scale": 7.0, "width": 832, "height": 1216},
+            "generation": {
+                "sampler_name": "Euler",
+                "steps": 20,
+                "cfg_scale": 7.0,
+                "width": 832,
+                "height": 1216,
+            },
         },
     )
 
@@ -92,8 +110,7 @@ def test_discovered_review_store_normalizes_missing_and_invalid_visibility_paylo
 
     assert loaded is not None
     ratings = {
-        item.item_id: item.extra_fields["content_visibility"]["rating"]
-        for item in loaded.items
+        item.item_id: item.extra_fields["content_visibility"]["rating"] for item in loaded.items
     }
     assert ratings == {
         "item-safe": CONTENT_RATING_UNKNOWN,

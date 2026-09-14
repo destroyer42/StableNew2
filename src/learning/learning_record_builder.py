@@ -178,9 +178,7 @@ def _build_prompt_optimizer_learning_context(
             "run_mode": str(prompt_source.get("run_mode") or ""),
             "source": str(prompt_source.get("source") or ""),
             "tags": [
-                str(item)
-                for item in prompt_source.get("tags") or []
-                if str(item or "").strip()
+                str(item) for item in prompt_source.get("tags") or [] if str(item or "").strip()
             ],
         },
     }
@@ -219,7 +217,9 @@ def build_learning_record(
         secondary_motion_context = build_secondary_motion_learning_context(rr_meta)
         if secondary_motion_context:
             metadata["secondary_motion"] = secondary_motion_context
-    if "prompt_optimizer_learning" not in metadata and _prompt_optimizer_learning_enabled(metadata, rr_meta):
+    if "prompt_optimizer_learning" not in metadata and _prompt_optimizer_learning_enabled(
+        metadata, rr_meta
+    ):
         prompt_optimizer_context = _build_prompt_optimizer_learning_context(
             run_result,
             metadata=metadata,

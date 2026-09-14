@@ -27,7 +27,9 @@ def _write_prompt_packs(base_dir: Path) -> None:
 
 def _open_settings_dialog_frame(root: tk.Toplevel) -> EngineSettingsDialog:
     dialog = next(child for child in root.winfo_children() if isinstance(child, tk.Toplevel))
-    return next(child for child in dialog.winfo_children() if isinstance(child, EngineSettingsDialog))
+    return next(
+        child for child in dialog.winfo_children() if isinstance(child, EngineSettingsDialog)
+    )
 
 
 @pytest.mark.gui
@@ -47,7 +49,9 @@ def test_main_window_restores_saved_visibility_mode_without_shell_banners(
 
             assert harness.controller.app_state.content_visibility_mode == "sfw"
             assert not hasattr(harness.window.header_zone, "visibility_button")
-            assert "explicit_pack" not in list(harness.window.prompt_tab.pack_listbox.get(0, tk.END))
+            assert "explicit_pack" not in list(
+                harness.window.prompt_tab.pack_listbox.get(0, tk.END)
+            )
 
             queue_panel = getattr(harness.window.pipeline_tab, "queue_panel", None)
             running_job_panel = getattr(harness.window.pipeline_tab, "running_job_panel", None)
@@ -75,7 +79,9 @@ def test_main_window_persists_visibility_mode_across_cleanup_and_restart(
         first_root = _make_window_root(tk_root)
         first = GuiV2Harness(first_root)
         try:
-            first.window.open_engine_settings_dialog(config_manager=ConfigManager(tmp_path / "presets"))
+            first.window.open_engine_settings_dialog(
+                config_manager=ConfigManager(tmp_path / "presets")
+            )
             first_root.update()
             dialog = _open_settings_dialog_frame(first.window.root)
             dialog._webui_base_url_var.set("http://127.0.0.1:7860")

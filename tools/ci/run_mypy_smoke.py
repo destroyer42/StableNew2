@@ -5,7 +5,6 @@ from __future__ import annotations
 import subprocess
 import sys
 
-
 MYPY_SMOKE_TARGETS = [
     "src/app/__init__.py",
     "src/app/bootstrap.py",

@@ -4,11 +4,10 @@ import tkinter as tk
 from collections.abc import Callable
 from tkinter import ttk
 
-from src.gui.layout_v2 import configure_grid_columns
 from src.gui import theme_v2
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.theme_v2 import (
     BODY_LABEL_STYLE,
-    SECONDARY_BUTTON_STYLE,
     SLIDER_VALUE_LABEL_STYLE,
     SURFACE_FRAME_STYLE,
 )
@@ -189,19 +188,18 @@ class SeedSection(ttk.Frame):
         ttk.Label(self, text=title, style=BODY_LABEL_STYLE).grid(
             row=0, column=0, sticky="w", pady=(0, 2)
         )
-        
+
         # Main seed
         self.seed_var = tk.StringVar(value="-1")
         self.seed_entry = ttk.Entry(self, textvariable=self.seed_var, width=14, style="Dark.TEntry")
         self.seed_entry.grid(row=1, column=0, sticky="ew")
-        
+
         # Add randomize button (🎲) - sets seed to -1 for random
         randomize_btn = ttk.Button(
-            self, text="🎲 Random", width=10,
-            command=self._on_randomize_click
+            self, text="🎲 Random", width=10, command=self._on_randomize_click
         )
         randomize_btn.grid(row=1, column=1, sticky="w", padx=(8, 0))
-        
+
         # Subseed controls
         ttk.Label(self, text="Subseed", style=BODY_LABEL_STYLE).grid(
             row=2, column=0, sticky="w", pady=(4, 2)
@@ -210,15 +208,13 @@ class SeedSection(ttk.Frame):
         ttk.Entry(self, textvariable=self.subseed_var, width=14, style="Dark.TEntry").grid(
             row=3, column=0, sticky="ew"
         )
-        
+
         # Subseed randomize button (🎲)
         subseed_random_btn = ttk.Button(
-            self, text="🎲", width=3,
-            command=self._on_randomize_subseed,
-            style="Dark.TButton"
+            self, text="🎲", width=3, command=self._on_randomize_subseed, style="Dark.TButton"
         )
         subseed_random_btn.grid(row=3, column=2, sticky="w", padx=(4, 0))
-        
+
         # Subseed strength (0.0 - 1.0)
         ttk.Label(self, text="Subseed Strength", style=BODY_LABEL_STYLE).grid(
             row=4, column=0, sticky="w", pady=(4, 2)
@@ -227,32 +223,37 @@ class SeedSection(ttk.Frame):
         ttk.Entry(self, textvariable=self.subseed_strength_var, width=14, style="Dark.TEntry").grid(
             row=5, column=0, sticky="ew"
         )
-        
+
         # Subseed strength randomize button (🎲)
         strength_random_btn = ttk.Button(
-            self, text="🎲", width=3,
+            self,
+            text="🎲",
+            width=3,
             command=self._on_randomize_subseed_strength,
-            style="Dark.TButton"
+            style="Dark.TButton",
         )
         strength_random_btn.grid(row=5, column=2, sticky="w", padx=(4, 0))
-        
+
         self.columnconfigure(0, weight=1)
-    
+
     def _on_randomize_click(self) -> None:
         """Generate and display a random seed that can be saved for subsequent runs."""
         import random
+
         new_seed = random.randint(0, 2**32 - 1)
         self.seed_var.set(str(new_seed))
-    
+
     def _on_randomize_subseed(self) -> None:
         """Generate random subseed."""
         import random
+
         new_subseed = random.randint(0, 2**32 - 1)
         self.subseed_var.set(str(new_subseed))
-    
+
     def _on_randomize_subseed_strength(self) -> None:
         """Generate random subseed strength between 0.0 and 1.0."""
         import random
+
         strength = random.random()
         self.subseed_strength_var.set(f"{strength:.2f}")
 

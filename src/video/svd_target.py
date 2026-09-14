@@ -14,7 +14,9 @@ SVD_TARGET_SIZES: Final[tuple[tuple[int, int], ...]] = (
     (1024, 576),
 )
 SVD_TARGET_STRIDE: Final[int] = 64
-SVD_AUTO_TARGET_PIXEL_CEILING: Final[int] = max(width * height for width, height in SVD_TARGET_SIZES)
+SVD_AUTO_TARGET_PIXEL_CEILING: Final[int] = max(
+    width * height for width, height in SVD_TARGET_SIZES
+)
 
 
 def select_svd_target_size(source_width: int, source_height: int) -> tuple[int, int]:

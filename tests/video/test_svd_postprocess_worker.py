@@ -13,7 +13,9 @@ pytest.importorskip("torch")
 from src.video import svd_postprocess_worker as worker
 
 
-def test_install_torchvision_compat_shims_registers_functional_tensor(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_install_torchvision_compat_shims_registers_functional_tensor(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     sys.modules.pop("torchvision.transforms.functional_tensor", None)
 
     torchvision_module = types.ModuleType("torchvision")
@@ -30,7 +32,7 @@ def test_install_torchvision_compat_shims_registers_functional_tensor(monkeypatc
 
     shim = sys.modules.get("torchvision.transforms.functional_tensor")
     assert shim is not None
-    assert getattr(shim, "fake_op") is functional_module.fake_op
+    assert shim.fake_op is functional_module.fake_op
 
 
 def test_run_face_restore_uses_gfpgan_runtime(tmp_path: Path, monkeypatch) -> None:

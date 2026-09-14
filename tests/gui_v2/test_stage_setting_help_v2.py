@@ -36,7 +36,10 @@ def test_video_surfaces_expose_setting_help(tk_root) -> None:
         assert "authored workflow recipe" in workflow_tab._setting_tooltips["workflow"].text.lower()
         assert "motion intensity profile" in workflow_tab._setting_tooltips["motion"].text.lower()
         assert "frames per second" in movie_clips_tab._setting_tooltips["fps"].text.lower()
-        assert "assembled into the output clip" in movie_clips_tab._setting_tooltips["mode"].text.lower()
+        assert (
+            "assembled into the output clip"
+            in movie_clips_tab._setting_tooltips["mode"].text.lower()
+        )
     finally:
         movie_clips_tab.destroy()
         workflow_tab.destroy()

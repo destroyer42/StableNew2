@@ -91,7 +91,9 @@ def build_review_chunk_lineage_block(
         "curation_derived_stage": {
             "workflow_id": str(
                 selection_meta.get("workflow_id")
-                or (candidate_meta.get("workflow_id") if isinstance(candidate_meta, Mapping) else "")
+                or (
+                    candidate_meta.get("workflow_id") if isinstance(candidate_meta, Mapping) else ""
+                )
                 or ""
             ),
             "target_stage": str(target_stage or ""),

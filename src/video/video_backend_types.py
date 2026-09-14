@@ -71,7 +71,7 @@ class VideoExecutionResult:
         backend_metadata: dict[str, Any] | None = None,
         diagnostic_payload: dict[str, Any] | None = None,
         replay_manifest_fragment: dict[str, Any] | None = None,
-    ) -> "VideoExecutionResult":
+    ) -> VideoExecutionResult:
         normalized = canonicalize_variant_entry(result, stage=stage_name)
         artifact = dict(normalized.get("artifact") or {})
         output_paths = extract_artifact_paths(normalized)
@@ -100,8 +100,12 @@ class VideoExecutionResult:
             stage_name=stage_name,
             primary_path=str(primary_path) if primary_path else None,
             output_paths=[str(item) for item in output_paths if item],
-            manifest_path=str(normalized.get("manifest_path")) if normalized.get("manifest_path") else None,
-            thumbnail_path=str(normalized.get("thumbnail_path")) if normalized.get("thumbnail_path") else None,
+            manifest_path=str(normalized.get("manifest_path"))
+            if normalized.get("manifest_path")
+            else None,
+            thumbnail_path=str(normalized.get("thumbnail_path"))
+            if normalized.get("thumbnail_path")
+            else None,
             frame_paths=frame_paths,
             artifact=artifact,
             raw_result=normalized,
@@ -137,8 +141,9 @@ class VideoBackendInterface(Protocol):
     backend_id: str
     capabilities: VideoBackendCapabilities
 
-    def execute(self, pipeline: Any, request: VideoExecutionRequest) -> VideoExecutionResult | None:
-        ...
+    def execute(
+        self, pipeline: Any, request: VideoExecutionRequest
+    ) -> VideoExecutionResult | None: ...
 
 
 __all__ = [

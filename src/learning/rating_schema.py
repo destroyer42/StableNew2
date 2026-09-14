@@ -20,13 +20,9 @@ PEOPLE_CATEGORIES = (
     RatingCategory("expression", "Expression"),
 )
 
-ANIMAL_CATEGORIES = (
-    RatingCategory("anatomy", "Anatomy"),
-)
+ANIMAL_CATEGORIES = (RatingCategory("anatomy", "Anatomy"),)
 
-SCENE_CATEGORIES = (
-    RatingCategory("structure", "Scene Structure"),
-)
+SCENE_CATEGORIES = (RatingCategory("structure", "Scene Structure"),)
 
 
 def get_active_categories(flags: dict[str, bool] | None = None) -> list[RatingCategory]:

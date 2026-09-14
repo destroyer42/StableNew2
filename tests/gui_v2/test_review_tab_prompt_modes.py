@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import tkinter as tk
 from pathlib import Path
 from unittest.mock import patch
 
-import tkinter as tk
 from PIL import Image
 
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
@@ -52,14 +52,18 @@ def test_review_tab_modify_mode_uses_resolved_metadata_prompt(
         tab.prompt_text.delete("1.0", tk.END)
         tab.prompt_text.insert("1.0", "cinematic lighting")
         tab._refresh_prompt_diff()
-        assert "After +: resolved portrait prompt, cinematic lighting" in tab.diff_after_label.cget("text")
+        assert "After +: resolved portrait prompt, cinematic lighting" in tab.diff_after_label.cget(
+            "text"
+        )
 
         tab.prompt_mode_var.set("modify")
         assert _read_text(tab.prompt_text) == "resolved portrait prompt"
         tab.prompt_text.delete("1.0", tk.END)
         tab.prompt_text.insert("1.0", "resolved portrait prompt, cinematic lighting")
         tab._refresh_prompt_diff()
-        assert "After +: resolved portrait prompt, cinematic lighting" in tab.diff_after_label.cget("text")
+        assert "After +: resolved portrait prompt, cinematic lighting" in tab.diff_after_label.cget(
+            "text"
+        )
     finally:
         tab.destroy()
 
@@ -90,6 +94,8 @@ def test_review_tab_modify_mode_short_delta_preserves_base_prompt(
         tab.prompt_text.delete("1.0", tk.END)
         tab.prompt_text.insert("1.0", "cinematic lighting")
         tab._refresh_prompt_diff()
-        assert "After +: resolved portrait prompt, cinematic lighting" in tab.diff_after_label.cget("text")
+        assert "After +: resolved portrait prompt, cinematic lighting" in tab.diff_after_label.cget(
+            "text"
+        )
     finally:
         tab.destroy()

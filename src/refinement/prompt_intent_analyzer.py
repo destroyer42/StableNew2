@@ -42,10 +42,18 @@ class PromptIntentAnalyzer:
 
         lower = positive_text.lower()
         wants_full_body = "full body" in lower
-        wants_portrait = any(token in lower for token in ("portrait", "close-up", "close up", "headshot"))
+        wants_portrait = any(
+            token in lower for token in ("portrait", "close-up", "close up", "headshot")
+        )
         wants_profile = any(
             token in lower
-            for token in ("profile", "side view", "over shoulder", "over-the-shoulder", "looking back")
+            for token in (
+                "profile",
+                "side view",
+                "over shoulder",
+                "over-the-shoulder",
+                "looking back",
+            )
         )
         looking_at_viewer = "looking at viewer" in lower
         has_people_tokens = any(
@@ -55,7 +63,8 @@ class PromptIntentAnalyzer:
         embedding_entries = extract_embedding_entries(positive_text)
         has_lora_tokens = any(detect_lora_syntax(chunk) for chunk in positive_chunks)
         wants_face_detail = bool(embedding_entries) or any(
-            token in lower for token in ("detailed face", "detailed eyes", "sharp eyes", "face focus")
+            token in lower
+            for token in ("detailed face", "detailed eyes", "sharp eyes", "face focus")
         )
 
         if not has_people_tokens:
@@ -65,7 +74,9 @@ class PromptIntentAnalyzer:
         else:
             intent_band = "portrait"
 
-        requested_pose = "profile" if wants_profile else ("frontal" if looking_at_viewer else "unknown")
+        requested_pose = (
+            "profile" if wants_profile else ("frontal" if looking_at_viewer else "unknown")
+        )
 
         conflicts: list[str] = []
         if self._cfg.enable_conflict_detection:

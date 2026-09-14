@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.gui.app_state_v2 import AppStateV2
 from src.controller.app_controller import AppController
+from src.gui.app_state_v2 import AppStateV2
 
 
 class _FakeTracePanel:

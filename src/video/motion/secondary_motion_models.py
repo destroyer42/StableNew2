@@ -5,7 +5,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal
 
-
 SECONDARY_MOTION_SCHEMA_V1 = "stablenew.secondary-motion.v1"
 SECONDARY_MOTION_POLICY_SCHEMA_V1 = "stablenew.secondary-motion-policy.v1"
 
@@ -111,7 +110,9 @@ class SecondaryMotionPolicy:
             cap_pixels=int(data.get("cap_pixels", 0) or 0),
             subject_scale=str(data.get("subject_scale") or "unknown"),
             pose_class=str(data.get("pose_class") or "steady"),
-            reasons=tuple(str(item) for item in reasons) if isinstance(reasons, (list, tuple)) else (),
+            reasons=tuple(str(item) for item in reasons)
+            if isinstance(reasons, (list, tuple))
+            else (),
             algorithm_version=str(data.get("algorithm_version") or "v1"),
         )
 

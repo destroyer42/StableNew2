@@ -48,9 +48,7 @@ class VideoSequencePlanner:
         - ``none``: no anchor image on any segment.
         """
         if seq_job.total_segments < 1:
-            raise ValueError(
-                f"total_segments must be >= 1, got {seq_job.total_segments}"
-            )
+            raise ValueError(f"total_segments must be >= 1, got {seq_job.total_segments}")
 
         plans: list[VideoSegmentPlan] = []
         policy = seq_job.carry_forward_policy
@@ -82,9 +80,7 @@ class VideoSequencePlanner:
                     segment_id=_segment_id(seq_job.sequence_id, idx),
                     source_image_path=source_image_path,
                     carry_forward_policy=policy,
-                    overlap_frames=overrides.get(
-                        "overlap_frames", seq_job.overlap_frames
-                    ),
+                    overlap_frames=overrides.get("overlap_frames", seq_job.overlap_frames),
                     segment_length_frames=overrides.get(
                         "segment_length_frames", seq_job.segment_length_frames
                     ),

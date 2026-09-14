@@ -19,7 +19,9 @@ class FakePipelineRunner:
     should_raise: bool = False
     run_calls: list[RunCall] = field(default_factory=list)
 
-    def run_njr(self, record, cancel_token=None, run_plan=None, log_fn=None, checkpoint_callback=None):
+    def run_njr(
+        self, record, cancel_token=None, run_plan=None, log_fn=None, checkpoint_callback=None
+    ):
         self.run_calls.append(
             RunCall(
                 record=record,

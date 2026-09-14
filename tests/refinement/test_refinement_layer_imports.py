@@ -5,7 +5,6 @@ import pathlib
 
 import pytest
 
-
 REFINEMENT_ROOT = pathlib.Path(__file__).resolve().parents[2] / "src" / "refinement"
 
 IMPORT_BLOCKLIST = {

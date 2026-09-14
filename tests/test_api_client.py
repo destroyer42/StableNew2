@@ -262,11 +262,14 @@ class TestSDWebUIClient:
         context.__exit__.return_value = None
         client._request_context = MagicMock(return_value=context)
 
-        assert client.free_vram(
-            unload_model=False,
-            force_gc=False,
-            refresh_checkpoints=True,
-        ) is True
+        assert (
+            client.free_vram(
+                unload_model=False,
+                force_gc=False,
+                refresh_checkpoints=True,
+            )
+            is True
+        )
 
         client._request_context.assert_called_once_with(
             "post",

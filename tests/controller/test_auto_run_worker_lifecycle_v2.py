@@ -109,7 +109,9 @@ def test_disabling_auto_run_during_running_job_retires_before_next_claim(tmp_pat
         repository.close()
 
 
-def test_reenabling_auto_run_restarts_retired_worker_and_drains_remaining_jobs(tmp_path: Path) -> None:
+def test_reenabling_auto_run_restarts_retired_worker_and_drains_remaining_jobs(
+    tmp_path: Path,
+) -> None:
     service, _queue, runner, repository, started, release_a, calls = _make_service(tmp_path)
     service.auto_run_enabled = True
     try:

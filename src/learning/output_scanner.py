@@ -16,18 +16,16 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
-import time
-import uuid
 from pathlib import Path
 from typing import Any
 
 from src.controller.content_visibility_resolver import build_content_visibility_payload
-from src.learning.output_scan_models import ScanRecord, _utc_now_iso
 from src.learning.discovered_review_models import OutputScanIndexEntry
+from src.learning.output_scan_models import ScanRecord, _utc_now_iso
 from src.utils.image_metadata import (
     extract_embedded_metadata,
-    resolve_prompt_fields,
     resolve_model_vae_fields,
+    resolve_prompt_fields,
 )
 
 logger = logging.getLogger(__name__)
@@ -152,11 +150,14 @@ def _record_from_manifest(manifest_path: Path, artifact_path: Path) -> ScanRecor
                     return text
         return ""
 
-    stage = _pick(
-        stage_manifest.get("stage"),
-        data.get("stage"),
-        gen.get("stage"),
-    ) or "txt2img"
+    stage = (
+        _pick(
+            stage_manifest.get("stage"),
+            data.get("stage"),
+            gen.get("stage"),
+        )
+        or "txt2img"
+    )
     sampler = _pick(
         stage_manifest.get("sampler_name"),
         gen.get("sampler_name"),
@@ -169,21 +170,13 @@ def _record_from_manifest(manifest_path: Path, artifact_path: Path) -> ScanRecor
         gen.get("scheduler"),
         data.get("scheduler"),
     )
-    steps = _safe_int(
-        stage_manifest.get("steps") or gen.get("steps") or data.get("steps")
-    )
+    steps = _safe_int(stage_manifest.get("steps") or gen.get("steps") or data.get("steps"))
     cfg_scale = _safe_float(
         stage_manifest.get("cfg_scale") or gen.get("cfg_scale") or data.get("cfg_scale")
     )
-    seed = _safe_int(
-        stage_manifest.get("seed") or gen.get("seed") or data.get("seed") or -1
-    )
-    width = _safe_int(
-        stage_manifest.get("width") or gen.get("width") or data.get("width")
-    )
-    height = _safe_int(
-        stage_manifest.get("height") or gen.get("height") or data.get("height")
-    )
+    seed = _safe_int(stage_manifest.get("seed") or gen.get("seed") or data.get("seed") or -1)
+    width = _safe_int(stage_manifest.get("width") or gen.get("width") or data.get("width"))
+    height = _safe_int(stage_manifest.get("height") or gen.get("height") or data.get("height"))
     input_img = _pick(
         artifact.get("input_image_path"),
         stage_manifest.get("input_image"),

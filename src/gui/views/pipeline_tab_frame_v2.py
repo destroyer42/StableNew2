@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Any
 
+from src.controller.runtime_state import PipelineState
 from src.gui import design_system_v2 as design_system
 from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
@@ -15,17 +16,15 @@ from src.gui.preview_panel_v2 import PreviewPanelV2
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
-from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
-
-from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.view_contracts.pipeline_layout_contract import (
     get_stage_card_min_width,
     get_visible_stage_order,
     normalize_window_geometry,
 )
+from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
+from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.zone_map_v2 import get_pipeline_stage_order
-from src.controller.runtime_state import PipelineState
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.utils.process_inspector_v2 import format_process_brief, iter_stablenew_like_processes
 
@@ -209,7 +208,6 @@ class PipelineTabFrame(ttk.Frame):
         )
         self.stage_cards_panel.pack(fill="both", expand=True)
         base_generation_panel = getattr(self.sidebar, "base_generation_panel", None)
-        txt2img_card = getattr(self.stage_cards_panel, "txt2img_card", None)
         img2img_card = getattr(self.stage_cards_panel, "img2img_card", None)
         upscale_card = getattr(self.stage_cards_panel, "upscale_card", None)
         self.txt2img_width = getattr(base_generation_panel, "width_var", tk.IntVar(value=512))
@@ -228,7 +226,9 @@ class PipelineTabFrame(ttk.Frame):
         # CRITICAL: These are read by controller when applying config - defaults must be correct
         self.txt2img_enabled = tk.BooleanVar(value=True)  # Only txt2img should default to True
         self.img2img_enabled = tk.BooleanVar(value=False)
-        self.adetailer_enabled = tk.BooleanVar(value=True)  # PR-DEFAULT-ADETAILER: Default to True for visibility
+        self.adetailer_enabled = tk.BooleanVar(
+            value=True
+        )  # PR-DEFAULT-ADETAILER: Default to True for visibility
         self.upscale_enabled = tk.BooleanVar(value=False)
 
         self.upscale_factor = tk.DoubleVar(value=2.0)
@@ -507,6 +507,7 @@ class PipelineTabFrame(ttk.Frame):
 
     def _refresh_preview_from_pipeline_jobs(self) -> bool:
         """Attempt to render JobUiSummary data before falling back to draft text."""
+
         def _run() -> bool:
             records = self._get_pipeline_preview_jobs()
             if self.app_state and hasattr(self.app_state, "set_preview_jobs"):
@@ -631,11 +632,7 @@ class PipelineTabFrame(ttk.Frame):
             return
         self._hot_surface_flush_scheduled = True
         try:
-            delay = (
-                self.HOT_SURFACE_FLUSH_DELAY_MS
-                if delay_ms is None
-                else max(0, int(delay_ms))
-            )
+            delay = self.HOT_SURFACE_FLUSH_DELAY_MS if delay_ms is None else max(0, int(delay_ms))
             self.after(delay, self._flush_hot_surfaces)
         except Exception:
             self._hot_surface_flush_scheduled = False
@@ -691,7 +688,9 @@ class PipelineTabFrame(ttk.Frame):
                         if preview_jobs:
                             self.preview_panel.set_preview_jobs(preview_jobs)
                         else:
-                            self.preview_panel.update_from_job_draft(getattr(app_state, "job_draft", None))
+                            self.preview_panel.update_from_job_draft(
+                                getattr(app_state, "job_draft", None)
+                            )
                         self.preview_panel.update_from_app_state(app_state)
                     except Exception as exc:
                         logger.warning("Preview projection refresh failed: %s", exc)
@@ -768,8 +767,12 @@ class PipelineTabFrame(ttk.Frame):
                 "avg_ms": round(hot_surface_flush_total / hot_surface_flush_count, 3)
                 if hot_surface_flush_count
                 else 0.0,
-                "max_ms": round(float(self._hot_surface_flush_metrics.get("max_ms", 0.0) or 0.0), 3),
-                "last_ms": round(float(self._hot_surface_flush_metrics.get("last_ms", 0.0) or 0.0), 3),
+                "max_ms": round(
+                    float(self._hot_surface_flush_metrics.get("max_ms", 0.0) or 0.0), 3
+                ),
+                "last_ms": round(
+                    float(self._hot_surface_flush_metrics.get("last_ms", 0.0) or 0.0), 3
+                ),
                 "slow_count": int(self._hot_surface_flush_metrics.get("slow_count", 0) or 0),
                 "dirty_pending": sorted(self._hot_surface_dirty),
                 "scheduled": bool(self._hot_surface_flush_scheduled),
@@ -777,9 +780,15 @@ class PipelineTabFrame(ttk.Frame):
             "running_job_panel": self.running_job_panel.get_diagnostics_snapshot()
             if hasattr(self, "running_job_panel")
             else {},
-            "queue_panel": self.queue_panel.get_diagnostics_snapshot() if hasattr(self, "queue_panel") else {},
-            "history_panel": self.history_panel.get_diagnostics_snapshot() if hasattr(self, "history_panel") else {},
-            "preview_panel": self.preview_panel.get_diagnostics_snapshot() if hasattr(self, "preview_panel") else {},
+            "queue_panel": self.queue_panel.get_diagnostics_snapshot()
+            if hasattr(self, "queue_panel")
+            else {},
+            "history_panel": self.history_panel.get_diagnostics_snapshot()
+            if hasattr(self, "history_panel")
+            else {},
+            "preview_panel": self.preview_panel.get_diagnostics_snapshot()
+            if hasattr(self, "preview_panel")
+            else {},
         }
 
 

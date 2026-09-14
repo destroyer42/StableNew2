@@ -4,9 +4,8 @@ import json
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.pipeline.executor import Pipeline
 from src.pipeline.animatediff_models import AnimateDiffCapability
-
+from src.pipeline.executor import Pipeline
 
 _TINY_PNG_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRX0AAAAASUVORK5CYII="
@@ -42,7 +41,9 @@ def test_run_animatediff_stage_records_unavailable_secondary_motion_and_uses_ori
     encoded_paths: list[str] = []
     container_payloads: list[dict[str, object]] = []
 
-    def _fake_create_video(self, image_paths, output_path, fps=24, codec="libx264", quality="medium"):
+    def _fake_create_video(
+        self, image_paths, output_path, fps=24, codec="libx264", quality="medium"
+    ):
         encoded_paths[:] = [str(path) for path in image_paths]
         output_path.write_bytes(b"video")
         return True
@@ -50,8 +51,12 @@ def test_run_animatediff_stage_records_unavailable_secondary_motion_and_uses_ori
     def _raise_motion_failure(*, runtime_block, input_dir, output_dir):
         raise RuntimeError("motion unavailable")
 
-    monkeypatch.setattr("src.pipeline.executor._apply_secondary_motion_frame_directory", _raise_motion_failure)
-    monkeypatch.setattr("src.pipeline.executor.VideoCreator.create_video_from_images", _fake_create_video)
+    monkeypatch.setattr(
+        "src.pipeline.executor._apply_secondary_motion_frame_directory", _raise_motion_failure
+    )
+    monkeypatch.setattr(
+        "src.pipeline.executor.VideoCreator.create_video_from_images", _fake_create_video
+    )
     monkeypatch.setattr(
         "src.pipeline.executor.write_video_container_metadata",
         lambda _path, payload: container_payloads.append(dict(payload)) or True,

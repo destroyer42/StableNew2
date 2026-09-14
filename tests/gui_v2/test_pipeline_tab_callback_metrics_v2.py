@@ -271,19 +271,28 @@ def test_pipeline_tab_owns_hot_surface_subscriptions(tk_root: tk.Tk) -> None:
         history_listeners = list(state._listeners.get("history_items", []))
         queue_job_listeners = list(state._listeners.get("queue_jobs", []))
 
-        assert any(getattr(listener, "__self__", None) is harness.pipeline_tab for listener in preview_listeners)
+        assert any(
+            getattr(listener, "__self__", None) is harness.pipeline_tab
+            for listener in preview_listeners
+        )
         assert all(
             type(getattr(listener, "__self__", None)).__name__ != "PreviewPanelV2"
             for listener in preview_listeners
         )
 
-        assert any(getattr(listener, "__self__", None) is harness.pipeline_tab for listener in history_listeners)
+        assert any(
+            getattr(listener, "__self__", None) is harness.pipeline_tab
+            for listener in history_listeners
+        )
         assert all(
             type(getattr(listener, "__self__", None)).__name__ != "JobHistoryPanelV2"
             for listener in history_listeners
         )
 
-        assert any(getattr(listener, "__self__", None) is harness.pipeline_tab for listener in queue_job_listeners)
+        assert any(
+            getattr(listener, "__self__", None) is harness.pipeline_tab
+            for listener in queue_job_listeners
+        )
         assert all(
             type(getattr(listener, "__self__", None)).__name__ != "QueuePanelV2"
             for listener in queue_job_listeners

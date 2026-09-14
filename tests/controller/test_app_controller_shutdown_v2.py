@@ -14,9 +14,9 @@ class FakeJobService:
     def __init__(self, history_store=None) -> None:
         self.cancel_calls = 0
         self.stop_calls = 0
-        self.history_store = history_store or type(
-            "Store", (), {"list_jobs": lambda self, *args, **kwargs: []}
-        )()
+        self.history_store = (
+            history_store or type("Store", (), {"list_jobs": lambda self, *args, **kwargs: []})()
+        )
 
     def register_callback(self, *args, **kwargs):
         return None
@@ -136,7 +136,9 @@ def test_shutdown_app_waits_for_watchdog_before_closing_loggers(controller: AppC
 
     controller._shutdown_watchdog = fake_watchdog  # type: ignore[method-assign]
 
-    with patch("src.controller.app_controller.close_all_structured_loggers", side_effect=assert_close_order):
+    with patch(
+        "src.controller.app_controller.close_all_structured_loggers", side_effect=assert_close_order
+    ):
         controller.shutdown_app("watchdog-order")
 
 
@@ -144,7 +146,9 @@ def test_shutdown_webui_uses_global_manager_fallback(controller: AppController) 
     fallback = FakeWebUIManager()
     controller.webui_process_manager = None
 
-    with patch("src.controller.app_controller.get_global_webui_process_manager", return_value=fallback):
+    with patch(
+        "src.controller.app_controller.get_global_webui_process_manager", return_value=fallback
+    ):
         controller._shutdown_webui()
 
     assert controller.webui_process_manager is fallback

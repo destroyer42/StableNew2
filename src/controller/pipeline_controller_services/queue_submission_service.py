@@ -91,9 +91,7 @@ class QueueSubmissionService:
     ) -> int:
         if not records or not self._job_service:
             return 0
-        learning_count = sum(
-            1 for record in records if record.source.kind.value == "learning"
-        )
+        learning_count = sum(1 for record in records if record.source.kind.value == "learning")
         if learning_count:
             allowed, reason = can_enqueue_learning_jobs(learning_count)
             if not allowed:

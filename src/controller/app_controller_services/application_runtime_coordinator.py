@@ -25,13 +25,19 @@ class ApplicationRuntimeCoordinator:
             return
         if app_state is not None:
             try:
-                app_state.set_auto_run_queue(bool(getattr(job_controller, "auto_run_enabled", False)))
-                app_state.set_is_queue_paused(bool(getattr(job_controller, "is_queue_paused", False)))
+                app_state.set_auto_run_queue(
+                    bool(getattr(job_controller, "auto_run_enabled", False))
+                )
+                app_state.set_is_queue_paused(
+                    bool(getattr(job_controller, "is_queue_paused", False))
+                )
             except Exception:
                 pass
         if job_service is not None:
             try:
-                job_service.auto_run_enabled = bool(getattr(job_controller, "auto_run_enabled", False))
+                job_service.auto_run_enabled = bool(
+                    getattr(job_controller, "auto_run_enabled", False)
+                )
             except Exception:
                 pass
 
@@ -65,4 +71,3 @@ class ApplicationRuntimeCoordinator:
                 trigger()
             except Exception:
                 self._logger.exception("Deferred queue autostart failed", exc_info=True)
-

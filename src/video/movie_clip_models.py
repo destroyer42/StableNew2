@@ -7,10 +7,9 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
-
 
 # ---------------------------------------------------------------------------
 # Clip request + settings
@@ -110,9 +109,7 @@ class ClipManifest:
     source_bundle: dict[str, Any] = field(default_factory=dict)
     assembly_result: dict[str, Any] | None = None
     artifact_bundle: dict[str, Any] = field(default_factory=dict)
-    created_at: str = field(
-        default_factory=lambda: datetime.now(timezone.utc).isoformat()
-    )
+    created_at: str = field(default_factory=lambda: datetime.now(UTC).isoformat())
     schema_version: str = "1.0"
 
     def to_dict(self) -> dict[str, Any]:

@@ -144,7 +144,9 @@ class DiagnosticsDashboardV2(ttk.Frame):
         )
         self._refresh_snapshot()
 
-    def _build_text_widget(self, parent: ttk.Frame, title: str, *, row: int, column: int) -> tk.Text:
+    def _build_text_widget(
+        self, parent: ttk.Frame, title: str, *, row: int, column: int
+    ) -> tk.Text:
         frame = ttk.LabelFrame(parent, text=title)
         frame.grid(row=row, column=column, padx=4, pady=4, sticky="nsew")
         frame.rowconfigure(0, weight=1)
@@ -239,9 +241,13 @@ class DiagnosticsDashboardV2(ttk.Frame):
         controller = snapshot.get("controller")
         controller = controller if isinstance(controller, dict) else {}
 
-        running_job = app_state.get("running_job") if isinstance(app_state.get("running_job"), dict) else {}
+        running_job = (
+            app_state.get("running_job") if isinstance(app_state.get("running_job"), dict) else {}
+        )
         runtime_status = (
-            app_state.get("runtime_status") if isinstance(app_state.get("runtime_status"), dict) else {}
+            app_state.get("runtime_status")
+            if isinstance(app_state.get("runtime_status"), dict)
+            else {}
         )
         display_label = running_job.get("display_label") or "idle"
         if runtime_status:
@@ -255,7 +261,11 @@ class DiagnosticsDashboardV2(ttk.Frame):
 
         runner_running = "on" if queue.get("runner_running") else "off"
         paused = "yes" if queue.get("paused") else "no"
-        queued_count = len(queue.get("queued_job_ids") or []) if isinstance(queue.get("queued_job_ids"), list) else 0
+        queued_count = (
+            len(queue.get("queued_job_ids") or [])
+            if isinstance(queue.get("queued_job_ids"), list)
+            else 0
+        )
         total_count = int(queue.get("job_count", 0) or 0)
         current_job = queue.get("current_job_id") or "none"
         self._queue_state_var.set(
@@ -312,7 +322,9 @@ class DiagnosticsDashboardV2(ttk.Frame):
         lines = []
         process_snapshot = snapshot.get("process_inspector")
         process_snapshot = process_snapshot if isinstance(process_snapshot, dict) else {}
-        risk = process_snapshot.get("risk") if isinstance(process_snapshot.get("risk"), dict) else {}
+        risk = (
+            process_snapshot.get("risk") if isinstance(process_snapshot.get("risk"), dict) else {}
+        )
         if risk:
             lines.append(
                 "risk="
@@ -362,7 +374,9 @@ class DiagnosticsDashboardV2(ttk.Frame):
             for thread in threads[:12]:
                 if not isinstance(thread, dict):
                     continue
-                top_frame = thread.get("top_frame") if isinstance(thread.get("top_frame"), dict) else {}
+                top_frame = (
+                    thread.get("top_frame") if isinstance(thread.get("top_frame"), dict) else {}
+                )
                 location = ""
                 if top_frame:
                     file_name = Path(str(top_frame.get("file") or "")).name
@@ -382,7 +396,11 @@ class DiagnosticsDashboardV2(ttk.Frame):
         pipeline_tab = pipeline_tab if isinstance(pipeline_tab, dict) else {}
         hot_surface = pipeline_tab.get("hot_surface_scheduler")
         if isinstance(hot_surface, dict):
-            pending = hot_surface.get("dirty_pending") if isinstance(hot_surface.get("dirty_pending"), list) else []
+            pending = (
+                hot_surface.get("dirty_pending")
+                if isinstance(hot_surface.get("dirty_pending"), list)
+                else []
+            )
             lines.append(
                 "hot-surface"
                 + f" | avg={hot_surface.get('avg_ms', 0.0)}ms"
@@ -476,9 +494,7 @@ class DiagnosticsDashboardV2(ttk.Frame):
             parts.append(str(state))
         parts.append(self._format_ms(payload.get("total_elapsed_ms")))
         parts.append(f"retries={int(payload.get('retry_attempts_used', 0) or 0)}")
-        parts.append(
-            f"autostart={'yes' if payload.get('autostart_invoked') else 'no'}"
-        )
+        parts.append(f"autostart={'yes' if payload.get('autostart_invoked') else 'no'}")
         error = payload.get("error")
         if error:
             parts.append(f"error={error}")

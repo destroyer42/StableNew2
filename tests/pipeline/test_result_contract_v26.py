@@ -25,7 +25,9 @@ def test_result_contract_carries_secondary_motion_summary() -> None:
     }
 
     replay = build_replay_descriptor(result, njr_snapshot={"normalized_job": {"job_id": "job-123"}})
-    diagnostics = build_diagnostics_descriptor(result, njr_snapshot={"normalized_job": {"job_id": "job-123"}})
+    diagnostics = build_diagnostics_descriptor(
+        result, njr_snapshot={"normalized_job": {"job_id": "job-123"}}
+    )
 
     assert replay["secondary_motion"]["status"] == "observe"
     assert replay["secondary_motion"]["policy_id"] == "observe_policy_v1"
@@ -116,9 +118,13 @@ def test_result_contract_carries_prompt_optimizer_v3_bundle() -> None:
     }
 
     replay = build_replay_descriptor(result, njr_snapshot={"normalized_job": {"job_id": "job-123"}})
-    diagnostics = build_diagnostics_descriptor(result, njr_snapshot={"normalized_job": {"job_id": "job-123"}})
+    diagnostics = build_diagnostics_descriptor(
+        result, njr_snapshot={"normalized_job": {"job_id": "job-123"}}
+    )
 
     assert replay["prompt_optimizer_v3"]["schema"] == "stablenew.prompt-optimizer.v3"
-    assert replay["prompt_optimizer_v3"]["outputs"]["positive_final"] == "beautiful woman, masterpiece"
+    assert (
+        replay["prompt_optimizer_v3"]["outputs"]["positive_final"] == "beautiful woman, masterpiece"
+    )
     assert diagnostics["prompt_optimizer_v3"]["stage"] == "txt2img"
     assert diagnostics["replay_descriptor"]["prompt_optimizer_v3"]["mode"] == "recommend_only_v1"

@@ -40,7 +40,9 @@ def _find_site_package_dir(name: str) -> Path | None:
 def _prepend_site_package_dir(name: str) -> Path:
     candidate = _find_site_package_dir(name)
     if candidate is None:
-        raise RuntimeError(f"{name} package directory was not found in the active Python environment")
+        raise RuntimeError(
+            f"{name} package directory was not found in the active Python environment"
+        )
     sys.path.insert(0, str(candidate.parent))
     return candidate
 
@@ -81,7 +83,15 @@ def _import_codeformer_runtime():
     from facelib.utils.face_restoration_helper import FaceRestoreHelper
     from torchvision.transforms.functional import normalize
 
-    return codeformer_root, CodeFormerArch, FaceRestoreHelper, get_device, img2tensor, tensor2img, normalize
+    return (
+        codeformer_root,
+        CodeFormerArch,
+        FaceRestoreHelper,
+        get_device,
+        img2tensor,
+        tensor2img,
+        normalize,
+    )
 
 
 def _parse_args() -> argparse.Namespace:
@@ -119,7 +129,15 @@ def _save_rgb_image(image: Image.Image, path: Path) -> None:
 
 
 def _build_codeformer(payload: dict[str, Any]):
-    codeformer_root, CodeFormerArch, FaceRestoreHelper, get_device, _img2tensor, _tensor2img, _normalize = _import_codeformer_runtime()
+    (
+        codeformer_root,
+        CodeFormerArch,
+        FaceRestoreHelper,
+        get_device,
+        _img2tensor,
+        _tensor2img,
+        _normalize,
+    ) = _import_codeformer_runtime()
     weight_path = Path(str(payload.get("codeformer_weight_path") or "")).expanduser()
     if not weight_path.exists():
         raise RuntimeError(f"CodeFormer weight file not found: {weight_path}")
@@ -221,6 +239,7 @@ def _build_gfpgan(payload: dict[str, Any]):
     _ensure_facelib_weights(model_root, target_dir=gfpgan_root / "weights" / "facelib")
 
     from gfpgan import GFPGANer
+
     _RRDBNet, _RealESRGANer, get_device = _import_basicsr_runtime()
     device = get_device()
     return GFPGANer(
@@ -334,9 +353,15 @@ def _run_upscale(input_dir: Path, output_dir: Path, payload: dict[str, Any]) -> 
             _release_worker_memory()
 
 
-def _run_secondary_motion(input_dir: Path, output_dir: Path, payload: dict[str, Any]) -> dict[str, Any]:
-    intent_payload = dict(payload.get("intent") or {}) if isinstance(payload.get("intent"), dict) else {}
-    policy_payload = dict(payload.get("policy") or {}) if isinstance(payload.get("policy"), dict) else {}
+def _run_secondary_motion(
+    input_dir: Path, output_dir: Path, payload: dict[str, Any]
+) -> dict[str, Any]:
+    intent_payload = (
+        dict(payload.get("intent") or {}) if isinstance(payload.get("intent"), dict) else {}
+    )
+    policy_payload = (
+        dict(payload.get("policy") or {}) if isinstance(payload.get("policy"), dict) else {}
+    )
     worker_payload = {
         "input_dir": str(input_dir),
         "output_dir": str(output_dir),
@@ -391,4 +416,4 @@ if __name__ == "__main__":
         raise SystemExit(main())
     except Exception as exc:
         sys.stderr.write(f"{exc}\n")
-        raise SystemExit(1)
+        raise SystemExit(1) from exc

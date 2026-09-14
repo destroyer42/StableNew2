@@ -2,6 +2,7 @@
 
 PR-LEARN-010: Shows experiment statistics, trends, and summaries.
 """
+
 from __future__ import annotations
 
 import tkinter as tk

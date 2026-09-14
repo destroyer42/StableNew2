@@ -22,7 +22,7 @@ class PipelineConfigPanel(ttk.Frame):
         *args: Any,
         **kwargs: Any,
     ) -> None:
-        super().__init__(master, style=CARD_FRAME_STYLE, *args, **kwargs)
+        super().__init__(master, *args, style=CARD_FRAME_STYLE, **kwargs)
         self.controller = controller
         self.app_state = app_state
         self._on_change = on_change
@@ -103,17 +103,15 @@ class PipelineConfigPanel(ttk.Frame):
         )
         max_spin.pack(side="left", padx=(8, 0))
         max_spin.bind("<FocusOut>", lambda _event: self._on_max_variants_change())
-        ttk.Label(
-            randomizer_frame, text="Max variants", style=BODY_LABEL_STYLE
-        ).pack(side="left", padx=(6, 0))
+        ttk.Label(randomizer_frame, text="Max variants", style=BODY_LABEL_STYLE).pack(
+            side="left", padx=(6, 0)
+        )
         self._max_variants_spinbox = max_spin
         self._update_randomizer_spin_state(bool(self.randomizer_enabled_var.get()))
 
         self._lora_container = ttk.Frame(self, style=CARD_FRAME_STYLE)
         row += 1
-        self._lora_container.grid(
-            row=row, column=0, columnspan=2, sticky="ew", pady=(8, 0)
-        )
+        self._lora_container.grid(row=row, column=0, columnspan=2, sticky="ew", pady=(8, 0))
         self._refresh_lora_controls()
 
     def _setup_callbacks(self) -> None:
@@ -165,9 +163,7 @@ class PipelineConfigPanel(ttk.Frame):
             value = 1
         value = max(1, value)
         self.max_variants_var.set(value)
-        if self.controller and hasattr(
-            self.controller, "on_randomizer_max_variants_changed"
-        ):
+        if self.controller and hasattr(self.controller, "on_randomizer_max_variants_changed"):
             try:
                 self.controller.on_randomizer_max_variants_changed(value)
             except Exception:
@@ -189,9 +185,7 @@ class PipelineConfigPanel(ttk.Frame):
     def _update_randomizer_spin_state(self, enabled: bool) -> None:
         if self._max_variants_spinbox is not None:
             try:
-                self._max_variants_spinbox.configure(
-                    state="normal" if enabled else "disabled"
-                )
+                self._max_variants_spinbox.configure(state="normal" if enabled else "disabled")
             except Exception:
                 pass
 
@@ -261,9 +255,7 @@ class PipelineConfigPanel(ttk.Frame):
         }
 
     def _on_lora_strength_change(self, lora_name: str, value: Any) -> None:
-        if not self.controller or not hasattr(
-            self.controller, "update_lora_runtime_strength"
-        ):
+        if not self.controller or not hasattr(self.controller, "update_lora_runtime_strength"):
             return
         try:
             strength = float(value)
@@ -274,9 +266,7 @@ class PipelineConfigPanel(ttk.Frame):
             self._on_change()
 
     def _on_lora_enabled_change(self, lora_name: str, value: Any) -> None:
-        if not self.controller or not hasattr(
-            self.controller, "update_lora_runtime_enabled"
-        ):
+        if not self.controller or not hasattr(self.controller, "update_lora_runtime_enabled"):
             return
         self.controller.update_lora_runtime_enabled(lora_name, bool(value))
         if callable(self._on_change):

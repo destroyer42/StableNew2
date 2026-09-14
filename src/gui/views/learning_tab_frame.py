@@ -62,7 +62,9 @@ class LearningTabFrame(ttk.Frame):
         )
         header_label.pack(anchor="w")
         self._workflow_state_var = tk.StringVar(value="Workflow: idle")
-        self.workflow_state_label = ttk.Label(self.header_frame, textvariable=self._workflow_state_var)
+        self.workflow_state_label = ttk.Label(
+            self.header_frame, textvariable=self._workflow_state_var
+        )
         self.workflow_state_label.pack(anchor="w", pady=(4, 0))
         self._summary_var = tk.StringVar(value="Plan: 0 variants | Images: 0/0")
         self.summary_label = ttk.Label(self.header_frame, textvariable=self._summary_var)

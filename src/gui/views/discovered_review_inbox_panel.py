@@ -5,13 +5,13 @@
 
 from __future__ import annotations
 
+import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import ttk
-from typing import Any, Callable
+from typing import Any
 
-import tkinter as tk
-
-from src.gui.theme_v2 import BODY_LABEL_STYLE, CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
+from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 from src.learning.discovered_review_models import (
     STATUS_CLOSED,
     STATUS_IGNORED,
@@ -19,7 +19,6 @@ from src.learning.discovered_review_models import (
     STATUS_WAITING_REVIEW,
     DiscoveredReviewHandle,
 )
-
 
 _STATUS_LABELS = {
     STATUS_WAITING_REVIEW: "Waiting Review",
@@ -89,7 +88,9 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
         toolbar.grid(row=0, column=0, sticky="ew")
         toolbar.columnconfigure(4, weight=1)
 
-        ttk.Label(toolbar, text="Filter:", style=BODY_LABEL_STYLE).grid(row=0, column=0, padx=(0, 4))
+        ttk.Label(toolbar, text="Filter:", style=BODY_LABEL_STYLE).grid(
+            row=0, column=0, padx=(0, 4)
+        )
         for col, (label, value) in enumerate(
             [("Active", "active"), ("Closed", STATUS_CLOSED), ("All", "all")], start=1
         ):
@@ -130,9 +131,7 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
         )
         self._scan_root_label.grid(row=1, column=0, columnspan=7, sticky="w", pady=(4, 0))
 
-        self._scan_status_label = ttk.Label(
-            toolbar, text="", style=BODY_LABEL_STYLE, width=18
-        )
+        self._scan_status_label = ttk.Label(toolbar, text="", style=BODY_LABEL_STYLE, width=18)
         self._scan_status_label.grid(row=0, column=7, padx=4, sticky="e")
 
         # --- list frame ---
@@ -238,8 +237,7 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
         filt = self._status_filter_var.get()
         if filt == "active":
             visible = [
-                h for h in self._handles
-                if h.status in (STATUS_WAITING_REVIEW, STATUS_IN_REVIEW)
+                h for h in self._handles if h.status in (STATUS_WAITING_REVIEW, STATUS_IN_REVIEW)
             ]
         elif filt == STATUS_CLOSED:
             visible = [h for h in self._handles if h.status == STATUS_CLOSED]

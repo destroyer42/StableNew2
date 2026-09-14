@@ -3,6 +3,7 @@
 import base64
 import json
 from io import BytesIO
+
 from PIL import Image
 
 
@@ -37,7 +38,7 @@ def txt2img_response(prompt: str, seed: int = 42, width: int = 512, height: int 
         "clip_skip": 2,
         "is_using_inpainting_conditioning": False,
     }
-    
+
     return {
         "images": [generate_stub_image(width, height, "blue")],
         "parameters": info,
@@ -51,7 +52,7 @@ def img2img_response(
     seed: int = 42,
     width: int = 512,
     height: int = 512,
-    denoising_strength: float = 0.75
+    denoising_strength: float = 0.75,
 ) -> dict:
     """Generate realistic img2img API response."""
     info = {
@@ -78,7 +79,7 @@ def img2img_response(
         "sd_model_name": "mock_model_v1.safetensors",
         "sd_model_hash": "abc123",
     }
-    
+
     return {
         "images": [generate_stub_image(width, height, "green")],
         "parameters": info,
@@ -91,10 +92,12 @@ def upscale_response(image: str, upscaler: str = "R-ESRGAN 4x+", scale: int = 2)
     # Stub: just return 2x dimensions
     return {
         "image": generate_stub_image(1024, 1024, "purple"),
-        "info": json.dumps({
-            "upscaler": upscaler,
-            "resize": scale,
-        }),
+        "info": json.dumps(
+            {
+                "upscaler": upscaler,
+                "resize": scale,
+            }
+        ),
     }
 
 
@@ -111,7 +114,7 @@ def controlnet_response(prompt: str, control_image: str, module: str, model: str
         "controlnet_guidance_start": 0.0,
         "controlnet_guidance_end": 1.0,
     }
-    
+
     return {
         "images": [generate_stub_image(512, 512, "orange")],
         "parameters": info,

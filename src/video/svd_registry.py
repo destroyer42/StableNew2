@@ -82,7 +82,11 @@ def write_svd_run_manifest(
             artifact_type="video",
         ),
     }
-    secondary_motion = ((result.postprocess or {}).get("secondary_motion") if isinstance(result.postprocess, dict) else None)
+    secondary_motion = (
+        (result.postprocess or {}).get("secondary_motion")
+        if isinstance(result.postprocess, dict)
+        else None
+    )
     if isinstance(secondary_motion, dict):
         payload["secondary_motion"] = dict(secondary_motion)
     if portable_provenance_summary:

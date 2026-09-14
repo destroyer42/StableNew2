@@ -32,11 +32,11 @@ class OutputSettingsPanelV2(ttk.Frame):
         ttk.Label(parent, text="", style=HEADING_LABEL_STYLE).grid(
             row=0, column=0, columnspan=2, sticky="w", pady=(0, 6)
         )
-        
+
         # Convert default output dir to absolute path for display
         default_output = app_config.output_dir_default()
         abs_output = os.path.abspath(default_output)
-        
+
         self.output_dir_var = tk.StringVar(value=abs_output)
         self.filename_pattern_var = tk.StringVar(value=app_config.filename_pattern_default())
         self.image_format_var = tk.StringVar(value=app_config.image_format_default())
@@ -46,11 +46,11 @@ class OutputSettingsPanelV2(ttk.Frame):
 
         # Build output dir row with browse button
         self._build_dir_row(parent, "Output Dir", self.output_dir_var, 1, 0)
-        
+
         # Consolidate Format, Batch Size, and Seed Mode on one row
         controls_row = ttk.Frame(parent)
         controls_row.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(0, 4))
-        
+
         ttk.Label(controls_row, text="Format:", style="TLabel").pack(side="left", padx=(0, 4))
         format_combo = ttk.Combobox(
             controls_row,
@@ -61,14 +61,20 @@ class OutputSettingsPanelV2(ttk.Frame):
             style="Dark.TCombobox",
         )
         format_combo.pack(side="left", padx=(0, 16))
-        
+
         ttk.Label(controls_row, text="Batch Size:", style="TLabel").pack(side="left", padx=(0, 4))
         batch_spin = ttk.Spinbox(
-            controls_row, from_=1, to=99, increment=1, textvariable=self.batch_size_var, width=6, style="Dark.TSpinbox"
+            controls_row,
+            from_=1,
+            to=99,
+            increment=1,
+            textvariable=self.batch_size_var,
+            width=6,
+            style="Dark.TSpinbox",
         )
         batch_spin.pack(side="left", padx=(0, 16))
         self._create_tooltip(batch_spin, "Number of images to generate per prompt")
-        
+
         ttk.Label(controls_row, text="Seed Mode:", style="TLabel").pack(side="left", padx=(0, 4))
         seed_combo = ttk.Combobox(
             controls_row,
@@ -112,7 +118,9 @@ class OutputSettingsPanelV2(ttk.Frame):
         entry = ttk.Entry(container, textvariable=variable)
         entry.grid(row=0, column=0, sticky="ew", padx=(0, 4))
 
-        browse_btn = ttk.Button(container, text="Browse...", command=self._on_browse_output_dir, style="Dark.TButton")
+        browse_btn = ttk.Button(
+            container, text="Browse...", command=self._on_browse_output_dir, style="Dark.TButton"
+        )
         browse_btn.grid(row=0, column=1, sticky="e")
 
     def _on_browse_output_dir(self) -> None:
@@ -121,9 +129,7 @@ class OutputSettingsPanelV2(ttk.Frame):
         initial_dir = current_dir if current_dir and os.path.isdir(current_dir) else os.getcwd()
 
         selected = filedialog.askdirectory(
-            title="Select Output Directory",
-            initialdir=initial_dir,
-            mustexist=False
+            title="Select Output Directory", initialdir=initial_dir, mustexist=False
         )
 
         if selected:
@@ -181,30 +187,31 @@ class OutputSettingsPanelV2(ttk.Frame):
             return int(float(str(value)))
         except Exception:
             return default
-    
+
     def _create_tooltip(self, widget: tk.Widget, text: str) -> None:
         """Create a simple tooltip for a widget."""
+
         def on_enter(event):
             tooltip = tk.Toplevel()
             tooltip.wm_overrideredirect(True)
             tooltip.wm_geometry(f"+{event.x_root + 10}+{event.y_root + 10}")
             label = tk.Label(
-                tooltip, 
-                text=text, 
-                background="#ffffe0", 
-                relief="solid", 
-                borderwidth=1, 
-                padx=5, 
-                pady=3
+                tooltip,
+                text=text,
+                background="#ffffe0",
+                relief="solid",
+                borderwidth=1,
+                padx=5,
+                pady=3,
             )
             label.pack()
             widget._tooltip = tooltip
-        
+
         def on_leave(event):
             if hasattr(widget, "_tooltip"):
                 widget._tooltip.destroy()
                 delattr(widget, "_tooltip")
-        
+
         widget.bind("<Enter>", on_enter)
         widget.bind("<Leave>", on_leave)
 

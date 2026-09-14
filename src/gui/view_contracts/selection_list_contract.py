@@ -12,10 +12,14 @@ class SelectionListState:
     selected_count: int
 
 
-def update_selection_list(items: list[str], selected_indices: list[int] | tuple[int, ...]) -> SelectionListState:
+def update_selection_list(
+    items: list[str], selected_indices: list[int] | tuple[int, ...]
+) -> SelectionListState:
     normalized_items = tuple(str(item) for item in (items or []))
     valid = tuple(
-        idx for idx in (int(i) for i in (selected_indices or [])) if 0 <= idx < len(normalized_items)
+        idx
+        for idx in (int(i) for i in (selected_indices or []))
+        if 0 <= idx < len(normalized_items)
     )
     return SelectionListState(
         items=normalized_items,

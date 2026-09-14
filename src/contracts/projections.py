@@ -8,7 +8,6 @@ from src.contracts.models import PackJobEntry
 from src.pipeline.job_models_v2 import NormalizedJobRecord, RuntimeJobStatus, UnifiedJobSummary
 from src.queue.job_history_store import JobHistoryEntry
 
-
 UNSET: Final[object] = object()
 
 
@@ -76,4 +75,3 @@ class ProjectionSink(Protocol):
     def apply_preview_projection(self, projection: PreviewProjection) -> None: ...
     def apply_webui_projection(self, projection: WebUIProjection) -> None: ...
     def append_operator_log(self, entry: OperatorLogEntry) -> None: ...
-

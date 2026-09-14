@@ -9,18 +9,16 @@ from __future__ import annotations
 import tkinter as tk
 import uuid
 from datetime import datetime
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.gui.views.discovered_review_inbox_panel import DiscoveredReviewInboxPanel
-from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningState
-from src.queue.job_model import JobStatus
-from src.queue.job_history_store import JobHistoryEntry
+from src.gui.views.discovered_review_inbox_panel import DiscoveredReviewInboxPanel
+from src.gui.views.discovered_review_table import DiscoveredReviewTable
 from src.learning.discovered_review_models import (
+    RATING_UNRATED,
     STATUS_CLOSED,
     STATUS_IGNORED,
     STATUS_IN_REVIEW,
@@ -28,13 +26,14 @@ from src.learning.discovered_review_models import (
     DiscoveredReviewExperiment,
     DiscoveredReviewHandle,
     DiscoveredReviewItem,
-    RATING_UNRATED,
 )
-
+from src.queue.job_history_store import JobHistoryEntry
+from src.queue.job_model import JobStatus
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_handle(
     group_id: str = "disc-abc",
@@ -93,6 +92,7 @@ def _make_experiment(group_id: str = "disc-abc") -> DiscoveredReviewExperiment:
 # ---------------------------------------------------------------------------
 # DiscoveredReviewInboxPanel tests
 # ---------------------------------------------------------------------------
+
 
 @pytest.mark.gui
 def test_inbox_panel_creates_without_error(tk_root: tk.Tk) -> None:
@@ -250,6 +250,7 @@ def test_inbox_panel_varying_fields_shown(tk_root: tk.Tk) -> None:
 # DiscoveredReviewTable tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.mark.gui
 def test_review_table_creates_without_error(tk_root: tk.Tk) -> None:
     table = DiscoveredReviewTable(tk_root)
@@ -353,6 +354,7 @@ def test_review_table_empty_load_clears_preview(tk_root: tk.Tk) -> None:
 # LearningController discovered-review orchestration tests
 # ---------------------------------------------------------------------------
 
+
 def _make_controller():
     """Build a minimal LearningController that passes the init guard."""
     from src.gui.controllers.learning_controller import LearningController
@@ -371,6 +373,7 @@ def test_controller_refresh_discovered_inbox_empty(tmp_path) -> None:
     ctrl = _make_controller()
     # Patch the store root so we use a temp dir
     from src.learning.discovered_review_store import DiscoveredReviewStore
+
     ctrl._discovered_review_store = DiscoveredReviewStore(tmp_path)
     handles = ctrl.refresh_discovered_inbox()
     assert handles == []
@@ -379,6 +382,7 @@ def test_controller_refresh_discovered_inbox_empty(tmp_path) -> None:
 def test_controller_load_discovered_group_returns_none_for_missing(tmp_path) -> None:
     ctrl = _make_controller()
     from src.learning.discovered_review_store import DiscoveredReviewStore
+
     ctrl._discovered_review_store = DiscoveredReviewStore(tmp_path)
     result = ctrl.load_discovered_group("disc-nonexistent")
     assert result is None
@@ -388,6 +392,7 @@ def test_controller_load_discovered_group_returns_none_for_missing(tmp_path) -> 
 def test_controller_load_discovered_group_sets_state(tmp_path) -> None:
     ctrl = _make_controller()
     from src.learning.discovered_review_store import DiscoveredReviewStore
+
     store = DiscoveredReviewStore(tmp_path)
     ctrl._discovered_review_store = store
     exp = _make_experiment("disc-abc")
@@ -401,6 +406,7 @@ def test_controller_load_discovered_group_sets_state(tmp_path) -> None:
 def test_controller_close_discovered_group(tmp_path) -> None:
     ctrl = _make_controller()
     from src.learning.discovered_review_store import DiscoveredReviewStore
+
     store = DiscoveredReviewStore(tmp_path)
     ctrl._discovered_review_store = store
     exp = _make_experiment("disc-abc")
@@ -413,6 +419,7 @@ def test_controller_close_discovered_group(tmp_path) -> None:
 def test_controller_ignore_discovered_group(tmp_path) -> None:
     ctrl = _make_controller()
     from src.learning.discovered_review_store import DiscoveredReviewStore
+
     store = DiscoveredReviewStore(tmp_path)
     ctrl._discovered_review_store = store
     exp = _make_experiment("disc-abc")
@@ -425,6 +432,7 @@ def test_controller_ignore_discovered_group(tmp_path) -> None:
 def test_controller_reopen_discovered_group(tmp_path) -> None:
     ctrl = _make_controller()
     from src.learning.discovered_review_store import DiscoveredReviewStore
+
     store = DiscoveredReviewStore(tmp_path)
     ctrl._discovered_review_store = store
     exp = _make_experiment("disc-close")
@@ -438,6 +446,7 @@ def test_controller_reopen_discovered_group(tmp_path) -> None:
 def test_controller_save_discovered_item_rating(tmp_path) -> None:
     ctrl = _make_controller()
     from src.learning.discovered_review_store import DiscoveredReviewStore
+
     store = DiscoveredReviewStore(tmp_path)
     ctrl._discovered_review_store = store
     exp = _make_experiment("disc-rate")
@@ -453,6 +462,7 @@ def test_controller_save_discovered_item_rating(tmp_path) -> None:
 def test_controller_refresh_inbox_filters_active(tmp_path) -> None:
     ctrl = _make_controller()
     from src.learning.discovered_review_store import DiscoveredReviewStore
+
     store = DiscoveredReviewStore(tmp_path)
     ctrl._discovered_review_store = store
 
@@ -474,11 +484,13 @@ def test_controller_trigger_background_scan_noop_on_missing_root(tmp_path) -> No
     """trigger_background_scan should not crash given a nonexistent output dir."""
     ctrl = _make_controller()
     from src.learning.discovered_review_store import DiscoveredReviewStore
+
     store = DiscoveredReviewStore(tmp_path)
     ctrl._discovered_review_store = store
 
     completed: list[int] = []
     import threading
+
     done = threading.Event()
 
     def _cb(n: int) -> None:
@@ -535,8 +547,8 @@ def test_controller_get_staged_curation_workflow_summary_returns_decision_counts
 
 
 def test_controller_record_staged_curation_selection_persists_event(tmp_path) -> None:
-    from src.learning.learning_record import LearningRecordWriter
     from src.learning.discovered_review_store import DiscoveredReviewStore
+    from src.learning.learning_record import LearningRecordWriter
 
     writer = LearningRecordWriter(tmp_path / "learning_records.jsonl")
     ctrl = LearningController(
@@ -564,7 +576,7 @@ def test_controller_record_staged_curation_selection_persists_event(tmp_path) ->
     assert saved[0].notes == "promote this one"
     records = writer.records_path.read_text(encoding="utf-8").strip().splitlines()
     assert len(records) == 1
-    assert "\"record_kind\": \"staged_curation_event\"" in records[0]
+    assert '"record_kind": "staged_curation_event"' in records[0]
 
 
 def test_controller_import_review_images_to_staged_curation(tmp_path) -> None:
@@ -579,24 +591,35 @@ def test_controller_import_review_images_to_staged_curation(tmp_path) -> None:
     payload = {
         "stage_manifest": {
             "stage": "txt2img",
-            "config": {"sampler_name": "DPM++ 2M", "scheduler": "Karras", "steps": 30, "cfg_scale": 6.5},
+            "config": {
+                "sampler_name": "DPM++ 2M",
+                "scheduler": "Karras",
+                "steps": 30,
+                "cfg_scale": 6.5,
+            },
         },
         "generation": {"width": 1024, "height": 1536},
         "job_id": "job-import-1",
         "run_id": "run-import-1",
     }
 
-    with patch(
-        "src.gui.controllers.learning_controller.extract_embedded_metadata",
-        return_value=ReadPayloadResult(payload=payload, status="ok"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_prompt_fields",
-        return_value=("prompt text", "negative text"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
-        return_value=("juggernautXL", "Automatic"),
+    with (
+        patch(
+            "src.gui.controllers.learning_controller.extract_embedded_metadata",
+            return_value=ReadPayloadResult(payload=payload, status="ok"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_prompt_fields",
+            return_value=("prompt text", "negative text"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+            return_value=("juggernautXL", "Automatic"),
+        ),
     ):
-        group_id = ctrl.import_review_images_to_staged_curation([str(image_path)], display_name="Imported Group")
+        group_id = ctrl.import_review_images_to_staged_curation(
+            [str(image_path)], display_name="Imported Group"
+        )
 
     assert group_id is not None
     experiment = store.load_group(group_id)
@@ -629,15 +652,19 @@ def test_controller_import_history_entry_to_staged_curation(tmp_path) -> None:
         "generation": {"width": 768, "height": 1152},
     }
 
-    with patch(
-        "src.gui.controllers.learning_controller.extract_embedded_metadata",
-        return_value=ReadPayloadResult(payload=payload, status="ok"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_prompt_fields",
-        return_value=("prompt text", "negative text"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
-        return_value=("juggernautXL", "Automatic"),
+    with (
+        patch(
+            "src.gui.controllers.learning_controller.extract_embedded_metadata",
+            return_value=ReadPayloadResult(payload=payload, status="ok"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_prompt_fields",
+            return_value=("prompt text", "negative text"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+            return_value=("juggernautXL", "Automatic"),
+        ),
     ):
         group_id = ctrl.import_history_entry_to_staged_curation(entry)
 
@@ -716,7 +743,6 @@ def test_controller_submit_staged_curation_advancement_enqueues_face_triage_job(
         reason_tags=["bad_face"],
         notes="needs rescue",
     )
-
     payload = {
         "stage_manifest": {
             "stage": "txt2img",
@@ -729,18 +755,23 @@ def test_controller_submit_staged_curation_advancement_enqueues_face_triage_job(
         }
     }
 
-    with patch(
-        "src.gui.controllers.learning_controller.extract_embedded_metadata",
-        return_value=ReadPayloadResult(payload=payload, status="ok"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_prompt_fields",
-        return_value=("prompt text", "negative text"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
-        return_value=("juggernautXL", "Automatic"),
-    ), patch(
-        "src.gui.controllers.learning_controller.ConfigManager.get_setting",
-        return_value="output",
+    with (
+        patch(
+            "src.gui.controllers.learning_controller.extract_embedded_metadata",
+            return_value=ReadPayloadResult(payload=payload, status="ok"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_prompt_fields",
+            return_value=("prompt text", "negative text"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+            return_value=("juggernautXL", "Automatic"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+            return_value="output",
+        ),
     ):
         submitted = ctrl.submit_staged_curation_advancement("disc-face", "face_triage")
 
@@ -757,7 +788,9 @@ def test_controller_submit_staged_curation_advancement_enqueues_face_triage_job(
     assert policy.start_when_idle is False
 
 
-def test_controller_build_staged_curation_advancement_plan_preserves_source_details(tmp_path) -> None:
+def test_controller_build_staged_curation_advancement_plan_preserves_source_details(
+    tmp_path,
+) -> None:
     from src.learning.discovered_review_store import DiscoveredReviewStore
     from src.utils.image_metadata import ReadPayloadResult
 
@@ -818,18 +851,23 @@ def test_controller_build_staged_curation_advancement_plan_preserves_source_deta
         }
     }
 
-    with patch(
-        "src.gui.controllers.learning_controller.extract_embedded_metadata",
-        return_value=ReadPayloadResult(payload=payload, status="ok"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_prompt_fields",
-        return_value=("prompt text", "negative text"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
-        return_value=("juggernautXL", "Automatic"),
-    ), patch(
-        "src.gui.controllers.learning_controller.ConfigManager.get_setting",
-        return_value="output",
+    with (
+        patch(
+            "src.gui.controllers.learning_controller.extract_embedded_metadata",
+            return_value=ReadPayloadResult(payload=payload, status="ok"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_prompt_fields",
+            return_value=("prompt text", "negative text"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+            return_value=("juggernautXL", "Automatic"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+            return_value="output",
+        ),
     ):
         plan = ctrl.build_staged_curation_advancement_plan("disc-plan", "face_triage")
 
@@ -905,18 +943,23 @@ def test_controller_build_staged_curation_review_handoff_preserves_review_inputs
         }
     }
 
-    with patch(
-        "src.gui.controllers.learning_controller.extract_embedded_metadata",
-        return_value=ReadPayloadResult(payload=payload, status="ok"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_prompt_fields",
-        return_value=("prompt text", "negative text"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
-        return_value=("juggernautXL", "Automatic"),
-    ), patch(
-        "src.gui.controllers.learning_controller.ConfigManager.get_setting",
-        return_value="output",
+    with (
+        patch(
+            "src.gui.controllers.learning_controller.extract_embedded_metadata",
+            return_value=ReadPayloadResult(payload=payload, status="ok"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_prompt_fields",
+            return_value=("prompt text", "negative text"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+            return_value=("juggernautXL", "Automatic"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+            return_value="output",
+        ),
     ):
         handoff = ctrl.build_staged_curation_review_handoff("disc-review", "face_triage")
 
@@ -932,7 +975,9 @@ def test_controller_build_staged_curation_review_handoff_preserves_review_inputs
     assert job_service.submit_njrs.called is False
 
 
-def test_controller_build_staged_curation_review_handoff_can_filter_single_candidate(tmp_path) -> None:
+def test_controller_build_staged_curation_review_handoff_can_filter_single_candidate(
+    tmp_path,
+) -> None:
     from src.learning.discovered_review_store import DiscoveredReviewStore
     from src.utils.image_metadata import ReadPayloadResult
 
@@ -989,18 +1034,6 @@ def test_controller_build_staged_curation_review_handoff_can_filter_single_candi
     ctrl.record_staged_curation_selection("disc-filter", "cand-1", "advanced_to_face_triage")
     ctrl.record_staged_curation_selection("disc-filter", "cand-2", "advanced_to_face_triage")
 
-    payload = {
-        "stage_manifest": {
-            "stage": "txt2img",
-            "config": {
-                "steps": 30,
-                "cfg_scale": 6.5,
-                "sampler_name": "DPM++ 2M",
-                "scheduler": "Karras",
-            },
-        }
-    }
-
     def _resolve_prompts(payload):
         marker = str(payload.get("prompt_marker") or "")
         if marker == "candidate-b":
@@ -1025,18 +1058,23 @@ def test_controller_build_staged_curation_review_handoff_can_filter_single_candi
             status="ok",
         )
 
-    with patch(
-        "src.gui.controllers.learning_controller.extract_embedded_metadata",
-        side_effect=_extract_payload,
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_prompt_fields",
-        side_effect=_resolve_prompts,
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
-        return_value=("juggernautXL", "Automatic"),
-    ), patch(
-        "src.gui.controllers.learning_controller.ConfigManager.get_setting",
-        return_value="output",
+    with (
+        patch(
+            "src.gui.controllers.learning_controller.extract_embedded_metadata",
+            side_effect=_extract_payload,
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_prompt_fields",
+            side_effect=_resolve_prompts,
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+            return_value=("juggernautXL", "Automatic"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+            return_value="output",
+        ),
     ):
         handoff = ctrl.build_staged_curation_review_handoff(
             "disc-filter",
@@ -1052,7 +1090,9 @@ def test_controller_build_staged_curation_review_handoff_can_filter_single_candi
     assert job_service.submit_njrs.called is False
 
 
-def test_controller_build_staged_curation_review_handoff_repairs_stale_absolute_output_route(tmp_path) -> None:
+def test_controller_build_staged_curation_review_handoff_repairs_stale_absolute_output_route(
+    tmp_path,
+) -> None:
     from src.learning.discovered_review_store import DiscoveredReviewStore
     from src.utils.image_metadata import ReadPayloadResult
 
@@ -1117,24 +1157,31 @@ def test_controller_build_staged_curation_review_handoff_repairs_stale_absolute_
         }
     }
 
-    with patch(
-        "src.gui.controllers.learning_controller.extract_embedded_metadata",
-        return_value=ReadPayloadResult(payload=payload, status="ok"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_prompt_fields",
-        return_value=("prompt text", "negative text"),
-    ), patch(
-        "src.gui.controllers.learning_controller.resolve_model_vae_fields",
-        return_value=("juggernautXL", "Automatic"),
-    ), patch(
-        "src.learning.discovered_review_store.REPO_ROOT",
-        tmp_path,
-    ), patch(
-        "src.learning.discovered_review_store.OUTPUT_ROOT",
-        output_root,
-    ), patch(
-        "src.gui.controllers.learning_controller.ConfigManager.get_setting",
-        return_value=str(output_root),
+    with (
+        patch(
+            "src.gui.controllers.learning_controller.extract_embedded_metadata",
+            return_value=ReadPayloadResult(payload=payload, status="ok"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_prompt_fields",
+            return_value=("prompt text", "negative text"),
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.resolve_model_vae_fields",
+            return_value=("juggernautXL", "Automatic"),
+        ),
+        patch(
+            "src.learning.discovered_review_store.REPO_ROOT",
+            tmp_path,
+        ),
+        patch(
+            "src.learning.discovered_review_store.OUTPUT_ROOT",
+            output_root,
+        ),
+        patch(
+            "src.gui.controllers.learning_controller.ConfigManager.get_setting",
+            return_value=str(output_root),
+        ),
     ):
         handoff = ctrl.build_staged_curation_review_handoff("disc-review-stale", "face_triage")
 

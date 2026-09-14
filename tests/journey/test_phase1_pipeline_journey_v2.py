@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import tkinter as tk
 import time
+import tkinter as tk
 from types import SimpleNamespace
 
 import pytest

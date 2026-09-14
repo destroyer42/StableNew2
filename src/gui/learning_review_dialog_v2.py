@@ -115,9 +115,7 @@ class LearningReviewDialogV2(tk.Toplevel):
                 text=f"{summary} / {model}",
                 justify=tk.LEFT,
                 wraplength=420,
-            ).grid(
-                row=idx, column=1, sticky="ew", padx=4, pady=2
-            )
+            ).grid(row=idx, column=1, sticky="ew", padx=4, pady=2)
             rating_spin = ttk.Spinbox(table, from_=1, to=5, textvariable=rating_var, width=4)
             rating_spin.grid(row=idx, column=2, sticky=tk.W, padx=4, pady=2)
             tags_entry = ttk.Entry(table, textvariable=tags_var, width=24)

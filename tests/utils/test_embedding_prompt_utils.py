@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
-
 from src.utils.embedding_prompt_utils import (
     extract_embedding_entries,
     normalize_embedding_entries,

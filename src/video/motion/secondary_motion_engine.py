@@ -9,7 +9,6 @@ from PIL import Image
 
 from .secondary_motion_models import SecondaryMotionIntent, SecondaryMotionPolicy
 
-
 SECONDARY_MOTION_APPLY_SCHEMA_V1 = "stablenew.secondary-motion-apply.v1"
 
 
@@ -163,7 +162,7 @@ def apply_secondary_motion_to_frames(
         dy_values.append(dy)
         output_frames.append(_translate_frame(frame, dx, dy))
 
-    applied_count = sum(1 for dx, dy in zip(dx_values, dy_values) if dx or dy)
+    applied_count = sum(1 for dx, dy in zip(dx_values, dy_values, strict=False) if dx or dy)
     metrics = {
         "applied_frame_count": applied_count,
         "avg_abs_dx": round(sum(abs(dx) for dx in dx_values) / max(1, frames_in), 4),

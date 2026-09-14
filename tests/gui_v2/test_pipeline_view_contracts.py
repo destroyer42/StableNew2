@@ -9,11 +9,11 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     WORKSPACE_LEFT_COLUMN_MIN_WIDTH,
     WORKSPACE_RIGHT_COLUMN_MIN_WIDTH,
     get_form_min_width,
-    get_three_pane_workspace_column_specs,
     get_stage_card_min_width,
     get_three_pair_form_column_specs,
-    get_two_pane_workspace_column_specs,
+    get_three_pane_workspace_column_specs,
     get_two_pair_form_column_specs,
+    get_two_pane_workspace_column_specs,
     get_visible_stage_order,
     normalize_window_geometry,
 )

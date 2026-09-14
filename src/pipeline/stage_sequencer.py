@@ -163,7 +163,9 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
             ],
             run_id=(validated_train_config.get("metadata", {}) or {}).get("run_id")
             or validated_train_config.get("run_id"),
-            one_click_action=(validated_train_config.get("metadata", {}) or {}).get("one_click_action"),
+            one_click_action=(validated_train_config.get("metadata", {}) or {}).get(
+                "one_click_action"
+            ),
         )
 
     config = normalize_pipeline_config(config)
@@ -190,9 +192,9 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
     animatediff_enabled = pipeline_flags.get("animatediff_enabled", False) or _extract_enabled(
         config, "animatediff", False
     )
-    video_workflow_enabled = pipeline_flags.get("video_workflow_enabled", False) or _extract_enabled(
-        config, "video_workflow", False
-    )
+    video_workflow_enabled = pipeline_flags.get(
+        "video_workflow_enabled", False
+    ) or _extract_enabled(config, "video_workflow", False)
 
     order = 0
     generation_stages = []
@@ -261,9 +263,7 @@ def build_stage_execution_plan(config: dict[str, Any]) -> StageExecutionPlan:
 
     if animatediff_enabled:
         if not any(_is_image_producing_stage(stage) for stage in stages):
-            raise InvalidStagePlanError(
-                "AnimateDiff requires a preceding image-producing stage."
-            )
+            raise InvalidStagePlanError("AnimateDiff requires a preceding image-producing stage.")
         payload = _stage_payload(config, "animatediff")
         metadata = _build_stage_metadata(config, payload, stage="animatediff")
         stage = StageExecution(
@@ -336,7 +336,9 @@ def _normalize_stage_order(stages: list[StageExecution]) -> list[StageExecution]
     if video_workflows and not any(
         _is_image_producing_stage(stage) for stage in stages if stage.stage_type != "video_workflow"
     ):
-        raise InvalidStagePlanError("Video workflow stage requires a preceding image-producing stage.")
+        raise InvalidStagePlanError(
+            "Video workflow stage requires a preceding image-producing stage."
+        )
 
     order_map = {
         "train_lora": -1,
@@ -347,7 +349,9 @@ def _normalize_stage_order(stages: list[StageExecution]) -> list[StageExecution]
         "animatediff": 4,
         "video_workflow": 5,
     }
-    ordered = sorted(stages, key=lambda stage: (order_map.get(stage.stage_type, 99), stage.order_index))
+    ordered = sorted(
+        stages, key=lambda stage: (order_map.get(stage.stage_type, 99), stage.order_index)
+    )
     if ordered != stages:
         logger.warning("Stage plan order normalized to canonical runtime order.")
     return [replace(stage, order_index=index) for index, stage in enumerate(ordered)]

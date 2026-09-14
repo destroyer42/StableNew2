@@ -120,7 +120,9 @@ def test_save_review_feedback_stamps_embedded_review_metadata(tmp_path: Path) ->
     assert read_result.payload["user_rating"] == 4
 
 
-def test_save_review_feedback_falls_back_to_sidecar_when_embedding_is_unsupported(tmp_path: Path) -> None:
+def test_save_review_feedback_falls_back_to_sidecar_when_embedding_is_unsupported(
+    tmp_path: Path,
+) -> None:
     controller = _build_controller(tmp_path)
     image_path = tmp_path / "reviewed.bmp"
     image_path.write_bytes(b"not-a-real-bmp")
@@ -185,7 +187,9 @@ def test_get_prior_review_summary_prefers_internal_learning_record(tmp_path: Pat
     assert summary["review_record_id"] == record.run_id
 
 
-def test_import_review_images_to_staged_curation_carries_portable_review_summary(tmp_path: Path) -> None:
+def test_import_review_images_to_staged_curation_carries_portable_review_summary(
+    tmp_path: Path,
+) -> None:
     controller = _build_controller(tmp_path)
     image_path = tmp_path / "imported.png"
     _write_png(image_path)
@@ -201,7 +205,9 @@ def test_import_review_images_to_staged_curation_carries_portable_review_summary
         }
     )
 
-    group_id = controller.import_review_images_to_staged_curation([str(image_path)], display_name="Import Test")
+    group_id = controller.import_review_images_to_staged_curation(
+        [str(image_path)], display_name="Import Test"
+    )
     store = controller._get_discovered_store()  # noqa: SLF001
     experiment = store.load_group(group_id)
 
@@ -210,4 +216,3 @@ def test_import_review_images_to_staged_curation_carries_portable_review_summary
     assert isinstance(portable_review, dict)
     assert portable_review["user_rating"] == 4
     assert portable_review["quality_label"] == "good"
-

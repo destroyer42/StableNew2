@@ -1,8 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
-from unittest.mock import ANY
-from unittest.mock import MagicMock
+from unittest.mock import ANY, MagicMock
 
 
 def test_get_learning_controller_prefers_panel_reference() -> None:

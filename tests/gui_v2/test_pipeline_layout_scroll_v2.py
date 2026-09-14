@@ -335,5 +335,3 @@ def test_preview_panel_body_is_direct_child() -> None:
         assert body_parent == panel, "Body frame should be direct child of PreviewPanelV2"
     finally:
         root.destroy()
-
-

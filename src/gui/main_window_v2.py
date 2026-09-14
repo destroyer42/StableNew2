@@ -295,9 +295,10 @@ class MainWindowV2:
         # Learning tab (optional; attach via registry)
         def _make_learning(parent):
             import logging
-            logger = logging.getLogger(__name__)            
+
+            logger = logging.getLogger(__name__)
             logger.info("[MainWindow] Creating LearningTabFrame")
-            
+
             # Create with full parameters - no fallback, fail fast on errors
             tab = LearningTabFrame(
                 parent,
@@ -305,7 +306,7 @@ class MainWindowV2:
                 pipeline_controller=self.pipeline_controller,
                 app_controller=self.app_controller,
             )
-            
+
             logger.info("[MainWindow] LearningTabFrame created successfully")
             return tab
             # Wire controller if present
@@ -378,9 +379,7 @@ class MainWindowV2:
                 app_state=self.app_state,
             )
 
-        self.svd_tab = self.add_tab(
-            "svd", self._support_tab_title("svd", "SVD Img2Vid"), _make_svd
-        )
+        self.svd_tab = self.add_tab("svd", self._support_tab_title("svd", "SVD Img2Vid"), _make_svd)
         self._restore_svd_tab_state()
 
         def _make_video_workflow(parent):
@@ -482,7 +481,7 @@ class MainWindowV2:
 
         # --- UI Heartbeat: Tk thread liveness signal ---
         self._install_ui_heartbeat()
-        
+
         # Trigger deferred queue autostart after the GUI renders so restored
         # queued jobs actually resume when auto-run was enabled before shutdown.
         self.root.after(100, self._trigger_deferred_queue_autostart)
@@ -558,9 +557,7 @@ class MainWindowV2:
             if not isinstance(settings, dict):
                 settings = {}
             configured = (
-                settings.get("output_dir")
-                or getattr(controller, "output_dir", None)
-                or "output"
+                settings.get("output_dir") or getattr(controller, "output_dir", None) or "output"
             )
             return Path(str(configured)).expanduser()
 
@@ -670,34 +667,37 @@ class MainWindowV2:
 
     def _install_ui_heartbeat(self):
         """Install UI heartbeat ticker that runs every 250ms.
-        
+
         PR-HB-003: Enhanced with diagnostic logging and operation tracking.
         """
         tick_count = 0
         last_operation = None
-        
+
         def _tick():
             nonlocal tick_count, last_operation
             tick_count += 1
-            
+
             # Update controller heartbeat timestamp
             if self.app_controller and hasattr(self.app_controller, "update_ui_heartbeat"):
                 self.app_controller.update_ui_heartbeat()
-            
+
             # PR-HB-003: Log heartbeat diagnostics periodically or when operation changes
             if self.app_controller:
                 current_op = getattr(self.app_controller, "current_operation_label", None)
-                
+
                 # Log every 20 ticks (5 seconds) or when operation changes
-                should_log = (tick_count % 20 == 0) or (current_op != last_operation and current_op is not None)
-                
+                should_log = (tick_count % 20 == 0) or (
+                    current_op != last_operation and current_op is not None
+                )
+
                 if should_log:
                     import logging
+
                     logger = logging.getLogger(__name__)
                     op_text = current_op if current_op else "idle"
                     logger.debug(f"[UI] heartbeat tick #{tick_count} op={op_text}")
                     last_operation = current_op
-            
+
             self.root.after(250, _tick)
 
         self.root.after(250, _tick)
@@ -721,7 +721,9 @@ class MainWindowV2:
         if hasattr(self, "pipeline_tab") and hasattr(self.pipeline_tab, "sidebar"):
             try:
                 self.pipeline_tab.sidebar.controller = controller
-                base_generation_panel = getattr(self.pipeline_tab.sidebar, "base_generation_panel", None)
+                base_generation_panel = getattr(
+                    self.pipeline_tab.sidebar, "base_generation_panel", None
+                )
                 if base_generation_panel and hasattr(base_generation_panel, "_controller"):
                     base_generation_panel._controller = controller
             except Exception:
@@ -757,7 +759,9 @@ class MainWindowV2:
             try:
                 self.character_training_tab.app_controller = controller
                 self.character_training_tab.app_state = self.app_state
-                apply_defaults = getattr(self.character_training_tab, "apply_controller_defaults", None)
+                apply_defaults = getattr(
+                    self.character_training_tab, "apply_controller_defaults", None
+                )
                 if callable(apply_defaults):
                     apply_defaults()
             except Exception:
@@ -781,7 +785,7 @@ class MainWindowV2:
         ui_store = get_ui_state_store()
         state = ui_store.load_state()
         restored = False
-        
+
         if state:
             window_state = state.get("window", {})
             saved_geometry = window_state.get("geometry")
@@ -797,7 +801,7 @@ class MainWindowV2:
                 self.app_state.set_content_visibility_mode(visibility.mode)
             except Exception:
                 pass
-            
+
             if saved_geometry:
                 try:
                     if self._is_window_geometry_visible(saved_geometry):
@@ -811,13 +815,13 @@ class MainWindowV2:
                         )
                 except Exception as e:
                     logger.warning(f"Failed to restore window geometry: {e}")
-            
+
             if saved_state == "zoomed":
                 try:
                     self.root.state("zoomed")
                 except Exception:
                     pass
-        
+
         # If not restored, check current size and apply defaults if needed
         if not restored:
             try:
@@ -840,7 +844,9 @@ class MainWindowV2:
             pass
         self._capture_visible_window_geometry()
 
-    def _parse_window_geometry(self, geometry: str) -> tuple[int, int, int | None, int | None] | None:
+    def _parse_window_geometry(
+        self, geometry: str
+    ) -> tuple[int, int, int | None, int | None] | None:
         text = str(geometry or "").strip()
         if "x" not in text:
             return None
@@ -1207,7 +1213,7 @@ class MainWindowV2:
         if self._disposed:
             return
         self._disposed = True
-        
+
         # PR-PERSIST-001: Save UI state before cleanup
         try:
             self._save_ui_state()
@@ -1260,7 +1266,9 @@ class MainWindowV2:
         try:
             comfy_manager = getattr(self, "comfy_process_manager", None)
             if comfy_manager:
-                stop = getattr(comfy_manager, "shutdown", None) or getattr(comfy_manager, "stop", None)
+                stop = getattr(comfy_manager, "shutdown", None) or getattr(
+                    comfy_manager, "stop", None
+                )
                 if callable(stop):
                     stop()
         except Exception:
@@ -1390,7 +1398,8 @@ class MainWindowV2:
             config_manager=config_manager,
             status_text=status,
             content_visibility_mode=str(
-                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw") or "nsfw"
+                getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw")
+                or "nsfw"
             ),
             on_content_visibility_mode_change=self._apply_content_visibility_mode_from_settings,
             on_save=lambda values: self._handle_settings_saved(values, dialog),
@@ -1428,7 +1437,7 @@ class MainWindowV2:
         try:
             ui_store = get_ui_state_store()
             existing_state = ui_store.load_state() or {}
-            
+
             # Get window geometry and state
             geometry = self.root.geometry()
             window_state = "normal"
@@ -1458,16 +1467,11 @@ class MainWindowV2:
                 selected_tab_index = self.center_notebook.index(self.center_notebook.select())
             except Exception:
                 pass
-            
+
             state = {
                 **existing_state,
-                "window": {
-                    "geometry": geometry,
-                    "state": window_state
-                },
-                "tabs": {
-                    "selected_index": selected_tab_index
-                },
+                "window": {"geometry": geometry, "state": window_state},
+                "tabs": {"selected_index": selected_tab_index},
                 "content_visibility": ContentVisibilitySettings.from_payload(
                     {"mode": getattr(self.app_state, "content_visibility_mode", "nsfw")}
                 ).to_payload(),
@@ -1543,11 +1547,11 @@ class MainWindowV2:
         try:
             ui_store = get_ui_state_store()
             state = ui_store.load_state()
-            
+
             if state:
                 tabs_state = state.get("tabs", {})
                 selected_index = tabs_state.get("selected_index", 0)
-                
+
                 # Validate index is in range
                 tab_count = self.center_notebook.index("end")
                 if 0 <= selected_index < tab_count:

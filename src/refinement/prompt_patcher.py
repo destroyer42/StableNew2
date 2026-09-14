@@ -3,7 +3,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from src.prompting.prompt_splitter import detect_lora_syntax, detect_weight_syntax, split_prompt_chunks
+from src.prompting.prompt_splitter import (
+    detect_lora_syntax,
+    detect_weight_syntax,
+    split_prompt_chunks,
+)
 from src.utils.embedding_prompt_utils import extract_embedding_entries
 
 
@@ -125,9 +129,11 @@ def _apply_prompt_side(
     applied_add: list[str] = []
     for token in safe_add:
         normalized = _normalize_token(token)
-        if not normalized or normalized in normalized_existing or normalized in {
-            _normalize_token(chunk) for chunk in kept_chunks
-        }:
+        if (
+            not normalized
+            or normalized in normalized_existing
+            or normalized in {_normalize_token(chunk) for chunk in kept_chunks}
+        ):
             continue
         kept_chunks.append(token)
         applied_add.append(token)

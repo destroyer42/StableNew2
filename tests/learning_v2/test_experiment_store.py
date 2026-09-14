@@ -26,8 +26,12 @@ def test_experiment_store_round_trip(tmp_path: Path) -> None:
 def test_experiment_store_tracks_last_experiment_and_lists_handles(tmp_path: Path) -> None:
     store = LearningExperimentStore(tmp_path / "experiments")
 
-    first = store.save_session(display_name="First", payload={"current_experiment": {"name": "First"}})
-    second = store.save_session(display_name="Second", payload={"current_experiment": {"name": "Second"}})
+    first = store.save_session(
+        display_name="First", payload={"current_experiment": {"name": "First"}}
+    )
+    second = store.save_session(
+        display_name="Second", payload={"current_experiment": {"name": "Second"}}
+    )
 
     last = store.load_last_session()
     assert last is not None

@@ -109,8 +109,6 @@ def test_run_config_reports_prompt_pack_when_present():
     controller = DummyAppController(FakePipelineController())
     controller.app_state.job_draft.pack_id = "pack-xyz"
     controller.start_run_v2()
-    run_config = assert_last_run_config(
-        controller, RunMode.QUEUE.value, RunSource.RUN_BUTTON.value
-    )
+    run_config = assert_last_run_config(controller, RunMode.QUEUE.value, RunSource.RUN_BUTTON.value)
     assert run_config["prompt_source"] == "pack"
     assert run_config["prompt_pack_id"] == "pack-xyz"

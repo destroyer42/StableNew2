@@ -1,11 +1,12 @@
-﻿# Subsystem: Learning
+# Subsystem: Learning
 # Role: Renders a table of learning plans and planned runs.
 
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Any, Callable
+from typing import Any
 
 from src.gui.learning_state import LearningVariant
 

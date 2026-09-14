@@ -6,8 +6,8 @@ import pytest
 
 from src.learning.learning_plan import (
     LearningPlan,
-    build_prompt_optimizer_preset_plan,
     build_learning_plan_from_dict,
+    build_prompt_optimizer_preset_plan,
 )
 
 

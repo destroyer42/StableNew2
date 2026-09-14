@@ -2,7 +2,11 @@ from __future__ import annotations
 
 import pytest
 
-from src.video.comfy_healthcheck import ComfyHealthCheckTimeout, validate_comfy_health, wait_for_comfy_ready
+from src.video.comfy_healthcheck import (
+    ComfyHealthCheckTimeout,
+    validate_comfy_health,
+    wait_for_comfy_ready,
+)
 
 
 class _Response:

@@ -43,10 +43,7 @@ def _as_snapshot(proc: Any) -> _ProcessSnapshot | None:
             name = str(info.get("name") or "")
             cmdline = " ".join(str(item) for item in info.get("cmdline") or [])
             cwd = str(info.get("cwd") or "")
-            environ = {
-                str(key): str(value)
-                for key, value in (info.get("environ") or {}).items()
-            }
+            environ = {str(key): str(value) for key, value in (info.get("environ") or {}).items()}
             return _ProcessSnapshot(
                 pid=pid,
                 parent_pid=int(parent_pid) if parent_pid is not None else None,
@@ -105,9 +102,7 @@ def _collect_snapshots() -> list[_ProcessSnapshot]:
         return []
     snapshots: list[_ProcessSnapshot] = []
     try:
-        iterator = psutil.process_iter(
-            attrs=["pid", "ppid", "name", "cmdline", "cwd", "environ"]
-        )
+        iterator = psutil.process_iter(attrs=["pid", "ppid", "name", "cmdline", "cwd", "environ"])
         for proc in iterator:
             snapshot = _as_snapshot(proc)
             if snapshot is not None:

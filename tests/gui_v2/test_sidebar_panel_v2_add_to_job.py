@@ -120,7 +120,9 @@ def test_add_to_job_resolves_visible_pack_after_visibility_toggle_with_stale_con
         sidebar._on_add_to_job()
         tk_root.update()
 
-        draft_prompts = [entry.prompt_text for entry in harness.controller.app_state.job_draft.packs]
+        draft_prompts = [
+            entry.prompt_text for entry in harness.controller.app_state.job_draft.packs
+        ]
         assert draft_prompts == ["safe prompt one", "safe prompt two"]
     finally:
         harness.cleanup()

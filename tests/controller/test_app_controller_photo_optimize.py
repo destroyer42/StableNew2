@@ -82,17 +82,32 @@ def test_on_optimize_photo_assets_groups_by_compatible_baseline(tmp_path: Path) 
         {
             "asset_id": "asset_a",
             "input_image_path": str(image_a),
-            "baseline": {"prompt": "portrait", "negative_prompt": "", "model": "modelA", "config": {}},
+            "baseline": {
+                "prompt": "portrait",
+                "negative_prompt": "",
+                "model": "modelA",
+                "config": {},
+            },
         },
         {
             "asset_id": "asset_b",
             "input_image_path": str(image_b),
-            "baseline": {"prompt": "portrait", "negative_prompt": "", "model": "modelA", "config": {}},
+            "baseline": {
+                "prompt": "portrait",
+                "negative_prompt": "",
+                "model": "modelA",
+                "config": {},
+            },
         },
         {
             "asset_id": "asset_c",
             "input_image_path": str(image_c),
-            "baseline": {"prompt": "portrait", "negative_prompt": "", "model": "modelB", "config": {}},
+            "baseline": {
+                "prompt": "portrait",
+                "negative_prompt": "",
+                "model": "modelB",
+                "config": {},
+            },
         },
     ]
 
@@ -121,7 +136,9 @@ def test_photo_optimize_completion_records_asset_history_and_refreshes_ui(tmp_pa
     store = PhotoOptimizeStore(tmp_path / "photo_optimize")
     source = tmp_path / "source" / "portrait.png"
     _write_image(source)
-    asset = store.import_photo(source, baseline_defaults={"prompt": "portrait", "negative_prompt": "blurry"})
+    asset = store.import_photo(
+        source, baseline_defaults={"prompt": "portrait", "negative_prompt": "blurry"}
+    )
 
     staging = store.create_staging_run_dir("photo_optimize")
     output = staging / "img2img" / "portrait_fix.png"
@@ -130,7 +147,9 @@ def test_photo_optimize_completion_records_asset_history_and_refreshes_ui(tmp_pa
 
     refreshed: list[list[str]] = []
     controller.main_window = SimpleNamespace(
-        photo_optimize_tab=SimpleNamespace(on_assets_updated=lambda asset_ids: refreshed.append(list(asset_ids)))
+        photo_optimize_tab=SimpleNamespace(
+            on_assets_updated=lambda asset_ids: refreshed.append(list(asset_ids))
+        )
     )
 
     job = SimpleNamespace(

@@ -21,7 +21,9 @@ class _RecordingJobService:
         return ["job-svd-integration"]
 
 
-def test_svd_submission_round_trips_from_controller_into_pipeline_runner(tmp_path: Path, monkeypatch) -> None:
+def test_svd_submission_round_trips_from_controller_into_pipeline_runner(
+    tmp_path: Path, monkeypatch
+) -> None:
     source_path = tmp_path / "source.png"
     source_path.write_bytes(b"png")
 
@@ -76,7 +78,10 @@ def test_svd_submission_round_trips_from_controller_into_pipeline_runner(tmp_pat
     assert njr.stage_chain[0].sampler_name == "native"
     assert njr.stage_chain[0].extra["inference"]["model_id"] == config.inference.model_id
     assert njr.stage_chain[0].extra["inference"]["num_frames"] == 14
-    assert njr.stage_chain[0].extra["inference"]["motion_bucket_id"] == config.inference.motion_bucket_id
+    assert (
+        njr.stage_chain[0].extra["inference"]["motion_bucket_id"]
+        == config.inference.motion_bucket_id
+    )
 
     runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
     pipeline = Mock()

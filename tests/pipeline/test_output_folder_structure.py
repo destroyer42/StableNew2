@@ -49,9 +49,7 @@ class TestOutputFolderStructure:
         )
         return runner
 
-    def test_datetime_pack_name_folder_structure(
-        self, pipeline_runner, temp_output_dir
-    ):
+    def test_datetime_pack_name_folder_structure(self, pipeline_runner, temp_output_dir):
         """
         Test that output folder structure is: output/{YYYYMMDD_HHMMSS}/{pack_name}/
         """
@@ -104,15 +102,15 @@ class TestOutputFolderStructure:
                 pack_folder = folder
                 break
 
-        assert pack_folder is not None, f"Pack folder not found. Found: {[f.name for f in output_folders]}"
+        assert pack_folder is not None, (
+            f"Pack folder not found. Found: {[f.name for f in output_folders]}"
+        )
         assert pack_folder.is_dir()
 
         # Verify it's a datetime format (starts with YYYYMMDD)
         assert pack_folder.name[:8].isdigit(), f"Expected datetime prefix, got {pack_folder.name}"
 
-    def test_manifests_subfolder_created(
-        self, pipeline_runner, temp_output_dir
-    ):
+    def test_manifests_subfolder_created(self, pipeline_runner, temp_output_dir):
         """
         Test that the run_dir structure allows for manifests/ subfolder.
         (Actual manifests creation happens in executor methods when real API is called)
@@ -164,7 +162,9 @@ class TestOutputFolderStructure:
                 pack_folder = folder
                 break
 
-        assert pack_folder is not None, f"Pack folder not found. Found: {[f.name for f in output_folders]}"
+        assert pack_folder is not None, (
+            f"Pack folder not found. Found: {[f.name for f in output_folders]}"
+        )
         assert pack_folder.is_dir(), "Pack folder is not a directory"
 
         # Verify that manifests subfolder was created by pipeline_runner.__init__
@@ -173,9 +173,7 @@ class TestOutputFolderStructure:
         assert manifests_folder.exists(), "manifests/ subfolder not created by pipeline_runner"
         assert manifests_folder.is_dir(), "manifests/ is not a directory"
 
-    def test_sanitized_pack_name(
-        self, pipeline_runner, temp_output_dir
-    ):
+    def test_sanitized_pack_name(self, pipeline_runner, temp_output_dir):
         """
         Test that pack names with special characters are sanitized for filesystem.
         """
@@ -224,15 +222,18 @@ class TestOutputFolderStructure:
                 pack_folder = folder
                 break
 
-        assert pack_folder is not None, f"Sanitized pack folder not found. Found: {[f.name for f in output_folders]}"
+        assert pack_folder is not None, (
+            f"Sanitized pack folder not found. Found: {[f.name for f in output_folders]}"
+        )
 
         # Verify no special characters in folder name (only alphanumeric, -, _)
         import re
-        assert re.match(r'^[a-zA-Z0-9_-]+$', pack_folder.name), f"Folder name contains special chars: {pack_folder.name}"
 
-    def test_fallback_to_job_id_when_no_pack_name(
-        self, pipeline_runner, temp_output_dir
-    ):
+        assert re.match(r"^[a-zA-Z0-9_-]+$", pack_folder.name), (
+            f"Folder name contains special chars: {pack_folder.name}"
+        )
+
+    def test_fallback_to_job_id_when_no_pack_name(self, pipeline_runner, temp_output_dir):
         """
         Test that job_id is used when prompt_pack_name is empty.
         """
@@ -280,11 +281,11 @@ class TestOutputFolderStructure:
                 pack_folder = folder
                 break
 
-        assert pack_folder is not None, f"Job ID folder not found. Found: {[f.name for f in output_folders]}"
+        assert pack_folder is not None, (
+            f"Job ID folder not found. Found: {[f.name for f in output_folders]}"
+        )
 
-    def test_multiple_jobs_same_pack_share_folder(
-        self, pipeline_runner, temp_output_dir
-    ):
+    def test_multiple_jobs_same_pack_share_folder(self, pipeline_runner, temp_output_dir):
         """
         Test that multiple jobs from the same prompt pack share the same output folder.
         """
@@ -329,7 +330,7 @@ class TestOutputFolderStructure:
             pipeline_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_results[i])
             result = pipeline_runner.run_njr(njr)
             assert result.success is True
-            
+
             # Track which folder was used
             output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
             for folder in output_folders:
@@ -337,16 +338,15 @@ class TestOutputFolderStructure:
                     folder_paths.add(str(folder))
 
         # All 3 jobs should use the SAME folder (consolidated by pack)
-        assert len(folder_paths) == 1, f"Expected 1 shared folder, found {len(folder_paths)}: {folder_paths}"
-        
+        assert len(folder_paths) == 1, (
+            f"Expected 1 shared folder, found {len(folder_paths)}: {folder_paths}"
+        )
+
         # Verify the shared folder contains files from all 3 jobs
-        shared_folder = self._pipeline_route_root(temp_output_dir) / list(folder_paths)[0].split("/")[-1]
         # Note: Files are actually saved by executor, not by pipeline_runner in this mock setup
         # So we just verify the folder reuse logic worked
 
-    def test_different_packs_get_different_folders(
-        self, pipeline_runner, temp_output_dir
-    ):
+    def test_different_packs_get_different_folders(self, pipeline_runner, temp_output_dir):
         """
         Test that jobs from different packs get different folders.
         """
@@ -418,7 +418,7 @@ class TestOutputFolderStructure:
         output_folders = list(self._pipeline_route_root(temp_output_dir).iterdir())
         pack_a_folder = None
         pack_b_folder = None
-        
+
         for folder in output_folders:
             if "PackA" in folder.name:
                 pack_a_folder = folder

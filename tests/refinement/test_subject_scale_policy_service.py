@@ -6,7 +6,10 @@ import pytest
 from PIL import Image
 
 from src.refinement.detectors.base_detector import SubjectDetector
-from src.refinement.subject_scale_policy_service import SubjectScalePolicyConfig, SubjectScalePolicyService
+from src.refinement.subject_scale_policy_service import (
+    SubjectScalePolicyConfig,
+    SubjectScalePolicyService,
+)
 
 
 def test_subject_scale_policy_service_builds_observation_bundle_with_null_detector() -> None:
@@ -53,7 +56,9 @@ class _FixedDetector(SubjectDetector):
         return self._detections
 
 
-def test_subject_scale_policy_service_assigns_scale_band_from_detection_size(tmp_path: Path) -> None:
+def test_subject_scale_policy_service_assigns_scale_band_from_detection_size(
+    tmp_path: Path,
+) -> None:
     image_path = tmp_path / "subject.png"
     Image.new("RGB", (100, 100), color="white").save(image_path)
     service = SubjectScalePolicyService(

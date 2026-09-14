@@ -56,11 +56,7 @@ def _git_paths(*args: str) -> tuple[str, ...]:
         check=True,
         capture_output=True,
     )
-    return tuple(
-        os.fsdecode(raw_path)
-        for raw_path in result.stdout.split(b"\0")
-        if raw_path
-    )
+    return tuple(os.fsdecode(raw_path) for raw_path in result.stdout.split(b"\0") if raw_path)
 
 
 def _file_digest(path: Path) -> str:
@@ -191,10 +187,7 @@ def main() -> int:
         (
             "--collect-only",
             "-q",
-            *(
-                f"--ignore={repository_test_target(path)}"
-                for path in DEFAULT_COLLECTION_EXCLUDES
-            ),
+            *(f"--ignore={repository_test_target(path)}" for path in DEFAULT_COLLECTION_EXCLUDES),
             repository_test_target("tests"),
         )
     )

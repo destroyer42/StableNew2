@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from tkinter import ttk
-from typing import Any, Callable
+from typing import Any
 
 from src.gui.state import PipelineState
 
@@ -68,9 +69,7 @@ class PipelineConfigPanel(ttk.Frame):
             textvariable=self.randomizer_var,
         )
         rand_combo.pack(anchor="w", pady=(0, 4))
-        rand_combo.bind(
-            "<<ComboboxSelected>>", lambda _event: self._on_randomizer_change()
-        )
+        rand_combo.bind("<<ComboboxSelected>>", lambda _event: self._on_randomizer_change())
 
         ttk.Label(self, text="Max Variants").pack(anchor="w")
         self.max_variants_var = tk.IntVar(value=self.pipeline_state.max_variants)
@@ -217,17 +216,13 @@ class PipelineConfigPanel(ttk.Frame):
 
     def _on_lora_enabled_change(self, lora_name: str, enabled: bool) -> None:
         current_settings = self.pipeline_state.get_lora_setting(lora_name)
-        self.pipeline_state.set_lora_setting(
-            lora_name, enabled, current_settings.strength
-        )
+        self.pipeline_state.set_lora_setting(lora_name, enabled, current_settings.strength)
         if callable(self._on_change):
             self._on_change()
 
     def _on_lora_strength_change(self, lora_name: str, strength: float) -> None:
         current_settings = self.pipeline_state.get_lora_setting(lora_name)
-        self.pipeline_state.set_lora_setting(
-            lora_name, current_settings.enabled, strength
-        )
+        self.pipeline_state.set_lora_setting(lora_name, current_settings.enabled, strength)
         if callable(self._on_change):
             self._on_change()
 

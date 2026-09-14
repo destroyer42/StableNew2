@@ -71,7 +71,10 @@ def test_reprocess_with_prompt_delta_uses_metadata_baseline(tmp_path) -> None:
     assert njr.config["vae"] == "vaeA"
     assert njr.config["txt2img"]["model"] == "modelA.safetensors"
     assert njr.extra_metadata["reprocess"]["source"] == "review_tab"
-    assert njr.extra_metadata["reprocess"]["source_items"][0]["metadata"]["baseline_source"] == "embedded_metadata"
+    assert (
+        njr.extra_metadata["reprocess"]["source_items"][0]["metadata"]["baseline_source"]
+        == "embedded_metadata"
+    )
 
 
 def test_reprocess_with_prompt_replace_uses_fallback_without_metadata(tmp_path) -> None:
@@ -177,7 +180,10 @@ def test_reprocess_with_prompt_modify_short_delta_preserves_baseline(tmp_path) -
     njr = controller.job_service._enqueue_calls[0][0][0]
     assert njr.positive_prompt == "portrait photo, studio lighting, better teeth"
     assert njr.negative_prompt == "extra tongue"
-    assert njr.config["adetailer"]["adetailer_prompt"] == "portrait photo, studio lighting, better teeth"
+    assert (
+        njr.config["adetailer"]["adetailer_prompt"]
+        == "portrait photo, studio lighting, better teeth"
+    )
     assert njr.config["adetailer"]["adetailer_negative_prompt"] == "extra tongue"
 
 
@@ -313,4 +319,6 @@ def test_submit_image_edits_builds_masked_img2img_jobs(tmp_path) -> None:
     assert njr.positive_prompt == "portrait photo, fix eyes"
     assert njr.negative_prompt == "blurry, extra iris"
     assert njr.extra_metadata["image_edit"]["schema"] == "stablenew.image_edit.v2.6"
-    assert njr.extra_metadata["reprocess"]["source_items"][0]["image_edit"]["mask_image_path"] == str(mask)
+    assert njr.extra_metadata["reprocess"]["source_items"][0]["image_edit"][
+        "mask_image_path"
+    ] == str(mask)

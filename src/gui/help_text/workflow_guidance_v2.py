@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerContent
 
-
 REVIEW_DEFAULT_WORKFLOW_HINT = (
     "Review is the canonical advanced reprocess workspace. Use Learning when the goal is evidence capture, "
     "batch triage, or discovered/imported group review instead of immediate reprocessing."
@@ -71,7 +70,9 @@ def build_staged_review_guidance() -> ActionExplainerContent:
     )
 
 
-def get_staged_queue_runtime_guidance(refine_count: int, face_count: int, upscale_count: int) -> str:
+def get_staged_queue_runtime_guidance(
+    refine_count: int, face_count: int, upscale_count: int
+) -> str:
     return (
         "Queue Now is the bulk staged-curation path after triage: "
         f"refine={refine_count}, face={face_count}, upscale={upscale_count}. "
@@ -79,7 +80,9 @@ def get_staged_queue_runtime_guidance(refine_count: int, face_count: int, upscal
     )
 
 
-def get_staged_review_runtime_guidance(selected_target: str | None, marked_count: int | None = None) -> str:
+def get_staged_review_runtime_guidance(
+    selected_target: str | None, marked_count: int | None = None
+) -> str:
     if selected_target is None:
         return (
             "Edit in Review stays single-candidate so you can make deliberate prompt or stage edits before anything is queued. "
@@ -88,9 +91,7 @@ def get_staged_review_runtime_guidance(selected_target: str | None, marked_count
 
     target_label = selected_target.replace("_", " ")
     if marked_count is None:
-        return (
-            "Edit in Review opens the selected candidate only. Select one candidate marked for a derived stage when you need deliberate edits instead of the bulk Queue Now path."
-        )
+        return "Edit in Review opens the selected candidate only. Select one candidate marked for a derived stage when you need deliberate edits instead of the bulk Queue Now path."
 
     return (
         f"Edit in Review opens only the selected {target_label} candidate for deliberate edits. "
@@ -100,12 +101,8 @@ def get_staged_review_runtime_guidance(selected_target: str | None, marked_count
 
 def get_review_handoff_hint(image_count: int) -> str:
     if image_count == 1:
-        return (
-            "Staged Curation handoff: deliberate single-candidate edit in Review. Use Queue Now in Learning when the full marked set is ready for bulk throughput."
-        )
-    return (
-        "Staged Curation handoff loaded in Review. Stay here for deliberate per-image edits; use Queue Now in Learning when the goal is bulk throughput for the marked set."
-    )
+        return "Staged Curation handoff: deliberate single-candidate edit in Review. Use Queue Now in Learning when the full marked set is ready for bulk throughput."
+    return "Staged Curation handoff loaded in Review. Stay here for deliberate per-image edits; use Queue Now in Learning when the goal is bulk throughput for the marked set."
 
 
 def build_svd_workflow_guidance() -> ActionExplainerContent:

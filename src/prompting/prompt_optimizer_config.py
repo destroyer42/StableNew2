@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
-from typing import Any, Dict
+from typing import Any
 
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 from src.prompting.prompt_optimizer_errors import PromptConfigError
@@ -36,13 +36,13 @@ class PromptOptimizerConfig:
         if any(not isinstance(item, str) for item in self.opt_out_pipeline_names):
             raise PromptConfigError("opt_out_pipeline_names must only contain strings")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload["opt_out_pipeline_names"] = list(self.opt_out_pipeline_names or [])
         return payload
 
     @classmethod
-    def from_dict(cls, payload: Dict[str, Any] | None) -> "PromptOptimizerConfig":
+    def from_dict(cls, payload: dict[str, Any] | None) -> PromptOptimizerConfig:
         data = dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS)
         for key, value in dict(payload or {}).items():
             if key in data:

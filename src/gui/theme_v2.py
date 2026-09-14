@@ -36,9 +36,9 @@ VALIDATION_ERROR_FG = TEXT_PRIMARY
 
 # PR-PIPE-003: Feedback colors for visual polish
 HIGHLIGHT_SUCCESS = TOKENS.colors.status_success  # Green flash for successful operations
-HIGHLIGHT_MOVE = TOKENS.colors.status_info     # Blue flash for move operations
+HIGHLIGHT_MOVE = TOKENS.colors.status_info  # Blue flash for move operations
 HIGHLIGHT_WARNING = TOKENS.colors.status_warning  # Orange for warnings
-HIGHLIGHT_DURATION_MS = 300    # Default flash duration
+HIGHLIGHT_DURATION_MS = 300  # Default flash duration
 
 CARD_FRAME_STYLE = design_system.CARD_FRAME
 SURFACE_FRAME_STYLE = design_system.SECTION_FRAME

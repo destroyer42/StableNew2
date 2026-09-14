@@ -215,7 +215,7 @@ class TestADetailerResourcesRegression:
     def test_regression_empty_dropdowns_prevented(self):
         """
         REGRESSION TEST: Ensure dropdowns never end up empty.
-        
+
         Background: User reported ADetailer dropdowns showed only default 3 models
         instead of all ~10 available. This ensures we always have comprehensive defaults.
         """
@@ -234,7 +234,7 @@ class TestADetailerResourcesRegression:
     def test_regression_models_and_detectors_consistent(self):
         """
         REGRESSION TEST: Ensure model and detector dropdowns show same list.
-        
+
         Background: User confusion about two dropdowns. ADetailer extension only
         uses ad_model parameter, so both dropdowns should show detection models.
         """

@@ -17,4 +17,3 @@ def test_lora_scan_regenerates_without_repository_cache(tmp_path, monkeypatch):
 
     assert set(resources) == {"example"}
     assert cache_file.exists()
-

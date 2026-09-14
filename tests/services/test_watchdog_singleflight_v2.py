@@ -39,4 +39,3 @@ def test_watchdog_start_is_single_instance_per_process(monkeypatch) -> None:
     assert started == ["started"]
 
     first.stop()
-

@@ -8,10 +8,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.utils.prompt_pack_utils import resolve_matrix_slot_value
-
 from src.pipeline.prompt_pack_parser import PackRow
 from src.utils.embedding_prompt_utils import render_embedding_reference
+from src.utils.prompt_pack_utils import resolve_matrix_slot_value
 
 MAX_PREVIEW_PROMPT_LENGTH = 120
 
@@ -44,7 +43,9 @@ def _dedupe_lora_tags(tags: Iterable[tuple[str, float]]) -> tuple[tuple[str, flo
     return tuple(deduped)
 
 
-def _actor_trigger_phrases(actor_resolutions: Iterable[Mapping[str, Any]] | None) -> tuple[str, ...]:
+def _actor_trigger_phrases(
+    actor_resolutions: Iterable[Mapping[str, Any]] | None,
+) -> tuple[str, ...]:
     phrases: list[str] = []
     seen: set[str] = set()
     for actor in list(actor_resolutions or []):
@@ -84,7 +85,9 @@ def _style_lora_tags(style_lora: Mapping[str, Any] | None) -> tuple[tuple[str, f
     return ((lora_name, weight),)
 
 
-def _actor_lora_tags(actor_resolutions: Iterable[Mapping[str, Any]] | None) -> tuple[tuple[str, float], ...]:
+def _actor_lora_tags(
+    actor_resolutions: Iterable[Mapping[str, Any]] | None,
+) -> tuple[tuple[str, float], ...]:
     tags: list[tuple[str, float]] = []
     for actor in list(actor_resolutions or []):
         lora_name = str(actor.get("lora_name") or "").strip()
@@ -267,7 +270,7 @@ class UnifiedPromptResolver:
         # Apply matrix token substitution to both quality_line and subject_template
         subject = self._substitute_matrix_tokens(pack_row.subject_template, matrix_slot_values)
         quality = self._substitute_matrix_tokens(pack_row.quality_line, matrix_slot_values)
-        
+
         actor_trigger_phrases = list(_actor_trigger_phrases(actor_resolutions))
         style_trigger_phrase = _style_trigger_phrase(style_lora)
         if style_trigger_phrase:
@@ -281,7 +284,9 @@ class UnifiedPromptResolver:
         positive_parts: list[str] = []
         # Render embeddings with weights
         if pack_row.embeddings:
-            positive_parts.extend(render_embedding_reference(name, weight) for name, weight in pack_row.embeddings)
+            positive_parts.extend(
+                render_embedding_reference(name, weight) for name, weight in pack_row.embeddings
+            )
         if actor_trigger_phrases:
             positive_parts.append(", ".join(actor_trigger_phrases))
         if quality:  # Use substituted quality_line
@@ -292,7 +297,7 @@ class UnifiedPromptResolver:
             positive_parts.append(lora_tokens)
 
         positive = " ".join(part for part in positive_parts if part).strip()
-        
+
         # BUGFIX: Ensure positive prompt is never empty - prevents negative becoming positive
         if not positive:
             positive = "professional photo, high quality"
@@ -307,7 +312,10 @@ class UnifiedPromptResolver:
             negative_parts.append(pack_negative.strip())
         # Fix: Wrap negative embeddings in <embedding:> syntax
         if pack_row.negative_embeddings:
-            negative_parts.extend(render_embedding_reference(name, weight) for name, weight in pack_row.negative_embeddings)
+            negative_parts.extend(
+                render_embedding_reference(name, weight)
+                for name, weight in pack_row.negative_embeddings
+            )
         negative_parts.extend(phrase for phrase in pack_row.negative_phrases if phrase)
         if self._safety_negative:
             negative_parts.append(self._safety_negative)

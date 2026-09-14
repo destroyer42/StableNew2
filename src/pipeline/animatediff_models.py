@@ -6,7 +6,6 @@ import json
 from dataclasses import dataclass, field
 from typing import Any
 
-
 _ANIMATEDIFF_SCRIPT_KEY = "AnimateDiff"
 _SDXL_MOTION_MODULE_CANDIDATES = (
     "mm_sdxl_hs.safetensors",

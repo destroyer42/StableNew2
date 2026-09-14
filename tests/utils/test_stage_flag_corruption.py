@@ -3,22 +3,24 @@
 import json
 import tempfile
 from pathlib import Path
+
 from src.utils.config import ConfigManager
+
 
 def test_stage_flags_preserved_on_load():
     """Test that stage flags are preserved when loading pack config."""
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmpdir_path = Path(tmpdir)
         presets_dir = tmpdir_path / "presets"
         presets_dir.mkdir()
-        
+
         # Create a pack JSON with specific stage flags
         pack_json = {
             "pack_data": {
                 "name": "test_pack",
                 "slots": [],
-                "matrix": {"enabled": False, "mode": "fanout", "limit": 8, "slots": []}
+                "matrix": {"enabled": False, "mode": "fanout", "limit": 8, "slots": []},
             },
             "preset_data": {
                 "txt2img": {
@@ -31,46 +33,46 @@ def test_stage_flags_preserved_on_load():
                     "img2img_enabled": False,
                     "adetailer_enabled": True,  # ← ENABLED
                     "upscale_enabled": True,
-                }
-            }
+                },
+            },
         }
-        
+
         # Save to packs/test_pack.json
         packs_dir = Path("packs")
         packs_dir.mkdir(exist_ok=True)
         pack_path = packs_dir / "test_pack.json"
         with open(pack_path, "w", encoding="utf-8") as f:
             json.dump(pack_json, f, indent=2)
-        
+
         # Create ConfigManager
         config_mgr = ConfigManager(presets_dir=presets_dir)
-        
+
         # Load the pack config
         loaded_config = config_mgr.load_pack_config("test_pack.txt")
-        
-        print("\n" + "="*60)
+
+        print("\n" + "=" * 60)
         print("TEST: Stage Flag Preservation on Load")
-        print("="*60)
-        
+        print("=" * 60)
+
         print("\nSaved flags:")
-        print(f"  txt2img_enabled: True")
-        print(f"  img2img_enabled: False")
-        print(f"  adetailer_enabled: True  <- ENABLED")
-        print(f"  upscale_enabled: True")
-        
+        print("  txt2img_enabled: True")
+        print("  img2img_enabled: False")
+        print("  adetailer_enabled: True  <- ENABLED")
+        print("  upscale_enabled: True")
+
         print("\nLoaded flags:")
         pipeline_section = loaded_config.get("pipeline", {})
         print(f"  txt2img_enabled: {pipeline_section.get('txt2img_enabled')}")
         print(f"  img2img_enabled: {pipeline_section.get('img2img_enabled')}")
         print(f"  adetailer_enabled: {pipeline_section.get('adetailer_enabled')}")
         print(f"  upscale_enabled: {pipeline_section.get('upscale_enabled')}")
-        
+
         # Check for corruption
-        txt2img_ok = pipeline_section.get("txt2img_enabled") == True
-        img2img_ok = pipeline_section.get("img2img_enabled") == False
-        adetailer_ok = pipeline_section.get("adetailer_enabled") == True
-        upscale_ok = pipeline_section.get("upscale_enabled") == True
-        
+        txt2img_ok = pipeline_section.get("txt2img_enabled")
+        img2img_ok = not pipeline_section.get("img2img_enabled")
+        adetailer_ok = pipeline_section.get("adetailer_enabled")
+        upscale_ok = pipeline_section.get("upscale_enabled")
+
         if txt2img_ok and img2img_ok and adetailer_ok and upscale_ok:
             print("\n[OK] TEST PASSED: All flags preserved correctly!")
         else:
@@ -80,12 +82,15 @@ def test_stage_flags_preserved_on_load():
             if not img2img_ok:
                 print(f"  - img2img should be False, got {pipeline_section.get('img2img_enabled')}")
             if not adetailer_ok:
-                print(f"  - adetailer should be True, got {pipeline_section.get('adetailer_enabled')}")
+                print(
+                    f"  - adetailer should be True, got {pipeline_section.get('adetailer_enabled')}"
+                )
             if not upscale_ok:
                 print(f"  - upscale should be True, got {pipeline_section.get('upscale_enabled')}")
-        
+
         # Cleanup
         pack_path.unlink()
+
 
 if __name__ == "__main__":
     test_stage_flags_preserved_on_load()

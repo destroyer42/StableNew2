@@ -13,7 +13,6 @@ from typing import Any
 
 from src.config.prompting_defaults import DEFAULT_PROMPT_OPTIMIZER_SETTINGS
 
-
 PROMPT_OPTIMIZER_PRESET_BASELINE_ID = "baseline_safe_v1"
 PROMPT_OPTIMIZER_PRESET_SCORE_ID = "score_classifier_v1"
 PROMPT_OPTIMIZER_PRESET_ANCHOR_ID = "subject_anchor_v1"
@@ -86,7 +85,7 @@ def propose_new_defaults(dataset: Any) -> dict[str, Any]:
             continue
         learning_meta = row.get("prompt_optimizer_learning")
         if not isinstance(learning_meta, dict):
-            learning_meta = ((row.get("metadata") or {}).get("prompt_optimizer_learning"))
+            learning_meta = (row.get("metadata") or {}).get("prompt_optimizer_learning")
         if not isinstance(learning_meta, dict):
             continue
         preset_id = str(learning_meta.get("preset_id") or "").strip()

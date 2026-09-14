@@ -5,7 +5,6 @@ import pathlib
 
 import pytest
 
-
 MOTION_ROOT = pathlib.Path(__file__).resolve().parents[2] / "src" / "video" / "motion"
 
 IMPORT_BLOCKLIST = {

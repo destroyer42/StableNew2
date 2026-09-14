@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-
 DEFAULT_STYLE_LORA_CATALOG_PATH = Path("data") / "style_loras.json"
 
 
@@ -89,9 +88,7 @@ def load_style_lora_definitions(
         if not isinstance(raw_entry, Mapping):
             continue
         style_id = _normalize_text(
-            raw_entry.get("style_id")
-            or raw_entry.get("id")
-            or raw_entry.get("name")
+            raw_entry.get("style_id") or raw_entry.get("id") or raw_entry.get("name")
         )
         if not style_id:
             continue
@@ -103,7 +100,9 @@ def load_style_lora_definitions(
         lora_name = _normalize_text(raw_entry.get("lora_name"))
         if not lora_name and file_path:
             lora_name = Path(file_path).stem
-        trigger_phrase = _normalize_text(raw_entry.get("trigger_phrase") or raw_entry.get("trigger_token"))
+        trigger_phrase = _normalize_text(
+            raw_entry.get("trigger_phrase") or raw_entry.get("trigger_token")
+        )
         if not lora_name or not trigger_phrase:
             continue
 
@@ -116,8 +115,7 @@ def load_style_lora_definitions(
                 weight=_normalize_weight(raw_entry.get("weight"), default=0.65),
                 file_path=file_path,
                 compatible_model_families=_normalize_family_list(
-                    raw_entry.get("compatible_model_families")
-                    or raw_entry.get("base_model_family")
+                    raw_entry.get("compatible_model_families") or raw_entry.get("base_model_family")
                 ),
                 notes=_normalize_text(raw_entry.get("notes")),
             )

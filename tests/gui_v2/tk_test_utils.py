@@ -12,17 +12,17 @@ _tk_root: tk.Tk | None = None
 
 def get_shared_tk_root() -> tk.Tk | None:
     """Get or create the shared Tk root for all GUI tests.
-    
+
     Returns:
         The shared Tk root, or None if Tk is unavailable.
     """
     global _tk_root
-    
+
     if _tk_root is None:
         try:
             _tk_root = tk.Tk()
             _tk_root.withdraw()
         except Exception:
             _tk_root = None
-    
+
     return _tk_root

@@ -178,9 +178,7 @@ def test_mid_import_failure_rolls_back_and_restores_database(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     source = tmp_path / "queue.json"
-    source.write_text(
-        json.dumps({"jobs": [_record("one"), _record("two")]}), encoding="utf-8"
-    )
+    source.write_text(json.dumps({"jobs": [_record("one"), _record("two")]}), encoding="utf-8")
     database = tmp_path / "jobs.sqlite3"
     with JobRepository(database) as repository:
         assert repository.count() == 0

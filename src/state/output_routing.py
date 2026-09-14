@@ -135,7 +135,11 @@ def resolve_output_artifact_path(
         seen_relative.add(normalized_relative)
 
         rel_parts = list(normalized_relative)
-        trimmed = rel_parts[1:] if rel_parts and rel_parts[0].lower() in _KNOWN_OUTPUT_ROUTE_DIRS_LOWER else rel_parts
+        trimmed = (
+            rel_parts[1:]
+            if rel_parts and rel_parts[0].lower() in _KNOWN_OUTPUT_ROUTE_DIRS_LOWER
+            else rel_parts
+        )
 
         if rel_parts:
             search_paths.append(output_root.joinpath(*rel_parts))
@@ -189,7 +193,11 @@ def classify_njr_output_route(njr: Any) -> str:
         pipeline_section = config.get("pipeline")
         if isinstance(pipeline_section, dict):
             explicit_route = str(pipeline_section.get("output_route") or "").strip()
-            if explicit_route and explicit_route != OUTPUT_ROUTE_AUTO and explicit_route in KNOWN_OUTPUT_ROUTE_DIRS:
+            if (
+                explicit_route
+                and explicit_route != OUTPUT_ROUTE_AUTO
+                and explicit_route in KNOWN_OUTPUT_ROUTE_DIRS
+            ):
                 return explicit_route
 
     if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("STABLENEW_TEST_MODE") == "1":
@@ -337,6 +345,7 @@ def migrate_legacy_output_tree(base_output_dir: str | Path = "output") -> dict[s
         moved.append(f"{child.name} -> {route}")
 
     return {"moved": moved, "skipped": skipped}
+
 
 def rebalance_output_tree(base_output_dir: str | Path = "output") -> dict[str, list[str]]:
     root = get_output_root(base_output_dir, create=True)

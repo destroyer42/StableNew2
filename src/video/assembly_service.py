@@ -10,9 +10,9 @@ from __future__ import annotations
 import json
 import logging
 import os
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any
 
 from src.pipeline.artifact_contract import artifact_manifest_payload
 from src.video.assembly_models import (
@@ -23,12 +23,12 @@ from src.video.assembly_models import (
     InterpolatedOutput,
     StitchedOutput,
 )
+from src.video.container_metadata import write_video_container_metadata
 from src.video.interpolation_contracts import (
-    InterpolationRequest,
     InterpolationProvider,
+    InterpolationRequest,
     NoOpInterpolationProvider,
 )
-from src.video.container_metadata import write_video_container_metadata
 from src.video.video_artifact_helpers import build_video_artifact_bundle
 from src.video.video_export import export_image_sequence_video, stitch_video_segments
 
@@ -109,7 +109,9 @@ class AssemblyService:
 
         try:
             if self._source_uses_frame_export(source):
-                frame_paths = [Path(item) for item in (source.resolved_frame_paths() or source.source_paths)]
+                frame_paths = [
+                    Path(item) for item in (source.resolved_frame_paths() or source.source_paths)
+                ]
                 output_path = self._image_exporter(
                     image_paths=frame_paths,
                     output_path=output_dir / f"{clip_name}.mp4",
@@ -311,7 +313,9 @@ class AssemblyService:
             ),
         )
 
-    def _write_manifest(self, result: AssembledVideoResult, *, output_dir: Path, clip_name: str) -> Path:
+    def _write_manifest(
+        self, result: AssembledVideoResult, *, output_dir: Path, clip_name: str
+    ) -> Path:
         manifest_path = output_dir / f"{clip_name}_assembly_manifest.json"
         export_output = result.export_output.to_dict() if result.export_output else None
         assembly_result_payload = result.to_dict()
@@ -322,7 +326,9 @@ class AssemblyService:
             "clip_name": clip_name,
             "output_path": result.primary_path,
             "source_images": list(result.source.resolved_frame_paths()) if result.source else [],
-            "source_paths": list(result.source.resolved_segment_output_paths()) if result.source else [],
+            "source_paths": list(result.source.resolved_segment_output_paths())
+            if result.source
+            else [],
             "settings": dict(result.export_settings),
             "frame_count": len(result.source.resolved_frame_paths()) if result.source else 0,
             "duration_seconds": 0.0,
@@ -341,7 +347,9 @@ class AssemblyService:
         manifest_path.write_text(json.dumps(normalized_payload, indent=2), encoding="utf-8")
         return manifest_path
 
-    def _relativize_manifest_payload(self, payload: dict[str, Any], base_dir: Path) -> dict[str, Any]:
+    def _relativize_manifest_payload(
+        self, payload: dict[str, Any], base_dir: Path
+    ) -> dict[str, Any]:
         normalized: dict[str, Any] = {}
         for key, value in payload.items():
             normalized[key] = self._relativize_manifest_value(key, value, base_dir)

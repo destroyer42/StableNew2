@@ -53,7 +53,9 @@ def test_watchdog_skips_when_main_thread_not_alive(monkeypatch) -> None:
         def is_alive(self) -> bool:
             return False
 
-    monkeypatch.setattr("src.services.watchdog_system_v2.threading.main_thread", lambda: _DeadThread())
+    monkeypatch.setattr(
+        "src.services.watchdog_system_v2.threading.main_thread", lambda: _DeadThread()
+    )
 
     watchdog._check()
 

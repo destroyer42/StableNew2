@@ -59,7 +59,9 @@ class OperatorReadinessSnapshot:
     records: tuple[OperatorReadinessRecord, ...]
 
     def support_for(self, surface_id: str) -> ProductSupportSurface | None:
-        return next((surface for surface in self.support_surfaces if surface.id == surface_id), None)
+        return next(
+            (surface for surface in self.support_surfaces if surface.id == surface_id), None
+        )
 
     def record_for(self, record_id: str) -> OperatorReadinessRecord | None:
         return next((record for record in self.records if record.id == record_id), None)
@@ -343,9 +345,13 @@ class OperatorReadinessService:
                 operator_actions=(),
                 source="get_svd_preflight / SVDPreflight",
             )
-        actions = ["Review Native SVD preflight details and correct the listed runtime prerequisite."]
+        actions = [
+            "Review Native SVD preflight details and correct the listed runtime prerequisite."
+        ]
         if preflight.local_files_only and not preflight.model_cached:
-            actions.insert(0, "Place the supported SVD XT model in the configured local cache, then refresh.")
+            actions.insert(
+                0, "Place the supported SVD XT model in the configured local cache, then refresh."
+            )
         return _action_record(
             "native_svd_runtime",
             "Native SVD XT runtime",
@@ -377,7 +383,9 @@ class OperatorReadinessService:
                 source="get_svd_preflight / SVDPreflight",
             )
         blockers = tuple(
-            reason for reason in preflight.blocking_reasons if reason.startswith("Invalid SVD source image:")
+            reason
+            for reason in preflight.blocking_reasons
+            if reason.startswith("Invalid SVD source image:")
         )
         return _action_record(
             "svd_source_image",
@@ -449,7 +457,9 @@ class OperatorReadinessService:
             blocking_reasons=(INTERRUPTED_RESTART_ACTION_REQUIRED,) if recovered else (),
             operator_actions=(
                 "Inspect available artifacts/backend state, then use Replay Job intentionally.",
-            ) if recovered else (),
+            )
+            if recovered
+            else (),
             source="JobRepository execution_metadata",
         )
 
@@ -494,7 +504,9 @@ def _probe_directory(path: Path) -> tuple[bool, str | None]:
 
 def _svd_runtime_blockers(preflight: SVDPreflight) -> tuple[str, ...]:
     if preflight.source_image_path is None:
-        return tuple(reason for reason in preflight.blocking_reasons if reason != "Select a source image.")
+        return tuple(
+            reason for reason in preflight.blocking_reasons if reason != "Select a source image."
+        )
     if preflight.source_image_valid is False:
         return tuple(
             reason

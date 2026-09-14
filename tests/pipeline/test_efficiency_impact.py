@@ -43,7 +43,9 @@ class _DelayedSwitchClient:
         return True
 
 
-def _legacy_set_model_vae(client: _DelayedSwitchClient, model_name: str | None, vae_name: str | None) -> None:
+def _legacy_set_model_vae(
+    client: _DelayedSwitchClient, model_name: str | None, vae_name: str | None
+) -> None:
     if model_name:
         client.set_model(model_name)
     if vae_name:

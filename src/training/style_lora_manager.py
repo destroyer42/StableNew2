@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+import logging
 from collections.abc import Mapping
 from dataclasses import dataclass, replace
-import logging
 from pathlib import Path
 from typing import Any
 
@@ -14,7 +14,6 @@ from src.config.style_lora_config import (
     load_style_lora_definitions,
 )
 from src.utils.lora_scanner import LoRAScanner, get_lora_scanner
-
 
 logger = logging.getLogger(__name__)
 
@@ -118,9 +117,7 @@ class StyleLoRAManager:
 
         enabled = bool(payload.get("enabled", True))
         style_id = _normalize_text(
-            payload.get("style_id")
-            or payload.get("id")
-            or payload.get("name")
+            payload.get("style_id") or payload.get("id") or payload.get("name")
         )
         if not enabled or not style_id or style_id.lower() in {"none", "(none)"}:
             return None
@@ -136,9 +133,7 @@ class StyleLoRAManager:
                 weight=_normalize_weight(payload.get("weight"), default=0.65),
                 applied=False,
                 available=False,
-                warning=(
-                    f"Style LoRA '{style_id}' is not defined in {self._catalog_path}."
-                ),
+                warning=(f"Style LoRA '{style_id}' is not defined in {self._catalog_path}."),
             )
 
         resolved = ResolvedStyleLoRA(
@@ -205,9 +200,7 @@ class StyleLoRAManager:
             file_path = Path(definition.file_path).expanduser()
             if file_path.exists() and file_path.is_file():
                 return None
-            return (
-                f"Style LoRA '{definition.display_name}' is configured with a missing weight file: {file_path}"
-            )
+            return f"Style LoRA '{definition.display_name}' is configured with a missing weight file: {file_path}"
 
         scanner = self._get_scanner()
         if scanner is None:
@@ -218,9 +211,7 @@ class StyleLoRAManager:
 
         if scanner.get_lora_info(definition.lora_name) is not None:
             return None
-        return (
-            f"Style LoRA '{definition.display_name}' was not found in the configured WebUI LoRA directories."
-        )
+        return f"Style LoRA '{definition.display_name}' was not found in the configured WebUI LoRA directories."
 
     def _get_scanner(self) -> LoRAScanner | None:
         if self._webui_root is None:

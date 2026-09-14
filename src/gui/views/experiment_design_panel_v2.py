@@ -149,7 +149,7 @@ class ExperimentDesignPanel(ttk.Frame):
         self.custom_prompt_var = tk.StringVar(value="")
         self.custom_prompt_text = tk.Text(prompt_frame, height=3, wrap=tk.WORD)
         self.custom_prompt_text.grid(row=2, column=0, sticky="ew", pady=(2, 0))
-        
+
         # Populate text field with workspace prompt initially
         self._on_prompt_source_changed()
 
@@ -176,7 +176,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_prompt_source_changed(self) -> None:
         """Handle prompt source radio button changes.
-        
+
         When 'workspace' is selected, populate the text field with the current
         workspace prompt so the user can see what will be used.
         """
@@ -203,7 +203,7 @@ class ExperimentDesignPanel(ttk.Frame):
         else:
             # Custom mode - enable text field for editing
             self.custom_prompt_text.config(state="normal")
-    
+
     def _on_build_preview(self) -> None:
         """Handle build preview button click."""
         if not self.learning_controller:
@@ -250,11 +250,14 @@ class ExperimentDesignPanel(ttk.Frame):
     def _on_run_experiment(self) -> None:
         """Handle run experiment button click."""
         import logging
+
         logger = logging.getLogger(__name__)
-        
+
         logger.info("[ExperimentDesignPanel] Run Experiment button clicked")
-        logger.info(f"[ExperimentDesignPanel]   Learning controller available: {self.learning_controller is not None}")
-        
+        logger.info(
+            f"[ExperimentDesignPanel]   Learning controller available: {self.learning_controller is not None}"
+        )
+
         if not self.learning_controller:
             self.feedback_var.set("Learning controller not available")
             logger.error("[ExperimentDesignPanel] Learning controller not available")

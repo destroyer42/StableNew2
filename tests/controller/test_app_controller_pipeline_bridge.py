@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.controller.app_controller import AppController
-from src.gui.app_state_v2 import AppStateV2
 from src.controller.runtime_state import GUIState
 from src.controller.webui_connection_controller import WebUIConnectionState
+from src.gui.app_state_v2 import AppStateV2
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job, JobStatus
 from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
 
@@ -76,7 +76,9 @@ class AsyncRunPipelineController:
     def get_preview_jobs(self):
         return [_make_preview_job()]
 
-    def submit_preview_jobs_to_queue(self, *, records, source: str, prompt_source: str, run_config=None):
+    def submit_preview_jobs_to_queue(
+        self, *, records, source: str, prompt_source: str, run_config=None
+    ):
         self.queue_submit_calls.append(
             {
                 "records": list(records),
@@ -178,7 +180,9 @@ def test_request_preview_refresh_falls_back_to_sync_without_gui_context() -> Non
 def test_start_run_v2_in_gui_mode_submits_queue_run_off_thread() -> None:
     main_window = SimpleNamespace(app_state=AppStateV2(), root=None)
     dummy = AsyncRunPipelineController()
-    controller = _build_controller(main_window=main_window, threaded=True, pipeline_controller=dummy)
+    controller = _build_controller(
+        main_window=main_window, threaded=True, pipeline_controller=dummy
+    )
     spawn_calls: list[dict[str, object]] = []
 
     def _run_inline(target, args=(), kwargs=None, **_unused):

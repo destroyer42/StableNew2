@@ -59,4 +59,3 @@ def test_learning_run_summary_reports_blocked_when_pending_would_exceed_cap() ->
     summary = controller.get_learning_run_summary()
     assert summary["queue_ok"] is False
     assert "cap exceeded" in summary["queue_reason"]
-

@@ -36,14 +36,19 @@ def test_review_tab_uses_shared_workspace_minimums(tk_root) -> None:
         tab.destroy()
 
 
-def test_learning_tab_uses_shared_workspace_minimums_and_staged_rows(tk_root, tmp_path: Path) -> None:
+def test_learning_tab_uses_shared_workspace_minimums_and_staged_rows(
+    tk_root, tmp_path: Path
+) -> None:
     state_path = tmp_path / "ui_state.json"
     experiments_root = tmp_path / "experiments"
     store = UIStateStore(state_path)
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             tk_root,
@@ -54,8 +59,14 @@ def test_learning_tab_uses_shared_workspace_minimums_and_staged_rows(tk_root, tm
             assert tab.body_frame.columnconfigure(0)["minsize"] == WORKSPACE_LEFT_COLUMN_MIN_WIDTH
             assert tab.body_frame.columnconfigure(1)["minsize"] == WORKSPACE_CENTER_COLUMN_MIN_WIDTH
             assert tab.body_frame.columnconfigure(2)["minsize"] == WORKSPACE_RIGHT_COLUMN_MIN_WIDTH
-            assert tab._discovered_tab_frame.columnconfigure(0)["minsize"] == WORKSPACE_LEFT_COLUMN_MIN_WIDTH
-            assert tab._discovered_tab_frame.columnconfigure(1)["minsize"] == WORKSPACE_CENTER_COLUMN_MIN_WIDTH
+            assert (
+                tab._discovered_tab_frame.columnconfigure(0)["minsize"]
+                == WORKSPACE_LEFT_COLUMN_MIN_WIDTH
+            )
+            assert (
+                tab._discovered_tab_frame.columnconfigure(1)["minsize"]
+                == WORKSPACE_CENTER_COLUMN_MIN_WIDTH
+            )
             assert int(tab._staged_action_frame.grid_info()["row"]) == 12
             assert int(tab._staged_derive_frame.grid_info()["row"]) == 13
             assert int(tab._staged_review_frame.grid_info()["row"]) == 14

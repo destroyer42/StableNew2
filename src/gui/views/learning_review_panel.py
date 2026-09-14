@@ -85,7 +85,9 @@ class LearningReviewPanel(ttk.Frame):
         self.metadata_text.pack(fill="x")
 
         # Recommendations section
-        self.recommendations_frame = ttk.LabelFrame(self.side_column, text="Recommended Settings", padding=5)
+        self.recommendations_frame = ttk.LabelFrame(
+            self.side_column, text="Recommended Settings", padding=5
+        )
         self.recommendations_frame.grid(row=2, column=0, sticky="ew", pady=(0, 6))
 
         self.recommendations_text = tk.Text(
@@ -235,9 +237,9 @@ class LearningReviewPanel(ttk.Frame):
             if rating:
                 # Show rating indicator
                 stars = "⭐" * rating
-                display = f"{i+1}. {filename} [{stars}]"
+                display = f"{i + 1}. {filename} [{stars}]"
             else:
-                display = f"{i+1}. {filename}"
+                display = f"{i + 1}. {filename}"
 
             self.image_listbox.insert(tk.END, display)
             self._image_full_paths.append(image_ref)
@@ -412,6 +414,7 @@ class LearningReviewPanel(ttk.Frame):
     def _extract_filename(self, path: str) -> str:
         """Extract filename from full path."""
         from pathlib import Path
+
         return Path(path).name
 
     def _get_rating_for_image(self, image_path: str) -> int | None:
@@ -455,6 +458,7 @@ class LearningReviewPanel(ttk.Frame):
         if existing_rating is not None:
             # Ask for confirmation to override
             from tkinter import messagebox
+
             if not messagebox.askyesno(
                 "Override Rating",
                 f"This image already has a rating of {existing_rating}.\nOverride with new rating?",
@@ -525,16 +529,18 @@ class LearningReviewPanel(ttk.Frame):
         """Update the recommendations display with new data."""
         self.recommendations_text.config(state="normal")
         self.recommendations_text.delete(1.0, tk.END)
-        
+
         if not recommendations:
             self.recommendations_text.insert(tk.END, "No recommendations available yet.\n")
-            self.recommendations_text.insert(tk.END, "\nRate more images to get personalized suggestions.")
+            self.recommendations_text.insert(
+                tk.END, "\nRate more images to get personalized suggestions."
+            )
             self.recommendations_text.config(state="disabled")
             return
-        
+
         # Format recommendations for display
         lines = []
-        
+
         # Check if it's a RecommendationSet or list of recommendations
         if hasattr(recommendations, "recommendations"):
             rec_list = recommendations.recommendations
@@ -542,19 +548,20 @@ class LearningReviewPanel(ttk.Frame):
             rec_list = recommendations
         else:
             rec_list = []
-        
+
         if not rec_list:
             self.recommendations_text.insert(tk.END, "Insufficient data for recommendations.\n")
-            self.recommendations_text.insert(tk.END, "\nRate at least 3 images to generate suggestions.")
+            self.recommendations_text.insert(
+                tk.END, "\nRate at least 3 images to generate suggestions."
+            )
             self.recommendations_text.config(state="disabled")
             return
-        
+
         lines.append("Recommended Settings\n")
         lines.append("-" * 30 + "\n\n")
 
         # PR-044: surface evidence tier and automation eligibility
         evidence_tier = getattr(recommendations, "evidence_tier", None)
-        automation_eligible = getattr(recommendations, "automation_eligible", True)
         if evidence_tier and evidence_tier != "experiment_strong":
             tier_labels = {
                 "experiment_sparse_plus_review": "Evidence: sparse experiment + review (manual-only)",
@@ -565,7 +572,7 @@ class LearningReviewPanel(ttk.Frame):
             lines.append(f"[{tier_label}]\n\n")
         elif evidence_tier == "experiment_strong":
             lines.append("[Evidence: experiment (auto-eligible)]\n\n")
-        
+
         for rec in rec_list[:5]:
             # Handle both dataclass and dict formats
             if hasattr(rec, "parameter_name"):
@@ -586,13 +593,13 @@ class LearningReviewPanel(ttk.Frame):
                 context = rec.get("context", "")
             else:
                 continue
-            
+
             # Format confidence as percentage
             conf_pct = f"{confidence * 100:.0f}%"
-            
+
             # Format mean rating as stars
             stars = "*" * int(round(mean_rating))
-            
+
             lines.append(f"{param}: {value}\n")
             lines.append(f"  Avg Rating: {stars or '-'} ({mean_rating:.1f})\n")
             lines.append(f"  Confidence: {conf_pct} ({samples} samples)\n")
@@ -604,7 +611,7 @@ class LearningReviewPanel(ttk.Frame):
             if because_parts:
                 lines.append(f"  Because: {'; '.join(because_parts)}\n")
             lines.append("\n")
-        
+
         self.recommendations_text.insert(tk.END, "".join(lines))
         self.recommendations_text.config(state="disabled")
 
@@ -614,23 +621,23 @@ class LearningReviewPanel(ttk.Frame):
             self.apply_button.config(state="normal")
         else:
             self.apply_button.config(state="disabled")
-    
+
     def _on_apply_recommendations(self) -> None:
         """Handle apply recommendations button click."""
         # Get controller
         controller = self._get_learning_controller()
         if not controller:
             return
-        
+
         # Get current recommendations
         recs = getattr(controller, "get_recommendations_for_current_prompt", None)
         if not callable(recs):
             return
-        
+
         recommendations = recs()
         if not recommendations:
             return
-        
+
         # Show confirmation dialog
         if self._confirm_apply(recommendations):
             apply_fn = getattr(controller, "apply_recommendations_to_pipeline", None)
@@ -638,19 +645,17 @@ class LearningReviewPanel(ttk.Frame):
                 success = apply_fn(recommendations)
                 if success:
                     from tkinter import messagebox
-                    messagebox.showinfo(
-                        "Applied",
-                        "Recommendations applied to Pipeline settings."
-                    )
-    
+
+                    messagebox.showinfo("Applied", "Recommendations applied to Pipeline settings.")
+
     def _confirm_apply(self, recommendations: Any) -> bool:
         """Show confirmation dialog with proposed changes."""
         from tkinter import messagebox
-        
+
         # Format changes for display
         changes = []
         rec_list = self._extract_rec_list(recommendations)
-        
+
         for rec in rec_list:
             if hasattr(rec, "parameter_name"):
                 param = rec.parameter_name
@@ -660,15 +665,15 @@ class LearningReviewPanel(ttk.Frame):
                 value = rec.get("value", "?")
             else:
                 continue
-            
+
             changes.append(f"  • {param} → {value}")
-        
+
         if not changes:
             return False
-        
+
         message = "Apply these settings to Pipeline?\n\n" + "\n".join(changes)
         return messagebox.askyesno("Confirm Apply", message)
-    
+
     def _extract_rec_list(self, recommendations: Any) -> list:
         """Extract list of recommendations from various formats."""
         if hasattr(recommendations, "recommendations"):
@@ -676,7 +681,7 @@ class LearningReviewPanel(ttk.Frame):
         elif isinstance(recommendations, list):
             return recommendations
         return []
-    
+
     def _get_learning_controller(self):
         """Get the learning controller from parent chain."""
         try:

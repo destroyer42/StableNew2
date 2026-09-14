@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Dict, List, Literal
+from typing import Literal
 
 PromptPolarity = Literal["positive", "negative"]
 
@@ -71,8 +71,8 @@ class PromptOptimizationResult:
     original_prompt: str
     optimized_prompt: str
     polarity: PromptPolarity
-    buckets: Dict[str, List[str]] = field(default_factory=dict)
-    dropped_duplicates: List[str] = field(default_factory=list)
+    buckets: dict[str, list[str]] = field(default_factory=dict)
+    dropped_duplicates: list[str] = field(default_factory=list)
     changed: bool = False
 
 

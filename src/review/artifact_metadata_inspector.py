@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from src.review.review_metadata_service import ReviewMetadataService
 from src.utils.image_metadata import (
@@ -31,12 +32,22 @@ class ArtifactMetadataInspection:
         return {
             "artifact_path": self.artifact_path,
             "normalized_generation_summary": dict(self.normalized_generation_summary),
-            "normalized_review_summary": dict(self.normalized_review_summary or {}) if self.normalized_review_summary else None,
+            "normalized_review_summary": dict(self.normalized_review_summary or {})
+            if self.normalized_review_summary
+            else None,
             "source_diagnostics": dict(self.source_diagnostics),
-            "raw_embedded_payload": dict(self.raw_embedded_payload or {}) if self.raw_embedded_payload else None,
-            "raw_embedded_review_payload": dict(self.raw_embedded_review_payload or {}) if self.raw_embedded_review_payload else None,
-            "raw_sidecar_review_payload": dict(self.raw_sidecar_review_payload or {}) if self.raw_sidecar_review_payload else None,
-            "raw_internal_review_summary": dict(self.raw_internal_review_summary or {}) if self.raw_internal_review_summary else None,
+            "raw_embedded_payload": dict(self.raw_embedded_payload or {})
+            if self.raw_embedded_payload
+            else None,
+            "raw_embedded_review_payload": dict(self.raw_embedded_review_payload or {})
+            if self.raw_embedded_review_payload
+            else None,
+            "raw_sidecar_review_payload": dict(self.raw_sidecar_review_payload or {})
+            if self.raw_sidecar_review_payload
+            else None,
+            "raw_internal_review_summary": dict(self.raw_internal_review_summary or {})
+            if self.raw_internal_review_summary
+            else None,
         }
 
 
@@ -71,13 +82,20 @@ class ArtifactMetadataInspector:
             "negative_prompt": str(negative_prompt or ""),
             "model": str(model or ""),
             "vae": str(vae or ""),
-            "sampler": str(config.get("sampler_name") or config.get("sampler") or generation.get("sampler_name") or ""),
+            "sampler": str(
+                config.get("sampler_name")
+                or config.get("sampler")
+                or generation.get("sampler_name")
+                or ""
+            ),
             "scheduler": str(config.get("scheduler") or generation.get("scheduler") or ""),
             "steps": config.get("steps") or generation.get("steps"),
             "cfg_scale": config.get("cfg_scale") or generation.get("cfg_scale"),
             "width": config.get("width") or generation.get("width"),
             "height": config.get("height") or generation.get("height"),
-            "seed": stage_manifest.get("final_seed") or generation.get("seed") or config.get("seed"),
+            "seed": stage_manifest.get("final_seed")
+            or generation.get("seed")
+            or config.get("seed"),
             "stage": str(stage_manifest.get("stage") or payload.get("stage") or ""),
             "manifest_present": bool(stage_manifest),
         }
@@ -98,9 +116,15 @@ class ArtifactMetadataInspector:
             if embedded_generation.status == "ok" and isinstance(embedded_generation.payload, dict)
             else None
         )
-        embedded_review_payload = embedded_review.payload if isinstance(embedded_review.payload, dict) else None
-        sidecar_review_payload = sidecar_review.payload if isinstance(sidecar_review.payload, dict) else None
-        internal_summary = dict(internal_review_summary) if isinstance(internal_review_summary, Mapping) else None
+        embedded_review_payload = (
+            embedded_review.payload if isinstance(embedded_review.payload, dict) else None
+        )
+        sidecar_review_payload = (
+            sidecar_review.payload if isinstance(sidecar_review.payload, dict) else None
+        )
+        internal_summary = (
+            dict(internal_review_summary) if isinstance(internal_review_summary, Mapping) else None
+        )
 
         warnings: list[str] = []
         if embedded_generation.error:
@@ -110,7 +134,10 @@ class ArtifactMetadataInspector:
         if sidecar_review.error:
             warnings.append(f"sidecar_review:{sidecar_review.error}")
 
-        internal_present = bool(internal_summary and str(internal_summary.get("source_type") or "") == "internal_learning_record")
+        internal_present = bool(
+            internal_summary
+            and str(internal_summary.get("source_type") or "") == "internal_learning_record"
+        )
         embedded_review_present = embedded_review_payload is not None
         sidecar_review_present = sidecar_review_payload is not None
         if internal_present:
@@ -122,14 +149,18 @@ class ArtifactMetadataInspector:
                 embedded_review_payload,
                 source_type="embedded_review_metadata",
             )
-            normalized_review_summary = normalized_review.to_dict() if normalized_review is not None else None
+            normalized_review_summary = (
+                normalized_review.to_dict() if normalized_review is not None else None
+            )
         elif sidecar_review_present:
             active_review_precedence = "sidecar_review_metadata"
             normalized_review = self._review_metadata_service.normalize_review_summary(
                 sidecar_review_payload,
                 source_type="sidecar_review_metadata",
             )
-            normalized_review_summary = normalized_review.to_dict() if normalized_review is not None else None
+            normalized_review_summary = (
+                normalized_review.to_dict() if normalized_review is not None else None
+            )
         else:
             active_review_precedence = "none"
             normalized_review_summary = None

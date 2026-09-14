@@ -60,7 +60,9 @@ class ComfyApiClient:
             except Exception:
                 body = ""
             if body:
-                raise requests.HTTPError(f"{exc} | response_body={body[:2000]}", response=response) from exc
+                raise requests.HTTPError(
+                    f"{exc} | response_body={body[:2000]}", response=response
+                ) from exc
             raise
         data = response.json()
         if not isinstance(data, dict):
@@ -95,7 +97,9 @@ class ComfyApiClient:
             except Exception:
                 body = ""
             if body:
-                raise requests.HTTPError(f"{exc} | response_body={body[:2000]}", response=response) from exc
+                raise requests.HTTPError(
+                    f"{exc} | response_body={body[:2000]}", response=response
+                ) from exc
             raise
         payload = response.json()
         if not isinstance(payload, dict):

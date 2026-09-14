@@ -24,9 +24,23 @@ logger = logging.getLogger(__name__)
 # PR-046: keywords used to infer people-presence from a prompt text
 _PEOPLE_KEYWORDS: frozenset[str] = frozenset(
     {
-        "woman", "man", "girl", "boy", "person", "people", "portrait",
-        "face", "couple", "model", "male", "female", "lady", "gentleman",
-        "child", "teen", "adult",
+        "woman",
+        "man",
+        "girl",
+        "boy",
+        "person",
+        "people",
+        "portrait",
+        "face",
+        "couple",
+        "model",
+        "male",
+        "female",
+        "lady",
+        "gentleman",
+        "child",
+        "teen",
+        "adult",
     }
 )
 
@@ -190,9 +204,7 @@ class RecommendationEngine:
     ) -> dict[str, str]:
         # PR-046: detect people presence for context-aware subscore weighting
         lower_tokens = {
-            t.strip().lower()
-            for t in str(prompt_text or "").replace(",", " ").split()
-            if t.strip()
+            t.strip().lower() for t in str(prompt_text or "").replace(",", " ").split() if t.strip()
         }
         has_people = bool(lower_tokens & _PEOPLE_KEYWORDS)
         refinement = self._normalize_refinement_context(refinement_context)
@@ -214,7 +226,9 @@ class RecommendationEngine:
             "refinement_has_applied_overrides": str(bool(refinement.get("has_applied_overrides"))),
             "secondary_motion_backend_id": str(secondary_motion.get("backend_id") or ""),
             "secondary_motion_policy_id": str(secondary_motion.get("policy_id") or ""),
-            "secondary_motion_application_path": str(secondary_motion.get("application_path") or ""),
+            "secondary_motion_application_path": str(
+                secondary_motion.get("application_path") or ""
+            ),
             "secondary_motion_backend_mode": str(secondary_motion.get("backend_mode") or ""),
             "secondary_motion_intent_mode": str(secondary_motion.get("intent_mode") or ""),
             "secondary_motion_status": str(secondary_motion.get("status") or ""),
@@ -412,7 +426,9 @@ class RecommendationEngine:
         query_policy_id = str(query_context.get("refinement_policy_id", "") or "")
         record_policy_id = str(refinement.get("policy_id") or "")
         if query_policy_id and record_policy_id:
-            if query_policy_id == record_policy_id or query_policy_id in refinement.get("policy_ids", []):
+            if query_policy_id == record_policy_id or query_policy_id in refinement.get(
+                "policy_ids", []
+            ):
                 weight += 0.35
                 rationale_bits.append("refinement-policy-match")
             else:
@@ -684,15 +700,15 @@ class RecommendationEngine:
                         f"context={reason or 'mixed'}"
                     ),
                     context_key=(
-                        f"{query_context.get('stage','')}|"
-                        f"{query_context.get('model','')}|"
-                        f"{query_context.get('style_bucket','default')}|"
-                        f"{query_context.get('resolution_bucket','unknown')}|"
-                        f"{query_context.get('refinement_policy_id','')}|"
-                        f"{query_context.get('refinement_scale_band','')}|"
-                        f"{query_context.get('secondary_motion_backend_id','')}|"
-                        f"{query_context.get('secondary_motion_policy_id','')}|"
-                        f"{query_context.get('secondary_motion_application_path','')}"
+                        f"{query_context.get('stage', '')}|"
+                        f"{query_context.get('model', '')}|"
+                        f"{query_context.get('style_bucket', 'default')}|"
+                        f"{query_context.get('resolution_bucket', 'unknown')}|"
+                        f"{query_context.get('refinement_policy_id', '')}|"
+                        f"{query_context.get('refinement_scale_band', '')}|"
+                        f"{query_context.get('secondary_motion_backend_id', '')}|"
+                        f"{query_context.get('secondary_motion_policy_id', '')}|"
+                        f"{query_context.get('secondary_motion_application_path', '')}"
                     ),
                 )
 
@@ -728,7 +744,9 @@ class RecommendationEngine:
                 "record_count": len(scored_records),
             }
             self._cache_timestamp = time.time()
-            self._cache_mtime = self.records_path.stat().st_mtime if self.records_path.exists() else 0.0
+            self._cache_mtime = (
+                self.records_path.stat().st_mtime if self.records_path.exists() else 0.0
+            )
         scored_records = self._cache.get("scored_records", []) if self._cache else []
         stage_name = str(stage or "txt2img")
         relevant_records = [
@@ -737,12 +755,15 @@ class RecommendationEngine:
             if str(record.get("stage", "") or "txt2img") == stage_name
         ]
         experiment_records = [
-            record for record in relevant_records if str(record.get("record_kind", "")) == "learning_experiment_rating"
+            record
+            for record in relevant_records
+            if str(record.get("record_kind", "")) == "learning_experiment_rating"
         ]
         review_records = [
             record
             for record in relevant_records
-            if str(record.get("record_kind", "")) in {
+            if str(record.get("record_kind", ""))
+            in {
                 "review_tab_feedback",
                 "staged_curation_event",
                 "legacy",
@@ -777,7 +798,9 @@ class RecommendationEngine:
                 automation_eligible=False,
             )
 
-        optimal_settings = self._compute_optimal_settings(evidence_records, query_context, prompt_text)
+        optimal_settings = self._compute_optimal_settings(
+            evidence_records, query_context, prompt_text
+        )
 
         # Create recommendation set with PR-044 tier provenance
         rec_set = RecommendationSet(

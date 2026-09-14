@@ -96,7 +96,9 @@ def test_build_default_comfy_process_config_reads_settings(tmp_path: Path) -> No
     assert config.startup_timeout_seconds == 45.0
 
 
-def test_build_default_comfy_process_config_autostarts_when_command_configured(tmp_path: Path) -> None:
+def test_build_default_comfy_process_config_autostarts_when_command_configured(
+    tmp_path: Path,
+) -> None:
     manager = ConfigManager(presets_dir=tmp_path / "presets")
     manager.save_settings(
         {

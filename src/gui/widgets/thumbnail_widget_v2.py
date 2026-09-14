@@ -38,7 +38,7 @@ class ThumbnailWidget(ttk.Frame):
         self._height = height
         self._placeholder_text = placeholder_text
         self._background = background
-        self._photo_image: "ImageTk.PhotoImage | None" = None
+        self._photo_image: ImageTk.PhotoImage | None = None
         self._load_thread: threading.Thread | None = None
         self._current_path: str | None = None
         self._open_path: str | None = None
@@ -73,7 +73,7 @@ class ThumbnailWidget(ttk.Frame):
             anchor="center",
         )
 
-    def set_image(self, image: "Image.Image | None") -> None:
+    def set_image(self, image: Image.Image | None) -> None:
         """Set the displayed thumbnail from a PIL Image."""
         if image is None:
             self.clear()
@@ -120,15 +120,16 @@ class ThumbnailWidget(ttk.Frame):
 
         # PR-THREAD-001: Use ThreadRegistry for thumbnail loading
         from src.utils.thread_registry import get_thread_registry
+
         registry = get_thread_registry()
         self._load_thread = registry.spawn(
             target=_load,
             name=f"Thumbnail-Loader-{id(self)}",
             daemon=False,
-            purpose="Load and cache thumbnail image asynchronously"
+            purpose="Load and cache thumbnail image asynchronously",
         )
 
-    def _on_image_loaded(self, image: "Image.Image | None") -> None:
+    def _on_image_loaded(self, image: Image.Image | None) -> None:
         """Handle async image load completion."""
         if image is None:
             self._show_placeholder("Not found")

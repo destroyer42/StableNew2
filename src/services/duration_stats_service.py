@@ -8,13 +8,13 @@ from __future__ import annotations
 
 import statistics
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
-    from src.pipeline.job_models_v2 import NormalizedJobRecord
     # QueueJobV2 removed - use UnifiedJobSummary or NormalizedJobRecord instead
 
 # Fallback estimates per stage in seconds

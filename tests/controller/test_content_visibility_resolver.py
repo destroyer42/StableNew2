@@ -317,7 +317,9 @@ def test_lora_picker_filters_nsfw_resources_in_sfw_mode(monkeypatch, tk_root) ->
                 return _Resource("nude anatomy helper")
             return _Resource("portrait lighting helper")
 
-    monkeypatch.setattr("src.gui.widgets.lora_picker_panel.get_lora_scanner", lambda *_args, **_kwargs: _Scanner())
+    monkeypatch.setattr(
+        "src.gui.widgets.lora_picker_panel.get_lora_scanner", lambda *_args, **_kwargs: _Scanner()
+    )
 
     parent = tk.Frame(tk_root)
     parent.app_state = AppStateV2()

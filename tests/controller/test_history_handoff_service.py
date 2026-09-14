@@ -51,7 +51,9 @@ def _make_entry(
         priority=JobPriority.NORMAL,
         status=status,
     )
-    snapshot = build_job_snapshot(job, record, run_config={"run_mode": "queue", "source": "history"})
+    snapshot = build_job_snapshot(
+        job, record, run_config={"run_mode": "queue", "source": "history"}
+    )
     return JobHistoryEntry(
         job_id=job.job_id,
         created_at=datetime.utcnow(),
@@ -81,8 +83,12 @@ def test_history_handoff_service_replays_snapshot_to_submit_callback() -> None:
         job_id="history-job",
         history_service=history_service,
         app_state=app_state,
-        submit_normalized_jobs=lambda records, run_config=None, source="gui", prompt_source="manual": (
-            submissions.append((list(records), dict(run_config or {}), source, prompt_source)) or len(records)
+        submit_normalized_jobs=lambda records,
+        run_config=None,
+        source="gui",
+        prompt_source="manual": (
+            submissions.append((list(records), dict(run_config or {}), source, prompt_source))
+            or len(records)
         ),
         set_last_run_config=lambda cfg: last_run_configs.append(dict(cfg)),
     )

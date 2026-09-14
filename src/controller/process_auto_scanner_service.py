@@ -23,9 +23,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 @dataclass
 class ProcessAutoScannerConfig:
     """Configuration for ProcessAutoScannerService.
-    
+
     PR-SCANNER-001: Increased thresholds to prevent GUI self-kill.
     """
+
     enabled: bool = True
     scan_interval_sec: float = 30.0
     # PR-SCANNER-001: Increased from 120s to 300s (5 minutes)
@@ -41,7 +42,7 @@ class ProcessAutoScannerSummary:
     scanned: int = 0
     # PR-MEMORY-001: Bounded list (max 100 entries) to prevent unbounded growth
     killed: list[dict[str, Any]] = field(default_factory=list)
-    
+
     def add_killed(self, entry: dict[str, Any]) -> None:
         """Add killed process entry with max 100 cap (PR-MEMORY-001)."""
         self.killed.append(entry)
@@ -77,7 +78,7 @@ class ProcessAutoScannerService:
             self._thread = threading.Thread(
                 target=self._run_loop,
                 daemon=False,  # Changed from True
-                name="ProcessAutoScanner"
+                name="ProcessAutoScanner",
             )
             self._thread.start()
         elif start_thread and _is_test_mode():
@@ -124,7 +125,7 @@ class ProcessAutoScannerService:
 
     def stop(self) -> None:
         """Stop the scanner thread gracefully.
-        
+
         PR-SCANNER-001: Increased timeout from 1s to 10s for reliable shutdown.
         """
         self._stop_event.set()
@@ -134,7 +135,7 @@ class ProcessAutoScannerService:
 
     def scan_once(self) -> ProcessAutoScannerSummary:
         """Scan for and terminate stray Python processes.
-        
+
         PR-SCANNER-001: Enhanced with self-PID and parent-PID protection.
         """
         summary = ProcessAutoScannerSummary(timestamp=time.time())
@@ -153,7 +154,7 @@ class ProcessAutoScannerService:
                 protected.add(parent_pid)
         except Exception:
             pass  # os.getppid() may not be available on all platforms
-        
+
         scanned = 0
         killed_details: list[dict[str, Any]] = []
         for proc in self._psutil.process_iter(

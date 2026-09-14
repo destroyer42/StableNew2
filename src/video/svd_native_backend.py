@@ -39,13 +39,17 @@ class SVDNativeVideoBackend:
                 "backend_id": self.backend_id,
                 "executor": "pipeline.run_svd_native_stage",
                 "job_id": str(request.job_id or ""),
-                "input_image_path": str(request.input_image_path) if request.input_image_path else None,
+                "input_image_path": str(request.input_image_path)
+                if request.input_image_path
+                else None,
             },
             replay_manifest_fragment={
                 "backend_id": self.backend_id,
                 "stage_name": request.stage_name,
                 "manifest_path": result.get("manifest_path"),
-                "input_image_path": str(request.input_image_path) if request.input_image_path else None,
+                "input_image_path": str(request.input_image_path)
+                if request.input_image_path
+                else None,
                 "job_id": str(request.job_id or ""),
                 "secondary_motion": result.get("secondary_motion"),
                 "secondary_motion_summary": result.get("secondary_motion_summary")

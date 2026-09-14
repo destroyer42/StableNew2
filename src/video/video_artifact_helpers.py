@@ -68,7 +68,7 @@ def build_video_artifact_bundle(
     }
 
 
-def bundle_from_execution_result(execution_result: "VideoExecutionResult") -> dict[str, Any]:
+def bundle_from_execution_result(execution_result: VideoExecutionResult) -> dict[str, Any]:
     """Build a generic video-artifact bundle from a ``VideoExecutionResult`` instance."""
     variant_payload = (
         execution_result.to_variant_payload()
@@ -83,17 +83,13 @@ def bundle_from_execution_result(execution_result: "VideoExecutionResult") -> di
         stage=str(getattr(execution_result, "stage_name", "") or ""),
         backend_id=str(getattr(execution_result, "backend_id", "") or ""),
         primary_path=getattr(execution_result, "primary_path", None),
-        output_paths=[
-            str(p) for p in (getattr(execution_result, "output_paths", None) or []) if p
-        ],
+        output_paths=[str(p) for p in (getattr(execution_result, "output_paths", None) or []) if p],
         video_paths=[str(p) for p in (variant_payload.get("video_paths") or []) if p],
         gif_paths=[str(p) for p in (variant_payload.get("gif_paths") or []) if p],
-        frame_paths=[
-            str(p) for p in (getattr(execution_result, "frame_paths", None) or []) if p
-        ],
+        frame_paths=[str(p) for p in (getattr(execution_result, "frame_paths", None) or []) if p],
         manifest_path=getattr(execution_result, "manifest_path", None),
         manifest_paths=(
-            [str(getattr(execution_result, "manifest_path"))]
+            [str(execution_result.manifest_path)]
             if getattr(execution_result, "manifest_path", None)
             else []
         ),

@@ -78,15 +78,18 @@ class TestGP1SingleSimpleRun:
 
     def test_gp1_single_simple_run_produces_one_job(self):
         """GP1.1: Builder emits exactly 1 NormalizedJobRecord with correct metadata."""
-        
+
         # Step 1: Load PromptPack fixture
         fixture_path = Path(__file__).parent.parent / "fixtures" / "packs" / "gp1_simple.json"
         pack = PromptPackModel.load_from_file(fixture_path)
-        
+
         assert pack.name == "GP1_Simple"
         assert len(pack.slots) >= 1, "Pack should have at least one slot"
-        assert pack.slots[0].text == "A beautiful sunset over mountains, photorealistic, highly detailed"
-        
+        assert (
+            pack.slots[0].text
+            == "A beautiful sunset over mountains, photorealistic, highly detailed"
+        )
+
         # Step 2: Create NJR using test helper (builder integration tested separately)
         njr = make_test_njr(
             job_id="gp1-test-001",
@@ -100,7 +103,7 @@ class TestGP1SingleSimpleRun:
                 "height": pack.preset_data.get("height", 1024),
             },
         )
-        
+
         # Step 3: Verify NJR structure
         assert njr.job_id == "gp1-test-001"
         assert njr.positive_prompt == pack.slots[0].text
@@ -110,11 +113,11 @@ class TestGP1SingleSimpleRun:
 
     def test_gp1_executes_through_runner(self):
         """GP1.2: NJR executes through runner with mocked HTTP transport."""
-        
+
         # Step 1: Load fixture and create NJR
         fixture_path = Path(__file__).parent.parent / "fixtures" / "packs" / "gp1_simple.json"
         pack = PromptPackModel.load_from_file(fixture_path)
-        
+
         njr = make_test_njr(
             job_id="gp1-test-002",
             prompt=pack.slots[0].text,
@@ -125,11 +128,11 @@ class TestGP1SingleSimpleRun:
                 "cfg_scale": 7.0,
             },
         )
-        
+
         # Step 2: Execute through runner with HTTP mock
         api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
-        
-        with patch.object(api_client._session, 'request') as mock_request:
+
+        with patch.object(api_client._session, "request") as mock_request:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
@@ -142,9 +145,9 @@ class TestGP1SingleSimpleRun:
             }
             mock_response.raise_for_status = Mock()
             mock_request.return_value = mock_response
-            
+
             entry = run_njr_journey(njr, api_client, timeout_seconds=10.0)
-            
+
             # Step 3: Verify execution
             assert entry.status.value == "completed"
             assert entry.job_id == "gp1-test-002"
@@ -152,28 +155,31 @@ class TestGP1SingleSimpleRun:
 
     def test_gp1_history_contains_correct_summary(self):
         """GP1.3: History entry contains correct metadata after execution."""
-        
+
         fixture_path = Path(__file__).parent.parent / "fixtures" / "packs" / "gp1_simple.json"
         pack = PromptPackModel.load_from_file(fixture_path)
-        
+
         njr = make_test_njr(
             job_id="gp1-test-003",
             prompt=pack.slots[0].text,
             base_model="sdxl",
             config={"sampler": "Euler", "steps": 20},
         )
-        
+
         api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
-        
-        with patch.object(api_client._session, 'request') as mock_request:
+
+        with patch.object(api_client._session, "request") as mock_request:
             mock_response = Mock()
             mock_response.status_code = 200
-            mock_response.json.return_value = {"images": ["data:image/png;base64,fake"], "parameters": {}}
+            mock_response.json.return_value = {
+                "images": ["data:image/png;base64,fake"],
+                "parameters": {},
+            }
             mock_response.raise_for_status = Mock()
             mock_request.return_value = mock_response
-            
+
             entry = run_njr_journey(njr, api_client)
-            
+
             # Verify history entry metadata
             assert entry.job_id == "gp1-test-003"
             assert entry.status == JobStatus.COMPLETED
@@ -230,10 +236,12 @@ class TestGP3BatchExpansion:
         """GP3.1: Batch size=3 produces 3 NormalizedJobRecords."""
         fixture_path = Path(__file__).parent.parent / "fixtures" / "packs" / "gp3_batch.json"
         pack = PromptPackModel.load_from_file(fixture_path)
-        
+
         # gp3_batch has batch_size=3
-        assert pack.preset_data["batch_size"] == 3, f"Expected batch_size=3, got {pack.preset_data.get('batch_size')}"
-        
+        assert pack.preset_data["batch_size"] == 3, (
+            f"Expected batch_size=3, got {pack.preset_data.get('batch_size')}"
+        )
+
         # Create 3 NJRs with batch_index=0,1,2
         njr_list = []
         for i in range(3):
@@ -252,12 +260,14 @@ class TestGP3BatchExpansion:
                 },
             )
             njr_list.append(njr)
-        
+
         assert len(njr_list) == 3, f"Expected 3 jobs from batch_size=3, got {len(njr_list)}"
-        
+
         # Verify batch_index increments
         for i, njr in enumerate(njr_list):
-            assert njr.config["batch_index"] == i, f"Job {i} should have batch_index={i}, got {njr.config.get('batch_index')}"
+            assert njr.config["batch_index"] == i, (
+                f"Job {i} should have batch_index={i}, got {njr.config.get('batch_index')}"
+            )
 
         # Expected:
         # - 3 records with batch_index=0,1,2
@@ -268,7 +278,7 @@ class TestGP3BatchExpansion:
         """GP3.2: Queue processes all 3 batch jobs."""
         fixture_path = Path(__file__).parent.parent / "fixtures" / "packs" / "gp3_batch.json"
         pack = PromptPackModel.load_from_file(fixture_path)
-        
+
         # Create 3 NJRs with batch_index=0,1,2
         njr_list = []
         for i in range(3):
@@ -287,35 +297,37 @@ class TestGP3BatchExpansion:
                 },
             )
             njr_list.append(njr)
-        
+
         # Execute each batch job through runner
         api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
-        
-        with patch.object(api_client._session, 'request') as mock_request:
+
+        with patch.object(api_client._session, "request") as mock_request:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
                 "images": ["data:image/png;base64,iVBORw0KGgoAAAANS"],
-                "info": json.dumps({
-                    "prompt": "A serene lake reflecting the sky at dawn",
-                    "all_prompts": ["A serene lake reflecting the sky at dawn"],
-                    "all_negative_prompts": [""],
-                    "seed": 42,
-                    "all_seeds": [42]
-                })
+                "info": json.dumps(
+                    {
+                        "prompt": "A serene lake reflecting the sky at dawn",
+                        "all_prompts": ["A serene lake reflecting the sky at dawn"],
+                        "all_negative_prompts": [""],
+                        "seed": 42,
+                        "all_seeds": [42],
+                    }
+                ),
             }
             mock_request.return_value = mock_response
-            
+
             history_entries = []
             for njr in njr_list:
                 entry = run_njr_journey(njr, api_client, timeout_seconds=10.0)
                 history_entries.append(entry)
-            
+
             # Verify all 3 jobs completed
             assert len(history_entries) == 3
             for entry in history_entries:
                 assert entry.status.value == "completed"
-            
+
             # Verify at least one generation call per batch job.
             # Runner may perform additional readiness/progress API calls.
             txt2img_calls = 0
@@ -401,7 +413,7 @@ class TestGP6MultiStagePipeline:
         """GP6.1: StageChain includes txt2img → refiner → hires → adetailer."""
         fixture_path = Path(__file__).parent.parent / "fixtures" / "packs" / "gp6_stages.json"
         pack = PromptPackModel.load_from_file(fixture_path)
-        
+
         # gp6_stages has: hires, refiner, adetailer enabled
         njr = make_test_njr(
             job_id="gp6-stages-001",
@@ -418,7 +430,7 @@ class TestGP6MultiStagePipeline:
                 "adetailer_enabled": True,
             },
         )
-        
+
         # Verify stage flags enabled
         assert njr.config["enable_hr"] is True, "Hires should be enabled"
         assert njr.config["hr_scale"] == 2.0, "Hires scale should be 2.0"
@@ -428,7 +440,7 @@ class TestGP6MultiStagePipeline:
         """GP6.2: Runner receives complete stage configurations."""
         fixture_path = Path(__file__).parent.parent / "fixtures" / "packs" / "gp6_stages.json"
         pack = PromptPackModel.load_from_file(fixture_path)
-        
+
         njr = make_test_njr(
             job_id="gp6-stages-002",
             prompt=pack.slots[0].text,
@@ -444,31 +456,33 @@ class TestGP6MultiStagePipeline:
                 "adetailer_enabled": True,
             },
         )
-        
+
         api_client = SDWebUIClient(base_url="http://127.0.0.1:7860")
-        
-        with patch.object(api_client._session, 'request') as mock_request:
+
+        with patch.object(api_client._session, "request") as mock_request:
             mock_response = Mock()
             mock_response.status_code = 200
             mock_response.json.return_value = {
                 "images": ["data:image/png;base64,iVBORw0KGgoAAAANS"],
-                "info": json.dumps({
-                    "prompt": "Futuristic cyberpunk cityscape at night",
-                    "all_prompts": ["Futuristic cyberpunk cityscape at night"],
-                    "all_negative_prompts": [""],
-                    "seed": 42,
-                    "all_seeds": [42]
-                })
+                "info": json.dumps(
+                    {
+                        "prompt": "Futuristic cyberpunk cityscape at night",
+                        "all_prompts": ["Futuristic cyberpunk cityscape at night"],
+                        "all_negative_prompts": [""],
+                        "seed": 42,
+                        "all_seeds": [42],
+                    }
+                ),
             }
             mock_request.return_value = mock_response
-            
+
             entry = run_njr_journey(njr, api_client, timeout_seconds=10.0)
-            
+
             assert entry.status.value == "completed"
-            
+
             # Verify runner processed multi-stage config
             assert mock_request.called
-            
+
             # Verify NJR snapshot has stage flags enabled
             snapshot = (entry.snapshot or {}).get("normalized_job", {})
             assert snapshot
@@ -536,7 +550,9 @@ class TestGP6MultiStagePipeline:
             ),
         }
 
-        def _write_fake_video(self, image_paths, output_path, fps=24, codec="libx264", quality="medium"):
+        def _write_fake_video(
+            self, image_paths, output_path, fps=24, codec="libx264", quality="medium"
+        ):
             output_path.parent.mkdir(parents=True, exist_ok=True)
             output_path.write_bytes(b"fake-mp4")
             return True
@@ -551,12 +567,16 @@ class TestGP6MultiStagePipeline:
                     motion_modules=["mm_sdxl_hs.safetensors"],
                 ),
             ),
-            patch.object(api_client, "get_current_model", return_value="realismFromHadesXL_2ndAnniversary"),
+            patch.object(
+                api_client, "get_current_model", return_value="realismFromHadesXL_2ndAnniversary"
+            ),
             patch.object(api_client._session, "request") as mock_request,
             patch("src.api.webui_api.WebUIAPI.wait_until_true_ready", return_value=True),
             patch("src.api.client.wait_for_webui_ready", return_value=True),
             patch("src.api.client.validate_webui_health", return_value=True),
-            patch("src.pipeline.executor.VideoCreator.create_video_from_images", new=_write_fake_video),
+            patch(
+                "src.pipeline.executor.VideoCreator.create_video_from_images", new=_write_fake_video
+            ),
         ):
             mock_response = Mock()
             mock_response.status_code = 200

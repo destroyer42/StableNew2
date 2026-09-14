@@ -3,8 +3,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
-import requests
 import pytest
+import requests
 
 from src.api.client import SDWebUIClient, WebUIUnavailableError
 from src.api.types import GenerateErrorCode
@@ -64,7 +64,9 @@ def test_generate_images_http_error_uses_webui_error_payload(monkeypatch):
     client = SDWebUIClient()
 
     def fake_img2img(payload, *, policy=None, raise_on_error=False):
-        exc = requests.HTTPError("500 Server Error: Internal Server Error for url: http://127.0.0.1:7860/sdapi/v1/img2img")
+        exc = requests.HTTPError(
+            "500 Server Error: Internal Server Error for url: http://127.0.0.1:7860/sdapi/v1/img2img"
+        )
         exc.diagnostics_context = {
             "request_summary": {
                 "status": 500,

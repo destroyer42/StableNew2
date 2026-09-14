@@ -16,7 +16,12 @@ class _ControllerStub:
             "workflow_id": "ltx_multiframe_anchor_v1",
             "motion_profile": "gentle",
             "camera_intent": {"preset": "none", "strength": 0.35},
-            "controlnet": {"model": "depth", "weight": 1.0, "guidance_start": 0.0, "guidance_end": 1.0},
+            "controlnet": {
+                "model": "depth",
+                "weight": 1.0,
+                "guidance_start": 0.0,
+                "guidance_end": 1.0,
+            },
             "depth_input": {"mode": "none", "path": ""},
             "output_route": "Reprocess",
         }
@@ -40,7 +45,9 @@ class _ControllerStub:
     def get_latest_output_image_path(self) -> str:
         return "C:/tmp/latest.png"
 
-    def submit_video_workflow_job(self, *, source_image_path: str, form_data: dict[str, object]) -> str:
+    def submit_video_workflow_job(
+        self, *, source_image_path: str, form_data: dict[str, object]
+    ) -> str:
         self.submissions.append((source_image_path, dict(form_data)))
         return "job-video-1"
 
@@ -88,7 +95,12 @@ def test_video_workflow_tab_handoff_and_state_roundtrip(tk_root) -> None:
             "mid_anchor_paths": ["C:/tmp/mid-a.png"],
             "motion_profile": "dynamic",
             "camera_intent": {"preset": "orbit_left", "strength": 0.55},
-            "controlnet": {"model": "depth", "weight": 0.8, "guidance_start": 0.2, "guidance_end": 0.85},
+            "controlnet": {
+                "model": "depth",
+                "weight": 0.8,
+                "guidance_start": 0.2,
+                "guidance_end": 0.85,
+            },
             "depth_input": {"mode": "auto", "path": ""},
             "output_route": "Testing",
             "prompt": "new prompt",
@@ -185,7 +197,10 @@ def test_video_workflow_tab_submit_serializes_conditioning_payload(tk_root, monk
     tab.controlnet_weight_var.set("0.8")
     tab.controlnet_guidance_start_var.set("0.1")
     tab.controlnet_guidance_end_var.set("0.9")
-    monkeypatch.setattr("src.gui.views.video_workflow_tab_frame_v2.messagebox.showinfo", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        "src.gui.views.video_workflow_tab_frame_v2.messagebox.showinfo",
+        lambda *_args, **_kwargs: None,
+    )
 
     tab._on_submit()
 

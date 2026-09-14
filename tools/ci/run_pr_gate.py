@@ -10,12 +10,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 GATE_STEPS = (
-    ("repository completeness", "tools/ci/check_repository_completeness.py"),
-    ("controller surface ratchet", "tools/ci/check_controller_surface.py"),
-    ("Ruff baseline", "tools/ci/run_ruff_baseline.py"),
-    ("mypy smoke", "tools/ci/run_mypy_smoke.py"),
-    ("isolated collection", "tools/ci/run_collection_gate.py"),
-    ("required smoke", "tools/ci/run_required_smoke.py"),
+    ("repository completeness", (sys.executable, str(ROOT / "tools/ci/check_repository_completeness.py"))),
+    ("controller surface ratchet", (sys.executable, str(ROOT / "tools/ci/check_controller_surface.py"))),
+    ("Ruff", ("ruff", "check", ".")),
+    ("mypy smoke", (sys.executable, str(ROOT / "tools/ci/run_mypy_smoke.py"))),
+    ("isolated collection", (sys.executable, str(ROOT / "tools/ci/run_collection_gate.py"))),
+    ("required smoke", (sys.executable, str(ROOT / "tools/ci/run_required_smoke.py"))),
 )
 
 TOOLING_BLOCKER_EXIT_CODE = 2
@@ -26,9 +26,7 @@ def missing_required_tools() -> list[str]:
     """Return obvious local tool prerequisites missing before the gate starts."""
 
     missing = [
-        module
-        for module in REQUIRED_TOOL_MODULES
-        if importlib.util.find_spec(module) is None
+        module for module in REQUIRED_TOOL_MODULES if importlib.util.find_spec(module) is None
     ]
     if shutil.which("ruff") is None:
         missing.append("ruff")
@@ -40,8 +38,7 @@ def preflight_tools() -> bool:
     if not missing:
         return True
     print(
-        "TOOLING BLOCKER: missing local gate tool(s): "
-        + ", ".join(sorted(missing)),
+        "TOOLING BLOCKER: missing local gate tool(s): " + ", ".join(sorted(missing)),
         file=sys.stderr,
     )
     print(
@@ -55,11 +52,11 @@ def preflight_tools() -> bool:
 def main() -> int:
     if not preflight_tools():
         return TOOLING_BLOCKER_EXIT_CODE
-    for label, relative_script in GATE_STEPS:
+    for label, command in GATE_STEPS:
         print(f"==> {label}", flush=True)
         try:
             completed = subprocess.run(
-                [sys.executable, str(ROOT / relative_script)],
+                command,
                 cwd=ROOT,
                 check=False,
             )

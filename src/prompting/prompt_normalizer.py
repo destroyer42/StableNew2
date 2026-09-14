@@ -7,6 +7,8 @@ from src.prompting.prompt_splitter import detect_lora_syntax, detect_weight_synt
 _SPACE_PATTERN = re.compile(r"\s+")
 _OUTER_WRAPPER_PATTERN = re.compile(r"^[\[(](.+?)[\])]$")
 _PAREN_WEIGHT_PATTERN = re.compile(r"^\((.+?):[+-]?\d+(?:\.\d+)?\)$")
+
+
 def normalize_for_match(text: str) -> str:
     value = _SPACE_PATTERN.sub(" ", str(text or "").strip().lower())
     value = value.replace("( ", "(").replace(" )", ")")

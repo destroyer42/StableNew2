@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-from typing import List, Tuple
-
 from src.prompting.prompt_normalizer import build_dedupe_key
 
 
-def dedupe_prompt_chunks(chunks: List[str]) -> Tuple[List[str], List[str]]:
+def dedupe_prompt_chunks(chunks: list[str]) -> tuple[list[str], list[str]]:
     """
     Returns:
         kept_chunks, dropped_chunks
@@ -27,7 +25,9 @@ def dedupe_prompt_chunks(chunks: List[str]) -> Tuple[List[str], List[str]]:
         kept.append(text)
 
     if not kept:
-        first_non_empty = next((str(chunk or "").strip() for chunk in chunks if str(chunk or "").strip()), "")
+        first_non_empty = next(
+            (str(chunk or "").strip() for chunk in chunks if str(chunk or "").strip()), ""
+        )
         if first_non_empty:
             kept.append(first_non_empty)
             dropped = [item for item in dropped if item != first_non_empty]

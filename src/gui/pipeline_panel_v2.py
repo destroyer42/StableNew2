@@ -146,11 +146,14 @@ class PipelinePanelV2(ttk.Frame):
 
             row = ttk.Frame(self._lora_section)
             row.pack(fill=tk.X, padx=6, pady=(4, 6))
-            name_label = ttk.Label(row, text=name, style=STATUS_LABEL_STYLE, wraplength=260, justify="left")
+            name_label = ttk.Label(
+                row, text=name, style=STATUS_LABEL_STYLE, wraplength=260, justify="left"
+            )
             name_label.pack(anchor=tk.W)
 
             controls = ttk.Frame(row)
             controls.pack(fill=tk.X, pady=(4, 0))
+
             def on_enabled_toggle(
                 lora_name: str = name,
                 variable: tk.BooleanVar = enabled_var,
@@ -171,7 +174,9 @@ class PipelinePanelV2(ttk.Frame):
                 to=1.5,
                 variable=strength_var,
                 resolution=0.01,
-                command=lambda value, lora_name=name: self._on_lora_strength_change(lora_name, value),
+                command=lambda value, lora_name=name: self._on_lora_strength_change(
+                    lora_name, value
+                ),
                 length=150,
             )
             slider.pack(side=tk.LEFT, fill=tk.X, expand=True)

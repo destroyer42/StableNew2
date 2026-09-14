@@ -29,9 +29,15 @@ def test_orchestrator_emits_recommend_only_analysis_without_changing_optimizer_c
     assert result.analysis.context.source.prompt_pack_id == "pack-1"
     assert result.analysis.intent.intent_band == "portrait"
     assert any(item.action == "consider_face_pass" for item in result.analysis.recommendations)
-    assert any(item.recommendation_id == "duplicate_lora_name_with_different_weights" for item in result.analysis.recommendations)
-    assert result.optimization.positive.optimized_prompt == service.optimize_prompts(
-        "masterpiece, beautiful woman, natural skin texture, <lora:detail:0.6>, <lora:detail:0.8>",
-        "watermark, blurry",
-        pipeline_name="txt2img",
-    ).positive.optimized_prompt
+    assert any(
+        item.recommendation_id == "duplicate_lora_name_with_different_weights"
+        for item in result.analysis.recommendations
+    )
+    assert (
+        result.optimization.positive.optimized_prompt
+        == service.optimize_prompts(
+            "masterpiece, beautiful woman, natural skin texture, <lora:detail:0.6>, <lora:detail:0.8>",
+            "watermark, blurry",
+            pipeline_name="txt2img",
+        ).positive.optimized_prompt
+    )

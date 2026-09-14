@@ -158,7 +158,17 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         self.sampler_combo = ttk.Combobox(
             parent,
             textvariable=self.sampler_var,
-            values=["Euler a", "Euler", "DPM++ 2M", "DPM++ 2M Karras", "DPM++ SDE", "DPM++ SDE Karras", "DDIM", "PLMS", "UniPC"],
+            values=[
+                "Euler a",
+                "Euler",
+                "DPM++ 2M",
+                "DPM++ 2M Karras",
+                "DPM++ SDE",
+                "DPM++ SDE Karras",
+                "DDIM",
+                "PLMS",
+                "UniPC",
+            ],
             state="readonly",
             width=18,
             style="Dark.TCombobox",
@@ -170,7 +180,7 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             sampler_label,
             self.sampler_combo,
         )
-        
+
         scheduler_label = ttk.Label(parent, text="Scheduler", style=BODY_LABEL_STYLE)
         scheduler_label.grid(row=3, column=2, sticky="w", pady=(6, 2))
         self.scheduler_combo = ttk.Combobox(
@@ -192,7 +202,7 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         # Face restore row with checkbox and method dropdown
         face_restore_frame = ttk.Frame(parent, style=SURFACE_FRAME_STYLE)
         face_restore_frame.grid(row=4, column=0, columnspan=4, sticky="ew", pady=(6, 0))
-        
+
         face_restore_check = ttk.Checkbutton(
             face_restore_frame,
             text="Face restore",
@@ -206,7 +216,7 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
             UPSCALE_SETTING_HELP["face_restore"],
             face_restore_check,
         )
-        
+
         self.face_restore_method_combo = ttk.Combobox(
             face_restore_frame,
             textvariable=self.face_restore_method_var,
@@ -239,7 +249,7 @@ class AdvancedUpscaleStageCardV2(BaseStageCardV2):
         )
 
         configure_grid_columns(parent, get_two_pair_form_column_specs())
-    
+
     def _on_face_restore_toggle(self) -> None:
         """Show/hide face restore method dropdown based on checkbox state."""
         if self.face_restore_var.get():

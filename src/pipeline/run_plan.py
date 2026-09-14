@@ -51,20 +51,20 @@ def build_run_plan_from_njr(njr: NormalizedJobRecord) -> RunPlan:
         )
     )
     stage_chain = [stage for _, stage in indexed_stage_chain]
-    
+
     # Build a PlannedJob for EACH **ENABLED** stage in the chain
     jobs = []
     enabled_stages = []
-    
-    for idx, stage_config in enumerate(stage_chain):
+
+    for _idx, stage_config in enumerate(stage_chain):
         # Check if stage is enabled
         is_enabled = getattr(stage_config, "enabled", True)
         if not is_enabled:
             continue  # Skip disabled stages
-            
+
         stage_type = getattr(stage_config, "stage_type", "") or "txt2img"
         enabled_stages.append(stage_type)
-        
+
         jobs.append(
             PlannedJob(
                 stage_name=stage_type,
@@ -77,7 +77,7 @@ def build_run_plan_from_njr(njr: NormalizedJobRecord) -> RunPlan:
                 model=getattr(njr, "base_model", None),
             )
         )
-    
+
     # Fallback: if no enabled stages found, create a single txt2img job
     if not jobs:
         jobs.append(
@@ -93,7 +93,7 @@ def build_run_plan_from_njr(njr: NormalizedJobRecord) -> RunPlan:
             )
         )
         enabled_stages = ["txt2img"]
-    
+
     plan = RunPlan(
         jobs=jobs,
         total_jobs=len(jobs),

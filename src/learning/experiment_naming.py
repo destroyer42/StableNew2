@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any
 
 
 def _compact_prompt(prompt_text: str, *, limit: int = 36) -> str:

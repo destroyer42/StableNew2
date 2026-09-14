@@ -64,7 +64,9 @@ def test_queue_mode_disabled_still_uses_job_controller(monkeypatch):
     controller, fake = _setup_controller(monkeypatch, queue_enabled=False)
     started = controller.start_pipeline()
     assert started is True
-    assert controller._job_service.submitted, "JobService should receive canonical queue submissions"
+    assert controller._job_service.submitted, (
+        "JobService should receive canonical queue submissions"
+    )
 
 
 def test_queue_mode_enabled_submits_and_handles_status(monkeypatch):
@@ -172,7 +174,9 @@ def test_pipeline_controller_run_njr_passes_checkpoint_callback(monkeypatch):
         seed=123,
     )
 
-    callback = lambda *_args, **_kwargs: None
+    def callback(*_args, **_kwargs) -> None:
+        return None
+
     result = controller.run_njr(record, checkpoint_callback=callback)
 
     assert runner.calls == [callback]

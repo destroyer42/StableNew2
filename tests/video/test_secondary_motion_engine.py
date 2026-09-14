@@ -26,7 +26,9 @@ def test_secondary_motion_engine_is_deterministic_for_fixed_seed() -> None:
         frequency_hz=0.4,
         cap_pixels=4,
     )
-    intent = SecondaryMotionIntent(enabled=True, mode="apply", intent="micro_sway", regions=("hair",))
+    intent = SecondaryMotionIntent(
+        enabled=True, mode="apply", intent="micro_sway", regions=("hair",)
+    )
 
     first_frames, first_result = apply_secondary_motion_to_frames(
         [frame.copy() for frame in frames],
@@ -42,7 +44,9 @@ def test_secondary_motion_engine_is_deterministic_for_fixed_seed() -> None:
     )
 
     assert first_result.to_dict() == second_result.to_dict()
-    assert [frame.tobytes() for frame in first_frames] == [frame.tobytes() for frame in second_frames]
+    assert [frame.tobytes() for frame in first_frames] == [
+        frame.tobytes() for frame in second_frames
+    ]
 
 
 def test_secondary_motion_engine_observe_mode_skips_frame_mutation() -> None:

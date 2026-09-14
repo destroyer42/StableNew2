@@ -85,7 +85,9 @@ class CurationLearningBridge:
             "variable_under_test": "staged_curation_decision",
             "variant_value": str(event.decision or ""),
             "user_rating": user_rating,
-            "user_rating_source": "final_rating" if final_rating is not None else "soft_decision_score",
+            "user_rating_source": "final_rating"
+            if final_rating is not None
+            else "soft_decision_score",
             "final_rating": final_rating,
             "advancement_score": SOFT_DECISION_SCORES.get(str(event.decision or ""), user_rating),
             "advancement_decision": str(event.decision or ""),

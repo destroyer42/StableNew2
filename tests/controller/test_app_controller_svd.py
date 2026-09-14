@@ -1,16 +1,16 @@
 from __future__ import annotations
 
-from datetime import datetime
 import json
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
 from src.controller.app_controller import AppController
-from src.video.svd_config import SVDConfig
-from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
 from src.queue.job_history_store import JobHistoryEntry, JobStatus
+from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
+from src.video.svd_config import SVDConfig
 
 
 def test_get_supported_svd_models_returns_model_ids() -> None:
@@ -76,7 +76,7 @@ def test_build_svd_defaults_uses_controller_default_config() -> None:
                 "face_restore": {"enabled": True},
                 "interpolation": {"enabled": True, "executable_path": "C:/tools/rife.exe"},
                 "upscale": {"enabled": True},
-            }
+            },
         }
     )
 
@@ -131,7 +131,9 @@ def test_submit_svd_job_rejects_invalid_motion_bucket_before_controller_dispatch
 def test_runtime_status_callback_preserves_stage_detail() -> None:
     captured = {}
     controller = AppController.__new__(AppController)
-    controller.app_state = SimpleNamespace(set_runtime_status=lambda status: captured.setdefault("status", status))
+    controller.app_state = SimpleNamespace(
+        set_runtime_status=lambda status: captured.setdefault("status", status)
+    )
     controller._ui_dispatch = lambda fn: fn()
 
     callback = controller._get_runtime_status_callback()
@@ -157,7 +159,9 @@ def test_on_webui_ready_triggers_deferred_autostart() -> None:
             self.called += 1
 
     controller = AppController.__new__(AppController)
-    controller.pipeline_controller = type("PipelineControllerStub", (), {"_job_controller": _JobController()})()
+    controller.pipeline_controller = type(
+        "PipelineControllerStub", (), {"_job_controller": _JobController()}
+    )()
     controller._append_log = lambda *_args, **_kwargs: None
     controller.current_operation_label = None
     controller.last_ui_action = None
@@ -213,7 +217,9 @@ def test_send_history_job_image_to_video_workflow_selects_workflow_tab(tmp_path)
             )
         ]
     )
-    controller.main_window = SimpleNamespace(video_workflow_tab=workflow_tab, center_notebook=notebook)
+    controller.main_window = SimpleNamespace(
+        video_workflow_tab=workflow_tab, center_notebook=notebook
+    )
     controller._append_log = lambda *_args, **_kwargs: None
 
     routed = controller.send_history_job_image_to_video_workflow("job-456")
@@ -291,7 +297,9 @@ def test_send_history_video_bundle_to_video_workflow_uses_bundle_handoff(tmp_pat
             )
         ]
     )
-    controller.main_window = SimpleNamespace(video_workflow_tab=workflow_tab, center_notebook=notebook)
+    controller.main_window = SimpleNamespace(
+        video_workflow_tab=workflow_tab, center_notebook=notebook
+    )
     controller._append_log = lambda *_args, **_kwargs: None
 
     routed = controller.send_history_job_image_to_video_workflow("job-vid-456")

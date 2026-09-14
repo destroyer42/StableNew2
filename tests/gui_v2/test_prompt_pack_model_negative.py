@@ -1,4 +1,5 @@
 """Unit tests for PromptPackModel negative prompt field."""
+
 from __future__ import annotations
 
 import json
@@ -34,7 +35,7 @@ def test_save_includes_negative():
     pack = PromptPackModel.new("Test", slot_count=1)
     pack.slots[0].text = "wizard"
     pack.slots[0].negative = "ugly"
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "test_negative.json"
         pack.save_to_file(path)
@@ -51,11 +52,11 @@ def test_load_without_negative_field():
     """Test backward compatibility: load old JSON without negative field."""
     # Simulate old JSON format
     old_json = {"name": "Old", "slots": [{"index": 0, "text": "hello"}]}
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "old_test.json"
         path.write_text(json.dumps(old_json), encoding="utf-8")
-        
+
         pack = PromptPackModel.load_from_file(path)
         assert pack.slots[0].negative == ""
         assert pack.slots[0].text == "hello"
@@ -66,11 +67,11 @@ def test_load_with_negative_field():
     pack = PromptPackModel.new("Test", slot_count=1)
     pack.slots[0].text = "positive"
     pack.slots[0].negative = "bad quality"
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "test_with_neg.json"
         pack.save_to_file(path)
-        
+
         pack2 = PromptPackModel.load_from_file(path)
         assert pack2.slots[0].negative == "bad quality"
         assert pack2.slots[0].text == "positive"
@@ -85,11 +86,11 @@ def test_roundtrip_save_load_negative():
     pack.slots[1].negative = "low quality"
     pack.slots[2].text = "druid"
     pack.slots[2].negative = ""  # Empty is valid
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "roundtrip.json"
         pack.save_to_file(path)
-        
+
         loaded = PromptPackModel.load_from_file(path)
         assert loaded.slots[0].negative == "ugly, blurry"
         assert loaded.slots[1].negative == "low quality"
@@ -99,14 +100,14 @@ def test_roundtrip_save_load_negative():
 def test_negative_field_preserves_special_characters():
     """Test that negative field handles special characters."""
     pack = PromptPackModel.new("Special", slot_count=1)
-    pack.slots[0].negative = "ugly, <lora:bad:0.5>, \"quotes\", new\\nline"
-    
+    pack.slots[0].negative = 'ugly, <lora:bad:0.5>, "quotes", new\\nline'
+
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "special.json"
         pack.save_to_file(path)
-        
+
         loaded = PromptPackModel.load_from_file(path)
-        assert loaded.slots[0].negative == "ugly, <lora:bad:0.5>, \"quotes\", new\\nline"
+        assert loaded.slots[0].negative == 'ugly, <lora:bad:0.5>, "quotes", new\\nline'
 
 
 def test_empty_negative_saves_as_empty_string():
@@ -114,7 +115,7 @@ def test_empty_negative_saves_as_empty_string():
     pack = PromptPackModel.new("Empty", slot_count=1)
     pack.slots[0].text = "test"
     pack.slots[0].negative = ""
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "empty_neg.json"
         pack.save_to_file(path)
@@ -132,24 +133,21 @@ def test_load_padded_slots_include_negative():
     # Create pack with only 2 slots
     small_json = {
         "name": "Small",
-        "slots": [
-            {"index": 0, "text": "one", "negative": "neg1"},
-            {"index": 1, "text": "two"}
-        ]
+        "slots": [{"index": 0, "text": "one", "negative": "neg1"}, {"index": 1, "text": "two"}],
     }
-    
+
     with tempfile.TemporaryDirectory() as tmpdir:
         path = Path(tmpdir) / "small.json"
         path.write_text(json.dumps(small_json), encoding="utf-8")
-        
+
         # Load with min_slots=10 (default)
         pack = PromptPackModel.load_from_file(path)
         assert len(pack.slots) == 10
-        
+
         # First two slots from file
         assert pack.slots[0].negative == "neg1"
         assert pack.slots[1].negative == ""
-        
+
         # Padded slots should have negative=""
         for i in range(2, 10):
             assert pack.slots[i].negative == ""

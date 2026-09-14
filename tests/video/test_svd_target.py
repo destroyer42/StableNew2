@@ -39,7 +39,9 @@ def test_auto_targets_are_stride_safe_and_within_pixel_budget() -> None:
         width % SVD_TARGET_STRIDE == 0 and height % SVD_TARGET_STRIDE == 0
         for width, height in SVD_TARGET_SIZES
     )
-    assert all(width * height <= SVD_AUTO_TARGET_PIXEL_CEILING for width, height in SVD_TARGET_SIZES)
+    assert all(
+        width * height <= SVD_AUTO_TARGET_PIXEL_CEILING for width, height in SVD_TARGET_SIZES
+    )
     assert SVD_AUTO_TARGET_PIXEL_CEILING <= 704 * 896
 
 

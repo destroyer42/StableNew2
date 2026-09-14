@@ -206,16 +206,14 @@ class TestSchedulerRegression:
         for config, expected_sampler, should_have_scheduler, expected_scheduler in test_cases:
             result = self.pipeline._parse_sampler_config(config)
 
-            assert (
-                result["sampler_name"] == expected_sampler
-            ), f"Failed sampler for config: {config}"
+            assert result["sampler_name"] == expected_sampler, (
+                f"Failed sampler for config: {config}"
+            )
 
             if should_have_scheduler:
                 assert "scheduler" in result, f"Missing scheduler for config: {config}"
-                assert (
-                    result["scheduler"] == expected_scheduler
-                ), f"Wrong scheduler for config: {config}"
+                assert result["scheduler"] == expected_scheduler, (
+                    f"Wrong scheduler for config: {config}"
+                )
             else:
-                assert (
-                    "scheduler" not in result
-                ), f"Unexpected scheduler for config: {config}"
+                assert "scheduler" not in result, f"Unexpected scheduler for config: {config}"

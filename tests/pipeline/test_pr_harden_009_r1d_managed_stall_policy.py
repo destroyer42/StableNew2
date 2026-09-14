@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import threading
-from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
-from src.api.client import ProgressInfo, SDWebUIClient
+from src.api.client import ProgressInfo
 from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome, GenerateResult
 from src.pipeline.executor import EXTERNAL_WEBUI_STALL_ACTION_REQUIRED, Pipeline, PipelineStageError
 from src.queue.job_model import JobStatus
@@ -73,6 +72,7 @@ class _BlockingGenerationClient:
 class _ProcessManager:
     def __init__(self, client: _BlockingGenerationClient, *, managed: bool) -> None:
         self.process = object() if managed else None
+        self.owns_process = managed
         self._managed = managed
         self._client = client
         self.restart_count = 0
@@ -158,9 +158,7 @@ def test_fake_clock_enforces_post_interrupt_grace(
     monkeypatch.setattr("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_SEC", 10.0)
     monkeypatch.setattr("src.pipeline.executor.STALL_INTERRUPT_THRESHOLD_BY_STAGE", {})
     monkeypatch.setattr("src.pipeline.executor.POST_INTERRUPT_STALL_GRACE_SEC", 30.0)
-    monkeypatch.setattr(
-        "src.pipeline.executor.get_global_webui_process_manager", lambda: manager
-    )
+    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: manager)
 
     pipeline._poll_progress_loop(
         _ClockStopEvent(clock, stop_after=stop_after),
@@ -180,9 +178,7 @@ def test_managed_wedge_restarts_once_and_returns_nonreplayable_unknown(monkeypat
     manager = _ProcessManager(client, managed=True)
     pipeline = _pipeline(client)
     _set_short_stall_policy(monkeypatch)
-    monkeypatch.setattr(
-        "src.pipeline.executor.get_global_webui_process_manager", lambda: manager
-    )
+    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: manager)
 
     with pytest.raises(PipelineStageError) as error:
         pipeline._generate_images_with_progress(
@@ -202,9 +198,7 @@ def test_request_return_during_grace_does_not_escalate(monkeypatch) -> None:
     manager = _ProcessManager(client, managed=True)
     pipeline = _pipeline(client)
     _set_short_stall_policy(monkeypatch)
-    monkeypatch.setattr(
-        "src.pipeline.executor.get_global_webui_process_manager", lambda: manager
-    )
+    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: manager)
 
     result = pipeline._generate_images_with_progress(
         "txt2img",
@@ -230,9 +224,7 @@ def test_external_wedge_emits_once_without_process_mutation(monkeypatch) -> None
 
     pipeline = _pipeline(client, status_callback=observe_status)
     _set_short_stall_policy(monkeypatch)
-    monkeypatch.setattr(
-        "src.pipeline.executor.get_global_webui_process_manager", lambda: manager
-    )
+    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: manager)
 
     with pytest.raises(PipelineStageError) as error:
         pipeline._generate_images_with_progress(

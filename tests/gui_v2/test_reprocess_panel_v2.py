@@ -3,17 +3,19 @@ from __future__ import annotations
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
+from tkinter import ttk
 from types import SimpleNamespace
 
 import pytest
-from tkinter import ttk
 
-from src.pipeline.reprocess_builder import ReprocessEffectiveSettingsPreview, ReprocessStageSettingsPreview
 from src.gui.controllers.review_workflow_adapter import ReviewWorkspaceHandoff
-from src.gui.artifact_metadata_inspector_dialog import ArtifactMetadataInspectorDialog
-from src.gui.theme_v2 import BACKGROUND_DARK
 from src.gui.panels_v2.reprocess_panel_v2 import ReprocessPanelV2
+from src.gui.theme_v2 import BACKGROUND_DARK
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
+from src.pipeline.reprocess_builder import (
+    ReprocessEffectiveSettingsPreview,
+    ReprocessStageSettingsPreview,
+)
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
 from src.utils.image_metadata import ReadPayloadResult
@@ -91,7 +93,9 @@ def test_review_tab_imports_selected_images_to_staged_curation(
     imported: list[tuple[list[str], str | None]] = []
 
     class _LearningController:
-        def import_review_images_to_staged_curation(self, image_paths, *, display_name=None, source_label="review_tab"):
+        def import_review_images_to_staged_curation(
+            self, image_paths, *, display_name=None, source_label="review_tab"
+        ):
             imported.append((list(image_paths), display_name))
             return "curation-import-1"
 
@@ -113,9 +117,18 @@ def test_review_tab_imports_selected_images_to_staged_curation(
                 "src.gui.views.review_tab_frame_v2.extract_embedded_metadata",
                 lambda _path: ReadPayloadResult(payload=None, status="missing"),
             )
-            mp.setattr("src.gui.views.review_tab_frame_v2.messagebox.showinfo", lambda *args, **kwargs: None)
-            mp.setattr("src.gui.views.review_tab_frame_v2.messagebox.showerror", lambda *args, **kwargs: None)
-            mp.setattr("src.gui.views.review_tab_frame_v2.messagebox.showwarning", lambda *args, **kwargs: None)
+            mp.setattr(
+                "src.gui.views.review_tab_frame_v2.messagebox.showinfo",
+                lambda *args, **kwargs: None,
+            )
+            mp.setattr(
+                "src.gui.views.review_tab_frame_v2.messagebox.showerror",
+                lambda *args, **kwargs: None,
+            )
+            mp.setattr(
+                "src.gui.views.review_tab_frame_v2.messagebox.showwarning",
+                lambda *args, **kwargs: None,
+            )
             tab._set_selected_images([image_a, image_b])  # noqa: SLF001
             tab.images_list.selection_set(0, 1)
             tab._on_import_selected_to_staged_curation()  # noqa: SLF001
@@ -155,11 +168,22 @@ def test_review_tab_imports_selected_history_job_to_staged_curation(
     tab = ReviewTabFrame(tk_root, app_controller=app_controller, app_state=app_state)
     try:
         with pytest.MonkeyPatch.context() as mp:
-            mp.setattr("src.gui.views.review_tab_frame_v2.messagebox.showinfo", lambda *args, **kwargs: None)
-            mp.setattr("src.gui.views.review_tab_frame_v2.messagebox.showerror", lambda *args, **kwargs: None)
-            mp.setattr("src.gui.views.review_tab_frame_v2.messagebox.showwarning", lambda *args, **kwargs: None)
+            mp.setattr(
+                "src.gui.views.review_tab_frame_v2.messagebox.showinfo",
+                lambda *args, **kwargs: None,
+            )
+            mp.setattr(
+                "src.gui.views.review_tab_frame_v2.messagebox.showerror",
+                lambda *args, **kwargs: None,
+            )
+            mp.setattr(
+                "src.gui.views.review_tab_frame_v2.messagebox.showwarning",
+                lambda *args, **kwargs: None,
+            )
             picker = ttk.Treeview(tk_root, columns=("status", "pack", "job_id"), show="headings")
-            picker.insert("", "end", iid="history-1", values=("completed", "History Pack", "history-1"))
+            picker.insert(
+                "", "end", iid="history-1", values=("completed", "History Pack", "history-1")
+            )
             picker.selection_set("history-1")
             tab._import_selected_history_job(picker)  # noqa: SLF001
     finally:
@@ -216,7 +240,9 @@ def test_review_tab_loads_staged_curation_handoff(tk_root: tk.Tk, tmp_path: Path
 
 
 @pytest.mark.gui
-def test_review_tab_shows_effective_reprocess_settings_summary(tk_root: tk.Tk, tmp_path: Path) -> None:
+def test_review_tab_shows_effective_reprocess_settings_summary(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
     image_path = tmp_path / "effective-summary.png"
     image_path.write_text("placeholder", encoding="utf-8")
 
@@ -291,15 +317,23 @@ def test_review_tab_shows_effective_reprocess_settings_summary(tk_root: tk.Tk, t
         assert "Why these values are active:" in summary
         assert "Positive prompt: append [explicit edit]" in summary
         assert "Negative prompt: inherited [source artifact baseline]" in summary
-        assert "adetailer | sampler=DPM++ 2M Karras [active resolution] | scheduler=Karras [active resolution] | steps=12 [active resolution] | cfg=5.7 [active resolution] | denoise=0.25 [active resolution]" in summary
+        assert (
+            "adetailer | sampler=DPM++ 2M Karras [active resolution] | scheduler=Karras [active resolution] | steps=12 [active resolution] | cfg=5.7 [active resolution] | denoise=0.25 [active resolution]"
+            in summary
+        )
         assert "Direct Queue Now baseline:" in summary
-        assert "adetailer | sampler=DPM++ 2M Karras [active resolution] | scheduler=Karras [active resolution] | steps=8 [active resolution] | cfg=5.7 [active resolution] | denoise=0.34 [active resolution]" in summary
+        assert (
+            "adetailer | sampler=DPM++ 2M Karras [active resolution] | scheduler=Karras [active resolution] | steps=8 [active resolution] | cfg=5.7 [active resolution] | denoise=0.34 [active resolution]"
+            in summary
+        )
     finally:
         tab.destroy()
 
 
 @pytest.mark.gui
-def test_review_tab_surfaces_prior_review_summary_from_learning_controller(tk_root: tk.Tk, tmp_path: Path) -> None:
+def test_review_tab_surfaces_prior_review_summary_from_learning_controller(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
     image_path = tmp_path / "prior-review.png"
     image_path.write_text("placeholder", encoding="utf-8")
 
@@ -339,7 +373,9 @@ def test_review_tab_surfaces_prior_review_summary_from_learning_controller(tk_ro
 
 
 @pytest.mark.gui
-def test_review_tab_opens_metadata_inspector_for_selected_image(tk_root: tk.Tk, tmp_path: Path) -> None:
+def test_review_tab_opens_metadata_inspector_for_selected_image(
+    tk_root: tk.Tk, tmp_path: Path
+) -> None:
     image_path = tmp_path / "inspect.png"
     image_path.write_text("placeholder", encoding="utf-8")
     opened: list[dict[str, object]] = []
@@ -358,7 +394,9 @@ def test_review_tab_opens_metadata_inspector_for_selected_image(tk_root: tk.Tk, 
         },
     )
     app_controller = SimpleNamespace(
-        main_window=SimpleNamespace(learning_tab=SimpleNamespace(learning_controller=learning_controller))
+        main_window=SimpleNamespace(
+            learning_tab=SimpleNamespace(learning_controller=learning_controller)
+        )
     )
 
     tab = ReviewTabFrame(tk_root, app_controller=app_controller)
@@ -371,7 +409,9 @@ def test_review_tab_opens_metadata_inspector_for_selected_image(tk_root: tk.Tk, 
             )
             mp.setattr(
                 "src.gui.views.review_tab_frame_v2.ArtifactMetadataInspectorDialog",
-                lambda parent, *, inspection_payload, on_refresh=None: opened.append(inspection_payload),
+                lambda parent, *, inspection_payload, on_refresh=None: opened.append(
+                    inspection_payload
+                ),
             )
             tab._set_selected_images([image_path])  # noqa: SLF001
             tab._open_metadata_inspector()  # noqa: SLF001
@@ -415,8 +455,15 @@ def test_review_tab_can_open_latest_derived_compare_from_staged_candidate(
             mp.setattr(
                 tab,
                 "_render_compare_viewer",
-                lambda image_path, *, secondary_path=None, title_prefix="Large Compare": rendered.append(
-                    (str(image_path), str(secondary_path) if secondary_path is not None else None, title_prefix)
+                lambda image_path,
+                *,
+                secondary_path=None,
+                title_prefix="Large Compare": rendered.append(
+                    (
+                        str(image_path),
+                        str(secondary_path) if secondary_path is not None else None,
+                        title_prefix,
+                    )
                 ),
             )
 

@@ -12,7 +12,6 @@ from src.pipeline.intent_artifact_contract import (
     compute_intent_hash,
 )
 
-
 CONFIG_CONTRACT_SCHEMA_V26 = "stablenew.config.v2.6"
 
 _EXECUTION_HINT_KEYS = {
@@ -200,7 +199,11 @@ def _validate_choice(value: Any, *, field_name: str, allowed_values: set[str]) -
 
 def validate_svd_native_execution_config(value: Any) -> dict[str, Any]:
     data = _mapping_dict(value)
-    payload = _mapping_dict(data.get("svd_native")) if isinstance(data.get("svd_native"), Mapping) else data
+    payload = (
+        _mapping_dict(data.get("svd_native"))
+        if isinstance(data.get("svd_native"), Mapping)
+        else data
+    )
 
     preprocess = _mapping_dict(payload.get("preprocess"))
     inference = _mapping_dict(payload.get("inference"))
@@ -209,9 +212,13 @@ def validate_svd_native_execution_config(value: Any) -> dict[str, Any]:
 
     if preprocess:
         if "target_width" in preprocess:
-            _coerce_svd_int(preprocess.get("target_width"), field_name="preprocess.target_width", minimum=1)
+            _coerce_svd_int(
+                preprocess.get("target_width"), field_name="preprocess.target_width", minimum=1
+            )
         if "target_height" in preprocess:
-            _coerce_svd_int(preprocess.get("target_height"), field_name="preprocess.target_height", minimum=1)
+            _coerce_svd_int(
+                preprocess.get("target_height"), field_name="preprocess.target_height", minimum=1
+            )
         if "resize_mode" in preprocess:
             _validate_choice(
                 preprocess.get("resize_mode"),
@@ -221,7 +228,9 @@ def validate_svd_native_execution_config(value: Any) -> dict[str, Any]:
 
     if inference:
         if "num_frames" in inference:
-            _coerce_svd_int(inference.get("num_frames"), field_name="inference.num_frames", minimum=1)
+            _coerce_svd_int(
+                inference.get("num_frames"), field_name="inference.num_frames", minimum=1
+            )
         if "fps" in inference:
             _coerce_svd_int(inference.get("fps"), field_name="inference.fps", minimum=1)
         if "motion_bucket_id" in inference:
@@ -356,7 +365,9 @@ def validate_train_lora_execution_config(value: Any) -> dict[str, Any]:
     else:
         raise ValueError("trainer_command must be a string or list of strings")
 
-    trainer_args = normalized_payload.get("trainer_args", normalized_payload.get("trainer_extra_args"))
+    trainer_args = normalized_payload.get(
+        "trainer_args", normalized_payload.get("trainer_extra_args")
+    )
     if trainer_args in (None, "", []):
         normalized_payload.pop("trainer_args", None)
         normalized_payload.pop("trainer_extra_args", None)
@@ -474,10 +485,7 @@ def validate_style_lora_execution_config(value: Any) -> dict[str, Any]:
     normalized: dict[str, Any] = dict(payload)
     normalized["enabled"] = bool(payload.get("enabled", True))
     style_id = str(
-        payload.get("style_id")
-        or payload.get("id")
-        or payload.get("name")
-        or ""
+        payload.get("style_id") or payload.get("id") or payload.get("name") or ""
     ).strip()
     if normalized["enabled"] and not style_id:
         raise ValueError("style_lora.style_id is required when style_lora is enabled")

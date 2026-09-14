@@ -79,7 +79,9 @@ def test_route_bundle_to_movie_clips_selects_tab() -> None:
 def test_route_image_to_movie_clips_selects_tab() -> None:
     calls: list[tuple[list[str], str | None]] = []
     movie_tab = SimpleNamespace(
-        set_source_frame_paths=lambda paths, status_message=None: calls.append((paths, status_message))
+        set_source_frame_paths=lambda paths, status_message=None: calls.append(
+            (paths, status_message)
+        )
     )
     notebook = _NotebookStub()
     main_window = SimpleNamespace(movie_clips_tab=movie_tab, center_notebook=notebook)

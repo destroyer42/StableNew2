@@ -77,7 +77,9 @@ def test_run_txt2img_stage_raises_when_cancelled_before_start(tmp_path):
 
 def test_runner_honors_cancellation_between_stages(tmp_path):
     token = ToggleToken()
-    runner = PipelineRunner(Mock(), _fake_structured_logger(tmp_path), runs_base_dir=str(tmp_path / "runs"))
+    runner = PipelineRunner(
+        Mock(), _fake_structured_logger(tmp_path), runs_base_dir=str(tmp_path / "runs")
+    )
 
     class _FakePipeline:
         def __init__(self):
@@ -93,7 +95,9 @@ def test_runner_honors_cancellation_between_stages(tmp_path):
         def get_run_efficiency_metrics(self, _images_processed):
             return {}
 
-        def run_txt2img_stage(self, prompt, negative_prompt, config, run_dir, image_name, cancel_token=None):
+        def run_txt2img_stage(
+            self, prompt, negative_prompt, config, run_dir, image_name, cancel_token=None
+        ):
             cancel_token.cancel()
             output_path = Path(run_dir) / f"{image_name}.png"
             output_path.parent.mkdir(parents=True, exist_ok=True)

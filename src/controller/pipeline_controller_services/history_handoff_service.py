@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any, Callable
+from collections.abc import Callable, Mapping
+from typing import Any
 
 from src.history.history_record import HistoryRecord
 from src.pipeline.job_models_v2 import NormalizedJobRecord

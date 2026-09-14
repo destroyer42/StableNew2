@@ -19,10 +19,7 @@ from src.utils.memory_utils import (
 )
 
 # Set up simple console logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s: %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
@@ -31,33 +28,33 @@ def main() -> int:
     logger.info("=" * 60)
     logger.info("Windows Standby Memory Clearer")
     logger.info("=" * 60)
-    
+
     # Show current memory state
     log_memory_state("Before cleanup:")
-    
+
     under_pressure, reason = check_memory_pressure()
     if under_pressure:
         logger.warning("Memory pressure detected: %s", reason)
     else:
         logger.info("Memory status: %s", reason)
-    
+
     # Clear standby memory
     logger.info("\nClearing standby memory...")
     success = clear_standby_memory_windows()
-    
+
     if success:
         logger.info("✓ Standby memory cleared")
     else:
         logger.warning("⚠ Standby memory clearing incomplete")
         logger.info("\nFor complete cleanup, run as administrator:")
-        logger.info("  powershell -Command \"Clear-Variable -Name * -Scope Global; [gc]::Collect()\"")
+        logger.info('  powershell -Command "Clear-Variable -Name * -Scope Global; [gc]::Collect()"')
         logger.info("\nOr download RAMMap from Microsoft Sysinternals:")
         logger.info("  https://docs.microsoft.com/en-us/sysinternals/downloads/rammap")
         logger.info("  Then run: RAMMap.exe -Ew")
-    
+
     # Show final memory state
     log_memory_state("\nAfter cleanup:")
-    
+
     under_pressure, reason = check_memory_pressure()
     if under_pressure:
         logger.warning("Still under memory pressure: %s", reason)

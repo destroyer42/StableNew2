@@ -1,8 +1,9 @@
 """
 Test that build_run_plan_from_njr creates jobs for enabled stages in stage_chain.
 """
-from src.pipeline.run_plan import build_run_plan_from_njr
+
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.run_plan import build_run_plan_from_njr
 
 
 def _make_njr(stage_chain: list[StageConfig]) -> NormalizedJobRecord:

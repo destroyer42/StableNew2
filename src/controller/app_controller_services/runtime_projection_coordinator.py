@@ -137,9 +137,7 @@ class RuntimeProjectionCoordinator:
 
     def publish_webui_state(self, state: str) -> int:
         revision = self._next_revision("runtime")
-        self._sink.apply_runtime_projection(
-            RuntimeProjection(revision=revision, webui_state=state)
-        )
+        self._sink.apply_runtime_projection(RuntimeProjection(revision=revision, webui_state=state))
         return revision
 
     def publish_last_error(self, message: str | None) -> int:
@@ -153,16 +151,12 @@ class RuntimeProjectionCoordinator:
         if resources is None:
             return self._current_revision("webui")
         revision = self._next_revision("webui")
-        self._sink.apply_webui_projection(
-            WebUIProjection(revision=revision, resources=resources)
-        )
+        self._sink.apply_webui_projection(WebUIProjection(revision=revision, resources=resources))
         return revision
 
     def append_operator_log(self, text: str) -> int:
         revision = self._next_revision("operator_log")
-        self._sink.append_operator_log(
-            OperatorLogEntry(revision=revision, line=str(text))
-        )
+        self._sink.append_operator_log(OperatorLogEntry(revision=revision, line=str(text)))
         return revision
 
     def _current_revision(self, surface: str) -> int:

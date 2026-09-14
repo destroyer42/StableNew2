@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 import re
-from typing import List
-
 
 _LORA_PATTERN = re.compile(r"<\s*lora\s*:[^>]+>", re.IGNORECASE)
 _WEIGHT_PATTERN = re.compile(r"^\s*[\[(].+:[+-]?\d+(?:\.\d+)?[\])]\s*$")
 
 
-def split_prompt_chunks(prompt: str) -> List[str]:
+def split_prompt_chunks(prompt: str) -> list[str]:
     """
     Split prompt on commas that are not inside (), [], or <>.
     Preserve original chunk text.

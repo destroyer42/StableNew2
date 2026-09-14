@@ -54,7 +54,11 @@ class JobExecutionController:
                 raise ValueError("Controller queue and repository must share one authority")
             repository = queue.repository
         if repository is None:
-            path = ":memory:" if os.environ.get("PYTEST_CURRENT_TEST") else workspace_paths.job_repository()
+            path = (
+                ":memory:"
+                if os.environ.get("PYTEST_CURRENT_TEST")
+                else workspace_paths.job_repository()
+            )
             repository = JobRepository(path)
         self._history_store = repository
         self._worker_registry = worker_registry or WorkerRegistry()
@@ -70,7 +74,9 @@ class JobExecutionController:
             on_status_change=self._on_status,
         )
         if owns_runner:
-            configure_continuous_dispatch = getattr(self._runner, "set_continuous_dispatch_allowed", None)
+            configure_continuous_dispatch = getattr(
+                self._runner, "set_continuous_dispatch_allowed", None
+            )
             if callable(configure_continuous_dispatch):
                 configure_continuous_dispatch(lambda: self._auto_run_enabled)
         self._worker_thread_name: str | None = None
@@ -96,21 +102,26 @@ class JobExecutionController:
         self._lock = threading.Lock()
         self._callbacks: dict[str, Callable[[Job, JobStatus], None]] = {}
         self._status_dispatcher: Callable[[Callable[[], None]], None] | None = None
-        self._deferred_autostart = False  # PR-PERSIST-001: Track if we need to auto-start after init
+        self._deferred_autostart = (
+            False  # PR-PERSIST-001: Track if we need to auto-start after init
+        )
         self._app_state: Any | None = None  # For runtime status updates
         if restore_state:
             self._restore_queue_state()
-        
+
         # PR-STARTUP-PERF: Deferred autostart is now triggered externally after GUI is ready
         # (previously executed here, blocking GUI startup for ~10 seconds)
 
     def trigger_deferred_autostart(self) -> None:
         """Execute deferred queue autostart if flagged during restore.
-        
+
         PR-STARTUP-PERF: Called after GUI is fully rendered to avoid blocking
         startup when there are queued jobs.
         """
-        logger.info("[STARTUP-PERF] trigger_deferred_autostart called, _deferred_autostart=%s", self._deferred_autostart)
+        logger.info(
+            "[STARTUP-PERF] trigger_deferred_autostart called, _deferred_autostart=%s",
+            self._deferred_autostart,
+        )
         if self._deferred_autostart:
             logger.info("Executing deferred queue autostart")
             self.start()
@@ -138,7 +149,7 @@ class JobExecutionController:
 
     def _handle_runtime_status_update(self, status_data: dict[str, Any]) -> None:
         """Handle runtime status updates from pipeline execution.
-        
+
         Converts status dict to RuntimeJobStatus and forwards to app_state.
         """
         job_id = str(status_data.get("job_id") or "")
@@ -154,12 +165,12 @@ class JobExecutionController:
 
         if not self._app_state:
             return
-        
+
         try:
             from datetime import datetime
 
             from src.pipeline.job_models_v2 import RuntimeJobStatus
-            
+
             # Create RuntimeJobStatus from status_data
             runtime_status = RuntimeJobStatus(
                 job_id=status_data.get("job_id", ""),
@@ -174,7 +185,7 @@ class JobExecutionController:
                 current_step=status_data.get("current_step", 0),
                 total_steps=status_data.get("total_steps", 0),
             )
-            
+
             # Update app_state
             if hasattr(self._app_state, "set_runtime_status"):
                 self._app_state.set_runtime_status(runtime_status)
@@ -185,10 +196,12 @@ class JobExecutionController:
         self, downstream: Callable[[dict[str, Any]], None] | None = None
     ) -> Callable[[dict[str, Any]], None]:
         """Return the canonical durable projection callback with an optional UI sink."""
+
         def _project(status_data: dict[str, Any]) -> None:
             self._handle_runtime_status_update(status_data)
             if downstream is not None:
                 downstream(status_data)
+
         return _project
 
     def stop(self) -> None:
@@ -203,7 +216,7 @@ class JobExecutionController:
                 self._runner.stop()
                 self._started = False
                 self._worker_thread_name = None
-        
+
         # PR-PERSIST-FIX: Save queue state when stopping to ensure queued jobs are persisted
         try:
             self._persist_queue_state()
@@ -383,16 +396,25 @@ class JobExecutionController:
             self._queue_paused,
             len(restored_jobs),
         )
-        
+
         # PR-PERSIST-001: Auto-start runner if it was enabled before shutdown
         if self._auto_run_enabled and restored_jobs and not self._queue_paused:
-            logger.info("[STARTUP-PERF] Auto-starting queue runner after restore (had %d jobs)", len(restored_jobs))
+            logger.info(
+                "[STARTUP-PERF] Auto-starting queue runner after restore (had %d jobs)",
+                len(restored_jobs),
+            )
             # Defer start until after full initialization
             self._deferred_autostart = True
-            logger.info("[STARTUP-PERF] Deferred autostart flag set to True (will start after GUI ready)")
+            logger.info(
+                "[STARTUP-PERF] Deferred autostart flag set to True (will start after GUI ready)"
+            )
         else:
-            logger.info("[STARTUP-PERF] Not setting deferred autostart: auto_run=%s, jobs=%d, paused=%s", 
-                       self._auto_run_enabled, len(restored_jobs), self._queue_paused)
+            logger.info(
+                "[STARTUP-PERF] Not setting deferred autostart: auto_run=%s, jobs=%d, paused=%s",
+                self._auto_run_enabled,
+                len(restored_jobs),
+                self._queue_paused,
+            )
 
     def _persist_queue_state(self) -> None:
         """Persist queue control flags; jobs are persisted at each mutation."""

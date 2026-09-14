@@ -49,9 +49,7 @@ def test_write_video_container_metadata_uses_standard_ffmpeg_tags(
     assert "-codec" in ffmpeg_cmd
     assert "copy" in ffmpeg_cmd
     metadata_args = [
-        ffmpeg_cmd[index + 1]
-        for index, value in enumerate(ffmpeg_cmd[:-1])
-        if value == "-metadata"
+        ffmpeg_cmd[index + 1] for index, value in enumerate(ffmpeg_cmd[:-1]) if value == "-metadata"
     ]
     assert any(item.startswith("title=clip") for item in metadata_args)
     assert any(item.startswith("software=StableNew") for item in metadata_args)
@@ -77,6 +75,7 @@ def test_write_video_container_metadata_preserves_additional_machine_tags(
     ffmpeg_path.write_bytes(b"")
     calls: list[list[str]] = []
     monkeypatch.setattr(container_metadata, "resolve_ffmpeg_executable", lambda: ffmpeg_path)
+
     def _fake_run(command, **_kwargs):
         calls.append(list(command))
         Path(command[-1]).write_bytes(b"mp4-with-meta")
@@ -91,9 +90,7 @@ def test_write_video_container_metadata_preserves_additional_machine_tags(
     )
 
     metadata_args = [
-        calls[-1][index + 1]
-        for index, value in enumerate(calls[-1][:-1])
-        if value == "-metadata"
+        calls[-1][index + 1] for index, value in enumerate(calls[-1][:-1]) if value == "-metadata"
     ]
     assert "stablenew_provenance_schema=stablenew.video-provenance.v2.6" in metadata_args
 

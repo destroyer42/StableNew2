@@ -97,7 +97,11 @@ class LearningRecord:
         context_raw = metadata.get("rating_context") or metadata.get("review_context") or {}
         context_flags = dict(context_raw) if isinstance(context_raw, dict) else {}
 
-        return {"subscores": subscores, "context_flags": context_flags, "schema_version": schema_version}
+        return {
+            "subscores": subscores,
+            "context_flags": context_flags,
+            "schema_version": schema_version,
+        }
 
     @staticmethod
     def from_json(text: str) -> LearningRecord:
@@ -252,8 +256,10 @@ class LearningRecordWriter:
                         record = json.loads(line)
                         metadata = record.get("metadata", {})
 
-                        if (metadata.get("experiment_name") == experiment_id and
-                            metadata.get("variant_value") == variant_value):
+                        if (
+                            metadata.get("experiment_name") == experiment_id
+                            and metadata.get("variant_value") == variant_value
+                        ):
                             rating = metadata.get("user_rating")
                             if rating is not None:
                                 ratings.append(int(rating))

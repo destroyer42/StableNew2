@@ -4,8 +4,8 @@ from .artifact_metadata_inspector import ArtifactMetadataInspection, ArtifactMet
 from .review_metadata_service import (
     REVIEW_METADATA_SCHEMA,
     ReviewMetadataReadResult,
-    ReviewMetadataStampResult,
     ReviewMetadataService,
+    ReviewMetadataStampResult,
 )
 
 __all__ = [

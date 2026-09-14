@@ -2,10 +2,11 @@
 
 PR-LEARN-010: Provides statistical analysis and trend detection.
 """
+
 from __future__ import annotations
 
 import json
-from collections import Counter, defaultdict
+from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -77,9 +78,7 @@ class LearningAnalytics:
         for record in records:
             metadata = record.get("metadata", {}) or {}
             parameter_name = parameter_name or str(
-                metadata.get("variable_under_test")
-                or metadata.get("advancement_decision")
-                or ""
+                metadata.get("variable_under_test") or metadata.get("advancement_decision") or ""
             )
             rating = metadata.get("user_rating")
             if rating is None:
@@ -98,12 +97,8 @@ class LearningAnalytics:
 
         # Compute statistics
         all_ratings = [r for rs in value_ratings.values() for r in rs]
-        avg_rating = sum(all_ratings) / len(all_ratings) if all_ratings else 0
-
         # Find best and worst
-        value_avgs = {
-            val: sum(ratings) / len(ratings) for val, ratings in value_ratings.items()
-        }
+        value_avgs = {val: sum(ratings) / len(ratings) for val, ratings in value_ratings.items()}
         best_value = max(value_avgs, key=value_avgs.get, default=None)
         worst_value = min(value_avgs, key=value_avgs.get, default=None)
 
@@ -138,9 +133,7 @@ class LearningAnalytics:
 
         # Count total ratings
         total_ratings = sum(
-            1
-            for r in all_records
-            if r.get("metadata", {}).get("user_rating") is not None
+            1 for r in all_records if r.get("metadata", {}).get("user_rating") is not None
         )
 
         # Calculate average rating
@@ -169,7 +162,9 @@ class LearningAnalytics:
             decision = str(metadata.get("advancement_decision") or "").strip()
             if decision:
                 decision_counts[decision] += 1
-            for tag in list(metadata.get("reason_tags") or metadata.get("selection_reason_tags") or []):
+            for tag in list(
+                metadata.get("reason_tags") or metadata.get("selection_reason_tags") or []
+            ):
                 clean = str(tag or "").strip()
                 if clean:
                     reason_tag_counts[clean] += 1
@@ -225,7 +220,7 @@ class LearningAnalytics:
     def export_to_json(self, output_path: Path) -> None:
         """Export analytics to JSON file."""
         summary = self.get_overall_summary()
-        with open(output_path, 'w') as f:
+        with open(output_path, "w") as f:
             json.dump(asdict(summary), f, indent=2, default=str)
 
     def export_to_csv(self, output_path: Path) -> None:
@@ -234,27 +229,31 @@ class LearningAnalytics:
 
         summary = self.get_overall_summary()
 
-        with open(output_path, 'w', newline='') as f:
+        with open(output_path, "w", newline="") as f:
             writer = csv.writer(f)
-            writer.writerow([
-                "Experiment ID",
-                "Parameter",
-                "Total Variants",
-                "Total Ratings",
-                "Best Value",
-                "Best Rating",
-                "Worst Value",
-                "Worst Rating",
-            ])
+            writer.writerow(
+                [
+                    "Experiment ID",
+                    "Parameter",
+                    "Total Variants",
+                    "Total Ratings",
+                    "Best Value",
+                    "Best Rating",
+                    "Worst Value",
+                    "Worst Rating",
+                ]
+            )
 
             for exp in summary.experiments:
-                writer.writerow([
-                    exp.experiment_id,
-                    exp.parameter_name,
-                    exp.total_variants,
-                    exp.total_ratings,
-                    exp.best_value,
-                    exp.best_rating,
-                    exp.worst_value,
-                    exp.worst_rating,
-                ])
+                writer.writerow(
+                    [
+                        exp.experiment_id,
+                        exp.parameter_name,
+                        exp.total_variants,
+                        exp.total_ratings,
+                        exp.best_value,
+                        exp.best_rating,
+                        exp.worst_value,
+                        exp.worst_rating,
+                    ]
+                )

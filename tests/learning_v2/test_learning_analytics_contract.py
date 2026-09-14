@@ -14,7 +14,6 @@ For integration-level evidence-tiering and rating-detail tests, see:
 
 from __future__ import annotations
 
-from dataclasses import fields as dataclass_fields
 from typing import Any
 
 import pytest
@@ -29,7 +28,6 @@ from src.learning.recommendation_engine import (
     RecommendationSet,
 )
 
-
 # ---------------------------------------------------------------------------
 # 1. Evidence-tier constant contract
 #    These string values are used in JSONL records on disk — changing them is a
@@ -38,7 +36,6 @@ from src.learning.recommendation_engine import (
 
 
 class TestEvidenceTierConstants:
-
     def test_strong_tier_value(self):
         assert EVIDENCE_TIER_EXPERIMENT_STRONG == "experiment_strong"
 
@@ -67,7 +64,6 @@ class TestEvidenceTierConstants:
 
 
 class TestRecommendationSetContract:
-
     def _make_set(self, **overrides: Any) -> RecommendationSet:
         defaults: dict[str, Any] = {
             "prompt_text": "a photograph",
@@ -175,7 +171,6 @@ class TestRecommendationSetContract:
 
 
 class TestParameterRecommendationContract:
-
     @pytest.fixture
     def rec(self) -> ParameterRecommendation:
         return ParameterRecommendation(
@@ -228,7 +223,6 @@ class TestParameterRecommendationContract:
 
 
 class TestExtractRatingDetailContract:
-
     # ----- Null / empty inputs -----
 
     def test_empty_dict_returns_safe_defaults(self):

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Mapping, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from .models import CurationCandidate, CurationWorkflow, SelectionEvent
 
@@ -34,7 +35,9 @@ def build_candidate_replay_entry(
     latest_derived: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     item_data = item
-    extra_fields = dict(getattr(item_data, "extra_fields", {}) or {}) if item_data is not None else {}
+    extra_fields = (
+        dict(getattr(item_data, "extra_fields", {}) or {}) if item_data is not None else {}
+    )
     artifact_path = str(getattr(item_data, "artifact_path", "") or candidate.artifact_id or "")
     positive_prompt = str(getattr(item_data, "positive_prompt", "") or "")
     negative_prompt = str(getattr(item_data, "negative_prompt", "") or "")
@@ -60,7 +63,9 @@ def build_candidate_replay_entry(
             {
                 "latest_derived_job_id": str(latest_derived.get("job_id") or ""),
                 "latest_derived_path": str(latest_derived.get("artifact_path") or ""),
-                "latest_derived_stage": str(latest_derived.get("target_stage") or latest_derived.get("stage") or ""),
+                "latest_derived_stage": str(
+                    latest_derived.get("target_stage") or latest_derived.get("stage") or ""
+                ),
                 "latest_derived_completed_at": latest_derived.get("completed_at"),
             }
         )
@@ -119,7 +124,9 @@ def build_workflow_summary(
         "created_at": workflow.created_at,
         "latest_event_at": latest_timestamp or None,
         "root_model": workflow.root_model,
-        "prompt_hash": str(getattr(experiment, "prompt_hash", "") or workflow.root_prompt_fingerprint or ""),
+        "prompt_hash": str(
+            getattr(experiment, "prompt_hash", "") or workflow.root_prompt_fingerprint or ""
+        ),
         "varying_fields": list(getattr(experiment, "varying_fields", []) or []),
         "candidate_count": len(candidates),
         "selection_event_count": len(selection_events),
@@ -173,7 +180,11 @@ def build_curation_replay_descriptor_from_snapshot(
                         derived_stage = {
                             "workflow_id": str(
                                 selection_meta.get("workflow_id")
-                                or (curation.get("workflow_id") if isinstance(curation, Mapping) else "")
+                                or (
+                                    curation.get("workflow_id")
+                                    if isinstance(curation, Mapping)
+                                    else ""
+                                )
                                 or ""
                             ),
                             "source_candidate_id": str(selection_meta.get("candidate_id") or ""),
@@ -199,11 +210,7 @@ def build_curation_replay_descriptor_from_snapshot(
     if isinstance(curation, Mapping):
         payload.update(
             {
-                "workflow_id": str(
-                    curation.get("workflow_id")
-                    or payload["workflow_id"]
-                    or ""
-                ),
+                "workflow_id": str(curation.get("workflow_id") or payload["workflow_id"] or ""),
                 "candidate_id": str(curation.get("candidate_id") or ""),
                 "root_candidate_id": str(curation.get("root_candidate_id") or ""),
                 "parent_candidate_id": curation.get("parent_candidate_id"),
@@ -214,10 +221,16 @@ def build_curation_replay_descriptor_from_snapshot(
     if isinstance(derived_stage, Mapping):
         payload.update(
             {
-                "workflow_id": str(derived_stage.get("workflow_id") or payload["workflow_id"] or ""),
-                "candidate_id": str(derived_stage.get("source_candidate_id") or payload["candidate_id"] or ""),
+                "workflow_id": str(
+                    derived_stage.get("workflow_id") or payload["workflow_id"] or ""
+                ),
+                "candidate_id": str(
+                    derived_stage.get("source_candidate_id") or payload["candidate_id"] or ""
+                ),
                 "target_stage": str(derived_stage.get("target_stage") or ""),
-                "source_decision": str(derived_stage.get("source_decision") or payload["source_decision"] or ""),
+                "source_decision": str(
+                    derived_stage.get("source_decision") or payload["source_decision"] or ""
+                ),
                 "face_triage_tier": str(derived_stage.get("face_triage_tier") or ""),
             }
         )
@@ -284,8 +297,16 @@ def find_latest_derived_descendant(
                 break
         if not artifact_path:
             continue
-        completed_at = getattr(entry, "completed_at", None) or getattr(entry, "started_at", None) or getattr(entry, "created_at", None)
-        if latest_timestamp is not None and completed_at is not None and completed_at <= latest_timestamp:
+        completed_at = (
+            getattr(entry, "completed_at", None)
+            or getattr(entry, "started_at", None)
+            or getattr(entry, "created_at", None)
+        )
+        if (
+            latest_timestamp is not None
+            and completed_at is not None
+            and completed_at <= latest_timestamp
+        ):
             continue
         latest_timestamp = completed_at
         latest_match = {
@@ -293,6 +314,8 @@ def find_latest_derived_descendant(
             "artifact_path": artifact_path,
             "target_stage": str(descriptor.get("target_stage") or ""),
             "source_decision": str(descriptor.get("source_decision") or ""),
-            "completed_at": completed_at.isoformat() if hasattr(completed_at, "isoformat") else completed_at,
+            "completed_at": completed_at.isoformat()
+            if hasattr(completed_at, "isoformat")
+            else completed_at,
         }
     return latest_match

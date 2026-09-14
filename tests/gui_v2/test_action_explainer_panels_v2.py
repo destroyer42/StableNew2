@@ -66,8 +66,14 @@ def test_queue_panel_exposes_action_help_panel(tk_root) -> None:
     panel = QueuePanelV2(tk_root, app_state=AppStateV2())
     try:
         assert isinstance(panel.queue_action_help_panel, ActionExplainerPanel)
-        assert "every job runs through the queue" in panel.queue_action_help_panel.summary_label.cget("text").lower()
-        assert "manually dispatches only the current top queued job" in panel.queue_action_help_panel.details_label.cget("text").lower()
+        assert (
+            "every job runs through the queue"
+            in panel.queue_action_help_panel.summary_label.cget("text").lower()
+        )
+        assert (
+            "manually dispatches only the current top queued job"
+            in panel.queue_action_help_panel.details_label.cget("text").lower()
+        )
     finally:
         panel.destroy()
 
@@ -76,7 +82,9 @@ def test_review_tab_exposes_action_help_and_tooltips(tk_root) -> None:
     tab = ReviewTabFrame(tk_root)
     try:
         assert isinstance(tab.action_help_panel, ActionExplainerPanel)
-        assert "metadata-aware decisions" in tab.action_help_panel.summary_label.cget("text").lower()
+        assert (
+            "metadata-aware decisions" in tab.action_help_panel.summary_label.cget("text").lower()
+        )
         assert "use learning" in tab.action_help_panel.summary_label.cget("text").lower()
         assert "does not queue a new reprocess job" in tab.import_selected_tooltip.text.lower()
         assert "queue every loaded image" in tab.reprocess_all_button.tooltip.text.lower()
@@ -89,9 +97,12 @@ def test_learning_tab_exposes_staged_queue_and_review_help(tk_root, tmp_path: Pa
     experiments_root = tmp_path / "experiments"
     store = UIStateStore(state_path)
 
-    with patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store), patch(
-        "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
-        return_value=experiments_root,
+    with (
+        patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+        patch(
+            "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+            return_value=experiments_root,
+        ),
     ):
         tab = LearningTabFrame(
             tk_root,
@@ -100,11 +111,20 @@ def test_learning_tab_exposes_staged_queue_and_review_help(tk_root, tmp_path: Pa
         )
         try:
             assert isinstance(tab.discovered_help_panel, ActionExplainerPanel)
-            assert "discovered review inbox" in tab.discovered_help_panel.summary_label.cget("text").lower()
+            assert (
+                "discovered review inbox"
+                in tab.discovered_help_panel.summary_label.cget("text").lower()
+            )
             assert isinstance(tab.staged_queue_help_panel, ActionExplainerPanel)
             assert isinstance(tab.staged_review_help_panel, ActionExplainerPanel)
-            assert "queue now for bulk stage submission" in tab.staged_queue_help_panel.summary_label.cget("text").lower()
-            assert "custom edits before queueing" in tab._staged_review_buttons["refine"].tooltip.text.lower()
+            assert (
+                "queue now for bulk stage submission"
+                in tab.staged_queue_help_panel.summary_label.cget("text").lower()
+            )
+            assert (
+                "custom edits before queueing"
+                in tab._staged_review_buttons["refine"].tooltip.text.lower()
+            )
         finally:
             tab.destroy()
 
@@ -113,7 +133,10 @@ def test_svd_tab_exposes_workflow_help_and_tooltips(tk_root) -> None:
     tab = SVDTabFrameV2(tk_root)
     try:
         assert isinstance(tab.workflow_help_panel, ActionExplainerPanel)
-        assert "choose svd when you have one strong still image" in tab.workflow_help_panel.summary_label.cget("text").lower()
+        assert (
+            "choose svd when you have one strong still image"
+            in tab.workflow_help_panel.summary_label.cget("text").lower()
+        )
         assert "secondary motion" in tab.workflow_help_panel.summary_label.cget("text").lower()
         assert "does not queue a job yet" in tab.use_latest_output_tooltip.text.lower()
         assert "queue a native svd animation job" in tab.animate_tooltip.text.lower()

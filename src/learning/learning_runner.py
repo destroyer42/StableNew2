@@ -9,8 +9,13 @@ from copy import deepcopy
 from typing import Any
 
 from .learning_contract import get_prompt_optimizer_learning_presets
-from .learning_plan import LearningPlan, LearningRunResult, LearningRunStep
-from .learning_plan import LearningMode, PROMPT_OPTIMIZER_PRESET_VARIABLE
+from .learning_plan import (
+    PROMPT_OPTIMIZER_PRESET_VARIABLE,
+    LearningMode,
+    LearningPlan,
+    LearningRunResult,
+    LearningRunStep,
+)
 
 
 class LearningRunner:

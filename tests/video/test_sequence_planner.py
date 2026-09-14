@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import pytest
+
 from src.video.sequence_models import VideoSequenceJob
 from src.video.sequence_planner import VideoSequencePlanner, _segment_id
-
 
 # ---------------------------------------------------------------------------
 # _segment_id determinism
@@ -29,6 +29,7 @@ class TestSegmentId:
     def test_known_value(self):
         # Regression guard: changing the hash format must fail this test.
         import hashlib
+
         raw = "seq-001:seg:0000"
         expected = hashlib.sha1(raw.encode(), usedforsecurity=False).hexdigest()[:12]
         assert _segment_id("seq-001", 0) == expected
@@ -40,18 +41,18 @@ class TestSegmentId:
 
 
 def _make_job(**kwargs) -> VideoSequenceJob:
-    defaults = dict(
-        sequence_id="seq-001",
-        job_id="job-abc",
-        workflow_id="ltx_multiframe_anchor_v1",
-        total_segments=3,
-        segment_length_frames=25,
-        overlap_frames=2,
-        carry_forward_policy="last_frame",
-        base_source_image_path="/img/base.png",
-        base_prompt="a mountain",
-        base_negative_prompt="blurry",
-    )
+    defaults = {
+        "sequence_id": "seq-001",
+        "job_id": "job-abc",
+        "workflow_id": "ltx_multiframe_anchor_v1",
+        "total_segments": 3,
+        "segment_length_frames": 25,
+        "overlap_frames": 2,
+        "carry_forward_policy": "last_frame",
+        "base_source_image_path": "/img/base.png",
+        "base_prompt": "a mountain",
+        "base_negative_prompt": "blurry",
+    }
     defaults.update(kwargs)
     return VideoSequenceJob(**defaults)
 

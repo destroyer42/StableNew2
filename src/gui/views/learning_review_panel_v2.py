@@ -180,14 +180,14 @@ class LearningReviewPanel(ttk.Frame):
 
         # Call controller to record rating
         # PR-LEARN-014: Check self.learning_controller first (set by learning_tab_frame)
-        controller = getattr(self, "learning_controller", None) or getattr(self.master, "learning_controller", None)
-        
+        controller = getattr(self, "learning_controller", None) or getattr(
+            self.master, "learning_controller", None
+        )
+
         if controller and hasattr(controller, "record_rating"):
             try:
                 controller.record_rating(image_ref, rating, notes)
-                self.feedback_label.config(
-                    text="Rating saved successfully!", foreground="green"
-                )
+                self.feedback_label.config(text="Rating saved successfully!", foreground="green")
                 # Clear form
                 self.rating_var.set(0)
                 self.notes_text.delete(1.0, tk.END)

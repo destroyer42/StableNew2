@@ -42,12 +42,33 @@ def test_recommendation_engine_prefers_matching_refinement_context(tmp_path: Pat
     _write(
         path,
         [
-            _record(sampler="Euler a", rating=4, policy_id="full_upscale_detail_v1", scale_band="small"),
-            _record(sampler="Euler a", rating=5, policy_id="full_upscale_detail_v1", scale_band="small"),
-            _record(sampler="Euler a", rating=4, policy_id="full_upscale_detail_v1", scale_band="small"),
-            _record(sampler="DPM++ 2M", rating=5, policy_id="adetailer_micro_face_v1", scale_band="large"),
-            _record(sampler="DPM++ 2M", rating=5, policy_id="adetailer_micro_face_v1", scale_band="large"),
-            _record(sampler="DPM++ 2M", rating=5, policy_id="adetailer_micro_face_v1", scale_band="large"),
+            _record(
+                sampler="Euler a", rating=4, policy_id="full_upscale_detail_v1", scale_band="small"
+            ),
+            _record(
+                sampler="Euler a", rating=5, policy_id="full_upscale_detail_v1", scale_band="small"
+            ),
+            _record(
+                sampler="Euler a", rating=4, policy_id="full_upscale_detail_v1", scale_band="small"
+            ),
+            _record(
+                sampler="DPM++ 2M",
+                rating=5,
+                policy_id="adetailer_micro_face_v1",
+                scale_band="large",
+            ),
+            _record(
+                sampler="DPM++ 2M",
+                rating=5,
+                policy_id="adetailer_micro_face_v1",
+                scale_band="large",
+            ),
+            _record(
+                sampler="DPM++ 2M",
+                rating=5,
+                policy_id="adetailer_micro_face_v1",
+                scale_band="large",
+            ),
         ],
     )
 
@@ -66,4 +87,7 @@ def test_recommendation_engine_prefers_matching_refinement_context(tmp_path: Pat
     best = result.get_best_for_parameter("sampler")
     assert best is not None
     assert best.recommended_value == "Euler a"
-    assert "refinement-policy-match" in best.confidence_rationale or "context=" in best.confidence_rationale
+    assert (
+        "refinement-policy-match" in best.confidence_rationale
+        or "context=" in best.confidence_rationale
+    )

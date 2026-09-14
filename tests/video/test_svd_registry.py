@@ -26,7 +26,11 @@ class _FakeResult:
         self.source_image_path = root / "source.png"
         self.video_path = root / "clip.mp4" if output_kind == "video" else None
         self.gif_path = root / "clip.gif" if output_kind == "gif" else None
-        self.frame_paths = [root / "frames" / "frame_0001.png", root / "frames" / "frame_0002.png"] if output_kind == "frames" else []
+        self.frame_paths = (
+            [root / "frames" / "frame_0001.png", root / "frames" / "frame_0002.png"]
+            if output_kind == "frames"
+            else []
+        )
         self.thumbnail_path = root / "preview.png"
         self.metadata_path = root / "manifests" / "clip.json"
         self.frame_count = 28

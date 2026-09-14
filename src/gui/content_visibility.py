@@ -34,7 +34,7 @@ class ContentVisibilitySettings:
     mode: ContentVisibilityMode = DEFAULT_CONTENT_VISIBILITY_MODE
 
     @classmethod
-    def from_payload(cls, payload: Any) -> "ContentVisibilitySettings":
+    def from_payload(cls, payload: Any) -> ContentVisibilitySettings:
         if isinstance(payload, dict):
             return cls(mode=normalize_content_visibility_mode(payload.get("mode")))
         return cls()

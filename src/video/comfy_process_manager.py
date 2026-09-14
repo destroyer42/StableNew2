@@ -44,6 +44,7 @@ class ComfyProcessManager:
         global _GLOBAL_COMFY_PROCESS_MANAGER
         self._config = config
         self._process: subprocess.Popen | None = None
+        self._owns_process = False
         self._stdout_tail: deque[str] = deque(maxlen=200)
         self._stderr_tail: deque[str] = deque(maxlen=200)
         self._stdout_thread: threading.Thread | None = None
@@ -54,6 +55,11 @@ class ComfyProcessManager:
     @property
     def process(self) -> subprocess.Popen | None:
         return self._process
+
+    @property
+    def owns_process(self) -> bool:
+        """Whether this manager owns the process created by its current launch session."""
+        return bool(self._owns_process and self._process is not None)
 
     @property
     def pid(self) -> int | None:
@@ -70,7 +76,12 @@ class ComfyProcessManager:
 
     def start(self) -> subprocess.Popen:
         if self._process and self.is_running():
-            return self._process
+            if self.owns_process:
+                return self._process
+            raise ComfyStartupError(
+                "A running ComfyUI process is present without launch-session ownership; "
+                "refusing to adopt or replace it"
+            )
         try:
             process = subprocess.Popen(
                 self._config.command,
@@ -87,6 +98,7 @@ class ComfyProcessManager:
             raise ComfyStartupError(str(exc)) from exc
 
         self._process = process
+        self._owns_process = True
         self._stopped = False
         self._stdout_thread = self._start_output_thread(process.stdout, self._stdout_tail)
         self._stderr_thread = self._start_output_thread(process.stderr, self._stderr_tail)
@@ -98,7 +110,7 @@ class ComfyProcessManager:
             return
         self._stopped = True
         process = self._process
-        if process is not None and process.poll() is None:
+        if self.owns_process and process is not None and process.poll() is None:
             try:
                 process.terminate()
                 process.wait(timeout=grace_seconds)
@@ -108,6 +120,7 @@ class ComfyProcessManager:
                 except Exception:
                     pass
         self._process = None
+        self._owns_process = False
         self._join_output_threads()
         if _GLOBAL_COMFY_PROCESS_MANAGER is self:
             _GLOBAL_COMFY_PROCESS_MANAGER = None
@@ -136,6 +149,8 @@ class ComfyProcessManager:
         *,
         wait_ready: bool = True,
     ) -> bool:
+        if not self.owns_process:
+            return False
         self.stop()
         self.start()
         if not wait_ready:

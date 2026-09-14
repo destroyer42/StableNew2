@@ -41,7 +41,7 @@ jobs:
 
     - name: Lint (Ruff) — required
       run: |
-        python tools/ci/run_ruff_baseline.py
+        ruff check .
 
     - name: Run mypy smoke gate
       run: |

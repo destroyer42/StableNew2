@@ -79,7 +79,9 @@ def test_prompt_tab_template_preview_updates_current_prompt(tk_root) -> None:
 def test_prompt_tab_style_lora_selection_updates_pack_preset_data(tk_root) -> None:
     frame = PromptTabFrame(tk_root)
     try:
-        style_choices = [choice for choice, style_id in frame._style_choice_to_id.items() if style_id]
+        style_choices = [
+            choice for choice, style_id in frame._style_choice_to_id.items() if style_id
+        ]
         assert style_choices
 
         selected_choice = style_choices[0]

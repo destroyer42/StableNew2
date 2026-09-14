@@ -10,11 +10,10 @@ Provides UI for defining matrix slots (name + values) for Cartesian
 prompt expansion, with real-time preview of combinations.
 """
 
-import tkinter as tk
-import itertools
 import random
-from tkinter import ttk, messagebox
-from typing import Callable
+import tkinter as tk
+from collections.abc import Callable
+from tkinter import ttk
 
 from src.gui.models.prompt_pack_model import MatrixConfig, MatrixSlot
 from src.gui.prompt_workspace_state import PromptWorkspaceState
@@ -149,9 +148,7 @@ class MatrixTabPanel(ttk.Frame):
         # Add Slot button
         add_btn_frame = ttk.Frame(parent)
         add_btn_frame.pack(fill="x", pady=(5, 0))
-        ttk.Button(add_btn_frame, text="+ Add Slot", command=self._on_slot_added).pack(
-            anchor="w"
-        )
+        ttk.Button(add_btn_frame, text="+ Add Slot", command=self._on_slot_added).pack(anchor="w")
 
     def _build_preview(self, parent: ttk.Frame) -> None:
         """Build preview panel (Day 3 will populate with combinations)."""
@@ -214,9 +211,7 @@ class MatrixTabPanel(ttk.Frame):
         values_entry = ttk.Entry(self.slots_frame, width=40)
         values_entry.grid(row=row_index, column=1, padx=5, pady=2, sticky="ew")
         values_entry.insert(0, values_text)
-        values_entry.bind(
-            "<KeyRelease>", lambda e, idx=row_index - 1: self._on_slot_changed(idx)
-        )
+        values_entry.bind("<KeyRelease>", lambda e, idx=row_index - 1: self._on_slot_changed(idx))
 
         # Delete button
         delete_btn = ttk.Button(
@@ -355,7 +350,11 @@ class MatrixTabPanel(ttk.Frame):
         combinations = self._build_combinations(matrix_config)
 
         # Apply limit if configured
-        limit = matrix_config.limit if matrix_config.limit and matrix_config.limit > 0 else len(combinations)
+        limit = (
+            matrix_config.limit
+            if matrix_config.limit and matrix_config.limit > 0
+            else len(combinations)
+        )
         limited_combinations = combinations[:limit]
 
         # Apply combinations to prompt
@@ -379,7 +378,9 @@ class MatrixTabPanel(ttk.Frame):
             preview_lines.append("")  # Blank line between prompts for readability
 
         if total > displayed:
-            preview_lines.append(f"━━━ {total - displayed} more combinations not shown (limit={limit}) ━━━")
+            preview_lines.append(
+                f"━━━ {total - displayed} more combinations not shown (limit={limit}) ━━━"
+            )
 
         self.preview_text.insert("1.0", "\n".join(preview_lines))
         self.preview_text.config(state="disabled")
@@ -445,7 +446,7 @@ class MatrixTabPanel(ttk.Frame):
             if combo_values in seen:
                 continue
             seen.add(combo_values)
-            combinations.append(dict(zip(slot_names, combo_values)))
+            combinations.append(dict(zip(slot_names, combo_values, strict=False)))
 
         return combinations
 

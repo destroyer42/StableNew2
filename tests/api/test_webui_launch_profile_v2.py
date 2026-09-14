@@ -14,9 +14,15 @@ def test_resolve_webui_launch_command_supports_guarded_profiles() -> None:
 
 def test_build_default_webui_process_config_carries_launch_profile(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("src.api.webui_process_manager._load_webui_cache", lambda: {})
-    monkeypatch.setattr("src.api.webui_process_manager.detect_default_webui_workdir", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        "src.api.webui_process_manager.detect_default_webui_workdir", lambda *args, **kwargs: None
+    )
     monkeypatch.setattr(app_config, "get_webui_workdir", lambda: str(tmp_path))
-    monkeypatch.setattr(app_config, "get_webui_command", lambda: ["webui-user.bat", "--api", "--xformers", "--medvram-sdxl"])
+    monkeypatch.setattr(
+        app_config,
+        "get_webui_command",
+        lambda: ["webui-user.bat", "--api", "--xformers", "--medvram-sdxl"],
+    )
     monkeypatch.setattr(app_config, "get_webui_launch_profile", lambda: "sdxl_guarded")
     monkeypatch.setattr(app_config, "is_webui_autostart_enabled", lambda: True)
 
@@ -69,9 +75,10 @@ def test_adetailer_experiment_launch_profile_only_applies_to_sdxl(monkeypatch) -
         )
         == "sdxl_adetailer_guarded"
     )
-    assert app_config.get_adetailer_experiment_launch_profile(
-        model_name="deliberate_v2.safetensors"
-    ) is None
+    assert (
+        app_config.get_adetailer_experiment_launch_profile(model_name="deliberate_v2.safetensors")
+        is None
+    )
 
 
 def test_adetailer_request_local_pinning_defaults_off_and_can_be_enabled(monkeypatch) -> None:

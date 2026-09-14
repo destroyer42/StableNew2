@@ -1,6 +1,7 @@
 """Test for queue Remove button fix - verifies notification chain works correctly."""
 
 from datetime import datetime
+
 from src.gui.app_state_v2 import AppStateV2
 from src.pipeline.job_models_v2 import UnifiedJobSummary
 

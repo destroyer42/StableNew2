@@ -11,7 +11,7 @@ Tests for critical fixes:
 import os
 import threading
 import time
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -34,7 +34,6 @@ class TestProcessAutoScannerProtection:
     def test_scanner_never_kills_gui_process(self, mock_psutil):
         """Verify GUI process (self) is always protected."""
         gui_pid = os.getpid()
-        parent_pid = os.getppid()
 
         # Mock process that looks like the GUI
         gui_proc = Mock()
@@ -95,7 +94,6 @@ class TestProcessAutoScannerProtection:
     def test_scanner_disabled_by_default(self):
         """Verify ProcessAutoScannerService is disabled in app_controller by default."""
         # This test verifies the fix is applied in app_controller.py
-        from src.controller.app_controller import AppController
 
         # AppController should create scanner with start_thread=False
         # We can't easily instantiate AppController without full GUI setup,

@@ -85,10 +85,12 @@ def test_queue_jobs_batches_like_other_hot_runtime_keys() -> None:
     state.subscribe("queue_jobs", lambda: calls.append("queue_jobs"))
 
     state.set_queue_jobs([SimpleNamespace(job_id="job-1")])
-    state.set_queue_jobs([
-        SimpleNamespace(job_id="job-1"),
-        SimpleNamespace(job_id="job-2"),
-    ])
+    state.set_queue_jobs(
+        [
+            SimpleNamespace(job_id="job-1"),
+            SimpleNamespace(job_id="job-2"),
+        ]
+    )
 
     assert calls == []
     assert invoker.immediate == []

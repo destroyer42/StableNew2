@@ -51,7 +51,7 @@ class InterpolationResult:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "InterpolationResult":
+    def from_dict(cls, data: dict[str, Any]) -> InterpolationResult:
         return cls(
             provider_id=str(data.get("provider_id", "")),
             applied=bool(data.get("applied", False)),

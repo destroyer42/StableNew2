@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import pytest
+
 from src.video.sequence_models import (
-    CarryForwardPolicy,
     SegmentProvenanceRecord,
     VideoSegmentPlan,
     VideoSequenceJob,
     VideoSequenceResult,
 )
-
 
 # ---------------------------------------------------------------------------
 # VideoSegmentPlan
@@ -19,17 +18,17 @@ from src.video.sequence_models import (
 
 class TestVideoSegmentPlan:
     def _make(self, **kwargs) -> VideoSegmentPlan:
-        defaults = dict(
-            segment_index=0,
-            segment_id="abc123def456",
-            source_image_path="/img/frame0.png",
-            carry_forward_policy="last_frame",
-            overlap_frames=2,
-            segment_length_frames=25,
-            prompt="a sunset",
-            negative_prompt="blurry",
-            workflow_id="ltx_multiframe_anchor_v1",
-        )
+        defaults = {
+            "segment_index": 0,
+            "segment_id": "abc123def456",
+            "source_image_path": "/img/frame0.png",
+            "carry_forward_policy": "last_frame",
+            "overlap_frames": 2,
+            "segment_length_frames": 25,
+            "prompt": "a sunset",
+            "negative_prompt": "blurry",
+            "workflow_id": "ltx_multiframe_anchor_v1",
+        }
         defaults.update(kwargs)
         return VideoSegmentPlan(**defaults)
 
@@ -75,18 +74,18 @@ class TestVideoSegmentPlan:
 
 class TestVideoSequenceJob:
     def _make(self, **kwargs) -> VideoSequenceJob:
-        defaults = dict(
-            sequence_id="seq-001",
-            job_id="job-abc",
-            workflow_id="ltx_multiframe_anchor_v1",
-            total_segments=3,
-            segment_length_frames=25,
-            overlap_frames=2,
-            carry_forward_policy="last_frame",
-            base_source_image_path="/img/base.png",
-            base_prompt="a mountain",
-            base_negative_prompt="blurry",
-        )
+        defaults = {
+            "sequence_id": "seq-001",
+            "job_id": "job-abc",
+            "workflow_id": "ltx_multiframe_anchor_v1",
+            "total_segments": 3,
+            "segment_length_frames": 25,
+            "overlap_frames": 2,
+            "carry_forward_policy": "last_frame",
+            "base_source_image_path": "/img/base.png",
+            "base_prompt": "a mountain",
+            "base_negative_prompt": "blurry",
+        }
         defaults.update(kwargs)
         return VideoSequenceJob(**defaults)
 
@@ -117,15 +116,15 @@ class TestVideoSequenceJob:
 
 class TestSegmentProvenanceRecord:
     def _make(self, **kwargs) -> SegmentProvenanceRecord:
-        defaults = dict(
-            sequence_id="seq-001",
-            job_id="job-abc",
-            segment_index=1,
-            segment_id="seg0001id123",
-            source_image_path="/img/base.png",
-            primary_output_path="/out/seg1.mp4",
-            manifest_path="/out/manifest1.json",
-        )
+        defaults = {
+            "sequence_id": "seq-001",
+            "job_id": "job-abc",
+            "segment_index": 1,
+            "segment_id": "seg0001id123",
+            "source_image_path": "/img/base.png",
+            "primary_output_path": "/out/seg1.mp4",
+            "manifest_path": "/out/manifest1.json",
+        }
         defaults.update(kwargs)
         return SegmentProvenanceRecord(**defaults)
 

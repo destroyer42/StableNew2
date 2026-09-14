@@ -7,13 +7,11 @@ required methods do not.
 
 from __future__ import annotations
 
-import pytest
-
 from src.controller.ports.runtime_ports import (
     ImageRuntimePorts,
+    JobCompletionCallbackPort,
     NJRSummaryPort,
     NJRUISummaryPort,
-    JobCompletionCallbackPort,
     WorkflowRegistryPort,
 )
 
@@ -44,6 +42,7 @@ class _UIOnly:
 
 class _NoSummary:
     """Satisfies neither summary port."""
+
     pass
 
 
@@ -56,6 +55,7 @@ class _Controller:
 
 class _NotAController:
     """Does not satisfy JobCompletionCallbackPort."""
+
     pass
 
 
@@ -116,7 +116,9 @@ class TestJobCompletionCallbackPort:
 
     def test_lambda_does_not_satisfy(self):
         # A bare lambda has no on_job_completed_callback attribute.
-        f = lambda job, result: None
+        def f(job, result) -> None:
+            return None
+
         assert not isinstance(f, JobCompletionCallbackPort)
 
 

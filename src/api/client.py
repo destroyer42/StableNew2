@@ -42,14 +42,14 @@ if TYPE_CHECKING:
 @dataclass
 class ProgressInfo:
     """Progress information from WebUI /sdapi/v1/progress endpoint."""
-    
-    progress: float           # 0.0 to 1.0
-    eta_relative: float       # Seconds remaining
+
+    progress: float  # 0.0 to 1.0
+    eta_relative: float  # Seconds remaining
     current_step: int | None
     total_steps: int | None
     current_image: str | None
     state: dict[str, Any]
-    
+
     @classmethod
     def from_response(cls, data: dict[str, Any]) -> ProgressInfo:
         """Parse from WebUI response."""
@@ -62,6 +62,7 @@ class ProgressInfo:
             current_image=data.get("current_image"),
             state=state,
         )
+
 
 POOL_CONNECTIONS = 20
 POOL_MAXSIZE = 20
@@ -602,7 +603,9 @@ class SDWebUIClient:
                         extra_fields={"payload_size_mb": payload_size_mb, "stage": stage_key},
                     )
                 else:
-                    logger.debug(f"Payload size for {method.upper()} {endpoint}: {payload_size_mb:.1f}MB")
+                    logger.debug(
+                        f"Payload size for {method.upper()} {endpoint}: {payload_size_mb:.1f}MB"
+                    )
             except (TypeError, ValueError) as json_exc:
                 raise WebUIPayloadValidationError(
                     f"Failed to serialize payload for {method.upper()} {endpoint}: {json_exc}"
@@ -1090,7 +1093,7 @@ class SDWebUIClient:
     def apply_upscale_performance_defaults(self) -> None:
         """
         Apply conservative tiling and resolution defaults to the WebUI options.
-        
+
         These are SAFE defaults that prevent memory explosion during upscaling.
         Smaller tiles = less VRAM per chunk = more stable upscaling.
 
@@ -1098,11 +1101,11 @@ class SDWebUIClient:
         """
 
         payload = {
-            "img_max_size_mp": 8.0,      # 8 megapixels max (2828x2828) - safe for most GPUs
-            "ESRGAN_tile": 768,           # 768px tiles = 589k pixels per tile (SAFE)
-            "ESRGAN_tile_overlap": 64,    # Moderate overlap for quality
-            "DAT_tile": 768,              # 768px tiles = 589k pixels per tile (SAFE)
-            "DAT_tile_overlap": 64,       # Moderate overlap for quality
+            "img_max_size_mp": 8.0,  # 8 megapixels max (2828x2828) - safe for most GPUs
+            "ESRGAN_tile": 768,  # 768px tiles = 589k pixels per tile (SAFE)
+            "ESRGAN_tile_overlap": 64,  # Moderate overlap for quality
+            "DAT_tile": 768,  # 768px tiles = 589k pixels per tile (SAFE)
+            "DAT_tile_overlap": 64,  # Moderate overlap for quality
             "upscaling_max_images_in_cache": 4,  # Reduced cache to free memory
         }
 
@@ -1138,20 +1141,20 @@ class SDWebUIClient:
     ) -> bool:
         """
         Free VRAM by unloading cached data.
-        
+
         Useful between batch jobs to prevent memory exhaustion.
-        
+
         Args:
             unload_model: If True, also unload the SD model (slower but frees more memory)
             force_gc: If True, also run Python garbage collection in the StableNew process
             refresh_checkpoints: If True, call WebUI's refresh-checkpoints endpoint.
                 This is an aggressive maintenance operation and should not run on every job.
-            
+
         Returns:
             True if successful, False otherwise
         """
         freed = False
-        
+
         try:
             # First try the unload-checkpoint endpoint if available (A1111 1.6+)
             if unload_model:
@@ -1163,7 +1166,7 @@ class SDWebUIClient:
                     if response is not None:
                         logger.info("Unloaded SD model to free VRAM")
                         freed = True
-            
+
             if refresh_checkpoints:
                 # refresh-checkpoints can hang under memory pressure; keep it opt-in and bounded.
                 with self._request_context(
@@ -1175,20 +1178,21 @@ class SDWebUIClient:
                     if response is not None:
                         logger.info("Refreshed checkpoints to free VRAM caches")
                         freed = True
-            
+
             # Optional: Force Python garbage collection
             if force_gc:
                 try:
                     import gc
+
                     collected = gc.collect()
                     freed = True
                     if collected > 100:  # Only log if significant
                         logger.debug("Python GC freed %d objects", collected)
                 except Exception:
                     pass
-            
+
             return freed
-            
+
         except Exception as exc:
             logger.debug("free_vram failed (non-fatal): %s", exc)
             return False
@@ -1222,7 +1226,9 @@ class SDWebUIClient:
             logger.warning("SD WebUI API readiness check failed: %s", exc)
             return False
 
-    def txt2img(self, payload: dict[str, Any], *, raise_on_error: bool = False) -> dict[str, Any] | None:
+    def txt2img(
+        self, payload: dict[str, Any], *, raise_on_error: bool = False
+    ) -> dict[str, Any] | None:
         """
         Generate image from text prompt.
 
@@ -1422,7 +1428,9 @@ class SDWebUIClient:
         logger.info("interrogate completed successfully")
         return caption
 
-    def upscale(self, payload: dict[str, Any], *, raise_on_error: bool = False) -> dict[str, Any] | None:
+    def upscale(
+        self, payload: dict[str, Any], *, raise_on_error: bool = False
+    ) -> dict[str, Any] | None:
         """
         Upscale image using extra-single-image endpoint.
 
@@ -1502,7 +1510,7 @@ class SDWebUIClient:
             "Upscale payload built",
             ctx=ctx,
             extra_fields={
-            "endpoint": "/sdapi/v1/extra-single-image",
+                "endpoint": "/sdapi/v1/extra-single-image",
                 "image_len": len(payload["image"]),
                 "upscaler": upscaler,
                 "scale": upscaling_resize,
@@ -1688,35 +1696,35 @@ class SDWebUIClient:
     def get_progress(self, *, skip_current_image: bool = True) -> ProgressInfo | None:
         """
         Get current generation progress from WebUI.
-        
+
         Args:
             skip_current_image: If True, don't include preview image in response
-            
+
         Returns:
             ProgressInfo if generation in progress, None if idle or error
         """
         try:
             url = f"{self.base_url}/sdapi/v1/progress"
             params = {"skip_current_image": str(skip_current_image).lower()}
-            
+
             response = self._session.get(
                 url,
                 params=params,
                 timeout=(DEFAULT_CONNECT_TIMEOUT, 5.0),  # Short read timeout
             )
-            
+
             if response.status_code != 200:
                 return None
-            
+
             data = response.json()
-            
+
             # Check if actually generating (progress > 0 or job running)
             state = data.get("state", {})
             if not state.get("job") and data.get("progress", 0) == 0:
                 return None  # Idle
-            
+
             return ProgressInfo.from_response(data)
-            
+
         except Exception as exc:
             logger.debug("Progress poll failed: %s", exc)
             return None
@@ -1958,7 +1966,7 @@ class SDWebUIClient:
         logger.warning("Unexpected scripts payload type: %s", type(data).__name__)
         return {}
 
-    def get_animatediff_capability(self) -> "AnimateDiffCapability":
+    def get_animatediff_capability(self) -> AnimateDiffCapability:
         """Detect AnimateDiff support from the WebUI scripts contract."""
 
         from src.pipeline.animatediff_models import (
@@ -1977,7 +1985,7 @@ class SDWebUIClient:
     def get_adetailer_models(self) -> list[str]:
         """
         Get list of available ADetailer models.
-        
+
         Returns:
             List of ADetailer model names (detection models including yolo and mediapipe)
         """
@@ -2015,12 +2023,12 @@ class SDWebUIClient:
                                     return choices
         except Exception as exc:
             logger.warning(f"Failed to parse ADetailer models from scripts: {exc}")
-        
+
         # Fallback defaults
         defaults = self._get_default_adetailer_models()
         logger.debug("Using default ADetailer models: %s", len(defaults))
         return defaults
-    
+
     @staticmethod
     def _get_default_adetailer_models() -> list[str]:
         """Get comprehensive default list of common ADetailer detection models."""
@@ -2040,10 +2048,10 @@ class SDWebUIClient:
     def get_adetailer_detectors(self) -> list[str]:
         """
         Get list of available ADetailer detectors.
-        
+
         Note: In ADetailer, 'detectors' are the same as 'models' - they're all detection models.
         The GUI may show them separately for UX, but the API uses the same list.
-        
+
         Returns:
             List of ADetailer detector/model names (same as get_adetailer_models)
         """

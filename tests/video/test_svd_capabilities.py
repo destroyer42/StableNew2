@@ -17,7 +17,9 @@ def test_get_svd_postprocess_capabilities_contains_expected_keys() -> None:
     assert result["gfpgan"].status == "missing"
 
 
-def test_get_svd_postprocess_capabilities_marks_codeformer_ready_when_assets_exist(tmp_path: Path, monkeypatch) -> None:
+def test_get_svd_postprocess_capabilities_marks_codeformer_ready_when_assets_exist(
+    tmp_path: Path, monkeypatch
+) -> None:
     codeformer_weight = tmp_path / "codeformer.pth"
     facelib_root = tmp_path / "GFPGAN"
     package_root = tmp_path / "site-packages" / "codeformer"
@@ -26,7 +28,9 @@ def test_get_svd_postprocess_capabilities_marks_codeformer_ready_when_assets_exi
     package_root.mkdir(parents=True)
     (facelib_root / "detection_Resnet50_Final.pth").write_bytes(b"det")
     (facelib_root / "parsing_parsenet.pth").write_bytes(b"parse")
-    monkeypatch.setattr("src.video.svd_capabilities._find_site_package_dir", lambda _name: package_root)
+    monkeypatch.setattr(
+        "src.video.svd_capabilities._find_site_package_dir", lambda _name: package_root
+    )
     config = SVDConfig.from_dict(
         {
             "postprocess": {
@@ -45,7 +49,9 @@ def test_get_svd_postprocess_capabilities_marks_codeformer_ready_when_assets_exi
     assert result["codeformer"].available is True
 
 
-def test_apply_recommended_svd_defaults_enables_available_postprocess(tmp_path: Path, monkeypatch) -> None:
+def test_apply_recommended_svd_defaults_enables_available_postprocess(
+    tmp_path: Path, monkeypatch
+) -> None:
     codeformer_weight = tmp_path / "codeformer.pth"
     facelib_root = tmp_path / "GFPGAN"
     package_root = tmp_path / "site-packages" / "codeformer"
@@ -59,7 +65,9 @@ def test_apply_recommended_svd_defaults_enables_available_postprocess(tmp_path: 
     (facelib_root / "detection_Resnet50_Final.pth").write_bytes(b"det")
     (facelib_root / "parsing_parsenet.pth").write_bytes(b"parse")
 
-    monkeypatch.setattr("src.video.svd_capabilities._find_site_package_dir", lambda _name: package_root)
+    monkeypatch.setattr(
+        "src.video.svd_capabilities._find_site_package_dir", lambda _name: package_root
+    )
     monkeypatch.setenv("STABLENEW_RIFE_EXE", str(rife_executable))
 
     config = SVDConfig.from_dict(
@@ -85,7 +93,9 @@ def test_apply_recommended_svd_defaults_enables_available_postprocess(tmp_path: 
     assert result.postprocess.upscale.enabled is True
 
 
-def test_apply_recommended_svd_defaults_falls_back_to_gfpgan_when_codeformer_missing(tmp_path: Path, monkeypatch) -> None:
+def test_apply_recommended_svd_defaults_falls_back_to_gfpgan_when_codeformer_missing(
+    tmp_path: Path, monkeypatch
+) -> None:
     facelib_root = tmp_path / "GFPGAN"
     gfpgan_weight = tmp_path / "GFPGANv1.4.pth"
     package_root = tmp_path / "site-packages" / "gfpgan"
@@ -100,8 +110,13 @@ def test_apply_recommended_svd_defaults_falls_back_to_gfpgan_when_codeformer_mis
             return package_root
         return None
 
-    monkeypatch.setattr("src.video.svd_capabilities._find_site_package_dir", _fake_find_site_package_dir)
-    monkeypatch.setattr("src.video.svd_postprocess.importlib.util.find_spec", lambda name: object() if name == "gfpgan" else None)
+    monkeypatch.setattr(
+        "src.video.svd_capabilities._find_site_package_dir", _fake_find_site_package_dir
+    )
+    monkeypatch.setattr(
+        "src.video.svd_postprocess.importlib.util.find_spec",
+        lambda name: object() if name == "gfpgan" else None,
+    )
 
     config = SVDConfig.from_dict(
         {
@@ -120,9 +135,13 @@ def test_apply_recommended_svd_defaults_falls_back_to_gfpgan_when_codeformer_mis
     assert result.postprocess.face_restore.method == "GFPGAN"
 
 
-def test_preflight_blocks_local_only_missing_model_without_mutating_cache(monkeypatch, tmp_path) -> None:
+def test_preflight_blocks_local_only_missing_model_without_mutating_cache(
+    monkeypatch, tmp_path
+) -> None:
     monkeypatch.setattr("src.video.svd_capabilities.importlib.util.find_spec", lambda _name: None)
-    monkeypatch.setattr("src.video.svd_capabilities.is_svd_model_cached", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        "src.video.svd_capabilities.is_svd_model_cached", lambda *_args, **_kwargs: False
+    )
 
     cache_dir = tmp_path / "not-created"
     preflight = get_svd_preflight(
@@ -177,7 +196,9 @@ def test_preflight_core_summary_reports_effective_config(monkeypatch) -> None:
 
 def test_preflight_warns_about_online_acquisition_when_allowed(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr("src.video.svd_capabilities.importlib.util.find_spec", lambda _name: None)
-    monkeypatch.setattr("src.video.svd_capabilities.is_svd_model_cached", lambda *_args, **_kwargs: False)
+    monkeypatch.setattr(
+        "src.video.svd_capabilities.is_svd_model_cached", lambda *_args, **_kwargs: False
+    )
 
     preflight = get_svd_preflight(
         SVDConfig.from_dict({"inference": {"local_files_only": False, "cache_dir": str(tmp_path)}})

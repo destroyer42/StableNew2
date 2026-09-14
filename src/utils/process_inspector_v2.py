@@ -389,8 +389,10 @@ def _is_comfyui_process(cmdline: Sequence[str], cwd: str | None) -> bool:
     lowered_cwd = (cwd or "").lower()
     return (
         "comfyui" in rendered
-        or "\\main.py" in rendered and "comfy" in rendered
-        or "/main.py" in rendered and "comfy" in rendered
+        or "\\main.py" in rendered
+        and "comfy" in rendered
+        or "/main.py" in rendered
+        and "comfy" in rendered
         or "comfyui" in lowered_cwd
     )
 

@@ -6,12 +6,11 @@ decomposition of AppController does not inadvertently change semantics.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call
-import pytest
+from unittest.mock import MagicMock
 
 from src.controller.app_controller_services.learning_completion_router import (
-    route_job_completion_to_learning,
     build_learning_completion_handler,
+    route_job_completion_to_learning,
 )
 
 
@@ -70,6 +69,7 @@ class TestRoutJobCompletionToLearning:
 
     def test_swallows_callback_exception(self):
         """Exceptions inside the callback must be caught, not propagated."""
+
         def bad_callback(job, result):
             raise RuntimeError("boom")
 

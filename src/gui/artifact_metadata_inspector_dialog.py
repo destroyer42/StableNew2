@@ -48,13 +48,21 @@ class ArtifactMetadataInspectorDialog(tk.Toplevel):
         header.grid(row=0, column=0, sticky="ew")
         header.columnconfigure(0, weight=1)
         self._artifact_var = tk.StringVar(value="Artifact: n/a")
-        ttk.Label(header, textvariable=self._artifact_var, style="Dark.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(header, textvariable=self._artifact_var, style="Dark.TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
 
         actions = ttk.Frame(header)
         actions.grid(row=0, column=1, sticky="e")
-        ttk.Button(actions, text="Copy Normalized Summary", command=self._copy_normalized_summary).pack(side="left", padx=(0, 6))
-        ttk.Button(actions, text="Copy Raw Metadata JSON", command=self._copy_raw_json).pack(side="left", padx=(0, 6))
-        ttk.Button(actions, text="Refresh", command=self._refresh_payload).pack(side="left", padx=(0, 6))
+        ttk.Button(
+            actions, text="Copy Normalized Summary", command=self._copy_normalized_summary
+        ).pack(side="left", padx=(0, 6))
+        ttk.Button(actions, text="Copy Raw Metadata JSON", command=self._copy_raw_json).pack(
+            side="left", padx=(0, 6)
+        )
+        ttk.Button(actions, text="Refresh", command=self._refresh_payload).pack(
+            side="left", padx=(0, 6)
+        )
         ttk.Button(actions, text="Close", command=self.destroy).pack(side="left")
 
         notebook = ttk.Notebook(self)

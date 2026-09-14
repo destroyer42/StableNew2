@@ -76,12 +76,15 @@ def _active_projection_snapshot(controller, tab) -> dict[str, object]:
 def _pump_until_exact_projection(root, controller, tab, expected) -> None:
     def _matches() -> bool:
         snapshot = _active_projection_snapshot(controller, tab)
-        return all(snapshot[layer] == expected for layer in (
-            "repository",
-            "job_queue",
-            "app_state",
-            "queue_panel",
-        )) and snapshot["rows"] == len(expected)
+        return all(
+            snapshot[layer] == expected
+            for layer in (
+                "repository",
+                "job_queue",
+                "app_state",
+                "queue_panel",
+            )
+        ) and snapshot["rows"] == len(expected)
 
     _pump_until(root, _matches)
 
@@ -106,9 +109,7 @@ def test_pipeline_tab_pack_add_preview_and_queue_projection(
                 "schema_version": 1,
                 "pack_data": {
                     "name": "Native one row",
-                    "slots": [
-                        {"index": 0, "text": "a lighthouse at dawn", "negative": "blur"}
-                    ],
+                    "slots": [{"index": 0, "text": "a lighthouse at dawn", "negative": "blur"}],
                 },
                 "preset_data": {},
             }
@@ -155,8 +156,7 @@ def test_pipeline_tab_pack_add_preview_and_queue_projection(
         controller.on_queue_clear_v2()
         _pump_until(
             tk_root,
-            lambda: not controller.app_state.queue_jobs
-            and tab.queue_panel.job_listbox.size() == 0,
+            lambda: not controller.app_state.queue_jobs and tab.queue_panel.job_listbox.size() == 0,
         )
         queue = controller.job_service.queue
         controller.on_set_auto_run_v2(False)
@@ -272,7 +272,9 @@ def test_queue_panel_manual_and_auto_run_worker_lifecycle(
             tk_root,
             lambda: queue.get_job("manual-a").status in {JobStatus.COMPLETED, JobStatus.FAILED},
         )
-        assert queue.get_job("manual-a").status is JobStatus.COMPLETED, queue.get_job("manual-a").error_message
+        assert queue.get_job("manual-a").status is JobStatus.COMPLETED, queue.get_job(
+            "manual-a"
+        ).error_message
         _pump_until(tk_root, lambda: panel.send_job_button.instate(["!disabled"]))
         assert [job.job_id for job in queue.list_jobs(JobStatus.QUEUED)] == ["manual-b"]
 
@@ -294,7 +296,10 @@ def test_queue_panel_manual_and_auto_run_worker_lifecycle(
         set_auto_run(True)
         _pump_until(tk_root, lambda: queue.get_job("auto-b").status is JobStatus.COMPLETED)
         assert [call.record.job_id for call in backend.run_calls] == [
-            "manual-a", "manual-b", "auto-a", "auto-b"
+            "manual-a",
+            "manual-b",
+            "auto-a",
+            "auto-b",
         ]
     finally:
         for event in backend.release.values():

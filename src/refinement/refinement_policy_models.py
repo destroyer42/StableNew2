@@ -5,7 +5,6 @@ from copy import deepcopy
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
-
 ADAPTIVE_REFINEMENT_SCHEMA_V1 = "stablenew.adaptive-refinement.v1"
 REFINEMENT_DECISION_SCHEMA_V1 = "stablenew.refinement-decision.v1"
 

@@ -4,13 +4,13 @@ import json
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _slugify(value: str) -> str:
@@ -37,7 +37,7 @@ class LearningExperimentStore:
         self.root.mkdir(parents=True, exist_ok=True)
 
     def create_experiment_id(self, display_name: str) -> str:
-        stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+        stamp = datetime.now(UTC).strftime("%Y%m%d_%H%M%S")
         return f"{stamp}_{_slugify(display_name)}_{uuid.uuid4().hex[:8]}"
 
     def save_session(

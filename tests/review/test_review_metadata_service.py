@@ -31,7 +31,9 @@ def _build_record(metadata: dict[str, object] | None = None) -> LearningRecord:
     )
 
 
-def test_review_metadata_service_embeds_review_payload_without_removing_existing_metadata(tmp_path: Path) -> None:
+def test_review_metadata_service_embeds_review_payload_without_removing_existing_metadata(
+    tmp_path: Path,
+) -> None:
     image_path = tmp_path / "sample.png"
     _write_png(image_path)
     assert read_image_metadata(image_path) == {}
@@ -80,7 +82,9 @@ def test_review_metadata_service_embeds_review_payload_without_removing_existing
     assert read_result.payload["subscores"]["anatomy"] == 5
 
 
-def test_review_metadata_service_falls_back_to_sidecar_for_unsupported_extension(tmp_path: Path) -> None:
+def test_review_metadata_service_falls_back_to_sidecar_for_unsupported_extension(
+    tmp_path: Path,
+) -> None:
     image_path = tmp_path / "sample.bmp"
     image_path.write_bytes(b"not-a-real-bmp")
 

@@ -89,7 +89,10 @@ def build_refinement_learning_context(
 
     face_count = _safe_int(subject_assessment.get("detection_count"))
     face_area_ratio = _safe_float(subject_assessment.get("face_area_ratio"))
-    face_detected = bool((face_count or 0) > 0 or str(subject_assessment.get("scale_band") or "") not in {"", "no_face"})
+    face_detected = bool(
+        (face_count or 0) > 0
+        or str(subject_assessment.get("scale_band") or "") not in {"", "no_face"}
+    )
     sharpness_variance = None
     if output_paths:
         sharpness_variance = compute_image_sharpness_variance(output_paths[0])
@@ -98,10 +101,14 @@ def build_refinement_learning_context(
         "mode": str(intent.get("mode") or ""),
         "profile_id": str(intent.get("profile_id") or ""),
         "detector_preference": str(intent.get("detector_preference") or ""),
-        "algorithm_version": str(decision_bundle.get("algorithm_version") or intent.get("algorithm_version") or ""),
+        "algorithm_version": str(
+            decision_bundle.get("algorithm_version") or intent.get("algorithm_version") or ""
+        ),
         "policy_id": str(decision_bundle.get("policy_id") or ""),
         "policy_ids": list(deduped_policy_ids),
-        "detector_id": str(decision_bundle.get("detector_id") or subject_assessment.get("detector_id") or ""),
+        "detector_id": str(
+            decision_bundle.get("detector_id") or subject_assessment.get("detector_id") or ""
+        ),
         "scale_band": str(subject_assessment.get("scale_band") or ""),
         "pose_band": str(subject_assessment.get("pose_band") or ""),
         "face_detected": face_detected,
@@ -115,7 +122,9 @@ def build_refinement_learning_context(
         "has_prompt_patch": bool(prompt_patch),
         "has_applied_overrides": bool(applied_overrides),
         "prompt_patch_ops": ",".join(
-            key for key in ("add_positive", "remove_positive", "add_negative", "remove_negative") if prompt_patch.get(key)
+            key
+            for key in ("add_positive", "remove_positive", "add_negative", "remove_negative")
+            if prompt_patch.get(key)
         ),
         "applied_override_keys": ",".join(sorted(applied_overrides.keys())),
         "image_decision_count": image_decision_count,

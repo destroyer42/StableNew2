@@ -1,4 +1,5 @@
 """Reusable image thumbnail widget for Tkinter."""
+
 from __future__ import annotations
 
 import os
@@ -10,6 +11,7 @@ from typing import Any
 # PIL is optional - graceful degradation
 try:
     from PIL import Image, ImageTk
+
     PIL_AVAILABLE = True
 except ImportError:
     PIL_AVAILABLE = False
@@ -103,7 +105,8 @@ class ImageThumbnail(tk.Canvas):
         y = canvas_height // 2
 
         self.create_text(
-            x, y,
+            x,
+            y,
             text=text,
             fill="#888888",
             font=("TkDefaultFont", 10),

@@ -60,4 +60,3 @@ def test_background_task_coordinator_runs_inline_for_deterministic_callers() -> 
     seen: list[int] = []
     coordinator.submit("queue", lambda: 7, on_result=seen.append)
     assert seen == [7]
-

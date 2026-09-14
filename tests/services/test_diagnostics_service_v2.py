@@ -30,4 +30,3 @@ def test_build_async_accepts_legacy_context_alias(monkeypatch, tmp_path: Path) -
         "runner_activity_age_s": 12.5,
         "watchdog_reason": "queue_runner_stall",
     }
-

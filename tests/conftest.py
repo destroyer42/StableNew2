@@ -108,6 +108,7 @@ def _mock_webui_discovery(monkeypatch, tmp_path: Path):
     except Exception:
         pass
 
+
 # ---------------------------------------------------------------------------
 # PR-0114C-Ty: DI fixtures for JobService/Runner/History
 # ---------------------------------------------------------------------------

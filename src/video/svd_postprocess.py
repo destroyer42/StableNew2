@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable, Mapping
 import gc
 import importlib.util
 import json
@@ -12,13 +11,14 @@ import os
 import shutil
 import subprocess
 import sys
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any, cast
 
 from PIL import Image
 
-from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block
 from src.video.motion.secondary_motion_engine import SECONDARY_MOTION_APPLY_SCHEMA_V1
+from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block
 from src.video.svd_config import SVDConfig, SVDPostprocessConfig
 from src.video.svd_errors import SVDPostprocessError
 from src.video.video_export import save_video_frames
@@ -51,7 +51,9 @@ def get_effective_svd_export_fps(
     interpolation_multiplier: int,
 ) -> int:
     """Return the actual artifact cadence while retaining base SVD config FPS."""
-    if not postprocess_metadata or "interpolation" not in (postprocess_metadata.get("applied") or []):
+    if not postprocess_metadata or "interpolation" not in (
+        postprocess_metadata.get("applied") or []
+    ):
         return base_fps
     interpolation = postprocess_metadata.get("interpolation")
     if isinstance(interpolation, Mapping):
@@ -115,22 +117,39 @@ def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None
         if method == "CodeFormer":
             issues = get_codeformer_runtime_issues(postprocess)
             if issues:
-                return False, "CodeFormer is enabled but required runtime assets are missing: " + ", ".join(issues)
+                return (
+                    False,
+                    "CodeFormer is enabled but required runtime assets are missing: "
+                    + ", ".join(issues),
+                )
         elif method == "GFPGAN":
             issues = get_gfpgan_runtime_issues(postprocess)
             if issues:
-                return False, "GFPGAN is enabled but required runtime assets are missing: " + ", ".join(issues)
+                return (
+                    False,
+                    "GFPGAN is enabled but required runtime assets are missing: "
+                    + ", ".join(issues),
+                )
     if postprocess.upscale.enabled:
         issues = get_realesrgan_runtime_issues(postprocess)
         if issues:
-            return False, "RealESRGAN is enabled but required runtime assets are missing: " + ", ".join(issues)
+            return (
+                False,
+                "RealESRGAN is enabled but required runtime assets are missing: "
+                + ", ".join(issues),
+            )
     if postprocess.interpolation.enabled:
-        multiplier_error = get_rife_multiplier_validation_error(int(postprocess.interpolation.multiplier))
+        multiplier_error = get_rife_multiplier_validation_error(
+            int(postprocess.interpolation.multiplier)
+        )
         if multiplier_error:
             return False, multiplier_error
         executable = resolve_rife_executable(postprocess)
         if executable is None:
-            return False, "RIFE interpolation is enabled but no rife-ncnn-vulkan executable was found."
+            return (
+                False,
+                "RIFE interpolation is enabled but no rife-ncnn-vulkan executable was found.",
+            )
     return True, None
 
 
@@ -223,7 +242,9 @@ class SVDPostprocessRunner:
         if postprocess.secondary_motion.enabled:
             self._emit_status(
                 stage_detail="postprocess: secondary_motion",
-                progress=0.0 if total_enabled_stages == 0 else len(metadata["applied"]) / total_enabled_stages,
+                progress=0.0
+                if total_enabled_stages == 0
+                else len(metadata["applied"]) / total_enabled_stages,
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
             )
@@ -233,7 +254,11 @@ class SVDPostprocessRunner:
                 work_dir=root,
             )
             metadata["secondary_motion"] = secondary_motion_block
-            summary = dict(secondary_motion_block.get("summary") or {}) if isinstance(secondary_motion_block, dict) else {}
+            summary = (
+                dict(secondary_motion_block.get("summary") or {})
+                if isinstance(secondary_motion_block, dict)
+                else {}
+            )
             if str(summary.get("status") or "") == "applied":
                 metadata["applied"].append("secondary_motion")
             else:
@@ -254,18 +279,20 @@ class SVDPostprocessRunner:
         if postprocess.face_restore.enabled:
             self._emit_status(
                 stage_detail="postprocess: face_restore",
-                progress=0.0 if total_enabled_stages == 0 else len(metadata["applied"]) / total_enabled_stages,
+                progress=0.0
+                if total_enabled_stages == 0
+                else len(metadata["applied"]) / total_enabled_stages,
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
             )
             current_frames = cast(
                 list[Image.Image],
                 self._run_worker_stage(
-                stage_name="face_restore",
-                action="face_restore",
-                frames=current_frames,
-                payload=postprocess.face_restore.to_dict(),
-                work_dir=root,
+                    stage_name="face_restore",
+                    action="face_restore",
+                    frames=current_frames,
+                    payload=postprocess.face_restore.to_dict(),
+                    work_dir=root,
                 ),
             )
             metadata["applied"].append("face_restore")
@@ -280,7 +307,9 @@ class SVDPostprocessRunner:
         if postprocess.interpolation.enabled:
             self._emit_status(
                 stage_detail="postprocess: interpolation",
-                progress=0.0 if total_enabled_stages == 0 else len(metadata["applied"]) / total_enabled_stages,
+                progress=0.0
+                if total_enabled_stages == 0
+                else len(metadata["applied"]) / total_enabled_stages,
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
             )
@@ -312,18 +341,20 @@ class SVDPostprocessRunner:
         if postprocess.upscale.enabled:
             self._emit_status(
                 stage_detail="postprocess: upscale",
-                progress=0.0 if total_enabled_stages == 0 else len(metadata["applied"]) / total_enabled_stages,
+                progress=0.0
+                if total_enabled_stages == 0
+                else len(metadata["applied"]) / total_enabled_stages,
                 current_step=len(metadata["applied"]),
                 total_steps=total_enabled_stages,
             )
             current_frames = cast(
                 list[Image.Image],
                 self._run_worker_stage(
-                stage_name="upscale",
-                action="upscale",
-                frames=current_frames,
-                payload=postprocess.upscale.to_dict(),
-                work_dir=root,
+                    stage_name="upscale",
+                    action="upscale",
+                    frames=current_frames,
+                    payload=postprocess.upscale.to_dict(),
+                    work_dir=root,
                 ),
             )
             metadata["applied"].append("upscale")
@@ -370,7 +401,10 @@ class SVDPostprocessRunner:
                 ),
             )
         except SVDPostprocessError as exc:
-            logger.warning("[SVD][postprocess] secondary motion unavailable; continuing without motion: %s", exc)
+            logger.warning(
+                "[SVD][postprocess] secondary motion unavailable; continuing without motion: %s",
+                exc,
+            )
             apply_result = {
                 "schema": SECONDARY_MOTION_APPLY_SCHEMA_V1,
                 "status": "unavailable",
@@ -448,7 +482,9 @@ class SVDPostprocessRunner:
                 check=False,
             )
             if completed.returncode != 0:
-                message = completed.stderr.strip() or completed.stdout.strip() or "unknown worker error"
+                message = (
+                    completed.stderr.strip() or completed.stdout.strip() or "unknown worker error"
+                )
                 raise SVDPostprocessError(f"{stage_name} worker failed: {message}")
             if expect_result:
                 stdout = completed.stdout.strip()
@@ -513,7 +549,11 @@ class SVDPostprocessRunner:
             )
             completed = self._run_rife_command(cmd=cmd, executable=executable)
             if completed.returncode != 0:
-                message = completed.stderr.strip() or completed.stdout.strip() or "unknown interpolation error"
+                message = (
+                    completed.stderr.strip()
+                    or completed.stdout.strip()
+                    or "unknown interpolation error"
+                )
                 if self._is_rife_custom_framecount_unsupported(message):
                     logger.warning(
                         "[SVD][postprocess] stage=interpolation runtime rejected custom frame target; "
@@ -574,7 +614,11 @@ class SVDPostprocessRunner:
                 )
                 completed = self._run_rife_command(cmd=cmd, executable=executable)
                 if completed.returncode != 0:
-                    message = completed.stderr.strip() or completed.stdout.strip() or "unknown interpolation error"
+                    message = (
+                        completed.stderr.strip()
+                        or completed.stdout.strip()
+                        or "unknown interpolation error"
+                    )
                     raise SVDPostprocessError(f"RIFE interpolation failed: {message}")
             finally:
                 if owns_current_frames:
@@ -655,7 +699,9 @@ class SVDPostprocessRunner:
     @staticmethod
     def _load_frame_sequence(path: Path) -> list[Image.Image]:
         frame_paths = sorted(
-            candidate for candidate in path.iterdir() if candidate.suffix.lower() in {".png", ".jpg", ".jpeg"}
+            candidate
+            for candidate in path.iterdir()
+            if candidate.suffix.lower() in {".png", ".jpg", ".jpeg"}
         )
         frames: list[Image.Image] = []
         for frame_path in frame_paths:

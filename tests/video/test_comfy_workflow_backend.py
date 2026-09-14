@@ -566,7 +566,9 @@ def test_comfy_workflow_backend_promotes_reencoded_secondary_motion_video(
             }
         },
     ]
-    monkeypatch.setattr("src.video.comfy_workflow_backend.wait_for_comfy_ready", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.wait_for_comfy_ready", lambda *_args, **_kwargs: True
+    )
     container_payloads: list[dict[str, object]] = []
     monkeypatch.setattr(
         "src.video.comfy_workflow_backend.write_video_container_metadata",
@@ -632,7 +634,9 @@ def test_comfy_workflow_backend_promotes_reencoded_secondary_motion_video(
     assert result.raw_result["secondary_motion"]["summary"]["status"] == "applied"
     assert result.raw_result["secondary_motion_summary"]["status"] == "applied"
     assert result.replay_manifest_fragment["secondary_motion_summary"]["status"] == "applied"
-    assert result.replay_manifest_fragment["secondary_motion_source_video_path"] == str(output_video)
+    assert result.replay_manifest_fragment["secondary_motion_source_video_path"] == str(
+        output_video
+    )
     assert container_payloads[0]["secondary_motion_summary"]["status"] == "applied"
 
 
@@ -672,7 +676,9 @@ def test_comfy_workflow_backend_preserves_original_video_when_secondary_motion_u
             }
         },
     ]
-    monkeypatch.setattr("src.video.comfy_workflow_backend.wait_for_comfy_ready", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.wait_for_comfy_ready", lambda *_args, **_kwargs: True
+    )
     container_payloads: list[dict[str, object]] = []
     monkeypatch.setattr(
         "src.video.comfy_workflow_backend.write_video_container_metadata",
@@ -747,4 +753,3 @@ def test_comfy_workflow_backend_preserves_original_video_when_secondary_motion_u
     assert result.raw_result["secondary_motion_source_video_path"] == str(output_video)
     assert result.replay_manifest_fragment["secondary_motion_summary"]["status"] == "unavailable"
     assert container_payloads[0]["secondary_motion_summary"]["status"] == "unavailable"
-

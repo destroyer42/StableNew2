@@ -219,4 +219,3 @@ def test_auto_micro_experiment_rolls_back_when_queue_cap_blocks(tmp_path: Path) 
     assert success is False
     assert stage_cards.txt2img_card.cfg_var.get() == 7.0
     pipeline_controller.submit_preview_jobs_to_queue.assert_not_called()
-

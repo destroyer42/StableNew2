@@ -5,7 +5,6 @@ from typing import Any
 
 import requests
 
-
 SYSTEM_STATS_PATH = "/system_stats"
 OBJECT_INFO_PATH = "/object_info"
 

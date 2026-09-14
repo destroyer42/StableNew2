@@ -3,7 +3,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-
 SECONDARY_MOTION_PROVENANCE_SCHEMA_V1 = "stablenew.secondary-motion-provenance.v1"
 SECONDARY_MOTION_SUMMARY_SCHEMA_V1 = "stablenew.secondary-motion-summary.v1"
 
@@ -33,7 +32,11 @@ def build_secondary_motion_summary(
     apply_payload = _mapping(apply_result)
     status = str(apply_payload.get("status") or "")
     if not status:
-        status = "observe" if str(policy_payload.get("backend_mode") or "").startswith("observe") else "disabled"
+        status = (
+            "observe"
+            if str(policy_payload.get("backend_mode") or "").startswith("observe")
+            else "disabled"
+        )
     application_path = str(apply_payload.get("application_path") or "")
     if not application_path and status == "observe":
         application_path = "policy_observation_only"
@@ -93,10 +96,7 @@ def extract_secondary_motion_summary(payload: Mapping[str, Any] | None) -> dict[
 
     return build_secondary_motion_summary(
         intent=_mapping(secondary_motion.get("intent")),
-        policy=_mapping(
-            secondary_motion.get("policy")
-            or secondary_motion.get("primary_policy")
-        ),
+        policy=_mapping(secondary_motion.get("policy") or secondary_motion.get("primary_policy")),
         apply_result=_mapping(secondary_motion.get("apply_result")),
     )
 

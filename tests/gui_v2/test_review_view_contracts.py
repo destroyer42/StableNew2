@@ -46,7 +46,9 @@ def test_review_feedback_payload_contract() -> None:
         composition_rating=4,
         prompt_adherence_rating=4,
     )
-    assert str(payload["image_path"]).endswith("output\\a.png") or str(payload["image_path"]).endswith("output/a.png")
+    assert str(payload["image_path"]).endswith("output\\a.png") or str(
+        payload["image_path"]
+    ).endswith("output/a.png")
     assert payload["after_prompt"] == "a portrait, cinematic"
     assert payload["subscores"]["anatomy"] == 5
 

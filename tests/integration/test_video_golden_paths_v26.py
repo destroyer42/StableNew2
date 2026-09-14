@@ -19,7 +19,6 @@ from src.video.video_backend_types import (
     VideoExecutionResult,
 )
 
-
 _TINY_PNG_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRX0AAAAASUVORK5CYII="
 )
@@ -62,7 +61,9 @@ def test_gp6_svd_native_path_creates_video_artifact(tmp_path: Path, monkeypatch)
 
     svd_service = Mock()
     svd_service.is_available.return_value = (True, None)
-    app_controller._svd_controller = SVDController(app_controller=app_controller, svd_service=svd_service)
+    app_controller._svd_controller = SVDController(
+        app_controller=app_controller, svd_service=svd_service
+    )
 
     job_id = app_controller.submit_svd_job(
         source_image_path=source_path,
@@ -245,6 +246,9 @@ def test_gp6_video_workflow_path_creates_video_artifact(tmp_path: Path, monkeypa
     assert result.metadata["video_primary_artifact"]["stage"] == "video_workflow"
     assert result.metadata["video_workflow_artifact"]["primary_path"] == str(output_video)
     assert result.metadata["video_workflow_artifact"]["frame_paths"] == [str(preview_frame)]
-    assert result.metadata["replay_descriptor"]["backends"][0]["workflow_id"] == "ltx_multiframe_anchor_v1"
+    assert (
+        result.metadata["replay_descriptor"]["backends"][0]["workflow_id"]
+        == "ltx_multiframe_anchor_v1"
+    )
     assert result.variants[0]["video_backend_id"] == "dummy_workflow"
     assert Path(result.metadata["video_workflow_artifact"]["primary_path"]).exists()

@@ -18,22 +18,21 @@ from __future__ import annotations
 
 import hashlib
 import uuid
-import time
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Any
 
+from src.learning.discovered_review_models import (
+    RATING_UNRATED,
+    STATUS_WAITING_REVIEW,
+    DiscoveredReviewExperiment,
+    DiscoveredReviewItem,
+    _utc_now_iso,
+)
 from src.learning.output_scan_models import (
     MEANINGFUL_FIELDS,
     SEED_ONLY_FIELDS,
     ScanRecord,
-)
-from src.learning.discovered_review_models import (
-    DiscoveredReviewExperiment,
-    DiscoveredReviewItem,
-    STATUS_WAITING_REVIEW,
-    _utc_now_iso,
-    RATING_UNRATED,
 )
 
 MIN_GROUP_SIZE = 3

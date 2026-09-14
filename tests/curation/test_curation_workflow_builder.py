@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from pathlib import Path
-
 from src.curation.curation_workflow_builder import (
     CurationSourceSelection,
     CurationWorkflowBuilder,
@@ -107,7 +105,9 @@ def test_face_triage_plan_applies_profile_and_learning_route(tmp_path) -> None:
     plan = builder.build_derived_stage_plan(
         workflow=_make_workflow(),
         target_stage="face_triage",
-        selections=[_make_source_selection(tmp_path, decision="advanced_to_face_triage", face_tier="heavy")],
+        selections=[
+            _make_source_selection(tmp_path, decision="advanced_to_face_triage", face_tier="heavy")
+        ],
         fallback_config={"pipeline": {"batch_size": 1}},
         output_dir="output",
     )
@@ -131,7 +131,9 @@ def test_face_triage_plan_skips_candidates_with_skip_tier(tmp_path) -> None:
     plan = builder.build_derived_stage_plan(
         workflow=_make_workflow(),
         target_stage="face_triage",
-        selections=[_make_source_selection(tmp_path, decision="advanced_to_face_triage", face_tier="skip")],
+        selections=[
+            _make_source_selection(tmp_path, decision="advanced_to_face_triage", face_tier="skip")
+        ],
         fallback_config={},
         output_dir="output",
     )

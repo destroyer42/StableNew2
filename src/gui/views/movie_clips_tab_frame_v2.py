@@ -12,22 +12,18 @@ from pathlib import Path
 from tkinter import filedialog, ttk
 from typing import Any
 
-from src.gui.layout_v2 import configure_grid_columns
-from src.gui.help_text.workflow_guidance_v2 import build_movie_clips_guidance
 from src.gui.help_text.stage_setting_help_v2 import MOVIE_CLIPS_SETTING_HELP
+from src.gui.help_text.workflow_guidance_v2 import build_movie_clips_guidance
+from src.gui.layout_v2 import configure_grid_columns
 from src.gui.theme_v2 import style_listbox_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.ui_tokens import TOKENS
-from src.gui.view_contracts.pipeline_layout_contract import (
-    PRIMARY_CONTROL_MIN_WIDTH,
-    get_two_pane_workspace_column_specs,
-)
 from src.gui.view_contracts.movie_clips_contract import (
+    CODEC_OPTIONS,
     DEFAULT_CODEC,
     DEFAULT_FPS,
     DEFAULT_MODE,
     DEFAULT_QUALITY,
-    CODEC_OPTIONS,
     MODE_OPTIONS,
     QUALITY_OPTIONS,
     SOURCE_MODE_FOLDER,
@@ -37,11 +33,14 @@ from src.gui.view_contracts.movie_clips_contract import (
     format_canonical_source_summary,
     format_image_list_summary,
     format_source_mode_label,
-    sort_image_names,
 )
+from src.gui.view_contracts.pipeline_layout_contract import (
+    PRIMARY_CONTROL_MIN_WIDTH,
+    get_two_pane_workspace_column_specs,
+)
+from src.gui.view_contracts.video_workspace_contract import summarize_movie_clips_source
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
-from src.gui.view_contracts.video_workspace_contract import summarize_movie_clips_source
 
 logger = logging.getLogger(__name__)
 
@@ -463,9 +462,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         added = [p for p in new_paths if p.resolve() not in existing_resolved]
         if added:
             self._source_bundle = None
-            self._set_image_list(
-                sorted(self._image_paths + added, key=lambda p: p.name)
-            )
+            self._set_image_list(sorted(self._image_paths + added, key=lambda p: p.name))
             self._set_status(f"Added {len(added)} image(s).")
         else:
             self._set_status("No new images added.")
@@ -475,9 +472,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         if not selected:
             return
         selected_set = set(selected)
-        self._image_paths = [
-            p for i, p in enumerate(self._image_paths) if i not in selected_set
-        ]
+        self._image_paths = [p for i, p in enumerate(self._image_paths) if i not in selected_set]
         self._source_bundle = None
         self._refresh_list_widget()
         self._update_summary()
@@ -669,9 +664,7 @@ class MovieClipsTabFrameV2(ttk.Frame):
         self._source_bundle = None
         self.source_mode_var.set(SOURCE_MODE_MANUAL)
         self._set_image_list(valid)
-        self._set_status(
-            status_message or f"Loaded {len(valid)} frame(s) from video output."
-        )
+        self._set_status(status_message or f"Loaded {len(valid)} frame(s) from video output.")
 
     def set_source_bundle(
         self,

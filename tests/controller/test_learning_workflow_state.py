@@ -101,4 +101,3 @@ def test_learning_workflow_state_can_capture_selected_prompt_pack_slot() -> None
     assert exp.metadata["selected_prompt_index"] == 2
     assert exp.metadata["selected_prompt_negative_text"] == "bad anatomy"
     assert exp.metadata["selected_prompt_loras"] == [{"name": "HeroLoRA", "weight": 0.8}]
-

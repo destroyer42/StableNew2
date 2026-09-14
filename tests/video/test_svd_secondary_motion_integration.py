@@ -11,7 +11,9 @@ from src.video.svd_models import SVDPreprocessResult
 from src.video.svd_runner import SVDRunner
 
 
-def test_svd_secondary_motion_integration_writes_manifest_and_container_summary(tmp_path: Path, monkeypatch) -> None:
+def test_svd_secondary_motion_integration_writes_manifest_and_container_summary(
+    tmp_path: Path, monkeypatch
+) -> None:
     source_path = tmp_path / "source.png"
     source_path.write_bytes(b"png")
     prepared_path = tmp_path / "_svd_temp" / "job-1" / "prepared.png"
@@ -60,11 +62,16 @@ def test_svd_secondary_motion_integration_writes_manifest_and_container_summary(
     monkeypatch.setattr("src.video.svd_runner.prepare_svd_input", lambda **_kwargs: preprocess)
     monkeypatch.setattr(
         "src.video.svd_runner.SVDPostprocessRunner.process_frames",
-        lambda self, **kwargs: (kwargs["frames"], {"applied": ["secondary_motion"], "secondary_motion": secondary_motion_block}),
+        lambda self, **kwargs: (
+            kwargs["frames"],
+            {"applied": ["secondary_motion"], "secondary_motion": secondary_motion_block},
+        ),
     )
     monkeypatch.setattr("src.video.svd_runner.export_video_mp4", lambda **_kwargs: output_video)
     write_container_metadata = Mock(return_value=True)
-    monkeypatch.setattr("src.video.svd_runner.write_video_container_metadata", write_container_metadata)
+    monkeypatch.setattr(
+        "src.video.svd_runner.write_video_container_metadata", write_container_metadata
+    )
 
     class _FakeService:
         def generate_frames(self, **_kwargs):
@@ -80,7 +87,10 @@ def test_svd_secondary_motion_integration_writes_manifest_and_container_summary(
     assert result.metadata_path is not None
     manifest_payload = json.loads(Path(result.metadata_path).read_text(encoding="utf-8"))
     assert manifest_payload["secondary_motion"]["summary"]["status"] == "applied"
-    assert manifest_payload["secondary_motion"]["summary"]["application_path"] == "frame_directory_worker"
+    assert (
+        manifest_payload["secondary_motion"]["summary"]["application_path"]
+        == "frame_directory_worker"
+    )
 
     container_payload = write_container_metadata.call_args.args[1]
     assert container_payload["secondary_motion_summary"]["status"] == "applied"

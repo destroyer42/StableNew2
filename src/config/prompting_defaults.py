@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 DEFAULT_PROMPT_OPTIMIZER_SETTINGS: dict[str, Any] = {
     "enabled": True,
     "optimize_positive": True,

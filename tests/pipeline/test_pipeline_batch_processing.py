@@ -49,7 +49,7 @@ class TestPipelineBatchProcessing:
     ):
         """
         Test that batch_size=2 with all stages enabled processes BOTH images through ALL stages.
-        
+
         Expected flow:
         txt2img generates 2 images → both go to adetailer → both go to upscale
         Final result: 2 upscaled images
@@ -71,14 +71,18 @@ class TestPipelineBatchProcessing:
             images_per_prompt=2,  # BATCH SIZE = 2
             stage_chain=[
                 StageConfig(stage_type="txt2img", enabled=True),
-                StageConfig(stage_type="adetailer", enabled=True, extra={"ad_model": "face_yolov8n.pt"}),
-                StageConfig(stage_type="upscale", enabled=True, extra={"upscaler_name": "R-ESRGAN 4x+"}),
+                StageConfig(
+                    stage_type="adetailer", enabled=True, extra={"ad_model": "face_yolov8n.pt"}
+                ),
+                StageConfig(
+                    stage_type="upscale", enabled=True, extra={"upscaler_name": "R-ESRGAN 4x+"}
+                ),
             ],
         )
 
         # Mock the executor methods to return fake image paths
         txt2img_base_path = temp_output_dir / "run_id" / "txt2img_00"
-        
+
         # Mock txt2img to return 2 images
         mock_txt2img_result = {
             "path": f"{txt2img_base_path}_batch0.png",
@@ -89,15 +93,23 @@ class TestPipelineBatchProcessing:
             "name": "txt2img_00",
             "stage": "txt2img",
         }
-        
+
         # Mock adetailer to return processed image
-        def mock_adetailer(input_image_path, config, output_dir, image_name, prompt, negative_prompt, cancel_token=None):
+        def mock_adetailer(
+            input_image_path,
+            config,
+            output_dir,
+            image_name,
+            prompt,
+            negative_prompt,
+            cancel_token=None,
+        ):
             return {
                 "path": str(output_dir / f"{image_name}.png"),
                 "name": image_name,
                 "stage": "adetailer",
             }
-        
+
         # Mock upscale to return upscaled image
         def mock_upscale(input_image_path, config, output_dir, image_name, cancel_token=None):
             return {
@@ -105,7 +117,7 @@ class TestPipelineBatchProcessing:
                 "name": image_name,
                 "stage": "upscale",
             }
-        
+
         pipeline_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_txt2img_result)
         pipeline_runner._pipeline.run_adetailer_stage = MagicMock(side_effect=mock_adetailer)
         pipeline_runner._pipeline.run_upscale_stage = MagicMock(side_effect=mock_upscale)
@@ -125,9 +137,7 @@ class TestPipelineBatchProcessing:
         # Verify success
         assert result.success is True
 
-    def test_batch_size_3_txt2img_only(
-        self, pipeline_runner, temp_output_dir
-    ):
+    def test_batch_size_3_txt2img_only(self, pipeline_runner, temp_output_dir):
         """
         Test that batch_size=3 with only txt2img enabled produces 3 images.
         """
@@ -164,7 +174,7 @@ class TestPipelineBatchProcessing:
             "name": "txt2img_00",
             "stage": "txt2img",
         }
-        
+
         pipeline_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_txt2img_result)
         pipeline_runner._pipeline.run_adetailer_stage = MagicMock()
         pipeline_runner._pipeline.run_upscale_stage = MagicMock()
@@ -184,9 +194,7 @@ class TestPipelineBatchProcessing:
         # Verify success
         assert result.success is True
 
-    def test_batch_size_4_txt2img_and_adetailer(
-        self, pipeline_runner, temp_output_dir
-    ):
+    def test_batch_size_4_txt2img_and_adetailer(self, pipeline_runner, temp_output_dir):
         """
         Test that batch_size=4 with txt2img+adetailer processes all 4 images.
         """
@@ -206,7 +214,9 @@ class TestPipelineBatchProcessing:
             images_per_prompt=4,  # BATCH SIZE = 4
             stage_chain=[
                 StageConfig(stage_type="txt2img", enabled=True),
-                StageConfig(stage_type="adetailer", enabled=True, extra={"ad_model": "face_yolov8n.pt"}),
+                StageConfig(
+                    stage_type="adetailer", enabled=True, extra={"ad_model": "face_yolov8n.pt"}
+                ),
                 StageConfig(stage_type="upscale", enabled=False),
             ],
         )
@@ -215,20 +225,26 @@ class TestPipelineBatchProcessing:
         txt2img_base_path = temp_output_dir / "run_id" / "txt2img_00"
         mock_txt2img_result = {
             "path": f"{txt2img_base_path}_batch0.png",
-            "all_paths": [
-                f"{txt2img_base_path}_batch{i}.png" for i in range(4)
-            ],
+            "all_paths": [f"{txt2img_base_path}_batch{i}.png" for i in range(4)],
             "name": "txt2img_00",
             "stage": "txt2img",
         }
-        
-        def mock_adetailer(input_image_path, config, output_dir, image_name, prompt, negative_prompt, cancel_token=None):
+
+        def mock_adetailer(
+            input_image_path,
+            config,
+            output_dir,
+            image_name,
+            prompt,
+            negative_prompt,
+            cancel_token=None,
+        ):
             return {
                 "path": str(output_dir / f"{image_name}.png"),
                 "name": image_name,
                 "stage": "adetailer",
             }
-        
+
         pipeline_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_txt2img_result)
         pipeline_runner._pipeline.run_adetailer_stage = MagicMock(side_effect=mock_adetailer)
         pipeline_runner._pipeline.run_upscale_stage = MagicMock()
@@ -248,9 +264,7 @@ class TestPipelineBatchProcessing:
         # Verify success
         assert result.success is True
 
-    def test_single_image_backward_compatibility(
-        self, pipeline_runner, temp_output_dir
-    ):
+    def test_single_image_backward_compatibility(self, pipeline_runner, temp_output_dir):
         """
         Test that batch_size=1 (single image) still works correctly.
         """
@@ -270,7 +284,9 @@ class TestPipelineBatchProcessing:
             images_per_prompt=1,  # SINGLE IMAGE
             stage_chain=[
                 StageConfig(stage_type="txt2img", enabled=True),
-                StageConfig(stage_type="upscale", enabled=True, extra={"upscaler_name": "R-ESRGAN 4x+"}),
+                StageConfig(
+                    stage_type="upscale", enabled=True, extra={"upscaler_name": "R-ESRGAN 4x+"}
+                ),
             ],
         )
 
@@ -282,14 +298,14 @@ class TestPipelineBatchProcessing:
             "name": "txt2img_00",
             "stage": "txt2img",
         }
-        
+
         def mock_upscale(input_image_path, config, output_dir, image_name, cancel_token=None):
             return {
                 "path": str(output_dir / f"{image_name}.png"),
                 "name": image_name,
                 "stage": "upscale",
             }
-        
+
         pipeline_runner._pipeline.run_txt2img_stage = MagicMock(return_value=mock_txt2img_result)
         pipeline_runner._pipeline.run_upscale_stage = MagicMock(side_effect=mock_upscale)
 
@@ -383,18 +399,69 @@ class TestPipelineBatchProcessing:
         result = pipeline_runner.run_njr(njr)
 
         assert result.success is True
-        assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["model"] == "base-model.safetensors"
-        assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["sd_model_checkpoint"] == "base-model.safetensors"
-        assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["vae"] == "base-vae.safetensors"
-        assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["sd_vae"] == "base-vae.safetensors"
-        assert pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["vae_name"] == "base-vae.safetensors"
-        assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["model"] == "base-model.safetensors"
-        assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["sd_model_checkpoint"] == "base-model.safetensors"
-        assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["vae"] == "base-vae.safetensors"
-        assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["sd_vae"] == "base-vae.safetensors"
-        assert pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["vae_name"] == "base-vae.safetensors"
-        assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["model"] == "base-model.safetensors"
-        assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["sd_model_checkpoint"] == "base-model.safetensors"
-        assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["vae"] == "base-vae.safetensors"
-        assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["sd_vae"] == "base-vae.safetensors"
-        assert pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["vae_name"] == "base-vae.safetensors"
+        assert (
+            pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["model"]
+            == "base-model.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"][
+                "sd_model_checkpoint"
+            ]
+            == "base-model.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["vae"]
+            == "base-vae.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["sd_vae"]
+            == "base-vae.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_img2img_stage.call_args.kwargs["config"]["vae_name"]
+            == "base-vae.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["model"]
+            == "base-model.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"][
+                "sd_model_checkpoint"
+            ]
+            == "base-model.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["vae"]
+            == "base-vae.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["sd_vae"]
+            == "base-vae.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_adetailer_stage.call_args.kwargs["config"]["vae_name"]
+            == "base-vae.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["model"]
+            == "base-model.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"][
+                "sd_model_checkpoint"
+            ]
+            == "base-model.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["vae"]
+            == "base-vae.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["sd_vae"]
+            == "base-vae.safetensors"
+        )
+        assert (
+            pipeline_runner._pipeline.run_upscale_stage.call_args.kwargs["config"]["vae_name"]
+            == "base-vae.safetensors"
+        )

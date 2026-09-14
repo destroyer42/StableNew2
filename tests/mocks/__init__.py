@@ -13,5 +13,5 @@ __all__ = [
     "get_mock_server",
 ]
 
-from tests.mocks.webui_mock_server import MockWebUIServer, get_mock_server
 from tests.mocks.webui_mock_client import MockWebUIClient
+from tests.mocks.webui_mock_server import MockWebUIServer, get_mock_server

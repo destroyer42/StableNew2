@@ -6,8 +6,8 @@ into the prompt editor at cursor position.
 """
 
 import tkinter as tk
-from tkinter import ttk
 from collections.abc import Callable
+from tkinter import ttk
 
 from src.gui.theme_v2 import apply_toplevel_theme, style_listbox_widget
 

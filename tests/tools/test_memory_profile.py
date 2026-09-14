@@ -10,9 +10,7 @@ from tools.test_helpers.memory_profile import (
 )
 
 
-def test_create_memprof_dir_defaults_to_system_temp_not_cwd(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_create_memprof_dir_defaults_to_system_temp_not_cwd(tmp_path: Path, monkeypatch) -> None:
     repo_like_root = tmp_path / "repo"
     repo_like_root.mkdir()
     monkeypatch.chdir(repo_like_root)

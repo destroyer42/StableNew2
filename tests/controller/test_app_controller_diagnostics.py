@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import time
 from pathlib import Path
 from types import SimpleNamespace
-import time
 
 from src.app.optional_dependency_probes import (
     OPTIONAL_DEPENDENCY_SCHEMA_V1,
@@ -178,13 +178,12 @@ def test_diagnostics_snapshot_includes_pipeline_tab_metrics() -> None:
                         "running_job_panel": {"count": 4, "avg_ms": 2.0},
                     }
                 },
-            )()
-            ,
+            )(),
             "log_trace_panel_v2": type(
                 "LogTracePanel",
                 (),
                 {"get_diagnostics_snapshot": lambda self: {"count": 5, "avg_ms": 1.0}},
-            )()
+            )(),
         },
     )()
 
@@ -291,4 +290,7 @@ def test_diagnostics_snapshot_includes_optional_dependency_snapshot() -> None:
     snapshot = controller.get_diagnostics_snapshot()
 
     assert snapshot["optional_dependencies"]["schema"] == OPTIONAL_DEPENDENCY_SCHEMA_V1
-    assert snapshot["optional_dependencies"]["capabilities"]["workflow:demo@1.0.0"]["status"] == "ready"
+    assert (
+        snapshot["optional_dependencies"]["capabilities"]["workflow:demo@1.0.0"]["status"]
+        == "ready"
+    )

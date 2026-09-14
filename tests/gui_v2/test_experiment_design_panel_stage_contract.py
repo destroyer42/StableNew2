@@ -71,7 +71,9 @@ def test_experiment_design_panel_can_switch_away_from_lora_mode() -> None:
     if root is None:
         return
 
-    panel = ExperimentDesignPanel(root, learning_controller=SimpleNamespace(_get_current_loras=lambda: []))
+    panel = ExperimentDesignPanel(
+        root, learning_controller=SimpleNamespace(_get_current_loras=lambda: [])
+    )
 
     panel.variable_var.set("LoRA Strength")
     panel._on_variable_changed()  # noqa: SLF001
@@ -90,7 +92,9 @@ def test_experiment_design_panel_lora_empty_state_mentions_prompt_or_runtime_con
     if root is None:
         return
 
-    panel = ExperimentDesignPanel(root, learning_controller=SimpleNamespace(_get_current_loras=lambda: []))
+    panel = ExperimentDesignPanel(
+        root, learning_controller=SimpleNamespace(_get_current_loras=lambda: [])
+    )
 
     panel.variable_var.set("LoRA Strength")
     panel._on_variable_changed()  # noqa: SLF001
@@ -104,17 +108,13 @@ def test_experiment_design_panel_lora_empty_state_mentions_prompt_or_runtime_con
             return None
 
     labels = [
-        text
-        for child in panel.lora_content_frame.winfo_children()
-        if (text := _safe_text(child))
+        text for child in panel.lora_content_frame.winfo_children() if (text := _safe_text(child))
     ]
     nested_labels = []
     for child in panel.lora_content_frame.winfo_children():
         if hasattr(child, "winfo_children"):
             nested_labels.extend(
-                text
-                for grandchild in child.winfo_children()
-                if (text := _safe_text(grandchild))
+                text for grandchild in child.winfo_children() if (text := _safe_text(grandchild))
             )
     assert "No enabled LoRAs in current prompt or runtime config" in labels + nested_labels
 

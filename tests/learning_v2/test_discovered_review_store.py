@@ -12,9 +12,6 @@ import pytest
 
 from src.curation.models import SelectionEvent
 from src.learning.discovered_review_models import (
-    RATING_MAX,
-    RATING_MIN,
-    RATING_UNRATED,
     STATUS_CLOSED,
     STATUS_IGNORED,
     STATUS_IN_REVIEW,
@@ -25,7 +22,6 @@ from src.learning.discovered_review_models import (
     OutputScanIndexEntry,
 )
 from src.learning.discovered_review_store import DiscoveredReviewStore
-
 
 # ---------------------------------------------------------------------------
 # Fixture helpers
@@ -49,7 +45,7 @@ def _make_experiment(
     group_id: str = "group-001",
     item_count: int = 3,
 ) -> DiscoveredReviewExperiment:
-    items = [_make_item(f"item-{i+1}") for i in range(item_count)]
+    items = [_make_item(f"item-{i + 1}") for i in range(item_count)]
     return DiscoveredReviewExperiment(
         group_id=group_id,
         display_name="test group",
@@ -451,9 +447,7 @@ def test_store_scan_index_incremental_update(store):
 
 
 def test_store_is_artifact_in_index(store):
-    store.update_scan_index_entries(
-        [OutputScanIndexEntry("img.png", "k", "2026-01-01T00:00:00Z")]
-    )
+    store.update_scan_index_entries([OutputScanIndexEntry("img.png", "k", "2026-01-01T00:00:00Z")])
     assert store.is_artifact_in_index("img.png")
     assert not store.is_artifact_in_index("missing.png")
 

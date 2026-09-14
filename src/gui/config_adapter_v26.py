@@ -11,7 +11,7 @@ from src.pipeline.config_contract_v26 import (
 )
 
 if TYPE_CHECKING:  # pragma: no cover
-    from src.gui.app_state_v2 import AppStateV2, PackJobEntry
+    from src.gui.app_state_v2 import AppStateV2
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -97,7 +97,9 @@ class GuiConfigAdapterV26:
         merged.update(_mapping_dict(patch))
         return self.apply_run_config(merged)
 
-    def get_randomizer_config(self, *, fallback_current_config: Any | None = None) -> dict[str, Any]:
+    def get_randomizer_config(
+        self, *, fallback_current_config: Any | None = None
+    ) -> dict[str, Any]:
         projection = self.get_run_config_projection()
         enabled = projection.get("randomization_enabled")
         max_variants = projection.get("max_variants")
@@ -152,7 +154,9 @@ class GuiConfigAdapterV26:
         return projection
 
     def resolve_prompt_pack_context(self) -> tuple[str, str]:
-        selected_pack_id = str(getattr(self._app_state, "selected_prompt_pack_id", "") or "").strip()
+        selected_pack_id = str(
+            getattr(self._app_state, "selected_prompt_pack_id", "") or ""
+        ).strip()
         if selected_pack_id:
             return "pack", selected_pack_id
         job_draft = getattr(self._app_state, "job_draft", None)

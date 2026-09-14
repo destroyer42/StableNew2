@@ -5,10 +5,10 @@
 
 from __future__ import annotations
 
-from tkinter import ttk
-from typing import Any, Callable
-
 import tkinter as tk
+from collections.abc import Callable
+from tkinter import ttk
+from typing import Any
 
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
 from src.gui.widgets.image_thumbnail import ImageThumbnail
@@ -18,7 +18,6 @@ from src.learning.discovered_review_models import (
     RATING_UNRATED,
     DiscoveredReviewItem,
 )
-
 
 _RATING_LABELS = {
     RATING_UNRATED: "—",
@@ -277,4 +276,4 @@ class DiscoveredReviewTable(ttk.Frame):
 def _truncate(text: str, max_len: int) -> str:
     if len(text) <= max_len:
         return text
-    return "…" + text[-(max_len - 1):]
+    return "…" + text[-(max_len - 1) :]

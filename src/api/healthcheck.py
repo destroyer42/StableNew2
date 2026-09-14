@@ -46,7 +46,9 @@ def _readiness_cooldown_remaining(base_url: str) -> float:
 def _record_readiness_failure(base_url: str, exc: Exception | None) -> None:
     if not _is_hard_connection_failure(exc):
         return
-    state = _READINESS_FAILURE_STATE.setdefault(base_url, {"hard_failures": 0.0, "cooldown_until": 0.0})
+    state = _READINESS_FAILURE_STATE.setdefault(
+        base_url, {"hard_failures": 0.0, "cooldown_until": 0.0}
+    )
     state["hard_failures"] = float(state.get("hard_failures", 0.0) or 0.0) + 1.0
     hard_failures = int(state["hard_failures"])
     if hard_failures < _HARD_FAILURE_THRESHOLD:
@@ -121,7 +123,11 @@ def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: fl
             logging.DEBUG,
             msg,
             ctx=ctx,
-            extra_fields={"event": "webui_readiness_backoff", "base_url": base_url, "cooldown_remaining_s": cooldown_remaining},
+            extra_fields={
+                "event": "webui_readiness_backoff",
+                "base_url": base_url,
+                "cooldown_remaining_s": cooldown_remaining,
+            },
         )
         raise WebUIHealthCheckTimeout(msg)
     log_with_ctx(
