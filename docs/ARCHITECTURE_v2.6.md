@@ -241,7 +241,7 @@ The accepted production still-image path is A1111/WebUI-centric. A1111-specific
 payload construction, checkpoint/VAE synchronization, extension semantics,
 progress, cancellation, stall handling, and managed/external runtime ownership
 remain accepted production behavior, now behind the implemented image backend
-boundary on the PR-IMG-100 feature branch.
+boundary on `main`.
 
 ### 7.2 Implemented post-v2.6 boundary — PR-IMG-100
 
@@ -399,7 +399,7 @@ implemented:
 | Video scope | **Closed 2026-09-12 / ACCEPTED** | Native SVD XT is the selected and accepted MVP video backend; its queue-first path, geometry, artifacts, and replay lineage are proven | `PR-MVP-070` |
 | Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated; the Windows runtime/bootstrap baseline, real local native SVD XT square-source run through the public production runner, replay lineage, separate artifact generation, cancellation, real portrait `832x1216 -> 640x960` source-aware production acceptance, duration-preserving RIFE interpolation semantics with real compatibility-runtime proof, portable native-SVD MP4 provenance with isolated-copy recovery proof, and conservative interrupted-running restart recovery are accepted. Remaining open work is queue/history action-state and no-op cleanup plus final operator-facing/CI/integration closeout | `PR-MVP-080` |
 | Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
-| Backend-neutral image execution | **Complete / accepted on feature branch; integration pending** | One typed image backend per NJR is implemented with explicit identity normalization, historical A1111 compatibility, registry/capability enforcement, neutral runner requests, adapter-private A1111 translation, fake-backend queue/SQLite proof, four-stage adapter parity, and bounded real A1111 acceptance | `PR-IMG-100` |
+| Backend-neutral image execution | **Complete / accepted / integrated** | One typed image backend per NJR is implemented with explicit identity normalization, historical A1111 compatibility, registry/capability enforcement, neutral runner requests, adapter-private A1111 translation, fake-backend queue/SQLite proof, four-stage adapter parity, and bounded real A1111 acceptance | `PR-IMG-100` |
 
 Closing a row requires implementation evidence and tests. Updating prose alone
 does not close a gap. The backend-neutral image row begins only after the v2.6
@@ -421,5 +421,5 @@ StableNew orchestration with ComfyUI/another runtime is a new material decision
 and requires owner review before implementation.
 
 This amendment preserves version v2.6 because it records the accepted post-release
-image boundary on the PR-IMG-100 feature branch; integration into `main` remains
+image boundary now integrated into `main`; further backend qualification remains
 an explicit product-owner decision.

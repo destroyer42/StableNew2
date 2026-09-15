@@ -3,11 +3,11 @@
 Status: APPROVED POST-v2.6 ARCHITECTURE CONTRACT
 Owner: Rob
 Decision date: 2026-09-13
-Execution state: Complete / accepted on feature branch; main integration pending explicit authorization.
+Execution state: Complete / accepted / integrated on `main`.
 
 ## 1. Outcome
 
-Make still-image execution backend-neutral while preserving the accepted A1111 image path unchanged and creating a clean later path for a Diffusers image backend, initially qualified against Ideogram 4. This contract is implemented and accepted on the feature branch; Diffusers qualification remains out of scope.
+Make still-image execution backend-neutral while preserving the accepted A1111 image path unchanged and creating a clean later path for a Diffusers image backend, initially qualified against Ideogram 4. This contract is implemented and accepted on `main`; Diffusers qualification remains out of scope.
 
 The canonical outer path remains:
 

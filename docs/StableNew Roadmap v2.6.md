@@ -249,18 +249,18 @@ legacy failures remain non-blocking.
 ## Approved post-v2.6 sequence
 
 This sequence records the post-v2.6 architecture line. PR-IMG-100 is complete /
-accepted on its feature branch; integrate it only after explicit authorization.
+accepted / integrated on `main`.
 Do not begin PR-IMG-110 until that integration and a separate qualification
 decision.
 
 | Order | Work | Status | Outcome |
 |---:|---|---|---|
-| P1 | `PR-IMG-100` | Complete / Accepted on feature branch; integration pending | One typed image backend per image NJR; existing A1111 path preserved behind a StableNew-owned backend contract |
+| P1 | `PR-IMG-100` | Complete / Accepted / Integrated | One typed image backend per image NJR; existing A1111 path preserved behind a StableNew-owned backend contract |
 | P2 | `PR-IMG-110` | Planned decision-gated qualification | Diffusers / Ideogram 4 runtime qualification on target hardware; no production backend yet |
 | P3 | `PR-IMG-120` | Conditional | First Diffusers production image vertical slice if PR-IMG-110 proves viable |
 | P4 | `PR-IMG-130` | Conditional | Capability-aware image backend/model UI and compiler projections |
 
-### PR-IMG-100 — backend-neutral image execution (complete / accepted on feature branch)
+### PR-IMG-100 — backend-neutral image execution (complete / accepted / integrated)
 
 Accepted architecture: **COA B — one typed image backend per image NJR**.
 
@@ -349,15 +349,13 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-`PR-IMG-100` is complete / accepted on the feature branch; next action is
-explicit authorization to integrate it into `main`. PR-IMG-110 remains planned
-and not started.
+`PR-IMG-100` is complete / accepted / integrated on `main`. PR-IMG-110 remains
+planned and not started. The next action is explicit product-owner direction.
 PR-MVP-080 is COMPLETE / ACCEPTED / INTEGRATED; its final operator journey, required CI, and
 documentation closeout are complete. Queue/history action-state and no-op cleanup is
 accepted, alongside PromptPack authorship, durable job state, image generation,
 native SVD XT, the Phase 0 runtime/bootstrap prerequisite, real portrait
 source-aware SVD geometry, and duration-preserving RIFE interpolation semantics.
 
-PR-MVP-080 and PR-MVP-090 are accepted and integrated. PR-IMG-100 was executed
-as one coherent work package and is complete / accepted on its feature branch.
-The next action is explicit authorization to integrate it into `main`.
+PR-MVP-080, PR-MVP-090, and PR-IMG-100 are accepted and integrated. PR-IMG-100
+was executed as one coherent work package.

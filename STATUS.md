@@ -7,7 +7,7 @@ Updated: 2026-09-15
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: `PR-IMG-100 — Backend-Neutral Image Execution` (complete / accepted; ready for main integration)
+- Active objective: `PR-IMG-100 — Backend-Neutral Image Execution` (complete / accepted / integrated)
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -33,17 +33,15 @@ Fresh work is queued, NJRs are immutable, lifecycle state belongs to queue and
 history, replay creates a new NJR with lineage, and GUI/controllers do not
 create an alternate runner path.
 
-`main` now contains the accepted PR-MVP-080 operator-readiness and PR-MVP-090
-release-proof lines. The v2.6 MVP/release proof is complete. PR-IMG-100 is
-complete and accepted on its feature branch; main integration is pending explicit
-authorization. PR-IMG-110 remains planned and not started.
+`main` now contains the accepted PR-MVP-080 operator-readiness, PR-MVP-090
+release-proof, and PR-IMG-100 backend-neutral image lines. The v2.6 MVP/release
+proof is complete. PR-IMG-110 remains planned and not started.
 
 ## Approved post-v2.6 direction
 
 The first approved post-v2.6 architecture PR, `PR-IMG-100 — Backend-Neutral
-Image Execution`, is complete and accepted on its feature branch, pending main
-integration. The accepted course of action is **one typed image backend per
-image NJR**.
+Image Execution`, is complete / accepted / integrated. The accepted course of
+action is **one typed image backend per image NJR**.
 A1111/WebUI remains the default/current production image backend and its accepted
 behavior must be preserved behind the new boundary. Newly compiled image NJRs
 will explicitly persist image backend identity through the existing immutable
@@ -294,9 +292,9 @@ provenance evidence remains valid. The accepted feature line was fast-forwarded
 into `main` without a merge commit, rebase, or force push. StableNew CI run 317
 passed on the accepted source tree, including required Python 3.11 and 3.12.
 
-1. Integrate PR-IMG-100 into `main` only after explicit product-owner authorization.
+1. Maintain the accepted v2.6 and IMG-100 baseline pending explicit product-owner direction.
 
-Next action: **PR-IMG-100 main integration authorization**.
+Next action: **await explicit product-owner direction**.
 
 PR-MVP-090 is **COMPLETE / ACCEPTED / INTEGRATED**. The final real-backend
 release proof completed without production source changes.
