@@ -74,8 +74,8 @@ accepted; it does not expand the current v2.6 release gate.
 | 12 | `PR-MVP-090` | Complete | Clean-machine release acceptance |
 
 Roadmap progress is 13 of 13 MVP rows complete (100%). Native SVD, operator
-readiness, and clean-machine release proof are complete on the feature branch;
-integration of PR-MVP-090 into `main` is pending product-owner authorization.
+readiness, and clean-machine release proof are complete and integrated into
+`main`.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair
 
@@ -176,8 +176,7 @@ This is workflow polish, not a GUI rewrite.
 
 ### PR-MVP-090 — release proof
 
-PR-MVP-090 is **COMPLETE / ACCEPTED on the feature branch — integration
-pending product-owner authorization**. The final release proof completed
+PR-MVP-090 is **COMPLETE / ACCEPTED / INTEGRATED**. The final release proof completed
 without production source changes. Its Phase 0 runtime/bootstrap prerequisite
 was accepted early for dependency sequencing:
 
@@ -348,13 +347,13 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-PR-MVP-090 product-owner integration authorization.
+`PR-IMG-100 — Backend-Neutral Image Execution` (not started).
 PR-MVP-080 is COMPLETE / ACCEPTED / INTEGRATED; its final operator journey, required CI, and
 documentation closeout are complete. Queue/history action-state and no-op cleanup is
 accepted, alongside PromptPack authorship, durable job state, image generation,
 native SVD XT, the Phase 0 runtime/bootstrap prerequisite, real portrait
 source-aware SVD geometry, and duration-preserving RIFE interpolation semantics.
 
-After PR-MVP-080 and PR-MVP-090 are accepted and integrated, verify the exact
-post-v2.6 parent SHA and begin `PR-IMG-100 Phase A`; do not reuse the discovery
-branch SHA as an implementation parent.
+PR-MVP-080 and PR-MVP-090 are accepted and integrated. Verify the exact
+post-v2.6 parent SHA before beginning `PR-IMG-100 Phase A`; do not reuse the
+discovery branch SHA as an implementation parent.
