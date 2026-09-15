@@ -291,15 +291,47 @@ provenance evidence remains valid. The accepted feature line was fast-forwarded
 into `main` without a merge commit, rebase, or force push. StableNew CI run 317
 passed on the accepted source tree, including required Python 3.11 and 3.12.
 
-1. Execute the remaining PR-MVP-090 clean-machine/release-proof work.
-2. After accepted/integrated v2.6 release proof, begin PR-IMG-100 from the
-   exact integrated post-v2.6 parent.
+1. Obtain product-owner authorization to fast-forward the accepted PR-MVP-090
+   feature line into `main`.
+2. After integration, begin PR-IMG-100 from the exact integrated post-v2.6
+   parent.
 
-Next action: **PR-MVP-090 migration/recovery and final release acceptance**.
+Next action: **PR-MVP-090 product-owner integration authorization**.
 
-PR-MVP-090 is **IN PROGRESS** for release proof. Its Phase 0
-runtime/bootstrap prerequisite was completed and accepted early only to unblock
-PR-MVP-080; its remaining clean-machine and release-proof work is now active.
+PR-MVP-090 is **COMPLETE / ACCEPTED on the feature branch — integration
+pending product-owner authorization**. The final real-backend release proof
+completed without production source changes.
+
+The accepted final image job was `mvp090-final-image-lifetime`: one durable
+`COMPLETED` queue/history entry, one decoded 768x1024 PNG, checkpoint
+`juggernautXL_ragnarokBy.safetensors [dd08fa32f9]`, and image SHA-256
+`57a1b6f14ab483a3d981df3e35304ef9d26bbe0478b8abb7c3a12f4513eec76f`.
+The repaired acceptance harness proved durable terminal state and queue-runner
+idle before teardown; no duplicate or replay occurred.
+
+The final native plain-SVD-XT job was `4df7d2a73ea04e42a09294a81dfe8897`.
+It was submitted through the public SVD controller and queue-first NJR path,
+reached durable `COMPLETED`, and produced one non-empty MP4. The source-aware
+target was 576x1024 from the 768x1024 portrait source; preprocessing resized
+and center-cropped without padding. FFprobe verified exactly 14 frames at 7
+fps and 576x1024. The accepted profile was plain XT, 25 steps, motion bucket
+48, noise 0.01, decode chunk 2, fp16, CPU offload ON, forward chunking ON,
+local-only ON, and all optional postprocessing OFF.
+
+The disposable Windows bootstrap/check-only evidence used Python 3.11.9,
+CUDA-enabled Torch 2.14.0+cu130 (CUDA 13.0), Diffusers 0.40.0,
+Transformers 5.17.0, Accelerate 1.15.0, imageio-ffmpeg 0.6.0, and an RTX
+4070 Ti. The production plain-XT cache was complete and no model download
+occurred. Embedded provenance read-back passed, including source image
+SHA-256, source job identity, current NJR SHA-256, SVD configuration, actual
+preprocess/postprocess facts, and media-content verification. The visual smoke
+check showed portrait orientation with no obvious stretch, squash, or gross
+corruption.
+
+Required CI run 331 remains the source-SHA compatibility evidence; no source
+validation was rerun for this docs-only closeout. The earlier 832x1216 pressure
+rejection remains expected guardrail behavior, and the interpreter-shutdown
+incident is closed as an acceptance-harness lifetime defect.
 
 ## Known non-blocking debt
 

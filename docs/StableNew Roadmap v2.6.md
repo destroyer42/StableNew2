@@ -175,9 +175,10 @@ This is workflow polish, not a GUI rewrite.
 
 ### PR-MVP-090 — release proof
 
-PR-MVP-090 is **IN PROGRESS** for the remaining release proof. Phase 0 — the
-enabling prerequisite, pulled forward for dependency sequencing only — is
-COMPLETE / ACCEPTED:
+PR-MVP-090 is **COMPLETE / ACCEPTED on the feature branch — integration
+pending product-owner authorization**. The final release proof completed
+without production source changes. Its Phase 0 runtime/bootstrap prerequisite
+was accepted early for dependency sequencing:
 
 - repository-owned Windows Python 3.11/3.12 bootstrap with CUDA-enabled Torch
   installation ordering;
@@ -186,14 +187,34 @@ COMPLETE / ACCEPTED:
 - accepted plain XT detected through the production cache authority and
   production local-only preflight passing without blockers or warnings.
 
-Pulling forward Phase 0 did not complete the broader PR-MVP-090 scope. The
-remaining clean-machine/release-proof work is now the active objective:
+The final image proof used one durable queue-first job, completed at 768x1024,
+and preserved checkpoint provenance for
+`juggernautXL_ragnarokBy.safetensors [dd08fa32f9]`. The image SHA-256 was
+`57a1b6f14ab483a3d981df3e35304ef9d26bbe0478b8abb7c3a12f4513eec76f`.
 
-- clean-checkout release proof;
-- migration/recovery rehearsal;
-- final image/SVD smokes;
-- restart/replay/artifact proof;
-- final limitations and rollback documentation.
+The final native plain-SVD-XT proof used SVD job
+`4df7d2a73ea04e42a09294a81dfe8897`, the accepted image as its source, and the
+public controller → immutable NJR → JobService → SQLite → PipelineRunner path.
+The source-aware target and prepared geometry were 576x1024, using resize plus
+center-crop without padding. The completed MP4 decoded at exactly 14 frames,
+7 fps, and 576x1024. The profile was 25 steps, motion bucket 48, noise 0.01,
+decode chunk 2, fp16, CPU offload and forward chunking enabled, local-only
+enabled, and all optional postprocessing disabled. SQLite, history, artifact
+manifest, JSON sidecar, embedded portable provenance, and filesystem agreed;
+the embedded source provenance retained the parent image job identity and
+source SHA-256. Visual smoke confirmed portrait orientation without obvious
+stretch, squash, or gross corruption.
+
+The disposable native-SVD bootstrap/check-only run established Python 3.11.9,
+CUDA Torch 2.14.0+cu130, Diffusers 0.40.0, Transformers 5.17.0, Accelerate
+1.15.0, production-resolved FFmpeg/ffprobe, and the RTX 4070 Ti. Plain XT was
+already complete in the production cache; no model download occurred.
+
+Required CI run 331 remains the source-SHA evidence. Migration, GP-MVP-17,
+Ruff, controller ratchet, and A1111 image validation were reused unchanged;
+the repaired acceptance harness and final SVD/image smokes supplied the
+remaining release proof. The earlier high-pressure 832x1216 rejection remains
+expected guardrail behavior.
 
 The release-harness integrity checkpoint is **COMPLETE / ACCEPTED**. Modern
 NJR journeys use the immutable contract and the canonical
