@@ -213,12 +213,17 @@ StableNew CI run 328 passed both required Python 3.11 and 3.12 jobs;
 informational full-suite legacy failures remain non-blocking.
 
 The managed-runtime ownership safety repair is also **COMPLETE / ACCEPTED**.
-WebUI and ComfyUI termination/restart paths now require explicit
-manager ownership of the launched process/session. Automatic port,
+WebUI and ComfyUI termination/restart paths now require explicit manager
+ownership of the launched process/session. ComfyUI bootstrap uses a healthy
+existing external endpoint unmanaged without launching a duplicate, rejects an
+occupied invalid endpoint without killing or replacing its occupant, and starts
+managed ComfyUI only when the endpoint is free. Automatic port,
 working-directory, process-appearance, and orphan/reparented-process kill
 heuristics were removed from runtime recovery and shutdown. Deterministic tests
 cover unmanaged external runtimes, owned roots/descendants, orphan monitoring,
-and isolated emergency cleanup without using a real backend.
+and isolated emergency cleanup without using a real backend. StableNew CI run
+330 passed both required Python 3.11 and 3.12 jobs; informational full-suite
+legacy failures remain non-blocking.
 
 ## Approved post-v2.6 sequence
 

@@ -195,13 +195,19 @@ The managed-runtime ownership safety repair is **COMPLETE / ACCEPTED**.
 WebUI launch now refuses an occupied configured endpoint without killing or
 adopting its process. Stop, restart, orphan monitoring, process-container
 teardown, and emergency cleanup require explicit manager ownership and may act
-only on the launched root and proven descendants. The same explicit ownership
-gate now protects ComfyUI cleanup. Machine-wide port, working-directory, and
-process-appearance kill scans are no longer automatic authorities. Focused
-ownership/lifecycle/recovery validation passed using fakes and test-owned
-disposable processes only. The legacy test's live `atexit` registration and
-global-state leak are confirmed; whether that callback caused the previously
-observed external runtime disappearance remains unresolved.
+only on the launched root and proven descendants. ComfyUI now has ownership
+parity: bootstrap uses an existing healthy external endpoint unmanaged without
+launching a duplicate, rejects an occupied invalid endpoint without killing or
+replacing its occupant, and launches only when the configured endpoint is free.
+The same explicit ownership gate protects ComfyUI cleanup and restart. Machine-
+wide port, working-directory, process-appearance, and orphan/reparented-process
+kill scans are no longer automatic authorities. Focused ownership/lifecycle/
+recovery validation passed using fakes and test-owned disposable processes only.
+StableNew CI run 330 passed both required Python 3.11 and 3.12 jobs;
+informational full-suite legacy failures remain non-blocking. The legacy test's
+live `atexit` registration and global-state leak are confirmed; whether that
+callback caused the previously observed external runtime disappearance remains
+unresolved.
 
 XT 1.1 remains a distinct supported model and must not be substituted for the
 accepted plain-XT baseline merely because it is cached.
