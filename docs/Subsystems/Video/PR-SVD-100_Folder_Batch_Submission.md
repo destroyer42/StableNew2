@@ -1,6 +1,6 @@
 # PR-SVD-100 — Folder Batch Submission
 
-Status: IMPLEMENTATION IN PROGRESS
+Status: COMPLETE / ACCEPTED ON FEATURE BRANCH; MAIN INTEGRATION PENDING
 Owner: Rob
 Execution profile: Standard — GPT-5.6 Terra, High, Local/Desktop.
 
@@ -47,6 +47,18 @@ planning, and the single queue submission. `AppController` is a thin form-data
 validation/delegation bridge that refreshes and flushes queue projection once.
 No controller is permitted to call the runner, backend, repository, or a
 per-image submission loop.
+
+## Accepted closeout evidence
+
+- Focused changed-behavior tests: 16 passed.
+- Raw Ruff and the controller-surface ratchet passed.
+- Required GitHub CI run `34992485523` passed Python 3.11 and 3.12 for final
+  source SHA `63140acac5ef6aa567819332f1fc546f24fd3395`.
+- The local PR gate was attempted once and reported the established tooling
+  blocker: local `mypy` and `ruff` are not discoverable by its preflight, even
+  though direct pinned Ruff passed. No environment rebuild was performed.
+- No real SVD inference/GPU acceptance was rerun; the execution boundary is
+  unchanged and accepted runtime evidence remains reusable.
 
 ## Token-efficient validation plan
 
