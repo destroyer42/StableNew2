@@ -60,7 +60,7 @@ from src.config.app_config import (
     set_webui_health_total_timeout_seconds,
     set_webui_workdir,
 )
-from src.contracts import PackJobEntry
+from src.contracts import PackJobEntry, PreviewRequest
 from src.controller.app_controller_services.application_runtime_coordinator import (
     ApplicationRuntimeCoordinator,
 )
@@ -1173,26 +1173,26 @@ class AppController:
         """Expose duration stats service for queue ETA estimation (PR-PIPE-002)."""
         return getattr(self, "_duration_stats_service", None)
 
-    def run_txt2img_once(self, config: dict[str, Any] | None = None) -> None:
-        self._append_log("[controller] run_txt2img_once called.")
-        if config is None:
-            config = {
-                "prompt": "A beautiful landscape, trending on artstation",
-                "model": "stable-diffusion-v1-5",
-                "sampler": "Euler a",
-                "width": 512,
-                "height": 512,
-                "steps": 20,
-                "cfg_scale": 7.0,
-            }
+    def run_txt2img_once(self, config: dict[str, Any] | None = None) -> Any:
+        """Compatibility event shim that submits canonical queued NJRs."""
+        self._append_log("[controller] run_txt2img_once routed to queue.")
         try:
-            result = self.pipeline_runner.run_txt2img_once(config)
-            msg = f"Pipeline finished: {result.get('output_path', 'No output path')}"
-            self._append_log(msg)
-            self._update_status(msg)
+            if config is None:
+                return self.on_run_now()
+            controller = getattr(self, "pipeline_controller", None)
+            if controller is None:
+                raise RuntimeError("PipelineController is unavailable")
+            records = controller.get_preview_jobs_for_request(PreviewRequest(base_config=dict(config), use_state_fallback=False))
+            if not records:
+                raise ValueError("No normalized image job could be built from the supplied intent")
+            submitted = int(controller.submit_preview_jobs_to_queue(records=records, source="run_txt2img_once", prompt_source="manual", run_config={"run_mode": "queue", "source": "run_txt2img_once", "prompt_source": "manual"}) or 0)
+            result = {"success": submitted == len(records), "submitted_jobs": submitted, "job_ids": [record.job_id for record in records[:submitted]]}
+            self._update_status(f"Submitted {submitted} image job(s) to the queue")
+            return result
         except Exception as exc:
             self._append_log(f"Pipeline error: {exc!r}")
             self._update_status(f"Error: {exc!r}")
+            return {"success": False, "error": str(exc)}
 
     def _learning_run_callable(self, config: dict, step: Any) -> Any:
         """Callable passed to LearningExecutionController for running pipeline steps.
@@ -1200,8 +1200,8 @@ class AppController:
         PR-LEARN-002: Provides learning experiments with access to the pipeline execution system.
         """
         try:
-            # Run through the pipeline runner with the learning experiment config
-            result = self.pipeline_runner.run_txt2img_once(config)
+            # Submit through the canonical NJR/queue path; execution remains asynchronous.
+            result = self.run_txt2img_once(config)
             return normalize_run_result(result)
         except Exception as exc:
             logger.exception(f"[learning] Pipeline run failed for step {step}: {exc}")
