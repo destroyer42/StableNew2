@@ -82,7 +82,7 @@ Existing A1111 implementation details may be moved behind an adapter but are not
 
 No new top-level NJR field or NJR schema version is required solely for backend selection. `ImageWorkloadSpec.backend_options` is the authorized immutable carrier.
 
-Newly compiled image work after PR-IMG-100 must persist an explicit image backend identity under the existing backend-options layer. The exact normalized shape may be chosen during Phase A, but it must be singular, typed/validated, round-trip completely, and remain backend configuration rather than GUI state.
+Newly compiled image work after PR-IMG-100 must persist an explicit image backend identity under the existing backend-options layer. The implemented normalized shape is singular, typed/validated, round-trips completely, and remains backend configuration rather than GUI state.
 
 Required semantics:
 
@@ -301,9 +301,14 @@ Discovery estimate:
 
 These percentages are architecture-surface estimates, not LOC targets or acceptance metrics.
 
-## 12. Phased implementation sequence
+## 12. Historical execution sequence
 
-The PR is one acceptance contract, but Codex executes one bounded phase per invocation unless explicitly authorized otherwise.
+PR-IMG-100 was executed as one coherent work package with internal checkpoints.
+Context was acquired once and reused while unchanged. Contract/routing,
+A1111 cutover, real acceptance, documentation, and Git closeout were adjacent
+authorized subphases. The following phase descriptions are retained only as
+historical structure and must not be treated as current instructions to begin or
+resume implementation.
 
 ### Phase A — Contract, backend identity, deterministic routing proof
 
@@ -364,9 +369,13 @@ The PR is one acceptance contract, but Codex executes one bounded phase per invo
 
 **Stop:** PR-IMG-100 acceptance. Do not begin Diffusers/Ideogram qualification.
 
-## 13. Codex prompt template — Phase A
+## 13. Historical/superseded Codex prompt template — Phase A
 
-Before use, replace the exact-start placeholders with the verified integrated post-v2.6 branch and SHA. Do not reuse the discovery SHA.
+This template is superseded by the accepted implementation above. Do not execute
+it or use it to resume PR-IMG-100.
+
+Historical note: the original prompt required exact-start verification and did
+not permit reuse of the discovery SHA.
 
 ```text
 Title: PR-IMG-100 Phase A — Image Backend Contract + Deterministic Routing
@@ -419,10 +428,15 @@ Work budget / stop conditions:
 One focused discovery pass, one implementation pass, one repair pass, one final verification. Stop after Phase A acceptance is true. Stop if more than two materially different failure classes appear, scope expands into A1111 cutover/Ideogram/ComfyUI/per-stage composition, or a higher execution class is required.
 
 Completion report:
-Return exact branch/SHA, files changed, backend-options shape chosen, compatibility rule, deterministic tests and results, PR-gate/CI state, architecture/controller effect, known blockers/debt, and whether Phase A acceptance is fully true. Do not begin Phase B.
+Historical completion report requested exact branch/SHA, files changed,
+backend-options shape, compatibility rule, validation, CI state, architecture /
+controller effect, blockers, and Phase A acceptance. Phase B is now superseded.
 ```
 
-## 14. Codex prompt template — Phase B
+## 14. Historical/superseded Codex prompt template — Phase B
+
+This template is superseded by the accepted implementation above. Do not execute
+it or use it to resume PR-IMG-100.
 
 Fill the exact start from the accepted Phase A checkpoint.
 
@@ -459,10 +473,15 @@ Work budget / stop conditions:
 One discovery pass, implementation pass, repair pass, final verification. Stop after deterministic Phase B acceptance. Stop after two materially different failure classes or if cutover requires changing queue/repository/public runner/process ownership semantics.
 
 Completion report:
-Return exact branch/SHA, diff summary, what moved behind A1111 adapter vs remained unchanged, focused tests, PR-gate/CI state, any accepted evidence invalidated by source changes, controller/architecture effect, blockers/debt, and whether Phase B acceptance is fully true. Do not begin Phase C.
+Historical completion report requested exact branch/SHA, diff summary, adapter
+boundary, focused tests, CI state, invalidated evidence, architecture /
+controller effect, blockers, and Phase B acceptance. Phase C is now superseded.
 ```
 
-## 15. Codex prompt template — Phase C
+## 15. Historical/superseded Codex prompt template — Phase C
+
+This template is superseded by the accepted implementation above. Do not execute
+it or use it to resume PR-IMG-100.
 
 Fill the exact start from the accepted Phase B checkpoint.
 

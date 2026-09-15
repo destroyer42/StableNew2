@@ -280,7 +280,7 @@ queue-first A1111 golden path.
 One backend owns all image stages in an NJR for this PR. Unsupported stages fail
 before dispatch. There is no implicit cross-backend fallback.
 
-The binding acceptance contract and exact Codex Phase A/B/C templates are in:
+The binding acceptance contract and historical execution record are in:
 
 `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`
 
@@ -331,7 +331,8 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 - Keep MVP video to one backend and one MVP journey.
 - Do not revive the failed child runtime host or add distributed execution.
 - Do not let historical feature breadth block the defined vertical slice.
-- Do not begin PR-IMG-100 before the accepted v2.6 release baseline exists.
+- Historical guardrail: PR-IMG-100 began only after the accepted v2.6 release
+  baseline existed.
 - PR-IMG-100 must preserve A1111 rather than combine backend-neutralization with
   image-quality changes, a broad executor rewrite, or another real backend.
 
@@ -357,6 +358,6 @@ accepted, alongside PromptPack authorship, durable job state, image generation,
 native SVD XT, the Phase 0 runtime/bootstrap prerequisite, real portrait
 source-aware SVD geometry, and duration-preserving RIFE interpolation semantics.
 
-PR-MVP-080 and PR-MVP-090 are accepted and integrated. Verify the exact
-post-v2.6 parent SHA before beginning `PR-IMG-100 Phase A`; do not reuse the
-discovery branch SHA as an implementation parent.
+PR-MVP-080 and PR-MVP-090 are accepted and integrated. PR-IMG-100 was executed
+as one coherent work package and is complete / accepted on its feature branch.
+The next action is explicit authorization to integrate it into `main`.

@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-09-14
+Updated: 2026-09-15
 
 ## Repository
 
@@ -34,8 +34,9 @@ history, replay creates a new NJR with lineage, and GUI/controllers do not
 create an alternate runner path.
 
 `main` now contains the accepted PR-MVP-080 operator-readiness and PR-MVP-090
-release-proof lines. The v2.6 MVP/release proof is complete. PR-IMG-100 is the
-next approved objective and has not started.
+release-proof lines. The v2.6 MVP/release proof is complete. PR-IMG-100 is
+complete and accepted on its feature branch; main integration is pending explicit
+authorization. PR-IMG-110 remains planned and not started.
 
 ## Approved post-v2.6 direction
 
