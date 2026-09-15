@@ -93,6 +93,11 @@ from src.controller.process_auto_scanner_service import (
 )
 from src.controller.runtime_state import GUIState
 from src.controller.submission_policy_v26 import SubmissionPolicy
+from src.controller.svd_submission_service import (
+    preview_folder_batch,
+    submit_folder_batch,
+    submit_single,
+)
 from src.controller.webui_connection_controller import (
     WebUIConnectionController,
     WebUIConnectionState,
@@ -7220,10 +7225,8 @@ class AppController:
             f"[train_lora] Queued character training job {job_id} for {character_name}"
         )
         return job_id
-
     def validate_svd_source_image(self, path: str | Path) -> tuple[bool, str | None]:
         return self._get_svd_controller().validate_source_image(path)
-
     def get_svd_postprocess_capabilities(self, form_data: dict[str, Any] | None = None, *, source_image_path: str | Path | None = None) -> dict[str, dict[str, object]]:
         controller = self._get_svd_controller()
         validated_form_data = validate_svd_native_execution_config(form_data) if isinstance(form_data, dict) else None
@@ -7232,33 +7235,31 @@ class AppController:
         if config is not None:
             capabilities["admission"] = controller.get_preflight(config, source_image_path=source_image_path)
         return capabilities
-
     def submit_svd_job(self, *, source_image_path: str | Path, form_data: dict[str, Any]) -> str:
-        controller = self._get_svd_controller()
-        validated_form_data = validate_svd_native_execution_config(form_data)
-        config = controller.build_svd_config(validated_form_data)
-        valid, reason = controller.validate_source_image(source_image_path)
-        if not valid:
-            raise ValueError(reason or "SVD source image is invalid")
-        pipeline_payload = validated_form_data.get("pipeline") if isinstance(validated_form_data, dict) else None
-        output_route = None
-        if isinstance(pipeline_payload, dict):
-            output_route = pipeline_payload.get("output_route")
-        job_id = controller.submit_svd_job(
-            source_image_path=source_image_path,
-            config=config,
-            output_route=str(output_route) if output_route else None,
-        )
+        job_id = submit_single(self._get_svd_controller(), source_image_path, form_data)
         self._sync_queue_state_after_direct_submission()
         self._append_log(f"[svd] Queued SVD Img2Vid job {job_id} for {Path(source_image_path).name}")
         return job_id
-
+    def preview_svd_folder_batch(self, *, folder_path: str | Path) -> dict[str, object]:
+        return preview_folder_batch(self._get_svd_controller(), folder_path)
+    def submit_svd_folder_batch(
+        self,
+        *,
+        folder_path: str | Path,
+        form_data: dict[str, Any],
+        match_source_aspect: bool,
+    ) -> list[str]:
+        job_ids = submit_folder_batch(
+            self._get_svd_controller(), folder_path, form_data, match_source_aspect
+        )
+        self._sync_queue_state_after_direct_submission()
+        self._append_log(f"[svd] Queued {len(job_ids)} SVD folder jobs from {Path(folder_path).name}")
+        return job_ids
     def _sync_queue_state_after_direct_submission(self) -> None:
         try:
             self._refresh_app_state_queue()
         except Exception as exc:
             logger.debug("Direct submission queue refresh failed: %s", exc)
-
         app_state = getattr(self, "app_state", None)
         flush_now = getattr(app_state, "flush_now", None)
         if callable(flush_now):
@@ -7266,7 +7267,6 @@ class AppController:
                 flush_now()
             except Exception as exc:
                 logger.debug("Direct submission app_state flush failed: %s", exc)
-
     def get_latest_output_image_path(self) -> str | None:
         app_state = getattr(self, "app_state", None)
         history_items = list(getattr(app_state, "history_items", []) or [])

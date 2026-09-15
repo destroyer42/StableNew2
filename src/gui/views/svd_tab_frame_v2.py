@@ -166,6 +166,9 @@ class SVDTabFrameV2(ttk.Frame):
             default_model = model_options[0] if model_options else preferred_model
 
         self.source_image_var = tk.StringVar()
+        self.source_mode_var = tk.StringVar(value="single")
+        self.source_folder_var = tk.StringVar()
+        self._folder_batch_preview: dict[str, Any] = {}
         self.preset_var = tk.StringVar(value=_DEFAULT_SVD_PRESET)
         self.model_var = tk.StringVar(value=default_model)
         self.frames_var = tk.IntVar(value=14)
@@ -258,8 +261,25 @@ class SVDTabFrameV2(ttk.Frame):
             "Pull the newest compatible still image into SVD so you can animate it without browsing manually. This chooses the source image; it does not queue a job yet.",
         )
 
+        ttk.Label(header, text="Folder Batch", style="Dark.TLabel").grid(
+            row=1, column=0, sticky="w", padx=(0, 6), pady=(6, 0)
+        )
+        self.folder_entry = ttk.Entry(
+            header,
+            textvariable=self.source_folder_var,
+            style="Dark.TEntry",
+            width=52,
+        )
+        self.folder_entry.grid(row=1, column=1, columnspan=3, sticky="ew", padx=(0, 6), pady=(6, 0))
+        ttk.Button(
+            header,
+            text="Select Folder...",
+            style="Dark.TButton",
+            command=self._on_browse_folder,
+        ).grid(row=1, column=4, sticky="w", padx=(0, 6), pady=(6, 0))
+
         self.status_label = ttk.Label(header, text="", style="Dark.TLabel")
-        self.status_label.grid(row=1, column=0, columnspan=6, sticky="w", pady=(6, 0))
+        self.status_label.grid(row=2, column=0, columnspan=6, sticky="w", pady=(6, 0))
 
     def _build_body(self, model_options: list[str]) -> None:
         body = ttk.Frame(self, style="Panel.TFrame")
@@ -851,6 +871,7 @@ class SVDTabFrameV2(ttk.Frame):
         self._refresh_capabilities()
 
     def set_source_image_path(self, path: str | Path, *, status_message: str | None = None) -> None:
+        self.source_mode_var.set("single")
         string_path = str(path)
         self.source_image_var.set(string_path)
         try:
@@ -869,6 +890,51 @@ class SVDTabFrameV2(ttk.Frame):
         )
         if path:
             self.set_source_image_path(path, status_message=f"Selected {Path(path).name}")
+
+    def _on_browse_folder(self) -> None:
+        initial_dir = self._last_folder or None
+        folder = filedialog.askdirectory(title="Select SVD source folder", initialdir=initial_dir)
+        if folder:
+            self.set_source_folder_path(folder)
+
+    def set_source_folder_path(self, folder: str | Path, *, status_message: str | None = None) -> None:
+        self.source_mode_var.set("folder")
+        self.source_folder_var.set(str(folder))
+        self._last_folder = str(folder)
+        self._refresh_folder_batch_preview()
+        self._refresh_summary()
+        self._refresh_capabilities()
+        if status_message:
+            self._set_status(status_message)
+
+    def _is_folder_mode(self) -> bool:
+        return getattr(self, "source_mode_var", None) is not None and self.source_mode_var.get() == "folder"
+
+    def _refresh_folder_batch_preview(self) -> None:
+        self._folder_batch_preview = {}
+        folder = self.source_folder_var.get().strip()
+        if not folder:
+            return
+        preview = getattr(self.app_controller, "preview_svd_folder_batch", None)
+        if not callable(preview):
+            self._folder_batch_preview = {"error": "SVD folder submission is not connected."}
+            return
+        try:
+            result = preview(folder_path=folder)
+            self._folder_batch_preview = dict(result) if isinstance(result, dict) else {}
+        except Exception as exc:
+            self._folder_batch_preview = {"error": str(exc)}
+
+    def _update_submission_action(self) -> None:
+        if not hasattr(self, "animate_btn"):
+            return
+        if not self._is_folder_mode():
+            self.animate_btn.configure(text="Animate Image")
+            return
+        count = int(self._folder_batch_preview.get("compatible_count") or 0)
+        invalid = self._folder_batch_preview.get("invalid_candidates") or []
+        text = f"Queue {count} SVD Jobs" if count else "Queue SVD Folder Jobs"
+        self.animate_btn.configure(text=text, state="normal" if count and not invalid else "disabled")
 
     def _on_use_latest_output(self) -> None:
         controller = self.app_controller
@@ -890,6 +956,36 @@ class SVDTabFrameV2(ttk.Frame):
 
     def _on_submit(self) -> None:
         controller = self.app_controller
+        if self._is_folder_mode():
+            handler = getattr(controller, "submit_svd_folder_batch", None)
+            folder = self.source_folder_var.get().strip()
+            self._refresh_folder_batch_preview()
+            count = int(self._folder_batch_preview.get("compatible_count") or 0)
+            invalid = self._folder_batch_preview.get("invalid_candidates") or []
+            if not folder or not count or invalid:
+                messagebox.showwarning("Folder batch unavailable", "Select a folder with valid compatible images.")
+                return
+            if not callable(handler):
+                messagebox.showerror("Controller missing", "SVD folder submission is not connected.")
+                return
+            if not messagebox.askyesno(
+                "Queue SVD folder batch",
+                f"Queue {count} SVD jobs using the currently displayed settings?",
+            ):
+                return
+            try:
+                job_ids = handler(
+                    folder_path=folder,
+                    form_data=self._build_form_data(),
+                    match_source_aspect=self.target_preset_var.get() == _TARGET_AUTO_LABEL,
+                )
+                self._set_status(f"Queued {len(job_ids)} SVD jobs from {Path(folder).name}")
+                self._refresh_folder_batch_preview()
+                self._refresh_summary()
+                messagebox.showinfo("Submitted", f"Queued {len(job_ids)} SVD jobs.")
+            except Exception as exc:
+                messagebox.showerror("SVD folder batch failed", str(exc))
+            return
         handler = getattr(controller, "submit_svd_job", None)
         if not callable(handler):
             messagebox.showerror("Controller missing", "SVD controller is not connected.")
@@ -992,6 +1088,8 @@ class SVDTabFrameV2(ttk.Frame):
             return
         try:
             source_image_path = self.source_image_var.get().strip() or None
+            if self._is_folder_mode():
+                source_image_path = self._folder_batch_preview.get("first_source_path") or None
             capabilities = getter(
                 self._build_form_data(),
                 source_image_path=source_image_path,
@@ -1029,6 +1127,7 @@ class SVDTabFrameV2(ttk.Frame):
             parts.append(f"{name}: {status}" + (f" ({detail})" if detail else ""))
         self._capability_text = "Capabilities: " + " | ".join(parts) if parts else ""
         self.capabilities_label.configure(text=self._capability_text)
+        self._update_submission_action()
 
     def _apply_runtime_defaults(self) -> None:
         if self._applied_runtime_defaults:
@@ -1128,6 +1227,26 @@ class SVDTabFrameV2(ttk.Frame):
             )
 
     def _refresh_summary(self, source: str | None = None) -> None:
+        if self._is_folder_mode():
+            folder = self.source_folder_var.get().strip()
+            count = int(self._folder_batch_preview.get("compatible_count") or 0)
+            ignored = int(self._folder_batch_preview.get("ignored_count") or 0)
+            invalid = self._folder_batch_preview.get("invalid_candidates") or []
+            target_text = (
+                "Match Source Aspect resolves separately for every image"
+                if self.target_preset_var.get() == _TARGET_AUTO_LABEL
+                else f"Fixed SVD target: {self._effective_target_size()[0]}x{self._effective_target_size()[1]}"
+            )
+            warning = f" | Invalid candidates: {len(invalid)}" if invalid else ""
+            self.summary_label.configure(
+                text=(
+                    f"Folder Batch: {Path(folder).name if folder else 'No folder selected'}\n"
+                    f"Compatible images: {count} | Ignored files: {ignored}{warning}\n"
+                    f"{target_text}; current displayed settings will be snapshotted per job."
+                )
+            )
+            self._update_submission_action()
+            return
         source_name = Path(source or self.source_image_var.get() or "").name or "No source image"
         cache_dir = self.cache_dir_var.get().strip() or "(default cache)"
         decode_chunk = int(self.decode_chunk_size_var.get())
@@ -1153,6 +1272,7 @@ class SVDTabFrameV2(ttk.Frame):
                 f"{memory_note}"
             )
         )
+        self._update_submission_action()
 
     def _set_status(self, message: str) -> None:
         self._status_text = message
@@ -1489,6 +1609,8 @@ class SVDTabFrameV2(ttk.Frame):
     def get_svd_state(self) -> dict[str, Any]:
         return {
             "source_image_path": self.source_image_var.get(),
+            "source_mode": self.source_mode_var.get(),
+            "source_folder_path": self.source_folder_var.get(),
             "last_folder": self._last_folder,
             "preset_name": self.preset_var.get(),
             "model_id": self.model_var.get(),
@@ -1524,8 +1646,12 @@ class SVDTabFrameV2(ttk.Frame):
         try:
             self._applied_runtime_defaults = True
             source_path = str(payload.get("source_image_path") or "")
+            source_mode = str(payload.get("source_mode") or "single")
+            source_folder = str(payload.get("source_folder_path") or "")
             if source_path:
                 self.source_image_var.set(source_path)
+            self.source_mode_var.set("folder" if source_mode == "folder" else "single")
+            self.source_folder_var.set(source_folder)
             self._last_folder = str(payload.get("last_folder") or self._last_folder)
             model_id = str(payload.get("model_id") or "")
             if model_id and model_id in list(self.model_combo.cget("values")):
@@ -1594,6 +1720,8 @@ class SVDTabFrameV2(ttk.Frame):
             self.frame_upscale_factor_var.set(
                 float(payload.get("frame_upscale_factor", self.frame_upscale_factor_var.get()))
             )
+            if self._is_folder_mode():
+                self._refresh_folder_batch_preview()
             self._refresh_capabilities()
             self._reconcile_preset()
             self._refresh_summary(source_path or None)

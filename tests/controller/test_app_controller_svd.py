@@ -128,6 +128,47 @@ def test_submit_svd_job_rejects_invalid_motion_bucket_before_controller_dispatch
     controller._svd_controller.build_svd_config.assert_not_called()
 
 
+def test_submit_svd_folder_batch_delegates_once_then_syncs_once() -> None:
+    controller = AppController.__new__(AppController)
+    controller._svd_controller = Mock()
+    controller._svd_controller.build_svd_config.return_value = "cfg"
+    controller._svd_controller.submit_svd_folder_batch.return_value = ["job-1", "job-2"]
+    controller._sync_queue_state_after_direct_submission = Mock()
+    controller._append_log = Mock()
+
+    job_ids = controller.submit_svd_folder_batch(
+        folder_path="C:/tmp/sources",
+        form_data={"inference": {"seed": 7}, "pipeline": {"output_route": "SVD"}},
+        match_source_aspect=True,
+    )
+
+    assert job_ids == ["job-1", "job-2"]
+    controller._svd_controller.submit_svd_folder_batch.assert_called_once_with(
+        folder="C:/tmp/sources",
+        config="cfg",
+        match_source_aspect=True,
+        output_route="SVD",
+    )
+    controller._sync_queue_state_after_direct_submission.assert_called_once()
+
+
+def test_preview_svd_folder_batch_projects_counts_without_queue_submission() -> None:
+    controller = AppController.__new__(AppController)
+    controller._svd_controller = Mock()
+    controller._svd_controller.discover_folder_sources.return_value = SimpleNamespace(
+        folder="C:/tmp/sources",
+        sources=(SimpleNamespace(path="C:/tmp/sources/a.png"),),
+        ignored_paths=("C:/tmp/sources/readme.txt",),
+        invalid_candidates=(("C:/tmp/sources/broken.png", "unreadable"),),
+    )
+
+    preview = controller.preview_svd_folder_batch(folder_path="C:/tmp/sources")
+
+    assert preview["compatible_count"] == 1
+    assert preview["ignored_count"] == 1
+    assert preview["first_source_path"] == "C:/tmp/sources/a.png"
+
+
 def test_runtime_status_callback_preserves_stage_detail() -> None:
     captured = {}
     controller = AppController.__new__(AppController)

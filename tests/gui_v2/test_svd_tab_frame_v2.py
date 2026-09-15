@@ -18,6 +18,9 @@ class _FakeVar:
     def get(self) -> str:
         return self.value
 
+    def set(self, value: str) -> None:
+        self.value = value
+
 
 class _FakeWidget:
     def __init__(self) -> None:
@@ -31,11 +34,38 @@ def _capability_projection_tab(controller: Mock, source: str = "") -> SVDTabFram
     tab = SVDTabFrameV2.__new__(SVDTabFrameV2)
     tab.app_controller = controller
     tab.source_image_var = _FakeVar(source)
+    tab.source_mode_var = _FakeVar("single")
+    tab.source_folder_var = _FakeVar("")
+    tab._folder_batch_preview = {}
     tab.capabilities_label = _FakeWidget()
     tab.admission_label = _FakeWidget()
     tab.animate_btn = _FakeWidget()
     tab._build_form_data = lambda: {}
     return tab
+
+
+def test_folder_batch_capabilities_use_preview_source_and_truthful_action_label() -> None:
+    controller = Mock()
+    controller.get_svd_postprocess_capabilities.return_value = {
+        "admission": {"available": True, "blocking_reasons": [], "warnings": []}
+    }
+    tab = _capability_projection_tab(controller)
+    tab.source_mode_var.set("folder")
+    tab.source_folder_var.set("C:/tmp/folder")
+    tab._folder_batch_preview = {
+        "compatible_count": 12,
+        "ignored_count": 2,
+        "invalid_candidates": [],
+        "first_source_path": "C:/tmp/folder/a.png",
+    }
+
+    tab._refresh_capabilities()
+
+    assert controller.get_svd_postprocess_capabilities.call_args.kwargs["source_image_path"] == (
+        "C:/tmp/folder/a.png"
+    )
+    assert tab.animate_btn.values["text"] == "Queue 12 SVD Jobs"
+    assert tab.animate_btn.values["state"] == "normal"
 
 
 def test_svd_tab_renders(tk_root: tk.Tk) -> None:

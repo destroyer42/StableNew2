@@ -7,7 +7,7 @@ Updated: 2026-09-15
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: `PR-IMG-100 — Backend-Neutral Image Execution` (complete / accepted / integrated)
+- Active objective: `PR-SVD-100 — Folder Batch Submission` (in progress)
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -36,6 +36,11 @@ create an alternate runner path.
 `main` now contains the accepted PR-MVP-080 operator-readiness, PR-MVP-090
 release-proof, and PR-IMG-100 backend-neutral image lines. The v2.6 MVP/release
 proof is complete. PR-IMG-110 remains planned and not started.
+
+PR-SVD-100 is the active post-v2.6 SVD submission-convenience package. It adds
+non-recursive folder planning and one normal queue batch submission while
+preserving the accepted SVD runtime, backend, queue, history, replay, and
+artifact authorities.
 
 ## Approved post-v2.6 direction
 

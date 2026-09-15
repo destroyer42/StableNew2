@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
+
+from PIL import Image
 
 from src.controller.svd_controller import SVDController
 from src.state.output_routing import OUTPUT_ROUTE_TESTING
@@ -83,6 +86,125 @@ def test_submit_svd_job_persists_resolved_target_dimensions(tmp_path, monkeypatc
     assert preprocess["target_width"] == 640
     assert preprocess["target_height"] == 960
     assert preprocess["resize_mode"] == "center_crop"
+
+
+def _write_image(path, size: tuple[int, int]) -> None:
+    Image.new("RGB", size, color=(32, 64, 96)).save(path)
+
+
+def test_submit_svd_folder_batch_submits_once_in_discovery_order_and_resolves_geometry(
+    tmp_path, monkeypatch
+) -> None:
+    _write_image(tmp_path / "z_landscape.png", (1600, 800))
+    _write_image(tmp_path / "a_portrait.jpg", (800, 1600))
+    (tmp_path / "notes.txt").write_text("ignored")
+    captured = {}
+
+    def _submit_njrs(njrs, policy):
+        captured["njrs"] = list(njrs)
+        captured["policy"] = policy
+        return [f"job-{index}" for index, _ in enumerate(njrs)]
+
+    app_controller = SimpleNamespace(
+        output_dir=str(tmp_path), job_service=SimpleNamespace(submit_njrs=_submit_njrs)
+    )
+    controller = SVDController(app_controller=app_controller, svd_service=Mock())
+    preflight = Mock(return_value=SimpleNamespace(available=True, blocking_reasons=()))
+    monkeypatch.setattr("src.controller.svd_controller.get_svd_preflight", preflight)
+
+    job_ids = controller.submit_svd_folder_batch(
+        folder=tmp_path,
+        config=SVDConfig.from_dict({"inference": {"seed": 42}}),
+        match_source_aspect=True,
+        output_route=OUTPUT_ROUTE_TESTING,
+    )
+
+    assert job_ids == ["job-0", "job-1"]
+    assert preflight.call_count == 1
+    assert captured["policy"].start_when_idle is False
+    assert [Path(njr.input_image_paths[0]).name for njr in captured["njrs"]] == [
+        "a_portrait.jpg",
+        "z_landscape.png",
+    ]
+    assert all(len(njr.input_image_paths) == 1 for njr in captured["njrs"])
+    assert all([stage.stage_type for stage in njr.stage_chain] == ["svd_native"] for njr in captured["njrs"])
+    preprocesses = [njr.config["svd_native"]["preprocess"] for njr in captured["njrs"]]
+    assert [(item["target_width"], item["target_height"]) for item in preprocesses] == [
+        (576, 1024),
+        (1024, 576),
+    ]
+    assert [njr.config["svd_native"]["inference"]["seed"] for njr in captured["njrs"]] == [42, 42]
+
+
+def test_submit_svd_folder_batch_rejects_invalid_candidate_without_submission(tmp_path, monkeypatch) -> None:
+    _write_image(tmp_path / "valid.png", (768, 768))
+    (tmp_path / "broken.webp").write_bytes(b"not a webp")
+    submit = Mock()
+    app_controller = SimpleNamespace(output_dir=str(tmp_path), job_service=SimpleNamespace(submit_njrs=submit))
+    controller = SVDController(app_controller=app_controller, svd_service=Mock())
+    monkeypatch.setattr(
+        "src.controller.svd_controller.get_svd_preflight",
+        lambda *_args, **_kwargs: SimpleNamespace(available=True, blocking_reasons=()),
+    )
+
+    try:
+        controller.submit_svd_folder_batch(
+            folder=tmp_path,
+            config=SVDConfig(),
+            match_source_aspect=False,
+        )
+        assert False, "expected invalid candidate to block the full batch"
+    except RuntimeError as exc:
+        assert "invalid image candidates" in str(exc)
+    submit.assert_not_called()
+
+
+def test_submit_svd_folder_batch_rejects_zero_compatible_sources_without_submission(
+    tmp_path, monkeypatch
+) -> None:
+    (tmp_path / "notes.txt").write_text("ignored")
+    submit = Mock()
+    controller = SVDController(
+        app_controller=SimpleNamespace(output_dir=str(tmp_path), job_service=SimpleNamespace(submit_njrs=submit)),
+        svd_service=Mock(),
+    )
+    monkeypatch.setattr(
+        "src.controller.svd_controller.get_svd_preflight",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(AssertionError("preflight must not run")),
+    )
+
+    try:
+        controller.submit_svd_folder_batch(folder=tmp_path, config=SVDConfig(), match_source_aspect=False)
+        assert False, "expected zero compatible sources to block submission"
+    except RuntimeError as exc:
+        assert "no compatible image files" in str(exc)
+    submit.assert_not_called()
+
+
+def test_submit_svd_folder_batch_fixed_target_and_blank_seed_are_preserved(tmp_path, monkeypatch) -> None:
+    _write_image(tmp_path / "a.png", (768, 768))
+    _write_image(tmp_path / "b.tiff", (900, 600))
+    captured = {}
+    app_controller = SimpleNamespace(
+        output_dir=str(tmp_path),
+        job_service=SimpleNamespace(
+            submit_njrs=lambda njrs, _policy: captured.setdefault("njrs", list(njrs)) and ["a", "b"]
+        ),
+    )
+    controller = SVDController(app_controller=app_controller, svd_service=Mock())
+    monkeypatch.setattr(
+        "src.controller.svd_controller.get_svd_preflight",
+        lambda *_args, **_kwargs: SimpleNamespace(available=True, blocking_reasons=()),
+    )
+    controller.submit_svd_folder_batch(
+        folder=tmp_path,
+        config=SVDConfig.from_dict({"preprocess": {"target_width": 768, "target_height": 768}}),
+        match_source_aspect=False,
+    )
+    for njr in captured["njrs"]:
+        preprocess = njr.config["svd_native"]["preprocess"]
+        assert (preprocess["target_width"], preprocess["target_height"]) == (768, 768)
+        assert njr.config["svd_native"]["inference"]["seed"] is None
 
 
 def test_get_postprocess_capabilities_exposes_runtime_status() -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from src.controller.submission_policy_v26 import SubmissionPolicy
@@ -11,8 +12,13 @@ from src.video.svd_capabilities import get_svd_postprocess_capabilities, get_svd
 from src.video.svd_config import SVDConfig
 from src.video.svd_models import get_default_svd_cache_dir
 from src.video.svd_postprocess import validate_svd_postprocess_config
-from src.video.svd_preprocess import validate_svd_source_image
+from src.video.svd_preprocess import (
+    SVDFolderDiscovery,
+    discover_svd_folder_sources,
+    validate_svd_source_image,
+)
 from src.video.svd_service import SVDService
+from src.video.svd_target import select_svd_target_size
 
 
 class SVDController:
@@ -110,11 +116,84 @@ class SVDController:
         preflight = get_svd_preflight(config, source_image_path=source_image_path)
         if not preflight.available:
             raise RuntimeError("SVD admission blocked: " + "; ".join(preflight.blocking_reasons))
+        njr = self._build_svd_njr(
+            source_image_path=source_image_path,
+            config=config,
+            output_route=output_route,
+        )
+
+        job_service = getattr(self._app_controller, "job_service", None)
+        if job_service is None:
+            raise RuntimeError("App controller is missing job_service")
+
+        job_ids = job_service.submit_njrs([njr], SubmissionPolicy())
+        if not job_ids:
+            raise RuntimeError("Failed to enqueue SVD job")
+        return job_ids[0]
+
+    def discover_folder_sources(self, folder: str | Path) -> SVDFolderDiscovery:
+        return discover_svd_folder_sources(folder)
+
+    def submit_svd_folder_batch(
+        self,
+        *,
+        folder: str | Path,
+        config: SVDConfig,
+        match_source_aspect: bool,
+        output_route: str | None = None,
+    ) -> list[str]:
+        """Admit a complete SVD folder batch and submit it once through JobService."""
+
+        valid, reason = self.validate_config(config)
+        if not valid:
+            raise RuntimeError(reason or "SVD configuration is invalid")
+        discovery = self.discover_folder_sources(folder)
+        if discovery.invalid_candidates:
+            details = "; ".join(
+                f"{path.name}: {reason}" for path, reason in discovery.invalid_candidates
+            )
+            raise RuntimeError(f"SVD folder batch has invalid image candidates: {details}")
+        if not discovery.sources:
+            raise RuntimeError("SVD folder batch has no compatible image files")
+        preflight = get_svd_preflight(config, source_image_path=discovery.sources[0].path)
+        if not preflight.available:
+            raise RuntimeError("SVD admission blocked: " + "; ".join(preflight.blocking_reasons))
+        njrs = []
+        for source in discovery.sources:
+            source_config = config
+            if match_source_aspect:
+                width, height = select_svd_target_size(source.width, source.height)
+                source_config = replace(
+                    config,
+                    preprocess=replace(config.preprocess, target_width=width, target_height=height),
+                )
+            njrs.append(
+                self._build_svd_njr(
+                    source_image_path=source.path,
+                    config=source_config,
+                    output_route=output_route,
+                )
+            )
+        job_service = getattr(self._app_controller, "job_service", None)
+        if job_service is None:
+            raise RuntimeError("App controller is missing job_service")
+        job_ids = job_service.submit_njrs(njrs, SubmissionPolicy())
+        if len(job_ids or []) != len(njrs):
+            raise RuntimeError("Failed to enqueue complete SVD folder batch")
+        return list(job_ids)
+
+    def _build_svd_njr(
+        self,
+        *,
+        source_image_path: str | Path,
+        config: SVDConfig,
+        output_route: str | None,
+    ):
         builder = ReprocessJobBuilder()
         output_dir = getattr(self._app_controller, "output_dir", None) or "output"
         source_name = Path(source_image_path).stem.replace("_", " ").strip() or "selected image"
         route_name = str(output_route or OUTPUT_ROUTE_SVD).strip() or OUTPUT_ROUTE_SVD
-        njr = builder.build_reprocess_job(
+        return builder.build_reprocess_job(
             input_image_paths=[str(source_image_path)],
             stages=["svd_native"],
             config={
@@ -126,12 +205,3 @@ class SVDController:
             negative_prompt="",
             pack_name="SVD",
         )
-
-        job_service = getattr(self._app_controller, "job_service", None)
-        if job_service is None:
-            raise RuntimeError("App controller is missing job_service")
-
-        job_ids = job_service.submit_njrs([njr], SubmissionPolicy())
-        if not job_ids:
-            raise RuntimeError("Failed to enqueue SVD job")
-        return job_ids[0]

@@ -47,6 +47,10 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   runtime ports, and the A1111 executor/client boundary.
 - Native SVD/video: `src/video/svd_service.py`, `src/video/svd_runner.py`,
   `src/video/svd_native_backend.py`, and `src/video/workflow_contracts.py`.
+- SVD folder-batch submission: `docs/Subsystems/Video/PR-SVD-100_Folder_Batch_Submission.md`
+  -> `src/video/svd_preprocess.py` -> `src/controller/svd_controller.py` ->
+  `src/controller/svd_submission_service.py` -> `src/controller/app_controller.py`
+  -> `src/gui/views/svd_tab_frame_v2.py` -> `JobService.submit_njrs`.
 - Portable SVD provenance: `src/video/svd_portable_provenance.py` ->
   `src/video/container_metadata.py` -> `src/video/svd_runner.py` ->
   `src/video/svd_registry.py`.
@@ -75,6 +79,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | Generation progress / stall diagnostics | `src/pipeline/executor.py` -> `src/controller/core_pipeline_controller.py` -> `src/controller/app_controller.py` runtime projection -> `src/services/watchdog_system_v2.py` |
 | Operator readiness | `src/services/operator_readiness_service.py` -> `src/gui/panels_v2/operator_readiness_panel_v2.py` -> `src/gui/main_window_v2.py` |
 | SVD geometry/presets | `src/gui/views/svd_tab_frame_v2.py` -> `src/video/svd_target.py` -> `src/video/svd_service.py` -> `src/video/svd_models.py` |
+| `PR-SVD-100` folder batch | `svd_preprocess.py` -> `svd_controller.py` -> `svd_submission_service.py` -> `app_controller.py` -> `svd_tab_frame_v2.py` -> `JobService.submit_njrs` |
 | Queue/history recovery UX | `src/gui/panels_v2/queue_panel_v2.py` + `src/gui/job_history_panel_v2.py` -> `src/controller/job_history_service.py` / `src/controller/job_service.py` -> `src/queue/job_queue.py` -> `src/queue/job_repository.py` |
 
 ## Controller decomposition
