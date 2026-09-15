@@ -1,6 +1,6 @@
 # PR-SVD-100 — Folder Batch Submission
 
-Status: COMPLETE / ACCEPTED ON FEATURE BRANCH; MAIN INTEGRATION PENDING
+Status: COMPLETE / ACCEPTED / INTEGRATED ON MAIN
 Owner: Rob
 Execution profile: Standard — GPT-5.6 Terra, High, Local/Desktop.
 

@@ -256,7 +256,7 @@ decision.
 | Order | Work | Status | Outcome |
 |---:|---|---|---|
 | P1 | `PR-IMG-100` | Complete / Accepted / Integrated | One typed image backend per image NJR; existing A1111 path preserved behind a StableNew-owned backend contract |
-| P1a | `PR-SVD-100` | Complete / Accepted on feature branch; integration pending | Non-recursive SVD folder batch submission through ordinary per-source NJRs and one existing JobService batch call |
+| P1a | `PR-SVD-100` | Complete / Accepted / Integrated | Non-recursive SVD folder batch submission through ordinary per-source NJRs and one existing JobService batch call |
 | P2 | `PR-IMG-110` | Planned decision-gated qualification | Diffusers / Ideogram 4 runtime qualification on target hardware; no production backend yet |
 | P3 | `PR-IMG-120` | Conditional | First Diffusers production image vertical slice if PR-IMG-110 proves viable |
 | P4 | `PR-IMG-130` | Conditional | Capability-aware image backend/model UI and compiler projections |
@@ -285,7 +285,7 @@ The binding acceptance contract and historical execution record are in:
 
 `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`
 
-### PR-SVD-100 — Folder Batch Submission (complete / accepted on feature branch)
+### PR-SVD-100 — Folder Batch Submission (complete / accepted / integrated)
 
 This bounded SVD utility package adds non-recursive folder discovery/admission
 and compiles one ordinary immutable `svd_native` NJR per valid source before one
@@ -359,9 +359,8 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-`PR-SVD-100 — Folder Batch Submission` is complete / accepted on its feature
-branch; main integration is pending explicit authorization. PR-IMG-110 remains
-planned, decision-gated, and not started.
+`PR-SVD-100 — Folder Batch Submission` is complete / accepted / integrated on
+`main`. PR-IMG-110 remains planned, decision-gated, and not started.
 PR-MVP-080 is COMPLETE / ACCEPTED / INTEGRATED; its final operator journey, required CI, and
 documentation closeout are complete. Queue/history action-state and no-op cleanup is
 accepted, alongside PromptPack authorship, durable job state, image generation,
