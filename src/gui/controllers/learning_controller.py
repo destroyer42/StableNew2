@@ -39,6 +39,7 @@ from src.gui_v2.adapters.learning_adapter_v2 import (
     list_recent_learning_records,
     update_record_feedback,
 )
+from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.learning.discovered_review_models import (
     DiscoveredReviewExperiment,
     DiscoveredReviewItem,
@@ -930,6 +931,7 @@ class LearningController:
                 config=final_config,
                 images_per_prompt=max(1, int(experiment.images_per_value or 1)),
                 metadata=learning_metadata,
+                backend_options=normalize_image_backend_options(final_config.get("backend_options")),
             ),
             stages=(txt2img_stage,),
             output_plan=OutputPlan(

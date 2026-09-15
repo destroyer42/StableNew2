@@ -11,6 +11,7 @@ from src.image_backends.image_backend_types import (
     ImageBackendInterface,
     ImageExecutionRequest,
     ImageExecutionResult,
+    normalize_image_backend_options,
     resolve_image_backend_id,
 )
 
@@ -22,6 +23,7 @@ __all__ = [
     "ImageBackendRegistry",
     "ImageExecutionRequest",
     "ImageExecutionResult",
+    "normalize_image_backend_options",
     "build_default_image_backend_registry",
     "resolve_image_backend_id",
 ]

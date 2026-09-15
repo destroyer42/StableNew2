@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from src.contracts import PackJobEntry
+from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.pipeline import config_contract_v26
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
@@ -484,7 +485,9 @@ class PromptPackNormalizedJobBuilder:
                             pipeline_section.get("variant_mode", "standard") or "standard"
                         ),
                         intent_config=canonicalize_intent_config(intent_payload),
-                        backend_options=derive_backend_options(record.config),
+                        backend_options=normalize_image_backend_options(
+                            derive_backend_options(record.config)
+                        ),
                         metadata=copy.deepcopy(record_metadata),
                     ),
                     stages=tuple(copy.deepcopy(stage_chain)),

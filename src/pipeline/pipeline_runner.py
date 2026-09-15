@@ -126,64 +126,46 @@ class PipelineRunner:
     _folder_cache_timeout_minutes = 30  # Reuse folder if same pack within 30 minutes
 
     @staticmethod
-    def _pin_stage_model_to_njr_base(
-        config_dict: dict[str, Any],
+    def _selected_stage_model(
+        stage_name: str,
+        stage_config: Mapping[str, Any],
         *,
         njr: NormalizedJobRecord,
-        stage_name: str,
-    ) -> None:
-        """Pin downstream image stages to the NJR base model by default.
+    ) -> str | None:
+        """Select the StableNew-owned model policy for one image stage.
 
         These stages currently do not have a first-class GUI surface for
         explicit per-stage SD checkpoint selection, so stale hidden stage
-        config must not silently override the NJR base model.
+        config must not silently override the NJR base model.  Backends receive
+        this selected value and own their own field aliases.
         """
-        if stage_name not in {"img2img", "adetailer", "upscale"}:
-            return
         base_model = str(getattr(njr, "base_model", "") or "").strip()
-        if not base_model:
-            return
-        previous_model = str(
-            config_dict.get("model") or config_dict.get("sd_model_checkpoint") or ""
-        ).strip()
-        config_dict["model"] = base_model
-        config_dict["sd_model_checkpoint"] = base_model
-        logger.info(
-            "[MODEL_PIN] Pinned %s stage to NJR base model: %s%s",
-            stage_name,
-            base_model,
-            f" (replaced hidden stage model {previous_model})"
-            if previous_model and previous_model != base_model
-            else "",
-        )
+        if stage_name in {"img2img", "adetailer", "upscale"} and base_model:
+            return base_model
+        return str(stage_config.get("model") or base_model or "").strip() or None
 
     @staticmethod
-    def _pin_stage_vae_to_njr_base(
-        config_dict: dict[str, Any],
+    def _selected_stage_vae(
+        stage_name: str,
+        stage_config: Mapping[str, Any],
         *,
         njr: NormalizedJobRecord,
-        stage_name: str,
-    ) -> None:
-        """Pin downstream image stages to the NJR-selected VAE by default."""
-        if stage_name not in {"img2img", "adetailer", "upscale"}:
-            return
+    ) -> str | None:
+        """Select the StableNew-owned VAE policy for one image stage."""
         base_vae = str(getattr(njr, "vae", "") or "").strip()
-        if not base_vae:
-            return
-        previous_vae = str(
-            config_dict.get("vae") or config_dict.get("sd_vae") or config_dict.get("vae_name") or ""
-        ).strip()
-        config_dict["vae"] = base_vae
-        config_dict["sd_vae"] = base_vae
-        config_dict["vae_name"] = base_vae
-        logger.info(
-            "[VAE_PIN] Pinned %s stage to NJR base VAE: %s%s",
-            stage_name,
-            base_vae,
-            f" (replaced hidden stage VAE {previous_vae})"
-            if previous_vae and previous_vae != base_vae
-            else "",
+        if stage_name in {"img2img", "adetailer", "upscale"} and base_vae:
+            return base_vae
+        return str(stage_config.get("vae") or base_vae or "").strip() or None
+
+    @staticmethod
+    def _stage_config_for_njr(njr: NormalizedJobRecord, stage_name: str) -> dict[str, Any]:
+        """Return the raw, backend-neutral configuration for one configured stage."""
+
+        stage_config = next(
+            (stage for stage in njr.stage_chain if stage.stage_type == stage_name),
+            None,
         )
+        return stage_config.to_dict() if stage_config else {}
 
     @staticmethod
     def _log_job_pressure_outlook(njr: NormalizedJobRecord) -> None:
@@ -1304,110 +1286,8 @@ class PipelineRunner:
 
                 # Dispatch to the appropriate stage executor based on stage_name
                 if stage.stage_name == "txt2img":
-                    # Build payload for txt2img
                     image_count = max(1, int(njr.images_per_prompt or 1))
-                    # Serialize txt2img API batches to reduce WebUI post-sampling finalize pressure.
-                    batch_size_value = 1
-                    n_iter_value = image_count
-                    logger.debug(
-                        "[pipeline/txt2img] images_per_prompt=%s batch_size=%s n_iter=%s",
-                        njr.images_per_prompt,
-                        batch_size_value,
-                        n_iter_value,
-                    )
-
-                    # Get config from NJR - it's a flat dict, not nested under 'txt2img'
-                    njr_config = njr.config or {}
-                    if not isinstance(njr_config, dict):
-                        njr_config = {}
-
-                    # Build payload starting with base config
-                    payload = {}
-
-                    # Add core txt2img parameters
-                    payload["prompt"] = stage.prompt_text
-                    payload["negative_prompt"] = negative_prompt
-                    payload["model"] = stage.model
-                    payload["sampler_name"] = stage.sampler
-                    payload["steps"] = njr.steps or 20
-                    payload["cfg_scale"] = stage.cfg_scale or njr.cfg_scale or 7.5
-                    payload["width"] = njr.width or 1024
-                    payload["height"] = njr.height or 1024
-                    payload["batch_size"] = batch_size_value
-                    payload["n_iter"] = n_iter_value
-
-                    # Add scheduler if present
-                    if njr.scheduler:
-                        payload["scheduler"] = njr.scheduler
-
-                    # Add hires fix settings from NJR config if present
-                    if njr_config.get("enable_hr"):
-                        payload["enable_hr"] = njr_config["enable_hr"]
-                        payload["hr_scale"] = njr_config.get("hr_scale", 2.0)
-                        payload["hr_upscaler"] = njr_config.get("hr_upscaler", "Latent")
-                        payload["hr_second_pass_steps"] = njr_config.get("hr_second_pass_steps", 0)
-                        payload["denoising_strength"] = njr_config.get("denoising_strength", 0.7)
-                        if njr_config.get("hr_resize_x"):
-                            payload["hr_resize_x"] = njr_config["hr_resize_x"]
-                        if njr_config.get("hr_resize_y"):
-                            payload["hr_resize_y"] = njr_config["hr_resize_y"]
-                        if njr_config.get("hires_use_base_model") is not None:
-                            payload["hires_use_base_model"] = njr_config["hires_use_base_model"]
-                        if njr_config.get("hr_checkpoint_name"):
-                            payload["hr_checkpoint_name"] = njr_config["hr_checkpoint_name"]
-
-                    # Add refiner settings only if use_refiner is explicitly True
-                    if njr_config.get("use_refiner") and njr_config.get("refiner_checkpoint"):
-                        payload["use_refiner"] = True  # Propagate flag so executor can see it
-                        payload["refiner_checkpoint"] = njr_config["refiner_checkpoint"]
-                        payload["refiner_switch_at"] = njr_config.get("refiner_switch_at", 0.8)
-
-                    # Add other settings that might be in config
-                    # PR-LEARN-012: Check NJR attributes if not in config (learning jobs have seed at NJR level)
-                    for key in [
-                        "clip_skip",
-                        "seed",
-                        "subseed",
-                        "subseed_strength",
-                        "seed_resize_from_h",
-                        "seed_resize_from_w",
-                        "restore_faces",
-                        "tiling",
-                        "do_not_save_samples",
-                        "do_not_save_grid",
-                        "vae",
-                    ]:
-                        if key in njr_config:
-                            payload[key] = njr_config[key]
-                        elif hasattr(njr, key) and getattr(njr, key) is not None:
-                            # Fallback to NJR attribute if not in config dict
-                            payload[key] = getattr(njr, key)
-                        elif (
-                            hasattr(njr, "extra_metadata")
-                            and isinstance(njr.extra_metadata, dict)
-                            and key in njr.extra_metadata
-                        ):
-                            # Fallback to extra_metadata for learning jobs
-                            payload[key] = njr.extra_metadata[key]
-
-                    # Debug logging for hires fix
-                    logger.debug(
-                        "[pipeline/txt2img] hires payload enable_hr=%s hr_scale=%s hr_upscaler=%s hr_second_pass_steps=%s denoise=%s",
-                        payload.get("enable_hr"),
-                        payload.get("hr_scale"),
-                        payload.get("hr_upscaler"),
-                        payload.get("hr_second_pass_steps"),
-                        payload.get("denoising_strength"),
-                    )
-                    # Add pipeline section for global negative settings
-                    if isinstance(njr_config, dict) and "pipeline" in njr_config:
-                        payload["pipeline"] = njr_config["pipeline"]
-
-                    logger.debug(
-                        "[pipeline/txt2img] payload batch_size=%s n_iter=%s",
-                        payload.get("batch_size"),
-                        payload.get("n_iter"),
-                    )
+                    config_dict = self._stage_config_for_njr(njr, "txt2img")
                     # Include prompt pack row index in naming to prevent overwrites
                     prompt_row = getattr(njr, "prompt_pack_row_index", 0) or 0
 
@@ -1426,7 +1306,7 @@ class PipelineRunner:
                     pack_name = getattr(njr, "prompt_pack_name", None) or getattr(
                         njr, "pack_name", None
                     )
-                    seed = payload.get("seed")
+                    seed = (njr.config or {}).get("seed") or getattr(njr, "extra_metadata", {}).get("seed")
                     image_name = build_safe_image_name(
                         base_prefix=base_prefix,
                         matrix_values=matrix_values,
@@ -1439,13 +1319,18 @@ class PipelineRunner:
                         backend_id=image_backend_id,
                         stage_name="txt2img",
                         njr=njr,
-                        stage_config=payload,
+                        stage_config=config_dict,
                         run_dir=run_dir,
                         input_image_path=None,
                         image_name=image_name,
-                        prompt=payload["prompt"],
-                        negative_prompt=payload["negative_prompt"],
+                        prompt=stage.prompt_text,
+                        negative_prompt=negative_prompt,
                         cancel_token=cancel_token,
+                        selected_model=self._selected_stage_model(
+                            "txt2img", config_dict, njr=njr
+                        ),
+                        selected_vae=self._selected_stage_vae("txt2img", config_dict, njr=njr),
+                        image_count=image_count,
                     )
                     # Extract ALL image paths from metadata for batch processing
                     if result and "all_paths" in result:
@@ -1470,31 +1355,7 @@ class PipelineRunner:
                         continue
 
                     # Get stage config from njr.stage_chain
-                    stage_config = next(
-                        (s for s in njr.stage_chain if s.stage_type == "img2img"), None
-                    )
-                    if stage_config:
-                        config_dict = stage_config.to_dict()
-                        # Flatten 'extra' dict to top level for executor
-                        if "extra" in config_dict:
-                            config_dict.update(config_dict.pop("extra"))
-                    else:
-                        config_dict = {}
-
-                    self._pin_stage_model_to_njr_base(
-                        config_dict,
-                        njr=njr,
-                        stage_name="img2img",
-                    )
-                    self._pin_stage_vae_to_njr_base(
-                        config_dict,
-                        njr=njr,
-                        stage_name="img2img",
-                    )
-
-                    # Add scheduler from NJR if present
-                    if njr.scheduler:
-                        config_dict["scheduler"] = njr.scheduler
+                    config_dict = self._stage_config_for_njr(njr, "img2img")
 
                     # Process ALL images from previous stage through img2img
                     next_stage_paths = []
@@ -1555,6 +1416,12 @@ class PipelineRunner:
                             prompt=prompt,
                             negative_prompt=negative_prompt,
                             cancel_token=cancel_token,
+                            selected_model=self._selected_stage_model(
+                                "img2img", config_dict, njr=njr
+                            ),
+                            selected_vae=self._selected_stage_vae(
+                                "img2img", config_dict, njr=njr
+                            ),
                         )
                         # Collect output path from this image
                         if result and "path" in result:
@@ -1575,51 +1442,7 @@ class PipelineRunner:
                         continue
 
                     # Get stage config from njr.stage_chain
-                    stage_config = next(
-                        (s for s in njr.stage_chain if s.stage_type == "adetailer"), None
-                    )
-                    if stage_config:
-                        config_dict = stage_config.to_dict()
-                        # Flatten 'extra' dict to top level for executor
-                        if "extra" in config_dict:
-                            extra = config_dict.pop("extra")
-                            # Map generic 'prompt'/'negative_prompt' to adetailer-specific keys
-                            if "prompt" in extra:
-                                extra["adetailer_prompt"] = extra.pop("prompt")
-                            if "negative_prompt" in extra:
-                                extra["adetailer_negative_prompt"] = extra.pop("negative_prompt")
-                            config_dict.update(extra)
-                    else:
-                        config_dict = {}
-                    self._pin_stage_model_to_njr_base(
-                        config_dict,
-                        njr=njr,
-                        stage_name="adetailer",
-                    )
-                    self._pin_stage_vae_to_njr_base(
-                        config_dict,
-                        njr=njr,
-                        stage_name="adetailer",
-                    )
-                    # CRITICAL: Add adetailer_enabled flag that run_adetailer() expects
-                    config_dict["adetailer_enabled"] = True
-                    # Add scheduler from NJR if present
-                    if njr.scheduler:
-                        config_dict["scheduler"] = njr.scheduler
-
-                    # Debug logging
-                    logger.debug("[pipeline/adetailer] config keys=%s", list(config_dict.keys()))
-                    logger.debug(
-                        "[pipeline/adetailer] steps=%s denoise=%s cfg=%s",
-                        config_dict.get("adetailer_steps", "NOT SET"),
-                        config_dict.get("adetailer_denoise", "NOT SET"),
-                        config_dict.get("adetailer_cfg", "NOT SET"),
-                    )
-                    logger.debug(
-                        "[pipeline/adetailer] prompt='%s' negative='%s'",
-                        config_dict.get("adetailer_prompt", "(not set)")[:60],
-                        config_dict.get("adetailer_negative_prompt", "(not set)")[:60],
-                    )
+                    config_dict = self._stage_config_for_njr(njr, "adetailer")
 
                     # Process ALL images from previous stage through adetailer
                     next_stage_paths = []
@@ -1738,6 +1561,12 @@ class PipelineRunner:
                             prompt=prompt,
                             negative_prompt=negative_prompt,
                             cancel_token=cancel_token,
+                            selected_model=self._selected_stage_model(
+                                "adetailer", config_dict, njr=njr
+                            ),
+                            selected_vae=self._selected_stage_vae(
+                                "adetailer", config_dict, njr=njr
+                            ),
                         )
                         # Collect output path from this image
                         if result and "path" in result:
@@ -1800,38 +1629,7 @@ class PipelineRunner:
                         continue
 
                     # Get stage config from njr.stage_chain
-                    stage_config = next(
-                        (s for s in njr.stage_chain if s.stage_type == "upscale"), None
-                    )
-                    if stage_config:
-                        config_dict = stage_config.to_dict()
-                        # Flatten 'extra' dict to top level for executor
-                        if "extra" in config_dict:
-                            logger.debug(
-                                "[pipeline/upscale] extra config before flatten=%s",
-                                config_dict["extra"],
-                            )
-                            config_dict.update(config_dict.pop("extra"))
-                            logger.debug(
-                                "[pipeline/upscale] config after flatten upscaler=%s",
-                                config_dict.get("upscaler"),
-                            )
-                    else:
-                        config_dict = {}
-                        logger.warning(
-                            "[UPSCALE_CONFIG_DEBUG] No upscale stage config found in stage_chain"
-                        )
-
-                    self._pin_stage_model_to_njr_base(
-                        config_dict,
-                        njr=njr,
-                        stage_name="upscale",
-                    )
-                    self._pin_stage_vae_to_njr_base(
-                        config_dict,
-                        njr=njr,
-                        stage_name="upscale",
-                    )
+                    config_dict = self._stage_config_for_njr(njr, "upscale")
 
                     refinement_mode = str(adaptive_refinement_intent.get("mode") or "disabled")
                     refinement_enabled = (
@@ -1913,8 +1711,6 @@ class PipelineRunner:
                             max_length=100,
                         )
                         per_image_config = dict(config_dict)
-                        per_image_config.setdefault("prompt", prompt)
-                        per_image_config.setdefault("negative_prompt", negative_prompt)
                         image_refinement_payload: dict[str, Any] | None = None
                         if refinement_enabled:
                             decision_bundle = refinement_service.build_bundle(
@@ -1949,6 +1745,12 @@ class PipelineRunner:
                             prompt=prompt,
                             negative_prompt=negative_prompt,
                             cancel_token=cancel_token,
+                            selected_model=self._selected_stage_model(
+                                "upscale", config_dict, njr=njr
+                            ),
+                            selected_vae=self._selected_stage_vae(
+                                "upscale", config_dict, njr=njr
+                            ),
                         )
                         # Collect output path from this image
                         if result and "path" in result:
@@ -2310,8 +2112,13 @@ class PipelineRunner:
         prompt: str,
         negative_prompt: str,
         cancel_token: CancelToken | None,
+        selected_model: str | None,
+        selected_vae: str | None,
+        image_count: int = 1,
     ) -> dict[str, Any] | None:
         backend = self._image_backends.get(backend_id)
+        raw_config = thaw_json(getattr(njr, "config", {}))
+        stage_data = dict(stage_config or {})
         execution_result = backend.execute(
             self._pipeline,
             ImageExecutionRequest(
@@ -2323,10 +2130,27 @@ class PipelineRunner:
                 image_name=image_name,
                 prompt=prompt,
                 negative_prompt=negative_prompt,
+                selected_model=selected_model,
+                selected_vae=selected_vae,
+                sampler=str(stage_data.get("sampler_name") or getattr(njr, "sampler_name", "") or "")
+                or None,
+                scheduler=str(stage_data.get("scheduler") or getattr(njr, "scheduler", "") or "")
+                or None,
+                steps=stage_data.get("steps") or getattr(njr, "steps", None) or None,
+                cfg_scale=stage_data.get("cfg_scale") or getattr(njr, "cfg_scale", None) or None,
+                width=getattr(njr, "width", None) or None,
+                height=getattr(njr, "height", None) or None,
+                seed=(raw_config.get("seed") if isinstance(raw_config, Mapping) else None),
+                image_count=image_count,
+                execution_config=dict(raw_config) if isinstance(raw_config, Mapping) else {},
                 job_id=njr.job_id,
                 backend_options=thaw_json(getattr(njr, "backend_options", {})),
                 cancel_token=cancel_token,
-                context_metadata={"job_id": njr.job_id, "stage": stage_name},
+                context_metadata={
+                    "job_id": njr.job_id,
+                    "stage": stage_name,
+                    "provenance": thaw_json(getattr(njr, "extra_metadata", {})),
+                },
             ),
         )
         return execution_result.to_variant_payload() if execution_result else None

@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
+from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.pipeline.artifact_contract import extract_artifact_paths
 from src.pipeline.job_models_v2 import (
     CURRENT_NJR_SCHEMA_VERSION,
@@ -313,7 +314,10 @@ class ReprocessJobBuilder:
                 continuity_link=metadata.get("continuity_link"),
             )
             if is_video
-            else ImageWorkloadSpec(**workload_common)
+            else ImageWorkloadSpec(
+                **workload_common,
+                backend_options=normalize_image_backend_options(config.get("backend_options")),
+            )
         )
         return NormalizedJobRecord(
             schema_version=CURRENT_NJR_SCHEMA_VERSION,

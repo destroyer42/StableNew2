@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from uuid import uuid4
 
+from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
     extract_adaptive_refinement_intent,
@@ -124,6 +125,7 @@ def build_cli_njr(
                 "execution_source": "cli",
                 **({"run_name": run_name} if run_name else {}),
             },
+            backend_options=normalize_image_backend_options(full_config.get("backend_options")),
         ),
         stages=tuple(stage_chain),
         output_plan=OutputPlan(),

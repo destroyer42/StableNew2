@@ -17,6 +17,44 @@ from src.pipeline.artifact_contract import (
 DEFAULT_IMAGE_BACKEND_ID = "a1111_webui"
 
 
+def normalize_image_backend_options(
+    existing_options: Any,
+    *,
+    backend_id: str = DEFAULT_IMAGE_BACKEND_ID,
+) -> dict[str, Any]:
+    """Persist explicit backend identity for newly constructed image work.
+
+    This is intentionally a construction-time operation.  The execution
+    resolver remains the sole compatibility authority for historical records
+    which were persisted before image backend identity existed.
+    """
+
+    if existing_options is None:
+        options: dict[str, Any] = {}
+    elif isinstance(existing_options, Mapping):
+        options = dict(existing_options)
+    else:
+        raise ValueError("backend_options must be a mapping for image work")
+
+    image_options = options.get("image")
+    if image_options is None:
+        image = {}
+    elif isinstance(image_options, Mapping):
+        image = dict(image_options)
+    else:
+        raise ValueError("backend_options.image must be a mapping")
+
+    explicit_backend_id = image.get("backend_id", backend_id)
+    if not isinstance(explicit_backend_id, str):
+        raise ValueError("backend_options.image.backend_id must be a string")
+    normalized_backend_id = explicit_backend_id.strip() or backend_id
+    if not normalized_backend_id:
+        raise ValueError("backend_options.image.backend_id must not be blank")
+    image["backend_id"] = normalized_backend_id
+    options["image"] = image
+    return options
+
+
 def resolve_image_backend_id(backend_options: Any) -> str:
     """Resolve the sole bounded historical compatibility default."""
 
@@ -48,6 +86,17 @@ class ImageExecutionRequest:
     image_name: str | None = None
     prompt: str = ""
     negative_prompt: str = ""
+    selected_model: str | None = None
+    selected_vae: str | None = None
+    sampler: str | None = None
+    scheduler: str | None = None
+    steps: int | None = None
+    cfg_scale: float | None = None
+    width: int | None = None
+    height: int | None = None
+    seed: int | None = None
+    image_count: int = 1
+    execution_config: dict[str, Any] = field(default_factory=dict)
     job_id: str | None = None
     backend_options: dict[str, Any] = field(default_factory=dict)
     cancel_token: Any = None

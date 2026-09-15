@@ -22,6 +22,7 @@ from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.pipeline.job_models_v2 import (
     CURRENT_NJR_SCHEMA_VERSION,
@@ -161,6 +162,9 @@ class JobBuilderV2:
                             positive_prompt=prompt_info.final_prompt,
                             negative_prompt=prompt_info.final_negative_prompt,
                             config=config,
+                            backend_options=normalize_image_backend_options(
+                                config.get("backend_options")
+                            ),
                         ),
                         stages=(stage,),
                         output_plan=OutputPlan(base_output_dir=output.base_output_dir),
