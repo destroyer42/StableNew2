@@ -3,11 +3,11 @@
 Status: APPROVED POST-v2.6 ARCHITECTURE CONTRACT
 Owner: Rob
 Decision date: 2026-09-13
-Execution state: Not started; begins only after PR-MVP-080 and PR-MVP-090 are accepted and integrated.
+Execution state: Complete / accepted on feature branch; main integration pending explicit authorization.
 
 ## 1. Outcome
 
-Make still-image execution backend-neutral while preserving the accepted A1111 image path unchanged and creating a clean later path for a Diffusers image backend, initially qualified against Ideogram 4.
+Make still-image execution backend-neutral while preserving the accepted A1111 image path unchanged and creating a clean later path for a Diffusers image backend, initially qualified against Ideogram 4. This contract is implemented and accepted on the feature branch; Diffusers qualification remains out of scope.
 
 The canonical outer path remains:
 
@@ -105,6 +105,10 @@ PR-IMG-100 must introduce one StableNew-owned internal contract equivalent in re
 - `ImageExecutionResult`
 - `ImageBackendInterface`
 - `ImageBackendRegistry`
+
+Implemented modules are `src/image_backends/image_backend_types.py`,
+`src/image_backends/image_backend_registry.py`, and
+`src/image_backends/a1111_webui_backend.py`.
 
 Names and exact file placement may change if current repo structure provides a better cohesive home, but the responsibilities may not be collapsed back into `PipelineRunner`.
 
@@ -268,6 +272,20 @@ Run focused tests first. Then run `python tools/ci/run_pr_gate.py` once when pra
 A final real-A1111 acceptance is required after the adapter cutover because the refactor touches the accepted production execution boundary. Reuse prior expensive runtime evidence only for behavior whose relevant source did not change.
 
 No Ideogram, ComfyUI, or other second real image backend is required for PR-IMG-100 acceptance.
+
+## 10.1 Accepted closeout evidence
+
+- 41 focused controller/image-backend/runner tests passed after the production
+  shortcut repair; broader accepted deterministic evidence remains valid.
+- Raw Ruff and the controller-surface ratchet passed.
+- Required GitHub CI run 34964546878 passed Python 3.11 and 3.12 for the final
+  source SHA; informational full-suite failures remain unrelated legacy debt.
+- One bounded real queue-first A1111 run completed through JobService, SQLite,
+  PipelineRunner, and the adapter, producing a durable completed history record,
+  PNG, and manifest. No external process was adopted, restarted, or killed.
+- `AppController.run_txt2img_once` remains only as a compatibility event shim;
+  both no-config and supplied-config calls route through canonical queue
+  submission, and no direct legacy runner path remains reachable.
 
 ## 11. Work estimate
 

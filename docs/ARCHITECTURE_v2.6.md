@@ -240,9 +240,10 @@ current process/session may terminate it or its proven descendants.
 The accepted production still-image path is A1111/WebUI-centric. A1111-specific
 payload construction, checkpoint/VAE synchronization, extension semantics,
 progress, cancellation, stall handling, and managed/external runtime ownership
-remain current production truth until PR-IMG-100 is implemented and accepted.
+remain accepted production behavior, now behind the implemented image backend
+boundary on the PR-IMG-100 feature branch.
 
-### 7.2 Approved post-v2.6 target — PR-IMG-100
+### 7.2 Implemented post-v2.6 boundary — PR-IMG-100
 
 The selected course of action is **one typed image backend per image NJR**.
 Backend selection is immutable authorized workload state under the existing
@@ -255,6 +256,15 @@ The first backend remains `a1111_webui` and supports the existing accepted image
 stages. PR-IMG-100 introduces a StableNew-owned image backend capability/request/
 result/interface/registry boundary below `PipelineRunner.run_njr` and wraps the
 existing A1111 executor/client behavior rather than rewriting it.
+
+The implemented modules are `src/image_backends/image_backend_types.py`,
+`src/image_backends/image_backend_registry.py`, and
+`src/image_backends/a1111_webui_backend.py`. A1111 payload/config translation is
+adapter-private; the runner sends a neutral request. New image build paths
+normalize explicit `a1111_webui` identity, while historical missing or blank
+identity resolves once to A1111 without mutating persisted NJRs. The legacy
+`AppController.run_txt2img_once` event shim now submits through the canonical
+queue path and no longer calls a direct runner shortcut.
 
 A future `diffusers` image backend may host multiple model families. Ideogram 4
 is the first planned qualification target after PR-IMG-100, but Ideogram is a
@@ -389,7 +399,7 @@ implemented:
 | Video scope | **Closed 2026-09-12 / ACCEPTED** | Native SVD XT is the selected and accepted MVP video backend; its queue-first path, geometry, artifacts, and replay lineage are proven | `PR-MVP-070` |
 | Operator readiness | Open | Readiness projection/UI and runtime hardening are integrated; the Windows runtime/bootstrap baseline, real local native SVD XT square-source run through the public production runner, replay lineage, separate artifact generation, cancellation, real portrait `832x1216 -> 640x960` source-aware production acceptance, duration-preserving RIFE interpolation semantics with real compatibility-runtime proof, portable native-SVD MP4 provenance with isolated-copy recovery proof, and conservative interrupted-running restart recovery are accepted. Remaining open work is queue/history action-state and no-op cleanup plus final operator-facing/CI/integration closeout | `PR-MVP-080` |
 | Release proof | Open | No clean-checkout, end-to-end image/video MVP acceptance record exists | `PR-MVP-090` |
-| Backend-neutral image execution | **Approved post-v2.6 target / not implemented** | Image NJR already has immutable `backend_options`, but current image compilation/runner/executor remain A1111/WebUI-centric. Approved direction is one typed image backend per NJR with A1111 preserved behind the first adapter; fake-backend proof and real A1111 parity are required before closure | `PR-IMG-100` |
+| Backend-neutral image execution | **Complete / accepted on feature branch; integration pending** | One typed image backend per NJR is implemented with explicit identity normalization, historical A1111 compatibility, registry/capability enforcement, neutral runner requests, adapter-private A1111 translation, fake-backend queue/SQLite proof, four-stage adapter parity, and bounded real A1111 acceptance | `PR-IMG-100` |
 
 Closing a row requires implementation evidence and tests. Updating prose alone
 does not close a gap. The backend-neutral image row begins only after the v2.6
@@ -410,6 +420,6 @@ core field, a new persistence authority, a new public runner, or replacement of
 StableNew orchestration with ComfyUI/another runtime is a new material decision
 and requires owner review before implementation.
 
-This amendment preserves version v2.6 because it corrects and records the
-unfinished v2.6 architecture plus the first approved post-release target; it does
-not claim PR-IMG-100 has been implemented inside the v2.6 release.
+This amendment preserves version v2.6 because it records the accepted post-release
+image boundary on the PR-IMG-100 feature branch; integration into `main` remains
+an explicit product-owner decision.

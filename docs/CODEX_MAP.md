@@ -37,13 +37,14 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 - Current A1111 image implementation boundary: `src/api/`,
   `src/pipeline/payload_builder.py`, and the typed image handlers in
   `src/pipeline/executor.py`.
-- Approved post-v2.6 backend-neutral image target (`PR-IMG-100`):
-  `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`, then
+- Implemented post-v2.6 backend-neutral image boundary (`PR-IMG-100`):
+  `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md`,
+  `src/image_backends/image_backend_types.py`,
+  `src/image_backends/image_backend_registry.py`,
+  `src/image_backends/a1111_webui_backend.py`,
   `src/pipeline/njr_core_v26.py`, `src/pipeline/config_contract_v26.py`,
   image NJR compilers/builders, `src/pipeline/pipeline_runner.py`, controller
-  runtime ports, and the current A1111 executor/client boundary. Exact new
-  image-backend module paths are implementation output and must be added here
-  only after they exist.
+  runtime ports, and the A1111 executor/client boundary.
 - Native SVD/video: `src/video/svd_service.py`, `src/video/svd_runner.py`,
   `src/video/svd_native_backend.py`, and `src/video/workflow_contracts.py`.
 - Portable SVD provenance: `src/video/svd_portable_provenance.py` ->
@@ -63,7 +64,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | GUI submission | `app_controller.py` -> `run_submission_service.py` -> `job_service.py` |
 | Queue/history | `job_service.py` -> `job_queue.py` -> `job_repository.py` |
 | Current image execution | `pipeline_runner.py` -> `executor.py` -> `src/api/` |
-| `PR-IMG-100` backend-neutral image execution | `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md` -> `njr_core_v26.py` / `config_contract_v26.py` -> image compilers -> `pipeline_runner.py` -> runtime ports -> current A1111 executor boundary |
+| `PR-IMG-100` backend-neutral image execution | `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md` -> `src/image_backends/image_backend_types.py` / `src/image_backends/image_backend_registry.py` / `src/image_backends/a1111_webui_backend.py` -> `njr_core_v26.py` / `config_contract_v26.py` -> image compilers -> `pipeline_runner.py` -> runtime ports -> A1111 executor/client boundary |
 | Video/SVD | `workflow_compiler.py` -> `svd_service.py` -> `svd_native_backend.py` |
 | Portable SVD provenance | `src/video/svd_portable_provenance.py` -> `src/video/container_metadata.py` -> `src/video/svd_runner.py` -> `src/video/svd_registry.py` |
 | Windows runtime/bootstrap | `scripts/bootstrap_windows.ps1` -> `docs/runbooks/windows_runtime_bootstrap.md` |

@@ -7,7 +7,7 @@ Updated: 2026-09-14
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: `PR-IMG-100 — Backend-Neutral Image Execution` (not started)
+- Active objective: `PR-IMG-100 — Backend-Neutral Image Execution` (complete / accepted; ready for main integration)
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -39,9 +39,10 @@ next approved objective and has not started.
 
 ## Approved post-v2.6 direction
 
-After PR-MVP-080 and PR-MVP-090 are accepted and integrated, the first approved
-post-v2.6 architecture PR is `PR-IMG-100 — Backend-Neutral Image Execution`.
-The accepted course of action is **one typed image backend per image NJR**.
+The first approved post-v2.6 architecture PR, `PR-IMG-100 — Backend-Neutral
+Image Execution`, is complete and accepted on its feature branch, pending main
+integration. The accepted course of action is **one typed image backend per
+image NJR**.
 A1111/WebUI remains the default/current production image backend and its accepted
 behavior must be preserved behind the new boundary. Newly compiled image NJRs
 will explicitly persist image backend identity through the existing immutable
@@ -292,9 +293,9 @@ provenance evidence remains valid. The accepted feature line was fast-forwarded
 into `main` without a merge commit, rebase, or force push. StableNew CI run 317
 passed on the accepted source tree, including required Python 3.11 and 3.12.
 
-1. Begin PR-IMG-100 from the exact integrated post-v2.6 parent when authorized.
+1. Integrate PR-IMG-100 into `main` only after explicit product-owner authorization.
 
-Next action: **PR-IMG-100 — Backend-Neutral Image Execution** (not started).
+Next action: **PR-IMG-100 main integration authorization**.
 
 PR-MVP-090 is **COMPLETE / ACCEPTED / INTEGRATED**. The final real-backend
 release proof completed without production source changes.
