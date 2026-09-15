@@ -35,9 +35,11 @@ from .api.webui_process_manager import (
 from .app_factory import build_v2_app
 from .utils import setup_logging
 from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
+from .video.comfy_healthcheck import probe_comfy_endpoint
 from .video.comfy_process_manager import (
     ComfyProcessConfig,
     ComfyProcessManager,
+    ComfyStartupError,
     build_default_comfy_process_config,
 )
 
@@ -230,10 +232,23 @@ def bootstrap_comfy(config: dict[str, Any]) -> ComfyProcessManager | None:
         return None
 
     manager = ComfyProcessManager(proc_config)
+    base_url = str(proc_config.base_url or config.get("comfy_base_url") or "").strip()
     if proc_config.autostart_enabled:
+        endpoint_state = probe_comfy_endpoint(base_url, timeout=0.5)
+        if endpoint_state == "healthy":
+            logging.info(
+                "Using existing external ComfyUI at %s without managed startup or ownership",
+                base_url,
+            )
+            return manager
+        if endpoint_state == "occupied":
+            raise ComfyStartupError(
+                f"Cannot autostart ComfyUI: configured endpoint {base_url} is occupied "
+                "but is not valid ComfyUI; refusing to kill or launch a competing process"
+            )
         manager.start()
         wait_for_comfy_ready(
-            config.get("comfy_base_url"),
+            base_url,
             timeout=proc_config.startup_timeout_seconds,
             poll_interval=0.5,
         )

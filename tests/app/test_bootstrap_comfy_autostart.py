@@ -2,7 +2,14 @@ from __future__ import annotations
 
 from unittest import mock
 
+import pytest
+
 from src import main
+from src.video.comfy_process_manager import (
+    ComfyProcessConfig,
+    ComfyProcessManager,
+    ComfyStartupError,
+)
 
 
 def test_bootstrap_comfy_invokes_process_manager_when_autostart_enabled(monkeypatch) -> None:
@@ -15,6 +22,7 @@ def test_bootstrap_comfy_invokes_process_manager_when_autostart_enabled(monkeypa
 
     fake_manager = mock.Mock()
     monkeypatch.setattr(main, "ComfyProcessManager", mock.Mock(return_value=fake_manager))
+    monkeypatch.setattr(main, "probe_comfy_endpoint", lambda *_args, **_kwargs: "free")
     waited = mock.Mock()
     monkeypatch.setattr(main, "wait_for_comfy_ready", waited)
 
@@ -22,6 +30,42 @@ def test_bootstrap_comfy_invokes_process_manager_when_autostart_enabled(monkeypa
 
     fake_manager.start.assert_called_once()
     waited.assert_called_once_with("http://127.0.0.1:8188", timeout=0.5, poll_interval=0.5)
+
+
+def test_bootstrap_comfy_uses_healthy_external_without_launch_or_ownership(monkeypatch) -> None:
+    config = {
+        "comfy_autostart_enabled": True,
+        "comfy_command": ["python", "main.py"],
+        "comfy_base_url": "http://127.0.0.1:8188",
+    }
+    manager = ComfyProcessManager(ComfyProcessConfig(command=config["comfy_command"], base_url=config["comfy_base_url"]))
+    monkeypatch.setattr(main, "ComfyProcessManager", lambda _config: manager)
+    monkeypatch.setattr(main, "probe_comfy_endpoint", lambda *_args, **_kwargs: "healthy")
+    monkeypatch.setattr("src.video.comfy_process_manager.wait_for_comfy_ready", lambda *_args, **_kwargs: True)
+
+    result = main.bootstrap_comfy(config)
+
+    assert result is manager
+    assert manager.owns_process is False
+    assert manager.check_health() is True
+    assert manager.restart(wait_ready=False) is False
+    manager.stop()
+
+
+def test_bootstrap_comfy_rejects_occupied_non_comfy_endpoint(monkeypatch) -> None:
+    config = {
+        "comfy_autostart_enabled": True,
+        "comfy_command": ["python", "main.py"],
+        "comfy_base_url": "http://127.0.0.1:8188",
+    }
+    fake_manager = mock.Mock()
+    monkeypatch.setattr(main, "ComfyProcessManager", mock.Mock(return_value=fake_manager))
+    monkeypatch.setattr(main, "probe_comfy_endpoint", lambda *_args, **_kwargs: "occupied")
+
+    with pytest.raises(ComfyStartupError, match="occupied.*not valid ComfyUI"):
+        main.bootstrap_comfy(config)
+
+    fake_manager.start.assert_not_called()
 
 
 def test_bootstrap_comfy_checks_health_when_process_config_missing(monkeypatch) -> None:

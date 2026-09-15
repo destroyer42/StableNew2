@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from src.utils.config import ConfigManager
-from src.video.comfy_healthcheck import wait_for_comfy_ready
+from src.video.comfy_healthcheck import probe_comfy_endpoint, wait_for_comfy_ready
 
 
 @dataclass
@@ -82,6 +82,17 @@ class ComfyProcessManager:
                 "A running ComfyUI process is present without launch-session ownership; "
                 "refusing to adopt or replace it"
             )
+        if self._config.base_url:
+            endpoint_state = probe_comfy_endpoint(self._config.base_url, timeout=0.5)
+            if endpoint_state != "free":
+                detail = (
+                    "a healthy external ComfyUI is already serving"
+                    if endpoint_state == "healthy"
+                    else "the configured endpoint is occupied but is not valid ComfyUI"
+                )
+                raise ComfyStartupError(
+                    f"Cannot launch managed ComfyUI: {detail}; refusing to adopt, stop, or replace it"
+                )
         try:
             process = subprocess.Popen(
                 self._config.command,

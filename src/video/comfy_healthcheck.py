@@ -9,6 +9,37 @@ SYSTEM_STATS_PATH = "/system_stats"
 OBJECT_INFO_PATH = "/object_info"
 
 
+def probe_comfy_endpoint(base_url: str, *, timeout: float = 0.5) -> str:
+    """Classify an endpoint without waiting for full ComfyUI startup readiness."""
+
+    request_timeout = max(float(timeout), 0.01)
+    system_stats_url = _build_url(base_url, SYSTEM_STATS_PATH)
+    object_info_url = _build_url(base_url, OBJECT_INFO_PATH)
+    try:
+        system_response = requests.get(system_stats_url, timeout=request_timeout)
+    except requests.RequestException:
+        return "free"
+    if system_response.status_code != 200:
+        return "occupied"
+    try:
+        system_payload = system_response.json()
+    except Exception:
+        return "occupied"
+    if not isinstance(system_payload, dict):
+        return "occupied"
+    try:
+        object_response = requests.get(object_info_url, timeout=request_timeout)
+    except requests.RequestException:
+        return "occupied"
+    if object_response.status_code != 200:
+        return "occupied"
+    try:
+        object_payload = object_response.json()
+    except Exception:
+        return "occupied"
+    return "healthy" if isinstance(object_payload, dict) else "occupied"
+
+
 class ComfyHealthCheckTimeout(TimeoutError):
     """Raised when ComfyUI does not become ready in time."""
 
@@ -87,6 +118,7 @@ __all__ = [
     "ComfyHealthCheckTimeout",
     "OBJECT_INFO_PATH",
     "SYSTEM_STATS_PATH",
+    "probe_comfy_endpoint",
     "validate_comfy_health",
     "wait_for_comfy_ready",
 ]

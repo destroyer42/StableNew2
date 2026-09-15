@@ -4,10 +4,13 @@ import io
 from pathlib import Path
 from unittest import mock
 
+import pytest
+
 from src.utils.config import ConfigManager
 from src.video.comfy_process_manager import (
     ComfyProcessConfig,
     ComfyProcessManager,
+    ComfyStartupError,
     build_default_comfy_process_config,
 )
 
@@ -47,9 +50,49 @@ def test_comfy_process_manager_start_invokes_subprocess_with_config(monkeypatch)
     process = manager.start()
 
     assert process is dummy
+    assert manager.owns_process is True
     kwargs = popen_mock.call_args.kwargs
     assert kwargs["cwd"] == "C:/ComfyUI"
     assert kwargs["env"]["A"] == "1"
+
+
+@pytest.mark.parametrize("endpoint_state", ["healthy", "occupied"])
+def test_comfy_start_refuses_any_occupied_configured_endpoint(monkeypatch, endpoint_state) -> None:
+    popen_mock = mock.Mock()
+    monkeypatch.setattr("subprocess.Popen", popen_mock)
+    monkeypatch.setattr(
+        "src.video.comfy_process_manager.probe_comfy_endpoint",
+        lambda *_args, **_kwargs: endpoint_state,
+    )
+    manager = ComfyProcessManager(
+        ComfyProcessConfig(command=["python", "main.py"], base_url="http://127.0.0.1:8188")
+    )
+
+    with pytest.raises(ComfyStartupError):
+        manager.start()
+
+    popen_mock.assert_not_called()
+    assert manager.owns_process is False
+
+
+def test_comfy_start_free_endpoint_launches_once_and_owned_stop_works(monkeypatch) -> None:
+    dummy = _DummyProcess()
+    popen_mock = mock.Mock(return_value=dummy)
+    monkeypatch.setattr("subprocess.Popen", popen_mock)
+    monkeypatch.setattr(
+        "src.video.comfy_process_manager.probe_comfy_endpoint",
+        lambda *_args, **_kwargs: "free",
+    )
+    manager = ComfyProcessManager(
+        ComfyProcessConfig(command=["python", "main.py"], base_url="http://127.0.0.1:8188")
+    )
+
+    manager.start()
+    assert manager.owns_process is True
+    assert manager.restart(wait_ready=False) is True
+    assert popen_mock.call_count == 2
+    manager.stop()
+    assert manager.owns_process is False
 
 
 def test_comfy_process_manager_ensure_running_uses_healthcheck(monkeypatch) -> None:
