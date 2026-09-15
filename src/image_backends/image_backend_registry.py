@@ -45,4 +45,3 @@ def build_default_image_backend_registry() -> ImageBackendRegistry:
     registry = ImageBackendRegistry()
     registry.register(A1111WebUIImageBackend())
     return registry
-
