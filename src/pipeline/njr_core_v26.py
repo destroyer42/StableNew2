@@ -12,6 +12,7 @@ CURRENT_NJR_SCHEMA_VERSION = "2.6"
 _IMAGE_STAGE_TYPES = {"txt2img", "img2img", "adetailer", "upscale"}
 _VIDEO_STAGE_TYPES = {"animatediff", "svd_native", "video_workflow"}
 _TRAINING_STAGE_TYPES = {"train_lora"}
+DEFAULT_IMAGE_BACKEND_ID = "a1111_webui"
 
 JsonScalar: TypeAlias = str | int | float | bool | None
 FrozenJsonValue: TypeAlias = "JsonScalar | tuple[FrozenJsonValue, ...] | FrozenJsonMap"
@@ -327,6 +328,20 @@ class WorkloadSpec:
 
 @dataclass(frozen=True)
 class ImageWorkloadSpec(WorkloadSpec):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        backend_options = thaw_json(self.backend_options)
+        image_options = backend_options.get("image")
+        if not isinstance(image_options, Mapping):
+            image_options = {}
+        else:
+            image_options = dict(image_options)
+        image_options["backend_id"] = (
+            str(image_options.get("backend_id") or "").strip() or DEFAULT_IMAGE_BACKEND_ID
+        )
+        backend_options["image"] = image_options
+        object.__setattr__(self, "backend_options", freeze_json_mapping(backend_options))
+
     def to_dict(self) -> dict[str, Any]:
         return self.common_dict()
 

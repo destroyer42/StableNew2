@@ -13,6 +13,12 @@ from typing import TYPE_CHECKING, Any
 
 from src.api.client import SDWebUIClient
 from src.controller.runtime_state import CancellationError
+from src.image_backends import (
+    ImageBackendRegistry,
+    ImageExecutionRequest,
+    build_default_image_backend_registry,
+    resolve_image_backend_id,
+)
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata
@@ -23,6 +29,7 @@ from src.pipeline.config_contract_v26 import (
     validate_train_lora_execution_config,
 )
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.njr_core_v26 import thaw_json
 from src.pipeline.payload_builder import build_sdxl_payload
 from src.pipeline.result_contract_v26 import (
     build_diagnostics_descriptor,
@@ -1061,6 +1068,9 @@ class PipelineRunner:
         from src.pipeline.run_plan import build_run_plan_from_njr
 
         plan = build_run_plan_from_njr(njr)
+        image_backend_id = self._resolve_image_backend_id(
+            njr, [job.stage_name for job in plan.jobs]
+        )
         if any(job.stage_name == StageTypeEnum.TRAIN_LORA.value for job in plan.jobs):
             if len(plan.jobs) != 1 or plan.jobs[0].stage_name != StageTypeEnum.TRAIN_LORA.value:
                 raise ValueError("train_lora must be the only enabled stage in an NJR run plan.")
@@ -1165,6 +1175,8 @@ class PipelineRunner:
         variants = []
         learning_records = []
         metadata = dict(njr.config or {})
+        if image_backend_id:
+            metadata["image_backend_id"] = image_backend_id
         metadata["output_dir"] = str(run_dir)
         metadata["output_route"] = output_route
 
@@ -1423,12 +1435,16 @@ class PipelineRunner:
                         max_length=100,  # Conservative limit for Windows paths
                     )
 
-                    result = self._pipeline.run_txt2img_stage(
-                        payload["prompt"],
-                        payload["negative_prompt"],
-                        payload,
-                        run_dir,
+                    result = self._execute_image_backend(
+                        backend_id=image_backend_id,
+                        stage_name="txt2img",
+                        njr=njr,
+                        stage_config=payload,
+                        run_dir=run_dir,
+                        input_image_path=None,
                         image_name=image_name,
+                        prompt=payload["prompt"],
+                        negative_prompt=payload["negative_prompt"],
                         cancel_token=cancel_token,
                     )
                     # Extract ALL image paths from metadata for batch processing
@@ -1528,12 +1544,16 @@ class PipelineRunner:
                             pack_name=pack_name,
                             max_length=100,
                         )
-                        result = self._pipeline.run_img2img_stage(
+                        result = self._execute_image_backend(
+                            backend_id=image_backend_id,
+                            stage_name="img2img",
+                            njr=njr,
+                            stage_config=config_dict,
+                            run_dir=run_dir,
                             input_image_path=Path(input_path),
-                            prompt=prompt,
-                            config=config_dict,
-                            output_dir=run_dir,
                             image_name=image_name,
+                            prompt=prompt,
+                            negative_prompt=negative_prompt,
                             cancel_token=cancel_token,
                         )
                         # Collect output path from this image
@@ -1707,10 +1727,13 @@ class PipelineRunner:
                                 decision_bundle.get("applied_overrides"),
                             )
                             per_image_config["adaptive_refinement"] = image_refinement_payload
-                        result = self._pipeline.run_adetailer_stage(
+                        result = self._execute_image_backend(
+                            backend_id=image_backend_id,
+                            stage_name="adetailer",
+                            njr=njr,
+                            stage_config=per_image_config,
+                            run_dir=run_dir,
                             input_image_path=Path(input_path),
-                            config=per_image_config,
-                            output_dir=run_dir,
                             image_name=image_name,
                             prompt=prompt,
                             negative_prompt=negative_prompt,
@@ -1915,11 +1938,16 @@ class PipelineRunner:
                                 decision_bundle.get("applied_overrides"),
                             )
                             per_image_config["adaptive_refinement"] = image_refinement_payload
-                        result = self._pipeline.run_upscale_stage(
+                        result = self._execute_image_backend(
+                            backend_id=image_backend_id,
+                            stage_name="upscale",
+                            njr=njr,
+                            stage_config=per_image_config,
+                            run_dir=run_dir,
                             input_image_path=Path(input_path),
-                            config=per_image_config,
-                            output_dir=run_dir,
                             image_name=image_name,
+                            prompt=prompt,
+                            negative_prompt=negative_prompt,
                             cancel_token=cancel_token,
                         )
                         # Collect output path from this image
@@ -2229,6 +2257,7 @@ class PipelineRunner:
         learning_enabled: bool = False,
         sequencer: StageSequencer | None = None,
         status_callback: Callable[[dict[str, Any]], None] | None = None,
+        image_backend_registry: ImageBackendRegistry | None = None,
         video_backend_registry: VideoBackendRegistry | None = None,
         character_embedder: CharacterEmbedder | None = None,
         lora_manager: LoRAManager | None = None,
@@ -2245,12 +2274,62 @@ class PipelineRunner:
         self._runs_base_dir = runs_base_dir or "output"
         self._learning_enabled = bool(learning_enabled)
         self._sequencer = sequencer or StageSequencer()
+        self._image_backends = image_backend_registry or build_default_image_backend_registry()
         self._video_backends = video_backend_registry or build_default_video_backend_registry()
         self._prompt_intent_analyzer = PromptIntentAnalyzer()
         self._refinement_policy_service = SubjectScalePolicyService()
         self._secondary_motion_policy_service = SecondaryMotionPolicyService()
         self._character_embedder = character_embedder
         self._lora_manager = lora_manager
+
+    def _resolve_image_backend_id(self, njr: NormalizedJobRecord, stage_names: list[str]) -> str:
+        """Resolve and validate one image backend before any stage dispatch."""
+
+        image_stages = [
+            stage_name
+            for stage_name in stage_names
+            if stage_name in {"txt2img", "img2img", "adetailer", "upscale"}
+        ]
+        if not image_stages:
+            return ""
+        backend_options = thaw_json(getattr(njr, "backend_options", {}))
+        backend_id = resolve_image_backend_id(backend_options)
+        self._image_backends.validate_stage_chain(backend_id, image_stages)
+        return backend_id
+
+    def _execute_image_backend(
+        self,
+        *,
+        backend_id: str,
+        stage_name: str,
+        njr: NormalizedJobRecord,
+        stage_config: dict[str, Any],
+        run_dir: Path,
+        input_image_path: Path | None,
+        image_name: str,
+        prompt: str,
+        negative_prompt: str,
+        cancel_token: CancelToken | None,
+    ) -> dict[str, Any] | None:
+        backend = self._image_backends.get(backend_id)
+        execution_result = backend.execute(
+            self._pipeline,
+            ImageExecutionRequest(
+                backend_id=backend_id,
+                stage_name=stage_name,
+                stage_config=dict(stage_config),
+                output_dir=run_dir,
+                input_image_path=input_image_path,
+                image_name=image_name,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                job_id=njr.job_id,
+                backend_options=thaw_json(getattr(njr, "backend_options", {})),
+                cancel_token=cancel_token,
+                context_metadata={"job_id": njr.job_id, "stage": stage_name},
+            ),
+        )
+        return execution_result.to_variant_payload() if execution_result else None
 
     def set_status_callback(self, callback: Callable[[dict[str, Any]], None] | None) -> None:
         """Bind the canonical runtime projection sink used by the executor."""
