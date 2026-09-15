@@ -7,7 +7,7 @@ Updated: 2026-09-14
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (PR-MVP-080 integrated)
-- Active objective: PR-MVP-090 release proof
+- Active objective: PR-MVP-090 product-owner integration authorization
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the release baseline and now contains the integrated PR-MVP-080 line.
@@ -22,7 +22,7 @@ StableNew has one queue-first NJR/runner spine, transactional SQLite lifecycle
 state, versioned JSON PromptPack storage, and accepted image and native SVD XT
 vertical slices. PR-MVP-060 is **COMPLETE / ACCEPTED**. PR-MVP-070 is
 **COMPLETE / ACCEPTED**. PR-MVP-080 is **COMPLETE / ACCEPTED / INTEGRATED**.
-PR-MVP-090 is **IN PROGRESS** for the remaining release proof.
+PR-MVP-090 is **COMPLETE / ACCEPTED on the feature branch; integration is pending product-owner authorization.**
 
 The runtime invariant remains:
 
@@ -33,8 +33,9 @@ history, replay creates a new NJR with lineage, and GUI/controllers do not
 create an alternate runner path.
 
 `main` now contains the accepted PR-MVP-080 operator-readiness feature line.
-The remaining release-proof work belongs to PR-MVP-090; it is not authorized to
-change the accepted 080 runtime behavior in this closeout.
+PR-MVP-090 release proof is complete on this feature branch; integration
+authorization remains pending. It is not authorized to change the accepted 080
+runtime behavior in this closeout.
 
 ## Approved post-v2.6 direction
 

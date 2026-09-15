@@ -71,10 +71,11 @@ accepted; it does not expand the current v2.6 release gate.
 | 9 | `PR-MVP-060` | Complete | Image create-to-replay vertical slice |
 | 10 | `PR-MVP-070` | Complete | Native SVD XT vertical slice |
 | 11 | `PR-MVP-080` | Complete | Operator readiness and runtime recovery closeout |
-| 12 | `PR-MVP-090` | IN PROGRESS | Clean-machine release acceptance |
+| 12 | `PR-MVP-090` | Complete | Clean-machine release acceptance |
 
-Roadmap progress is 12 of 13 MVP rows complete (approximately 92%). Native SVD
-and operator readiness are complete; clean-machine release proof is in progress.
+Roadmap progress is 13 of 13 MVP rows complete (100%). Native SVD, operator
+readiness, and clean-machine release proof are complete on the feature branch;
+integration of PR-MVP-090 into `main` is pending product-owner authorization.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair
 
@@ -347,7 +348,7 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 
 ## Next action
 
-PR-MVP-090 migration/recovery and final release acceptance.
+PR-MVP-090 product-owner integration authorization.
 PR-MVP-080 is COMPLETE / ACCEPTED / INTEGRATED; its final operator journey, required CI, and
 documentation closeout are complete. Queue/history action-state and no-op cleanup is
 accepted, alongside PromptPack authorship, durable job state, image generation,
