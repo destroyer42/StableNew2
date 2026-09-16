@@ -250,15 +250,15 @@ legacy failures remain non-blocking.
 
 This sequence records the post-v2.6 architecture line. PR-IMG-100 is complete /
 accepted / integrated on `main`.
-Do not begin PR-IMG-110 until that integration and a separate qualification
-decision.
+PR-IMG-110 completed its separate qualification and returned an Ideogram 4
+target-hardware no-go. Do not begin PR-IMG-120 from this result.
 
 | Order | Work | Status | Outcome |
 |---:|---|---|---|
 | P1 | `PR-IMG-100` | Complete / Accepted / Integrated | One typed image backend per image NJR; existing A1111 path preserved behind a StableNew-owned backend contract |
 | P1a | `PR-SVD-100` | Complete / Accepted / Integrated | Non-recursive SVD folder batch submission through ordinary per-source NJRs and one existing JobService batch call |
-| P2 | `PR-IMG-110` | Planned decision-gated qualification | Diffusers / Ideogram 4 runtime qualification on target hardware; no production backend yet |
-| P3 | `PR-IMG-120` | Conditional | First Diffusers production image vertical slice if PR-IMG-110 proves viable |
+| P2 | `PR-IMG-110` | Complete / Ideogram 4 No-Go | Generic Diffusers substrate passed; Ideogram 4 NF4/group-offload did not qualify on RTX 4070 Ti 12GB; no production backend added |
+| P3 | `PR-IMG-120` | Not authorized | A separate product-owner model-selection decision and qualification would be required before any Diffusers production slice |
 | P4 | `PR-IMG-130` | Conditional | Capability-aware image backend/model UI and compiler projections |
 
 ### PR-IMG-100 — backend-neutral image execution (complete / accepted / integrated)
@@ -296,21 +296,22 @@ runtime authority. Its contract is
 
 ### PR-IMG-110 — Diffusers / Ideogram 4 qualification
 
-This is a separate runtime qualification after PR-IMG-100. It must determine,
-on the actual supported target environment, model access/license flow, minimum
-known-good Diffusers version, local cache behavior, VRAM/RAM/offload strategy,
-1024-class viability, latency, seed behavior, progress/cancellation, model
-unload/reload, and coexistence with the existing A1111/SVD GPU lifecycle.
+This completed target-machine qualification found a viable generic Torch/CUDA /
+Diffusers SDXL control, but an Ideogram 4 NF4 target-hardware no-go. Normal CUDA
+missed the resource/performance criteria; model CPU offload missed the latency
+criterion; and two fresh group-offload attempts faulted or reached no viable
+inference, with `nvlddmkm` Event 153 evidence. No production Diffusers backend
+was added. The full evidence is in
+`docs/Subsystems/Image/PR-IMG-110_Diffusers_Ideogram4_Qualification.md`.
 
-Qualification does not authorize production integration. PR-IMG-120 begins only
-if the evidence is acceptable and Rob approves the production slice.
+PR-IMG-120 is not authorized by this result. A future model choice requires a
+separate product-owner decision and qualification.
 
 ### PR-IMG-120 — conditional Diffusers production slice
 
-If qualified, add `diffusers` as a second image backend behind the PR-IMG-100
-contract. Ideogram 4 is the first candidate model family, not a public backend
-class. The initial slice should remain `txt2img`-only unless evidence supports a
-broader capability contract.
+Not authorized. PR-IMG-110 established that generic Diffusers is viable but
+Ideogram 4 is not viable on the supported target. A future approved model
+qualification would be required before this production slice can be proposed.
 
 ### PR-IMG-130 — conditional capability-aware UX/compiler
 
@@ -360,7 +361,9 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 ## Next action
 
 `PR-SVD-100 — Folder Batch Submission` is complete / accepted / integrated on
-`main`. PR-IMG-110 remains planned, decision-gated, and not started.
+`main`. PR-IMG-110 is complete with an Ideogram 4 target-hardware no-go; no
+Diffusers production slice is authorized. The next image-model direction needs
+explicit product-owner approval.
 PR-MVP-080 is COMPLETE / ACCEPTED / INTEGRATED; its final operator journey, required CI, and
 documentation closeout are complete. Queue/history action-state and no-op cleanup is
 accepted, alongside PromptPack authorship, durable job state, image generation,

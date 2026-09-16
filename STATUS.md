@@ -7,7 +7,7 @@ Updated: 2026-09-15
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: `PR-IMG-110 — Diffusers / Ideogram 4 qualification` (planned / decision-gated; not started)
+- Active objective: maintain the accepted v2.6 / IMG-100 baseline; `PR-IMG-110` is complete with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -35,7 +35,9 @@ create an alternate runner path.
 
 `main` now contains the accepted PR-MVP-080 operator-readiness, PR-MVP-090
 release-proof, and PR-IMG-100 backend-neutral image lines. The v2.6 MVP/release
-proof is complete. PR-IMG-110 remains planned and not started.
+proof is complete. PR-IMG-110 is complete: generic Diffusers qualification
+passed, but Ideogram 4 NF4 did not qualify on the supported RTX 4070 Ti 12-GB
+target. IMG-120 is not authorized.
 
 PR-SVD-100 is the complete / accepted / integrated post-v2.6 SVD
 submission-convenience package on `main`. It adds non-recursive folder planning and one
@@ -56,8 +58,9 @@ identity will resolve deterministically to A1111 through one bounded compatibili
 rule.
 
 `PR-IMG-100` does not implement Ideogram, Diffusers image inference, ComfyUI
-still-image execution, or per-stage backend composition. A later Diffusers
-backend may be qualified against Ideogram 4 after PR-IMG-100 is accepted.
+still-image execution, or per-stage backend composition. PR-IMG-110 established
+that the generic Diffusers substrate is viable but Ideogram 4 NF4 is not viable
+on the RTX 4070 Ti 12-GB target; it did not authorize a Diffusers backend.
 Per-stage backend composition (COA C) and ComfyUI-centric image execution (COA D)
 remain possible future options, but neither may replace StableNew's compiler,
 NJR, queue, runner, artifact, history, replay, cancellation, or process authorities.

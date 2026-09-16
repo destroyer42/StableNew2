@@ -45,6 +45,10 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/pipeline/njr_core_v26.py`, `src/pipeline/config_contract_v26.py`,
   image NJR compilers/builders, `src/pipeline/pipeline_runner.py`, controller
   runtime ports, and the A1111 executor/client boundary.
+- Completed `PR-IMG-110` target-hardware qualification (Ideogram 4 no-go;
+  generic Diffusers substrate viable):
+  `docs/Subsystems/Image/PR-IMG-110_Diffusers_Ideogram4_Qualification.md` and
+  qualification-only evidence tooling in `tools/qualification/img110/`.
 - Native SVD/video: `src/video/svd_service.py`, `src/video/svd_runner.py`,
   `src/video/svd_native_backend.py`, and `src/video/workflow_contracts.py`.
 - SVD folder-batch submission: `docs/Subsystems/Video/PR-SVD-100_Folder_Batch_Submission.md`
@@ -69,6 +73,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | Queue/history | `job_service.py` -> `job_queue.py` -> `job_repository.py` |
 | Current image execution | `pipeline_runner.py` -> `executor.py` -> `src/api/` |
 | `PR-IMG-100` backend-neutral image execution | `docs/Subsystems/Image/PR-IMG-100_Backend-Neutral_Image_Execution.md` -> `src/image_backends/image_backend_types.py` / `src/image_backends/image_backend_registry.py` / `src/image_backends/a1111_webui_backend.py` -> `njr_core_v26.py` / `config_contract_v26.py` -> image compilers -> `pipeline_runner.py` -> runtime ports -> A1111 executor/client boundary |
+| `PR-IMG-110` qualification evidence | `docs/Subsystems/Image/PR-IMG-110_Diffusers_Ideogram4_Qualification.md` -> `tools/qualification/img110/` (qualification-only; no production backend) |
 | Video/SVD | `workflow_compiler.py` -> `svd_service.py` -> `svd_native_backend.py` |
 | Portable SVD provenance | `src/video/svd_portable_provenance.py` -> `src/video/container_metadata.py` -> `src/video/svd_runner.py` -> `src/video/svd_registry.py` |
 | Windows runtime/bootstrap | `scripts/bootstrap_windows.ps1` -> `docs/runbooks/windows_runtime_bootstrap.md` |
