@@ -107,8 +107,15 @@ Local generated images, Hub caches, virtual environment, and incremental JSON
 evidence remain user-scoped and untracked. Reusable qualification-only tools
 are under `tools/qualification/img110/`; they contain no token, cache, or
 machine-specific hardcoded path. Ruff passed on that directory; `git diff
---check` passed. No production test or CI run was needed or claimed because no
-production source changed.
+--check` passed. The local `python tools/ci/run_pr_gate.py` was attempted but
+was blocked because `mypy` was unavailable; this was a tooling limitation, not
+a source or test failure. GitHub Actions run `35048397497` for feature SHA
+`d48780a38b01580f58ae13589c3dba2198881600` passed the required Python 3.11 and
+3.12 jobs, including repository completeness, controller-surface ratchet,
+Ruff, mypy smoke, active test-surface collection, required positive-list smoke,
+and clean-checkout validation. The informational full-suite jobs failed
+outside this qualification-only change surface and remain non-blocking. No
+production test or GPU qualification was rerun for this docs-only correction.
 
 Controller surface assessment: not applicable; no controller/coordinator code
 changed. Token-efficient validation reused accepted R1–R4 evidence, then used
