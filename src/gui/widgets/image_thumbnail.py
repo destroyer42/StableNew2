@@ -17,6 +17,32 @@ except ImportError:
     PIL_AVAILABLE = False
 
 
+def fit_image_size(
+    source_width: int,
+    source_height: int,
+    viewport_width: int,
+    viewport_height: int,
+    *,
+    max_width: int | None = None,
+    max_height: int | None = None,
+    allow_enlarge: bool = False,
+) -> tuple[int, int]:
+    """Return aspect-preserving dimensions fully contained in a viewport."""
+    source_width = max(1, int(source_width))
+    source_height = max(1, int(source_height))
+    viewport_width = max(1, int(viewport_width))
+    viewport_height = max(1, int(viewport_height))
+    limits = [viewport_width / source_width, viewport_height / source_height]
+    if max_width:
+        limits.append(max(1, int(max_width)) / source_width)
+    if max_height:
+        limits.append(max(1, int(max_height)) / source_height)
+    scale = min(limits)
+    if not allow_enlarge:
+        scale = min(1.0, scale)
+    return max(1, int(source_width * scale)), max(1, int(source_height * scale))
+
+
 class ImageThumbnail(tk.Canvas):
     """Canvas widget that displays a resizable image thumbnail."""
 
@@ -25,14 +51,17 @@ class ImageThumbnail(tk.Canvas):
         master: tk.Misc,
         max_width: int = 300,
         max_height: int = 300,
+        fit_to_widget: bool = False,
         bg: str = "#1E1E1E",
         **kwargs: Any,
     ) -> None:
         super().__init__(master, bg=bg, highlightthickness=0, **kwargs)
         self.max_width = max_width
         self.max_height = max_height
+        self.fit_to_widget = bool(fit_to_widget)
         self._photo_image: Any = None  # Keep reference to prevent GC
         self._current_path: str | None = None
+        self._resize_after_id: str | None = None
 
         # Bind resize event
         self.bind("<Configure>", self._on_resize)
@@ -84,17 +113,29 @@ class ImageThumbnail(tk.Canvas):
             return False
 
     def _resize_to_fit(self, img: Image.Image) -> Image.Image:
-        """Resize image to fit within max dimensions while preserving aspect ratio."""
-        width, height = img.size
-
-        # Calculate scale factor
-        scale = min(self.max_width / width, self.max_height / height)
-
-        if scale < 1:
-            new_width = int(width * scale)
-            new_height = int(height * scale)
-            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-
+        """Resize without crop using either widget viewport or constructor caps."""
+        if self.fit_to_widget:
+            viewport_width = self.winfo_width() or self.max_width
+            viewport_height = self.winfo_height() or self.max_height
+            new_size = fit_image_size(
+                img.width,
+                img.height,
+                viewport_width,
+                viewport_height,
+                max_width=self.max_width,
+                max_height=self.max_height,
+            )
+        else:
+            new_size = fit_image_size(
+                img.width,
+                img.height,
+                self.max_width,
+                self.max_height,
+                max_width=self.max_width,
+                max_height=self.max_height,
+            )
+        if new_size != img.size:
+            return img.resize(new_size, Image.Resampling.LANCZOS)
         return img
 
     def _show_placeholder(self, text: str) -> None:
@@ -116,12 +157,28 @@ class ImageThumbnail(tk.Canvas):
 
     def _on_resize(self, event: tk.Event) -> None:
         """Handle canvas resize by reloading the current image."""
-        if self._current_path:
-            # Debounce resize events
-            self.after(100, lambda: self.load_image(self._current_path))
+        if self._current_path and self.fit_to_widget:
+            if self._resize_after_id is not None:
+                try:
+                    self.after_cancel(self._resize_after_id)
+                except Exception:
+                    pass
+            path = self._current_path
+            self._resize_after_id = self.after(100, lambda: self._reload_after_resize(path))
+
+    def _reload_after_resize(self, path: str) -> None:
+        self._resize_after_id = None
+        if self._current_path == path:
+            self.load_image(path)
 
     def clear(self) -> None:
         """Clear the current image."""
+        if getattr(self, "_resize_after_id", None) is not None:
+            try:
+                self.after_cancel(self._resize_after_id)
+            except Exception:
+                pass
+            self._resize_after_id = None
         self.delete("all")
         self._photo_image = None
         self._current_path = None

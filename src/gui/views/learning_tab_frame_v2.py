@@ -39,6 +39,7 @@ from src.gui.views.learning_plan_table import LearningPlanTable
 from src.gui.views.learning_review_panel import LearningReviewPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.image_thumbnail import ImageThumbnail
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.learning.experiment_store import LearningExperimentStore
 from src.learning.learning_paths import get_learning_experiments_root, get_learning_records_path
@@ -250,14 +251,26 @@ class LearningTabFrame(ttk.Frame):
         self.body_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
         self._mode_notebook.add(self.body_frame, text="Designed Experiments")
 
-        # Configure body layout
-        configure_grid_columns(self.body_frame, get_three_pane_workspace_column_specs())
+        # Designed Experiments uses adjustable horizontal and vertical panes.
+        # The design form is independently scrollable so large live inventories
+        # cannot push its lower controls out of reach.
+        self.body_frame.columnconfigure(0, weight=1)
         self.body_frame.rowconfigure(0, weight=1)
-        self.body_frame.rowconfigure(1, weight=3)
+        self.designed_horizontal_panes = ttk.Panedwindow(
+            self.body_frame, orient=tk.HORIZONTAL
+        )
+        self.designed_horizontal_panes.grid(row=0, column=0, sticky="nsew")
 
-        # Left panel: Experiment Design
+        design_host = ttk.Frame(self.designed_horizontal_panes, style=SURFACE_FRAME_STYLE)
+        design_host.columnconfigure(0, weight=1)
+        design_host.rowconfigure(0, weight=1)
+        workspace_host = ttk.Panedwindow(self.designed_horizontal_panes, orient=tk.VERTICAL)
+
+        # Left panel: scrollable Experiment Design
+        self.experiment_scroll = ScrollableFrame(design_host, style=SURFACE_FRAME_STYLE)
+        self.experiment_scroll.grid(row=0, column=0, sticky="nsew")
         self.experiment_panel = ExperimentDesignPanel(
-            self.body_frame,
+            self.experiment_scroll.inner,
             learning_controller=self.learning_controller,
             prompt_workspace_state=getattr(self.app_state, "prompt_workspace_state", None)
             if self.app_state
@@ -267,19 +280,31 @@ class LearningTabFrame(ttk.Frame):
             ),
             style=CARD_FRAME_STYLE,
         )
-        self.experiment_panel.grid(row=0, column=0, rowspan=2, sticky="nsew", padx=(0, 2), pady=4)
+        self.experiment_panel.grid(row=0, column=0, sticky="ew", padx=2, pady=4)
+        self.experiment_scroll.inner.columnconfigure(0, weight=1)
 
         # Center panel: Learning Plan Table
-        self.plan_table = LearningPlanTable(self.body_frame, style=CARD_FRAME_STYLE)
-        self.plan_table.grid(row=0, column=1, columnspan=2, sticky="nsew", padx=2, pady=(4, 2))
+        plan_host = ttk.Frame(workspace_host, style=SURFACE_FRAME_STYLE)
+        plan_host.columnconfigure(0, weight=1)
+        plan_host.rowconfigure(0, weight=1)
+        self.plan_table = LearningPlanTable(plan_host, style=CARD_FRAME_STYLE)
+        self.plan_table.grid(row=0, column=0, sticky="nsew", padx=2, pady=(4, 2))
 
         # Connect controller to plan table
         self.learning_controller._plan_table = self.plan_table
         self.plan_table.set_on_variant_selected(self.learning_controller.on_variant_selected)
 
         # Right panel: Learning Review
-        self.review_panel = LearningReviewPanel(self.body_frame, style=CARD_FRAME_STYLE)
-        self.review_panel.grid(row=1, column=1, columnspan=2, sticky="nsew", padx=2, pady=(2, 4))
+        review_host = ttk.Frame(workspace_host, style=SURFACE_FRAME_STYLE)
+        review_host.columnconfigure(0, weight=1)
+        review_host.rowconfigure(0, weight=1)
+        self.review_panel = LearningReviewPanel(review_host, style=CARD_FRAME_STYLE)
+        self.review_panel.grid(row=0, column=0, sticky="nsew", padx=2, pady=(2, 4))
+
+        workspace_host.add(plan_host, weight=1)
+        workspace_host.add(review_host, weight=3)
+        self.designed_horizontal_panes.add(design_host, weight=1)
+        self.designed_horizontal_panes.add(workspace_host, weight=3)
 
         # Connect controller to review panel (bidirectional)
         self.learning_controller._review_panel = self.review_panel

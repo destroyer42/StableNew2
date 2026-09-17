@@ -38,15 +38,12 @@ def test_experiment_design_panel_resource_checklist_uses_internal_names() -> Non
     if root is None:
         return
 
-    app_state = SimpleNamespace(
-        resources={
-            "models": [
-                {"title": "Juggernaut XL", "name": "juggernautXL_ragnarokBy.safetensors"},
-                {"title": "Photon", "name": "photon_v1.safetensors"},
-            ]
-        }
-    )
-    controller = SimpleNamespace(app_controller=SimpleNamespace(_app_state=app_state))
+    models = [
+        {"title": "Juggernaut XL", "name": "juggernautXL_ragnarokBy.safetensors"},
+        {"title": "Photon", "name": "photon_v1.safetensors"},
+    ] + [{"title": f"Model {index}", "name": f"model_{index}.safetensors"} for index in range(43)]
+    app_state = SimpleNamespace(resources={"models": models})
+    controller = SimpleNamespace(app_controller=SimpleNamespace(app_state=app_state))
     panel = ExperimentDesignPanel(root, learning_controller=controller)
 
     panel.variable_var.set("Model")
@@ -54,6 +51,9 @@ def test_experiment_design_panel_resource_checklist_uses_internal_names() -> Non
 
     assert "juggernautXL_ragnarokBy.safetensors" in panel.choice_vars
     assert "photon_v1.safetensors" in panel.choice_vars
+    assert "model_42.safetensors" in panel.choice_vars
+    assert int(panel.checklist_canvas.cget("height")) == 150
+    assert panel.checkbox_container.winfo_children()[0].bind("<MouseWheel>")
 
     texts = [
         child.cget("text")

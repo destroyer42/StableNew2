@@ -9,7 +9,6 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     PRIMARY_CONTROL_MIN_WIDTH,
     WORKSPACE_CENTER_COLUMN_MIN_WIDTH,
     WORKSPACE_LEFT_COLUMN_MIN_WIDTH,
-    WORKSPACE_RIGHT_COLUMN_MIN_WIDTH,
 )
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.gui.views.movie_clips_tab_frame_v2 import MovieClipsTabFrameV2
@@ -56,9 +55,9 @@ def test_learning_tab_uses_shared_workspace_minimums_and_staged_rows(
             pipeline_controller=_StubPipelineController(),
         )
         try:
-            assert tab.body_frame.columnconfigure(0)["minsize"] == WORKSPACE_LEFT_COLUMN_MIN_WIDTH
-            assert tab.body_frame.columnconfigure(1)["minsize"] == WORKSPACE_CENTER_COLUMN_MIN_WIDTH
-            assert tab.body_frame.columnconfigure(2)["minsize"] == WORKSPACE_RIGHT_COLUMN_MIN_WIDTH
+            assert str(tab.designed_horizontal_panes.cget("orient")) == "horizontal"
+            assert tab.experiment_scroll._vsb.winfo_manager() == "grid"
+            assert tab.experiment_panel.master is tab.experiment_scroll.inner
             assert (
                 tab._discovered_tab_frame.columnconfigure(0)["minsize"]
                 == WORKSPACE_LEFT_COLUMN_MIN_WIDTH

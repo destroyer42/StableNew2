@@ -169,6 +169,8 @@ class ExperimentDesignPanel(ttk.Frame):
         )
         self.checklist_inner_frame = ttk.Frame(self.checklist_canvas)
         self.checklist_canvas.configure(yscrollcommand=self.checklist_scrollbar.set)
+        self._bind_checklist_wheel(self.checklist_canvas)
+        self._bind_checklist_wheel(self.checklist_inner_frame)
 
         self.checklist_scrollbar.pack(side="right", fill="y")
         self.checklist_canvas.pack(side="left", fill="both", expand=True)
@@ -829,6 +831,7 @@ class ExperimentDesignPanel(ttk.Frame):
         # Container for checkboxes (for filtering)
         self.checkbox_container = ttk.Frame(self.checklist_inner_frame)
         self.checkbox_container.pack(fill="both", expand=True)
+        self._bind_checklist_wheel(self.checkbox_container)
 
         entries = [str(choice) for choice in choices]
         # Create checkboxes for each choice
@@ -837,6 +840,7 @@ class ExperimentDesignPanel(ttk.Frame):
             var = tk.BooleanVar(value=False)
             cb = ttk.Checkbutton(self.checkbox_container, text=choice, variable=var)
             cb.pack(anchor="w", pady=2)
+            self._bind_checklist_wheel(cb)
             self.choice_vars[internal_choice] = var
 
             # Bind checkbox changes to update count
@@ -864,6 +868,21 @@ class ExperimentDesignPanel(ttk.Frame):
         """Select or deselect all checkboxes."""
         for var in self.choice_vars.values():
             var.set(selected)
+
+    def _bind_checklist_wheel(self, widget: tk.Misc) -> None:
+        for sequence in ("<MouseWheel>", "<Button-4>", "<Button-5>"):
+            widget.bind(sequence, self._on_checklist_mousewheel, add="+")
+
+    def _on_checklist_mousewheel(self, event: tk.Event) -> str:
+        """Keep nested resource scrolling inside its bounded viewport."""
+        if getattr(event, "num", None) == 4:
+            delta = -1
+        elif getattr(event, "num", None) == 5:
+            delta = 1
+        else:
+            delta = int(-1 * (getattr(event, "delta", 0) / 120)) or -1
+        self.checklist_canvas.yview_scroll(delta, "units")
+        return "break"
 
     def _update_choice_count(self) -> None:
         """Update the count label showing selected items."""

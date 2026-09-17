@@ -10,6 +10,7 @@ from typing import Any
 
 from src.gui.learning_state import LearningVariant
 from src.gui.ui_tokens import TOKENS
+from src.gui.widgets.image_thumbnail import ImageThumbnail
 from src.learning.rating_schema import blend_rating, get_active_categories
 from src.learning.review_workspace import build_review_projection
 
@@ -161,9 +162,6 @@ class LearningReviewPanel(ttk.Frame):
         self.image_frame.columnconfigure(0, weight=1)
         self.image_frame.rowconfigure(1, weight=1)  # Thumbnail row gets weight
 
-        # Import ImageThumbnail widget
-        from src.gui.widgets.image_thumbnail import ImageThumbnail
-
         # Image list (top)
         self.image_listbox = tk.Listbox(
             self.image_frame,
@@ -183,6 +181,7 @@ class LearningReviewPanel(ttk.Frame):
             self.image_frame,
             max_width=960,
             max_height=960,
+            fit_to_widget=True,
         )
         self.image_thumbnail.grid(row=1, column=0, sticky="nsew", pady=(5, 0))
         self.image_thumbnail.clear()
@@ -194,6 +193,9 @@ class LearningReviewPanel(ttk.Frame):
         self._viewer_canvas: tk.Canvas | None = None
         self._viewer_photo: Any = None
         self._viewer_image_id: int | None = None
+        self._viewer_source_image: Any = None
+        self._viewer_fit_mode = "fit"
+        self._viewer_resize_after_id: str | None = None
         self._workspace_syncing = False
 
         # Rating section
@@ -416,18 +418,36 @@ class LearningReviewPanel(ttk.Frame):
             return
         window = tk.Toplevel(self)
         window.title("Learning Experiment Comparison")
+        window.geometry("1100x700")
+        window.minsize(520, 360)
+        window.columnconfigure(0, weight=1)
+        window.rowconfigure(0, weight=1)
+        columns = 2 if len(image_paths) > 1 else 1
+        for column in range(columns):
+            window.columnconfigure(column, weight=1)
+        for row in range((len(image_paths) + columns - 1) // columns):
+            window.rowconfigure(row, weight=1)
         for column, image_path in enumerate(image_paths):
             frame = ttk.Frame(window, padding=4)
-            frame.grid(row=0, column=column, sticky="nsew")
+            row, grid_column = divmod(column, columns)
+            frame.grid(row=row, column=grid_column, sticky="nsew")
+            frame.columnconfigure(0, weight=1)
+            frame.rowconfigure(1, weight=1)
             try:
-                image = Image.open(Path(image_path)).convert("RGB")
-                image.thumbnail((360, 360))
-                photo = ImageTk.PhotoImage(image)
-                label = ttk.Label(frame, image=photo, text=Path(image_path).name, compound="top")
-                label.image = photo
-                label.pack()
+                ttk.Label(frame, text=Path(image_path).name).grid(row=0, column=0, sticky="w")
+                thumbnail = ImageThumbnail(
+                    frame,
+                    max_width=1600,
+                    max_height=1600,
+                    fit_to_widget=True,
+                )
+                thumbnail.grid(row=1, column=0, sticky="nsew")
+                thumbnail.load_image(image_path)
             except Exception as exc:
-                ttk.Label(frame, text=f"Unable to load\n{Path(image_path).name}\n{exc}").pack()
+                ttk.Label(frame, text=f"Unable to load\n{Path(image_path).name}\n{exc}").grid(
+                    row=1, column=0, sticky="nsew"
+                )
+
     def _update_metadata(self, variant: LearningVariant, experiment: Any | None) -> None:
         """Update the metadata display."""
         self.metadata_text.config(state="normal")
@@ -507,9 +527,8 @@ class LearningReviewPanel(ttk.Frame):
 
         try:
             with Image.open(path_obj) as image:
-                image = image.convert("RGBA")
-                image_width, image_height = image.size
-                photo = ImageTk.PhotoImage(image)
+                self._viewer_source_image = image.convert("RGBA")
+                image_width, image_height = self._viewer_source_image.size
         except Exception as exc:
             self.feedback_label.config(
                 text=f"Failed to open image: {exc}",
@@ -533,7 +552,16 @@ class LearningReviewPanel(ttk.Frame):
         frame = ttk.Frame(viewer, padding=6)
         frame.pack(fill=tk.BOTH, expand=True)
         frame.columnconfigure(0, weight=1)
-        frame.rowconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        toolbar = ttk.Frame(frame)
+        toolbar.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 5))
+        ttk.Button(toolbar, text="Fit", command=lambda: self._set_viewer_mode("fit")).pack(
+            side="left"
+        )
+        ttk.Button(
+            toolbar, text="100% / Actual Size", command=lambda: self._set_viewer_mode("actual")
+        ).pack(side="left", padx=(5, 0))
 
         canvas = tk.Canvas(
             frame,
@@ -544,14 +572,13 @@ class LearningReviewPanel(ttk.Frame):
         h_scroll = ttk.Scrollbar(frame, orient=tk.HORIZONTAL, command=canvas.xview)
         canvas.configure(yscrollcommand=v_scroll.set, xscrollcommand=h_scroll.set)
 
-        canvas.grid(row=0, column=0, sticky="nsew")
-        v_scroll.grid(row=0, column=1, sticky="ns")
-        h_scroll.grid(row=1, column=0, sticky="ew")
+        canvas.grid(row=1, column=0, sticky="nsew")
+        v_scroll.grid(row=1, column=1, sticky="ns")
+        h_scroll.grid(row=2, column=0, sticky="ew")
 
         self._viewer_canvas = canvas
-        self._viewer_photo = photo
-        self._viewer_image_id = canvas.create_image(0, 0, image=photo, anchor="nw")
-        canvas.configure(scrollregion=(0, 0, image_width, image_height))
+        self._viewer_fit_mode = "fit"
+        canvas.bind("<Configure>", self._on_viewer_canvas_configure, add="+")
 
         width, height = self._compute_viewer_window_size(
             image_width,
@@ -561,19 +588,68 @@ class LearningReviewPanel(ttk.Frame):
         )
         viewer.geometry(f"{width}x{height}")
 
-        status = ttk.Label(
-            frame,
-            text=f"{image_width} x {image_height}  |  Double-click another image to reuse this viewer",
-        )
-        status.grid(row=2, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        status = ttk.Label(frame, text=f"{image_width} x {image_height} native pixels")
+        status.grid(row=3, column=0, columnspan=2, sticky="w", pady=(6, 0))
+        self._render_viewer_image()
         viewer.lift()
         viewer.focus_force()
 
+    def _set_viewer_mode(self, mode: str) -> None:
+        self._viewer_fit_mode = "actual" if mode == "actual" else "fit"
+        self._render_viewer_image()
+
+    def _on_viewer_canvas_configure(self, _event: tk.Event | None = None) -> None:
+        if self._viewer_resize_after_id is not None:
+            try:
+                self.after_cancel(self._viewer_resize_after_id)
+            except Exception:
+                pass
+        self._viewer_resize_after_id = self.after(80, self._render_viewer_image)
+
+    def _render_viewer_image(self) -> None:
+        self._viewer_resize_after_id = None
+        canvas = self._viewer_canvas
+        image = self._viewer_source_image
+        if canvas is None or image is None or not canvas.winfo_exists():
+            return
+        if self._viewer_fit_mode == "fit":
+            from src.gui.widgets.image_thumbnail import fit_image_size
+
+            width, height = fit_image_size(
+                image.width,
+                image.height,
+                max(1, canvas.winfo_width() - 8),
+                max(1, canvas.winfo_height() - 8),
+            )
+            rendered = image.resize((width, height), Image.Resampling.LANCZOS)
+        else:
+            rendered = image
+        self._viewer_photo = ImageTk.PhotoImage(rendered)
+        canvas.delete("all")
+        x = max(0, (canvas.winfo_width() - rendered.width) // 2)
+        y = max(0, (canvas.winfo_height() - rendered.height) // 2)
+        self._viewer_image_id = canvas.create_image(x, y, image=self._viewer_photo, anchor="nw")
+        canvas.configure(
+            scrollregion=(
+                0,
+                0,
+                max(canvas.winfo_width(), rendered.width),
+                max(canvas.winfo_height(), rendered.height),
+            )
+        )
+
     def _on_viewer_destroyed(self, _event: tk.Event | None = None) -> None:
+        if self._viewer_resize_after_id is not None:
+            try:
+                self.after_cancel(self._viewer_resize_after_id)
+            except Exception:
+                pass
         self._viewer_window = None
         self._viewer_canvas = None
         self._viewer_photo = None
         self._viewer_image_id = None
+        self._viewer_source_image = None
+        self._viewer_resize_after_id = None
 
     def _extract_filename(self, path: str) -> str:
         """Extract filename from full path."""
