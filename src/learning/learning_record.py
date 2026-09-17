@@ -218,7 +218,13 @@ class LearningRecordWriter:
                         metadata = record.get("metadata", {})
 
                         # Check if this record is for our experiment
-                        if metadata.get("experiment_name") != experiment_id:
+                        record_experiment_id = str(
+                            metadata.get("experiment_id")
+                            or (metadata.get("learning_context") or {}).get("experiment_id")
+                            or metadata.get("experiment_name")
+                            or ""
+                        )
+                        if record_experiment_id != experiment_id:
                             continue
 
                         # Extract rating and image path
@@ -256,10 +262,13 @@ class LearningRecordWriter:
                         record = json.loads(line)
                         metadata = record.get("metadata", {})
 
-                        if (
-                            metadata.get("experiment_name") == experiment_id
-                            and metadata.get("variant_value") == variant_value
-                        ):
+                        record_experiment_id = str(
+                            metadata.get("experiment_id")
+                            or (metadata.get("learning_context") or {}).get("experiment_id")
+                            or metadata.get("experiment_name")
+                            or ""
+                        )
+                        if record_experiment_id == experiment_id and metadata.get("variant_value") == variant_value:
                             rating = metadata.get("user_rating")
                             if rating is not None:
                                 ratings.append(int(rating))

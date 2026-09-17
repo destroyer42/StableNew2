@@ -58,7 +58,6 @@ def test_learning_controller_receives_execution_controller():
         learning_state=learning_state,
         execution_controller=mock_exec_ctrl,
     )
-
     # Verify execution_controller was stored
     assert controller.execution_controller is mock_exec_ctrl
 
@@ -118,6 +117,11 @@ def test_learning_controller_handles_missing_execution_controller():
         learning_state=learning_state,
         pipeline_controller=mock_pipeline_ctrl,
         execution_controller=None,  # No execution controller
+    )
+    # This test is exercising controller construction/wiring, not stage-card
+    # compilation.  Supply one already-compiled immutable record.
+    controller._build_variant_njr = MagicMock(  # type: ignore[method-assign]
+        return_value=type("Record", (), {"job_id": "learning-job-1"})()
     )
 
     # Run plan - should still use canonical NJR submission

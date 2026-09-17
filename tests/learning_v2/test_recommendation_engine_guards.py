@@ -45,7 +45,7 @@ def test_recommendation_engine_requires_sufficient_learning_records(tmp_path: Pa
 
     # PR-044 fix: sparse experiment + review evidence MUST return recommendations,
     # but with automation_eligible=False (not experiment_strong tier).
-    assert result.evidence_tier == "experiment_sparse_plus_review"
+    assert result.evidence_tier == "review_only"
     assert result.automation_eligible is False
     # Recommendations should be present (not empty) because usable evidence exists
     assert result.recommendations, "Expected recommendations from sparse+review evidence"
@@ -85,8 +85,8 @@ def test_recommendation_engine_ignores_review_tab_feedback_for_learning_recommen
     result = engine.recommend("portrait", "txt2img")
 
     assert result.recommendations
-    assert all(
-        rec.parameter_name != "sampler" or rec.recommended_value == "Euler a"
+    assert any(
+        rec.parameter_name == "sampler" and rec.recommended_value == "DPM++ 2M"
         for rec in result.recommendations
     )
 
@@ -124,6 +124,6 @@ def test_recommendation_engine_refinement_context_does_not_bypass_sparse_evidenc
         refinement_context={"policy_id": "full_upscale_detail_v1", "scale_band": "small"},
     )
 
-    assert result.evidence_tier == "experiment_sparse_plus_review"
+    assert result.evidence_tier == "no_evidence"
     assert result.automation_eligible is False
-    assert result.recommendations
+    assert not result.recommendations

@@ -1504,9 +1504,13 @@ class ReviewTabFrame(ttk.Frame):
         else:
             idxs = self.images_list.curselection()
             if not idxs:
-                messagebox.showwarning("No selection", "Select an image from the list.")
+                messagebox.showwarning("No selection", "Select one or more images in the list.")
                 return
-            targets = [self._image_index_by_row[int(idxs[0])]]
+            targets = [
+                self._image_index_by_row[int(idx)]
+                for idx in idxs
+                if 0 <= int(idx) < len(self._image_index_by_row)
+            ]
 
         if not targets:
             messagebox.showwarning("No images", "Select at least one image.")

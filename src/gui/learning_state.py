@@ -15,6 +15,9 @@ class LearningExperiment:
     """
 
     name: str = ""
+    # Durable identity is intentionally distinct from the editable display name.
+    # It is persisted with the session and carried into every NJR/rating record.
+    experiment_id: str = ""
     description: str = ""
     baseline_config: dict[str, Any] = field(default_factory=dict)
     prompt_text: str = ""
@@ -24,10 +27,14 @@ class LearningExperiment:
     values: list[Any] = field(default_factory=list)
     images_per_value: int = 1
     metadata: dict[str, Any] = field(default_factory=dict)  # PR-LEARN-020: Value spec storage
+    # Canonical JSON captured at preview time.  A JSON string prevents later
+    # stage-card edits from mutating the admitted execution baseline in place.
+    execution_snapshot_json: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "name": self.name,
+            "experiment_id": self.experiment_id,
             "description": self.description,
             "baseline_config": dict(self.baseline_config or {}),
             "prompt_text": self.prompt_text,
@@ -37,12 +44,14 @@ class LearningExperiment:
             "values": list(self.values or []),
             "images_per_value": int(self.images_per_value or 0),
             "metadata": dict(self.metadata or {}),
+            "execution_snapshot_json": self.execution_snapshot_json,
         }
 
     @staticmethod
     def from_dict(payload: dict[str, Any]) -> LearningExperiment:
         return LearningExperiment(
             name=str(payload.get("name", "")),
+            experiment_id=str(payload.get("experiment_id", "")),
             description=str(payload.get("description", "")),
             baseline_config=dict(payload.get("baseline_config") or {}),
             prompt_text=str(payload.get("prompt_text", "")),
@@ -52,6 +61,7 @@ class LearningExperiment:
             values=list(payload.get("values") or []),
             images_per_value=int(payload.get("images_per_value", 1) or 1),
             metadata=dict(payload.get("metadata") or {}),
+            execution_snapshot_json=str(payload.get("execution_snapshot_json", "") or ""),
         )
 
 
@@ -60,31 +70,42 @@ class LearningVariant:
     """Represents a single variant in a learning plan."""
 
     experiment_id: str = ""
+    variant_id: str = ""
     param_value: Any = None
     status: str = "pending"  # pending, running, completed, failed
     planned_images: int = 0
     completed_images: int = 0
     image_refs: list[str] = field(default_factory=list)
+    job_id: str = ""
+    # This is a readback/audit copy of the frozen configuration actually used
+    # to build the immutable NJR; it is never used as a live configuration.
+    executed_config: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "experiment_id": self.experiment_id,
+            "variant_id": self.variant_id,
             "param_value": self.param_value,
             "status": self.status,
             "planned_images": int(self.planned_images or 0),
             "completed_images": int(self.completed_images or 0),
             "image_refs": [str(ref) for ref in (self.image_refs or [])],
+            "job_id": self.job_id,
+            "executed_config": dict(self.executed_config or {}),
         }
 
     @staticmethod
     def from_dict(payload: dict[str, Any]) -> LearningVariant:
         return LearningVariant(
             experiment_id=str(payload.get("experiment_id", "")),
+            variant_id=str(payload.get("variant_id", "")),
             param_value=payload.get("param_value"),
             status=str(payload.get("status", "pending")),
             planned_images=int(payload.get("planned_images", 0) or 0),
             completed_images=int(payload.get("completed_images", 0) or 0),
             image_refs=[str(ref) for ref in (payload.get("image_refs") or [])],
+            job_id=str(payload.get("job_id", "")),
+            executed_config=dict(payload.get("executed_config") or {}),
         )
 
 

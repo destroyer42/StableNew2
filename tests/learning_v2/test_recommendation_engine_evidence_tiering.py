@@ -30,6 +30,7 @@ def _write(path: Path, records: list[dict]) -> None:
 def _exp_record(
     sampler: str = "Euler a", steps: int = 20, cfg: float = 7.0, rating: int = 4
 ) -> dict:
+    config = {"txt2img": {"model": "test-model", "steps": steps, "cfg_scale": cfg}}
     return {
         "timestamp": "2026-03-10T21:00:00",
         "primary_sampler": sampler,
@@ -39,8 +40,15 @@ def _exp_record(
         "base_config": {"prompt": "portrait", "stage": "txt2img"},
         "metadata": {
             "record_kind": "learning_experiment_rating",
+            "experiment_id": "test-controlled-experiment",
+            "variable_under_test": "CFG Scale",
+            "variant_value": cfg,
             "user_rating": rating,
             "stage": "txt2img",
+            "frozen_experiment": {
+                "snapshot": {"experiment_id": "test-controlled-experiment"},
+                "executed_config": config,
+            },
         },
     }
 
@@ -188,13 +196,13 @@ def test_two_experiment_records_alone_is_sparse_tier(tmp_path: Path) -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_three_experiment_records_gives_strong_tier(tmp_path: Path) -> None:
+def test_three_ratings_for_one_controlled_value_stay_manual_only(tmp_path: Path) -> None:
     path = tmp_path / "r.jsonl"
     _write(path, [_exp_record(rating=4), _exp_record(rating=5), _exp_record(rating=4)])
     engine = RecommendationEngine(path)
     result = engine.recommend("portrait", "txt2img")
-    assert result.evidence_tier == EVIDENCE_TIER_EXPERIMENT_STRONG
-    assert result.automation_eligible is True
+    assert result.evidence_tier == EVIDENCE_TIER_SPARSE_PLUS_REVIEW
+    assert result.automation_eligible is False
     assert result.recommendations
 
 
@@ -202,9 +210,9 @@ def test_strong_tier_ignores_review_poor_ratings(tmp_path: Path) -> None:
     """3 experiment records with good ratings + 1 bad review → sampler follows experiments."""
     path = tmp_path / "r.jsonl"
     records = [
-        _exp_record(sampler="Euler a", rating=5),
-        _exp_record(sampler="Euler a", rating=5),
-        _exp_record(sampler="Euler a", rating=5),
+        _exp_record(sampler="Euler a", cfg=6.0, rating=4),
+        _exp_record(sampler="Euler a", cfg=7.0, rating=5),
+        _exp_record(sampler="Euler a", cfg=7.0, rating=5),
         _review_record(sampler="DPM++ 2M", rating=1),
     ]
     _write(path, records)
@@ -212,16 +220,13 @@ def test_strong_tier_ignores_review_poor_ratings(tmp_path: Path) -> None:
     result = engine.recommend("portrait", "txt2img")
     assert result.evidence_tier == EVIDENCE_TIER_EXPERIMENT_STRONG
     assert result.automation_eligible is True
-    sampler_rec = result.recommendations and next(
-        (r for r in result.recommendations if r.parameter_name == "sampler"), None
-    )
-    if sampler_rec:
-        assert sampler_rec.recommended_value == "Euler a"
+    assert [rec.parameter_name for rec in result.recommendations] == ["cfg_scale"]
+    assert result.recommendations[0].recommended_value == 7.0
 
 
 def test_strong_tier_many_records(tmp_path: Path) -> None:
     path = tmp_path / "r.jsonl"
-    _write(path, [_exp_record(rating=i % 5 + 1) for i in range(10)])
+    _write(path, [_exp_record(cfg=6.0 + (i % 3), rating=i % 5 + 1) for i in range(10)])
     engine = RecommendationEngine(path)
     result = engine.recommend("portrait", "txt2img")
     assert result.evidence_tier == EVIDENCE_TIER_EXPERIMENT_STRONG

@@ -210,7 +210,6 @@ class LearningExecutionController:
             return False
 
         try:
-            # Track variant mapping
             self._job_to_variant[record.job_id] = variant
             self._job_contexts[record.job_id] = LearningJobContext(
                 variant=variant,
@@ -219,23 +218,51 @@ class LearningExecutionController:
                 variant_value=variant.param_value,
                 job_id=record.job_id,
             )
-
             self.job_service.submit_njrs([record], SubmissionPolicy())
-
-            _logger.info(
-                f"[LearningExecutionController] Submitted job: "
-                f"job_id={record.job_id}, experiment={experiment_name}, "
-                f"variant={variant.param_value}"
-            )
-
             return True
-
         except Exception as exc:
             self._job_to_variant.pop(record.job_id, None)
             self._job_contexts.pop(record.job_id, None)
             _logger.exception(f"[LearningExecutionController] Failed to submit job: {exc}")
             return False
 
+    def submit_experiment_jobs(
+        self,
+        records: list[NormalizedJobRecord] | tuple[NormalizedJobRecord, ...],
+        variants: list[LearningVariant],
+        experiment_name: str,
+        variable_under_test: str,
+    ) -> list[str]:
+        """Register and admit a fully compiled experiment in one queue call.
+
+        The caller must compile every record first.  Tracking is installed
+        immediately before the single JobService submission and removed if the
+        repository admission rejects the batch.
+        """
+        if not self.job_service or not hasattr(self.job_service, "submit_njrs"):
+            raise RuntimeError("JobService.submit_njrs is unavailable")
+        if len(records) != len(variants) or not records:
+            raise ValueError("records and variants must be non-empty and aligned")
+
+        registered_ids: list[str] = []
+        try:
+            for record, variant in zip(records, variants, strict=True):
+                self._job_to_variant[record.job_id] = variant
+                self._job_contexts[record.job_id] = LearningJobContext(
+                    variant=variant,
+                    experiment_name=experiment_name,
+                    variable_under_test=variable_under_test,
+                    variant_value=variant.param_value,
+                    job_id=record.job_id,
+                )
+                registered_ids.append(record.job_id)
+            result = self.job_service.submit_njrs(list(records), SubmissionPolicy())
+            return [str(job_id) for job_id in (result or [])]
+        except Exception:
+            for job_id in registered_ids:
+                self._job_to_variant.pop(job_id, None)
+                self._job_contexts.pop(job_id, None)
+            raise
     def on_job_completed(self, job_id: str, result: dict[str, Any]) -> None:
         """Handle job completion.
 

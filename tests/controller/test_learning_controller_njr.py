@@ -149,7 +149,8 @@ class TestLearningControllerNJR:
         # Verify CFG override was applied
         assert record.cfg_scale == 8.5  # variant value, not baseline 7.0
         assert record.config["txt2img"]["cfg_scale"] == 8.5
-        assert record.prompt_pack_name == "TestExperiment"
+        assert record.prompt_pack_name == ""
+        assert record.source.kind.value == "learning"
         assert record.extra_metadata["submission_source"] == "learning"
         assert record.extra_metadata["learning"]["config"]["txt2img"]["cfg_scale"] == 8.5
 
@@ -212,7 +213,7 @@ class TestLearningControllerNJR:
         assert record.start_stage == "img2img"
         assert record.stage_chain[0].stage_type == "img2img"
         assert record.stage_chain[0].denoising_strength == 0.45
-        assert record.input_image_paths == [str(input_image), str(input_image)]
+        assert list(record.input_image_paths) == [str(input_image), str(input_image)]
         assert record.extra_metadata["learning_stage"] == "img2img"
         assert record.extra_metadata["submission_source"] == "learning"
 

@@ -16,7 +16,6 @@ from pathlib import Path
 
 from src.learning.learning_record import LearningRecord
 from src.learning.recommendation_engine import (
-    EVIDENCE_TIER_EXPERIMENT_STRONG,
     EVIDENCE_TIER_REVIEW_ONLY,
     RecommendationEngine,
 )
@@ -179,7 +178,7 @@ def test_flat_rating_records_still_produce_recommendations(tmp_path: Path) -> No
     _write(path, [_flat_record(sampler="Euler a", rating=5) for _ in range(3)])
     engine = RecommendationEngine(path)
     result = engine.recommend("landscape", "txt2img")
-    assert result.evidence_tier == EVIDENCE_TIER_EXPERIMENT_STRONG
+    assert result.evidence_tier == EVIDENCE_TIER_REVIEW_ONLY
     assert result.recommendations
 
 
@@ -200,7 +199,7 @@ def test_flat_and_detailed_records_mixed(tmp_path: Path) -> None:
     engine = RecommendationEngine(path)
     result = engine.recommend("portrait, woman", "txt2img")
     assert result.recommendations
-    assert result.evidence_tier == EVIDENCE_TIER_EXPERIMENT_STRONG
+    assert result.evidence_tier == EVIDENCE_TIER_REVIEW_ONLY
 
 
 # ---------------------------------------------------------------------------

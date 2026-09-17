@@ -294,6 +294,9 @@ def test_apply_button_enabled_for_manual_only_recommendations(tk_root):
     from src.gui.views.learning_review_panel import LearningReviewPanel
 
     panel = LearningReviewPanel(tk_root)
+    panel.learning_controller = type(
+        "Controller", (), {"get_automation_mode": staticmethod(lambda: "apply_with_confirm")}
+    )()
     recs = RecommendationSet(
         prompt_text="portrait",
         stage="txt2img",

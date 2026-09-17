@@ -615,9 +615,15 @@ class LearningReviewPanel(ttk.Frame):
         self.recommendations_text.insert(tk.END, "".join(lines))
         self.recommendations_text.config(state="disabled")
 
-        # PR-044/055: manual-only evidence can still be applied via the
-        # confirm flow; only auto modes should enforce automation_eligible.
-        if rec_list:
+        # suggest_only is deliberately display-only.  Do not expose an
+        # enabled interaction that the controller must silently reject.
+        controller = self._get_learning_controller()
+        mode = (
+            controller.get_automation_mode()
+            if controller is not None and hasattr(controller, "get_automation_mode")
+            else "suggest_only"
+        )
+        if rec_list and mode != "suggest_only":
             self.apply_button.config(state="normal")
         else:
             self.apply_button.config(state="disabled")

@@ -44,6 +44,12 @@ from src.learning.discovered_review_models import (
     DiscoveredReviewExperiment,
     DiscoveredReviewItem,
 )
+from src.learning.experiment_execution import (
+    ExperimentAdmissionService,
+    freeze_snapshot,
+    snapshot_digest,
+    thaw_snapshot,
+)
 from src.learning.learning_controller_services.experiment_persistence import (
     build_resume_payload,
     extract_workflow_state,
@@ -121,6 +127,7 @@ class LearningController:
         self._review_workflow_adapter = ReviewWorkflowAdapter()
         self._review_metadata_service = ReviewMetadataService()
         self._artifact_metadata_inspector = ArtifactMetadataInspector(self._review_metadata_service)
+        self._experiment_admission = ExperimentAdmissionService()
 
         # Rating cache for current experiment
         self._rating_cache: dict[str, int] = {}  # {image_path: rating}
@@ -213,8 +220,11 @@ class LearningController:
         }
 
         # Create LearningExperiment from form data
+        existing = self.learning_state.current_experiment
         experiment = LearningExperiment(
             name=experiment_data.get("name", ""),
+            # A display name is editable and may collide; runtime lineage is not.
+            experiment_id=str(getattr(existing, "experiment_id", "") or uuid.uuid4().hex),
             description=experiment_data.get("description", ""),
             baseline_config={},  # Will be populated from pipeline state later
             prompt_text=prompt_text,
@@ -522,6 +532,8 @@ class LearningController:
 
         # Store the current experiment
         self.learning_state.current_experiment = experiment
+        if not experiment.experiment_id:
+            experiment.experiment_id = uuid.uuid4().hex
 
         # Load existing ratings for this experiment
         self.load_existing_ratings()
@@ -538,10 +550,35 @@ class LearningController:
             logger.error(f"[LearningController] Failed to generate values: {exc}")
             raise
 
+        # Capture effective settings once at preview.  The runner will compile
+        # only from this canonical JSON snapshot, never from live stage cards.
+        baseline = self._get_baseline_config() or dict(experiment.baseline_config or {})
+        negative_prompt = str(
+            getattr(experiment, "metadata", {}).get("selected_prompt_negative_text", "") or ""
+        )
+        if not negative_prompt and self.prompt_workspace_state:
+            negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
+        experiment.baseline_config = baseline
+        experiment.execution_snapshot_json = freeze_snapshot(
+            {
+                "schema_version": 1,
+                "experiment_id": experiment.experiment_id,
+                "display_name": experiment.name,
+                "baseline_config": baseline,
+                "prompt_text": experiment.prompt_text,
+                "negative_prompt_text": negative_prompt,
+                "stage": experiment.stage,
+                "variable_under_test": experiment.variable_under_test,
+                "variant_values": list(experiment.values),
+                "images_per_value": max(1, int(experiment.images_per_value or 1)),
+            }
+        )
+
         # Generate variants for each value in the experiment
         for value in experiment.values:
             variant = LearningVariant(
-                experiment_id=experiment.name,  # Use experiment name as ID for now
+                experiment_id=experiment.experiment_id,
+                variant_id=f"{experiment.experiment_id}:{len(self.learning_state.plan)}",
                 param_value=value,
                 status="pending",
                 planned_images=experiment.images_per_value,
@@ -575,7 +612,7 @@ class LearningController:
         if not self.learning_state.current_experiment:
             return
 
-        experiment_id = self.learning_state.current_experiment.name
+        experiment_id = self.learning_state.current_experiment.experiment_id
         self._rating_cache = self._learning_record_writer.get_ratings_for_experiment(experiment_id)
 
     def get_rating_for_image(self, image_path: str) -> int | None:
@@ -641,21 +678,43 @@ class LearningController:
         if self._plan_table and hasattr(self._plan_table, "clear_highlights"):
             self._plan_table.clear_highlights()
 
-        # Submit jobs for each variant
-        for variant in self.learning_state.plan:
-            if variant.status == "pending":
-                logger.info(
-                    f"[LearningController] Submitting pending variant: {variant.param_value}"
-                )
-                self._submit_variant_job(variant)
+        pending = [variant for variant in self.learning_state.plan if variant.status == "pending"]
+        if not pending:
+            self._recompute_workflow_state_from_plan()
+            return
 
-                # Clear job draft after each submission to avoid duplicates
-                app_state = getattr(self.pipeline_controller, "_app_state", None)
-                if app_state and hasattr(app_state, "clear_job_draft"):
-                    try:
-                        app_state.clear_job_draft()
-                    except Exception:
-                        pass
+        # Compile every NJR before crossing the queue boundary.  Any compile
+        # error leaves all variants pending, so an experiment cannot partially
+        # enter the queue.
+        experiment = self.learning_state.current_experiment
+        if experiment is None:
+            raise RuntimeError("Learning experiment is unavailable")
+        if not self.execution_controller:
+            raise RuntimeError("Learning execution controller unavailable")
+        try:
+            admission = self._experiment_admission.compile_all(
+                pending,
+                lambda variant: self._build_variant_njr(variant, experiment),
+            )
+            submit_experiment = getattr(self.execution_controller, "submit_experiment_jobs", None)
+            if not callable(submit_experiment):
+                raise RuntimeError("Learning batch admission is unavailable")
+            submit_experiment(
+                admission.records,
+                pending,
+                experiment.name,
+                experiment.variable_under_test,
+            )
+        except Exception:
+            raise
+
+        for variant, record in zip(pending, admission.records, strict=True):
+            variant.job_id = record.job_id
+            variant.status = "queued"
+            variant_index = self._get_variant_index(variant)
+            if variant_index >= 0:
+                self._update_variant_status(variant_index, "queued")
+                self._highlight_variant(variant_index, True)
 
         # Update table (fallback for any variants that didn't get live updates)
         self._update_plan_table()
@@ -743,10 +802,25 @@ class LearningController:
         """
         import logging
 
+        # Direct programmatic callers may bypass the Preview button.  Give
+        # them the same stable identity rather than falling back to a name.
+        if not experiment.experiment_id:
+            experiment.experiment_id = uuid.uuid4().hex
+        if not variant.experiment_id:
+            variant.experiment_id = experiment.experiment_id
+        if not variant.variant_id:
+            variant.variant_id = f"{experiment.experiment_id}:{self._get_variant_index(variant)}"
+
         logger = logging.getLogger(__name__)
 
-        # Get baseline config from stage cards
-        baseline = self._get_baseline_config()
+        # A plan created by Build Preview has a canonical serialized baseline.
+        # Fallback is only for legacy saved sessions, and is immediately frozen
+        # by build_plan on the next preview.
+        snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
+        snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
+        baseline = dict(snapshot.get("baseline_config") or experiment.baseline_config or {})
+        if not baseline:
+            baseline = self._get_baseline_config()
 
         # PR-LEARN-011: Validate baseline config
         is_valid, error_msg = self._validate_baseline_config(baseline)
@@ -761,7 +835,7 @@ class LearningController:
         self._apply_variant_override_with_metadata(final_config, variant.param_value, experiment)
 
         # Add learning context metadata
-        final_config["learning_experiment_id"] = experiment.name
+        final_config["learning_experiment_id"] = experiment.experiment_id
         final_config["learning_variant_value"] = variant.param_value
         final_config["learning_variable"] = experiment.variable_under_test
         stage_name = str(experiment.stage or "txt2img").strip().lower() or "txt2img"
@@ -796,7 +870,7 @@ class LearningController:
         seed_resize_from_w = int(txt2img_final.get("seed_resize_from_w", 0))
 
         # Get prompt from experiment or current prompt workspace
-        prompt = experiment.prompt_text
+        prompt = str(snapshot.get("prompt_text") or experiment.prompt_text)
         if not prompt:
             # If no prompt in experiment, get from current prompt workspace
             if self.prompt_workspace_state:
@@ -806,12 +880,11 @@ class LearningController:
             prompt = "a test prompt"
 
         # Get negative prompt from experiment or current prompt workspace
-        negative_prompt = (
-            getattr(experiment, "negative_prompt_text", "")
+        negative_prompt = str(
+            snapshot.get("negative_prompt_text")
+            or getattr(experiment, "negative_prompt_text", "")
+            or getattr(experiment, "metadata", {}).get("selected_prompt_negative_text", "")
             or ""
-            or str(
-                getattr(experiment, "metadata", {}).get("selected_prompt_negative_text", "") or ""
-            )
         )
         if not negative_prompt and self.prompt_workspace_state:
             negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
@@ -832,7 +905,7 @@ class LearningController:
         )
 
         # Generate job ID
-        job_id = f"learning_{experiment.name}_{variant.param_value}_{uuid.uuid4().hex[:8]}"
+        job_id = f"learning_{experiment.experiment_id}_{variant.variant_id or variant.param_value}_{uuid.uuid4().hex[:8]}"
 
         # Build stage_chain (required for job validation)
         txt2img_stage = StageConfig(
@@ -849,7 +922,7 @@ class LearningController:
 
         # Build learning context for tracking and metadata
         learning_ctx = LearningJobContext(
-            experiment_id=experiment.name,
+            experiment_id=experiment.experiment_id,
             experiment_name=experiment.name,
             variant_index=variant_index,
             variable_under_test=experiment.variable_under_test,
@@ -861,6 +934,7 @@ class LearningController:
             stage_name=stage_name,
             final_config=final_config,
         )
+        variant.executed_config = copy.deepcopy(final_config)
         selected_loras: dict[str, LoRATag] = {}
         for entry in list(getattr(experiment, "metadata", {}).get("selected_prompt_loras") or []):
             if not isinstance(entry, dict):
@@ -982,21 +1056,33 @@ class LearningController:
         stage_name: str,
         final_config: dict[str, Any],
     ) -> dict[str, Any]:
+        snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
         return {
             "submission_source": "learning",
             "learning_enabled": True,
-            "learning_experiment": experiment.name,
+            "learning_experiment": experiment.experiment_id,
+            "learning_experiment_id": experiment.experiment_id,
             "learning_variable": experiment.variable_under_test,
             "learning_variant_value": variant.param_value,
             "learning_stage": stage_name,
             "learning": {
                 "schema": "stablenew.learning.v2.6",
                 "experiment_name": experiment.name,
+                "experiment_id": experiment.experiment_id,
+                "variant_id": variant.variant_id,
                 "variable_under_test": experiment.variable_under_test,
                 "variant_value": variant.param_value,
                 "stage": stage_name,
                 "images_per_value": max(1, int(experiment.images_per_value or 1)),
                 "config": final_config,
+            },
+            "frozen_experiment": {
+                "schema_version": 1,
+                "experiment_id": experiment.experiment_id,
+                "variant_id": variant.variant_id,
+                "snapshot_sha256": snapshot_digest(snapshot_json) if snapshot_json else "",
+                "snapshot": thaw_snapshot(snapshot_json) if snapshot_json else {},
+                "executed_config": final_config,
             },
         }
 
@@ -1434,9 +1520,16 @@ class LearningController:
             )
             self._highlight_variant(variant_index, False)  # Remove highlight
 
-        # Update review panel if this variant is selected
-        if self._review_panel and hasattr(self._review_panel, "display_variant_results"):
-            self._review_panel.display_variant_results(variant)
+        # Background completion refreshes data only.  It may repaint review
+        # only when the operator is already reviewing this exact variant.
+        if (
+            self.learning_state.selected_variant is variant
+            and self._review_panel
+            and hasattr(self._review_panel, "display_variant_results")
+        ):
+            self._review_panel.display_variant_results(
+                variant, self.learning_state.current_experiment
+            )
         self._recompute_workflow_state_from_plan()
         self._notify_resume_state_changed()
 
@@ -1670,19 +1763,28 @@ class LearningController:
         # Create a learning record for this rating
         experiment = self.learning_state.current_experiment
 
-        # Build base config from experiment
-        base_config = {
-            "prompt": experiment.prompt_text,
-            "stage": experiment.stage,
-            experiment.variable_under_test.lower(): target_variant.param_value,
-        }
+        # Ratings are evidence about an execution, not about the current GUI.
+        # Retain the exact frozen/effective configuration carried by the NJR.
+        executed_config = dict(target_variant.executed_config or {})
+        snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
+        snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
+        base_config = dict(executed_config or snapshot.get("baseline_config") or {})
+        base_config.update(
+            {
+                "prompt": str(snapshot.get("prompt_text") or experiment.prompt_text),
+                "negative_prompt": str(snapshot.get("negative_prompt_text") or ""),
+                "stage": str(snapshot.get("stage") or experiment.stage),
+                experiment.variable_under_test.lower(): target_variant.param_value,
+            }
+        )
         detail_payload = dict(details or {})
         subscores = dict(detail_payload.get("subscores") or {})
         context_flags = dict(detail_payload.get("context_flags") or {})
         blended_rating = int(detail_payload.get("blended_rating") or rating)
 
         # Create variant config
-        variant_config = {experiment.variable_under_test.lower(): target_variant.param_value}
+        variant_config = dict(executed_config)
+        variant_config[experiment.variable_under_test.lower()] = target_variant.param_value
 
         # Create learning record
         record = LearningRecord.from_pipeline_context(
@@ -1690,12 +1792,15 @@ class LearningController:
             variant_configs=[variant_config],
             randomizer_mode="learning_experiment",
             randomizer_plan_size=1,
+            extract_primary=self._extract_learning_primary,
             metadata={
+                "experiment_id": experiment.experiment_id,
                 "experiment_name": experiment.name,
                 "experiment_description": experiment.description,
                 "variable_under_test": experiment.variable_under_test,
                 "variant_value": target_variant.param_value,
                 "image_path": image_ref,
+                "job_id": target_variant.job_id,
                 "user_rating": blended_rating,
                 "user_rating_raw": rating,
                 "user_notes": notes,
@@ -1707,11 +1812,17 @@ class LearningController:
                 # so both record shapes normalize identically via extract_rating_detail()
                 "subscores": subscores,
                 "learning_context": {
-                    "experiment_id": experiment.name,
-                    "variant_id": target_variant.id
-                    if hasattr(target_variant, "id")
-                    else str(target_variant.param_value),
+                    "experiment_id": experiment.experiment_id,
+                    "variant_id": target_variant.variant_id or str(target_variant.param_value),
                     "variant_name": f"{experiment.variable_under_test}={target_variant.param_value}",
+                },
+                "frozen_experiment": {
+                    "schema_version": 1,
+                    "experiment_id": experiment.experiment_id,
+                    "variant_id": target_variant.variant_id,
+                    "snapshot_sha256": snapshot_digest(snapshot_json) if snapshot_json else "",
+                    "snapshot": snapshot,
+                    "executed_config": executed_config,
                 },
             },
         )
@@ -1733,6 +1844,20 @@ class LearningController:
             self._recompute_workflow_state_from_plan()
         self._notify_resume_state_changed()
 
+    @staticmethod
+    def _extract_learning_primary(config: dict[str, Any]) -> dict[str, Any]:
+        """Extract executed primary settings from a frozen stage configuration."""
+        stage = config.get("txt2img") if isinstance(config, dict) else {}
+        if not isinstance(stage, dict):
+            stage = {}
+        return {
+            "model": stage.get("model", config.get("model", "")),
+            "sampler": stage.get("sampler_name", stage.get("sampler", "")),
+            "scheduler": stage.get("scheduler", ""),
+            "steps": stage.get("steps", 0),
+            "cfg_scale": stage.get("cfg_scale", 0.0),
+        }
+
     def update_recommendations(self) -> None:
         """Update recommendations based on latest learning data."""
         if not self._recommendation_engine:
@@ -1751,7 +1876,9 @@ class LearningController:
             stage = "txt2img"  # Default stage
 
         if prompt_text:
-            recommendations = self._recommendation_engine.recommend(prompt_text, stage)
+            recommendations = self._recommendation_engine.recommend(
+                prompt_text, stage, **self._recommendation_query_context()
+            )
 
             # Update review panel with new recommendations
             if self._review_panel and hasattr(self._review_panel, "update_recommendations"):
@@ -1825,9 +1952,28 @@ class LearningController:
             stage = "txt2img"
 
         if prompt_text:
-            return self._recommendation_engine.recommend(prompt_text, stage)
+            return self._recommendation_engine.recommend(
+                prompt_text, stage, **self._recommendation_query_context()
+            )
 
         return None
+
+    def _recommendation_query_context(self) -> dict[str, Any]:
+        """Use known frozen model/geometry when querying evidence."""
+        experiment = self.learning_state.current_experiment
+        if experiment is None:
+            return {}
+        snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
+        snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
+        config = dict(snapshot.get("baseline_config") or experiment.baseline_config or {})
+        stage = config.get(str(experiment.stage or "txt2img"), config.get("txt2img", {}))
+        if not isinstance(stage, dict):
+            stage = {}
+        return {
+            "model": str(stage.get("model") or ""),
+            "width": stage.get("width"),
+            "height": stage.get("height"),
+        }
 
     def _update_variant_ratings(self) -> None:
         """Update all variant rows with their average ratings."""

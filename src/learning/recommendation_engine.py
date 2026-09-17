@@ -77,6 +77,8 @@ EVIDENCE_TIER_EXPERIMENT_STRONG = "experiment_strong"
 EVIDENCE_TIER_SPARSE_PLUS_REVIEW = "experiment_sparse_plus_review"
 EVIDENCE_TIER_REVIEW_ONLY = "review_only"
 EVIDENCE_TIER_NO_EVIDENCE = "no_evidence"
+MIN_CONTROLLED_VARIANTS = 2
+MIN_CONTROLLED_RATINGS = 3
 
 
 @dataclass
@@ -201,6 +203,10 @@ class RecommendationEngine:
         stage: str,
         refinement_context: dict[str, Any] | None = None,
         secondary_motion_context: dict[str, Any] | None = None,
+        *,
+        model: str = "",
+        width: int | None = None,
+        height: int | None = None,
     ) -> dict[str, str]:
         # PR-046: detect people presence for context-aware subscore weighting
         lower_tokens = {
@@ -213,8 +219,8 @@ class RecommendationEngine:
             "stage": str(stage or "txt2img"),
             "style_bucket": "default",
             "prompt_similarity_bucket": "high",
-            "resolution_bucket": "unknown",
-            "model": "",
+            "resolution_bucket": self._resolution_bucket(width, height),
+            "model": str(model or ""),
             "has_people": str(has_people),
             "refinement_mode": str(refinement.get("mode") or ""),
             "refinement_policy_id": str(refinement.get("policy_id") or ""),
@@ -309,6 +315,25 @@ class RecommendationEngine:
             }:
                 continue
 
+            frozen = metadata.get("frozen_experiment")
+            learning_context = metadata.get("learning_context")
+            experiment_id = str(
+                metadata.get("experiment_id")
+                or (learning_context or {}).get("experiment_id")
+                or ""
+            )
+            # Old rows remain readable, but cannot claim controlled causal
+            # evidence without an immutable baseline and executed config.
+            controlled_complete = bool(
+                record_kind == "learning_experiment_rating"
+                and experiment_id
+                and isinstance(frozen, dict)
+                and isinstance(frozen.get("snapshot"), dict)
+                and isinstance(frozen.get("executed_config"), dict)
+                and str(metadata.get("variable_under_test") or "").strip()
+                and metadata.get("variant_value") is not None
+            )
+
             # Only consider records with user ratings
             user_rating = metadata.get("user_rating")
             if user_rating is None:
@@ -342,10 +367,17 @@ class RecommendationEngine:
             except (ValueError, TypeError):
                 timestamp = time.time()  # Use current time if parsing fails
 
+            effective_record_kind = (
+                "legacy"
+                if record_kind == "learning_experiment_rating" and not controlled_complete
+                else record_kind or "legacy"
+            )
             scored_record = {
                 "rating": rating,
-                "record_kind": record_kind or "legacy",
+                "record_kind": effective_record_kind,
                 "experiment_name": experiment_name,
+                "experiment_id": experiment_id,
+                "controlled_complete": controlled_complete,
                 "variable_under_test": variable_under_test,
                 "variant_value": variant_value,
                 "primary_sampler": primary_sampler,
@@ -601,23 +633,19 @@ class RecommendationEngine:
             weight, rationale = self._compute_context_weight(record, query_context, query_prompt)
             rating = record["rating"] * weight
 
-            # Collect ratings for each parameter type
-            param_groups["sampler"][record["primary_sampler"]].append(rating)
-            param_groups["scheduler"][record["primary_scheduler"]].append(rating)
-            param_groups["steps"][record["primary_steps"]].append(rating)
-            param_groups["cfg_scale"][record["primary_cfg_scale"]].append(rating)
-            param_raw["sampler"][record["primary_sampler"]].append(float(record["rating"]))
-            param_raw["scheduler"][record["primary_scheduler"]].append(float(record["rating"]))
-            param_raw["steps"][record["primary_steps"]].append(float(record["rating"]))
-            param_raw["cfg_scale"][record["primary_cfg_scale"]].append(float(record["rating"]))
-            param_reasons["sampler"][record["primary_sampler"]].append(rationale)
-            param_reasons["scheduler"][record["primary_scheduler"]].append(rationale)
-            param_reasons["steps"][record["primary_steps"]].append(rationale)
-            param_reasons["cfg_scale"][record["primary_cfg_scale"]].append(rationale)
-            param_context_weights["sampler"][record["primary_sampler"]].append(weight)
-            param_context_weights["scheduler"][record["primary_scheduler"]].append(weight)
-            param_context_weights["steps"][record["primary_steps"]].append(weight)
-            param_context_weights["cfg_scale"][record["primary_cfg_scale"]].append(weight)
+            if record["record_kind"] != "learning_experiment_rating":
+                # Observational rows may inform manual suggestions only.  A
+                # controlled experiment can prove just its tested variable.
+                for parameter, value in (
+                    ("sampler", record["primary_sampler"]),
+                    ("scheduler", record["primary_scheduler"]),
+                    ("steps", record["primary_steps"]),
+                    ("cfg_scale", record["primary_cfg_scale"]),
+                ):
+                    param_groups[parameter][value].append(rating)
+                    param_raw[parameter][value].append(float(record["rating"]))
+                    param_reasons[parameter][value].append(rationale)
+                    param_context_weights[parameter][value].append(weight)
 
             # If this record is from a variable test, also track that parameter
             if record["variable_under_test"] and record["variant_value"] is not None:
@@ -726,6 +754,10 @@ class RecommendationEngine:
         stage: str,
         refinement_context: dict[str, Any] | None = None,
         secondary_motion_context: dict[str, Any] | None = None,
+        *,
+        model: str = "",
+        width: int | None = None,
+        height: int | None = None,
     ) -> RecommendationSet:
         """Get recommendations for a specific prompt and stage combination."""
         query_context = self._build_query_context(
@@ -733,6 +765,9 @@ class RecommendationEngine:
             stage,
             refinement_context,
             secondary_motion_context,
+            model=model,
+            width=width,
+            height=height,
         )
         if self._should_reload_cache():
             records = self._load_records()
@@ -758,6 +793,7 @@ class RecommendationEngine:
             record
             for record in relevant_records
             if str(record.get("record_kind", "")) == "learning_experiment_rating"
+            and bool(record.get("controlled_complete"))
         ]
         review_records = [
             record
@@ -770,7 +806,18 @@ class RecommendationEngine:
             }
         ]
         # PR-044: deterministic evidence-tier policy — never suppress usable evidence
-        if len(experiment_records) >= 3:
+        controlled_by_experiment: dict[str, dict[str, int]] = defaultdict(
+            lambda: defaultdict(int)
+        )
+        for record in experiment_records:
+            value_key = json.dumps(record.get("variant_value"), sort_keys=True)
+            controlled_by_experiment[str(record.get("experiment_id") or "")][value_key] += 1
+        strong_experiment = any(
+            len(variants) >= MIN_CONTROLLED_VARIANTS
+            and sum(variants.values()) >= MIN_CONTROLLED_RATINGS
+            for variants in controlled_by_experiment.values()
+        )
+        if strong_experiment:
             evidence_records = experiment_records
             evidence_tier = EVIDENCE_TIER_EXPERIMENT_STRONG
             automation_eligible = True
