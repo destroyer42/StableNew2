@@ -1,7 +1,7 @@
 Learning_System_Spec_v2.6.md
 
 Status: Canonical subsystem reference
-Updated: 2026-09-05
+Updated: 2026-09-16
 
 0. Purpose
 
@@ -58,6 +58,17 @@ An experiment must capture:
 - optional required input image for image-based stages
 
 The Learning UI may suggest names and descriptions, but the persisted experiment definition is the source of truth.
+
+### 2.1 Frozen preview and queue admission
+
+`experiment_id` is a durable opaque identity, distinct from the editable display
+name. Build Preview captures canonical JSON containing the effective baseline
+prompt/negative prompt, model/VAE/stage configuration, tested variable, variant
+values, and images-per-value. Run compiles every variant from that snapshot
+before one ordinary `JobService.submit_njrs(all_njrs, SubmissionPolicy())` call.
+There is no Learning queue, runner, history, or process authority. A compile or
+validation failure admits no variant; after admission each NJR has the normal
+independent SQLite lifecycle.
 
 3. Stage Capability Contract
 
@@ -152,7 +163,10 @@ A minimum floor of `0.05` is always applied so no record's weight reaches zero.
 
 ### 5.5 Backward Compatibility
 
-Records without any subscore or context detail receive zero adjustment (the helper returns empty dicts and the adjustment function is a no-op when `subscores` is empty). Older records continue to contribute exactly as before PR-046.
+Records without subscore/context detail receive zero rating-detail adjustment.
+Historical experiment rows lacking a durable ID plus frozen snapshot and executed
+configuration remain readable, but are classified as observational/manual-only;
+they cannot establish controlled or automatic recommendation evidence.
 
 
 Supported patterns:
@@ -184,9 +198,14 @@ Recommendations are stage-scoped and evidence-gated.
 
 Rules:
 
-- recommendations must prefer `learning_experiment_rating` data when sufficient evidence exists
-- sparse experiment evidence must not be replaced with noisy review feedback
-- review-tab feedback may be used only when experiment evidence is absent
+- complete controlled `learning_experiment_rating` data may recommend only the
+  field explicitly varied in that frozen experiment
+- `experiment_strong` requires at least two distinct tested values and at least
+  three rated controlled samples in one durable experiment; row count alone is
+  insufficient
+- sparse controlled and observational review/curation evidence remains
+  manual-only; it never becomes automatic evidence
+- incomplete historical experiment rows are observational/manual-only
 - unsupported or unknown record kinds must be ignored
 - adaptive refinement context may weight or stratify recommendations, but it
   must not bypass existing evidence-tier protections
@@ -241,6 +260,14 @@ The Learning subsystem does not:
 - mutate historical outputs
 - bypass the queue
 - construct PromptPacks from GUI text
+- mutate a PromptPack, historical NJR, or historical artifact in place
+- automatically tune parameters or add video-learning support
+
+### 7.1 Recommendation application
+
+`suggest_only` is display-only and does not expose an enabled Apply action.
+Manual application is confirmation-gated and affects only the current/new
+Pipeline draft intent; it never rewrites prior jobs, artifacts, or PromptPacks.
 
 8. Testing Requirements
 
@@ -252,3 +279,16 @@ Learning changes must include:
 - rating persistence coverage
 - recommendation evidence guard tests
 - Golden Path regression validation
+- frozen-preview, all-or-none admission, controlled-evidence, and review-focus
+  regression coverage
+
+9. PR-LEARN-300 execution record
+
+- Execution profile: Standard, Local/Desktop; model recommendation was
+  GPT-5.6 Terra High for cross-surface lifecycle/evidence work.
+- Controller assessment: the GUI Learning coordinator delegates batch tracking
+  to the existing Learning execution controller; no `src/controller/` ratchet
+  ceiling changed.
+- Token-efficient validation: focused deterministic Learning tests first, raw
+  Ruff and controller ratchet, then GitHub required Python 3.11/3.12 CI. The
+  local PR gate was attempted once and was blocked only by unavailable mypy.

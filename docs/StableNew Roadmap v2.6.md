@@ -77,6 +77,12 @@ Roadmap progress is 13 of 13 MVP rows complete (100%). Native SVD, operator
 readiness, and clean-machine release proof are complete and integrated into
 `main`.
 
+Post-v2.6 `PR-LEARN-300` is complete / accepted on its feature branch: image
+experiments now have immutable preview-to-queue evidence, one normal batch
+admission, focused review/rating lineage, and controlled-versus-observational
+recommendation rules. Integration awaits product-owner review. `PR-VID-110`
+remains a separate product-owner decision and is not started.
+
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair
 
 The production PromptPack workflow now expands Matrix selections into immutable

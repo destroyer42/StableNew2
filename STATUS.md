@@ -7,7 +7,9 @@ Updated: 2026-09-15
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: maintain the accepted v2.6 / IMG-100 baseline; `PR-IMG-110` is complete with an Ideogram 4 target-hardware no-go.
+- Active objective: `PR-LEARN-300` is complete / accepted on its feature branch;
+  integration awaits product-owner review. `PR-IMG-110` remains integrated with
+  an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -44,6 +46,19 @@ submission-convenience package on `main`. It adds non-recursive folder planning 
 normal queue batch submission while
 preserving the accepted SVD runtime, backend, queue, history, replay, and
 artifact authorities.
+
+PR-LEARN-300 is **COMPLETE / ACCEPTED ON FEATURE BRANCH**. Designed image
+experiments now use one durable experiment identity and an immutable preview
+snapshot of effective prompt, model/VAE, stage configuration, tested variable,
+values, and sample count. All variants compile before one normal
+`JobService.submit_njrs` admission; each admitted NJR retains its ordinary
+independent SQLite queue lifecycle. Ratings retain exact experiment/variant,
+job/artifact, and frozen executed-configuration evidence. Controlled ratings
+may recommend only the deliberately tested variable; incomplete historical rows
+remain readable as manual observational evidence and cannot become automatic
+or causal recommendations. Learning remains image-stage-only, cannot mutate
+PromptPacks/NJRs/history, and has no autonomous tuning authority. `PR-VID-110`
+remains a separate product-owner decision.
 
 ## Approved post-v2.6 direction
 
