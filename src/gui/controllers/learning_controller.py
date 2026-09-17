@@ -57,6 +57,7 @@ from src.learning.learning_controller_services.experiment_persistence import (
 )
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.recommendation_engine import RecommendationEngine
+from src.learning.resource_access import get_projected_resources
 from src.learning.stage_capabilities import get_stage_capability
 from src.learning.variable_selection_contract import normalize_resource_entries
 from src.pipeline.artifact_contract import extract_artifact_paths
@@ -300,19 +301,14 @@ class LearningController:
 
             if not selected and meta.resource_key:
                 # Fallback: get available items from app state resources
-                if self.app_controller and hasattr(self.app_controller, "_app_state"):
-                    app_state = self.app_controller._app_state
-                    if hasattr(app_state, "resources"):
-                        available = app_state.resources.get(meta.resource_key, [])
-                        _, mapping = normalize_resource_entries(list(available or []))
-                        normalized = (
-                            list(mapping.values()) if mapping else [str(item) for item in available]
-                        )
-                        selected = normalized[:5] if normalized else []  # Use first 5 as fallback
-                        logger.warning(
-                            f"[LearningController]   No items selected, using first {len(selected)} "
-                            f"available {meta.resource_key}"
-                        )
+                available = get_projected_resources(self).get(meta.resource_key, [])
+                _, mapping = normalize_resource_entries(list(available or []))
+                normalized = list(mapping.values()) if mapping else [str(item) for item in available]
+                selected = normalized[:5] if normalized else []  # Use first 5 as fallback
+                logger.warning(
+                    f"[LearningController]   No items selected, using first {len(selected)} "
+                    f"available {meta.resource_key}"
+                )
 
             if not selected:
                 raise ValueError(
@@ -484,11 +480,7 @@ class LearningController:
         logger = logging.getLogger(__name__)
 
         # Get available resources from app_state
-        available = []
-        if self.app_controller and hasattr(self.app_controller, "_app_state"):
-            app_state = self.app_controller._app_state
-            if hasattr(app_state, "resources"):
-                available = app_state.resources.get(resource_key, [])
+        available = get_projected_resources(self).get(resource_key, [])
         _, mapping = normalize_resource_entries(list(available or []))
         if mapping:
             available = list(mapping.values())

@@ -10,12 +10,12 @@ from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.models.prompt_pack_model import PromptPackModel, PromptSlot
 from src.gui.ui_tokens import TOKENS
 from src.learning.experiment_naming import build_experiment_identity
+from src.learning.resource_access import get_resource_choices, resolve_app_state
 from src.learning.stage_capabilities import (
     get_stage_capability,
     get_variables_for_stage,
     list_supported_stages,
 )
-from src.learning.variable_selection_contract import normalize_resource_entries
 from src.promptpacks.paths import resolve_prompt_pack_dir
 from src.utils.embedding_prompt_utils import normalize_embedding_entries, render_embedding_reference
 from src.utils.file_io import read_prompt_pack
@@ -43,6 +43,9 @@ class ExperimentDesignPanel(ttk.Frame):
         self._suspend_identity_tracking = False
         self._prompt_pack_paths: dict[str, Path] = {}
         self._prompt_option_payloads: dict[str, dict[str, Any]] = {}
+        self._resource_state = resolve_app_state(self.learning_controller)
+        if self._resource_state is not None and hasattr(self._resource_state, "add_resource_listener"):
+            self._resource_state.add_resource_listener(self._on_resources_updated)
 
         # Configure layout
         self.columnconfigure(0, weight=1)
@@ -779,11 +782,8 @@ class ExperimentDesignPanel(ttk.Frame):
         # Get available choices from app_state
         choices = []
         if meta.resource_key and self.learning_controller:
-            app_controller = getattr(self.learning_controller, "app_controller", None)
-            if app_controller and hasattr(app_controller, "_app_state"):
-                app_state = app_controller._app_state
-                if hasattr(app_state, "resources"):
-                    choices = app_state.resources.get(meta.resource_key, [])
+            choices, mapping = get_resource_choices(self.learning_controller, meta.resource_key)
+            self._choice_display_map = dict(mapping)
 
         if not choices:
             # No choices available
@@ -830,10 +830,7 @@ class ExperimentDesignPanel(ttk.Frame):
         self.checkbox_container = ttk.Frame(self.checklist_inner_frame)
         self.checkbox_container.pack(fill="both", expand=True)
 
-        normalized_values, mapping = normalize_resource_entries(list(choices or []))
-        entries = normalized_values if mapping else [str(choice) for choice in choices]
-        if mapping:
-            self._choice_display_map = dict(mapping)
+        entries = [str(choice) for choice in choices]
         # Create checkboxes for each choice
         for choice in entries:
             internal_choice = self._choice_display_map.get(choice, choice)
@@ -851,6 +848,17 @@ class ExperimentDesignPanel(ttk.Frame):
             self.checklist_inner_frame, textvariable=self.choice_count_var, foreground="blue"
         )
         count_label.pack(anchor="w", pady=(5, 0))
+
+    def _on_resources_updated(self, _resources: dict[str, list[Any]] | None = None) -> None:
+        """Refresh the active resource checklist from the current projection."""
+        from src.learning.variable_metadata import get_variable_metadata
+
+        variable = self.variable_var.get().strip()
+        if not variable:
+            return
+        meta = get_variable_metadata(variable)
+        if meta is not None and meta.resource_key:
+            self._populate_checklist(meta)
 
     def _select_all_choices(self, selected: bool) -> None:
         """Select or deselect all checkboxes."""

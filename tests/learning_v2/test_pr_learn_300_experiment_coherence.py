@@ -11,10 +11,16 @@ import pytest
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 from src.learning.experiment_execution import ExperimentAdmissionService
+from src.learning.experiment_naming import (
+    build_learning_filename_prefix,
+    build_learning_folder_label,
+)
 from src.learning.recommendation_engine import (
     EVIDENCE_TIER_EXPERIMENT_STRONG,
     RecommendationEngine,
 )
+from src.learning.resource_access import get_resource_choices
+from src.learning.review_workspace import build_review_projection
 
 
 def _controlled_record(value: float, rating: int) -> dict[str, object]:
@@ -129,3 +135,55 @@ def test_incomplete_historical_experiment_cannot_claim_controlled_evidence(tmp_p
     assert not result.recommendations
     assert result.evidence_tier == "no_evidence"
     assert result.automation_eligible is False
+
+
+def test_learning_resources_use_current_app_state_projection() -> None:
+    app_state = SimpleNamespace(
+        resources={
+            "models": [{"title": "Display Model", "name": "runtime-model"}],
+            "vaes": [],
+            "samplers": ["Euler a"],
+            "schedulers": ["normal"],
+        }
+    )
+    controller = SimpleNamespace(app_controller=SimpleNamespace(app_state=app_state))
+    displays, mapping = get_resource_choices(controller, "models")
+    assert displays == ["Display Model"]
+    assert mapping == {"Display Model": "runtime-model"}
+    app_state.resources["models"] = [{"title": "Updated Model", "name": "updated-runtime"}]
+    refreshed, refreshed_mapping = get_resource_choices(controller, "models")
+    assert refreshed == ["Updated Model"]
+    assert refreshed_mapping["Updated Model"] == "updated-runtime"
+
+
+def test_learning_output_labels_are_readable_but_identity_is_full_id() -> None:
+    folder = build_learning_folder_label("Portrait / CFG sweep", "exp-abcdef012345")
+    filename = build_learning_filename_prefix(
+        stage="txt2img", variable="CFG Scale", value=7.0, variant_index=1
+    )
+    assert folder == "learning_Portrait_CFG_sweep_exp_abcd"
+    assert filename == "txt2img_CFG_Scale-7_0_v02_s"
+    assert len(filename) < 100
+
+
+def test_experiment_review_projection_is_grouped_and_next_unrated_is_stable() -> None:
+    variants = [
+        LearningVariant(
+            variant_id="v1", param_value="a", status="completed", image_refs=["a1", "a2"]
+        ),
+        LearningVariant(
+            variant_id="v2", param_value="b", status="completed", image_refs=["b1"]
+        ),
+    ]
+    ratings = {"a1": 4}
+    projection = build_review_projection(variants, lambda ref: ratings.get(ref))
+    assert [summary.sample_count for summary in projection.variants] == [2, 1]
+    assert [summary.rated_count for summary in projection.variants] == [1, 0]
+    assert projection.next_unrated is not None
+    assert projection.next_unrated.image_ref == "a2"
+    assert len(projection.samples) == 3
+    assert projection.review_complete is False
+    refreshed = build_review_projection(variants, lambda ref: {"a1": 4, "a2": 5}.get(ref))
+    assert refreshed.variants[0].rated_count == 2
+    assert refreshed.next_unrated is not None
+    assert refreshed.next_unrated.image_ref == "b1"

@@ -18,6 +18,23 @@ def _slug_fragment(value: str, *, limit: int = 18) -> str:
     return text[:limit]
 
 
+def build_learning_folder_label(experiment_name: str, experiment_id: str) -> str:
+    """Build a readable bounded folder label; the full ID remains authoritative."""
+    name = _slug_fragment(experiment_name, limit=36)
+    short_id = _slug_fragment(experiment_id, limit=8)
+    return f"learning_{name}_{short_id}"
+
+
+def build_learning_filename_prefix(
+    *, stage: str, variable: str, value: object, variant_index: int
+) -> str:
+    """Build a readable Learning artifact prefix within Windows-safe bounds."""
+    stage_part = _slug_fragment(stage, limit=12)
+    variable_part = _slug_fragment(variable, limit=18)
+    value_part = _slug_fragment(str(value), limit=18)
+    return f"{stage_part}_{variable_part}-{value_part}_v{int(variant_index) + 1:02d}_s"
+
+
 def build_experiment_identity(
     *,
     stage: str,

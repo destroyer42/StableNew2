@@ -292,6 +292,17 @@ Learning changes must include:
 - Token-efficient validation: focused deterministic Learning tests first, raw
   Ruff and controller ratchet, then GitHub required Python 3.11/3.12 CI. The
   local PR gate was attempted once and was blocked only by unavailable mypy.
-- Remaining acceptance work: an experiment-wide review workspace for comparison,
-  unrated-sample identification, rate-and-next navigation, and per-variant
-  rating summaries.
+- Resource-backed Model, VAE, sampler, and scheduler choices read the live
+  `AppStateV2.resources` projection through one Learning accessor; refreshes are
+  visible without restarting the application and display values map to runtime
+  values before compilation.
+- Learning output folders use a bounded sanitized experiment label plus a short
+  ID discriminator; artifact names expose tested variable/value and variant/sample
+  information. Full experiment/variant/job/NJR identity remains authoritative
+  metadata, and collision protection remains in the existing pipeline helpers.
+- The experiment-wide review workspace groups completed samples by variant/value,
+  shows rated/unrated state and per-variant summaries, supports deterministic
+  `Next Unrated` and bounded side-by-side comparison, reuses the existing
+  full-resolution viewer, and preserves operator focus during background completion.
+- Remaining acceptance work: aggregate operator smoke and end-to-end artifact /
+  recommendation verification.

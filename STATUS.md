@@ -7,8 +7,9 @@ Updated: 2026-09-15
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: `PR-LEARN-300` is IN PROGRESS: evidence integrity is
-  repaired, while the required experiment-wide review workspace remains.
+- Active objective: `PR-LEARN-300` is IN PROGRESS: evidence integrity and the
+  experiment-wide review workspace implementation are repaired; final aggregate
+  operator smoke/acceptance remains.
   `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
@@ -47,8 +48,8 @@ normal queue batch submission while
 preserving the accepted SVD runtime, backend, queue, history, replay, and
 artifact authorities.
 
-PR-LEARN-300 is **IN PROGRESS**. Its accepted evidence-integrity slice gives Designed image
-experiments now use one durable experiment identity and an immutable preview
+PR-LEARN-300 is **IN PROGRESS**. Its evidence-integrity and workflow slices give Designed
+image experiments one durable experiment identity and an immutable preview
 snapshot of effective prompt, model/VAE, stage configuration, tested variable,
 values, and sample count. All variants compile before one normal
 `JobService.submit_njrs` admission; each admitted NJR retains its ordinary
@@ -56,11 +57,16 @@ independent SQLite queue lifecycle. Ratings retain exact experiment/variant,
 job/artifact, and frozen executed-configuration evidence. Controlled ratings
 may recommend only the deliberately tested variable; incomplete historical rows
 remain readable but are excluded from recommendation inference. Learning remains image-stage-only, cannot mutate
-PromptPacks/NJRs/history, and has no autonomous tuning authority. `PR-VID-110`
-remains a separate product-owner decision. The remaining package blocker is an
-experiment-wide review workspace that compares samples across variants,
-identifies unrated samples, supports rate-and-next navigation, and surfaces
-per-variant rating summaries without stealing operator focus.
+PromptPacks/NJRs/history, and has no autonomous tuning authority. Resource-backed
+Model/VAE/Sampler/Scheduler choices now use the live `AppStateV2` projection and
+refresh path. Learning outputs retain full experiment identity in metadata while
+using readable experiment-folder and artifact-name labels; all variants of one
+experiment remain grouped. The review workspace now groups completed samples by
+variant/value, exposes rated state and per-variant summaries, supports deterministic
+Next Unrated and side-by-side comparison, and preserves the selected target during
+background completion. `PR-VID-110` remains a separate product-owner decision.
+Final aggregate operator smoke and end-to-end artifact/recommendation verification
+remain before acceptance.
 
 ## Approved post-v2.6 direction
 

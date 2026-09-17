@@ -339,6 +339,14 @@ only for the deliberately varied field. Review/curation is observational/manual
 evidence; incomplete historical rows remain readable but are excluded from
 recommendation inference.
 
+Learning resource-backed variables consume the live `AppStateV2.resources`
+projection through one Learning-owned accessor; Learning does not query WebUI
+independently or create a second resource authority. Learning output grouping is
+scoped by durable experiment identity while human-readable folder and artifact
+labels remain bounded presentation text. The experiment review workspace is a
+projection over canonical variant/image references and ratings, not a second
+history or artifact store.
+
 A backend-neutral image boundary does not create a new artifact or history
 authority. Backend results must normalize into the existing canonical artifact
 and execution-result contracts. Backend identity/model-family information may be

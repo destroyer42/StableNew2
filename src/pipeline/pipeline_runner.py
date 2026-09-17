@@ -19,6 +19,10 @@ from src.image_backends import (
     build_default_image_backend_registry,
     resolve_image_backend_id,
 )
+from src.learning.experiment_naming import (
+    build_learning_filename_prefix,
+    build_learning_folder_label,
+)
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.learning_record_builder import build_learning_record
 from src.learning.run_metadata import write_run_metadata
@@ -1095,8 +1099,9 @@ class PipelineRunner:
         if learning_context:
             # Learning experiments: use experiment_id so all variants share same folder
             cache_key = f"learning_{learning_context.experiment_id}"
-            folder_name = (
-                f"learning_{self._sanitize_output_component(learning_context.experiment_id)}"
+            folder_name = build_learning_folder_label(
+                learning_context.experiment_name,
+                learning_context.experiment_id,
             )
             logger.debug(f"Using learning experiment folder: {cache_key}")
         else:
@@ -1295,9 +1300,17 @@ class PipelineRunner:
                     from src.utils.file_io import build_safe_image_name
 
                     # Use 1-based indexing to match GUI display (p01 = "Prompt 1", v01 = "Variant 1")
-                    base_prefix = (
-                        f"{stage.stage_name}_p{prompt_row + 1:02d}_v{njr.variant_index + 1:02d}"
-                    )
+                    if learning_context:
+                        base_prefix = build_learning_filename_prefix(
+                            stage=stage.stage_name,
+                            variable=learning_context.variable_under_test,
+                            value=learning_context.variant_value,
+                            variant_index=learning_context.variant_index,
+                        )
+                    else:
+                        base_prefix = (
+                            f"{stage.stage_name}_p{prompt_row + 1:02d}_v{njr.variant_index + 1:02d}"
+                        )
                     matrix_values = (
                         getattr(njr, "matrix_slot_values", None)
                         if hasattr(njr, "matrix_slot_values")

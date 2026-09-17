@@ -81,7 +81,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | Portable SVD provenance | `src/video/svd_portable_provenance.py` -> `src/video/container_metadata.py` -> `src/video/svd_runner.py` -> `src/video/svd_registry.py` |
 | Windows runtime/bootstrap | `scripts/bootstrap_windows.ps1` -> `docs/runbooks/windows_runtime_bootstrap.md` |
 | Replay/learning | `replay_engine.py`, `src/learning/`, `job_history_store.py` |
-| `PR-LEARN-300` experiment evidence | `experiment_execution.py` -> `execution_controller.py` -> `learning_controller.py` -> `learning_record.py` / `recommendation_engine.py` |
+| `PR-LEARN-300` experiment workflow | `experiment_execution.py` -> `execution_controller.py` -> `learning_controller.py` -> `resource_access.py` / `experiment_naming.py` / `review_workspace.py` -> `learning_record.py` / `recommendation_engine.py` |
 | Tests/CI | `pyproject.toml`, `tools/ci/`, `.github/workflows/ci.yml` |
 | A1111 generation / transport | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |
 | A1111 process ownership / lifecycle | `src/api/webui_process_manager.py` -> `src/controller/webui_connection_controller.py` |

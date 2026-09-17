@@ -77,11 +77,13 @@ Roadmap progress is 13 of 13 MVP rows complete (100%). Native SVD, operator
 readiness, and clean-machine release proof are complete and integrated into
 `main`.
 
-Post-v2.6 `PR-LEARN-300` is IN PROGRESS. Its evidence-integrity slice now has
-immutable preview-to-queue evidence, one normal batch admission, focused
-rating lineage, and controlled-versus-observational recommendation rules. The
-remaining bounded work is the experiment-wide comparison/rate-and-next review
-workspace. `PR-VID-110` remains a separate product-owner decision and is not
+Post-v2.6 `PR-LEARN-300` is IN PROGRESS. Its evidence-integrity and workflow
+slices now have immutable preview-to-queue evidence, one normal batch admission,
+focused rating lineage, canonical live resource projection, readable Learning
+output naming, grouped experiment review, deterministic Next Unrated navigation,
+and controlled-versus-observational recommendation rules. Final aggregate
+operator smoke and end-to-end artifact/recommendation verification remain before
+acceptance. `PR-VID-110` remains a separate product-owner decision and is not
 started.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair

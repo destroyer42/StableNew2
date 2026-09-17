@@ -11,6 +11,7 @@ from typing import Any
 from src.gui.learning_state import LearningVariant
 from src.gui.ui_tokens import TOKENS
 from src.learning.rating_schema import blend_rating, get_active_categories
+from src.learning.review_workspace import build_review_projection
 
 try:
     from PIL import Image, ImageTk
@@ -48,7 +49,40 @@ class LearningReviewPanel(ttk.Frame):
         self.preview_column = ttk.Frame(self)
         self.preview_column.grid(row=0, column=0, sticky="nsew", padx=(5, 3), pady=5)
         self.preview_column.columnconfigure(0, weight=1)
-        self.preview_column.rowconfigure(0, weight=1)
+        self.preview_column.rowconfigure(0, weight=0)
+        self.preview_column.rowconfigure(1, weight=1)
+
+        # Experiment-wide review workspace.  The existing per-variant viewer
+        # remains the detail surface; this layer makes the durable experiment
+        # the navigation/comparison unit.
+        self.experiment_workspace = ttk.LabelFrame(
+            self.preview_column, text="Experiment Review", padding=5
+        )
+        self.experiment_workspace.grid(row=0, column=0, sticky="ew", pady=(0, 5))
+        self.experiment_workspace.columnconfigure(0, weight=1)
+        self.experiment_workspace.columnconfigure(1, weight=0)
+        self.workspace_status_var = tk.StringVar(value="No experiment selected")
+        ttk.Label(
+            self.experiment_workspace,
+            textvariable=self.workspace_status_var,
+            justify="left",
+        ).grid(row=0, column=0, columnspan=2, sticky="w")
+        self.variant_summary_list = tk.Listbox(
+            self.experiment_workspace,
+            height=4,
+            selectmode=tk.EXTENDED,
+            exportselection=False,
+        )
+        self.variant_summary_list.grid(row=1, column=0, sticky="ew", pady=(4, 0))
+        self.variant_summary_list.bind("<<ListboxSelect>>", self._on_workspace_variant_selected)
+        workspace_actions = ttk.Frame(self.experiment_workspace)
+        workspace_actions.grid(row=1, column=1, sticky="ns", padx=(6, 0), pady=(4, 0))
+        ttk.Button(
+            workspace_actions, text="Next Unrated", command=self._on_next_unrated
+        ).pack(fill="x")
+        ttk.Button(
+            workspace_actions, text="Compare Selected", command=self._on_compare_selected
+        ).pack(fill="x", pady=(4, 0))
 
         # Right: status / metadata / recommendations / rating stack
         self.side_column = ttk.Frame(self)
@@ -123,7 +157,7 @@ class LearningReviewPanel(ttk.Frame):
 
         # Image display section
         self.image_frame = ttk.LabelFrame(self.preview_column, text="Images", padding=5)
-        self.image_frame.grid(row=0, column=0, sticky="nsew")
+        self.image_frame.grid(row=1, column=0, sticky="nsew")
         self.image_frame.columnconfigure(0, weight=1)
         self.image_frame.rowconfigure(1, weight=1)  # Thumbnail row gets weight
 
@@ -160,6 +194,7 @@ class LearningReviewPanel(ttk.Frame):
         self._viewer_canvas: tk.Canvas | None = None
         self._viewer_photo: Any = None
         self._viewer_image_id: int | None = None
+        self._workspace_syncing = False
 
         # Rating section
         self.rating_frame = ttk.LabelFrame(self.side_column, text="Rating", padding=5)
@@ -219,6 +254,7 @@ class LearningReviewPanel(ttk.Frame):
         """Display results for a completed learning variant."""
         self.current_variant = variant
         self.current_experiment = experiment
+        self._refresh_experiment_workspace(experiment)
 
         # Update status
         self.status_label.config(text=f"Status: {variant.status.title()}")
@@ -268,6 +304,130 @@ class LearningReviewPanel(ttk.Frame):
             except Exception:
                 continue
 
+        # Preserve the review target across refreshes while still making the
+        # current image available for deterministic rate-and-next navigation.
+        selected_image_index = int(
+            getattr(getattr(self, "learning_controller", None), "learning_state", None)
+            and getattr(
+                getattr(self.learning_controller, "learning_state", None),
+                "selected_image_index",
+                0,
+            )
+            or 0
+        )
+        if self._image_full_paths:
+            selected_image_index = max(0, min(selected_image_index, len(self._image_full_paths) - 1))
+            self.image_listbox.selection_set(selected_image_index)
+            self.image_listbox.activate(selected_image_index)
+            self._on_image_selected(None)
+            existing_rating = self._get_rating_for_image(
+                self._image_full_paths[selected_image_index]
+            )
+            self.rating_var.set(int(existing_rating or 0))
+
+    def _refresh_experiment_workspace(self, experiment: Any | None = None) -> None:
+        controller = self._get_learning_controller()
+        state = getattr(controller, "learning_state", None) if controller is not None else None
+        variants = list(getattr(state, "plan", []) or [])
+        if experiment is None:
+            experiment = getattr(state, "current_experiment", None)
+        self._workspace_variants = variants
+        projection = build_review_projection(variants, self._get_rating_for_image)
+        self._review_projection = projection
+        if not hasattr(self, "variant_summary_list"):
+            return
+        self.variant_summary_list.delete(0, tk.END)
+        total = len(projection.samples)
+        rated = sum(sample.rating is not None for sample in projection.samples)
+        for summary in projection.variants:
+            label = (
+                f"{getattr(experiment, 'variable_under_test', 'Value')}="
+                f"{summary.value} | {summary.status.title()} | "
+                f"{summary.rated_count}/{summary.sample_count} rated"
+            )
+            self.variant_summary_list.insert(tk.END, label)
+        state_label = (
+            "complete"
+            if projection.review_complete
+            else ("ready to review" if projection.execution_complete else "in progress")
+        )
+        name = str(getattr(experiment, "name", "experiment") or "experiment")
+        self.workspace_status_var.set(
+            f"{name} | {getattr(experiment, 'variable_under_test', 'value')} | "
+            f"{rated}/{total} samples rated | Experiment {state_label}"
+        )
+        selected = getattr(state, "selected_variant", None) if state is not None else None
+        if selected in variants:
+            self._workspace_syncing = True
+            try:
+                self.variant_summary_list.selection_clear(0, tk.END)
+                self.variant_summary_list.selection_set(variants.index(selected))
+                self.variant_summary_list.see(variants.index(selected))
+            finally:
+                self._workspace_syncing = False
+
+    def _on_workspace_variant_selected(self, _event: tk.Event | None = None) -> None:
+        if getattr(self, "_workspace_syncing", False):
+            return
+        selection = self.variant_summary_list.curselection()
+        if not selection:
+            return
+        index = int(selection[0])
+        if index < 0 or index >= len(getattr(self, "_workspace_variants", [])):
+            return
+        variant = self._workspace_variants[index]
+        controller = self._get_learning_controller()
+        if controller is not None and hasattr(controller, "on_variant_selected"):
+            controller.on_variant_selected(index)
+        else:
+            self.display_variant_results(variant, self.current_experiment)
+
+    def _on_next_unrated(self) -> None:
+        """Select the first unrated sample in stable variant/image order."""
+        variants = list(getattr(self, "_workspace_variants", []) or [])
+        controller = self._get_learning_controller()
+        projection = build_review_projection(variants, self._get_rating_for_image)
+        sample = projection.next_unrated
+        if sample is not None:
+            variant = variants[sample.variant_index]
+            if controller is not None:
+                state = getattr(controller, "learning_state", None)
+                if state is not None:
+                    state.selected_variant = variant
+                    state.selected_image_index = sample.image_index
+            self.display_variant_results(variant, self.current_experiment)
+            return
+        self.feedback_label.config(text="All completed samples are rated", foreground="green")
+
+    def _on_compare_selected(self) -> None:
+        """Open a bounded side-by-side comparison for selected variant samples."""
+        selected = self.variant_summary_list.curselection()
+        variants = list(getattr(self, "_workspace_variants", []) or [])
+        chosen = [variants[index] for index in selected if 0 <= index < len(variants)]
+        if not chosen and self.current_variant is not None:
+            chosen = [self.current_variant]
+        image_paths = [str(ref) for variant in chosen for ref in (getattr(variant, "image_refs", []) or [])]
+        image_paths = image_paths[:4]
+        if not image_paths:
+            self.feedback_label.config(text="No completed samples to compare", foreground="red")
+            return
+        if not PIL_AVAILABLE:
+            self.feedback_label.config(text="Comparison requires Pillow", foreground="red")
+            return
+        window = tk.Toplevel(self)
+        window.title("Learning Experiment Comparison")
+        for column, image_path in enumerate(image_paths):
+            frame = ttk.Frame(window, padding=4)
+            frame.grid(row=0, column=column, sticky="nsew")
+            try:
+                image = Image.open(Path(image_path)).convert("RGB")
+                image.thumbnail((360, 360))
+                photo = ImageTk.PhotoImage(image)
+                label = ttk.Label(frame, image=photo, text=Path(image_path).name, compound="top")
+                label.image = photo
+                label.pack()
+            except Exception as exc:
+                ttk.Label(frame, text=f"Unable to load\n{Path(image_path).name}\n{exc}").pack()
     def _update_metadata(self, variant: LearningVariant, experiment: Any | None) -> None:
         """Update the metadata display."""
         self.metadata_text.config(state="normal")
@@ -291,6 +451,10 @@ class LearningReviewPanel(ttk.Frame):
         if selection and hasattr(self, "_image_full_paths"):
             index = selection[0]
             if 0 <= index < len(self._image_full_paths):
+                controller = self._get_learning_controller()
+                state = getattr(controller, "learning_state", None) if controller else None
+                if state is not None:
+                    state.selected_image_index = int(index)
                 full_path = self._image_full_paths[index]
                 # Load image into thumbnail
                 self.image_thumbnail.load_image(full_path)
