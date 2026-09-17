@@ -282,7 +282,7 @@ Learning changes must include:
 - frozen-preview, all-or-none admission, controlled-evidence, and review-focus
   regression coverage
 
-9. PR-LEARN-300 execution record
+9. PR-LEARN-300 implementation checkpoint
 
 - Execution profile: Standard, Local/Desktop; model recommendation was
   GPT-5.6 Terra High for cross-surface lifecycle/evidence work.
@@ -292,3 +292,6 @@ Learning changes must include:
 - Token-efficient validation: focused deterministic Learning tests first, raw
   Ruff and controller ratchet, then GitHub required Python 3.11/3.12 CI. The
   local PR gate was attempted once and was blocked only by unavailable mypy.
+- Remaining acceptance work: an experiment-wide review workspace for comparison,
+  unrated-sample identification, rate-and-next navigation, and per-variant
+  rating summaries.
