@@ -2,7 +2,7 @@
 
 Status: CURRENT AND ACTIVE
 Owner: Rob
-Updated: 2026-09-14
+Updated: 2026-09-16
 
 This is the only active roadmap. `STATUS.md` identifies the work happening now;
 Git history preserves completed plans and earlier sequencing.
