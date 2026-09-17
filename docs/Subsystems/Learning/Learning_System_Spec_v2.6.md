@@ -165,8 +165,7 @@ A minimum floor of `0.05` is always applied so no record's weight reaches zero.
 
 Records without subscore/context detail receive zero rating-detail adjustment.
 Historical experiment rows lacking a durable ID plus frozen snapshot and executed
-configuration remain readable, but are classified as observational/manual-only;
-they cannot establish controlled or automatic recommendation evidence.
+configuration remain readable, but are excluded from recommendation inference.
 
 
 Supported patterns:
@@ -205,7 +204,8 @@ Rules:
   insufficient
 - sparse controlled and observational review/curation evidence remains
   manual-only; it never becomes automatic evidence
-- incomplete historical experiment rows are observational/manual-only
+- incomplete historical experiment rows remain readable but are excluded from
+  recommendation inference
 - unsupported or unknown record kinds must be ignored
 - adaptive refinement context may weight or stratify recommendations, but it
   must not bypass existing evidence-tier protections

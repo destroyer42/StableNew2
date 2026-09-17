@@ -333,6 +333,10 @@ class RecommendationEngine:
                 and str(metadata.get("variable_under_test") or "").strip()
                 and metadata.get("variant_value") is not None
             )
+            if record_kind == "learning_experiment_rating" and not controlled_complete:
+                # Preserve the JSONL row for inspection, but do not infer a
+                # parameter recommendation from an unverifiable experiment.
+                continue
 
             # Only consider records with user ratings
             user_rating = metadata.get("user_rating")
@@ -648,7 +652,12 @@ class RecommendationEngine:
                     param_context_weights[parameter][value].append(weight)
 
             # If this record is from a variable test, also track that parameter
-            if record["variable_under_test"] and record["variant_value"] is not None:
+            if (
+                record["record_kind"] == "learning_experiment_rating"
+                and bool(record.get("controlled_complete"))
+                and record["variable_under_test"]
+                and record["variant_value"] is not None
+            ):
                 param_name = record["variable_under_test"].lower().replace(" ", "_")
                 param_groups[param_name][record["variant_value"]].append(rating)
                 param_raw[param_name][record["variant_value"]].append(float(record["rating"]))

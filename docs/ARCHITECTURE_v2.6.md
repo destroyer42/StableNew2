@@ -335,9 +335,9 @@ frozen executed configuration travel through ordinary immutable NJRs and rating
 records. The experiment planner compiles all variants before exactly one normal
 `JobService.submit_njrs` call; SQLite queue/history retain the only lifecycle
 authority for each independent job. Controlled experiment ratings are causal
-only for the deliberately varied field. Review/curation and incomplete
-historical rows are observational/manual evidence and cannot create automatic
-or unsupported parameter recommendations.
+only for the deliberately varied field. Review/curation is observational/manual
+evidence; incomplete historical rows remain readable but are excluded from
+recommendation inference.
 
 A backend-neutral image boundary does not create a new artifact or history
 authority. Backend results must normalize into the existing canonical artifact

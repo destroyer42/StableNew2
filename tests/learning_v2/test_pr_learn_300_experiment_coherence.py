@@ -127,4 +127,5 @@ def test_incomplete_historical_experiment_cannot_claim_controlled_evidence(tmp_p
     result = RecommendationEngine(records_path).recommend("portrait", "txt2img")
 
     assert not result.recommendations
+    assert result.evidence_tier == "no_evidence"
     assert result.automation_eligible is False

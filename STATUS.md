@@ -55,8 +55,7 @@ values, and sample count. All variants compile before one normal
 independent SQLite queue lifecycle. Ratings retain exact experiment/variant,
 job/artifact, and frozen executed-configuration evidence. Controlled ratings
 may recommend only the deliberately tested variable; incomplete historical rows
-remain readable as manual observational evidence and cannot become automatic
-or causal recommendations. Learning remains image-stage-only, cannot mutate
+remain readable but are excluded from recommendation inference. Learning remains image-stage-only, cannot mutate
 PromptPacks/NJRs/history, and has no autonomous tuning authority. `PR-VID-110`
 remains a separate product-owner decision.
 
