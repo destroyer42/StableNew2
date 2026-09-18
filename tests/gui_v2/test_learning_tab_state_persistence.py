@@ -94,7 +94,7 @@ def test_learning_tab_persists_and_restores_resume_session() -> None:
             tab.destroy()
 
 
-def test_learning_tab_places_review_panel_below_plan_for_larger_preview() -> None:
+def test_learning_tab_places_plan_and_review_in_adjustable_vertical_workspace() -> None:
     root = get_shared_tk_root()
     if root is None:
         return
@@ -121,11 +121,10 @@ def test_learning_tab_places_review_panel_below_plan_for_larger_preview() -> Non
             review_grid = tab.review_panel.grid_info()
 
             assert int(plan_grid["row"]) == 0
-            assert int(plan_grid["column"]) == 1
-            assert int(plan_grid["columnspan"]) == 2
-            assert int(review_grid["row"]) == 1
-            assert int(review_grid["column"]) == 1
-            assert int(review_grid["columnspan"]) == 2
+            assert int(plan_grid["column"]) == 0
+            assert int(review_grid["row"]) == 0
+            assert int(review_grid["column"]) == 0
+            assert str(tab.designed_horizontal_panes.cget("orient")) == "horizontal"
 
             tab.destroy()
 
@@ -144,8 +143,10 @@ def test_learning_review_panel_prioritizes_image_column() -> None:
 
         assert int(preview_grid["column"]) == 0
         assert int(side_grid["column"]) == 1
-        assert int(image_grid["row"]) == 0
+        assert int(image_grid["row"]) == 1
         assert int(rating_grid["row"]) == 3
+        assert panel.rating_action_strip.winfo_manager() == "grid"
+        assert panel.rating_details_scroll.winfo_manager() == "pack"
         assert int(panel.grid_columnconfigure(0)["weight"]) > int(
             panel.grid_columnconfigure(1)["weight"]
         )

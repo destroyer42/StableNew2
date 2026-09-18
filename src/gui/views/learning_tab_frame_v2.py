@@ -193,18 +193,18 @@ class LearningTabFrame(ttk.Frame):
         ).grid(row=0, column=2, sticky="e", padx=8)
         ttk.Button(
             self.header_frame,
-            text="Save",
-            command=self._on_save_experiment,
+            text="New Experiment",
+            command=self._on_new_experiment,
         ).grid(row=0, column=5, sticky="e", padx=(4, 0))
         ttk.Button(
             self.header_frame,
-            text="Save As",
-            command=self._on_save_experiment_as,
+            text="Clone as New",
+            command=self._on_clone_experiment,
         ).grid(row=0, column=6, sticky="e", padx=(4, 0))
         ttk.Button(
             self.header_frame,
-            text="Load",
-            command=self._on_load_experiment,
+            text="Experiment Library",
+            command=self._on_open_experiment_library,
         ).grid(row=0, column=7, sticky="e", padx=(4, 0))
         ttk.Button(
             self.header_frame,
@@ -314,7 +314,7 @@ class LearningTabFrame(ttk.Frame):
 
         # ---- Tab 2: Discovered Review Inbox ----
         self._discovered_tab_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
-        self._mode_notebook.add(self._discovered_tab_frame, text="Discovered Review Inbox")
+        self._mode_notebook.add(self._discovered_tab_frame, text="Discovered Outputs")
         configure_grid_columns(self._discovered_tab_frame, get_two_pane_workspace_column_specs())
         self._discovered_tab_frame.rowconfigure(1, weight=1)
 
@@ -829,10 +829,11 @@ class LearningTabFrame(ttk.Frame):
             if isinstance(payload, dict):
                 experiment = self.learning_controller.learning_state.current_experiment
                 display_name = str(getattr(experiment, "name", "") or "Learning Experiment")
+                durable_id = str(getattr(experiment, "experiment_id", "") or "") or None
                 handle = self.experiment_store.save_session(
                     display_name=display_name,
                     payload=payload,
-                    experiment_id=self._active_experiment_id,
+                    experiment_id=durable_id,
                 )
                 self._active_experiment_id = handle.experiment_id
             ui_store = get_ui_state_store()
@@ -875,10 +876,13 @@ class LearningTabFrame(ttk.Frame):
             return False
         experiment = self.learning_controller.learning_state.current_experiment
         display_name = str(getattr(experiment, "name", "") or "Learning Experiment")
+        # Durable experiment identity, not the active tab pointer, owns the
+        # session directory.  The explicit Clone action creates a new ID first.
+        durable_id = str(getattr(experiment, "experiment_id", "") or "") or None
         handle = self.experiment_store.save_session(
             display_name=display_name,
             payload=payload,
-            experiment_id=None if force_new else self._active_experiment_id,
+            experiment_id=durable_id,
         )
         self._active_experiment_id = handle.experiment_id
         self._persist_learning_session_state()
@@ -891,6 +895,78 @@ class LearningTabFrame(ttk.Frame):
     def _on_save_experiment_as(self) -> None:
         if not self._save_to_store(force_new=True):
             messagebox.showinfo("Learning", "No experiment is available to save.")
+
+    def _on_new_experiment(self) -> None:
+        self.learning_controller.new_experiment_draft()
+        self._active_experiment_id = None
+        panel = getattr(self, "experiment_panel", None)
+        if panel is not None and hasattr(panel, "restore_state"):
+            try:
+                from src.gui.learning_state import LearningExperiment
+
+                panel.restore_state(LearningExperiment())
+            except Exception:
+                pass
+
+    def _on_clone_experiment(self) -> None:
+        clone = self.learning_controller.clone_current_experiment_as_new()
+        if clone is None:
+            messagebox.showinfo("Learning", "No experiment is available to clone.")
+            return
+        self._active_experiment_id = clone.experiment_id
+        self._restore_experiment_panel()
+        self._persist_learning_session_state()
+
+    def _on_open_experiment_library(self) -> None:
+        handles = self.experiment_store.list_handles()
+        window = tk.Toplevel(self)
+        window.title("Learning Experiment Library")
+        window.geometry("980x480")
+        window.minsize(720, 300)
+        window.columnconfigure(0, weight=1)
+        window.rowconfigure(0, weight=1)
+        columns = ("id", "variable", "stage", "status", "variants", "images", "review", "updated")
+        tree = ttk.Treeview(window, columns=columns, show="tree headings", selectmode="browse")
+        tree.heading("#0", text="Experiment")
+        headings = {
+            "id": "ID", "variable": "Variable", "stage": "Stage", "status": "Status",
+            "variants": "Variants", "images": "Images", "review": "Review", "updated": "Updated",
+        }
+        for column in columns:
+            tree.heading(column, text=headings[column])
+            tree.column(column, width=90, anchor="w")
+        tree.column("#0", width=180)
+        tree.grid(row=0, column=0, sticky="nsew", padx=6, pady=6)
+        scrollbar = ttk.Scrollbar(window, orient="vertical", command=tree.yview)
+        tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar.grid(row=0, column=1, sticky="ns", pady=6)
+        for handle in handles:
+            payload = self.experiment_store.load_session(handle.experiment_id) or {}
+            experiment = dict(payload.get("current_experiment") or {})
+            plan = list(payload.get("plan") or [])
+            completed = sum(int(item.get("completed_images", 0) or 0) for item in plan if isinstance(item, dict))
+            total = sum(int(item.get("planned_images", 0) or 0) for item in plan if isinstance(item, dict))
+            ratings = self.learning_record_writer.get_ratings_for_experiment(handle.experiment_id)
+            tree.insert(
+                "", "end", iid=handle.experiment_id, text=handle.display_name,
+                values=(handle.experiment_id[-8:], experiment.get("variable_under_test", ""),
+                        experiment.get("stage", ""), payload.get("workflow_state", "draft"),
+                        len(plan), f"{completed}/{total}", f"{len(ratings)}/{completed}",
+                        handle.updated_at.replace("T", " ")[:19]),
+            )
+        actions = ttk.Frame(window, padding=6)
+        actions.grid(row=1, column=0, columnspan=2, sticky="ew")
+        def _open_selected() -> None:
+            selection = tree.selection()
+            if not selection:
+                return
+            experiment_id = str(selection[0])
+            if self._restore_from_store_payload(self.experiment_store.load_session(experiment_id), experiment_id=experiment_id):
+                window.destroy()
+        ttk.Button(actions, text="Open / Review", command=_open_selected).pack(side="left")
+        ttk.Button(actions, text="Resume", command=_open_selected).pack(side="left", padx=(4, 0))
+        ttk.Button(actions, text="New Experiment", command=lambda: (self._on_new_experiment(), window.destroy())).pack(side="right")
+        tree.bind("<Double-1>", lambda _event: _open_selected())
 
     def _on_load_experiment(self) -> None:
         session_path = filedialog.askopenfilename(
@@ -1041,10 +1117,11 @@ class LearningTabFrame(ttk.Frame):
 
     def _set_discovered_scan_root(self, scan_root: str | None) -> None:
         self._custom_discovered_scan_root = str(scan_root) if scan_root else None
+        effective_root = self._get_effective_discovered_scan_root()
         if hasattr(self, "discovered_inbox_panel"):
-            self.discovered_inbox_panel.set_scan_root(self._custom_discovered_scan_root)
+            self.discovered_inbox_panel.set_scan_root(effective_root)
         if hasattr(self, "staged_inbox_panel"):
-            self.staged_inbox_panel.set_scan_root(self._custom_discovered_scan_root)
+            self.staged_inbox_panel.set_scan_root(effective_root)
 
     def _on_pick_discovered_scan_root(self) -> None:
         selected = filedialog.askdirectory(
@@ -1066,8 +1143,9 @@ class LearningTabFrame(ttk.Frame):
             on_complete=self._on_discovered_scan_complete,
         )
 
-    def _on_discovered_scan_complete(self, new_count: int) -> None:
+    def _on_discovered_scan_complete(self, result: Any) -> None:
         self.discovered_inbox_panel.set_scanning(False)
+        self.discovered_inbox_panel.set_scan_result(result)
         self._refresh_discovered_inbox()
 
     def _on_discovered_rate_item(self, item_id: str, rating: int) -> None:
@@ -1728,8 +1806,9 @@ class LearningTabFrame(ttk.Frame):
             on_complete=self._on_staged_scan_complete,
         )
 
-    def _on_staged_scan_complete(self, new_count: int) -> None:
+    def _on_staged_scan_complete(self, result: Any) -> None:
         self.staged_inbox_panel.set_scanning(False)
+        self.staged_inbox_panel.set_scan_result(result)
         self._refresh_staged_curation_inbox()
 
     def _clear_staged_group(self) -> None:

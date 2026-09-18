@@ -11,6 +11,7 @@ from typing import Any
 from src.gui.learning_state import LearningVariant
 from src.gui.ui_tokens import TOKENS
 from src.gui.widgets.image_thumbnail import ImageThumbnail
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.learning.rating_schema import blend_rating, get_active_categories
 from src.learning.review_workspace import build_review_projection
 
@@ -197,13 +198,18 @@ class LearningReviewPanel(ttk.Frame):
         self._viewer_fit_mode = "fit"
         self._viewer_resize_after_id: str | None = None
         self._workspace_syncing = False
+        self._active_image_ref: str | None = None
 
         # Rating section
         self.rating_frame = ttk.LabelFrame(self.side_column, text="Rating", padding=5)
         self.rating_frame.grid(row=3, column=0, sticky="nsew")
+        self.rating_details_scroll = ScrollableFrame(self.rating_frame)
+        self.rating_details_scroll.pack(fill="both", expand=True)
+        rating_details = self.rating_details_scroll.inner
+        rating_details.columnconfigure(0, weight=1)
 
         # Rating controls
-        rating_frame = ttk.Frame(self.rating_frame)
+        rating_frame = ttk.Frame(rating_details)
         rating_frame.pack(fill="x")
 
         ttk.Label(rating_frame, text="Rating:").pack(side="left")
@@ -214,7 +220,7 @@ class LearningReviewPanel(ttk.Frame):
             btn.pack(side="left")
             self.rating_buttons.append(btn)
 
-        self.context_frame = ttk.LabelFrame(self.rating_frame, text="Context", padding=5)
+        self.context_frame = ttk.LabelFrame(rating_details, text="Context", padding=5)
         self.context_frame.pack(fill="x", pady=(8, 6))
         for index, (key, var) in enumerate(self._context_flag_vars.items()):
             ttk.Checkbutton(
@@ -224,14 +230,14 @@ class LearningReviewPanel(ttk.Frame):
                 command=self._rebuild_subscore_controls,
             ).grid(row=index // 3, column=index % 3, sticky="w", padx=(0, 8), pady=2)
 
-        self.subscore_frame = ttk.LabelFrame(self.rating_frame, text="Sub-scores", padding=5)
+        self.subscore_frame = ttk.LabelFrame(rating_details, text="Sub-scores", padding=5)
         self.subscore_frame.pack(fill="x", pady=(0, 6))
         self._rebuild_subscore_controls()
 
         # Notes
-        ttk.Label(self.rating_frame, text="Notes:").pack(anchor="w")
+        ttk.Label(rating_details, text="Notes:").pack(anchor="w")
         self.notes_text = tk.Text(
-            self.rating_frame,
+            rating_details,
             height=3,
             width=40,
             bg=TOKENS.colors.surface_secondary,
@@ -240,20 +246,38 @@ class LearningReviewPanel(ttk.Frame):
         )
         self.notes_text.pack(fill="x")
 
-        # Rate button
-        self.rate_button = ttk.Button(
-            self.rating_frame, text="Submit Rating", command=self._submit_rating
-        )
-        self.rate_button.pack(pady=(5, 0))
-
         # Feedback label
-        self.feedback_label = ttk.Label(self.rating_frame, text="")
+        self.feedback_label = ttk.Label(rating_details, text="")
         self.feedback_label.pack(pady=(2, 0))
+
+        # This strip stays outside the scrollable/detail stack so persistence
+        # is reachable at constrained review-pane heights.
+        self.rating_action_strip = ttk.Frame(self.side_column, padding=(0, 5))
+        self.rating_action_strip.grid(row=4, column=0, sticky="ew")
+        self.rate_button = ttk.Button(
+            self.rating_action_strip, text="Save Rating", command=self._submit_rating
+        )
+        self.rate_button.pack(side="left")
+        self.save_next_button = ttk.Button(
+            self.rating_action_strip, text="Save & Next", command=self._save_and_next
+        )
+        self.save_next_button.pack(side="left", padx=(4, 0))
+        self.discard_draft_button = ttk.Button(
+            self.rating_action_strip, text="Discard Draft", command=self._discard_draft
+        )
+        self.discard_draft_button.pack(side="left", padx=(4, 0))
+        self.send_to_curation_button = ttk.Button(
+            self.rating_action_strip,
+            text="Send Selected to Curation",
+            command=self._send_selected_to_curation,
+        )
+        self.send_to_curation_button.pack(side="right")
 
     def display_variant_results(
         self, variant: LearningVariant, experiment: Any | None = None
     ) -> None:
         """Display results for a completed learning variant."""
+        self._capture_current_draft()
         self.current_variant = variant
         self.current_experiment = experiment
         self._refresh_experiment_workspace(experiment)
@@ -282,16 +306,14 @@ class LearningReviewPanel(ttk.Frame):
             self.image_listbox.insert(tk.END, display)
             self._image_full_paths.append(image_ref)
 
-        # Reset rating form
-        self.rating_var.set(0)
-        self.notes_text.delete(1.0, tk.END)
         self.feedback_label.config(text="")
-        for var in self._subscore_vars.values():
-            var.set(0)
 
         # Enable/disable rating controls based on status
         state = "normal" if variant.status == "completed" and variant.image_refs else "disabled"
         self.rate_button.config(state=state)
+        self.save_next_button.config(state=state)
+        self.discard_draft_button.config(state=state)
+        self.send_to_curation_button.config(state=state)
         for btn in self.rating_buttons:
             btn.config(state=state)
         self.notes_text.config(state=tk.NORMAL if state == "normal" else tk.DISABLED)
@@ -322,10 +344,6 @@ class LearningReviewPanel(ttk.Frame):
             self.image_listbox.selection_set(selected_image_index)
             self.image_listbox.activate(selected_image_index)
             self._on_image_selected(None)
-            existing_rating = self._get_rating_for_image(
-                self._image_full_paths[selected_image_index]
-            )
-            self.rating_var.set(int(existing_rating or 0))
 
     def _refresh_experiment_workspace(self, experiment: Any | None = None) -> None:
         controller = self._get_learning_controller()
@@ -339,8 +357,12 @@ class LearningReviewPanel(ttk.Frame):
         if not hasattr(self, "variant_summary_list"):
             return
         self.variant_summary_list.delete(0, tk.END)
-        total = len(projection.samples)
         rated = sum(sample.rating is not None for sample in projection.samples)
+        counts = (
+            controller.get_review_counts()
+            if controller is not None and hasattr(controller, "get_review_counts")
+            else {"saved": rated, "draft": 0, "unrated": max(0, len(projection.samples) - rated)}
+        )
         for summary in projection.variants:
             label = (
                 f"{getattr(experiment, 'variable_under_test', 'Value')}="
@@ -356,7 +378,8 @@ class LearningReviewPanel(ttk.Frame):
         name = str(getattr(experiment, "name", "experiment") or "experiment")
         self.workspace_status_var.set(
             f"{name} | {getattr(experiment, 'variable_under_test', 'value')} | "
-            f"{rated}/{total} samples rated | Experiment {state_label}"
+            f"{counts['saved']} saved / {counts['draft']} draft / {counts['unrated']} unrated | "
+            f"Experiment {state_label}"
         )
         selected = getattr(state, "selected_variant", None) if state is not None else None
         if selected in variants:
@@ -467,6 +490,7 @@ class LearningReviewPanel(ttk.Frame):
 
     def _on_image_selected(self, event: tk.Event[tk.Listbox]) -> None:
         """Handle image selection from the list."""
+        self._capture_current_draft()
         selection = self.image_listbox.curselection()
         if selection and hasattr(self, "_image_full_paths"):
             index = selection[0]
@@ -478,8 +502,11 @@ class LearningReviewPanel(ttk.Frame):
                 full_path = self._image_full_paths[index]
                 # Load image into thumbnail
                 self.image_thumbnail.load_image(full_path)
+                self._active_image_ref = full_path
+                self._load_review_state(full_path)
         else:
             self.image_thumbnail.clear()
+            self._active_image_ref = None
 
     def _on_open_selected_image(self, _event: tk.Event | None = None) -> None:
         """Open the currently selected image in a resizable viewer."""
@@ -667,10 +694,67 @@ class LearningReviewPanel(ttk.Frame):
             pass
         return None
 
-    def _submit_rating(self) -> None:
-        """Submit the rating for the selected image."""
-        if not self.current_variant:
+    def _capture_current_draft(self) -> None:
+        """Checkpoint editable review controls before changing the current artifact."""
+        image_ref = self._active_image_ref
+        controller = self._get_learning_controller()
+        if not image_ref or controller is None or not hasattr(controller, "save_review_draft"):
             return
+        rating = int(self.rating_var.get() or 0)
+        notes = self.notes_text.get("1.0", tk.END).strip()
+        details = self._build_rating_details(rating)
+        if rating or notes or details["subscores"] or any(details["context_flags"].values()):
+            controller.save_review_draft(
+                image_ref,
+                {
+                    "overall_rating": rating,
+                    "notes": notes,
+                    "context_flags": details["context_flags"],
+                    "subscores": details["subscores"],
+                    "dirty": True,
+                },
+            )
+
+    def _load_review_state(self, image_ref: str) -> None:
+        controller = self._get_learning_controller()
+        draft = (
+            controller.get_review_draft(image_ref)
+            if controller is not None and hasattr(controller, "get_review_draft")
+            else None
+        )
+        saved = (
+            controller.get_rating_details_for_image(image_ref)
+            if controller is not None and hasattr(controller, "get_rating_details_for_image")
+            else None
+        )
+        payload = dict(draft or saved or {})
+        self.rating_var.set(int(payload.get("overall_rating", 0) or 0))
+        context = dict(payload.get("context_flags") or {})
+        for key, var in self._context_flag_vars.items():
+            var.set(bool(context.get(key, key == "people" and not payload)))
+        self._rebuild_subscore_controls()
+        for key, value in dict(payload.get("subscores") or {}).items():
+            if key in self._subscore_vars:
+                self._subscore_vars[key].set(int(value or 0))
+        self.notes_text.config(state=tk.NORMAL)
+        self.notes_text.delete("1.0", tk.END)
+        self.notes_text.insert("1.0", str(payload.get("notes") or ""))
+        if draft:
+            self.feedback_label.config(text="Unsaved draft", foreground="orange")
+
+    def _selected_image_ref(self) -> str | None:
+        selection = self.image_listbox.curselection()
+        if not selection or not hasattr(self, "_image_full_paths"):
+            return None
+        index = int(selection[0])
+        if not 0 <= index < len(self._image_full_paths):
+            return None
+        return str(self._image_full_paths[index])
+
+    def _submit_rating(self) -> bool:
+        """Persist the selected artifact's rating and its complete detail payload."""
+        if not self.current_variant:
+            return False
 
         rating = self.rating_var.get()
         notes = self.notes_text.get(1.0, tk.END).strip()
@@ -678,20 +762,13 @@ class LearningReviewPanel(ttk.Frame):
 
         if rating == 0:
             self.feedback_label.config(text="Please select a rating", foreground="red")
-            return
+            return False
 
         # Get selected image
-        selection = self.image_listbox.curselection()
-        if not selection:
+        image_ref = self._selected_image_ref()
+        if not image_ref:
             self.feedback_label.config(text="Please select an image to rate", foreground="red")
-            return
-
-        image_index = selection[0]
-        if not hasattr(self, "_image_full_paths") or image_index >= len(self._image_full_paths):
-            self.feedback_label.config(text="Invalid image selection", foreground="red")
-            return
-
-        image_ref = self._image_full_paths[image_index]
+            return False
 
         # Check if already rated
         existing_rating = self._get_rating_for_image(image_ref)
@@ -703,7 +780,7 @@ class LearningReviewPanel(ttk.Frame):
                 "Override Rating",
                 f"This image already has a rating of {existing_rating}.\nOverride with new rating?",
             ):
-                return
+                return False
 
         # Call controller to record rating
         controller = self._get_learning_controller()
@@ -716,16 +793,46 @@ class LearningReviewPanel(ttk.Frame):
                     )
                     # Refresh display to show new rating indicator
                     if self.current_variant and self.current_experiment:
+                        self._active_image_ref = None
                         self.display_variant_results(self.current_variant, self.current_experiment)
-                    # Clear form
-                    self.rating_var.set(0)
-                    self.notes_text.delete(1.0, tk.END)
+                    return True
                 except Exception as e:
                     self.feedback_label.config(text=f"Error saving rating: {e}", foreground="red")
             else:
                 self.feedback_label.config(text="Rating system not available", foreground="red")
         else:
             self.feedback_label.config(text="Controller not available", foreground="red")
+        return False
+
+    def _save_and_next(self) -> None:
+        if self._submit_rating():
+            self._on_next_unrated()
+
+    def _discard_draft(self) -> None:
+        image_ref = self._selected_image_ref()
+        controller = self._get_learning_controller()
+        if not image_ref or controller is None:
+            return
+        discard = getattr(controller, "discard_review_draft", None)
+        if callable(discard):
+            discard(image_ref)
+        self._load_review_state(image_ref)
+        self.feedback_label.config(text="Draft discarded", foreground="green")
+        self._refresh_experiment_workspace(self.current_experiment)
+
+    def _send_selected_to_curation(self) -> None:
+        image_ref = self._selected_image_ref()
+        controller = self._get_learning_controller()
+        sender = getattr(controller, "send_controlled_artifacts_to_staged_curation", None)
+        if not image_ref or not callable(sender):
+            return
+        group_id = sender([image_ref])
+        if group_id:
+            self.feedback_label.config(
+                text=f"Sent to Staged Curation ({group_id[-6:]})", foreground="green"
+            )
+        else:
+            self.feedback_label.config(text="Unable to create curation workset", foreground="red")
 
     def _rebuild_subscore_controls(self) -> None:
         for child in self.subscore_frame.winfo_children():

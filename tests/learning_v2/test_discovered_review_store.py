@@ -179,6 +179,21 @@ def test_store_load_missing_returns_none(store):
     assert store.load_group("does-not-exist") is None
 
 
+def test_store_marks_missing_artifact_as_unavailable_without_deleting_group(store, tmp_path):
+    missing_path = tmp_path / "missing.png"
+    experiment = _make_experiment("g-missing-artifact")
+    experiment.items[0].artifact_path = str(missing_path)
+    store.save_group(experiment)
+
+    loaded = store.load_group("g-missing-artifact")
+
+    assert loaded is not None
+    assert loaded.items[0].artifact_path == str(missing_path)
+    assert loaded.items[0].extra_fields["artifact_availability"] == "missing"
+    assert loaded.items[0].extra_fields["artifact_unavailable_reason"] == "artifact file is unavailable"
+    assert store.load_group("g-missing-artifact") is not None
+
+
 def test_store_saves_updated_at_on_save(store):
     exp = _make_experiment("g-ts-001")
     old_ts = exp.updated_at

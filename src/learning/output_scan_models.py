@@ -37,6 +37,17 @@ def _utc_now_iso() -> str:
     return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
 
+@dataclass(frozen=True)
+class OutputScanResult:
+    """Truthful outcome of one asynchronous discovered-output scan."""
+
+    output_root: str
+    success: bool
+    new_group_count: int = 0
+    record_count: int = 0
+    reason: str = ""
+
+
 @dataclass
 class ScanRecord:
     """Canonical normalized representation of one scanned image artifact.

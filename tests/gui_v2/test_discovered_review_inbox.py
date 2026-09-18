@@ -103,6 +103,18 @@ def test_inbox_panel_creates_without_error(tk_root: tk.Tk) -> None:
 
 
 @pytest.mark.gui
+def test_review_table_visibly_marks_missing_artifact(tk_root: tk.Tk) -> None:
+    table = DiscoveredReviewTable(tk_root)
+    item = _make_item()
+    item.extra_fields["artifact_availability"] = "missing"
+    table.load_items([item])
+
+    assert str(table._tree.set(item.item_id, "path")).startswith("[missing] ")
+    assert "Artifact unavailable" in table._preview_meta_var.get()
+    table.destroy()
+
+
+@pytest.mark.gui
 def test_inbox_panel_load_handles_active(tk_root: tk.Tk) -> None:
     panel = DiscoveredReviewInboxPanel(tk_root)
     handles = [
@@ -488,13 +500,15 @@ def test_controller_trigger_background_scan_noop_on_missing_root(tmp_path) -> No
     store = DiscoveredReviewStore(tmp_path)
     ctrl._discovered_review_store = store
 
-    completed: list[int] = []
+    from src.learning.output_scan_models import OutputScanResult
+
+    completed: list[OutputScanResult] = []
     import threading
 
     done = threading.Event()
 
-    def _cb(n: int) -> None:
-        completed.append(n)
+    def _cb(result: OutputScanResult) -> None:
+        completed.append(result)
         done.set()
 
     ctrl.trigger_background_scan(
@@ -502,7 +516,54 @@ def test_controller_trigger_background_scan_noop_on_missing_root(tmp_path) -> No
         on_complete=_cb,
     )
     done.wait(timeout=5.0)
-    assert len(completed) == 1  # callback fires even with empty scan
+    assert len(completed) == 1
+    assert completed[0].success is False
+    assert "missing scan root" in completed[0].reason
+
+
+def test_controller_scan_excludes_controlled_experiment_records(tmp_path) -> None:
+    """A controlled artifact cannot become duplicate observational evidence."""
+    import threading
+
+    from src.learning.discovered_review_store import DiscoveredReviewStore
+    from src.learning.output_scan_models import OutputScanResult, ScanRecord
+
+    ctrl = _make_controller()
+    store = DiscoveredReviewStore(tmp_path / "learning")
+    ctrl._discovered_review_store = store
+    output_root = tmp_path / "output"
+    output_root.mkdir()
+
+    records = [
+        ScanRecord(
+            artifact_path=str(output_root / f"controlled-{index}.png"),
+            stage="txt2img",
+            prompt_hash="controlled-prompt",
+            cfg_scale=float(index),
+            extra_fields={"learning_context": {"experiment_id": "experiment-a"}},
+        )
+        for index in range(3)
+    ]
+
+    class _ControlledScanner:
+        def __init__(self, _root, scan_index):
+            self.scan_index = scan_index
+
+        def scan_incremental(self):
+            return records
+
+    done = threading.Event()
+    completed: list[OutputScanResult] = []
+    with patch("src.learning.output_scanner.OutputScanner", _ControlledScanner):
+        ctrl.trigger_background_scan(
+            output_root=str(output_root),
+            on_complete=lambda result: (completed.append(result), done.set()),
+        )
+        assert done.wait(timeout=5.0)
+
+    assert completed[0].success is True
+    assert completed[0].record_count == 0
+    assert store.list_handles() == []
 
 
 def test_controller_load_staged_curation_group_returns_projection(tmp_path) -> None:

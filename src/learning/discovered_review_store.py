@@ -98,6 +98,7 @@ class DiscoveredReviewStore:
         items = self._read_json(items_path) or []
 
         repaired_paths = False
+        availability_changed = False
 
         # Merge persisted review state into items
         review_state: dict[str, Any] = self._read_json(group_dir / "review_state.json") or {}
@@ -117,13 +118,28 @@ class DiscoveredReviewStore:
             if resolved_artifact and resolved_artifact != str(item_dict.get("artifact_path") or ""):
                 item_dict["artifact_path"] = resolved_artifact
                 repaired_paths = True
+            artifact_path = Path(str(item_dict.get("artifact_path") or ""))
+            if artifact_path.is_file():
+                if extra_fields.pop("artifact_unavailable_reason", None) is not None:
+                    availability_changed = True
+                if extra_fields.get("artifact_availability") != "available":
+                    extra_fields["artifact_availability"] = "available"
+                    availability_changed = True
+            else:
+                if extra_fields.get("artifact_availability") != "missing":
+                    extra_fields["artifact_availability"] = "missing"
+                    availability_changed = True
+                if extra_fields.get("artifact_unavailable_reason") != "artifact file is unavailable":
+                    extra_fields["artifact_unavailable_reason"] = "artifact file is unavailable"
+                    availability_changed = True
+            item_dict["extra_fields"] = extra_fields
             resolved_manifest = self._repair_output_path(str(item_dict.get("manifest_path") or ""))
             if resolved_manifest and resolved_manifest != str(item_dict.get("manifest_path") or ""):
                 item_dict["manifest_path"] = resolved_manifest
                 repaired_paths = True
 
         experiment = DiscoveredReviewExperiment.from_meta_and_items(meta, items)
-        if repaired_paths:
+        if repaired_paths or availability_changed:
             self.save_group(experiment)
         return experiment
 

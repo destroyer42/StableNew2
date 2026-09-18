@@ -212,7 +212,9 @@ class DiscoveredReviewTable(ttk.Frame):
                 str(item.extra_fields.get(f, getattr(item, f, "—")) or "—")
                 for f in self._varying_fields
             )
-            path_value = (_truncate(item.artifact_path, 40),)
+            unavailable = item.extra_fields.get("artifact_availability") == "missing"
+            path_prefix = "[missing] " if unavailable else ""
+            path_value = (path_prefix + _truncate(item.artifact_path, 40),)
             self._tree.insert(
                 "",
                 "end",
@@ -260,9 +262,15 @@ class DiscoveredReviewTable(ttk.Frame):
         dimensions = ""
         if item.width and item.height:
             dimensions = f"{item.width} x {item.height}"
+        unavailable = item.extra_fields.get("artifact_availability") == "missing"
         meta_parts = [part for part in (item.stage, item.model, dimensions) if part]
+        if unavailable:
+            meta_parts.append("Artifact unavailable")
         self._preview_meta_var.set(" | ".join(meta_parts) or "Image selected")
-        self._preview_thumbnail.load_image(item.artifact_path)
+        if unavailable:
+            self._preview_thumbnail.clear()
+        else:
+            self._preview_thumbnail.load_image(item.artifact_path)
 
     def _get_item(self, item_id: str | None) -> DiscoveredReviewItem | None:
         if not item_id:

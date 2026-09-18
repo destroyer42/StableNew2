@@ -131,8 +131,8 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
         )
         self._scan_root_label.grid(row=1, column=0, columnspan=7, sticky="w", pady=(4, 0))
 
-        self._scan_status_label = ttk.Label(toolbar, text="", style=BODY_LABEL_STYLE, width=18)
-        self._scan_status_label.grid(row=0, column=7, padx=4, sticky="e")
+        self._scan_status_label = ttk.Label(toolbar, text="", style=BODY_LABEL_STYLE)
+        self._scan_status_label.grid(row=2, column=0, columnspan=7, padx=4, sticky="w")
 
         # --- list frame ---
         list_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE, padding=4)
@@ -228,6 +228,18 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
             self._scan_root_var.set(f"Scan Root: {display}")
         else:
             self._scan_root_var.set("Scan Root: Auto")
+
+    def set_scan_result(self, result: Any) -> None:
+        """Expose success, no-result, and failure outcomes without ambiguity."""
+        if not bool(getattr(result, "success", False)):
+            self._scan_status_label.configure(
+                text=f"Scan failed: {str(getattr(result, 'reason', '') or 'unknown error')[:90]}"
+            )
+            return
+        new_count = int(getattr(result, "new_group_count", 0) or 0)
+        record_count = int(getattr(result, "record_count", 0) or 0)
+        message = "Scan succeeded: no new groups" if new_count == 0 else f"Scan succeeded: {new_count} new group(s)"
+        self._scan_status_label.configure(text=f"{message} ({record_count} eligible artifact(s))")
 
     # ------------------------------------------------------------------
     # Filter and render

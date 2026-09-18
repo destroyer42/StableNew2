@@ -27,16 +27,16 @@ def build_review_action_guidance() -> ActionExplainerContent:
 
 def build_discovered_review_guidance() -> ActionExplainerContent:
     return ActionExplainerContent(
-        title="When To Use Discovered Review",
+        title="Discovered Outputs (Observational)",
         summary=(
-            "Use Discovered Review Inbox for grouped scans or imported review batches that should be compared together. "
-            "Use direct Review when you already know which individual image needs prompt edits, metadata inspection, or a deliberate reprocess path."
+            "Use Discovered Outputs for legacy, external, or otherwise observational StableNew outputs. "
+            "Controlled Designed Experiment artifacts stay in Experiment Review and are never duplicated here."
         ),
         bullets=(
-            "Scan Folder is for outputs the system found on disk and grouped into a compare-first inbox.",
-            "Imported review flows are best when Review or history already identified images that should become Learning evidence instead of being reprocessed immediately.",
-            "Open a group here when you want side-by-side ratings across related outputs before deciding what advances.",
-            "Move to Staged Curation after the group needs downstream refine, face-triage, or upscale decisions.",
+            "Scan Folder uses the displayed resolved output root and reports successful, empty, or failed scans explicitly.",
+            "Use direct Review when you already know which individual image needs metadata inspection or a deliberate reprocess path.",
+            "Open an observational group when side-by-side comparison is useful before downstream triage.",
+            "Staged Curation accepts observational groups and explicit controlled-experiment handoffs without a filesystem scan.",
         ),
     )
 

@@ -132,6 +132,9 @@ class LearningState:
         self.selected_discovered_group_id: str | None = None
         self.selected_staged_curation_group_id: str | None = None
         self.selected_staged_curation_item_id: str | None = None
+        # Drafts are resumable workspace state, never submitted learning evidence.
+        # Keys combine the durable experiment and artifact identities.
+        self.review_drafts: dict[str, dict[str, Any]] = {}
 
     def to_dict(self) -> dict[str, Any]:
         selected_variant_index = -1
@@ -150,6 +153,11 @@ class LearningState:
             "selected_discovered_group_id": self.selected_discovered_group_id,
             "selected_staged_curation_group_id": self.selected_staged_curation_group_id,
             "selected_staged_curation_item_id": self.selected_staged_curation_item_id,
+            "review_drafts": {
+                str(key): dict(value or {})
+                for key, value in self.review_drafts.items()
+                if isinstance(value, dict)
+            },
         }
 
     @staticmethod
@@ -179,4 +187,11 @@ class LearningState:
             payload.get("selected_staged_curation_item_id") or ""
         ).strip()
         state.selected_staged_curation_item_id = selected_staged_curation_item_id or None
+        raw_drafts = payload.get("review_drafts") or {}
+        if isinstance(raw_drafts, dict):
+            state.review_drafts = {
+                str(key): dict(value)
+                for key, value in raw_drafts.items()
+                if isinstance(value, dict)
+            }
         return state

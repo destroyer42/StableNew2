@@ -241,6 +241,38 @@ class LearningRecordWriter:
 
         return ratings
 
+    def get_rating_details_for_experiment(self, experiment_id: str) -> dict[str, dict[str, Any]]:
+        """Return the latest persisted controlled-rating detail by artifact path."""
+        details: dict[str, dict[str, Any]] = {}
+        if not self.records_path.exists():
+            return details
+        try:
+            with open(self.records_path, encoding="utf-8") as records_file:
+                for line in records_file:
+                    try:
+                        record = json.loads(line)
+                        metadata = dict(record.get("metadata") or {})
+                        record_experiment_id = str(
+                            metadata.get("experiment_id")
+                            or (metadata.get("learning_context") or {}).get("experiment_id")
+                            or ""
+                        )
+                        image_path = str(metadata.get("image_path") or "")
+                        if record_experiment_id != experiment_id or not image_path:
+                            continue
+                        normalized = LearningRecord.extract_rating_detail(metadata)
+                        details[image_path] = {
+                            "overall_rating": int(metadata.get("user_rating_raw") or 0),
+                            "notes": str(metadata.get("user_notes") or ""),
+                            "context_flags": dict(normalized.get("context_flags") or {}),
+                            "subscores": dict(normalized.get("subscores") or {}),
+                        }
+                    except (json.JSONDecodeError, TypeError, ValueError):
+                        continue
+        except Exception:
+            return details
+        return details
+
     def get_average_rating_for_variant(
         self,
         experiment_id: str,

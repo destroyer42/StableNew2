@@ -132,6 +132,7 @@ class LearningController:
 
         # Rating cache for current experiment
         self._rating_cache: dict[str, int] = {}  # {image_path: rating}
+        self._rating_details_cache: dict[str, dict[str, Any]] = {}
 
         # Initialize recommendation engine if record writer is available
         self._recommendation_engine: RecommendationEngine | None = None
@@ -222,10 +223,24 @@ class LearningController:
 
         # Create LearningExperiment from form data
         existing = self.learning_state.current_experiment
+        existing_has_controlled_work = any(
+            str(getattr(variant, "status", "") or "").lower() not in {"", "pending"}
+            or bool(getattr(variant, "job_id", ""))
+            or bool(getattr(variant, "image_refs", []))
+            for variant in self.learning_state.plan
+        )
+        if existing_has_controlled_work:
+            # The tab persistence listener checkpoints the durable workspace
+            # while it still represents the prior controlled experiment.
+            self._notify_resume_state_changed()
         experiment = LearningExperiment(
             name=experiment_data.get("name", ""),
             # A display name is editable and may collide; runtime lineage is not.
-            experiment_id=str(getattr(existing, "experiment_id", "") or uuid.uuid4().hex),
+            experiment_id=(
+                uuid.uuid4().hex
+                if existing_has_controlled_work
+                else str(getattr(existing, "experiment_id", "") or uuid.uuid4().hex)
+            ),
             description=experiment_data.get("description", ""),
             baseline_config={},  # Will be populated from pipeline state later
             prompt_text=prompt_text,
@@ -239,6 +254,14 @@ class LearningController:
 
         # Store in state
         self.learning_state.current_experiment = experiment
+        if existing_has_controlled_work:
+            # A new logical experiment never inherits prior variants, artifacts,
+            # ratings, or selected review target while its editable form changes.
+            self.learning_state.plan = []
+            self.learning_state.selected_variant = None
+            self.learning_state.selected_image_index = 0
+            self._rating_cache = {}
+            self._rating_details_cache = {}
         self._set_workflow_state("designing")
         self._notify_resume_state_changed()
 
@@ -606,6 +629,9 @@ class LearningController:
 
         experiment_id = self.learning_state.current_experiment.experiment_id
         self._rating_cache = self._learning_record_writer.get_ratings_for_experiment(experiment_id)
+        self._rating_details_cache = self._learning_record_writer.get_rating_details_for_experiment(
+            experiment_id
+        )
 
     def get_rating_for_image(self, image_path: str) -> int | None:
         """Get the rating for an image if it exists."""
@@ -614,6 +640,78 @@ class LearningController:
     def is_image_rated(self, image_path: str) -> bool:
         """Check if an image has been rated."""
         return image_path in self._rating_cache
+
+    def get_rating_details_for_image(self, image_path: str) -> dict[str, Any] | None:
+        """Return the complete persisted rating detail for the selected artifact."""
+        detail = self._rating_details_cache.get(str(image_path))
+        return dict(detail) if isinstance(detail, dict) else None
+
+    def _draft_key(self, image_path: str) -> str:
+        experiment_id = str(
+            getattr(self.learning_state.current_experiment, "experiment_id", "") or ""
+        )
+        return f"{experiment_id}:{str(image_path)}"
+
+    def save_review_draft(self, image_path: str, draft: dict[str, Any]) -> None:
+        """Persist a resumable UI draft without emitting learning evidence."""
+        if self.learning_state.current_experiment is None or not str(image_path or "").strip():
+            return
+        self.learning_state.review_drafts[self._draft_key(image_path)] = dict(draft or {})
+        self._notify_resume_state_changed()
+
+    def get_review_draft(self, image_path: str) -> dict[str, Any] | None:
+        draft = self.learning_state.review_drafts.get(self._draft_key(image_path))
+        return dict(draft) if isinstance(draft, dict) else None
+
+    def discard_review_draft(self, image_path: str) -> None:
+        self.learning_state.review_drafts.pop(self._draft_key(image_path), None)
+        self._notify_resume_state_changed()
+
+    def get_review_counts(self) -> dict[str, int]:
+        """Return persisted-rating, draft, and unresolved counts for the current plan."""
+        refs = [
+            str(ref)
+            for variant in self.learning_state.plan
+            if str(getattr(variant, "status", "") or "").lower() == "completed"
+            for ref in list(getattr(variant, "image_refs", []) or [])
+        ]
+        saved = sum(self.is_image_rated(ref) for ref in refs)
+        drafts = sum(not self.is_image_rated(ref) and self.get_review_draft(ref) is not None for ref in refs)
+        return {"saved": saved, "draft": drafts, "unrated": max(0, len(refs) - saved - drafts), "total": len(refs)}
+
+    def new_experiment_draft(self) -> None:
+        """Clear only the editable controlled-experiment workspace for a new identity."""
+        if self.learning_state.current_experiment is not None:
+            self._notify_resume_state_changed()
+        self.learning_state.current_experiment = None
+        self.learning_state.plan = []
+        self.learning_state.selected_variant = None
+        self.learning_state.selected_image_index = 0
+        self._rating_cache = {}
+        self._rating_details_cache = {}
+        self._set_workflow_state("idle")
+        self._notify_resume_state_changed()
+
+    def clone_current_experiment_as_new(self) -> LearningExperiment | None:
+        """Copy only editable design fields into a distinct, unsubmitted experiment."""
+        current = self.learning_state.current_experiment
+        if current is None:
+            return None
+        self._notify_resume_state_changed()
+        clone = LearningExperiment.from_dict(current.to_dict())
+        clone.experiment_id = uuid.uuid4().hex
+        clone.execution_snapshot_json = ""
+        clone.baseline_config = {}
+        clone.values = []
+        self.learning_state.current_experiment = clone
+        self.learning_state.plan = []
+        self.learning_state.selected_variant = None
+        self.learning_state.selected_image_index = 0
+        self._rating_cache = {}
+        self._rating_details_cache = {}
+        self._set_workflow_state("designing")
+        self._notify_resume_state_changed()
+        return clone
 
     def _update_variant_status(self, variant_index: int, status: str) -> None:
         """Update the status of a specific variant in the table."""
@@ -1824,6 +1922,13 @@ class LearningController:
 
         # Update rating cache
         self._rating_cache[image_ref] = rating
+        self._rating_details_cache[image_ref] = {
+            "overall_rating": rating,
+            "notes": notes,
+            "context_flags": context_flags,
+            "subscores": subscores,
+        }
+        self.discard_review_draft(image_ref)
 
         # Refresh recommendations with new data
         self.refresh_recommendations()
@@ -2695,6 +2800,7 @@ class LearningController:
         *,
         display_name: str | None = None,
         source_label: str = "review_tab",
+        source_metadata: dict[str, Any] | None = None,
     ) -> str | None:
         """Create a staged-curation group from explicit review image paths."""
         cleaned_paths = [str(Path(path)) for path in image_paths if str(path or "").strip()]
@@ -2705,6 +2811,10 @@ class LearningController:
         for index, image_path in enumerate(cleaned_paths):
             item = self._build_discovered_item_from_image_path(image_path, index=index)
             if item is not None:
+                item.extra_fields = {
+                    **dict(item.extra_fields or {}),
+                    **dict(source_metadata or {}),
+                }
                 items.append(item)
         if not items:
             return None
@@ -2728,6 +2838,27 @@ class LearningController:
         self.learning_state.selected_staged_curation_item_id = items[0].item_id if items else None
         self._notify_resume_state_changed()
         return group_id
+
+    def send_controlled_artifacts_to_staged_curation(self, image_paths: list[str]) -> str | None:
+        """Create a curation workset from explicit controlled artifacts without discovery."""
+        experiment = self.learning_state.current_experiment
+        if experiment is None:
+            return None
+        selected = [str(path) for path in image_paths if str(path or "").strip()]
+        if not selected:
+            return None
+        return self.import_review_images_to_staged_curation(
+            selected,
+            display_name=f"Controlled: {experiment.name}",
+            source_label="controlled_experiment",
+            source_metadata={
+                "controlled_source": {
+                    "experiment_id": experiment.experiment_id,
+                    "experiment_name": experiment.name,
+                    "evidence_kind": "controlled_experiment_artifact",
+                }
+            },
+        )
 
     def import_history_entry_to_staged_curation(
         self,
@@ -3455,7 +3586,7 @@ class LearningController:
         output_root:
             Root directory to scan for image artifacts.
         on_complete:
-            Optional callback(new_count: int) invoked on the main thread when
+            Optional callback(OutputScanResult) invoked on the main thread when
             the scan completes.  Uses ``after(0, ...)`` via the stored after_fn
             if available, otherwise calls directly.
         """
@@ -3463,15 +3594,31 @@ class LearningController:
         from pathlib import Path
 
         from src.learning.discovered_grouping import GroupingEngine
+        from src.learning.output_scan_models import OutputScanResult
         from src.learning.output_scanner import OutputScanner
 
         def _run() -> None:
+            root = Path(output_root)
             try:
+                if not root.exists():
+                    raise FileNotFoundError(f"missing scan root: {root}")
+                if not root.is_dir():
+                    raise NotADirectoryError(f"scan root is not a directory: {root}")
                 store = self._get_discovered_store()
                 scan_index = store.load_scan_index()
-                scanner = OutputScanner(Path(output_root), scan_index=scan_index)
+                scanner = OutputScanner(root, scan_index=scan_index)
                 records = scanner.scan_incremental()
                 store.save_scan_index(scanner.scan_index)
+
+                # Controlled artifacts have their own Experiment Review and
+                # must never become duplicate observational evidence.
+                def _is_controlled(record: Any) -> bool:
+                    context = (getattr(record, "extra_fields", {}) or {}).get(
+                        "learning_context", {}
+                    )
+                    return isinstance(context, dict) and bool(context.get("experiment_id"))
+
+                records = [record for record in records if not _is_controlled(record)]
 
                 existing_ids = {h.group_id for h in store.list_handles()}
                 engine = GroupingEngine()
@@ -3480,17 +3627,26 @@ class LearningController:
                 for candidate in candidates:
                     store.save_group(candidate)
 
-                new_count = len(candidates)
-            except Exception:
-                new_count = 0
+                result = OutputScanResult(
+                    output_root=str(root),
+                    success=True,
+                    new_group_count=len(candidates),
+                    record_count=len(records),
+                )
+            except Exception as exc:
+                result = OutputScanResult(
+                    output_root=str(root),
+                    success=False,
+                    reason=str(exc)[:240],
+                )
 
             if callable(on_complete):
                 after_fn = getattr(self, "_after_fn", None)
                 if callable(after_fn):
-                    after_fn(0, lambda: on_complete(new_count))
+                    after_fn(0, lambda: on_complete(result))
                 else:
                     try:
-                        on_complete(new_count)
+                        on_complete(result)
                     except Exception:
                         pass
 

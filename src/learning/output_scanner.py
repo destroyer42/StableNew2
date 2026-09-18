@@ -201,6 +201,11 @@ def _record_from_manifest(manifest_path: Path, artifact_path: Path) -> ScanRecor
         negative_prompt=negative,
         input_image_path=input_img,
         extra_fields={
+            "learning_context": (
+                dict(data.get("learning_context") or gen.get("learning_context") or {})
+                if isinstance(data.get("learning_context") or gen.get("learning_context"), dict)
+                else {}
+            ),
             "content_visibility": build_content_visibility_payload(
                 {
                     "content_visibility": data.get("content_visibility"),
@@ -257,6 +262,11 @@ def _record_from_embedded(image_path: Path) -> ScanRecord | None:
         positive_prompt=positive,
         negative_prompt=negative,
         extra_fields={
+            "learning_context": (
+                dict(payload.get("learning_context") or {})
+                if isinstance(payload.get("learning_context"), dict)
+                else {}
+            ),
             "content_visibility": build_content_visibility_payload(
                 {
                     "content_visibility": payload.get("content_visibility"),
