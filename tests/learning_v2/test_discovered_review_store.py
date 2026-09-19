@@ -88,6 +88,30 @@ def test_experiment_round_trip():
     assert restored.varying_fields == exp.varying_fields
 
 
+def test_origin_round_trip_and_legacy_default():
+    exp = _make_experiment()
+    exp.origin = "filesystem_scan"
+    assert DiscoveredReviewExperiment.from_meta_and_items(exp.to_meta_dict(), []).origin == "filesystem_scan"
+    assert DiscoveredReviewExperiment.from_meta_and_items({"group_id": "old"}, []).origin == "legacy_unknown"
+
+
+def test_prune_missing_isolates_scanner_owned_state(store, tmp_path):
+    available = tmp_path / "available.png"
+    available.write_bytes(b"png")
+    scanned = _make_experiment("scanned", 0)
+    scanned.origin = "filesystem_scan"
+    scanned.items = [_make_item("missing"), _make_item("available")]
+    scanned.items[1].artifact_path = str(available)
+    imported = _make_experiment("imported", 0)
+    imported.origin = "review_import"
+    store.save_group(scanned)
+    store.save_group(imported)
+    result = store.prune_missing_scanner_items()
+    assert result["missing_items"] == 1
+    assert len(store.load_group("scanned").items) == 1
+    assert store.load_group("imported") is not None
+
+
 def test_handle_round_trip():
     handle = DiscoveredReviewHandle(
         group_id="g1",

@@ -339,6 +339,14 @@ only for the deliberately varied field. Review/curation is observational/manual
 evidence; incomplete historical rows remain readable but are excluded from
 recommendation inference.
 
+The requested seed is frozen before NJR admission; actual backend seed vectors
+are established from the first successful variant and must match subsequently
+before ratings count as controlled evidence. PromptPack experiments freeze one
+deterministic Matrix vector and rendered prompt. Learning-only filenames are
+bounded presentation labels with source, row, model, timestamp, variant, and
+sample identity. Scanner-owned discovered groups are explicitly classified and
+may be pruned or rebuilt without touching controlled or imported worksets.
+
 Learning resource-backed variables consume the live `AppStateV2.resources`
 projection through one Learning-owned accessor; Learning does not query WebUI
 independently or create a second resource authority. Learning output grouping is

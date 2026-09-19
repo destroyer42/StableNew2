@@ -58,6 +58,8 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
         on_rescan: Callable[[], None] | None = None,
         on_pick_scan_root: Callable[[], None] | None = None,
         on_reset_scan_root: Callable[[], None] | None = None,
+        on_prune_missing: Callable[[], None] | None = None,
+        on_rebuild_scanned: Callable[[], None] | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, **kwargs)
@@ -67,6 +69,8 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
         self._on_rescan = on_rescan
         self._on_pick_scan_root = on_pick_scan_root
         self._on_reset_scan_root = on_reset_scan_root
+        self._on_prune_missing = on_prune_missing
+        self._on_rebuild_scanned = on_rebuild_scanned
         self._handles: list[DiscoveredReviewHandle] = []
         self._status_filter_var = tk.StringVar(value="active")
         self._selected_group_id: str | None = None
@@ -122,6 +126,11 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
             command=self._on_rescan_clicked,
         )
         self._scan_btn.grid(row=0, column=6, padx=(4, 0), sticky="e")
+
+        self._prune_btn = ttk.Button(toolbar, text="Prune Missing", command=self._on_prune_clicked)
+        self._prune_btn.grid(row=0, column=7, padx=(4, 0), sticky="e")
+        self._rebuild_btn = ttk.Button(toolbar, text="Rebuild Scanned Inbox...", command=self._on_rebuild_clicked)
+        self._rebuild_btn.grid(row=0, column=8, padx=(4, 0), sticky="e")
 
         self._scan_root_label = ttk.Label(
             toolbar,
@@ -278,6 +287,14 @@ class DiscoveredReviewInboxPanel(ttk.Frame):
     def _on_tree_select(self, _event: Any = None) -> None:
         sel = self._tree.selection()
         self._selected_group_id = sel[0] if sel else None
+
+    def _on_prune_clicked(self) -> None:
+        if self._on_prune_missing:
+            self._on_prune_missing()
+
+    def _on_rebuild_clicked(self) -> None:
+        if self._on_rebuild_scanned:
+            self._on_rebuild_scanned()
         self._update_action_buttons()
         if self._selected_group_id:
             handle = self._find_handle(self._selected_group_id)

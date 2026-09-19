@@ -1306,6 +1306,13 @@ class PipelineRunner:
                             variable=learning_context.variable_under_test,
                             value=learning_context.variant_value,
                             variant_index=learning_context.variant_index,
+                            prompt_source=dict(
+                                thaw_json(getattr(njr, "extra_metadata", {})).get("learning", {}).get("prompt_source", {})
+                            ),
+                            model=str(config_dict.get("model") or ""),
+                            timestamp=str(
+                                thaw_json(getattr(njr, "extra_metadata", {})).get("learning", {}).get("experiment_timestamp", "")
+                            ),
                         )
                     else:
                         base_prefix = (
@@ -1343,6 +1350,7 @@ class PipelineRunner:
                             "txt2img", config_dict, njr=njr
                         ),
                         selected_vae=self._selected_stage_vae("txt2img", config_dict, njr=njr),
+                        learning_sample_names=bool(learning_context),
                         image_count=image_count,
                     )
                     # Extract ALL image paths from metadata for batch processing
@@ -2103,6 +2111,7 @@ class PipelineRunner:
         selected_model: str | None,
         selected_vae: str | None,
         image_count: int = 1,
+        learning_sample_names: bool = False,
     ) -> dict[str, Any] | None:
         backend = self._image_backends.get(backend_id)
         raw_config = thaw_json(getattr(njr, "config", {}))
@@ -2130,6 +2139,7 @@ class PipelineRunner:
                 height=getattr(njr, "height", None) or None,
                 seed=(raw_config.get("seed") if isinstance(raw_config, Mapping) else None),
                 image_count=image_count,
+                learning_sample_names=learning_sample_names,
                 execution_config=dict(raw_config) if isinstance(raw_config, Mapping) else {},
                 job_id=njr.job_id,
                 backend_options=thaw_json(getattr(njr, "backend_options", {})),

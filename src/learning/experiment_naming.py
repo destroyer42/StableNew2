@@ -26,13 +26,34 @@ def build_learning_folder_label(experiment_name: str, experiment_id: str) -> str
 
 
 def build_learning_filename_prefix(
-    *, stage: str, variable: str, value: object, variant_index: int
+    *,
+    stage: str,
+    variable: str,
+    value: object,
+    variant_index: int,
+    prompt_source: dict[str, object] | None = None,
+    model: str = "",
+    timestamp: str = "",
 ) -> str:
     """Build a readable Learning artifact prefix within Windows-safe bounds."""
     stage_part = _slug_fragment(stage, limit=12)
     variable_part = _slug_fragment(variable, limit=18)
-    value_part = _slug_fragment(str(value), limit=18)
-    return f"{stage_part}_{variable_part}-{value_part}_v{int(variant_index) + 1:02d}_s"
+    value_part = str(value).strip()[:18] or "none"
+    source = dict(prompt_source or {})
+    if str(source.get("prompt_source") or "") == "pack":
+        source_part = _slug_fragment(str(source.get("selected_prompt_pack_name") or "pack"), limit=14)
+        row_part = f"P{int(source.get('selected_prompt_index', 0) or 0) + 1:02d}"
+    else:
+        source_part, row_part = "workspace", "P00"
+    model_part = _slug_fragment(model, limit=16)
+    stamp_part = _slug_fragment(timestamp, limit=16)
+    parts = [f"{stage_part}_{variable_part}-{value_part}", f"{source_part}-{row_part}"]
+    if model_part != "none":
+        parts.append(model_part)
+    if stamp_part != "none":
+        parts.append(stamp_part)
+    parts.append(f"v{int(variant_index) + 1:02d}")
+    return "_".join(parts)
 
 
 def build_experiment_identity(

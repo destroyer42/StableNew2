@@ -180,6 +180,7 @@ class GroupingEngine:
                 updated_at=_utc_now_iso(),
                 items=items,
                 varying_fields=varying,
+                origin="filesystem_scan",
             )
             candidates.append(experiment)
 

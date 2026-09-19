@@ -125,6 +125,8 @@ class DiscoveredReviewExperiment:
     items: list[DiscoveredReviewItem] = field(default_factory=list)
     varying_fields: list[str] = field(default_factory=list)  # Which params vary
     scan_source_dirs: list[str] = field(default_factory=list)
+    # Additive provenance.  Old on-disk groups deliberately remain unknown.
+    origin: str = "legacy_unknown"
     schema_version: str = DISCOVERED_REVIEW_SCHEMA_VERSION
     notes: str = ""
 
@@ -153,6 +155,7 @@ class DiscoveredReviewExperiment:
             "updated_at": self.updated_at,
             "varying_fields": list(self.varying_fields),
             "scan_source_dirs": list(self.scan_source_dirs),
+            "origin": self.origin,
             "schema_version": self.schema_version,
             "notes": self.notes,
         }
@@ -176,6 +179,7 @@ class DiscoveredReviewExperiment:
             updated_at=str(meta.get("updated_at") or _utc_now_iso()),
             varying_fields=list(meta.get("varying_fields") or []),
             scan_source_dirs=list(meta.get("scan_source_dirs") or []),
+            origin=str(meta.get("origin") or "legacy_unknown"),
             schema_version=str(meta.get("schema_version") or DISCOVERED_REVIEW_SCHEMA_VERSION),
             notes=str(meta.get("notes") or ""),
         )

@@ -81,9 +81,12 @@ Post-v2.6 `PR-LEARN-300` is IN PROGRESS. Its evidence-integrity and workflow
 slices now have immutable preview-to-queue evidence, one normal batch admission,
 focused rating lineage, canonical live resource projection, readable Learning
 output naming, grouped experiment review, deterministic Next Unrated navigation,
-and controlled-versus-observational recommendation rules. Final aggregate
-operator smoke and end-to-end artifact/recommendation verification remain before
-acceptance. `PR-VID-110` remains a separate product-owner decision and is not
+and controlled-versus-observational recommendation rules. Physical operator
+smoke and end-to-end artifact/recommendation verification are deferred pending
+GPU safety clearance. The deterministic implementation freezes requested seeds
+and one PromptPack Matrix vector, validates backend-observed seed vectors, uses
+Learning-only source/model/sample filenames, and isolates scanner-owned
+Discovered Output prune/rebuild state. `PR-VID-110` remains a separate product-owner decision and is not
 started.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair

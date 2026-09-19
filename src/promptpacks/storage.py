@@ -181,6 +181,19 @@ def prompt_pack_rows(document: dict[str, Any]) -> list[PackRow]:
     return rows
 
 
+def prompt_pack_row_by_index(document: dict[str, Any], index: int) -> PackRow:
+    """Return a native PromptPack row using its persisted zero-based slot index."""
+    validate_prompt_pack_document(document, allow_unversioned=True)
+    slots = list(document["pack_data"].get("slots", []))
+    if index < 0 or index >= len(slots):
+        raise PromptPackFormatError(f"PromptPack row index is unavailable: {index}")
+    selected = {"pack_data": {"slots": [slots[index]]}, "preset_data": {}}
+    rows = prompt_pack_rows(selected)
+    if not rows:
+        raise PromptPackFormatError(f"PromptPack row {index} is not renderable")
+    return rows[0]
+
+
 def render_prompt_pack_prompts(document: dict[str, Any]) -> list[dict[str, str]]:
     """Render structured slots for UI preview without consulting interchange files."""
     validate_prompt_pack_document(document)

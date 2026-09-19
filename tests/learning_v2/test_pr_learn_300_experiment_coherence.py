@@ -162,7 +162,7 @@ def test_learning_output_labels_are_readable_but_identity_is_full_id() -> None:
         stage="txt2img", variable="CFG Scale", value=7.0, variant_index=1
     )
     assert folder == "learning_Portrait_CFG_sweep_exp_abcd"
-    assert filename == "txt2img_CFG_Scale-7_0_v02_s"
+    assert filename == "txt2img_CFG_Scale-7.0_workspace-P00_v02"
     assert len(filename) < 100
 
 

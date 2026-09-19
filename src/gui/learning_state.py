@@ -80,6 +80,9 @@ class LearningVariant:
     # This is a readback/audit copy of the frozen configuration actually used
     # to build the immutable NJR; it is never used as a live configuration.
     executed_config: dict[str, Any] = field(default_factory=dict)
+    # Backend readback facts, including controlled-seed validity.  These are
+    # evidence, never mutable execution inputs.
+    execution_metadata: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -92,6 +95,7 @@ class LearningVariant:
             "image_refs": [str(ref) for ref in (self.image_refs or [])],
             "job_id": self.job_id,
             "executed_config": dict(self.executed_config or {}),
+            "execution_metadata": dict(self.execution_metadata or {}),
         }
 
     @staticmethod
@@ -106,6 +110,7 @@ class LearningVariant:
             image_refs=[str(ref) for ref in (payload.get("image_refs") or [])],
             job_id=str(payload.get("job_id", "")),
             executed_config=dict(payload.get("executed_config") or {}),
+            execution_metadata=dict(payload.get("execution_metadata") or {}),
         )
 
 

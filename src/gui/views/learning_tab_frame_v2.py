@@ -336,6 +336,8 @@ class LearningTabFrame(ttk.Frame):
             on_rescan=self._on_discovered_rescan,
             on_pick_scan_root=self._on_pick_discovered_scan_root,
             on_reset_scan_root=self._on_reset_discovered_scan_root,
+            on_prune_missing=self._on_discovered_prune_missing,
+            on_rebuild_scanned=self._on_discovered_rebuild_scanned,
         )
         self.discovered_inbox_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 2), pady=4)
 
@@ -1142,6 +1144,20 @@ class LearningTabFrame(ttk.Frame):
             output_root=self._get_effective_discovered_scan_root(),
             on_complete=self._on_discovered_scan_complete,
         )
+
+    def _on_discovered_prune_missing(self) -> None:
+        if not messagebox.askyesno("Prune Missing", "Remove unavailable items from scanner-owned groups? Images and manifests are never deleted."):
+            return
+        counts = self.learning_controller.prune_missing_discovered_outputs()
+        self.discovered_inbox_panel._scan_status_label.configure(text=f"Pruned {counts['missing_items']} missing item(s); removed {counts['groups_removed']} empty scanner group(s).")
+        self._refresh_discovered_inbox()
+
+    def _on_discovered_rebuild_scanned(self) -> None:
+        if not messagebox.askyesno("Rebuild Scanned Inbox", "Reset scanner-owned review groups and scanner index, then rescan this folder? Images, manifests, and imported groups are preserved."):
+            return
+        counts = self.learning_controller.reset_scanned_discovered_outputs()
+        self.discovered_inbox_panel._scan_status_label.configure(text=f"Removed {counts['groups_removed']} scanner group(s); rescanning...")
+        self._on_discovered_rescan()
 
     def _on_discovered_scan_complete(self, result: Any) -> None:
         self.discovered_inbox_panel.set_scanning(False)

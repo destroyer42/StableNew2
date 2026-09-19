@@ -65,8 +65,10 @@ class DiscoveredReviewTable(ttk.Frame):
 
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
-        self.rowconfigure(1, weight=3)
-        self.rowconfigure(2, weight=2)
+        # Image review is the primary task: default the table to roughly a
+        # quarter of the usable height and the preview to the remainder.
+        self.rowconfigure(1, weight=1)
+        self.rowconfigure(2, weight=3)
 
         # header label
         self._header_label = ttk.Label(
@@ -138,6 +140,7 @@ class DiscoveredReviewTable(ttk.Frame):
             preview_frame,
             max_width=1200,
             max_height=1200,
+            fit_to_widget=True,
         )
         self._preview_thumbnail.grid(row=1, column=0, sticky="nsew")
         self._preview_thumbnail.clear()

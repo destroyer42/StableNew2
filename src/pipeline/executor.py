@@ -4551,6 +4551,7 @@ class Pipeline:
         output_dir: Path,
         image_name: str,
         cancel_token=None,
+        learning_sample_names: bool = False,
     ) -> dict[str, Any] | None:
         """
         Run single txt2img stage for individual prompt.
@@ -4989,15 +4990,22 @@ class Pipeline:
                 response_images = list(response.get("images") or [])
 
             for batch_idx in range(num_images_received):
-                # Multiple images: use suffix _batch0, _batch1, etc.
+                # Learning artifacts have an externally meaningful sample
+                # identity; normal outputs retain their legacy batch suffix.
                 # This applies when batch_size > 1 OR n_iter > 1
                 if num_images_received > 1:
-                    batch_image_name = f"{image_name}_batch{batch_idx}"
+                    batch_image_name = (
+                        f"{image_name}_s{batch_idx + 1:02d}"
+                        if learning_sample_names
+                        else f"{image_name}_batch{batch_idx}"
+                    )
                     image_path = output_dir / f"{batch_image_name}.png"
                 else:
                     # Single image: use original name
-                    image_path = output_dir / f"{image_name}.png"
-                    batch_image_name = image_name
+                    batch_image_name = (
+                        f"{image_name}_s01" if learning_sample_names else image_name
+                    )
+                    image_path = output_dir / f"{batch_image_name}.png"
 
                 # PR-FILENAME-001: Apply collision failsafe
                 from src.utils.file_io import get_unique_output_path

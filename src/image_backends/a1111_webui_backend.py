@@ -112,6 +112,7 @@ class A1111WebUIImageBackend:
             result = pipeline.run_txt2img_stage(
                 request.prompt, request.negative_prompt, config, request.output_dir,
                 image_name=str(request.image_name or "txt2img"), cancel_token=request.cancel_token,
+                learning_sample_names=request.learning_sample_names,
             )
         elif request.stage_name == "img2img":
             if request.input_image_path is None:

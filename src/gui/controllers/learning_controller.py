@@ -50,6 +50,13 @@ from src.learning.experiment_execution import (
     snapshot_digest,
     thaw_snapshot,
 )
+from src.learning.experiment_freeze import (
+    apply_frozen_seed_policy,
+    freeze_prompt_pack_source,
+    freeze_seed_policy,
+    normalize_actual_seed_vector,
+    seed_vector_matches,
+)
 from src.learning.learning_controller_services.experiment_persistence import (
     build_resume_payload,
     extract_workflow_state,
@@ -573,10 +580,25 @@ class LearningController:
         )
         if not negative_prompt and self.prompt_workspace_state:
             negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
+        prompt_source = freeze_prompt_pack_source(
+            dict(getattr(experiment, "metadata", {}) or {}), global_negative=negative_prompt
+        )
+        if str(prompt_source.get("prompt_source") or "") == "pack":
+            experiment.prompt_text = str(prompt_source["rendered_positive_prompt"])
+            negative_prompt = str(prompt_source["rendered_negative_prompt"])
+            experiment.metadata.update(prompt_source)
         experiment.baseline_config = baseline
+        preserved_seed_policy = getattr(experiment, "metadata", {}).get("frozen_seed_policy")
+        seed_policy = freeze_seed_policy(
+            baseline,
+            max(1, int(experiment.images_per_value or 1)),
+            preserved_policy=(
+                preserved_seed_policy if isinstance(preserved_seed_policy, dict) else None
+            ),
+        )
         experiment.execution_snapshot_json = freeze_snapshot(
             {
-                "schema_version": 1,
+                "schema_version": 2,
                 "experiment_id": experiment.experiment_id,
                 "display_name": experiment.name,
                 "baseline_config": baseline,
@@ -586,6 +608,9 @@ class LearningController:
                 "variable_under_test": experiment.variable_under_test,
                 "variant_values": list(experiment.values),
                 "images_per_value": max(1, int(experiment.images_per_value or 1)),
+                "seed_policy": seed_policy,
+                "experiment_timestamp": datetime.utcnow().strftime("%Y%m%d-%H%M%S"),
+                "prompt_source": prompt_source,
             }
         )
 
@@ -700,6 +725,11 @@ class LearningController:
         self._notify_resume_state_changed()
         clone = LearningExperiment.from_dict(current.to_dict())
         clone.experiment_id = uuid.uuid4().hex
+        snapshot_json = str(getattr(current, "execution_snapshot_json", "") or "")
+        snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
+        seed_policy = snapshot.get("seed_policy") if isinstance(snapshot, dict) else None
+        if isinstance(seed_policy, dict):
+            clone.metadata["frozen_seed_policy"] = dict(seed_policy)
         clone.execution_snapshot_json = ""
         clone.baseline_config = {}
         clone.values = []
@@ -923,6 +953,32 @@ class LearningController:
 
         final_config = copy.deepcopy(baseline)
         self._apply_variant_override_with_metadata(final_config, variant.param_value, experiment)
+        frozen_seed_policy = snapshot.get("seed_policy") if isinstance(snapshot, dict) else None
+        if not isinstance(frozen_seed_policy, dict):
+            # Compatibility for programmatic callers that construct a legacy
+            # experiment without first pressing Build Preview.  Freeze once on
+            # the experiment object; do not mutate or re-read a stage card.
+            frozen_seed_policy = freeze_seed_policy(
+                baseline, max(1, int(experiment.images_per_value or 1))
+            )
+            snapshot = {
+                "schema_version": 2,
+                "experiment_id": experiment.experiment_id,
+                "display_name": experiment.name,
+                "baseline_config": baseline,
+                "prompt_text": experiment.prompt_text,
+                "negative_prompt_text": "",
+                "stage": experiment.stage,
+                "variable_under_test": experiment.variable_under_test,
+                "variant_values": list(experiment.values or []),
+                "images_per_value": max(1, int(experiment.images_per_value or 1)),
+                "seed_policy": frozen_seed_policy,
+                "experiment_timestamp": datetime.utcnow().strftime("%Y%m%d-%H%M%S"),
+                "prompt_source": dict(getattr(experiment, "metadata", {}) or {}),
+            }
+            snapshot_json = freeze_snapshot(snapshot)
+            experiment.execution_snapshot_json = snapshot_json
+        apply_frozen_seed_policy(final_config, frozen_seed_policy)
 
         # Add learning context metadata
         final_config["learning_experiment_id"] = experiment.experiment_id
@@ -1147,6 +1203,7 @@ class LearningController:
         final_config: dict[str, Any],
     ) -> dict[str, Any]:
         snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
+        snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
         return {
             "submission_source": "learning",
             "learning_enabled": True,
@@ -1164,6 +1221,9 @@ class LearningController:
                 "variant_value": variant.param_value,
                 "stage": stage_name,
                 "images_per_value": max(1, int(experiment.images_per_value or 1)),
+                "seed_policy": dict(snapshot.get("seed_policy") or {}),
+                "prompt_source": dict(snapshot.get("prompt_source") or {}),
+                "experiment_timestamp": str(snapshot.get("experiment_timestamp") or ""),
                 "config": final_config,
             },
             "frozen_experiment": {
@@ -1584,6 +1644,54 @@ class LearningController:
 
         variant.status = "completed"
 
+        snapshot_json = str(
+            getattr(self.learning_state.current_experiment, "execution_snapshot_json", "") or ""
+        )
+        snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
+        policy = snapshot.get("seed_policy") if isinstance(snapshot, dict) else None
+        metadata = result.get("metadata", {}) if isinstance(result, dict) else {}
+        metadata = metadata if isinstance(metadata, dict) else {}
+        actual_seeds = (
+            result.get("all_seeds") if isinstance(result, dict) else None
+        ) or metadata.get("all_seeds") or metadata.get("actual_seed_vector")
+        actual_subseeds = (
+            result.get("all_subseeds") if isinstance(result, dict) else None
+        ) or metadata.get("all_subseeds") or metadata.get("actual_subseed_vector")
+        actual_vector = normalize_actual_seed_vector(actual_seeds)
+        actual_subseed_vector = normalize_actual_seed_vector(actual_subseeds)
+        sample_count = int((policy or {}).get("requested_sample_count", 0) or 0)
+        observed = dict(getattr(self.learning_state.current_experiment, "metadata", {}) or {})
+        observed_vector = normalize_actual_seed_vector(observed.get("observed_seed_vector"))
+        controlled = False
+        if isinstance(policy, dict) and len(actual_vector) == sample_count:
+            if not observed_vector:
+                observed["observed_seed_vector"] = actual_vector
+                if float(policy.get("subseed_strength", 0.0) or 0.0) > 0:
+                    observed["observed_subseed_vector"] = actual_subseed_vector
+                self.learning_state.current_experiment.metadata = observed
+                controlled = bool(actual_vector) and (
+                    float(policy.get("subseed_strength", 0.0) or 0.0) <= 0
+                    or bool(actual_subseed_vector)
+                )
+            else:
+                comparable = {**policy, "observed_seed_vector": observed_vector,
+                              "observed_subseed_vector": observed.get("observed_subseed_vector", [])}
+                controlled = seed_vector_matches(comparable, actual_vector, actual_subseed_vector)
+        variant.execution_metadata = {
+            **dict(getattr(variant, "execution_metadata", {}) or {}),
+            "requested_seed_policy": dict(policy or {}),
+            "actual_all_seeds": actual_vector,
+            "actual_all_subseeds": actual_subseed_vector,
+            "controlled_evidence_valid": controlled,
+        }
+        if not controlled:
+            variant.status = "uncontrolled"
+            logger.error(
+                "Learning experiment %s variant %s is uncontrolled: backend seed vector did not match frozen policy",
+                getattr(self.learning_state.current_experiment, "experiment_id", ""),
+                variant.variant_id,
+            )
+
         # PR-LEARN-005: Extract image references from result
         image_paths = []
         if isinstance(result, dict):
@@ -1604,7 +1712,7 @@ class LearningController:
         # PR-LEARN-004: Update UI with live updates
         variant_index = self._get_variant_index(variant)
         if variant_index >= 0:
-            self._update_variant_status(variant_index, "completed")
+            self._update_variant_status(variant_index, variant.status)
             self._update_variant_images(
                 variant_index, variant.completed_images, variant.planned_images
             )
@@ -1677,10 +1785,13 @@ class LearningController:
             self._set_workflow_state("running")
             return
         if "completed" in statuses:
-            if statuses.issubset({"completed", "failed"}):
+            if statuses.issubset({"completed", "failed", "uncontrolled"}):
                 self._set_workflow_state("reviewing")
             else:
                 self._set_workflow_state("running")
+            return
+        if "uncontrolled" in statuses:
+            self._set_workflow_state("uncontrolled")
             return
         if statuses.issubset({"failed"}):
             self._set_workflow_state("failed")
@@ -1907,12 +2018,23 @@ class LearningController:
                     "variant_name": f"{experiment.variable_under_test}={target_variant.param_value}",
                 },
                 "frozen_experiment": {
-                    "schema_version": 1,
+                    "schema_version": 2,
                     "experiment_id": experiment.experiment_id,
                     "variant_id": target_variant.variant_id,
                     "snapshot_sha256": snapshot_digest(snapshot_json) if snapshot_json else "",
                     "snapshot": snapshot,
                     "executed_config": executed_config,
+                    "controlled_evidence_valid": bool(
+                        dict(getattr(target_variant, "execution_metadata", {}) or {}).get(
+                            "controlled_evidence_valid", True
+                        )
+                    ),
+                    "actual_all_seeds": list(
+                        dict(getattr(target_variant, "execution_metadata", {}) or {}).get(
+                            "actual_all_seeds", []
+                        )
+                        or []
+                    ),
                 },
             },
         )
@@ -2768,6 +2890,14 @@ class LearningController:
         store = self._get_discovered_store()
         store.reopen_group(group_id)
 
+    def prune_missing_discovered_outputs(self) -> dict[str, int]:
+        """Prune only scanner-owned unavailable discovered artifacts."""
+        return self._get_discovered_store().prune_missing_scanner_items()
+
+    def reset_scanned_discovered_outputs(self) -> dict[str, int]:
+        """Reset only known filesystem-scan review projections."""
+        return self._get_discovered_store().reset_filesystem_scan_state()
+
     # ------------------------------------------------------------------
     # PR-LEARN-259B: Staged-curation orchestration
     # ------------------------------------------------------------------
@@ -2830,6 +2960,11 @@ class LearningController:
             items=items,
             varying_fields=self._infer_varying_fields(items),
             scan_source_dirs=sorted({str(Path(item.artifact_path).parent) for item in items}),
+            origin=(
+                "controlled_experiment"
+                if source_label == "controlled_experiment"
+                else ("history_import" if source_label == "history_import" else "review_import")
+            ),
             notes=f"Imported via {source_label}",
         )
         store = self._get_discovered_store()

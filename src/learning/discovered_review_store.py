@@ -153,6 +153,56 @@ class DiscoveredReviewStore:
             return True
         return False
 
+    def prune_missing_scanner_items(self, *, include_legacy: bool = False) -> dict[str, int]:
+        """Remove missing items only from scanner-owned (optionally legacy) groups.
+
+        Files and manifests are never touched.  A group that becomes empty is
+        removed with its scanner review state, and its index references are
+        discarded atomically with the next index write.
+        """
+        counts = {"groups_examined": 0, "missing_items": 0, "groups_removed": 0, "index_entries_removed": 0}
+        removable_origins = {"filesystem_scan"}
+        if include_legacy:
+            removable_origins.add("legacy_unknown")
+        removed_groups: set[str] = set()
+        for handle in self.list_handles():
+            exp = self.load_group(handle.group_id)
+            if exp is None or exp.origin not in removable_origins:
+                continue
+            counts["groups_examined"] += 1
+            retained = [item for item in exp.items if Path(item.artifact_path).is_file()]
+            counts["missing_items"] += len(exp.items) - len(retained)
+            if len(retained) == len(exp.items):
+                continue
+            if retained:
+                exp.items = retained
+                self.save_group(exp)
+            else:
+                self.delete_group(exp.group_id)
+                removed_groups.add(exp.group_id)
+                counts["groups_removed"] += 1
+        index = self.load_scan_index()
+        for path, entry in list(index.items()):
+            if (not Path(path).is_file()) or entry.group_id in removed_groups:
+                del index[path]
+                counts["index_entries_removed"] += 1
+        self.save_scan_index(index)
+        return counts
+
+    def reset_filesystem_scan_state(self, *, include_legacy: bool = False) -> dict[str, int]:
+        """Delete only scanner-owned persisted review projections and scan index."""
+        origins = {"filesystem_scan"}
+        if include_legacy:
+            origins.add("legacy_unknown")
+        removed = 0
+        for handle in self.list_handles():
+            exp = self.load_group(handle.group_id)
+            if exp is not None and exp.origin in origins and self.delete_group(exp.group_id):
+                removed += 1
+        index = self.load_scan_index()
+        self.save_scan_index({})
+        return {"groups_removed": removed, "index_entries_removed": len(index)}
+
     # ------------------------------------------------------------------
     # Status lifecycle
     # ------------------------------------------------------------------

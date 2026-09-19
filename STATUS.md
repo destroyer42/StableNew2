@@ -51,7 +51,10 @@ artifact authorities.
 PR-LEARN-300 is **IN PROGRESS**. Its evidence-integrity and workflow slices give Designed
 image experiments one durable experiment identity and an immutable preview
 snapshot of effective prompt, model/VAE, stage configuration, tested variable,
-values, and sample count. All variants compile before one normal
+values, sample count, and a concrete requested seed. Backend-returned seed
+vectors establish then validate controlled evidence across variants; they are
+not inferred from batch arithmetic. PromptPack work freezes one deterministic
+Matrix vector and its rendered prompt before admission. All variants compile before one normal
 `JobService.submit_njrs` admission; each admitted NJR retains its ordinary
 independent SQLite queue lifecycle. Ratings retain exact experiment/variant,
 job/artifact, and frozen executed-configuration evidence. Controlled ratings
@@ -61,12 +64,16 @@ PromptPacks/NJRs/history, and has no autonomous tuning authority. Resource-backe
 Model/VAE/Sampler/Scheduler choices now use the live `AppStateV2` projection and
 refresh path. Learning outputs retain full experiment identity in metadata while
 using readable experiment-folder and artifact-name labels; all variants of one
-experiment remain grouped. The review workspace now groups completed samples by
+experiment remain grouped. Learning filenames include frozen source/prompt row,
+model, timestamp, variant, and sample identity. Discovered scanner groups have
+durable origin, fit their image preview to the review viewport, and support
+scanner-only Prune Missing and Rebuild Scanned Inbox operations that preserve
+controlled and imported worksets. The review workspace now groups completed samples by
 variant/value, exposes rated state and per-variant summaries, supports deterministic
 Next Unrated and side-by-side comparison, and preserves the selected target during
 background completion. `PR-VID-110` remains a separate product-owner decision.
-Final aggregate operator smoke and end-to-end artifact/recommendation verification
-remain before acceptance.
+Deterministic implementation validation is complete; physical A1111 operator
+acceptance remains deferred pending GPU safety clearance.
 
 ## Approved post-v2.6 direction
 

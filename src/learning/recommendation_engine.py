@@ -330,6 +330,7 @@ class RecommendationEngine:
                 and isinstance(frozen, dict)
                 and isinstance(frozen.get("snapshot"), dict)
                 and isinstance(frozen.get("executed_config"), dict)
+                and frozen.get("controlled_evidence_valid", True) is True
                 and str(metadata.get("variable_under_test") or "").strip()
                 and metadata.get("variant_value") is not None
             )

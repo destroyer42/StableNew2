@@ -96,6 +96,7 @@ class ImageExecutionRequest:
     height: int | None = None
     seed: int | None = None
     image_count: int = 1
+    learning_sample_names: bool = False
     execution_config: dict[str, Any] = field(default_factory=dict)
     job_id: str | None = None
     backend_options: dict[str, Any] = field(default_factory=dict)
