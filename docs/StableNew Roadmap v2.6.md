@@ -88,8 +88,10 @@ freeze is selected-row-aware, including random-mode packs. Discovered Outputs
 now use durable Done/Dismiss semantics, availability counts, protected explicit
 missing-reference cleanup, and a resizable review-first layout. Confirmed Staged
 Curation suggestions affect only the selected derived-job intent through the
-existing NJR/JobService path. Physical operator smoke and end-to-end
-artifact/recommendation verification are deferred pending GPU safety clearance.
+existing NJR/JobService path. Bounded physical A1111 seed acceptance is PASS:
+three CFG variants x one image used frozen seed `12345`, each returned
+`all_seeds=[12345]`, and each remained controlled. Broader physical operator
+smoke and end-to-end artifact/recommendation verification remain open.
 `PR-VID-110` remains a separate product-owner decision and is not started.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair

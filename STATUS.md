@@ -8,8 +8,8 @@ Updated: 2026-09-19
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
 - Active objective: `PR-LEARN-300` is IN PROGRESS: deterministic Learning
-  workflow coherence is implemented on the feature branch; physical A1111
-  operator acceptance remains deferred pending GPU safety clearance.
+  workflow coherence and bounded physical seed acceptance are implemented and
+  accepted on the feature branch; remaining operator acceptance is still open.
   `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
@@ -85,8 +85,13 @@ and global header Automation selector are no longer primary Learning actions.
 Staged Curation can preview learned settings and, after confirmation, apply an
 allowlisted patch only to one newly built derived-job intent before its normal
 NJR/JobService submission. `PR-VID-110` remains a separate product-owner decision.
-Deterministic implementation validation is complete; physical A1111 operator
-acceptance remains deferred pending GPU safety clearance.
+Deterministic implementation validation and bounded physical A1111 seed
+acceptance are **PASS** on the feature branch. The controlled run used three
+CFG variants with one image each and frozen requested seed `12345`; every job
+sent `12345`, returned `all_seeds=[12345]`, and reached Learning as controlled
+evidence. Remaining physical operator acceptance covers the broader artifact,
+review, and recommendation journey; no full PR-LEARN-300 completion claim is
+made yet.
 
 ## Approved post-v2.6 direction
 
