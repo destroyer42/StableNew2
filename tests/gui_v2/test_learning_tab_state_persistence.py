@@ -63,6 +63,7 @@ def test_learning_tab_persists_and_restores_resume_session() -> None:
                 planned_images=2,
                 completed_images=2,
                 image_refs=["out/a.png", "out/b.png"],
+                job_id="admitted-job-1",
             )
             tab.learning_controller.learning_state.current_experiment = experiment
             tab.learning_controller.learning_state.plan = [variant]
@@ -89,6 +90,62 @@ def test_learning_tab_persists_and_restores_resume_session() -> None:
             )
             assert restored_tab.experiment_panel.name_var.get() == "Resume Test"
             assert restored_tab.experiment_panel.variable_var.get() == "Steps"
+
+            restored_tab.destroy()
+            tab.destroy()
+
+
+def test_working_draft_autosaves_without_creating_library_entry() -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    with TemporaryDirectory() as tmp_dir:
+        state_path = Path(tmp_dir) / "ui_state.json"
+        experiments_root = Path(tmp_dir) / "experiments"
+        store = UIStateStore(state_path)
+
+        with (
+            patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+            patch(
+                "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+                return_value=experiments_root,
+            ),
+        ):
+            tab = LearningTabFrame(
+                root,
+                app_state=AppStateV2(),
+                pipeline_controller=_StubPipelineController(),
+            )
+            draft = LearningExperiment(
+                name="Working Draft",
+                prompt_text="portrait",
+                variable_under_test="Steps",
+            )
+            tab.learning_controller.learning_state.current_experiment = draft
+            tab.learning_controller.learning_state.plan = [
+                LearningVariant(status="pending", planned_images=1)
+            ]
+
+            tab._persist_learning_session_state()  # noqa: SLF001
+
+            saved = store.load_state()
+            assert saved is not None
+            assert saved["learning"]["session"]["current_experiment"]["name"] == "Working Draft"
+            assert tab.experiment_store.list_handles() == []
+
+            restored_tab = LearningTabFrame(
+                root,
+                app_state=AppStateV2(),
+                pipeline_controller=_StubPipelineController(),
+            )
+            assert restored_tab.restore_learning_session_state(saved["learning"]) is True
+            assert restored_tab.learning_controller.learning_state.current_experiment is not None
+            assert (
+                restored_tab.learning_controller.learning_state.current_experiment.name
+                == "Working Draft"
+            )
+            assert restored_tab.experiment_store.list_handles() == []
 
             restored_tab.destroy()
             tab.destroy()
@@ -126,6 +183,53 @@ def test_learning_tab_places_plan_and_review_in_adjustable_vertical_workspace() 
             assert int(review_grid["column"]) == 0
             assert str(tab.designed_horizontal_panes.cget("orient")) == "horizontal"
 
+            tab.destroy()
+
+
+def test_discovered_review_uses_adjustable_35_65_navigation_and_image_workspace() -> None:
+    root = get_shared_tk_root()
+    if root is None:
+        return
+
+    with TemporaryDirectory() as tmp_dir:
+        state_path = Path(tmp_dir) / "ui_state.json"
+        experiments_root = Path(tmp_dir) / "experiments"
+        store = UIStateStore(state_path)
+        with (
+            patch("src.gui.views.learning_tab_frame_v2.get_ui_state_store", return_value=store),
+            patch(
+                "src.gui.views.learning_tab_frame_v2.get_learning_experiments_root",
+                return_value=experiments_root,
+            ),
+        ):
+            tab = LearningTabFrame(
+                root,
+                app_state=AppStateV2(),
+                pipeline_controller=_StubPipelineController(),
+            )
+
+            assert str(tab._discovered_split.cget("orient")) == "horizontal"  # noqa: SLF001
+            assert str(tab._discovered_navigation_split.cget("orient")) == "vertical"  # noqa: SLF001
+            assert int(
+                tab._discovered_split.pane(tab._discovered_navigation_split, "weight")  # noqa: SLF001
+            ) == 35
+            assert int(
+                tab._discovered_split.pane(tab.discovered_review_table, "weight")  # noqa: SLF001
+            ) == 65
+            assert (
+                tab.discovered_review_table._navigation_master  # noqa: SLF001
+                is tab._discovered_item_navigation  # noqa: SLF001
+            )
+            assert tab.discovered_review_table._preview_thumbnail.fit_to_widget is True  # noqa: SLF001
+
+            header_labels = {
+                str(child.cget("text"))
+                for child in tab.header_frame.winfo_children()
+                if "text" in child.keys()
+            }
+            assert "Resume Last" not in header_labels
+            assert "Review learning runs" not in header_labels
+            assert "Automation" not in header_labels
             tab.destroy()
 
 

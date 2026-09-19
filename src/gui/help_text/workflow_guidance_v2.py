@@ -35,7 +35,8 @@ def build_discovered_review_guidance() -> ActionExplainerContent:
         bullets=(
             "Scan Folder uses the displayed resolved output root and reports successful, empty, or failed scans explicitly.",
             "Use direct Review when you already know which individual image needs metadata inspection or a deliberate reprocess path.",
-            "Open an observational group when side-by-side comparison is useful before downstream triage.",
+            "Review opens an observational group; Done and Dismiss remove it from Active while preserving distinct, restorable decisions.",
+            "Clean Missing References previews stale scanner and optional legacy references without deleting images or manifests.",
             "Staged Curation accepts observational groups and explicit controlled-experiment handoffs without a filesystem scan.",
         ),
     )

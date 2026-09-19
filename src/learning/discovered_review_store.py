@@ -189,6 +189,26 @@ class DiscoveredReviewStore:
         self.save_scan_index(index)
         return counts
 
+    def preview_missing_cleanup(self) -> dict[str, int]:
+        """Count stale references without mutating groups, images, or manifests."""
+        counts = {
+            "scanner_missing_items": 0,
+            "legacy_missing_items": 0,
+            "zero_available_groups": 0,
+            "affected_scan_index_entries": 0,
+        }
+        for handle in self.list_handles():
+            if handle.item_count > 0 and handle.available_item_count == 0:
+                counts["zero_available_groups"] += 1
+            if handle.origin == "filesystem_scan":
+                counts["scanner_missing_items"] += handle.missing_item_count
+            elif handle.origin == "legacy_unknown":
+                counts["legacy_missing_items"] += handle.missing_item_count
+        counts["affected_scan_index_entries"] = sum(
+            not Path(path).is_file() for path in self.load_scan_index()
+        )
+        return counts
+
     def reset_filesystem_scan_state(self, *, include_legacy: bool = False) -> dict[str, int]:
         """Delete only scanner-owned persisted review projections and scan index."""
         origins = {"filesystem_scan"}
@@ -197,7 +217,12 @@ class DiscoveredReviewStore:
         removed = 0
         for handle in self.list_handles():
             exp = self.load_group(handle.group_id)
-            if exp is not None and exp.origin in origins and self.delete_group(exp.group_id):
+            if (
+                exp is not None
+                and exp.origin in origins
+                and exp.status in {STATUS_WAITING_REVIEW, STATUS_IN_REVIEW}
+                and self.delete_group(exp.group_id)
+            ):
                 removed += 1
         index = self.load_scan_index()
         self.save_scan_index({})
@@ -332,6 +357,14 @@ class DiscoveredReviewStore:
                 continue
             meta = self._read_json(meta_path) or {}
             try:
+                raw_items = self._read_json(group_dir / "items.json") or []
+                available_count = sum(
+                    Path(
+                        self._repair_output_path(str(item.get("artifact_path") or ""))
+                    ).is_file()
+                    for item in raw_items
+                    if isinstance(item, dict)
+                )
                 handle = DiscoveredReviewHandle(
                     group_id=str(meta.get("group_id") or group_dir.name),
                     display_name=str(meta.get("display_name") or ""),
@@ -341,6 +374,9 @@ class DiscoveredReviewStore:
                     varying_fields=tuple(meta.get("varying_fields") or []),
                     created_at=str(meta.get("created_at") or ""),
                     updated_at=str(meta.get("updated_at") or ""),
+                    available_item_count=available_count,
+                    missing_item_count=max(0, self._count_items(group_dir) - available_count),
+                    origin=str(meta.get("origin") or "legacy_unknown"),
                 )
             except Exception as exc:
                 logger.warning("Skipping corrupt group dir %s: %s", group_dir, exc)

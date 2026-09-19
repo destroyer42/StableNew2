@@ -1,15 +1,15 @@
 # StableNew current state
 
-Updated: 2026-09-16
+Updated: 2026-09-19
 
 ## Repository
 
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: `PR-LEARN-300` is IN PROGRESS: evidence integrity and the
-  experiment-wide review workspace implementation are repaired; final aggregate
-  operator smoke/acceptance remains.
+- Active objective: `PR-LEARN-300` is IN PROGRESS: deterministic Learning
+  workflow coherence is implemented on the feature branch; physical A1111
+  operator acceptance remains deferred pending GPU safety clearance.
   `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
@@ -53,8 +53,10 @@ image experiments one durable experiment identity and an immutable preview
 snapshot of effective prompt, model/VAE, stage configuration, tested variable,
 values, sample count, and a concrete requested seed. Backend-returned seed
 vectors establish then validate controlled evidence across variants; they are
-not inferred from batch arithmetic. PromptPack work freezes one deterministic
-Matrix vector and its rendered prompt before admission. All variants compile before one normal
+not inferred from batch arithmetic. PromptPack work resolves only Matrix
+variables referenced by the selected row, freezes the first canonical vector
+even when the pack normally uses random mode, and records Matrix as unused when
+the selected row references no tokens. All variants compile before one normal
 `JobService.submit_njrs` admission; each admitted NJR retains its ordinary
 independent SQLite queue lifecycle. Ratings retain exact experiment/variant,
 job/artifact, and frozen executed-configuration evidence. Controlled ratings
@@ -65,13 +67,24 @@ Model/VAE/Sampler/Scheduler choices now use the live `AppStateV2` projection and
 refresh path. Learning outputs retain full experiment identity in metadata while
 using readable experiment-folder and artifact-name labels; all variants of one
 experiment remain grouped. Learning filenames include frozen source/prompt row,
-model, timestamp, variant, and sample identity. Discovered scanner groups have
-durable origin, fit their image preview to the review viewport, and support
-scanner-only Prune Missing and Rebuild Scanned Inbox operations that preserve
-controlled and imported worksets. The review workspace now groups completed samples by
+model, timestamp, variant, and sample identity. Editable Working Draft state
+autosaves independently; only experiments that cross queue admission enter the
+default Experiment Library, while old never-run entries remain non-destructive
+Draft/Legacy Draft data. Discovered scanner groups have durable origin, expose
+total/available/missing counts, use distinct restorable Done and Dismiss
+decisions, fit their image preview to a majority-width adjustable review
+workspace, and support previewed Clean Missing References and rebuild operations
+that preserve controlled/imported worksets and terminal operator decisions. The
+review workspace now groups completed samples by
 variant/value, exposes rated state and per-variant summaries, supports deterministic
 Next Unrated and side-by-side comparison, and preserves the selected target during
-background completion. `PR-VID-110` remains a separate product-owner decision.
+background completion. Experiment conclusions derive from saved sample ratings,
+exclude drafts, and cannot name a causal winner when controlled seed evidence is
+invalid. The ambiguous Resume Last, primary generic recent-record Tags editor,
+and global header Automation selector are no longer primary Learning actions.
+Staged Curation can preview learned settings and, after confirmation, apply an
+allowlisted patch only to one newly built derived-job intent before its normal
+NJR/JobService submission. `PR-VID-110` remains a separate product-owner decision.
 Deterministic implementation validation is complete; physical A1111 operator
 acceptance remains deferred pending GPU safety clearance.
 

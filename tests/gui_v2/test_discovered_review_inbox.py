@@ -115,6 +115,23 @@ def test_review_table_visibly_marks_missing_artifact(tk_root: tk.Tk) -> None:
 
 
 @pytest.mark.gui
+def test_review_table_does_not_rate_missing_artifact(tk_root: tk.Tk) -> None:
+    rated: list[tuple[str, int]] = []
+    table = DiscoveredReviewTable(
+        tk_root, on_rate_item=lambda item_id, rating: rated.append((item_id, rating))
+    )
+    item = _make_item()
+    item.extra_fields["artifact_availability"] = "missing"
+    table.load_items([item])
+
+    table._apply_rating(4)
+
+    assert rated == []
+    assert "rating is disabled" in table._preview_meta_var.get()
+    table.destroy()
+
+
+@pytest.mark.gui
 def test_inbox_panel_load_handles_active(tk_root: tk.Tk) -> None:
     panel = DiscoveredReviewInboxPanel(tk_root)
     handles = [

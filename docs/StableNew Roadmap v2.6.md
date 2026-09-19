@@ -81,13 +81,16 @@ Post-v2.6 `PR-LEARN-300` is IN PROGRESS. Its evidence-integrity and workflow
 slices now have immutable preview-to-queue evidence, one normal batch admission,
 focused rating lineage, canonical live resource projection, readable Learning
 output naming, grouped experiment review, deterministic Next Unrated navigation,
-and controlled-versus-observational recommendation rules. Physical operator
-smoke and end-to-end artifact/recommendation verification are deferred pending
-GPU safety clearance. The deterministic implementation freezes requested seeds
-and one PromptPack Matrix vector, validates backend-observed seed vectors, uses
-Learning-only source/model/sample filenames, and isolates scanner-owned
-Discovered Output prune/rebuild state. `PR-VID-110` remains a separate product-owner decision and is not
-started.
+and controlled-versus-observational recommendation rules. Working Draft autosave
+is separated from queue-admitted Experiment Library history; experiment
+conclusions derive from saved sample ratings and controlled validity. Matrix
+freeze is selected-row-aware, including random-mode packs. Discovered Outputs
+now use durable Done/Dismiss semantics, availability counts, protected explicit
+missing-reference cleanup, and a resizable review-first layout. Confirmed Staged
+Curation suggestions affect only the selected derived-job intent through the
+existing NJR/JobService path. Physical operator smoke and end-to-end
+artifact/recommendation verification are deferred pending GPU safety clearance.
+`PR-VID-110` remains a separate product-owner decision and is not started.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair
 

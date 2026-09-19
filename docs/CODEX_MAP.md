@@ -61,7 +61,10 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 - Learning experiments: `src/learning/experiment_execution.py` ->
   `src/learning/execution_controller.py` -> `JobService.submit_njrs`; durable
   evidence/recommendations live in `learning_record.py` and
-  `recommendation_engine.py`, with GUI coordination in
+  `recommendation_engine.py`; draft/library classification, sample-derived
+  conclusions, deterministic source freeze, and isolated derived-job suggestion
+  patches live in `experiment_lifecycle.py`, `experiment_conclusion.py`,
+  `experiment_freeze.py`, and `staged_recommendations.py`, with GUI coordination in
   `src/gui/controllers/learning_controller.py`.
 - Artifacts and replay: `src/pipeline/artifact_contract.py`,
   `src/pipeline/result_contract_v26.py`, and `src/pipeline/replay_engine.py`.
@@ -81,7 +84,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | Portable SVD provenance | `src/video/svd_portable_provenance.py` -> `src/video/container_metadata.py` -> `src/video/svd_runner.py` -> `src/video/svd_registry.py` |
 | Windows runtime/bootstrap | `scripts/bootstrap_windows.ps1` -> `docs/runbooks/windows_runtime_bootstrap.md` |
 | Replay/learning | `replay_engine.py`, `src/learning/`, `job_history_store.py` |
-| `PR-LEARN-300` experiment workflow | `experiment_execution.py` -> `execution_controller.py` -> `learning_controller.py` -> `resource_access.py` / `experiment_naming.py` / `review_workspace.py` -> `learning_record.py` / `recommendation_engine.py` |
+| `PR-LEARN-300` experiment workflow | `experiment_execution.py` / `experiment_lifecycle.py` / `experiment_conclusion.py` / `experiment_freeze.py` -> `execution_controller.py` -> `learning_controller.py` -> `resource_access.py` / `experiment_naming.py` / `review_workspace.py` / `discovered_review_store.py` / `staged_recommendations.py` -> `learning_record.py` / `recommendation_engine.py` |
 | Tests/CI | `pyproject.toml`, `tools/ci/`, `.github/workflows/ci.yml` |
 | A1111 generation / transport | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |
 | A1111 process ownership / lifecycle | `src/api/webui_process_manager.py` -> `src/controller/webui_connection_controller.py` |

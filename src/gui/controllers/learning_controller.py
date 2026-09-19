@@ -44,6 +44,7 @@ from src.learning.discovered_review_models import (
     DiscoveredReviewExperiment,
     DiscoveredReviewItem,
 )
+from src.learning.experiment_conclusion import build_experiment_conclusion
 from src.learning.experiment_execution import (
     ExperimentAdmissionService,
     freeze_snapshot,
@@ -66,6 +67,10 @@ from src.learning.learning_record import LearningRecord, LearningRecordWriter
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.resource_access import get_projected_resources
 from src.learning.stage_capabilities import get_stage_capability
+from src.learning.staged_recommendations import (
+    apply_derived_recommendation_patch,
+    build_derived_recommendation_patch,
+)
 from src.learning.variable_selection_contract import normalize_resource_entries
 from src.pipeline.artifact_contract import extract_artifact_paths
 from src.pipeline.job_models_v2 import (
@@ -1929,7 +1934,24 @@ class LearningController:
             "queue_reason": queue_reason,
             "queue_cap": queue_cap,
             "queue_depth": queue_depth,
+            "conclusion": self.get_experiment_conclusion(),
         }
+
+    def get_experiment_conclusion(self) -> dict[str, Any]:
+        """Project a conclusion from saved sample reviews only."""
+        experiment_id = str(
+            getattr(self.learning_state.current_experiment, "experiment_id", "") or ""
+        )
+        details = (
+            self._learning_record_writer.get_rating_details_for_experiment(experiment_id)
+            if self._learning_record_writer and experiment_id
+            else {}
+        )
+        return build_experiment_conclusion(
+            list(self.learning_state.plan or []),
+            details,
+            dict(self.learning_state.review_drafts or {}),
+        )
 
     def on_job_completed(self, job_id: str, result: dict[str, Any]) -> None:
         """Handle completion of a learning job."""
@@ -2894,6 +2916,14 @@ class LearningController:
         """Prune only scanner-owned unavailable discovered artifacts."""
         return self._get_discovered_store().prune_missing_scanner_items()
 
+    def preview_missing_discovered_cleanup(self) -> dict[str, int]:
+        return self._get_discovered_store().preview_missing_cleanup()
+
+    def clean_missing_discovered_outputs(self, *, include_legacy: bool) -> dict[str, int]:
+        return self._get_discovered_store().prune_missing_scanner_items(
+            include_legacy=include_legacy
+        )
+
     def reset_scanned_discovered_outputs(self) -> dict[str, int]:
         """Reset only known filesystem-scan review projections."""
         return self._get_discovered_store().reset_filesystem_scan_state()
@@ -3287,9 +3317,17 @@ class LearningController:
         self,
         group_id: str,
         target_stage: str,
+        *,
+        candidate_ids: list[str] | None = None,
+        recommendation_patch: dict[str, Any] | None = None,
     ) -> int:
         """Compile staged-curation selections into queue-backed derived jobs."""
-        plan = self.build_staged_curation_advancement_plan(group_id, target_stage)
+        plan = self.build_staged_curation_advancement_plan(
+            group_id,
+            target_stage,
+            candidate_ids=candidate_ids,
+            recommendation_patch=recommendation_patch,
+        )
         if plan is None or not plan.jobs:
             return 0
 
@@ -3325,6 +3363,7 @@ class LearningController:
         target_stage: str,
         *,
         candidate_ids: list[str] | None = None,
+        recommendation_patch: dict[str, Any] | None = None,
     ) -> CurationAdvancementPlan | None:
         """Build a staged-curation advancement plan without enqueueing it."""
         normalized_target = str(target_stage or "").strip().lower()
@@ -3354,6 +3393,12 @@ class LearningController:
             candidate_ids=candidate_ids,
         )
         fallback_config = self._get_baseline_config()
+        if recommendation_patch:
+            fallback_config = apply_derived_recommendation_patch(
+                fallback_config,
+                recommendation_patch,
+                target_stage=target_stage_literal,
+            )
         reprocess_plan = self._curation_workflow_builder.build_derived_stage_plan(
             workflow=workflow,
             target_stage=target_stage_literal,
@@ -3369,6 +3414,31 @@ class LearningController:
             source_candidate_ids=[selection.candidate.candidate_id for selection in selections],
             source_items=[selection.source_item for selection in selections],
             selection_events=[selection.selection_event for selection in selections],
+        )
+
+    def preview_staged_curation_suggestions(
+        self, group_id: str, item_id: str, target_stage: str
+    ) -> dict[str, Any]:
+        """Build a non-mutating recommendation diff for one derived-job intent."""
+        if self._recommendation_engine is None:
+            return {"target_stage": target_stage, "stage_patch": {}, "changes": []}
+        experiment = self._get_discovered_store().load_group(group_id)
+        if experiment is None:
+            return {"target_stage": target_stage, "stage_patch": {}, "changes": []}
+        item = next((candidate for candidate in experiment.items if candidate.item_id == item_id), None)
+        if item is None:
+            return {"target_stage": target_stage, "stage_patch": {}, "changes": []}
+        recommendations = self._recommendation_engine.recommend(
+            item.positive_prompt,
+            target_stage,
+            model=item.model,
+            width=item.width or None,
+            height=item.height or None,
+        )
+        return build_derived_recommendation_patch(
+            recommendations,
+            target_stage=target_stage,
+            current_config=self._get_baseline_config(),
         )
 
     def _build_curation_workflow(self, experiment: Any) -> CurationWorkflow:

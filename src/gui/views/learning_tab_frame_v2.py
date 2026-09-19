@@ -17,7 +17,6 @@ from src.gui.help_text.workflow_guidance_v2 import (
     get_staged_review_runtime_guidance,
 )
 from src.gui.layout_v2 import configure_grid_columns
-from src.gui.learning_review_dialog_v2 import LearningReviewDialogV2
 from src.gui.learning_state import LearningState
 from src.gui.theme_v2 import (
     BODY_LABEL_STYLE,
@@ -157,27 +156,6 @@ class LearningTabFrame(ttk.Frame):
             command=self._on_learning_toggle,
         )
         learning_toggle.grid(row=0, column=4, sticky="e")
-        mode_row = ttk.Frame(self.header_frame, style=SURFACE_FRAME_STYLE)
-        mode_row.grid(row=0, column=3, sticky="e", padx=(8, 0))
-        ttk.Label(mode_row, text="Automation", style=BODY_LABEL_STYLE).pack(
-            side="left", padx=(0, 4)
-        )
-        mode_combo = ttk.Combobox(
-            mode_row,
-            textvariable=self._automation_mode_var,
-            values=["suggest_only", "apply_with_confirm", "auto_micro_experiment"],
-            state="readonly",
-            width=22,
-        )
-        mode_combo.pack(side="left")
-        mode_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_automation_mode_changed())
-        help_btn = ttk.Button(
-            mode_row,
-            text="?",
-            width=3,
-            command=self._show_automation_help,
-        )
-        help_btn.pack(side="left", padx=(4, 0))
         if self.app_state is not None and hasattr(self.app_state, "subscribe"):
             try:
                 self.app_state.subscribe(
@@ -186,11 +164,6 @@ class LearningTabFrame(ttk.Frame):
                 )
             except Exception:
                 pass
-        ttk.Button(
-            self.header_frame,
-            text="Review learning runs",
-            command=self._on_open_review,
-        ).grid(row=0, column=2, sticky="e", padx=8)
         ttk.Button(
             self.header_frame,
             text="New Experiment",
@@ -206,21 +179,7 @@ class LearningTabFrame(ttk.Frame):
             text="Experiment Library",
             command=self._on_open_experiment_library,
         ).grid(row=0, column=7, sticky="e", padx=(4, 0))
-        ttk.Button(
-            self.header_frame,
-            text="Resume Last",
-            command=self._on_resume_last_experiment,
-        ).grid(row=0, column=8, sticky="e", padx=(4, 0))
         attach_tooltip(learning_toggle, "Enable learning mode to collect ratings and feedback.")
-        attach_tooltip(
-            mode_combo,
-            "suggest_only: never apply; apply_with_confirm: manual apply; "
-            "auto_micro_experiment: apply + submit one capped validation job.",
-        )
-        attach_tooltip(
-            help_btn,
-            "Automation mode help.",
-        )
         attach_tooltip(header_label, "Learning mode: review runs, enable adaptive loops.")
         self._workflow_state_var = tk.StringVar(value="Workflow: idle")
         self.workflow_state_label = ttk.Label(
@@ -328,24 +287,40 @@ class LearningTabFrame(ttk.Frame):
             row=0, column=0, columnspan=2, sticky="ew", padx=2, pady=(4, 0)
         )
 
+        self._discovered_split = ttk.Panedwindow(
+            self._discovered_tab_frame, orient=tk.HORIZONTAL
+        )
+        self._discovered_split.grid(
+            row=1, column=0, columnspan=2, sticky="nsew", padx=2, pady=4
+        )
+        self._discovered_navigation_split = ttk.Panedwindow(
+            self._discovered_split, orient=tk.VERTICAL
+        )
         self.discovered_inbox_panel = DiscoveredReviewInboxPanel(
-            self._discovered_tab_frame,
+            self._discovered_navigation_split,
             on_open_group=self._on_discovered_open_group,
             on_close_group=self._on_discovered_close_group,
             on_ignore_group=self._on_discovered_ignore_group,
+            on_reopen_group=self._on_discovered_reopen_group,
             on_rescan=self._on_discovered_rescan,
             on_pick_scan_root=self._on_pick_discovered_scan_root,
             on_reset_scan_root=self._on_reset_discovered_scan_root,
             on_prune_missing=self._on_discovered_prune_missing,
             on_rebuild_scanned=self._on_discovered_rebuild_scanned,
         )
-        self.discovered_inbox_panel.grid(row=1, column=0, sticky="nsew", padx=(0, 2), pady=4)
+        self._discovered_navigation_split.add(self.discovered_inbox_panel, weight=3)
+        self._discovered_item_navigation = ttk.Frame(
+            self._discovered_navigation_split, style=SURFACE_FRAME_STYLE
+        )
+        self._discovered_navigation_split.add(self._discovered_item_navigation, weight=2)
+        self._discovered_split.add(self._discovered_navigation_split, weight=35)
 
         self.discovered_review_table = DiscoveredReviewTable(
-            self._discovered_tab_frame,
+            self._discovered_split,
             on_rate_item=self._on_discovered_rate_item,
+            navigation_master=self._discovered_item_navigation,
         )
-        self.discovered_review_table.grid(row=1, column=1, sticky="nsew", padx=(2, 0), pady=4)
+        self._discovered_split.add(self.discovered_review_table, weight=65)
 
         # ---- Tab 3: Staged Curation ----
         self._staged_tab_frame = ttk.Frame(self._mode_notebook, style=SURFACE_FRAME_STYLE)
@@ -364,6 +339,9 @@ class LearningTabFrame(ttk.Frame):
         self._staged_workflow_summary_var = tk.StringVar(value="Workflow summary: n/a")
         self._staged_replay_summary_var = tk.StringVar(value="Replay chain: n/a")
         self._staged_plan_preview_var = tk.StringVar(value="Derived plan preview: n/a")
+        self._staged_suggestion_var = tk.StringVar(value="No Learning suggestions previewed")
+        self._staged_suggestion_preview: dict[str, Any] | None = None
+        self._staged_applied_suggestion: dict[str, Any] | None = None
         self._staged_effective_settings_var = tk.StringVar(
             value="Effective settings: select a candidate"
         )
@@ -621,6 +599,26 @@ class LearningTabFrame(ttk.Frame):
             wraplength=520,
         )
         self.staged_queue_help_panel.pack(fill="x", pady=(0, 6))
+        suggestion_frame = ttk.LabelFrame(
+            derive_frame, text="Learning Suggestions", padding=(6, 4)
+        )
+        suggestion_frame.pack(fill="x", pady=(0, 6))
+        ttk.Label(
+            suggestion_frame,
+            textvariable=self._staged_suggestion_var,
+            style=BODY_LABEL_STYLE,
+            justify="left",
+        ).pack(fill="x")
+        ttk.Button(
+            suggestion_frame,
+            text="Preview Suggested Changes",
+            command=self._preview_staged_suggestions,
+        ).pack(side="left", pady=(4, 0))
+        ttk.Button(
+            suggestion_frame,
+            text="Apply to Derived Job",
+            command=self._apply_staged_suggestions,
+        ).pack(side="left", padx=(4, 0), pady=(4, 0))
         self._staged_queue_buttons["refine"] = ttk.Button(
             derive_frame,
             text="Queue Refine Now",
@@ -736,20 +734,6 @@ class LearningTabFrame(ttk.Frame):
                 pass
         self._persist_learning_session_state()
 
-    def _on_open_review(self) -> None:
-        """Open the learning review dialog with the latest records."""
-        fetch = getattr(self.learning_controller, "list_recent_records", None)
-        records = []
-        if callable(fetch):
-            try:
-                records = fetch(limit=10)
-            except Exception:
-                records = []
-        try:
-            LearningReviewDialogV2(self, self.learning_controller, records)
-        except Exception:
-            pass
-
     def _on_automation_mode_changed(self) -> None:
         mode = str(self._automation_mode_var.get() or "suggest_only")
         setter = getattr(self.learning_controller, "set_automation_mode", None)
@@ -759,15 +743,6 @@ class LearningTabFrame(ttk.Frame):
             except Exception:
                 pass
         self._persist_learning_session_state()
-
-    def _show_automation_help(self) -> None:
-        messagebox.showinfo(
-            "Automation Modes",
-            "suggest_only: recommendations are shown only, never auto-applied.\n\n"
-            "apply_with_confirm: recommendations can be applied to stage cards after user confirmation.\n\n"
-            "auto_micro_experiment: applies recommendations, then submits one preview job as "
-            "a validation run if queue capacity guardrails allow it.",
-        )
 
     def _on_workflow_state_changed(self, state: str) -> None:
         contract = update_status_banner(state)
@@ -806,6 +781,13 @@ class LearningTabFrame(ttk.Frame):
             f"Pending: {pending} Queued: {queued} Running: {running} Failed: {failed} | "
             f"{queue_text}"
         )
+        conclusion = dict(summary.get("conclusion") or {})
+        if conclusion.get("values"):
+            self._summary_var.set(
+                f"{self._summary_var.get()} | {conclusion.get('message', '')} "
+                f"Saved/Draft/Unrated: {conclusion.get('saved', 0)}/"
+                f"{conclusion.get('draft', 0)}/{conclusion.get('unrated', 0)}"
+            )
 
     def _build_store_payload(self) -> dict[str, Any] | None:
         if self.learning_controller.learning_state.current_experiment is None:
@@ -820,15 +802,22 @@ class LearningTabFrame(ttk.Frame):
         """Return learning tab session payload for app-level persistence."""
         return {
             "enabled": bool(self._learning_enabled_var.get()),
-            "automation_mode": str(self._automation_mode_var.get() or "suggest_only"),
+            "automation_mode": "suggest_only",
             "last_experiment_id": self._active_experiment_id,
+            "session": self._build_store_payload(),
         }
+
+    @staticmethod
+    def _payload_has_admission(payload: dict[str, Any] | None) -> bool:
+        from src.learning.experiment_lifecycle import has_successful_admission
+
+        return has_successful_admission(payload)
 
     def _persist_learning_session_state(self) -> None:
         """Persist learning session state immediately for resume-after-restart flows."""
         try:
             payload = self._build_store_payload()
-            if isinstance(payload, dict):
+            if isinstance(payload, dict) and self._payload_has_admission(payload):
                 experiment = self.learning_controller.learning_state.current_experiment
                 display_name = str(getattr(experiment, "name", "") or "Learning Experiment")
                 durable_id = str(getattr(experiment, "experiment_id", "") or "") or None
@@ -861,8 +850,7 @@ class LearningTabFrame(ttk.Frame):
         except Exception:
             pass
         try:
-            mode = str(payload.get("automation_mode", "suggest_only") or "suggest_only")
-            self._automation_mode_var.set(mode)
+            self._automation_mode_var.set("suggest_only")
             self._on_automation_mode_changed()
         except Exception:
             pass
@@ -876,6 +864,9 @@ class LearningTabFrame(ttk.Frame):
         payload = self._build_store_payload()
         if not isinstance(payload, dict):
             return False
+        if not self._payload_has_admission(payload):
+            self._persist_learning_session_state()
+            return True
         experiment = self.learning_controller.learning_state.current_experiment
         display_name = str(getattr(experiment, "name", "") or "Learning Experiment")
         # Durable experiment identity, not the active tab pointer, owns the
@@ -920,7 +911,7 @@ class LearningTabFrame(ttk.Frame):
         self._persist_learning_session_state()
 
     def _on_open_experiment_library(self) -> None:
-        handles = self.experiment_store.list_handles()
+        all_handles = self.experiment_store.list_handles()
         window = tk.Toplevel(self)
         window.title("Learning Experiment Library")
         window.geometry("980x480")
@@ -942,6 +933,10 @@ class LearningTabFrame(ttk.Frame):
         scrollbar = ttk.Scrollbar(window, orient="vertical", command=tree.yview)
         tree.configure(yscrollcommand=scrollbar.set)
         scrollbar.grid(row=0, column=1, sticky="ns", pady=6)
+        handles = [
+            handle for handle in all_handles
+            if self._payload_has_admission(self.experiment_store.load_session(handle.experiment_id))
+        ]
         for handle in handles:
             payload = self.experiment_store.load_session(handle.experiment_id) or {}
             experiment = dict(payload.get("current_experiment") or {})
@@ -949,10 +944,15 @@ class LearningTabFrame(ttk.Frame):
             completed = sum(int(item.get("completed_images", 0) or 0) for item in plan if isinstance(item, dict))
             total = sum(int(item.get("planned_images", 0) or 0) for item in plan if isinstance(item, dict))
             ratings = self.learning_record_writer.get_ratings_for_experiment(handle.experiment_id)
+            from src.learning.experiment_lifecycle import classify_experiment_lifecycle
+
+            lifecycle = classify_experiment_lifecycle(
+                payload, saved_rating_count=len(ratings)
+            )
             tree.insert(
                 "", "end", iid=handle.experiment_id, text=handle.display_name,
                 values=(handle.experiment_id[-8:], experiment.get("variable_under_test", ""),
-                        experiment.get("stage", ""), payload.get("workflow_state", "draft"),
+                        experiment.get("stage", ""), lifecycle,
                         len(plan), f"{completed}/{total}", f"{len(ratings)}/{completed}",
                         handle.updated_at.replace("T", " ")[:19]),
             )
@@ -966,7 +966,6 @@ class LearningTabFrame(ttk.Frame):
             if self._restore_from_store_payload(self.experiment_store.load_session(experiment_id), experiment_id=experiment_id):
                 window.destroy()
         ttk.Button(actions, text="Open / Review", command=_open_selected).pack(side="left")
-        ttk.Button(actions, text="Resume", command=_open_selected).pack(side="left", padx=(4, 0))
         ttk.Button(actions, text="New Experiment", command=lambda: (self._on_new_experiment(), window.destroy())).pack(side="right")
         tree.bind("<Double-1>", lambda _event: _open_selected())
 
@@ -984,15 +983,6 @@ class LearningTabFrame(ttk.Frame):
         payload = self.experiment_store.load_session(experiment_id)
         if not self._restore_from_store_payload(payload, experiment_id=experiment_id):
             messagebox.showerror("Learning", "Unable to load the selected experiment.")
-
-    def _on_resume_last_experiment(self) -> None:
-        last = self.experiment_store.load_last_session()
-        if not last:
-            messagebox.showinfo("Learning", "No saved learning experiment was found.")
-            return
-        experiment_id, payload = last
-        if not self._restore_from_store_payload(payload, experiment_id=experiment_id):
-            messagebox.showerror("Learning", "Unable to resume the last saved experiment.")
 
     def _restore_experiment_panel(self) -> None:
         experiment = getattr(self.learning_controller.learning_state, "current_experiment", None)
@@ -1038,15 +1028,13 @@ class LearningTabFrame(ttk.Frame):
         if not isinstance(payload, dict):
             return False
         experiment_id = str(payload.get("last_experiment_id") or "").strip() or None
+        if isinstance(payload.get("session"), dict):
+            restored = self._restore_from_store_payload(payload.get("session"))
+            return restored
         if experiment_id:
             stored = self.experiment_store.load_session(experiment_id)
             if self._restore_from_store_payload(stored, experiment_id=experiment_id):
                 return True
-        if isinstance(payload.get("session"), dict):
-            restored = self._restore_from_store_payload(payload.get("session"))
-            if restored and self._active_experiment_id is None:
-                self._save_to_store(force_new=True)
-            return restored
         try:
             enabled = bool(payload.get("enabled", True))
             self._learning_enabled_var.set(enabled)
@@ -1146,10 +1134,31 @@ class LearningTabFrame(ttk.Frame):
         )
 
     def _on_discovered_prune_missing(self) -> None:
-        if not messagebox.askyesno("Prune Missing", "Remove unavailable items from scanner-owned groups? Images and manifests are never deleted."):
+        preview = self.learning_controller.preview_missing_discovered_cleanup()
+        message = (
+            f"Scanner missing: {preview['scanner_missing_items']}\n"
+            f"Legacy missing: {preview['legacy_missing_items']}\n"
+            f"Zero-available groups: {preview['zero_available_groups']}\n"
+            f"Affected scan-index entries: {preview['affected_scan_index_entries']}\n\n"
+            "Clean scanner-owned missing references? Images and manifests are never deleted."
+        )
+        if not messagebox.askyesno("Clean Missing References", message):
             return
-        counts = self.learning_controller.prune_missing_discovered_outputs()
+        include_legacy = False
+        if preview["legacy_missing_items"]:
+            include_legacy = messagebox.askyesno(
+                "Include Legacy References?",
+                "Also remove missing references from legacy-unknown groups? "
+                "Controlled and imported groups remain protected.",
+            )
+        counts = self.learning_controller.clean_missing_discovered_outputs(
+            include_legacy=include_legacy
+        )
         self.discovered_inbox_panel._scan_status_label.configure(text=f"Pruned {counts['missing_items']} missing item(s); removed {counts['groups_removed']} empty scanner group(s).")
+        self._refresh_discovered_inbox()
+
+    def _on_discovered_reopen_group(self, group_id: str) -> None:
+        self.learning_controller.reopen_discovered_group(group_id)
         self._refresh_discovered_inbox()
 
     def _on_discovered_rebuild_scanned(self) -> None:
@@ -1645,6 +1654,21 @@ class LearningTabFrame(ttk.Frame):
             submitted = self.learning_controller.submit_staged_curation_advancement(
                 self._staged_current_group_id,
                 target_stage,
+                candidate_ids=(
+                    [str(self._staged_applied_suggestion.get("candidate_id"))]
+                    if self._staged_applied_suggestion
+                    and self._staged_applied_suggestion.get("requested_target_stage")
+                    == target_stage
+                    and self._staged_applied_suggestion.get("candidate_id")
+                    else None
+                ),
+                recommendation_patch=(
+                    self._staged_applied_suggestion
+                    if self._staged_applied_suggestion
+                    and self._staged_applied_suggestion.get("requested_target_stage")
+                    == target_stage
+                    else None
+                ),
             )
         except Exception as exc:
             self._staged_job_status_var.set(f"Failed to submit {target_stage} jobs: {exc}")
@@ -1662,7 +1686,59 @@ class LearningTabFrame(ttk.Frame):
             return
         label = target_stage.replace("_", " ")
         self._staged_job_status_var.set(f"Submitted {submitted} {label} job(s) to the queue.")
+        self._staged_applied_suggestion = None
         self._persist_learning_session_state()
+
+    def _selected_staged_suggestion_target(self) -> tuple[str, str] | None:
+        selection = self._staged_candidate_tree.selection()
+        candidate_id = str(selection[0]) if selection else ""
+        latest = self._staged_latest_events.get(candidate_id)
+        target = self._target_stage_for_decision(
+            str(getattr(latest, "decision", "") or "")
+        )
+        return (candidate_id, target) if candidate_id and target else None
+
+    def _preview_staged_suggestions(self) -> None:
+        selected = self._selected_staged_suggestion_target()
+        if not self._staged_current_group_id or not selected:
+            messagebox.showinfo(
+                "Learning Suggestions",
+                "Select a staged candidate and mark its intended next stage first.",
+            )
+            return
+        candidate_id, target = selected
+        preview = self.learning_controller.preview_staged_curation_suggestions(
+            self._staged_current_group_id, candidate_id, target
+        )
+        preview["candidate_id"] = candidate_id
+        preview["requested_target_stage"] = target
+        self._staged_suggestion_preview = preview
+        changes = list(preview.get("changes") or [])
+        if not changes:
+            self._staged_suggestion_var.set("No applicable learned changes for this candidate.")
+            return
+        descriptions = [
+            f"{change['setting']}: {change.get('current')} -> {change.get('suggested')}"
+            for change in changes
+        ]
+        self._staged_suggestion_var.set(" | ".join(descriptions))
+
+    def _apply_staged_suggestions(self) -> None:
+        preview = dict(self._staged_suggestion_preview or {})
+        if not preview.get("changes"):
+            messagebox.showinfo("Learning Suggestions", "Preview applicable changes first.")
+            return
+        if not messagebox.askyesno(
+            "Apply to Derived Job",
+            "Apply these suggestions only to the next derived-job plan? "
+            "Pipeline cards, PromptPacks, source artifacts, and original jobs are unchanged.",
+        ):
+            return
+        self._staged_applied_suggestion = preview
+        self._staged_suggestion_var.set(
+            f"Confirmed for next {preview.get('requested_target_stage')} derived job: "
+            + self._staged_suggestion_var.get()
+        )
 
     def _open_staged_in_review(self, target_stage: str) -> None:
         if not self._staged_current_group_id:

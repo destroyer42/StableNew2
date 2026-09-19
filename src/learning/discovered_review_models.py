@@ -199,6 +199,14 @@ class DiscoveredReviewHandle:
     varying_fields: tuple[str, ...]
     created_at: str
     updated_at: str
+    available_item_count: int = 0
+    missing_item_count: int = 0
+    origin: str = "legacy_unknown"
+
+    def __post_init__(self) -> None:
+        """Treat pre-availability handles as fully available for compatibility."""
+        if self.item_count > 0 and self.available_item_count == self.missing_item_count == 0:
+            object.__setattr__(self, "available_item_count", self.item_count)
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -210,6 +218,9 @@ class DiscoveredReviewHandle:
             "varying_fields": list(self.varying_fields),
             "created_at": self.created_at,
             "updated_at": self.updated_at,
+            "available_item_count": self.available_item_count,
+            "missing_item_count": self.missing_item_count,
+            "origin": self.origin,
         }
 
     @staticmethod
@@ -223,6 +234,9 @@ class DiscoveredReviewHandle:
             varying_fields=tuple(d.get("varying_fields") or []),
             created_at=str(d.get("created_at") or ""),
             updated_at=str(d.get("updated_at") or ""),
+            available_item_count=int(d.get("available_item_count") or 0),
+            missing_item_count=int(d.get("missing_item_count") or 0),
+            origin=str(d.get("origin") or "legacy_unknown"),
         )
 
 

@@ -341,11 +341,32 @@ recommendation inference.
 
 The requested seed is frozen before NJR admission; actual backend seed vectors
 are established from the first successful variant and must match subsequently
-before ratings count as controlled evidence. PromptPack experiments freeze one
-deterministic Matrix vector and rendered prompt. Learning-only filenames are
+before ratings count as controlled evidence. PromptPack experiments inspect
+canonical Matrix tokens in the selected row, resolve only referenced slots, and
+freeze the first canonical combination without mutating or fanning out the pack;
+pack Matrix configuration is recorded as unused when the row references no
+tokens. Learning-only filenames are
 bounded presentation labels with source, row, model, timestamp, variant, and
-sample identity. Scanner-owned discovered groups are explicitly classified and
-may be pruned or rebuilt without touching controlled or imported worksets.
+sample identity.
+
+Editable Designed Experiment Working Draft state belongs to existing UI/session
+persistence. `LearningExperimentStore` remains the single durable experiment
+store, and default library admission begins only after at least one immutable
+experiment job successfully crosses queue admission. The same entry then tracks
+execution and sample review. Experiment conclusions derive from persisted sample
+ratings and controlled-validity evidence; unsaved drafts and uncontrolled seed
+comparisons cannot produce a causal winner.
+
+Scanner-owned discovered groups are explicitly classified and project total,
+available, and missing artifacts. Done and Dismiss are distinct durable statuses
+that remain suppressed during ordinary rescans and rebuilds until explicitly
+restored. Missing-reference cleanup may remove scanner or explicitly confirmed
+legacy references, but it never deletes artifact/manifest files or touches
+controlled and imported worksets. Staged Curation may project
+RecommendationEngine evidence for one selected candidate and target stage;
+confirmation applies an allowlisted patch only to the isolated derived-job config
+before the existing compiler/NJR/JobService path. It does not mutate Pipeline
+cards, PromptPacks, source artifacts, original NJRs, or historical experiments.
 
 Learning resource-backed variables consume the live `AppStateV2.resources`
 projection through one Learning-owned accessor; Learning does not query WebUI

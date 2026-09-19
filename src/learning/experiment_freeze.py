@@ -11,7 +11,7 @@ import secrets
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from src.pipeline.resolution_layer import UnifiedPromptResolver
+from src.pipeline.resolution_layer import MATRIX_TOKEN_RE, UnifiedPromptResolver
 from src.promptpacks.storage import (
     PromptPackFormatError,
     load_prompt_pack_document,
@@ -20,6 +20,22 @@ from src.promptpacks.storage import (
 from src.utils.prompt_pack_utils import get_matrix_slots_dict
 
 _MAX_A1111_SEED = (2**32) - 1
+
+
+def describe_matrix_freeze(metadata: Mapping[str, Any]) -> str:
+    """Describe the controlled Matrix choice captured by Build Preview."""
+    if not bool(metadata.get("matrix_used")):
+        return ""
+    vector = dict(metadata.get("matrix_values") or {})
+    rendered = ", ".join(f"{name}={value}" for name, value in vector.items())
+    total = max(1, int(metadata.get("matrix_combination_total", 1) or 1))
+    source_mode = str(metadata.get("matrix_source_mode") or "sequential").strip().lower()
+    prefix = (
+        "PromptPack Matrix mode is Random; this controlled experiment froze"
+        if source_mode == "random"
+        else "This controlled experiment froze"
+    )
+    return f"{prefix} canonical combination 1/{total}: {rendered}."
 
 
 def freeze_prompt_pack_source(
@@ -42,10 +58,31 @@ def freeze_prompt_pack_source(
         row = prompt_pack_row_by_index(document, int(source.get("selected_prompt_index", 0) or 0))
     except (OSError, PromptPackFormatError, ValueError) as exc:
         raise ValueError(f"Selected PromptPack cannot be frozen: {exc}") from exc
-    slots = get_matrix_slots_dict(document)
-    mode = str(dict(document.get("pack_data", {}).get("matrix", {}) or {}).get("mode") or "sequential")
-    if slots and mode == "random":
-        raise ValueError("PromptPack Matrix random mode cannot be frozen deterministically")
+    matrix_config = dict(document.get("pack_data", {}).get("matrix", {}) or {})
+    mode = str(matrix_config.get("mode") or "sequential")
+    referenced = list(
+        dict.fromkeys(
+            match.group(1).strip()
+            for text in (row.quality_line, row.subject_template)
+            for match in MATRIX_TOKEN_RE.finditer(str(text or ""))
+        )
+    )
+    all_slots = get_matrix_slots_dict(document)
+    configured_slots = {
+        str(slot.get("name") or "").strip(): list(slot.get("values") or [])
+        for slot in list(matrix_config.get("slots") or [])
+        if isinstance(slot, dict) and str(slot.get("name") or "").strip()
+    }
+    slots: dict[str, list[str]] = {}
+    for name in referenced:
+        values = list(all_slots.get(name) or configured_slots.get(name) or [])
+        if not values:
+            raise ValueError(
+                "Cannot build experiment: selected prompt uses "
+                f"[[{name}]], but Matrix slot '{name}' has no values. "
+                "Add a value or choose Custom/Current prompt."
+            )
+        slots[name] = values
     vector: dict[str, str] = {}
     if slots:
         names = list(slots)
@@ -64,6 +101,10 @@ def freeze_prompt_pack_source(
     for values in slots.values():
         total *= len(values)
     source.update({
+        "matrix_source_mode": mode,
+        "matrix_referenced_variables": referenced,
+        "matrix_used": bool(referenced),
+        "matrix_freeze_policy": "first_canonical_required_slots" if referenced else "unused",
         "matrix_values": vector,
         "matrix_combination_index": 1 if slots else 0,
         "matrix_combination_total": total if slots else 0,

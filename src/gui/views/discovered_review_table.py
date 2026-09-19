@@ -48,12 +48,14 @@ class DiscoveredReviewTable(ttk.Frame):
         on_rate_item: Callable[[str, int], None] | None = None,
         on_item_selected: Callable[[str], None] | None = None,
         varying_fields: list[str] | None = None,
+        navigation_master: tk.Misc | None = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(master, **kwargs)
         self._on_rate_item = on_rate_item
         self._on_item_selected = on_item_selected
         self._varying_fields = varying_fields or []
+        self._navigation_master = navigation_master
         self._items: list[DiscoveredReviewItem] = []
         self._rating_vars: dict[str, tk.IntVar] = {}
 
@@ -65,14 +67,19 @@ class DiscoveredReviewTable(ttk.Frame):
 
     def _build_ui(self) -> None:
         self.columnconfigure(0, weight=1)
-        # Image review is the primary task: default the table to roughly a
-        # quarter of the usable height and the preview to the remainder.
-        self.rowconfigure(1, weight=1)
-        self.rowconfigure(2, weight=3)
+        external_navigation = self._navigation_master is not None
+        navigation_host = self._navigation_master or self
+        navigation_host.columnconfigure(0, weight=1)
+        navigation_host.rowconfigure(1, weight=1)
+        if external_navigation:
+            self.rowconfigure(0, weight=1)
+        else:
+            self.rowconfigure(1, weight=1)
+            self.rowconfigure(2, weight=3)
 
         # header label
         self._header_label = ttk.Label(
-            self,
+            navigation_host,
             text="No group loaded",
             style=BODY_LABEL_STYLE,
             font=("TkDefaultFont", 10, "bold"),
@@ -80,12 +87,16 @@ class DiscoveredReviewTable(ttk.Frame):
         self._header_label.grid(row=0, column=0, sticky="w", padx=4, pady=(4, 2))
 
         # table frame
-        table_frame = ttk.Frame(self, style=SURFACE_FRAME_STYLE, padding=2)
+        table_frame = ttk.Frame(navigation_host, style=SURFACE_FRAME_STYLE, padding=2)
         table_frame.grid(row=1, column=0, sticky="nsew", padx=2)
         table_frame.columnconfigure(0, weight=1)
         table_frame.rowconfigure(0, weight=1)
 
-        fixed_cols = ("rating", "stage", "model", "sampler", "steps", "cfg")
+        fixed_cols = (
+            ("rating", "stage", "steps", "cfg")
+            if external_navigation
+            else ("rating", "stage", "model", "sampler", "steps", "cfg")
+        )
         varying_cols = tuple(self._varying_fields)
         all_cols = fixed_cols + varying_cols + ("path",)
 
@@ -98,23 +109,24 @@ class DiscoveredReviewTable(ttk.Frame):
         # Fixed column headings
         self._tree.heading("rating", text="Rating")
         self._tree.heading("stage", text="Stage")
-        self._tree.heading("model", text="Model")
-        self._tree.heading("sampler", text="Sampler")
         self._tree.heading("steps", text="Steps")
         self._tree.heading("cfg", text="CFG")
         self._tree.column("rating", width=70, anchor="center")
         self._tree.column("stage", width=70, anchor="center")
-        self._tree.column("model", width=160, anchor="w")
-        self._tree.column("sampler", width=90, anchor="center")
         self._tree.column("steps", width=50, anchor="center")
         self._tree.column("cfg", width=50, anchor="center")
+        if not external_navigation:
+            self._tree.heading("model", text="Model")
+            self._tree.heading("sampler", text="Sampler")
+            self._tree.column("model", width=160, anchor="w")
+            self._tree.column("sampler", width=90, anchor="center")
         # Varying column headings
         for v in varying_cols:
             self._tree.heading(v, text=v)
             self._tree.column(v, width=80, anchor="center")
         # Path column
         self._tree.heading("path", text="File")
-        self._tree.column("path", width=200, anchor="w")
+        self._tree.column("path", width=140 if external_navigation else 200, anchor="w")
 
         self._tree.grid(row=0, column=0, sticky="nsew")
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self._tree.yview)
@@ -123,7 +135,13 @@ class DiscoveredReviewTable(ttk.Frame):
         self._tree.bind("<<TreeviewSelect>>", self._on_tree_select)
 
         preview_frame = ttk.LabelFrame(self, text="Selected Image", padding=(6, 4))
-        preview_frame.grid(row=2, column=0, sticky="nsew", padx=2, pady=(4, 2))
+        preview_frame.grid(
+            row=0 if external_navigation else 2,
+            column=0,
+            sticky="nsew",
+            padx=2,
+            pady=(0 if external_navigation else 4, 2),
+        )
         preview_frame.columnconfigure(0, weight=1)
         preview_frame.rowconfigure(1, weight=1)
 
@@ -147,7 +165,7 @@ class DiscoveredReviewTable(ttk.Frame):
 
         # rating control strip
         rating_bar = ttk.Frame(self, style=SURFACE_FRAME_STYLE, padding=(4, 2))
-        rating_bar.grid(row=3, column=0, sticky="ew")
+        rating_bar.grid(row=1 if external_navigation else 3, column=0, sticky="ew")
         ttk.Label(rating_bar, text="Rate selected:", style=BODY_LABEL_STYLE).pack(
             side="left", padx=(0, 4)
         )
@@ -204,12 +222,16 @@ class DiscoveredReviewTable(ttk.Frame):
         for item in self._items:
             rating_label = _RATING_LABELS.get(item.rating, "—")
             fixed_values = (
-                rating_label,
-                item.stage,
-                _truncate(item.model, 24),
-                item.sampler,
-                item.steps,
-                f"{item.cfg_scale:.1f}",
+                (rating_label, item.stage, item.steps, f"{item.cfg_scale:.1f}")
+                if self._navigation_master is not None
+                else (
+                    rating_label,
+                    item.stage,
+                    _truncate(item.model, 24),
+                    item.sampler,
+                    item.steps,
+                    f"{item.cfg_scale:.1f}",
+                )
             )
             varying_values = tuple(
                 str(item.extra_fields.get(f, getattr(item, f, "—")) or "—")
@@ -240,6 +262,10 @@ class DiscoveredReviewTable(ttk.Frame):
         item_id = self.get_selected_item_id()
         if not item_id:
             return
+        item = self._get_item(item_id)
+        if item is None or item.extra_fields.get("artifact_availability") == "missing":
+            self._preview_meta_var.set("Artifact unavailable — rating is disabled")
+            return
         self.refresh_item_rating(item_id, rating)
         if self._on_rate_item:
             self._on_rate_item(item_id, rating)
@@ -266,7 +292,11 @@ class DiscoveredReviewTable(ttk.Frame):
         if item.width and item.height:
             dimensions = f"{item.width} x {item.height}"
         unavailable = item.extra_fields.get("artifact_availability") == "missing"
-        meta_parts = [part for part in (item.stage, item.model, dimensions) if part]
+        meta_parts = [
+            part
+            for part in (item.stage, item.model, item.sampler, dimensions)
+            if part
+        ]
         if unavailable:
             meta_parts.append("Artifact unavailable")
         self._preview_meta_var.set(" | ".join(meta_parts) or "Image selected")

@@ -591,7 +591,14 @@ class ExperimentDesignPanel(ttk.Frame):
                 self.learning_controller.build_plan(
                     self.learning_controller.learning_state.current_experiment
                 )
-                self.feedback_var.set("Experiment definition and plan built successfully")
+                from src.learning.experiment_freeze import describe_matrix_freeze
+
+                guidance = describe_matrix_freeze(
+                    self.learning_controller.learning_state.current_experiment.metadata
+                )
+                self.feedback_var.set(
+                    guidance or "Experiment definition and plan built successfully"
+                )
             else:
                 self.feedback_var.set("Experiment definition updated successfully")
         except Exception as e:

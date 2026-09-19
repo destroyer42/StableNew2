@@ -15,8 +15,8 @@ from src.pipeline.reprocess_builder import (
 from src.state.output_routing import OUTPUT_ROUTE_LEARNING
 
 from .curation_manifest import (
-    build_candidate_lineage_block,
-    build_selection_event_block,
+    build_review_chunk_lineage_block,
+    build_serialized_curation_source_metadata,
 )
 from .models import (
     CurationCandidate,
@@ -171,12 +171,15 @@ class CurationWorkflowBuilder:
     ) -> ReprocessSourceItem | None:
         source = selection.reprocess_item
         metadata = deepcopy(source.metadata or {})
-        metadata["curation_source_selection"] = {
-            "candidate_id": selection.candidate.candidate_id,
-            "decision": selection.selection_event.decision,
-            "face_triage_tier": selection.face_triage_tier,
-            "target_stage": target_stage,
-        }
+        metadata.update(
+            build_serialized_curation_source_metadata(
+                selection.candidate,
+                selection.selection_event,
+                source_stage=selection.candidate.stage,
+                face_triage_tier=selection.face_triage_tier,
+            )
+        )
+        metadata["curation_source_selection"]["target_stage"] = target_stage
         config = deepcopy(source.config or {})
 
         if target_stage == "face_triage":
@@ -224,26 +227,10 @@ class CurationWorkflowBuilder:
         if not chunk:
             return {}
         item = chunk[0]
-        selection_meta = dict((item.metadata or {}).get("curation_source_selection") or {})
-        candidate = item.metadata.get("curation_candidate")
-        event = item.metadata.get("curation_selection_event")
-        payload: dict[str, Any] = {
-            "curation_derived_stage": {
-                "workflow_id": workflow.workflow_id,
-                "target_stage": target_stage,
-                "source_candidate_id": str(selection_meta.get("candidate_id") or ""),
-                "source_decision": str(selection_meta.get("decision") or ""),
-                "face_triage_tier": str(selection_meta.get("face_triage_tier") or ""),
-            }
-        }
-        if isinstance(candidate, CurationCandidate):
-            source_decision = str(selection_meta.get("decision") or "").strip() or None
-            payload.update(
-                build_candidate_lineage_block(
-                    candidate,
-                    source_decision=source_decision,
-                )
-            )
-        if isinstance(event, SelectionEvent):
-            payload["selection_event"] = build_selection_event_block(event)
+        payload = build_review_chunk_lineage_block(
+            item.metadata,
+            target_stage=target_stage,
+        )
+        derived = payload.setdefault("curation_derived_stage", {})
+        derived.setdefault("workflow_id", workflow.workflow_id)
         return payload
