@@ -824,6 +824,8 @@ class LearningController:
             submit_experiment = getattr(self.execution_controller, "submit_experiment_jobs", None)
             if not callable(submit_experiment):
                 raise RuntimeError("Learning batch admission is unavailable")
+            for record, variant in zip(admission.records, pending, strict=True):
+                self._log_seed_dispatch(record, variant, experiment)
             submit_experiment(
                 admission.records,
                 pending,
@@ -876,6 +878,7 @@ class LearningController:
             # PR-LEARN-010: Build NJR directly with explicit config fields
             record = self._build_variant_njr(variant, experiment)
             logger.info(f"[LearningController] Built NJR for variant: {variant.param_value}")
+            self._log_seed_dispatch(record, variant, experiment)
 
             if not self.execution_controller:
                 raise RuntimeError("Learning execution controller unavailable")
@@ -914,6 +917,27 @@ class LearningController:
             variant_index = self._get_variant_index(variant)
             if variant_index >= 0:
                 self._update_variant_status(variant_index, "failed")
+
+    @staticmethod
+    def _log_seed_dispatch(
+        record: Any, variant: LearningVariant, experiment: LearningExperiment
+    ) -> None:
+        """Log bounded frozen seed inputs for one controlled dispatch."""
+
+        import logging
+
+        logger = logging.getLogger(__name__)
+        snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
+        snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
+        policy = snapshot.get("seed_policy") if isinstance(snapshot, dict) else {}
+        policy = policy if isinstance(policy, dict) else {}
+        logger.info(
+            "Learning seed dispatch: experiment=%s variant=%s requested=%s samples=%s",
+            getattr(experiment, "experiment_id", ""),
+            getattr(variant, "variant_id", "") or getattr(variant, "param_value", ""),
+            getattr(record, "seed", None),
+            policy.get("requested_sample_count", getattr(experiment, "images_per_value", 1)),
+        )
 
     def _build_variant_njr(
         self, variant: LearningVariant, experiment: LearningExperiment
@@ -1656,45 +1680,82 @@ class LearningController:
         policy = snapshot.get("seed_policy") if isinstance(snapshot, dict) else None
         metadata = result.get("metadata", {}) if isinstance(result, dict) else {}
         metadata = metadata if isinstance(metadata, dict) else {}
+        variant_payloads = result.get("variants") if isinstance(result, dict) else None
+        variant_payload = (
+            next((item for item in variant_payloads if isinstance(item, dict)), {})
+            if isinstance(variant_payloads, list)
+            else {}
+        )
         actual_seeds = (
             result.get("all_seeds") if isinstance(result, dict) else None
-        ) or metadata.get("all_seeds") or metadata.get("actual_seed_vector")
+        ) or metadata.get("all_seeds") or metadata.get("actual_seed_vector") or variant_payload.get("all_seeds")
         actual_subseeds = (
             result.get("all_subseeds") if isinstance(result, dict) else None
-        ) or metadata.get("all_subseeds") or metadata.get("actual_subseed_vector")
+        ) or metadata.get("all_subseeds") or metadata.get("actual_subseed_vector") or variant_payload.get("all_subseeds")
         actual_vector = normalize_actual_seed_vector(actual_seeds)
         actual_subseed_vector = normalize_actual_seed_vector(actual_subseeds)
         sample_count = int((policy or {}).get("requested_sample_count", 0) or 0)
         observed = dict(getattr(self.learning_state.current_experiment, "metadata", {}) or {})
         observed_vector = normalize_actual_seed_vector(observed.get("observed_seed_vector"))
         controlled = False
-        if isinstance(policy, dict) and len(actual_vector) == sample_count:
-            if not observed_vector:
+        reason = "seed_readback_unavailable"
+        subseed_strength = float((policy or {}).get("subseed_strength", 0.0) or 0.0)
+        has_seed_policy = isinstance(policy, dict) and bool(policy)
+        if has_seed_policy and actual_vector:
+            if len(actual_vector) != sample_count:
+                reason = "seed_vector_mismatch"
+            elif subseed_strength > 0 and not actual_subseed_vector:
+                reason = "seed_readback_unavailable"
+            elif not observed_vector:
                 observed["observed_seed_vector"] = actual_vector
-                if float(policy.get("subseed_strength", 0.0) or 0.0) > 0:
+                if subseed_strength > 0:
                     observed["observed_subseed_vector"] = actual_subseed_vector
                 self.learning_state.current_experiment.metadata = observed
-                controlled = bool(actual_vector) and (
-                    float(policy.get("subseed_strength", 0.0) or 0.0) <= 0
-                    or bool(actual_subseed_vector)
-                )
+                controlled = True
+                reason = ""
             else:
-                comparable = {**policy, "observed_seed_vector": observed_vector,
-                              "observed_subseed_vector": observed.get("observed_subseed_vector", [])}
+                comparable = {
+                    **policy,
+                    "observed_seed_vector": observed_vector,
+                    "observed_subseed_vector": observed.get("observed_subseed_vector", []),
+                }
                 controlled = seed_vector_matches(comparable, actual_vector, actual_subseed_vector)
+                reason = "" if controlled else "seed_vector_mismatch"
         variant.execution_metadata = {
             **dict(getattr(variant, "execution_metadata", {}) or {}),
             "requested_seed_policy": dict(policy or {}),
             "actual_all_seeds": actual_vector,
             "actual_all_subseeds": actual_subseed_vector,
             "controlled_evidence_valid": controlled,
+            "seed_validation_reason": reason or "valid",
+            "requested_seed": (policy or {}).get("requested_base_seed"),
+            "requested_sample_count": sample_count,
+            "observed_seed_vector": observed_vector or (actual_vector if controlled else []),
         }
-        if not controlled:
+        if not has_seed_policy:
+            logger.debug(
+                "Learning seed validation skipped: no frozen policy for experiment=%s",
+                getattr(self.learning_state.current_experiment, "experiment_id", ""),
+            )
+        elif not controlled:
             variant.status = "uncontrolled"
             logger.error(
-                "Learning experiment %s variant %s is uncontrolled: backend seed vector did not match frozen policy",
+                "Learning seed validation: experiment=%s variant=%s requested=%s actual=%s observed=%s controlled=False reason=%s",
                 getattr(self.learning_state.current_experiment, "experiment_id", ""),
                 variant.variant_id,
+                (policy or {}).get("requested_base_seed"),
+                actual_vector,
+                observed_vector,
+                reason,
+            )
+        else:
+            logger.info(
+                "Learning seed validation: experiment=%s variant=%s requested=%s actual=%s observed=%s controlled=True",
+                getattr(self.learning_state.current_experiment, "experiment_id", ""),
+                variant.variant_id,
+                (policy or {}).get("requested_base_seed"),
+                actual_vector,
+                observed_vector or actual_vector,
             )
 
         # PR-LEARN-005: Extract image references from result

@@ -4963,6 +4963,9 @@ class Pipeline:
                 "requested_seed": payload.get("seed", -1),
                 "actual_seed": gen_info.get("seed"),
                 "actual_subseed": gen_info.get("subseed"),
+                "all_seeds": gen_info.get("all_seeds"),
+                "requested_subseed": payload.get("subseed", -1),
+                "all_subseeds": gen_info.get("all_subseeds"),
                 "model": model_name,
                 "vae": vae_name,
                 "pressure_assessment": pressure_assessment,
@@ -5122,6 +5125,12 @@ class Pipeline:
                     "seed": payload.get("seed", -1),
                     "subseed": payload.get("subseed", -1),
                     "subseed_strength": payload.get("subseed_strength", 0.0),
+                    "requested_seed": payload.get("seed", -1),
+                    "actual_seed": gen_info.get("seed"),
+                    "all_seeds": gen_info.get("all_seeds"),
+                    "requested_subseed": payload.get("subseed", -1),
+                    "actual_subseed": gen_info.get("subseed"),
+                    "all_subseeds": gen_info.get("all_subseeds"),
                     "config": self._clean_metadata_payload(payload),
                     "output_path": str(image_path),
                     "path": str(image_path),
@@ -5401,6 +5410,9 @@ class Pipeline:
                 "requested_seed": payload.get("seed", -1),
                 "actual_seed": gen_info.get("seed"),
                 "actual_subseed": gen_info.get("subseed"),
+                "all_seeds": gen_info.get("all_seeds"),
+                "requested_subseed": payload.get("subseed", -1),
+                "all_subseeds": gen_info.get("all_subseeds"),
             }
             if adaptive_refinement:
                 metadata["adaptive_refinement"] = self._attach_prompt_patch_provenance(

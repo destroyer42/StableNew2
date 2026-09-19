@@ -18,9 +18,18 @@ def _slug_fragment(value: str, *, limit: int = 18) -> str:
     return text[:limit]
 
 
-def build_learning_folder_label(experiment_name: str, experiment_id: str) -> str:
-    """Build a readable bounded folder label; the full ID remains authoritative."""
-    name = _slug_fragment(experiment_name, limit=36)
+def build_learning_folder_label(
+    experiment_name: str,
+    experiment_id: str,
+    variable_under_test: str = "",
+) -> str:
+    """Build a readable bounded folder label; the full ID remains authoritative.
+
+    Runtime folders use the admitted variable when available. The editable
+    display name remains untouched, but a name generated before changing the
+    variable can no longer mislabel a newly admitted run.
+    """
+    name = _slug_fragment(variable_under_test or experiment_name, limit=36)
     short_id = _slug_fragment(experiment_id, limit=8)
     return f"learning_{name}_{short_id}"
 

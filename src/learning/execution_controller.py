@@ -154,6 +154,22 @@ class LearningExecutionController:
             "output_paths": image_paths,
             "variants": variants,  # Include full variant data for metadata
         }
+        # Preserve seed readback at the completion boundary as well as inside
+        # the canonical variant payload. Learning receives one image variant
+        # per admitted job, so exposing the first variant's fields keeps the
+        # existing callback contract small while retaining the full list.
+        if variants and isinstance(variants[0], dict):
+            for key in (
+                "requested_seed",
+                "actual_seed",
+                "all_seeds",
+                "requested_subseed",
+                "actual_subseed",
+                "all_subseeds",
+                "subseed_strength",
+            ):
+                if key in variants[0]:
+                    result[key] = variants[0][key]
 
         _logger.info(
             f"[ExecutionController] Job {job_id} finished: extracted {len(image_paths)} images total"

@@ -1102,6 +1102,7 @@ class PipelineRunner:
             folder_name = build_learning_folder_label(
                 learning_context.experiment_name,
                 learning_context.experiment_id,
+                learning_context.variable_under_test,
             )
             logger.debug(f"Using learning experiment folder: {cache_key}")
         else:
@@ -2137,7 +2138,23 @@ class PipelineRunner:
                 cfg_scale=stage_data.get("cfg_scale") or getattr(njr, "cfg_scale", None) or None,
                 width=getattr(njr, "width", None) or None,
                 height=getattr(njr, "height", None) or None,
-                seed=(raw_config.get("seed") if isinstance(raw_config, Mapping) else None),
+                # Immutable NJR provenance is the canonical requested-seed
+                # authority. Keep construction-time fallbacks for historical
+                # records that only carry a nested txt2img value.
+                seed=(
+                    getattr(njr, "seed", None)
+                    if getattr(njr, "seed", None) is not None
+                    else (
+                        (stage_data.get("seed") if stage_name == "txt2img" else None)
+                        or (
+                            raw_config.get("txt2img", {}).get("seed")
+                            if isinstance(raw_config, Mapping)
+                            and isinstance(raw_config.get("txt2img"), Mapping)
+                            else None
+                        )
+                        or (raw_config.get("seed") if isinstance(raw_config, Mapping) else None)
+                    )
+                ),
                 image_count=image_count,
                 learning_sample_names=learning_sample_names,
                 execution_config=dict(raw_config) if isinstance(raw_config, Mapping) else {},
