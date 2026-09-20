@@ -17,3 +17,13 @@ def test_merge_global_negative_handles_empty_global() -> None:
     assert final == "target"
     assert applied is False
     assert terms == ""
+
+
+def test_merge_global_negative_does_not_duplicate_precomposed_global_terms() -> None:
+    original, final, applied, terms = merge_global_negative(
+        "pack negative, GLOBAL_BAD", "GLOBAL_BAD"
+    )
+    assert original == "pack negative, GLOBAL_BAD"
+    assert final == original
+    assert applied is False
+    assert terms == ""

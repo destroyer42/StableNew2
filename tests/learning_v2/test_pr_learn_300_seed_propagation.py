@@ -103,13 +103,23 @@ def test_a1111_adapter_sends_requested_seed_and_preserves_readback(tmp_path: Pat
         prompt="prompt",
         seed=12345,
         image_count=2,
-        execution_config={"txt2img": {"seed": 12345}},
+        execution_config={
+            "txt2img": {"seed": 12345},
+            "pipeline": {"apply_global_negative_txt2img": False},
+            "global_positive_prompt": "frozen-positive",
+            "global_negative_prompt": "frozen-negative",
+            "global_prompt_policy_source": "frozen_njr",
+        },
     )
 
     result = A1111WebUIImageBackend().execute(pipeline, request)
 
     config = pipeline.run_txt2img_stage.call_args.args[2]
     assert config["seed"] == 12345
+    assert config["pipeline"]["apply_global_negative_txt2img"] is False
+    assert config["global_positive_prompt"] == "frozen-positive"
+    assert config["global_negative_prompt"] == "frozen-negative"
+    assert config["global_prompt_policy_source"] == "frozen_njr"
     assert result is not None
     assert result.to_variant_payload()["all_seeds"] == [12345, 67890]
     assert result.to_variant_payload()["all_subseeds"] == [222, 333]

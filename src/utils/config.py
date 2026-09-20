@@ -776,6 +776,10 @@ class ConfigManager:
             "comfy_health_retry_interval_seconds": 1.0,
             "comfy_health_total_timeout_seconds": 30.0,
             "webui_options_write_enabled": True,
+            # Persisted sidebar defaults.  Text lives in the existing prompt
+            # files; enabled state lives in the existing settings authority.
+            "global_positive_enabled": False,
+            "global_negative_enabled": True,
             "output_dir": str(Path("output")),
             "model_dir": str(Path("models")),
             "prompt_optimizer": dict(DEFAULT_PROMPT_OPTIMIZER_SETTINGS),
@@ -819,6 +823,20 @@ class ConfigManager:
             logger.error("Failed to save global negative prompt: %s", exc)
             return False
 
+    def get_global_negative_enabled(self) -> bool:
+        """Return the persisted negative prompt default (historically enabled)."""
+
+        return bool(self._load_settings().get("global_negative_enabled", True))
+
+    def save_global_negative_state(self, prompt: str, enabled: bool) -> bool:
+        """Persist negative text and its visible sidebar enablement together."""
+
+        if not self.save_global_negative_prompt(prompt):
+            return False
+        settings = dict(self._load_settings())
+        settings["global_negative_enabled"] = bool(enabled)
+        return self.save_settings(settings)
+
     def get_global_positive_prompt(self) -> str:
         """Return the persisted global positive prompt, creating a default if missing."""
 
@@ -852,6 +870,20 @@ class ConfigManager:
         except Exception as exc:  # noqa: BLE001 - surface failure but keep running
             logger.error("Failed to save global positive prompt: %s", exc)
             return False
+
+    def get_global_positive_enabled(self) -> bool:
+        """Return the persisted positive prompt default (historically disabled)."""
+
+        return bool(self._load_settings().get("global_positive_enabled", False))
+
+    def save_global_positive_state(self, prompt: str, enabled: bool) -> bool:
+        """Persist positive text and its visible sidebar enablement together."""
+
+        if not self.save_global_positive_prompt(prompt):
+            return False
+        settings = dict(self._load_settings())
+        settings["global_positive_enabled"] = bool(enabled)
+        return self.save_settings(settings)
 
     def add_global_negative(self, negative_prompt: str) -> str:
         """

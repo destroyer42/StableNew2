@@ -148,6 +148,25 @@ records, not NJR:
 - produced output paths, thumbnails, and result summaries;
 - worker/runtime ownership and transient diagnostics.
 
+### 4.4 Global prompt intent
+
+Global Positive/Negative text and enablement are run intent, frozen at
+Preview/compilation and carried in the NJR (`global_positive_prompt`,
+`global_negative_prompt`, `pipeline.apply_global_positive_txt2img`, and the
+stage-consistent `apply_global_negative_*` flags, with
+`global_prompt_policy_source = frozen_njr`).
+
+- The visible checkbox and text drive work compiled now; Save persists only the
+  cross-session default (text plus enabled state, via existing ConfigManager
+  settings). Defaults with nothing saved: Positive off, Negative on.
+- PromptPack, generic/manual and Learning compilation overlay the current
+  policy onto the compiled config (Add-to-Job snapshots do not own it); Learning
+  freezes it once into the experiment snapshot inherited by every variant.
+- The executor applies the frozen terms and does not read GUI state or mutable
+  global-prompt files for modern NJRs. Replay reuses the parent's frozen policy.
+- Historical NJRs without frozen policy use an explicit
+  `legacy_runtime_fallback`; replay of those is not bit-identical.
+
 ## 5. Queue, repository, and history
 
 `JobRepository` is the single persistence boundary for jobs and execution

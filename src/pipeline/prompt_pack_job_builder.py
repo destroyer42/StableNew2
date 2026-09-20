@@ -20,6 +20,7 @@ from src.pipeline.config_contract_v26 import (
     extract_adaptive_refinement_intent,
     extract_secondary_motion_intent,
 )
+from src.pipeline.global_prompt_policy import has_frozen_global_prompt_policy
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import (
     CURRENT_NJR_SCHEMA_VERSION,
@@ -568,14 +569,22 @@ class PromptPackNormalizedJobBuilder:
         matrix_values = entry.matrix_slot_values or {}
         pipeline_section = config.get("pipeline", {})
         negative_prompt = config.get("txt2img", {}).get("negative_prompt", "")
+        is_frozen = has_frozen_global_prompt_policy(config)
         apply_global = pipeline_section.get("apply_global_negative_txt2img", True)
+        global_negative = (
+            str(config.get("global_negative_prompt") or "")
+            if is_frozen
+            else self._config_manager.get_global_negative_prompt()
+        )
+        if not is_frozen:
+            config["global_prompt_policy_source"] = "legacy_runtime_fallback"
         return self._prompt_resolver.resolve_from_pack(
             pack_row=pack_row,
             matrix_slot_values=matrix_values,
             actor_resolutions=resolved_actors,
             style_lora=resolved_style_lora,
             pack_negative=negative_prompt,
-            global_negative=self._config_manager.get_global_negative_prompt(),
+            global_negative=global_negative,
             apply_global_negative=bool(apply_global),
         )
 
@@ -736,6 +745,9 @@ class PromptPackNormalizedJobBuilder:
             # Stage and section references
             "stages": [stage.stage_type for stage in stage_chain if stage.enabled],
             "pipeline": pipeline_section,
+            "global_positive_prompt": merged_config.get("global_positive_prompt", ""),
+            "global_negative_prompt": merged_config.get("global_negative_prompt", ""),
+            "global_prompt_policy_source": merged_config.get("global_prompt_policy_source"),
             "randomization": merged_config.get("randomization"),
             "hires_fix": merged_config.get("hires_fix"),
             "refiner": merged_config.get("refiner"),

@@ -73,6 +73,10 @@ from src.learning.staged_recommendations import (
 )
 from src.learning.variable_selection_contract import normalize_resource_entries
 from src.pipeline.artifact_contract import extract_artifact_paths
+from src.pipeline.global_prompt_policy import (
+    apply_global_prompt_policy,
+    has_frozen_global_prompt_policy,
+)
 from src.pipeline.job_models_v2 import (
     CURRENT_NJR_SCHEMA_VERSION,
     ImageWorkloadSpec,
@@ -580,13 +584,23 @@ class LearningController:
         # Capture effective settings once at preview.  The runner will compile
         # only from this canonical JSON snapshot, never from live stage cards.
         baseline = self._get_baseline_config() or dict(experiment.baseline_config or {})
+        policy_getter = getattr(self.app_controller, "get_current_global_prompt_policy", None)
+        policy = policy_getter() if callable(policy_getter) else None
+        if isinstance(policy, dict):
+            baseline = apply_global_prompt_policy(baseline, **policy)
         negative_prompt = str(
             getattr(experiment, "metadata", {}).get("selected_prompt_negative_text", "") or ""
         )
         if not negative_prompt and self.prompt_workspace_state:
             negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
+        pipeline_policy = dict(baseline.get("pipeline") or {})
         prompt_source = freeze_prompt_pack_source(
-            dict(getattr(experiment, "metadata", {}) or {}), global_negative=negative_prompt
+            dict(getattr(experiment, "metadata", {}) or {}),
+            global_negative=(
+                str(baseline.get("global_negative_prompt") or "")
+                if bool(pipeline_policy.get("apply_global_negative_txt2img", False))
+                else ""
+            ),
         )
         if str(prompt_source.get("prompt_source") or "") == "pack":
             experiment.prompt_text = str(prompt_source["rendered_positive_prompt"])
@@ -970,6 +984,11 @@ class LearningController:
         baseline = dict(snapshot.get("baseline_config") or experiment.baseline_config or {})
         if not baseline:
             baseline = self._get_baseline_config()
+        if not has_frozen_global_prompt_policy(baseline):
+            policy_getter = getattr(self.app_controller, "get_current_global_prompt_policy", None)
+            policy = policy_getter() if callable(policy_getter) else None
+            if isinstance(policy, dict):
+                baseline = apply_global_prompt_policy(baseline, **policy)
 
         # PR-LEARN-011: Validate baseline config
         is_valid, error_msg = self._validate_baseline_config(baseline)

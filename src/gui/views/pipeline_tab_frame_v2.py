@@ -462,7 +462,12 @@ class PipelineTabFrame(ttk.Frame):
                     self.preview_panel.update_from_controls(self.sidebar)
                 except Exception:
                     pass
-            self._refresh_preview_from_pipeline_jobs()
+            controller = self.app_controller or self.pipeline_controller
+            request_preview_refresh = getattr(controller, "request_preview_refresh", None)
+            if callable(request_preview_refresh):
+                request_preview_refresh()
+            else:
+                self._refresh_preview_from_pipeline_jobs()
 
         self._measure_callback("_handle_sidebar_change", _run)
 

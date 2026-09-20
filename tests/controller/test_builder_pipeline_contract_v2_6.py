@@ -78,6 +78,34 @@ def test_multiple_pack_entries_produce_multiple_njrs(pack_dir: Path):
     assert "pack1" in pack_ids and "pack2" in pack_ids
 
 
+def test_pack_preview_overlays_current_frozen_global_prompt_policy(pack_dir: Path) -> None:
+    _make_pack_files(pack_dir, "pack1", "hello")
+    controller = PipelineController(config_manager=None)
+    controller._config_manager.packs_dir = pack_dir  # type: ignore[attr-defined]
+    controller.gui_get_pipeline_overrides = lambda: {
+        "global_positive_prompt": "current-positive",
+        "global_negative_prompt": "current-negative",
+        "pipeline": {
+            "apply_global_positive_txt2img": True,
+            "apply_global_negative_txt2img": False,
+        },
+    }
+    stale_entry = make_minimal_pack_job_entry(pack_id="pack1", prompt="hello")
+    stale_entry.config_snapshot = {
+        "global_positive_prompt": "stale-positive",
+        "global_negative_prompt": "stale-negative",
+        "pipeline": {"apply_global_negative_txt2img": True},
+    }
+
+    njr = controller._build_njrs_from_pack_bundle([stale_entry])[0]
+
+    assert njr.config["global_positive_prompt"] == "current-positive"
+    assert njr.config["global_negative_prompt"] == "current-negative"
+    assert njr.config["global_prompt_policy_source"] == "frozen_njr"
+    assert njr.config["pipeline"]["apply_global_positive_txt2img"] is True
+    assert njr.config["pipeline"]["apply_global_negative_txt2img"] is False
+
+
 def test_no_pipeline_config_assembler_dependency():
     # Importing PipelineController should not raise ModuleNotFoundError for assembler
     try:

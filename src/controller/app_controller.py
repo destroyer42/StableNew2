@@ -81,6 +81,10 @@ from src.controller.app_controller_services.runtime_projection_coordinator impor
     RuntimeProjectionCoordinator,
 )
 from src.controller.content_visibility_resolver import ContentVisibilityResolver
+from src.controller.global_prompt_policy_service import (
+    overlay_config_in_place,
+    read_current_policy,
+)
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service import JobService
@@ -5567,7 +5571,7 @@ class AppController:
         # Get negative prompt from AppStateV2 (not CurrentConfig)
         negative_prompt = getattr(self.app_state, "negative_prompt", "") if self.app_state else ""
 
-        return {
+        overrides = {
             "prompt": prompt,
             "negative_prompt": negative_prompt or "",
             "model": current.get("model", ""),
@@ -5580,6 +5584,17 @@ class AppController:
             "cfg_scale": current.get("cfg_scale", 7.0),
             "batch_size": 1,
         }
+        overlay_config_in_place(overrides, self.get_current_global_prompt_policy())
+        return overrides
+
+    def get_current_global_prompt_policy(self) -> dict[str, Any]:
+        """Project the editable sidebar policy for compilation, never execution."""
+
+        return read_current_policy(
+            getattr(getattr(self, "main_window", None), "sidebar_panel_v2", None),
+            getattr(self, "config_manager", None),
+            self._append_log,
+        )
 
     def build_pipeline_config_v2(self) -> DeprecatedPipelineConfigSnapshot:
         """DEPRECATED (PR-CORE1-12): Legacy pipeline_config builder.
@@ -6413,33 +6428,10 @@ class AppController:
         Args:
             config: Configuration dict to modify (modifies in-place)
         """
-        # Get sidebar reference from main window
-        main_window = getattr(self, "main_window", None)
-        if not main_window:
-            return
-
-        sidebar = getattr(main_window, "sidebar_panel_v2", None)
-        if not sidebar:
-            return
-
-        # Get global prompt configurations from sidebar
         try:
-            global_positive_config = sidebar.get_global_positive_config()
-            global_negative_config = sidebar.get_global_negative_config()
-
-            # Add flags to pipeline section
-            pipeline_section = config.setdefault("pipeline", {})
-            pipeline_section["apply_global_positive_txt2img"] = global_positive_config.get("enabled", False)
-            pipeline_section["apply_global_negative_txt2img"] = global_negative_config.get("enabled", True)
-            config["global_positive_prompt"] = global_positive_config.get("text", "")
-            config["global_negative_prompt"] = global_negative_config.get("text", "")
-
+            overlay_config_in_place(config, self.get_current_global_prompt_policy())
         except Exception as e:
-            # Fallback: if anything goes wrong, default to safe values
             self._append_log(f"[controller] Failed to read global prompt flags: {e}")
-            pipeline_section = config.setdefault("pipeline", {})
-            pipeline_section.setdefault("apply_global_positive_txt2img", False)
-            pipeline_section.setdefault("apply_global_negative_txt2img", True)
 
     def _build_config_snapshot_with_override(self, pack_config: dict[str, Any]) -> dict[str, Any]:
         """Build config snapshot considering the override checkbox state.

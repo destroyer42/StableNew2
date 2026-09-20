@@ -36,6 +36,11 @@ from src.pipeline.animatediff_models import (
     resolve_animatediff_motion_module,
 )
 from src.pipeline.artifact_contract import artifact_manifest_payload
+from src.pipeline.global_prompt_policy import (
+    FROZEN_POLICY_SOURCE,
+    LEGACY_POLICY_SOURCE,
+    has_frozen_global_prompt_policy,
+)
 from src.pipeline.model_synchronizer import A1111ModelSynchronizer, normalize_model_name
 from src.pipeline.video import VideoCreator, write_video_frames
 from src.prompting.contracts import PromptOptimizerAnalysisBundle
@@ -802,22 +807,25 @@ class Pipeline:
         return fallback
 
     def _merge_stage_negative(
-        self, base_negative: str, apply_global: bool
+        self, base_negative: str, apply_global: bool, global_terms: str
     ) -> tuple[str, str, bool, str]:
         """Compute original/final negative prompts plus metadata."""
-        global_terms = (
-            self.config_manager.get_global_negative_prompt().strip() if apply_global else ""
-        )
-        return merge_global_negative(base_negative, global_terms)
+        return merge_global_negative(base_negative, str(global_terms or "").strip() if apply_global else "")
 
     def _merge_stage_positive(
-        self, base_positive: str, apply_global: bool
+        self, base_positive: str, apply_global: bool, global_terms: str
     ) -> tuple[str, str, bool, str]:
         """Compute original/final positive prompts plus metadata."""
-        global_terms = (
-            self.config_manager.get_global_positive_prompt().strip() if apply_global else ""
-        )
-        return merge_global_positive(base_positive, global_terms)
+        return merge_global_positive(base_positive, str(global_terms or "").strip() if apply_global else "")
+
+    def _global_prompt_terms(self, config: Mapping[str, Any], key: str) -> tuple[str, str]:
+        """Read frozen NJR terms, with an explicit compatibility fallback."""
+
+        if has_frozen_global_prompt_policy(config):
+            return str(config.get(key) or "").strip(), FROZEN_POLICY_SOURCE
+        if key == "global_positive_prompt":
+            return self.config_manager.get_global_positive_prompt().strip(), LEGACY_POLICY_SOURCE
+        return self.config_manager.get_global_negative_prompt().strip(), LEGACY_POLICY_SOURCE
 
     def _resolve_negative_prompt(
         self,
@@ -4617,8 +4625,17 @@ class Pipeline:
 
             # Apply global positive and negative prompts to txt2img stage only
             pipeline_section = config.get("pipeline", {})
-            apply_global_positive = pipeline_section.get("apply_global_positive_txt2img", True)
-            apply_global_negative = pipeline_section.get("apply_global_negative_txt2img", True)
+            frozen_policy = has_frozen_global_prompt_policy(config)
+            apply_global_positive = pipeline_section.get(
+                "apply_global_positive_txt2img", False if frozen_policy else True
+            )
+            apply_global_negative = pipeline_section.get(
+                "apply_global_negative_txt2img", True
+            )
+            frozen_positive, policy_source = self._global_prompt_terms(
+                config, "global_positive_prompt"
+            )
+            frozen_negative, _ = self._global_prompt_terms(config, "global_negative_prompt")
             adaptive_refinement = dict(config.get("adaptive_refinement") or {})
 
             # Apply global positive (prepends quality/style terms)
@@ -4630,7 +4647,7 @@ class Pipeline:
             )
             _, enhanced_positive, positive_global_applied, positive_global_terms = (
                 self._merge_stage_positive(
-                    patch_application.positive.patched, apply_global_positive
+                    patch_application.positive.patched, apply_global_positive, frozen_positive
                 )
             )
             if positive_global_applied:
@@ -4645,7 +4662,7 @@ class Pipeline:
             original_negative_prompt = negative_prompt
             _, enhanced_negative, negative_global_applied, negative_global_terms = (
                 self._merge_stage_negative(
-                    patch_application.negative.patched, apply_global_negative
+                    patch_application.negative.patched, apply_global_negative, frozen_negative
                 )
             )
             if negative_global_applied:
@@ -4951,10 +4968,15 @@ class Pipeline:
                 "final_prompt": payload.get("prompt", enhanced_positive),
                 "global_positive_applied": positive_global_applied,
                 "global_positive_terms": positive_global_terms if positive_global_applied else "",
+                "global_positive_enabled": bool(apply_global_positive),
+                "frozen_global_positive_terms": frozen_positive,
                 "original_negative_prompt": original_negative_prompt,
                 "final_negative_prompt": payload.get("negative_prompt", enhanced_negative),
                 "global_negative_applied": negative_global_applied,
                 "global_negative_terms": negative_global_terms if negative_global_applied else "",
+                "global_negative_enabled": bool(apply_global_negative),
+                "frozen_global_negative_terms": frozen_negative,
+                "global_prompt_policy_source": policy_source,
                 "seed": payload.get("seed", -1),
                 "subseed": payload.get("subseed", -1),
                 "subseed_strength": payload.get("subseed_strength", 0.0),
@@ -5116,12 +5138,17 @@ class Pipeline:
                     "global_positive_terms": positive_global_terms
                     if positive_global_applied
                     else "",
+                    "global_positive_enabled": bool(apply_global_positive),
+                    "frozen_global_positive_terms": frozen_positive,
                     "original_negative_prompt": original_negative_prompt,
                     "final_negative_prompt": payload.get("negative_prompt", enhanced_negative),
                     "global_negative_applied": negative_global_applied,
                     "global_negative_terms": negative_global_terms
                     if negative_global_applied
                     else "",
+                    "global_negative_enabled": bool(apply_global_negative),
+                    "frozen_global_negative_terms": frozen_negative,
+                    "global_prompt_policy_source": policy_source,
                     "seed": payload.get("seed", -1),
                     "subseed": payload.get("subseed", -1),
                     "subseed_strength": payload.get("subseed_strength", 0.0),
@@ -5260,8 +5287,11 @@ class Pipeline:
             apply_global = (
                 (full_config or {}).get("pipeline", {}).get("apply_global_negative_img2img", True)
             )
+            global_terms, _ = self._global_prompt_terms(
+                full_config or config, "global_negative_prompt"
+            )
             _, enhanced_negative, global_applied, global_terms = self._merge_stage_negative(
-                patched_negative_prompt, apply_global
+                patched_negative_prompt, apply_global, global_terms
             )
             if global_applied:
                 try:
@@ -6110,8 +6140,11 @@ class Pipeline:
                         apply_global = (
                             config.get("pipeline", {}) if isinstance(config, dict) else {}
                         ).get("apply_global_negative_upscale", True)
+                        frozen_terms, _ = self._global_prompt_terms(
+                            config, "global_negative_prompt"
+                        )
                         _, enhanced_neg, global_applied, global_terms = self._merge_stage_negative(
-                            original_neg, apply_global
+                            original_neg, apply_global, frozen_terms
                         )
                         payload["negative_prompt"] = enhanced_neg
                         if global_applied:

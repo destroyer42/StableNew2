@@ -42,6 +42,12 @@ def test_global_prompt_flag_wiring():
     assert result_config["pipeline"]["apply_global_negative_txt2img"], (
         "Global negative should be enabled"
     )
+    assert result_config["global_positive_prompt"] == "masterpiece, best quality"
+    assert result_config["global_negative_prompt"] == "low quality, worst quality"
+    assert result_config["global_prompt_policy_source"] == "frozen_njr"
+    assert result_config["pipeline"]["apply_global_negative_img2img"] is True
+    assert result_config["pipeline"]["apply_global_negative_adetailer"] is True
+    assert result_config["pipeline"]["apply_global_negative_upscale"] is True
     print("[OK] Both flags correctly set to True")
 
     # Test Case 2: Only positive disabled

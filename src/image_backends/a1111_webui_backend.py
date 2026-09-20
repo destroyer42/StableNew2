@@ -25,6 +25,7 @@ class A1111WebUIImageBackend:
         """Translate neutral stage intent to the legacy executor configuration."""
 
         config = dict(request.stage_config or {})
+        execution = dict(request.execution_config or {})
         extra = config.pop("extra", {})
         if isinstance(extra, Mapping):
             config.update(extra)
@@ -43,6 +44,15 @@ class A1111WebUIImageBackend:
             config["steps"] = request.steps
         if request.cfg_scale is not None:
             config["cfg_scale"] = request.cfg_scale
+        if "pipeline" in execution:
+            config["pipeline"] = execution["pipeline"]
+        for key in (
+            "global_positive_prompt",
+            "global_negative_prompt",
+            "global_prompt_policy_source",
+        ):
+            if key in execution:
+                config[key] = execution[key]
         return config
 
     @classmethod
@@ -104,6 +114,13 @@ class A1111WebUIImageBackend:
             config["vae"] = request.selected_vae
         if "pipeline" in execution:
             config["pipeline"] = execution["pipeline"]
+        for key in (
+            "global_positive_prompt",
+            "global_negative_prompt",
+            "global_prompt_policy_source",
+        ):
+            if key in execution:
+                config[key] = execution[key]
         return {key: value for key, value in config.items() if value is not None}
 
     def execute(self, pipeline: Any, request: ImageExecutionRequest) -> ImageExecutionResult | None:

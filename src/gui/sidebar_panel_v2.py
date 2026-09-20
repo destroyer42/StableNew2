@@ -229,12 +229,34 @@ class SidebarPanelV2(ttk.Frame):
                 if hasattr(self.config_manager, "get_global_negative_prompt"):
                     global_neg = self.config_manager.get_global_negative_prompt()
                     self.global_negative_text_var.set(global_neg)
+                if hasattr(self.config_manager, "get_global_negative_enabled"):
+                    self.global_negative_enabled_var.set(
+                        bool(self.config_manager.get_global_negative_enabled())
+                    )
                 if hasattr(self.config_manager, "get_global_positive_prompt"):
                     global_pos = self.config_manager.get_global_positive_prompt()
                     self.global_positive_text_var.set(global_pos)
+                if hasattr(self.config_manager, "get_global_positive_enabled"):
+                    self.global_positive_enabled_var.set(
+                        bool(self.config_manager.get_global_positive_enabled())
+                    )
         except Exception:
             # Fail silently if loading fails
             pass
+
+        # Global prompt values are current run intent.  A normal sidebar change
+        # asks the existing debounced preview path to rebuild; saving only
+        # controls what a later launch starts with.
+        for variable in (
+            self.global_positive_enabled_var,
+            self.global_positive_text_var,
+            self.global_negative_enabled_var,
+            self.global_negative_text_var,
+        ):
+            try:
+                variable.trace_add("write", lambda *_args: self._emit_change())
+            except Exception:
+                pass
 
         self.saved_recipe_card = _SidebarCard(
             self,
@@ -1324,11 +1346,13 @@ class SidebarPanelV2(ttk.Frame):
         """Save global negative prompt to disk."""
         if not self.config_manager:
             return
-        if not hasattr(self.config_manager, "save_global_negative_prompt"):
+        if not hasattr(self.config_manager, "save_global_negative_state"):
             return
         text = self.global_negative_text_var.get().strip()
         try:
-            self.config_manager.save_global_negative_prompt(text)
+            self.config_manager.save_global_negative_state(
+                text, bool(self.global_negative_enabled_var.get())
+            )
         except Exception:
             pass
 
@@ -1336,11 +1360,13 @@ class SidebarPanelV2(ttk.Frame):
         """Save global positive prompt to disk."""
         if not self.config_manager:
             return
-        if not hasattr(self.config_manager, "save_global_positive_prompt"):
+        if not hasattr(self.config_manager, "save_global_positive_state"):
             return
         text = self.global_positive_text_var.get().strip()
         try:
-            self.config_manager.save_global_positive_prompt(text)
+            self.config_manager.save_global_positive_state(
+                text, bool(self.global_positive_enabled_var.get())
+            )
         except Exception:
             pass
 

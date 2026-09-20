@@ -19,6 +19,7 @@ from typing import Any
 from src.config.app_config import is_queue_execution_enabled
 from src.contracts import PackJobEntry, PreviewRequest
 from src.controller.core_pipeline_controller import CorePipelineController
+from src.controller.global_prompt_policy_service import copy_frozen_keys, overlay_current_policy
 from src.controller.job_execution_controller import JobExecutionController
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
@@ -100,10 +101,8 @@ class PipelineController(CorePipelineController):
         builder = self._get_prompt_pack_builder()
         if builder is None:
             return []
-        njrs = builder.build_jobs(pack_entries)
+        njrs = builder.build_jobs(overlay_current_policy(self, pack_entries))
         _logger.info(f"[PipelineController] Builder returned {len(njrs)} NormalizedJobRecord(s)")
-        _logger.debug(f"[PipelineController] About to return {len(njrs)} jobs")
-        _logger.debug(f"[PipelineController] First job: {njrs[0] if njrs else 'NONE'}")
         return njrs
 
     def _normalize_run_mode(self, pipeline_state: PipelineState) -> str:
@@ -347,6 +346,7 @@ class PipelineController(CorePipelineController):
             runtime_overrides["prompt"] = prompt
             if overrides.get("negative_prompt") is not None:
                 runtime_overrides["negative_prompt"] = overrides["negative_prompt"]
+            copy_frozen_keys(overrides, runtime_overrides)
 
             model_name = str(
                 txt2img.get("model") or txt2img.get("model_name") or ""

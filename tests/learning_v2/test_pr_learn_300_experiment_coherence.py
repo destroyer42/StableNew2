@@ -91,7 +91,15 @@ def test_preview_snapshot_is_stable_and_background_completion_keeps_selection() 
         values=[6.0, 7.0],
     )
     state.current_experiment = experiment
-    controller = LearningController(state)
+    app_controller = SimpleNamespace(
+        get_current_global_prompt_policy=lambda: {
+            "positive_enabled": True,
+            "positive_text": "frozen-positive",
+            "negative_enabled": False,
+            "negative_text": "frozen-negative",
+        }
+    )
+    controller = LearningController(state, app_controller=app_controller)
     controller._get_baseline_config = lambda: {"txt2img": {"cfg_scale": 7.0}}  # type: ignore[method-assign]
     controller.build_plan(experiment)
     preview = experiment.execution_snapshot_json
@@ -104,6 +112,12 @@ def test_preview_snapshot_is_stable_and_background_completion_keeps_selection() 
     controller._on_variant_job_completed(background, {"images": ["background.png"]})
 
     assert experiment.execution_snapshot_json == preview
+    snapshot = json.loads(preview)
+    baseline = snapshot["baseline_config"]
+    assert baseline["global_positive_prompt"] == "frozen-positive"
+    assert baseline["global_negative_prompt"] == "frozen-negative"
+    assert baseline["pipeline"]["apply_global_positive_txt2img"] is True
+    assert baseline["pipeline"]["apply_global_negative_txt2img"] is False
     assert calls == []
     assert selected.experiment_id == "exp-stable"
     assert background.variant_id.startswith("exp-stable:")

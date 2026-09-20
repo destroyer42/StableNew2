@@ -12,6 +12,8 @@ def merge_global_negative(
     global_clean = (global_terms or "").strip()
     if not global_clean:
         return base, base, False, ""
+    if base == global_clean or base.endswith(f", {global_clean}"):
+        return base, base, False, ""
     final = f"{base}, {global_clean}" if base else global_clean
     return base, final, True, global_clean
 
