@@ -77,7 +77,7 @@ Roadmap progress is 13 of 13 MVP rows complete (100%). Native SVD, operator
 readiness, and clean-machine release proof are complete and integrated into
 `main`.
 
-Post-v2.6 `PR-LEARN-300` is IN PROGRESS. Its evidence-integrity and workflow
+Post-v2.6 `PR-LEARN-300` is COMPLETE / ACCEPTED / INTEGRATED. Its evidence-integrity and workflow
 slices now have immutable preview-to-queue evidence, one normal batch admission,
 focused rating lineage, canonical live resource projection, readable Learning
 output naming, grouped experiment review, deterministic Next Unrated navigation,
@@ -90,8 +90,9 @@ missing-reference cleanup, and a resizable review-first layout. Confirmed Staged
 Curation suggestions affect only the selected derived-job intent through the
 existing NJR/JobService path. Bounded physical A1111 seed acceptance is PASS:
 three CFG variants x one image used frozen seed `12345`, each returned
-`all_seeds=[12345]`, and each remained controlled. Broader physical operator
-smoke and end-to-end artifact/recommendation verification remain open.
+`all_seeds=[12345]`, and each remained controlled. Final operator acceptance
+also passed for the responsive Learning workflow, current Global Prompt policy
+execution, and a real LoRA Strength experiment with executed-prompt readback.
 `PR-VID-110` remains a separate product-owner decision and is not started.
 
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair

@@ -7,9 +7,7 @@ Updated: 2026-09-19
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: `PR-LEARN-300` is IN PROGRESS: deterministic Learning
-  workflow coherence and bounded physical seed acceptance are implemented and
-  accepted on the feature branch; remaining operator acceptance is still open.
+- Active objective: none; `PR-LEARN-300` is COMPLETE / ACCEPTED / INTEGRATED.
   `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
@@ -48,7 +46,7 @@ normal queue batch submission while
 preserving the accepted SVD runtime, backend, queue, history, replay, and
 artifact authorities.
 
-PR-LEARN-300 is **IN PROGRESS**. Its evidence-integrity and workflow slices give Designed
+PR-LEARN-300 is **COMPLETE / ACCEPTED / INTEGRATED**. Its evidence-integrity and workflow slices give Designed
 image experiments one durable experiment identity and an immutable preview
 snapshot of effective prompt, model/VAE, stage configuration, tested variable,
 values, sample count, and a concrete requested seed. Backend-returned seed
@@ -85,13 +83,16 @@ and global header Automation selector are no longer primary Learning actions.
 Staged Curation can preview learned settings and, after confirmation, apply an
 allowlisted patch only to one newly built derived-job intent before its normal
 NJR/JobService submission. `PR-VID-110` remains a separate product-owner decision.
-Deterministic implementation validation and bounded physical A1111 seed
-acceptance are **PASS** on the feature branch. The controlled run used three
-CFG variants with one image each and frozen requested seed `12345`; every job
-sent `12345`, returned `all_seeds=[12345]`, and reached Learning as controlled
-evidence. Remaining physical operator acceptance covers the broader artifact,
-review, and recommendation journey; no full PR-LEARN-300 completion claim is
-made yet.
+Current Global Positive/Negative text and enablement are frozen into each
+compiled NJR (Learning, PromptPack, and generic jobs) rather than read at
+execution. A `LoRA Strength` variant rewrites the executable prompt, and
+controlled evidence requires the executed-prompt readback to show the requested
+weight in addition to the frozen seed vector; incomplete historical LoRA ratings
+stay readable but non-evidentiary.
+Final operator acceptance is **PASS**: controlled seed proof (three CFG variants,
+frozen seed `12345`, each returning `all_seeds=[12345]`), the responsive
+Experiment Design / Plan / Review workflow, current Global Prompt execution in
+the real app, and a real LoRA Strength experiment with actual execution/readback.
 
 ## Approved post-v2.6 direction
 
