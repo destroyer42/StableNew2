@@ -174,7 +174,9 @@ requires an explicitly approved architecture exception.
   protected data or tracked Git files change.
 - Backends: `--backend fake` for deterministic checks; `--real-backend` only by
   explicit opt-in, never in required CI. Never adopt, start, kill, or restart
-  A1111; wait for it to be idle instead of interrupting foreign work.
+  A1111; wait for it to be idle instead of interrupting foreign work. Use the
+  checkpoint A1111 already has loaded (a mismatch is a HOLD, not a switch) and
+  verify afterwards that the active checkpoint is unchanged.
 - Synchronize on observable state with bounded waits (StableNew needs ~15-30 s
   to connect to WebUI); every timeout must report evidence.
 - Each run publishes `evidence.json` and `summary.txt` (SHA, backend, model, LoRA,

@@ -38,11 +38,15 @@ class FakeA1111:
         self,
         *,
         model: str = DEFAULT_MODEL,
+        extra_models: tuple[str, ...] = (),
+        active_model: str | None = None,
         loras: tuple[str, ...] = DEFAULT_LORAS,
         drop_seed_readback: bool = False,
         startup_delay: float = 0.0,
     ) -> None:
-        self.model = model
+        self.model = active_model or model  # the checkpoint WebUI has loaded
+        self.model_names = tuple(dict.fromkeys((model, *extra_models, self.model)))
+        self.checkpoint_switches = 0
         self.loras = tuple(loras)
         self.drop_seed_readback = drop_seed_readback
         self.startup_delay = float(startup_delay)
@@ -50,7 +54,10 @@ class FakeA1111:
         self.rejected_while_starting = 0
         self.txt2img_payloads: list[dict[str, Any]] = []
         self.unhandled: list[str] = []
-        self.options: dict[str, Any] = {"sd_model_checkpoint": model, "sd_vae": "Automatic"}
+        self.options: dict[str, Any] = {
+            "sd_model_checkpoint": self.title(self.model),
+            "sd_vae": "Automatic",
+        }
         self._server: ThreadingHTTPServer | None = None
         self._thread: threading.Thread | None = None
         self._lock = threading.Lock()
@@ -107,6 +114,26 @@ class FakeA1111:
         )
         self._thread.start()
 
+    @staticmethod
+    def _hash(name: str) -> str:
+        return hashlib.sha1(name.encode()).hexdigest()[:8]
+
+    def title(self, name: str) -> str:
+        return f"{name}.safetensors [{self._hash(name)}]"
+
+    def _apply_options(self, body: dict[str, Any]) -> None:
+        """Like WebUI: a checkpoint request resolves to a known title and loads it."""
+
+        body = dict(body)
+        requested = body.pop("sd_model_checkpoint", None)
+        self.options.update(body)
+        if requested is None:
+            return
+        base = str(requested).split(" [")[0].removesuffix(".safetensors")
+        if base in self.model_names and self.title(base) != self.options["sd_model_checkpoint"]:
+            self.checkpoint_switches += 1
+            self.options["sd_model_checkpoint"] = self.title(base)
+
     def starting_up(self) -> bool:
         """True while emulating WebUI's slow start (endpoints answer 503).
 
@@ -134,11 +161,12 @@ class FakeA1111:
         if path == "/sdapi/v1/sd-models":
             return [
                 {
-                    "title": f"{self.model}.safetensors [deadbeef]",
-                    "model_name": self.model,
-                    "hash": "deadbeef",
-                    "filename": f"{self.model}.safetensors",
+                    "title": self.title(name),
+                    "model_name": name,
+                    "hash": self._hash(name),
+                    "filename": f"{name}.safetensors",
                 }
+                for name in self.model_names
             ], 200
         if path == "/sdapi/v1/samplers":
             return [{"name": "Euler a", "aliases": [], "options": {}}], 200
@@ -163,7 +191,7 @@ class FakeA1111:
 
     def _post(self, path: str, body: dict[str, Any]) -> tuple[Any, int]:
         if path == "/sdapi/v1/options":
-            self.options.update(body)
+            self._apply_options(body)
             return {}, 200
         if path in {"/sdapi/v1/interrupt", "/sdapi/v1/refresh-checkpoints"}:
             return {}, 200

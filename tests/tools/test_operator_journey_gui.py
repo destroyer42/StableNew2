@@ -154,12 +154,18 @@ def test_journey_waits_for_a_slow_starting_webui(tmp_path: Path) -> None:
 
 def test_real_backend_code_path_against_a_loopback_backend(tmp_path: Path) -> None:
     """Exercise the --real-backend branch (probe, LoRA check, model match, idle wait)
-    against a loopback double so no real A1111 is needed."""
+    against a loopback double so no real A1111 is needed.
+
+    The double has two checkpoints and the *second* is loaded; the journey must use
+    that one and leave the operator's checkpoint untouched (no switch).
+    """
 
     _require_display()
     from tools.operator_journey.fake_a1111 import FakeA1111
 
-    with FakeA1111() as backend:
+    with FakeA1111(
+        model="alpha-model", extra_models=("zeta-model",), active_model="zeta-model"
+    ) as backend:
         env = {
             k: v
             for k, v in os.environ.items()
@@ -190,11 +196,17 @@ def test_real_backend_code_path_against_a_loopback_backend(tmp_path: Path) -> No
             timeout=240,
         )
         payloads = list(backend.txt2img_payloads)
+        switches, active = backend.checkpoint_switches, backend.options["sd_model_checkpoint"]
     evidence = json.loads((next(tmp_path.iterdir()) / "evidence.json").read_text("utf-8"))
     assert result.returncode == 0 and evidence["verdict"] == "PASS", evidence["failed_assertion"]
     assert evidence["backend_mode"] == "real"
     assert evidence["summary"]["backend"]["lora_count"] == 1
-    assert evidence["summary"]["backend"]["active_checkpoint"] == backend.model
+    assert evidence["summary"]["model"].startswith("zeta-model")  # the loaded model, not the first
+    assert switches == 0 and active.startswith("zeta-model")  # operator's checkpoint untouched
+    assert (
+        evidence["summary"]["active_checkpoint_before"]
+        == evidence["summary"]["active_checkpoint_after"]
+    )
     assert len(payloads) == 3 and {p["seed"] for p in payloads} == {12345}
 
 

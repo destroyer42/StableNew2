@@ -296,7 +296,7 @@ def test_backend_probe_reports_models_loras_and_active_checkpoint() -> None:
     with FakeA1111(model="m1", loras=("a", "b")) as backend:
         info = probe_backend(backend.base_url)
         assert info.reachable and info.models == ["m1"] and info.loras == ["a", "b"]
-        assert info.active_checkpoint == "m1" and info.version
+        assert info.active_checkpoint == backend.title("m1") and info.version
         assert fetch_progress(backend.base_url)["progress"] == 0.0
     assert not probe_backend("http://127.0.0.1:9").reachable
 

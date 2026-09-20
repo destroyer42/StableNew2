@@ -131,6 +131,15 @@ def _create_root() -> tk.Tk:
     return tk.Tk()
 
 
+_HASH_SUFFIX = re.compile(r"\s*\[[0-9a-fA-F]+\]\s*$")
+
+
+def model_base(name: Any) -> str:
+    """A checkpoint's comparable name: A1111 titles carry a trailing ``[hash]``."""
+
+    return _HASH_SUFFIX.sub("", str(name or "")).strip().casefold()
+
+
 def _canon(value: Any) -> str:
     return json.dumps(value, sort_keys=True, default=str)
 
@@ -285,19 +294,27 @@ class _Journey:
         )
 
     def _match_active_model(self, card: Any) -> None:
-        """Prefer the model A1111 currently has loaded; pick it like an operator would."""
+        """Use the model A1111 already has loaded; never switch the operator's checkpoint."""
 
         active = self.backend_info.active_checkpoint
-        current = str(card.model_var.get())
-        if not active or (active and active in current):
+        if not active:
+            raise JourneyHold(
+                "A1111 reports no active checkpoint; the journey will not pick a model "
+                "that could switch it"
+            )
+        if model_base(card.model_var.get()) == model_base(active):
             return
         combo = self.driver.find(
             self.window.pipeline_tab, ttk.Combobox, textvariable=card.model_var
         )
         for value in [str(v) for v in combo.cget("values")]:
-            if active in value:
+            if model_base(value) == model_base(active):
                 self.driver.select_combobox(combo, value, label="txt2img model")  # type: ignore[arg-type]
                 return
+        raise JourneyHold(
+            f"A1111's active model {active!r} is not selectable in StableNew's model list; "
+            "the journey will not switch the operator's checkpoint"
+        )
 
     # -- phase: configure -----------------------------------------------
     def _set_toggle(self, parent: tk.Misc, text: str, wanted: bool) -> None:
@@ -824,9 +841,9 @@ def run_journey(config: JourneyConfig) -> JourneyEvidence:
             info = BackendInfo(
                 base_url=url,
                 reachable=True,
-                models=[fake.model],
+                models=list(fake.model_names),
                 loras=list(fake.loras),
-                active_checkpoint=fake.model,
+                active_checkpoint=fake.title(fake.model),
                 version="operator-journey-fake",
             )
         else:
@@ -852,6 +869,16 @@ def run_journey(config: JourneyConfig) -> JourneyEvidence:
         spy = AccessSpy(allowed=(workspace.root,))
         with workspace.activate(), spy:
             _Journey(config, evidence, workspace, fake, info).run()
+        after = probe_backend(url)
+        evidence.summary["active_checkpoint_before"] = info.active_checkpoint
+        evidence.summary["active_checkpoint_after"] = after.active_checkpoint
+        evidence.check(
+            "shutdown",
+            "backend_active_model_unchanged",
+            model_base(after.active_checkpoint) == model_base(info.active_checkpoint),
+            f"the journey changed the backend's active checkpoint from "
+            f"{info.active_checkpoint!r} to {after.active_checkpoint!r}",
+        )
         evidence.isolation_violations.extend(spy.violations())
         evidence.summary["operator_output_files_read_by_app_scan"] = len(set(spy.read_outputs))
         archive_workspace(workspace, evidence, run_dir, discard=config.discard_workspace)
