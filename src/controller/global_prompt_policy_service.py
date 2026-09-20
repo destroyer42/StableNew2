@@ -12,8 +12,6 @@ from typing import Any
 
 from src.pipeline.global_prompt_policy import apply_global_prompt_policy
 
-FROZEN_KEYS = ("global_positive_prompt", "global_negative_prompt", "global_prompt_policy_source")
-
 
 def read_current_policy(
     sidebar: Any, config_manager: Any, log: Callable[[str], None]
@@ -58,33 +56,29 @@ def policy_from_overrides(overrides: Mapping[str, Any] | None) -> dict[str, Any]
     }
 
 
-def overlay_pack_entries(entries: list[Any], policy: Mapping[str, Any]) -> list[Any]:
-    """Return pack entries whose snapshots carry the current run-level policy."""
+def current_policy(controller: Any) -> dict[str, Any]:
+    """Current editable policy, provided by AppController wiring at compile time."""
 
-    return [
-        replace(e, config_snapshot=apply_global_prompt_policy(e.config_snapshot, **policy))
-        for e in entries
-    ]
+    getter = getattr(controller, "get_current_global_prompt_policy", None)
+    policy = getter() if callable(getter) else None
+    return dict(policy) if isinstance(policy, Mapping) else policy_from_overrides(None)
 
 
 def overlay_config_in_place(config: dict[str, Any], policy: Mapping[str, Any]) -> None:
     config.update(apply_global_prompt_policy(config, **policy))
 
 
-def copy_frozen_keys(source: Mapping[str, Any], target: dict[str, Any]) -> None:
-    for key in FROZEN_KEYS:
-        if key in source:
-            target[key] = source[key]
-
-
 def overlay_current_policy(controller: Any, entries: list[Any]) -> list[Any]:
-    """Overlay the controller's current GUI policy onto pack entries."""
+    """Return pack entries whose snapshots carry the current run-level policy."""
 
-    getter = getattr(controller, "gui_get_pipeline_overrides", None) or getattr(
-        controller, "get_gui_overrides", None
-    )
-    try:
-        policy = policy_from_overrides(getter() if callable(getter) else None)
-    except Exception:
-        policy = policy_from_overrides(None)
-    return overlay_pack_entries(entries, policy)
+    policy = current_policy(controller)
+    return [
+        replace(e, config_snapshot=apply_global_prompt_policy(e.config_snapshot, **policy))
+        for e in entries
+    ]
+
+
+def copy_frozen_keys(controller: Any, target: dict[str, Any]) -> None:
+    """Freeze the current policy into generic/manual runtime overrides."""
+
+    overlay_config_in_place(target, current_policy(controller))

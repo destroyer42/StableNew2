@@ -346,7 +346,7 @@ class PipelineController(CorePipelineController):
             runtime_overrides["prompt"] = prompt
             if overrides.get("negative_prompt") is not None:
                 runtime_overrides["negative_prompt"] = overrides["negative_prompt"]
-            copy_frozen_keys(overrides, runtime_overrides)
+            copy_frozen_keys(self, runtime_overrides)
 
             model_name = str(
                 txt2img.get("model") or txt2img.get("model_name") or ""

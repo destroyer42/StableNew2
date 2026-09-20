@@ -82,13 +82,11 @@ def test_pack_preview_overlays_current_frozen_global_prompt_policy(pack_dir: Pat
     _make_pack_files(pack_dir, "pack1", "hello")
     controller = PipelineController(config_manager=None)
     controller._config_manager.packs_dir = pack_dir  # type: ignore[attr-defined]
-    controller.gui_get_pipeline_overrides = lambda: {
-        "global_positive_prompt": "current-positive",
-        "global_negative_prompt": "current-negative",
-        "pipeline": {
-            "apply_global_positive_txt2img": True,
-            "apply_global_negative_txt2img": False,
-        },
+    controller.get_current_global_prompt_policy = lambda: {  # type: ignore[attr-defined]
+        "positive_enabled": True,
+        "positive_text": "current-positive",
+        "negative_enabled": False,
+        "negative_text": "current-negative",
     }
     stale_entry = make_minimal_pack_job_entry(pack_id="pack1", prompt="hello")
     stale_entry.config_snapshot = {

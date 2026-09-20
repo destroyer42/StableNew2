@@ -287,3 +287,16 @@ def test_app_controller_queue_submission_returns_quickly(tmp_path: Path) -> None
     release_event.set()
     controller.job_service.runner.stop()
     assert not controller.job_service.runner.is_running()
+
+
+def test_app_controller_wires_current_global_prompt_policy_into_pipeline_controller(
+    tmp_path: Path,
+) -> None:
+    """Preview compilation must see the app's current global prompt intent."""
+
+    controller = RecordingAppController(
+        main_window=None, threaded=False, tmp_history=tmp_path / "job_history.json"
+    )
+    getter = controller.pipeline_controller.get_current_global_prompt_policy  # type: ignore[attr-defined]
+
+    assert getter() == controller.get_current_global_prompt_policy()

@@ -678,9 +678,8 @@ class AppController:
         except Exception as e:
             logger.error(f"[controller] Failed to initialize persistence worker: {e}")
 
-        # Wire GUI overrides into PipelineController so config assembler can access GUI state
-        if hasattr(self.pipeline_controller, "get_gui_overrides"):
-            self.pipeline_controller.get_gui_overrides = self._get_gui_overrides_for_pipeline  # type: ignore[attr-defined]
+        # Compile-time (never execution-time) global prompt intent for preview builds
+        self.pipeline_controller.get_current_global_prompt_policy = self.get_current_global_prompt_policy  # type: ignore[attr-defined]
         # Let the GUI wire its callbacks to us
         if self.main_window is not None:
             self._bind_app_state_visibility_listener()
