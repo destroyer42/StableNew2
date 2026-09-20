@@ -64,6 +64,11 @@ from src.learning.learning_controller_services.experiment_persistence import (
     validate_resume_payload,
 )
 from src.learning.learning_record import LearningRecord, LearningRecordWriter
+from src.learning.lora_variant import (
+    apply_lora_variant,
+    validate_executed_lora,
+    validate_lora_variant,
+)
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.resource_access import get_projected_resources
 from src.learning.stage_capabilities import get_stage_capability
@@ -1142,10 +1147,21 @@ class LearningController:
         lora_override = final_config.get("lora_override")
         if isinstance(lora_override, dict):
             lora_name = str(lora_override["name"])
-            selected_loras[lora_name] = LoRATag(
-                name=lora_name,
-                weight=float(lora_override["weight"]),
+            lora_weight = float(lora_override["weight"])
+            # The executable prompt is the LoRA authority: rewrite it before the
+            # NJR is frozen, then prove the result before admission.
+            baseline_prompt = prompt
+            prompt = apply_lora_variant(baseline_prompt, lora_name, lora_weight)
+            reason = validate_lora_variant(
+                prompt, lora_name, lora_weight, baseline_prompt=baseline_prompt
             )
+            if reason:
+                raise ValueError(f"LoRA variant {lora_name}@{lora_weight} rejected: {reason}")
+            selected_loras = {
+                k: v for k, v in selected_loras.items() if k.casefold() != lora_name.casefold()
+            }
+            if lora_weight > 0:
+                selected_loras[lora_name] = LoRATag(name=lora_name, weight=lora_weight)
 
         if stage_name != "txt2img":
             capability = get_stage_capability(stage_name)
@@ -1740,8 +1756,29 @@ class LearningController:
                 }
                 controlled = seed_vector_matches(comparable, actual_vector, actual_subseed_vector)
                 reason = "" if controlled else "seed_vector_mismatch"
+        # The tested variable must also have executed as requested, and every
+        # comparable variant must have run in the same backend launch profile.
+        final_prompt = variant_payload.get("final_prompt") or metadata.get("final_prompt")
+        variable_reason = validate_executed_lora(
+            getattr(variant, "executed_config", None), final_prompt
+        )
+        launch_profile = str(
+            (variant_payload.get("runtime_admission") or {}).get("launch_profile") or ""
+        )
+        observed_profile = str(observed.get("observed_launch_profile") or "")
+        if launch_profile and not observed_profile:
+            observed["observed_launch_profile"] = launch_profile
+            self.learning_state.current_experiment.metadata = observed
+        elif launch_profile and launch_profile != observed_profile:
+            variable_reason = variable_reason or "backend_restart_boundary"
+        if variable_reason:
+            reason = reason if not controlled else variable_reason
+            controlled = False
         variant.execution_metadata = {
             **dict(getattr(variant, "execution_metadata", {}) or {}),
+            "variable_validation_reason": variable_reason or "valid",
+            "executed_final_prompt": str(final_prompt or ""),
+            "runtime_launch_profile": launch_profile,
             "requested_seed_policy": dict(policy or {}),
             "actual_all_seeds": actual_vector,
             "actual_all_subseeds": actual_subseed_vector,
@@ -1751,7 +1788,7 @@ class LearningController:
             "requested_sample_count": sample_count,
             "observed_seed_vector": observed_vector or (actual_vector if controlled else []),
         }
-        if not has_seed_policy:
+        if not has_seed_policy and not variable_reason:
             logger.debug(
                 "Learning seed validation skipped: no frozen policy for experiment=%s",
                 getattr(self.learning_state.current_experiment, "experiment_id", ""),
@@ -2131,6 +2168,9 @@ class LearningController:
                             "controlled_evidence_valid", True
                         )
                     ),
+                    "variable_validation_reason": dict(
+                        getattr(target_variant, "execution_metadata", {}) or {}
+                    ).get("variable_validation_reason", ""),
                     "actual_all_seeds": list(
                         dict(getattr(target_variant, "execution_metadata", {}) or {}).get(
                             "actual_all_seeds", []

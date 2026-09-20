@@ -334,6 +334,15 @@ class RecommendationEngine:
                 and str(metadata.get("variable_under_test") or "").strip()
                 and metadata.get("variant_value") is not None
             )
+            # A LoRA-strength variant is only evidence when executed-prompt
+            # readback proved the requested weight; historical rows lack that
+            # proof and stay readable but non-evidentiary.
+            if (
+                controlled_complete
+                and isinstance(frozen["executed_config"].get("lora_override"), dict)
+                and frozen.get("variable_validation_reason") != "valid"
+            ):
+                controlled_complete = False
             if record_kind == "learning_experiment_rating" and not controlled_complete:
                 # Preserve the JSONL row for inspection, but do not infer a
                 # parameter recommendation from an unverifiable experiment.

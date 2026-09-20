@@ -167,6 +167,19 @@ stage-consistent `apply_global_negative_*` flags, with
 - Historical NJRs without frozen policy use an explicit
   `legacy_runtime_fallback`; replay of those is not bit-identical.
 
+### 4.5 Learning LoRA-strength evidence
+
+A `LoRA Strength` variant is compiled into the NJR's executable positive prompt
+(`src/learning/lora_variant.py`): the selected LoRA's token is replaced by exactly
+one `<lora:name:weight>` (none at 0.0), unrelated LoRAs are untouched, and the
+result is validated before batch admission. `lora_override` is descriptive only.
+At completion the executed `final_prompt` readback must show the requested weight
+and the same backend launch profile as the first variant; otherwise the variant
+is uncontrolled (`lora_strength_mismatch`, `lora_readback_unavailable`,
+`backend_restart_boundary`) and, together with the seed check, is excluded from
+recommendations. Historical LoRA-strength ratings lacking that proof are
+non-evidentiary at read time.
+
 ## 5. Queue, repository, and history
 
 `JobRepository` is the single persistence boundary for jobs and execution

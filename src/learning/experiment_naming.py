@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from src.learning.lora_variant import lora_value_label
+
 
 def _compact_prompt(prompt_text: str, *, limit: int = 36) -> str:
     text = " ".join(str(prompt_text or "").split())
@@ -47,7 +49,7 @@ def build_learning_filename_prefix(
     """Build a readable Learning artifact prefix within Windows-safe bounds."""
     stage_part = _slug_fragment(stage, limit=12)
     variable_part = _slug_fragment(variable, limit=18)
-    value_part = str(value).strip()[:18] or "none"
+    value_part = lora_value_label(value) or str(value).strip()[:18] or "none"
     source = dict(prompt_source or {})
     if str(source.get("prompt_source") or "") == "pack":
         source_part = _slug_fragment(str(source.get("selected_prompt_pack_name") or "pack"), limit=14)
