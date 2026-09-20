@@ -8,7 +8,7 @@ Updated: 2026-09-19
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
 - Active objective: `PR-TEST-OPERATOR-100` (real Tk operator-journey harness) is
-  IMPLEMENTED and awaiting product-owner review; `PR-LEARN-300` is COMPLETE /
+  IMPLEMENTED with a real-journey PASS and awaiting product-owner review; `PR-LEARN-300` is COMPLETE /
   ACCEPTED / INTEGRATED. `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
@@ -105,9 +105,12 @@ recommendation/conclusion projection. Its rating step exposed that
 `RecommendationEngine` could not group composite variant values; it now groups
 structured values by a canonical key (`src/learning/value_identity.py`) and
 returns the original structured value. An access spy proves the journey never
-opens or writes production SQLite/state/presets. The real-A1111 run is
-**pending**: it needs a local A1111 with `add-detail-xl` already running; the
-harness never starts, adopts, or stops it.
+opens or writes production SQLite/state/presets. The real-A1111 run of
+`learning-lora-strength` is **PASS**: three completed jobs at frozen seed
+`12345`, executed LoRA tokens none/`1.0`/`2.0`, controlled evidence, ratings
+3/4/5 persisted through the Review GUI, structured recommendation handling, no
+captured Tk/thread errors, bounded graceful shutdown, and the operator's loaded
+checkpoint unchanged. The harness never starts, adopts, or stops A1111.
 
 ## Approved post-v2.6 direction
 
