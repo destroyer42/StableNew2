@@ -137,7 +137,10 @@ Tk/native GUI, A1111, GPU/CUDA/SVD, local filesystem/runtime acceptance, or
 environment/bootstrap work matters. **Cloud Codex** is suitable only when the
 exact parent is pushed, the relevant tree is clean, the task is source/test/docs
 only, no local hardware/runtime/user state is needed, and deterministic tests
-plus GitHub CI can establish acceptance.
+plus GitHub CI can establish acceptance. Real Tk GUI acceptance is run with
+`python -m tools.operator_journey <journey>` (semantic widget driving in an
+isolated workspace; `--real-backend` only by explicit opt-in) instead of asking
+the operator to click through the journey manually.
 
 Every authored StableNew PR or bounded work package records an **Execution
 Profile + Model/Reasoning Recommendation**, a **Controller Surface Assessment**

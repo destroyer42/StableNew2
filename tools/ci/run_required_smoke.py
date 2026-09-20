@@ -16,6 +16,7 @@ REQUIRED_SMOKE_TARGETS = (
     "tests/queue/test_job_repository_sqlite.py",
     "tests/migrations/test_sqlite_job_importer.py",
     "tests/controller/test_core_run_path_v2.py",
+    "tests/tools/test_operator_journey_harness.py",
     "tests/queue/test_job_service_pipeline_integration_v2.py::TestQueuedModeExecution",
     "tests/queue/test_job_service_pipeline_integration_v2.py::TestQueueErrorHandling",
 )

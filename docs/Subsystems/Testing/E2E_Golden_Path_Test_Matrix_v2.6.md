@@ -157,6 +157,27 @@ must have hermetic coverage where meaningful.
 Runs with a controlled GUI environment and fake backends. It verifies visible
 state, scheduling, bounded shutdown/cancel, and no worker-thread widget access.
 
+### Operator-journey gate (semantic Tk)
+
+Local and display-required; never part of required CI. `python -m tools.operator_journey
+<journey>` starts the real V2 app stack in a disposable workspace (own SQLite
+repository, outputs, Learning records, presets, PromptPacks, cwd), drives the
+actual Tk widgets semantically (tab select, variable/text edits, combobox
+selection plus `<<ComboboxSelected>>`, button `invoke`), and only *observes* the
+production lifecycle (queue/SQLite, manifests, Learning records, ThreadRegistry).
+It never calls a submission method, JobService, runner, executor, or generation
+endpoint. `--backend fake` (default) answers the WebUI HTTP seam with a loopback
+double for repeatable verification; `--real-backend` is an explicit opt-in that
+polls the operator's A1111 (never adopting, starting, killing, or restarting it)
+and waits for it to be idle. StableNew takes ~15-30 s to connect to WebUI at
+start, so journeys wait on observable state (resource projection, backend idle)
+rather than sleeping. Each run writes `evidence.json` + `summary.txt` under the
+ignored `reports/operator_journeys/` and exits 0 (PASS), 1 (FAIL) or 2 (HOLD).
+The first journey is `learning-lora-strength` (Learning -> Designed Experiments ->
+LoRA Strength -> Build Preview Only -> Run Experiment -> queue/SQLite ->
+PipelineRunner -> A1111 -> manifests -> Review ratings). Hermetic harness logic
+is in the required smoke list; Tk-backed end-to-end tests skip without a display.
+
 ### Real-backend gate
 
 Opt-in and bounded. It never runs during collection. WebUI image and native SVD

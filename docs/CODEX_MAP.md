@@ -85,6 +85,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | Windows runtime/bootstrap | `scripts/bootstrap_windows.ps1` -> `docs/runbooks/windows_runtime_bootstrap.md` |
 | Replay/learning | `replay_engine.py`, `src/learning/`, `job_history_store.py` |
 | `PR-LEARN-300` experiment workflow | `experiment_execution.py` / `experiment_lifecycle.py` / `experiment_conclusion.py` / `experiment_freeze.py` -> `execution_controller.py` -> `learning_controller.py` -> `resource_access.py` / `experiment_naming.py` / `review_workspace.py` / `discovered_review_store.py` / `staged_recommendations.py` -> `learning_record.py` / `recommendation_engine.py` |
+| Operator-journey harness | `python -m tools.operator_journey` -> `tools/operator_journey/cli.py` -> `journeys/learning_lora_strength.py` -> `tk_driver.py` (semantic Tk) / `workspace.py` (isolation) / `observe.py` / `capture.py` / `evidence.py` / `fake_a1111.py`; tests in `tests/tools/test_operator_journey_*.py` |
 | Tests/CI | `pyproject.toml`, `tools/ci/`, `.github/workflows/ci.yml` |
 | A1111 generation / transport | `src/pipeline/pipeline_runner.py` -> `src/pipeline/executor.py` -> `src/api/client.py` |
 | A1111 process ownership / lifecycle | `src/api/webui_process_manager.py` -> `src/controller/webui_connection_controller.py` |

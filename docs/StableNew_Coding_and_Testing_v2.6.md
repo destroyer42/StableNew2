@@ -162,6 +162,27 @@ requires an explicitly approved architecture exception.
   Mock `atexit.register` and restore cleanup globals/state so pytest never exits
   with a real runtime-cleanup callback armed.
 
+## Semantic GUI operator journeys
+
+- Drive the real Tk widgets (`tools/operator_journey/tk_driver.py`); never call a
+  controller submission method, JobService, runner, executor, or generation
+  endpoint to start work, and do not use screen coordinates, OCR, or pixel
+  matching. Observation of controller/repository/runtime state is allowed.
+- Run every journey in a disposable workspace (`OperatorWorkspace`): it redirects
+  `workspace_paths`, `ConfigManager` defaults, PromptPack/output env, and the
+  cwd, drops test-mode env switches, and a `UserDataGuard` fails the run if
+  protected data or tracked Git files change.
+- Backends: `--backend fake` for deterministic checks; `--real-backend` only by
+  explicit opt-in, never in required CI. Never adopt, start, kill, or restart
+  A1111; wait for it to be idle instead of interrupting foreign work.
+- Synchronize on observable state with bounded waits (StableNew needs ~15-30 s
+  to connect to WebUI); every timeout must report evidence.
+- Each run publishes `evidence.json` and `summary.txt` (SHA, backend, model, LoRA,
+  seed, job/experiment IDs, per-variant seed and prompt readback, artifacts,
+  manifests, controlled-evidence result, captured GUI/thread/log errors, verdict).
+  Run journeys as subprocesses from tests so pytest's autouse WebUI stubs do not
+  alter production behavior.
+
 ## Job persistence and legacy migration
 
 - Use a temporary SQLite database for repository, queue, history, and restart tests.
