@@ -7,8 +7,9 @@ Updated: 2026-09-19
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: none; `PR-LEARN-300` is COMPLETE / ACCEPTED / INTEGRATED.
-  `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
+- Active objective: `PR-TEST-OPERATOR-100` (real Tk operator-journey harness) is
+  IMPLEMENTED and awaiting product-owner review; `PR-LEARN-300` is COMPLETE /
+  ACCEPTED / INTEGRATED. `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -93,6 +94,18 @@ Final operator acceptance is **PASS**: controlled seed proof (three CFG variants
 frozen seed `12345`, each returning `all_seeds=[12345]`), the responsive
 Experiment Design / Plan / Review workflow, current Global Prompt execution in
 the real app, and a real LoRA Strength experiment with actual execution/readback.
+
+`PR-TEST-OPERATOR-100` adds `python -m tools.operator_journey <journey>`: a
+semantic Tk driver plus isolated workspace and evidence bundle that operates the
+real V2 GUI and only observes the production queue/SQLite/runner/backend path.
+The reference journey `learning-lora-strength` passes end to end against the
+fake-backend seam through Build Preview Only, Run Experiment, execution and
+readback validation, but its rating step exposes an unresolved product defect:
+saving a rating for a composite LoRA-strength variant persists the record and
+then raises `unhashable type: 'dict'` in
+`RecommendationEngine._compute_optimal_settings`. The real-A1111 run is on
+**HOLD** until a local A1111 with `add-detail-xl` is running; the harness never
+starts, adopts, or stops it.
 
 ## Approved post-v2.6 direction
 
@@ -393,6 +406,8 @@ incident is closed as an acceptance-harness lifetime defect.
 - Informational Linux/Xvfb isolation failures remain outside the required CI verdict.
 - Legacy stale tests still reflect superseded CLI, compatibility, migration, or
   stale constructor-fixture expectations.
+- The composite LoRA-strength rating defect above (found by `PR-TEST-OPERATOR-100`)
+  is unresolved; the harness marks its full-journey test `xfail(strict)`.
 - Local PR-gate execution can be unavailable when local `mypy` is missing;
   required GitHub mypy and smoke gates are the compatibility verdict.
 
