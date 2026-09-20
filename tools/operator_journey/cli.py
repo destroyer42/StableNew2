@@ -26,7 +26,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("journey", choices=[JOURNEY_ID])
     backend = parser.add_mutually_exclusive_group()
-    backend.add_argument("--backend", choices=["fake", "real"], default="fake")
+    backend.add_argument("--backend", choices=["fake", "real"], default=None)
     backend.add_argument(
         "--real-backend",
         action="store_true",
@@ -44,6 +44,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="seconds to wait for StableNew to connect to WebUI (normal startup takes ~15-30s)",
     )
+    parser.add_argument(
+        "--startup-grace",
+        type=float,
+        default=None,
+        help="override StableNew's startup probe grace seconds (default: production timing)",
+    )
     dev = parser.add_argument_group("harness development (fake backend)")
     dev.add_argument("--stop-after", choices=list(PHASES), default=None)
     dev.add_argument("--discard-workspace", action="store_true")
@@ -54,13 +60,14 @@ def build_parser() -> argparse.ArgumentParser:
 
 def config_from_args(args: argparse.Namespace) -> JourneyConfig:
     config = JourneyConfig(
-        backend="real" if args.real_backend else args.backend,
+        backend="real" if args.real_backend else (args.backend or "fake"),
         lora_name=args.lora_name,
         seed=args.seed,
         timeout=args.timeout,
         webui_url=args.webui_url,
         show_window=not args.hide_window,
         startup_wait=args.startup_wait,
+        startup_grace_sec=args.startup_grace,
         stop_after=args.stop_after,
         discard_workspace=args.discard_workspace,
     )

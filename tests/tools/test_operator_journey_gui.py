@@ -152,6 +152,52 @@ def test_journey_waits_for_a_slow_starting_webui(tmp_path: Path) -> None:
     assert any(e.get("label") == "header Refresh" for e in evidence["action_trace"])
 
 
+def test_real_backend_code_path_against_a_loopback_backend(tmp_path: Path) -> None:
+    """Exercise the --real-backend branch (probe, LoRA check, model match, idle wait)
+    against a loopback double so no real A1111 is needed."""
+
+    _require_display()
+    from tools.operator_journey.fake_a1111 import FakeA1111
+
+    with FakeA1111() as backend:
+        env = {
+            k: v
+            for k, v in os.environ.items()
+            if k not in {"PYTEST_CURRENT_TEST", "STABLENEW_TEST_MODE", "STABLENEW_NO_WEBUI"}
+        }
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "tools.operator_journey",
+                "learning-lora-strength",
+                "--real-backend",
+                "--webui-url",
+                backend.base_url,
+                "--startup-grace",
+                "0",
+                "--hide-window",
+                "--discard-workspace",
+                "--stop-after",
+                "verify_execution",
+                "--evidence-dir",
+                str(tmp_path),
+            ],
+            cwd=REPO_ROOT,
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=240,
+        )
+        payloads = list(backend.txt2img_payloads)
+    evidence = json.loads((next(tmp_path.iterdir()) / "evidence.json").read_text("utf-8"))
+    assert result.returncode == 0 and evidence["verdict"] == "PASS", evidence["failed_assertion"]
+    assert evidence["backend_mode"] == "real"
+    assert evidence["summary"]["backend"]["lora_count"] == 1
+    assert evidence["summary"]["backend"]["active_checkpoint"] == backend.model
+    assert len(payloads) == 3 and {p["seed"] for p in payloads} == {12345}
+
+
 def test_journey_reports_fail_when_seed_readback_is_lost(tmp_path: Path) -> None:
     code, evidence = _run_cli(
         tmp_path, "--stop-after", "verify_execution", "--fake-drop-seed-readback"

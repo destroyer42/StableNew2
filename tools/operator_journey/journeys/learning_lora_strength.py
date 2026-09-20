@@ -228,11 +228,6 @@ class _Journey:
         card = self.window.pipeline_tab.stage_cards_panel.txt2img_card
         self.check(ph, "resource_projection_models", True)
         if self.config.backend == "real":
-            if self.config.lora_name not in self.backend_info.loras:
-                raise JourneyHold(
-                    f"LoRA {self.config.lora_name!r} is not installed in A1111 "
-                    f"({len(self.backend_info.loras)} LoRAs available)"
-                )
             self._match_active_model(card)
         self.ev.summary["model"] = str(card.model_var.get())
         self.ev.summary["lora"] = self.config.lora_name
@@ -817,6 +812,13 @@ def run_journey(config: JourneyConfig) -> JourneyEvidence:
             info = probe_backend(url)
             if not info.reachable:
                 raise JourneyHold(f"A1111 is not reachable at {url}: {info.error}")
+            if not info.models:
+                raise JourneyHold(f"A1111 at {url} reports no image models")
+            if config.lora_name not in info.loras:
+                raise JourneyHold(
+                    f"LoRA {config.lora_name!r} is not installed in A1111 "
+                    f"({len(info.loras)} LoRAs available)"
+                )
         evidence.summary["backend"] = info.as_dict()
         # A short root keeps Learning artifact paths under the Windows MAX_PATH limit.
         workspace = OperatorWorkspace(
@@ -834,7 +836,9 @@ def run_journey(config: JourneyConfig) -> JourneyEvidence:
         evidence.abort_reason = f"harness error {type(exc).__name__}: {exc}"
     finally:
         if fake is not None:
-            evidence.summary["backend_requests_rejected_while_starting"] = fake.rejected_while_starting
+            evidence.summary["backend_requests_rejected_while_starting"] = (
+                fake.rejected_while_starting
+            )
         owned.cleanup()
         evidence.isolation_violations = guard.violations()
         evidence.completed_at = evidence.now()

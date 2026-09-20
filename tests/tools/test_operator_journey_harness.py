@@ -259,3 +259,43 @@ def test_learning_journey_defaults_match_the_reference_scenario() -> None:
 
 def JourneyConfigReal() -> journey.JourneyConfig:  # noqa: N802 - tiny factory used above
     return journey.JourneyConfig(backend="real")
+
+
+def test_real_mode_holds_when_a1111_is_unreachable(tmp_path: Path) -> None:
+    """No A1111 means HOLD with the exact precondition - never a bypass or a fake result."""
+
+    evidence = journey.run_journey(
+        journey.JourneyConfig(
+            backend="real", webui_url="http://127.0.0.1:9", evidence_root=tmp_path
+        )
+    )
+    assert evidence.verdict == HOLD
+    assert "not reachable at http://127.0.0.1:9" in evidence.hold_reason
+    assert not evidence.checks and evidence.failed_assertion.startswith("prerequisite:")
+    assert (next(tmp_path.iterdir()) / "evidence.json").is_file()
+
+
+def test_real_mode_holds_when_the_requested_lora_is_missing(tmp_path: Path) -> None:
+    with FakeA1111(loras=("some-other-lora",)) as backend:
+        evidence = journey.run_journey(
+            journey.JourneyConfig(
+                backend="real",
+                webui_url=backend.base_url,
+                evidence_root=tmp_path,
+                lora_name="add-detail-xl",
+            )
+        )
+    assert evidence.verdict == HOLD
+    assert "'add-detail-xl' is not installed" in evidence.hold_reason
+    assert backend.txt2img_payloads == []  # nothing was generated
+
+
+def test_backend_probe_reports_models_loras_and_active_checkpoint() -> None:
+    from tools.operator_journey.preflight import fetch_progress, probe_backend
+
+    with FakeA1111(model="m1", loras=("a", "b")) as backend:
+        info = probe_backend(backend.base_url)
+        assert info.reachable and info.models == ["m1"] and info.loras == ["a", "b"]
+        assert info.active_checkpoint == "m1" and info.version
+        assert fetch_progress(backend.base_url)["progress"] == 0.0
+    assert not probe_backend("http://127.0.0.1:9").reachable
