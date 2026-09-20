@@ -230,3 +230,105 @@ def archive_workspace(
             shutil.copy2(source, target / name)
     if discard:
         shutil.rmtree(workspace.root, ignore_errors=True)
+
+
+_WRITE_MODE_CHARS = set("wax+")
+
+
+class AccessSpy:
+    """Record SQLite connections and file opens that touch the operator's real data.
+
+    Installed while the app is constructed and driven, so it proves isolation was
+    in place before production code could open a mutable workspace path.  It only
+    observes: every call is passed through unchanged.
+    """
+
+    def __init__(self, repo_root: Path = REPO_ROOT, allowed: tuple[Path, ...] = ()) -> None:
+        self.repo_root = repo_root.resolve()
+        self.allowed = tuple(p.resolve() for p in allowed)
+        self.sqlite_opened: list[str] = []
+        self.written: list[str] = []
+        self.read_protected: list[str] = []
+        self.read_outputs: list[str] = []  # informational: the app scans past outputs
+        self._saved: dict[str, Any] = {}
+
+    def _inside(self, path: Path, root: Path) -> bool:
+        try:
+            path.resolve().relative_to(root)
+            return True
+        except (ValueError, OSError):
+            return False
+
+    def _is_output(self, path: Path) -> bool:
+        return path.resolve().relative_to(self.repo_root).parts[0] == "output"
+
+    def _real_data(self, raw: Any) -> Path | None:
+        try:
+            path = Path(str(raw))
+            if not path.is_absolute():
+                path = Path.cwd() / path
+        except (TypeError, ValueError, OSError):
+            return None
+        if not self._inside(path, self.repo_root) or any(
+            self._inside(path, a) for a in self.allowed
+        ):
+            return None
+        relative = path.resolve().relative_to(self.repo_root)
+        return (
+            path if relative.parts and relative.parts[0] in _PROTECTED_DIRS + ("output",) else None
+        )
+
+    def __enter__(self) -> AccessSpy:
+        import builtins
+        import io
+        import sqlite3
+
+        spy = self
+        real_connect, real_open, real_io_open = sqlite3.connect, builtins.open, io.open
+        self._saved = {"connect": real_connect, "open": real_open, "io_open": real_io_open}
+
+        def connect(database: Any, *args: Any, **kwargs: Any) -> Any:
+            text = str(database)
+            if text != ":memory:" and not text.startswith("file::memory:"):
+                target = text[len("file:") :].split("?")[0] if text.startswith("file:") else text
+                if spy._real_data(target) is not None:
+                    spy.sqlite_opened.append(target)
+            return real_connect(database, *args, **kwargs)
+
+        def traced(real: Any) -> Any:
+            def wrapper(file: Any, mode: str = "r", *args: Any, **kwargs: Any) -> Any:
+                if isinstance(file, (str, bytes, os.PathLike)):
+                    target = spy._real_data(os.fsdecode(file))
+                    if target is not None:
+                        writing = bool(_WRITE_MODE_CHARS & set(str(mode)))
+                        if writing:
+                            spy.written.append(str(target))
+                        elif spy._is_output(target):
+                            spy.read_outputs.append(str(target))
+                        else:
+                            spy.read_protected.append(str(target))
+                return real(file, mode, *args, **kwargs)
+
+            return wrapper
+
+        sqlite3.connect = connect  # type: ignore[assignment]
+        builtins.open = traced(real_open)  # type: ignore[assignment]
+        io.open = traced(real_io_open)  # type: ignore[assignment]
+        return self
+
+    def __exit__(self, *_: object) -> None:
+        import builtins
+        import io
+        import sqlite3
+
+        sqlite3.connect = self._saved["connect"]  # type: ignore[assignment]
+        builtins.open = self._saved["open"]  # type: ignore[assignment]
+        io.open = self._saved["io_open"]  # type: ignore[assignment]
+
+    def violations(self) -> list[str]:
+        problems = [
+            f"opened production SQLite database {p}" for p in sorted(set(self.sqlite_opened))
+        ]
+        problems += [f"wrote production file {p}" for p in sorted(set(self.written))]
+        problems += [f"read operator-owned file {p}" for p in sorted(set(self.read_protected))]
+        return problems

@@ -19,6 +19,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.learning.value_identity import VariantValueError, canonical_value_key, plain_value
+
 logger = logging.getLogger(__name__)
 
 # PR-046: keywords used to infer people-presence from a prompt text
@@ -633,13 +635,30 @@ class RecommendationEngine:
         """Compute optimal parameter settings from scored records."""
         recommendations = {}
 
-        # Group records by parameter type and value
+        # Group records by parameter type and value.  Structured values (e.g. a
+        # LoRA Strength ``{"name", "weight"}``) group by a canonical key while
+        # the first-seen value stays the semantic value that is returned.
         param_groups: dict[str, dict[Any, list[float]]] = defaultdict(lambda: defaultdict(list))
         param_raw: dict[str, dict[Any, list[float]]] = defaultdict(lambda: defaultdict(list))
         param_reasons: dict[str, dict[Any, list[str]]] = defaultdict(lambda: defaultdict(list))
         param_context_weights: dict[str, dict[Any, list[float]]] = defaultdict(
             lambda: defaultdict(list)
         )
+        param_values: dict[str, dict[Any, Any]] = defaultdict(dict)
+
+        def track(
+            parameter: str, value: Any, rating: float, raw: float, rationale: str, weight: float
+        ) -> None:
+            try:
+                key = canonical_value_key(value)
+            except VariantValueError as exc:
+                logger.warning("Skipping %s recommendation value %r: %s", parameter, value, exc)
+                return
+            param_values[parameter].setdefault(key, value)
+            param_groups[parameter][key].append(rating)
+            param_raw[parameter][key].append(raw)
+            param_reasons[parameter][key].append(rationale)
+            param_context_weights[parameter][key].append(weight)
 
         for record in records:
             if self._exclude_diagnostic_only_motion_record(record, query_context):
@@ -656,10 +675,7 @@ class RecommendationEngine:
                     ("steps", record["primary_steps"]),
                     ("cfg_scale", record["primary_cfg_scale"]),
                 ):
-                    param_groups[parameter][value].append(rating)
-                    param_raw[parameter][value].append(float(record["rating"]))
-                    param_reasons[parameter][value].append(rationale)
-                    param_context_weights[parameter][value].append(weight)
+                    track(parameter, value, rating, float(record["rating"]), rationale, weight)
 
             # If this record is from a variable test, also track that parameter
             if (
@@ -669,10 +685,14 @@ class RecommendationEngine:
                 and record["variant_value"] is not None
             ):
                 param_name = record["variable_under_test"].lower().replace(" ", "_")
-                param_groups[param_name][record["variant_value"]].append(rating)
-                param_raw[param_name][record["variant_value"]].append(float(record["rating"]))
-                param_reasons[param_name][record["variant_value"]].append(rationale)
-                param_context_weights[param_name][record["variant_value"]].append(weight)
+                track(
+                    param_name,
+                    record["variant_value"],
+                    rating,
+                    float(record["rating"]),
+                    rationale,
+                    weight,
+                )
 
         # Compute recommendations for each parameter
         for param_name, value_ratings in param_groups.items():
@@ -737,7 +757,7 @@ class RecommendationEngine:
                 reason = reasons[-1] if reasons else ""
                 recommendations[param_name] = ParameterRecommendation(
                     parameter_name=param_name,
-                    recommended_value=best_value,
+                    recommended_value=plain_value(param_values[param_name][best_value]),
                     confidence_score=round(best_confidence, 3),
                     sample_count=best_count,
                     mean_rating=round(best_mean, 2),

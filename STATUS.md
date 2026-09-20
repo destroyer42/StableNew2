@@ -99,13 +99,15 @@ the real app, and a real LoRA Strength experiment with actual execution/readback
 semantic Tk driver plus isolated workspace and evidence bundle that operates the
 real V2 GUI and only observes the production queue/SQLite/runner/backend path.
 The reference journey `learning-lora-strength` passes end to end against the
-fake-backend seam through Build Preview Only, Run Experiment, execution and
-readback validation, but its rating step exposes an unresolved product defect:
-saving a rating for a composite LoRA-strength variant persists the record and
-then raises `unhashable type: 'dict'` in
-`RecommendationEngine._compute_optimal_settings`. The real-A1111 run is on
-**HOLD** until a local A1111 with `add-detail-xl` is running; the harness never
-starts, adopts, or stops it.
+fake-backend seam: Build Preview Only, Run Experiment, queue/SQLite/runner
+execution, seed and LoRA readback validation, Review ratings, and
+recommendation/conclusion projection. Its rating step exposed that
+`RecommendationEngine` could not group composite variant values; it now groups
+structured values by a canonical key (`src/learning/value_identity.py`) and
+returns the original structured value. An access spy proves the journey never
+opens or writes production SQLite/state/presets. The real-A1111 run is
+**pending**: it needs a local A1111 with `add-detail-xl` already running; the
+harness never starts, adopts, or stops it.
 
 ## Approved post-v2.6 direction
 
@@ -406,8 +408,6 @@ incident is closed as an acceptance-harness lifetime defect.
 - Informational Linux/Xvfb isolation failures remain outside the required CI verdict.
 - Legacy stale tests still reflect superseded CLI, compatibility, migration, or
   stale constructor-fixture expectations.
-- The composite LoRA-strength rating defect above (found by `PR-TEST-OPERATOR-100`)
-  is unresolved; the harness marks its full-journey test `xfail(strict)`.
 - Local PR-gate execution can be unavailable when local `mypy` is missing;
   required GitHub mypy and smoke gates are the compatibility verdict.
 

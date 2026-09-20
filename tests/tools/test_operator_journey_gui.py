@@ -208,14 +208,28 @@ def test_journey_reports_fail_when_seed_readback_is_lost(tmp_path: Path) -> None
     )
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "Product defect found by this journey: saving a rating for a composite LoRA-strength "
-        "variant raises \"unhashable type: 'dict'\" in RecommendationEngine._compute_optimal_settings "
-        "(the rating record itself is persisted). Remove this xfail once that is fixed."
-    ),
-)
 def test_full_fake_journey_including_review_and_ratings(tmp_path: Path) -> None:
     code, evidence = _run_cli(tmp_path)
     assert code == 0 and evidence["verdict"] == "PASS", evidence["failed_assertion"]
+    names = {check["name"] for check in evidence["checks"]}
+    assert {
+        "gui_rating_feedback",
+        "ratings_persisted_isolated",
+        "rating_lineage[0.0]",
+        "rating_lineage[1.0]",
+        "rating_lineage[2.0]",
+        "only_lora_strength_varies",
+        "conclusion_scoped_to_lora_strength",
+        "gui_recommendations_only_lora_strength",
+        "engine_recommends_structured_lora_value_only",
+    } <= names
+    assert all(check["passed"] for check in evidence["checks"])
+    assert evidence["isolation_violations"] == []
+    assert evidence["captured_errors"] == {"gui": [], "threads": [], "logs": []}
+    records = Path(evidence["_bundle"]) / "artifacts" / "learning_records.jsonl"
+    ratings = [
+        json.loads(line)["metadata"]["user_rating_raw"]
+        for line in records.read_text(encoding="utf-8").splitlines()
+        if '"learning_experiment_rating"' in line
+    ]
+    assert ratings == [3, 4, 5]

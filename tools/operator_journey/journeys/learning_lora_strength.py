@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import time
 import tkinter as tk
@@ -21,6 +22,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.learning.lora_variant import extract_lora_tokens
+from src.learning.recommendation_engine import RecommendationEngine
 from tools.operator_journey.capture import FaultCapture, leaked_non_daemon_threads, thread_snapshot
 from tools.operator_journey.evidence import JourneyEvidence
 from tools.operator_journey.fake_a1111 import FakeA1111
@@ -37,6 +39,7 @@ from tools.operator_journey.preflight import BackendInfo, fetch_progress, probe_
 from tools.operator_journey.tk_driver import ActionTrace, JourneyTimeout, TkDriver, WidgetNotFound
 from tools.operator_journey.workspace import (
     REPO_ROOT,
+    AccessSpy,
     OperatorWorkspace,
     UserDataGuard,
     archive_workspace,
@@ -735,6 +738,25 @@ class _Journey:
             == set(_STRENGTHS),
             f"conclusion={conclusion.get('message')} best={conclusion.get('best_value')}",
         )
+        # Recommendations: shown by the GUI and computed by the production engine
+        # over the isolated records.  Only the tested variable may be recommended.
+        shown = str(review.recommendations_text.get("1.0", "end"))
+        shown_params = re.findall(r"^([a-z_]+): ", shown, flags=re.MULTILINE)
+        best = {"name": self.config.lora_name, "weight": _STRENGTHS[-1]}
+        self.check(
+            ph,
+            "gui_recommendations_only_lora_strength",
+            shown_params == ["lora_strength"] and self.config.lora_name in shown,
+            f"review panel recommendation parameters={shown_params} text={shown[:300]!r}",
+        )
+        engine_set = RecommendationEngine(self.ws.records_path).recommend(self.prompt, "txt2img")
+        engine_params = {r.parameter_name: r.recommended_value for r in engine_set.recommendations}
+        self.check(
+            ph,
+            "engine_recommends_structured_lora_value_only",
+            engine_params == {"lora_strength": best},
+            f"engine recommendations={engine_params}",
+        )
         self.checkpoint("rated")
 
     # -- shutdown ---------------------------------------------------------
@@ -827,8 +849,11 @@ def run_journey(config: JourneyConfig) -> JourneyEvidence:
             startup_grace_sec=config.grace_sec,
         )
         evidence.summary["workspace"] = str(workspace.root)
-        with workspace.activate():
+        spy = AccessSpy(allowed=(workspace.root,))
+        with workspace.activate(), spy:
             _Journey(config, evidence, workspace, fake, info).run()
+        evidence.isolation_violations.extend(spy.violations())
+        evidence.summary["operator_output_files_read_by_app_scan"] = len(set(spy.read_outputs))
         archive_workspace(workspace, evidence, run_dir, discard=config.discard_workspace)
     except JourneyHold as exc:
         evidence.hold_reason = str(exc)
@@ -840,7 +865,7 @@ def run_journey(config: JourneyConfig) -> JourneyEvidence:
                 fake.rejected_while_starting
             )
         owned.cleanup()
-        evidence.isolation_violations = guard.violations()
+        evidence.isolation_violations.extend(guard.violations())
         evidence.completed_at = evidence.now()
         evidence.write(run_dir)
     return evidence

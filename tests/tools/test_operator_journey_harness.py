@@ -299,3 +299,55 @@ def test_backend_probe_reports_models_loras_and_active_checkpoint() -> None:
         assert info.active_checkpoint == "m1" and info.version
         assert fetch_progress(backend.base_url)["progress"] == 0.0
     assert not probe_backend("http://127.0.0.1:9").reachable
+
+
+def test_access_spy_flags_production_data_but_allows_the_workspace(tmp_path: Path) -> None:
+    import builtins
+    import io
+    import sqlite3
+
+    from tools.operator_journey.workspace import AccessSpy
+
+    repo, work = tmp_path / "repo", tmp_path / "ws"
+    for directory in (repo / "state", repo / "presets", repo / "output", work):
+        directory.mkdir(parents=True)
+    real = (sqlite3.connect, builtins.open, io.open)
+    spy = AccessSpy(repo_root=repo, allowed=(work,))
+    with spy:
+        sqlite3.connect(str(work / "jobs.sqlite3")).close()  # isolated: fine
+        sqlite3.connect(":memory:").close()
+        (work / "ok.txt").write_text("workspace write")
+        (repo / "output" / "old.png").write_bytes(b"png")  # noqa: SIM115 - writes via open
+        sqlite3.connect(str(repo / "state" / "jobs.sqlite3")).close()
+        (repo / "presets" / "settings.json").write_text("mutated")
+        (repo / "presets" / "settings.json").read_text()
+    assert (sqlite3.connect, builtins.open, io.open) == real  # patches restored
+    problems = spy.violations()
+    assert any("production SQLite database" in p and "jobs.sqlite3" in p for p in problems)
+    assert any("wrote production file" in p and "settings.json" in p for p in problems)
+    assert any("wrote production file" in p and "old.png" in p for p in problems)
+    assert not any(str(work) in p for p in problems)
+
+
+def test_isolation_is_installed_before_production_authorities_open_paths(tmp_path: Path) -> None:
+    """Default-constructed production authorities must resolve inside the workspace."""
+
+    from src.queue.job_repository import JobRepository
+    from src.state.workspace_paths import workspace_paths
+    from src.utils.config import ConfigManager
+    from tools.operator_journey.workspace import REPO_ROOT, AccessSpy
+
+    workspace = OperatorWorkspace(root=tmp_path / "ws", webui_base_url="http://127.0.0.1:1")
+    spy = AccessSpy(repo_root=REPO_ROOT, allowed=(workspace.root,))
+    with workspace.activate(), spy:
+        manager = ConfigManager()  # the constructor every GUI/controller call site uses
+        manager.get_global_positive_prompt()
+        manager.save_settings({"webui_base_url": "http://127.0.0.1:1"})
+        repository = JobRepository(workspace_paths.job_repository())
+        repository.close()
+        workspace_paths.learning_records().write_text("{}\n", encoding="utf-8")
+        workspace_paths.ui_state().parent.mkdir(parents=True, exist_ok=True)
+        workspace_paths.ui_state().write_text("{}", encoding="utf-8")
+    assert spy.violations() == []
+    assert (workspace.root / "state" / "jobs.sqlite3").is_file()
+    assert (workspace.presets_dir / "global_positive.txt").is_file()
