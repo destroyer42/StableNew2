@@ -94,7 +94,7 @@ three CFG variants x one image used frozen seed `12345`, each returned
 also passed for the responsive Learning workflow, current Global Prompt policy
 execution, and a real LoRA Strength experiment with executed-prompt readback.
 `PR-VID-110` is COMPLETE / ACCEPTED / INTEGRATED; `PR-VID-120` (neutral, capability-aware video
-execution contract; no production Wan/VACE integration) is implemented and awaiting acceptance. Its
+execution contract; no production Wan/VACE integration) is COMPLETE / ACCEPTED / INTEGRATED. `PR-VID-130 — Wan2.2 Experimental Prompt-Directed I2V Vertical Slice` is the next authorized package. Recorded product decisions (not implemented): Wan2.2 is a versioned Comfy workflow with governance_state=experimental and an explicit durable per-job opt-in (never labelled approved); disabled workflows stay absolutely non-runnable; VID-130 gets a bounded resource-readiness guard, not a generic GPU scheduler/lease authority, and it must never terminate, adopt or restart external A1111 or Comfy processes; the historical video bridge stays until every producer emits neutral `video_execution` intent and replay migration/normalization is proven. `PR-VID-110`
 directed-motion qualification evidence is recorded in
 `docs/Subsystems/Video/PR-VID-110_Directed_Motion_Qualification.md` (qualification only, no
 integration): on the RTX 4070 Ti 12-GB, Wan2.2 TI2V-5B (stock Comfy) is **CONDITIONAL**

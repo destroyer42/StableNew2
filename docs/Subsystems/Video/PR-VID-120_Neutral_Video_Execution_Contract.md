@@ -1,7 +1,6 @@
 # PR-VID-120 — Capability-Aware Backend-Neutral Video Execution Contract
 
-Status: **implemented on branch `video/120-neutral-video-contract`; awaiting product-owner
-acceptance.** Contract only: no Wan2.2, VACE, SCAIL or other new production backend, workflow,
+Status: **COMPLETE / ACCEPTED / INTEGRATED.** Contract only: no Wan2.2, VACE, SCAIL or other new production backend, workflow,
 model, GPU work, GUI feature, or resource scheduler. Native SVD remains the only accepted
 production video backend.
 
@@ -113,3 +112,18 @@ producers (Video Workflow controller and later UI) and have capability projectio
 here: whether/when to register any Wan2.2 workflow (it needs its own governance and dependency
 declarations), GPU lease/resource arbitration between video and image runtimes, and retiring the
 legacy bridge.
+
+## 7. Acceptance clarification and next package
+
+Stage names may keep classifying existing pipeline video stages and anchoring the bounded historical
+bridge; acceptance does not require removing video stage types. The material requirement, met by the
+explicit resolver, is that neutral backend selection is no longer stage-owned. The legacy bridge is
+preserved and its removal condition (section 4) stands.
+
+**Next authorized package: PR-VID-130 — Wan2.2 Experimental Prompt-Directed I2V Vertical Slice.**
+Product decisions recorded for it (not implemented here): a versioned Comfy workflow with
+`governance_state=experimental` and an explicit durable per-job opt-in (never labelled approved);
+disabled workflows remain absolutely non-runnable; a bounded resource-readiness guard, not a generic GPU
+scheduler/lease authority, that never terminates, adopts or restarts external A1111 or Comfy processes;
+and the historical bridge stays until every producer emits neutral `video_execution` intent and replay
+migration/normalization is proven.

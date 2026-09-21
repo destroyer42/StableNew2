@@ -15,9 +15,11 @@ Updated: 2026-09-19
   `PR-VID-110` is COMPLETE / ACCEPTED / INTEGRATED (Wan2.2 TI2V-5B CONDITIONAL and the only
   currently qualified directed-motion candidate; Wan2.1 VACE-1.3B NO-GO in reference-only,
   Canny and pose-only modes; native SVD the only accepted production video backend).
-  `PR-VID-120` (capability-aware, backend-neutral video execution contract) is implemented on
-  `video/120-neutral-video-contract`, awaiting acceptance; it adds no Wan/VACE integration and
-  native SVD is unchanged. Details: `docs/Subsystems/Video/PR-VID-120_Neutral_Video_Execution_Contract.md`.
+  `PR-VID-120` (capability-aware, backend-neutral video execution contract) is COMPLETE /
+  ACCEPTED / INTEGRATED; it adds no Wan/VACE integration and native SVD is unchanged. Neutral
+  backend selection is explicit (`video_execution.backend_id`); the historical stage-owned bridge
+  remains. Details: `docs/Subsystems/Video/PR-VID-120_Neutral_Video_Execution_Contract.md`.
+  `PR-VID-130 — Wan2.2 Experimental Prompt-Directed I2V Vertical Slice` is the next authorized package. Recorded product decisions (not implemented): Wan2.2 is a versioned Comfy workflow with governance_state=experimental and an explicit durable per-job opt-in (never labelled approved); disabled workflows stay absolutely non-runnable; VID-130 gets a bounded resource-readiness guard, not a generic GPU scheduler/lease authority, and it must never terminate, adopt or restart external A1111 or Comfy processes; the historical video bridge stays until every producer emits neutral `video_execution` intent and replay migration/normalization is proven.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
