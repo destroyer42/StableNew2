@@ -157,9 +157,13 @@ def build_lane_b(
     control_video: str | None,
     *,
     strength: float = 1.0,
+    control: str = "canny",
     prefix: str = "vid110/laneB",
 ) -> Workflow:
-    """Wan2.1 VACE-1.3B with a reference image and, when given, a Canny-edge control video.
+    """Wan2.1 VACE-1.3B with a reference image and, when given, a control video.
+
+    ``control="canny"`` edge-detects the driving frames (stock ``Canny``); ``control="raw"``
+    feeds the video as-is, for a pre-rendered pose-skeleton video that carries no scene RGB.
 
     ``control_video=None`` is the reference-image + prompt (no motion-transfer) variant.
     """
@@ -196,11 +200,14 @@ def build_lane_b(
                 "crop": "center",
             },
         }
-        graph["17"] = {
-            "class_type": "Canny",
-            "inputs": {"image": ["16", 0], "low_threshold": 0.2, "high_threshold": 0.6},
-        }
-        vace_inputs["control_video"] = ["17", 0]
+        if control == "canny":
+            graph["17"] = {
+                "class_type": "Canny",
+                "inputs": {"image": ["16", 0], "low_threshold": 0.2, "high_threshold": 0.6},
+            }
+            vace_inputs["control_video"] = ["17", 0]
+        else:
+            vace_inputs["control_video"] = ["16", 0]
     graph["20"] = {"class_type": "WanVaceToVideo", "inputs": vace_inputs}
     graph.update(_tail(spec, prefix, sampler_latent=["20", 2], trim=["20", 3]))
     return graph

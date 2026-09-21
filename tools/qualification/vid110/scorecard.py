@@ -77,6 +77,22 @@ SCORECARD: dict[tuple[str, str], tuple[dict[str, int], list[str]]] = {
             "Head is down or in profile so the face is barely judgeable; camera static.",
         ],
     ),
+    ("wan2.1-vace-1.3b", "user_control_pose"): (
+        {
+            "identity_preservation": 2,
+            "face_stability": 4,
+            "limb_anatomy_integrity": 4,
+            "temporal_coherence": 4,
+            "prompt_action_adherence": 4,
+            "driving_motion_fidelity": 4,
+        },
+        [
+            "Skeleton-only control (MediaPipe pose, strength 0.7): a child hinges, grips a round weight and lifts; r=0.85 with the driving clip.",
+            "The driving gym, framing and adult silhouette no longer leak in (the Canny failure), and anatomy/temporal quality are clean.",
+            "The source child and park are still not reproduced: a different, older-looking child in a new indoor scene; only orange top / dark-blue lower clothing colours carry over.",
+            "Identity therefore fails for the same reason as the reference-only runs (weak reference binding), not because of the control representation.",
+        ],
+    ),
     ("wan2.1-vace-1.3b", "ref2v_walk_wave"): (
         {
             "identity_preservation": 1,

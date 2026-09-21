@@ -4,8 +4,11 @@ Status: qualification evidence; **not an integration**. Lane A (Wan2.2 TI2V-5B) 
 halves of Lane B (Wan2.1 VACE-1.3B: reference-only and Canny control-video motion
 transfer) were physically qualified, the pair on operator-supplied media. A GPU loss
 interrupted the first control-video attempt; the repeat after a reboot completed
-(section 9 records the incident and the investigation). Outcome: Wan2.2 CONDITIONAL,
-VACE NO-GO on identity in both modes, motion-transfer fidelity itself good.
+(section 9 records the incident and the investigation). A final bounded run replaced the
+Canny control with a pose-skeleton-only control (section 10). Outcome: Wan2.2 CONDITIONAL
+(the only currently qualified directed-motion candidate); VACE-1.3B NO-GO for
+identity-preserving directed motion in reference-only, Canny and pose-only modes, though its
+motion-transfer fidelity is good; native SVD remains the only accepted video backend.
 Nothing here registers a production backend, workflow, catalog entry, GUI field, NJR
 schema change, or runner/queue change.
 
@@ -155,7 +158,7 @@ graphics clock never below 2,775 MHz while busy (`*_telemetry.csv` beside each r
 | Candidate | Result | Reason |
 |---|---|---|
 | **Wan2.2 TI2V-5B** (stock Comfy, fp16) | **CONDITIONAL** | Completes in ~1 min per 2 s clip on the 12-GB card; materially more body motion than SVD and keeps the source identity; gesture-level prompts work, locomotion/turn prompts did not; VRAM peaks at ~11.6 of 12.3 GiB (little headroom); RAM-tight cold load; artifacts at 480x832. |
-| **Wan2.1 VACE-1.3B** (reference-only and Canny control) | **NO-GO** as identity-preserving I2V and as stock-Canny motion transfer; motion fidelity itself is good | Strong prompt direction and clean output but the reference identity is not preserved. Control-video motion transfer (Canny of the operator's clip) follows the driving motion well (r = 0.82, 4/5) but also replaces the source person and scene (identity 1/5), so it is a NO-GO as identity-preserving directed motion with stock Canny control. Pose-only control, control-strength tuning and masking were not tried. |
+| **Wan2.1 VACE-1.3B** (reference-only and Canny control) | **NO-GO** as identity-preserving I2V and as stock-Canny motion transfer; motion fidelity itself is good | Strong prompt direction and clean output but the reference identity is not preserved. Control-video motion transfer (Canny of the operator's clip) follows the driving motion well (r = 0.82, 4/5) but also replaces the source person and scene (identity 1/5), so it is a NO-GO as identity-preserving directed motion with stock Canny control. A pose-skeleton-only control (section 10) removes the scene/silhouette leak and gives clean anatomy but still does not reproduce the source person (identity 2/5): VACE's reference binding is the limit. |
 | SCAIL-2 / Wan Animate 2 | **Not qualified (deferred)** | Official Comfy repacks are 14B: smallest weights 16.65 GB (int8_convrot) / 17.7 GB (fp8), and the 11 GB nvfp4-mix targets Blackwell FP4, which Ada lacks. With 12 GB VRAM and ~32 GB RAM shared with the operator's applications there is no credible stock path; community GGUF would be a separate, pinned evidence class, and both need a driving clip anyway. |
 | HunyuanVideo-1.5, LTX-2.5, Wan 3.0/2.6/2.7, MiniMax H3, CogVideoX | **Deferred per brief** | Official runtime/VRAM floors, hosted-only, licensing/territory, or no evidence of an advantage over the Wan candidates; no new evidence changed that. |
 | Native SVD | Reference baseline | Accepted; per-pixel motion 0.1225 on the sampled clips. |
@@ -173,18 +176,23 @@ graphics clock never below 2,775 MHz while busy (`*_telemetry.csv` beside each r
   lane (VACE with a control video, or a 14B Animate/SCAIL path that this hardware may not run);
   and how a queued job should surface a RAM-hungry cold load and an external-Comfy readiness
   problem (the broken-stderr failure above is an operational hazard for any Comfy-backed video job).
-- Recommended next step (product-owner decision): choose between (a) an opt-in experimental
-  Wan2.2 TI2V-5B prompt-directed workflow (identity kept, gesture-level motion, ~1-2.5 min per
-  2 s clip, near the 12-GB ceiling) and (b) waiting for a motion-transfer path that keeps
-  identity. For (b) the untried levers are a pose-skeleton control (a separate pinned
-  custom-node evidence class), a lower control strength or a person mask on VACE, and the
-  14B Animate/SCAIL family on hardware with more memory. Stabilising the workstation
-  (section 9) should come first for either choice.
+- Recommended direction (a product-owner decision, nothing implemented): a later
+  capability-aware, backend-neutral video contract should model *capabilities* (image-to-video
+  with prompt-directed motion; an optional control-video/pose input; identity-preservation
+  strength as a reported property), never model names, with StableNew remaining the
+  orchestration authority and any Comfy/Wan runtime execution only. Native SVD stays the
+  production baseline; Wan2.2 TI2V-5B is the only candidate that currently qualifies (an
+  opt-in experimental workflow if the owner wants prompt-directed human motion, near the
+  12-GB ceiling); VACE-1.3B is closed for this target; identity-preserving performance
+  transfer needs a stronger reference/animate model (the 14B Animate/SCAIL family) on
+  hardware with more memory. Stabilising the workstation (section 9) comes first.
 
 ## 8. Reproduction and evidence
 
 Local only, GPU-bound, never in CI: `python -m tools.qualification.vid110.session_a`, then
-`session_b`, then `session_c` (which needs operator media at the paths named in the module;
+`session_b`, then `session_c`, then `session_d` (the pose run; needs
+`python -m tools.qualification.vid110.pose` in a MediaPipe environment first) (which need
+operator media at the paths named in the modules;
 all need the GPU free and the five model files above). Deterministic tests
 cover inventory, workflow structure, evidence serialization, scoring inputs, the verdict
 rule and the no-production-registration guarantee. Raw evidence (per-run JSON, videos,
@@ -240,3 +248,42 @@ What changed in the tooling because of it: every run now writes a per-row, flush
 trail (`*_telemetry.csv`: VRAM, temperature, power, clocks, utilisation, throttle bits, free RAM)
 so a hard failure leaves evidence, and `session_c` skips runs that already completed so a repeat
 does not redo them.
+
+## 10. Pose-skeleton-only control (bounded decision run)
+
+Question: was VACE's identity loss caused by the stock full-frame Canny control, or is VACE-1.3B
+unsuitable for identity-preserving directed motion?
+
+Route (no Comfy custom node; the owned Comfy stayed stock-only): the operator's driving clip was
+reduced to a skeleton on black (`tools/qualification/vid110/pose.py`) by MediaPipe 0.10.21
+(Apache-2.0) with opencv-python-headless 4.11.0 in a disposable environment
+(`~/img110r/venv-pose`, model `pose_landmark_heavy.tflite`, 27,709,200 bytes, sha256 prefix
+`59e42d71bcd44cbd`, fetched by MediaPipe at first use). 49 of 49 frames were detected (legs are
+partly hidden behind the barbell, so the skeleton is torso/arms with partial legs). The same
+stock VACE graph, source still, prompt, seed 12345, 25 steps and cfg 6.0 as the Canny run were used;
+only the control video changed (`build_lane_b(..., control="raw")`), at one conservative control
+strength, 0.7. One run; the result was not over-controlled, so no tuning retry was made.
+
+| Run | identity | face | limbs | temporal | prompt/action | driving fidelity | motion-curve r | wall | VRAM peak | RAM min |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Wan2.2 prompt-directed (operator still) | 4 | 3 | 3 | 3 | 4 | n/a (prompt only) | -0.20 | 147 s | 11,690 MiB | 0.05 GB (cold load) |
+| VACE stock Canny | 1 | 2 | 3 | 3 | 3 | 4 | 0.82 | 221 s | 11,749 MiB | 6.05 GB |
+| VACE pose-only (strength 0.7) | 2 | 4 | 4 | 4 | 4 | 4 | 0.85 | 223 s | 11,768 MiB | 7.53 GB |
+
+Observations. The pose control removes the failure that was specific to Canny: the driving gym,
+framing and adult silhouette no longer appear, anatomy and temporal quality are clean, the
+child hinges, grips a round weight and lifts in step with the driving motion (r = 0.85, camera
+static). But the output is still not the source person or place: a different, older-looking child
+in a new indoor scene, with only the orange top / dark-blue lower clothing colours carried over.
+That is the same identity outcome as the reference-only runs (identity 1 on the studio still), so
+the reference image is only weakly bound by VACE-1.3B whatever the control representation.
+Resources: peak VRAM 11,768 MiB of 12,282 (baseline 1,237), 84 C, up to 259 W, throttle bitmask
+`0x405`, graphics clock never below 2,745 MHz while busy, no fault or GPU/WER event, telemetry in
+`reports/vid110/runs/*_telemetry.csv`. Computed verdict: NO-GO (identity 2 < 3).
+
+Decision gate result: pose-only control does **not** materially preserve source identity, so
+identity loss is primarily VACE-1.3B's weak reference binding, with Canny adding scene and
+silhouette leakage on top. **VACE-1.3B is closed as NO-GO for the first production
+controlled-motion backend on this target.** Wan2.2 TI2V-5B (CONDITIONAL) remains the only
+currently qualified directed-motion candidate; native SVD remains the only accepted backend.
+

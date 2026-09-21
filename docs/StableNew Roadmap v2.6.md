@@ -97,10 +97,12 @@ execution, and a real LoRA Strength experiment with executed-prompt readback.
 `docs/Subsystems/Video/PR-VID-110_Directed_Motion_Qualification.md` (qualification only, no
 integration): on the RTX 4070 Ti 12-GB, Wan2.2 TI2V-5B (stock Comfy) is **CONDITIONAL**
 (gesture-level directed motion with identity preserved, ~1 min per 2 s clip, VRAM near the
-ceiling); Wan2.1 VACE-1.3B is **NO-GO** for identity preservation in both reference-only and
-stock-Canny control-video modes (the control mode follows the driving motion well but also
-replaces the person and scene); SCAIL-2/Wan Animate 2 are deferred (14B, no credible 12-GB
-path). A GPU loss during qualification is one of about 15 unexplained hard resets on the
+ceiling); Wan2.1 VACE-1.3B is **NO-GO** for identity preservation in reference-only,
+stock-Canny and pose-skeleton-only control modes (pose control removes the scene/silhouette
+leak and gives clean anatomy but the source person is still not reproduced, so the limit is
+VACE's reference binding); SCAIL-2/Wan Animate 2 are deferred (14B, no credible 12-GB
+path). Wan2.2 is the only currently qualified directed-motion candidate. A GPU loss during
+qualification is one of about 15 unexplained hard resets on the
 workstation since 2026-09-07 (suspects: DDR5-6000 memory OC, power delivery, driver; see the
 doc). Whether to integrate any candidate is a product-owner decision; native SVD remains the
 only accepted video backend.

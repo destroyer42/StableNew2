@@ -205,10 +205,34 @@ def test_qualification_never_registers_a_production_backend_or_workflow() -> Non
 def test_recorded_scorecard_is_valid_and_deterministic() -> None:
     from tools.qualification.vid110.scorecard import SCORECARD
 
-    assert len(SCORECARD) == 6
+    assert len(SCORECARD) == 7
     for (candidate, lane), (scores, notes) in SCORECARD.items():
         assert ev.scoring_inputs_valid(scores) == [], (candidate, lane)
-        transfer = lane.endswith("_control_canny")  # only control-video lanes score motion
+        transfer = lane.endswith(
+            ("_control_canny", "_control_pose")
+        )  # only control-video lanes score motion
         expected = {c for c in ev.SCORE_CRITERIA if transfer or c != "driving_motion_fidelity"}
         assert set(scores) == expected, (candidate, lane)
         assert notes  # every score is backed by a written observation
+
+
+def test_pose_control_graph_bypasses_canny_and_stays_stock() -> None:
+    graph = build_lane_b(SPEC, "source.png", "pose.mp4", control="raw")
+    assert validate_graph(graph) == []
+    assert "17" not in graph and graph["20"]["inputs"]["control_video"] == ["16", 0]
+    canny = build_lane_b(SPEC, "source.png", "drive.mp4")
+    assert canny["20"]["inputs"]["control_video"] == ["17", 0]
+
+
+def test_pose_skeleton_segments_drop_hidden_joints_and_add_a_neck() -> None:
+    from tools.qualification.vid110 import pose
+
+    marks = {
+        pose.NOSE: (0.5, 0.2, 1.0),
+        pose.L_SH: (0.4, 0.3, 1.0),
+        pose.R_SH: (0.6, 0.3, 1.0),
+        pose.L_EL: (0.4, 0.5, 0.05),  # hidden: its limb must be dropped
+    }
+    segments = pose.limb_points(marks)
+    assert ((0.5, 0.2), (0.5, 0.3)) in [(a, b) for a, b, _ in segments]  # nose -> neck midpoint
+    assert len(segments) == 3  # nose-neck, neck-R shoulder, neck-L shoulder
