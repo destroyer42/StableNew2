@@ -70,7 +70,7 @@ def run_generation(
         return record
     client = ComfyClient(comfy_url)
     started = time.monotonic()
-    with ResourceSampler() as sampler:
+    with ResourceSampler(log_path=out_dir / f"{candidate}_{lane}_telemetry.csv") as sampler:
         try:
             prompt_id = client.queue(graph)
             entry = client.wait(

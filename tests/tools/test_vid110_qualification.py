@@ -166,6 +166,26 @@ def test_unscored_or_low_scored_runs_cannot_pass() -> None:
     assert verdict == ev.HOLD and "driving_motion_fidelity" in why[0]
 
 
+def test_gpu_telemetry_is_parsed_recorded_and_flushed_per_row(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from tools.qualification.vid110 import monitor
+
+    sample = monitor.parse_gpu_line("11690, 71, 268.4, 2535, 10501, 100, 0x0000000000000004")
+    assert (sample.vram_mib, sample.temp_c, sample.power_w) == (11690, 71, 268.4)
+    assert (sample.gpu_mhz, sample.util_pct, sample.throttle) == (2535, 100, 0x4)
+
+    monkeypatch.setattr(monitor, "_gpu_sample", lambda: sample)
+    log = tmp_path / "trail.csv"
+    with monitor.ResourceSampler(interval=60.0, log_path=log) as sampler:
+        sampler._sample()
+        rows = log.read_text(encoding="utf-8").splitlines()  # readable before close
+    assert rows[0] == monitor.TELEMETRY_HEADER and len(rows) >= 2
+    peaks = sampler.peaks.as_dict()
+    assert peaks["temp_peak_c"] == 71 and peaks["gpu_mhz_min_busy"] == 2535
+    assert peaks["throttle_reasons_seen"] == "0x4"
+
+
 def test_qualification_never_registers_a_production_backend_or_workflow() -> None:
     """The candidates must not appear anywhere in production source or catalogs."""
 
@@ -185,8 +205,10 @@ def test_qualification_never_registers_a_production_backend_or_workflow() -> Non
 def test_recorded_scorecard_is_valid_and_deterministic() -> None:
     from tools.qualification.vid110.scorecard import SCORECARD
 
-    assert len(SCORECARD) == 5
+    assert len(SCORECARD) == 6
     for (candidate, lane), (scores, notes) in SCORECARD.items():
         assert ev.scoring_inputs_valid(scores) == [], (candidate, lane)
-        assert set(scores) == {c for c in ev.SCORE_CRITERIA if c != "driving_motion_fidelity"}
+        transfer = lane.endswith("_control_canny")  # only control-video lanes score motion
+        expected = {c for c in ev.SCORE_CRITERIA if transfer or c != "driving_motion_fidelity"}
+        assert set(scores) == expected, (candidate, lane)
         assert notes  # every score is backed by a written observation

@@ -1,9 +1,11 @@
 # PR-VID-110 — Directed-Motion Local Backend Qualification
 
-Status: qualification evidence; **not an integration**. Lane A (Wan2.2 TI2V-5B) and the
-reference-only half of Lane B (Wan2.1 VACE-1.3B) were physically qualified, and Lane A
-was repeated on operator-supplied media. The Lane B control-video (motion-transfer)
-comparison is **on HOLD**: the GPU was lost mid-run (section 9) and it needs a reboot.
+Status: qualification evidence; **not an integration**. Lane A (Wan2.2 TI2V-5B) and both
+halves of Lane B (Wan2.1 VACE-1.3B: reference-only and Canny control-video motion
+transfer) were physically qualified, the pair on operator-supplied media. A GPU loss
+interrupted the first control-video attempt; the repeat after a reboot completed
+(section 9 records the incident and the investigation). Outcome: Wan2.2 CONDITIONAL,
+VACE NO-GO on identity in both modes, motion-transfer fidelity itself good.
 Nothing here registers a production backend, workflow, catalog entry, GUI field, NJR
 schema change, or runner/queue change.
 
@@ -71,7 +73,8 @@ quantised path was used, so all numbers below are stock-Comfy evidence.
   (`output/SVD`, 56 frames @ 28 fps, 576x1024). They were not viewed and are not the same
   source image, so this is a per-pixel-motion reference, not a paired comparison.
 - **Operator-supplied media (session C)**: one owned still of a person standing outdoors
-  and one owned barbell-lift clip. The still was upright-corrected and centre-cropped to
+  (a young child) and one owned barbell-lift clip (a side-on adult deadlift in a gym), so
+  the driving body and the source body differ in size and proportions. The still was upright-corrected and centre-cropped to
   480x832; the clip was cut to 49 frames at 24 fps, 480x832 (start 5.2 s). The
   prompt was "bends at the hips and knees, grips a barbell on the ground with both hands, and
   lifts it while standing up straight". These files and their outputs stay in the
@@ -91,6 +94,7 @@ camera translation removed). SVD baseline = **0.1225**.
 | VACE-1.3B reference-only walk_wave | 217 s | 11,562 MiB | 10.4 GB | 0.390 | 3.2x | 0.014 |
 | VACE-1.3B reference-only turn_raise_arms | 205 s | 11,086 MiB | 13.2 GB | 0.352 | 2.9x | 0.006 |
 | Wan2.2 I2V operator still, barbell prompt (session C) | 147 s | 11,690 MiB | 0.05 GB (cold load) | 3.98 | 32x (inflated, see below) | 0.644 |
+| VACE-1.3B Canny control from the operator clip (session C) | 221 s | 11,749 MiB | 6.05 GB | 0.644 | 5.3x | -0.069 |
 
 Peak VRAM includes models cached from the previous run in the same process, so it is a
 ceiling, not a minimum. The first (cold) load of the 10 GB UNet + text encoder drove system
@@ -110,6 +114,7 @@ Visual scorecard (0-5; recorded in `tools/qualification/vid110/scorecard.py`):
 | VACE walk_wave | 1 | 4 | 4 | 4 | 5 | NO-GO (identity) |
 | VACE turn_raise_arms | 1 | 3 | 3 | 3 | 4 | NO-GO (identity) |
 | Wan2.2 operator still, barbell prompt | 4 | 3 | 3 | 3 | 4 | PASS (motion ratio inflated) |
+| VACE Canny control, operator clip | 1 | 2 | 3 | 3 | 3 (+ driving fidelity 4) | NO-GO (identity, face) |
 
 Observations. Wan2.2: the wave and the arms-overhead motion happen with the source person,
 clothing and framing preserved; the requested walk and turn do not happen (the body stays
@@ -130,12 +135,27 @@ result. The clip's motion curve correlates at r = -0.20 with the driving clip, w
 Wan2.2 I2V only sees the text prompt, not the driving video, so this run measures prompt-directed
 motion, not motion transfer. Cold-load free RAM again dipped to ~0.05 GB and the machine stayed up.
 
+VACE control-video (session C, repeated after the reboot): the output follows the driving lift
+(hinge, grip, pull; motion-curve correlation with the driving clip r = 0.82, camera static,
+drift 0.004 px/frame), so motion transfer itself works on stock nodes at 480x832 in 221 s.
+It does not carry the source identity: Canny edges of the whole driving frame bring the gym,
+the framing and an adult silhouette, so a different, older-looking person in the driving
+clip's red top appears instead of the source child (identity score 1; the histogram proxy is
+-0.07). A pink toy-face object shows up under a kettlebell-like weight and turns into
+barbell plates in the last frames, and the person is still bent at the end of the 2 s
+window. The two runs had a single seed, one control strength (1.0) and one source/driving
+pair; a lower control strength, a body-only mask or a pose (skeleton) control would be the
+levers to try, but those are tuning or a separate pinned custom-node evidence class, so they
+are recorded as follow-on rather than run here. Peak GPU temperature was 84 C at up to 260 W;
+the driver reported a power-cap throttle bit (0x4) and an unnamed 0x400 bit, with the
+graphics clock never below 2,775 MHz while busy (`*_telemetry.csv` beside each run).
+
 ## 6. Verdicts
 
 | Candidate | Result | Reason |
 |---|---|---|
 | **Wan2.2 TI2V-5B** (stock Comfy, fp16) | **CONDITIONAL** | Completes in ~1 min per 2 s clip on the 12-GB card; materially more body motion than SVD and keeps the source identity; gesture-level prompts work, locomotion/turn prompts did not; VRAM peaks at ~11.6 of 12.3 GiB (little headroom); RAM-tight cold load; artifacts at 480x832. |
-| **Wan2.1 VACE-1.3B** reference-only | **NO-GO** as identity-preserving I2V; **motion-transfer HOLD** | Strong prompt direction and clean output but the reference identity is not preserved. Its real value (control-video motion transfer) is still untested: the one control-video run (Canny of the operator's clip) was cut short by the GPU loss in section 9. This is not a NO-GO for the control lane. |
+| **Wan2.1 VACE-1.3B** (reference-only and Canny control) | **NO-GO** as identity-preserving I2V and as stock-Canny motion transfer; motion fidelity itself is good | Strong prompt direction and clean output but the reference identity is not preserved. Control-video motion transfer (Canny of the operator's clip) follows the driving motion well (r = 0.82, 4/5) but also replaces the source person and scene (identity 1/5), so it is a NO-GO as identity-preserving directed motion with stock Canny control. Pose-only control, control-strength tuning and masking were not tried. |
 | SCAIL-2 / Wan Animate 2 | **Not qualified (deferred)** | Official Comfy repacks are 14B: smallest weights 16.65 GB (int8_convrot) / 17.7 GB (fp8), and the 11 GB nvfp4-mix targets Blackwell FP4, which Ada lacks. With 12 GB VRAM and ~32 GB RAM shared with the operator's applications there is no credible stock path; community GGUF would be a separate, pinned evidence class, and both need a driving clip anyway. |
 | HunyuanVideo-1.5, LTX-2.5, Wan 3.0/2.6/2.7, MiniMax H3, CogVideoX | **Deferred per brief** | Official runtime/VRAM floors, hosted-only, licensing/territory, or no evidence of an advantage over the Wan candidates; no new evidence changed that. |
 | Native SVD | Reference baseline | Accepted; per-pixel motion 0.1225 on the sampled clips. |
@@ -153,11 +173,13 @@ motion, not motion transfer. Cold-load free RAM again dipped to ~0.05 GB and the
   lane (VACE with a control video, or a 14B Animate/SCAIL path that this hardware may not run);
   and how a queued job should surface a RAM-hungry cold load and an external-Comfy readiness
   problem (the broken-stderr failure above is an operational hazard for any Comfy-backed video job).
-- Recommended next step: reboot, confirm `nvidia-smi` sees the GPU, then re-run the VACE
-  control-video comparison only (`python -m tools.qualification.vid110.session_c`; the finished
-  Wan2.2 run is cached and will not repeat). Stock `Canny` control first; a pose
-  preprocessor would be a separate pinned custom-node class. Then decide between "Wan2.2
-  experimental workflow" and "wait for a motion-transfer path".
+- Recommended next step (product-owner decision): choose between (a) an opt-in experimental
+  Wan2.2 TI2V-5B prompt-directed workflow (identity kept, gesture-level motion, ~1-2.5 min per
+  2 s clip, near the 12-GB ceiling) and (b) waiting for a motion-transfer path that keeps
+  identity. For (b) the untried levers are a pose-skeleton control (a separate pinned
+  custom-node evidence class), a lower control strength or a person mask on VACE, and the
+  14B Animate/SCAIL family on hardware with more memory. Stabilising the workstation
+  (section 9) should come first for either choice.
 
 ## 8. Reproduction and evidence
 
@@ -169,15 +191,52 @@ rule and the no-production-registration guarantee. Raw evidence (per-run JSON, v
 contact sheets, model manifest, owned-Comfy log) is under the git-ignored
 `reports/vid110/`.
 
-## 9. Incident: GPU lost during the VACE control-video run
+## 9. Incident: GPU lost during the VACE control-video run, and investigation
 
-While the owned Comfy was sampling the VACE-1.3B Canny-control run (25 steps at 5-7 s/it), the
-client got `ConnectionResetError 10054` and the owned process disappeared. Afterwards
-`nvidia-smi` reported "Unable to determine the device handle for GPU0: 0000:01:00.0: GPU is lost.
-Reboot the system to recover this GPU". The operator's external Comfy on port 8000 began
-returning HTTP 500. RAM was healthy (about 22 GB free), the System event log showed no
-nvlddmkm/TDR entry (only an unrelated DCOM 10016), and the Wan2.2 run immediately before it had
-finished cleanly. The cause is **unproven** (a driver/device fault under sustained 12-GB load is
-one candidate; no other has been ruled in or out). Per the brief, all GPU work stopped without an
-automatic retry, and nothing on the machine was restarted or reconfigured. The control-video
-comparison remains incomplete and produces no verdict.
+What happened. While the owned Comfy was sampling the first VACE Canny-control attempt (25 steps
+at 5-7 s/it, straight after a 147 s Wan2.2 run), the client got `ConnectionResetError 10054` and
+the owned process disappeared. `nvidia-smi` then reported "GPU is lost. Reboot the system to
+recover this GPU"; the operator's Comfy on port 8000 returned HTTP 500. Windows itself stayed up
+and there was no bugcheck, TDR, `nvlddmkm` or WHEA entry for the moment; the operator had to
+reset the machine (Kernel-Power 41 at boot, previous shutdown 08:19). A WPF app
+(`MicrosoftSecurityApp.exe`) crashed at 08:10:34, when the GPU dropped. The identical graph and
+settings then completed after the reboot (221 s, 84 C peak), so the graph is not a deterministic
+trigger.
+
+What the machine's own logs show (read-only inspection; nothing was changed):
+
+- **It predates this work.** Kernel-Power 41 (unexpected reboot) events: 2026-07-23 and 07-30 (one
+  each), then 15 between 2026-09-07 and 2026-09-21 (on nine separate days). The qualification's
+  first GPU run was at 07:09 on 9/21, so 14 of those 15 reboots (all but this incident's) predate it.
+- **Two DPC_WATCHDOG_VIOLATION bugchecks** (0x133, argument 1, timeout 0x1e00) on 9/9 05:51 and
+  9/14 07:46 with the same argument signature.
+- **17 `nvlddmkm` event-153 errors ("Error occurred on GPUID: 100")** between 9/7 and 9/15, and
+  `WATCHDOG` live-kernel dumps on 9/16 06:20 and 08:07 that coincide with two of the unexpected
+  power-offs (those dumps hold session/`csrss`/`dwm` state, not a driver stack).
+- **`MicrosoftSecurityApp.exe` crashes cluster with the failures** (within about a minute or two of
+  the unexpected shutdowns on 9/16 x2, 9/18 and 9/19, and at the moment of this GPU loss). It
+  is a symptom of the display stack failing, not a cause.
+- **Not implicated by the evidence:** system RAM (about 22 GB free at failure), system drive
+  health (all NVMe/SSD Healthy), or VRAM overcommit alone (the successful runs used the same
+  11.7 of 12.3 GiB). Volume F: (external USB) is flagged "Full Repair Needed" by NTFS after the
+  hard resets; that is a consequence, and `chkdsk F: /f` is the operator's call.
+- **Configuration worth knowing:** i9-13900K on an ASRock Z690-C/D5 (BIOS 16.01, 2025-10-22), two
+  Micron DDR5 modules rated 5600 MT/s **configured at 6000 MT/s** (XMP/EXPO, 1.35 V), NVIDIA driver
+  32.0.16.1692 (dated 2026-09-03; installed 8/30 and again 9/17), High-performance power plan.
+  PSU model and 12VHPWR seating cannot be read from software.
+
+Assessment (not proven). The failure class (silent whole-GPU loss, 0x133 with identical
+arguments, no driver TDR record, many unrelated live-kernel watchdog reports, a cadence of several a week)
+points at platform or power stability under sustained GPU load more than at the qualification
+graph or at a single bad kernel. In rough order of suspicion: (1) memory/CPU-memory-controller
+stability at DDR5-6000 on a 13th-gen part; (2) GPU power delivery or the PSU/connector (the card
+peaked at 84 C and about 260 W in the successful run); (3) the NVIDIA driver 616.92 WDDM path.
+Cheap discriminating steps for the operator: drop memory to its 5600 MT/s JEDEC rating (or lower)
+for a few days and watch Kernel-Power 41; run a memory test; confirm the PSU rating and reseat the
+GPU power connector; try the previous NVIDIA driver with a clean install. None of these was
+attempted because they change the machine's configuration.
+
+What changed in the tooling because of it: every run now writes a per-row, flushed telemetry
+trail (`*_telemetry.csv`: VRAM, temperature, power, clocks, utilisation, throttle bits, free RAM)
+so a hard failure leaves evidence, and `session_c` skips runs that already completed so a repeat
+does not redo them.

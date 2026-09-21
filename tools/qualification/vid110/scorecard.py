@@ -58,6 +58,25 @@ SCORECARD: dict[tuple[str, str], tuple[dict[str, int], list[str]]] = {
             "The driving clip is not an input to this lane; its motion curve is uncorrelated (r=-0.20).",
         ],
     ),
+    ("wan2.1-vace-1.3b", "user_control_canny"): (
+        {
+            "identity_preservation": 1,
+            "face_stability": 2,
+            "limb_anatomy_integrity": 3,
+            "temporal_coherence": 3,
+            "prompt_action_adherence": 3,
+            "driving_motion_fidelity": 4,
+        },
+        [
+            "Follows the driving lift: hinge, grip, pull; motion-curve correlation 0.82.",
+            "The output is not the source person or place: the Canny edges bring the driving "
+            "clip's gym, framing and adult silhouette, so a different, older-looking person "
+            "appears in the driving clip's red top.",
+            "A pink toy-face object appears under a kettlebell-like weight and turns into "
+            "barbell plates in the last frames; the person never stands up straight in 2 s.",
+            "Head is down or in profile so the face is barely judgeable; camera static.",
+        ],
+    ),
     ("wan2.1-vace-1.3b", "ref2v_walk_wave"): (
         {
             "identity_preservation": 1,
@@ -105,5 +124,6 @@ def verdicts(runs_dir: Path, baseline: float) -> dict[str, tuple[str, list[str]]
     for (candidate, lane), (scores, notes) in SCORECARD.items():
         data = json.loads((runs_dir / f"{candidate}_{lane}.json").read_text(encoding="utf-8"))
         record = ev.RunEvidence(**{**data, "scores": scores, "observations": notes})
-        results[f"{candidate}:{lane}"] = ev.decide(record, baseline, motion_transfer=False)
+        transfer = "driving_motion_fidelity" in scores
+        results[f"{candidate}:{lane}"] = ev.decide(record, baseline, motion_transfer=transfer)
     return results

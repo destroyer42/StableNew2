@@ -120,6 +120,10 @@ def main(argv: list[str]) -> int:
             ),
         )
         for candidate, lane, graph, files, spec, control in jobs:
+            done = REPORTS / "runs" / f"{candidate}_{lane}.json"
+            if done.exists() and json.loads(done.read_text(encoding="utf-8")).get("completed"):
+                summary[lane] = {"completed": True, "skipped": "already recorded"}
+                continue
             record = run_generation(
                 candidate=candidate,
                 lane=lane,
