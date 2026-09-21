@@ -346,6 +346,11 @@ by one resolver (`src/video/video_execution_resolver.py`) before any backend is 
 no longer own backend selection; they survive only as a bounded legacy bridge for historical
 records. See `docs/Subsystems/Video/PR-VID-120_Neutral_Video_Execution_Contract.md`.
 
+Workflow governance has three states: `approved` runs normally, `experimental` runs only when the job's
+immutable `video_execution.experimental_opt_in` is true (never a global switch), and `disabled` never runs.
+A workflow may declare an observe-only resource-readiness policy that is checked before dispatch and never
+stops, adopts or restarts any process. See `docs/Subsystems/Video/PR-VID-130_Wan22_Experimental_Vertical_Slice.md`.
+
 Image and video backend registries remain separate unless later evidence proves
 a shared runtime abstraction is materially simpler without weakening typed
 image/video contracts. PR-IMG-100 must not create a premature universal backend

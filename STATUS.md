@@ -19,7 +19,10 @@ Updated: 2026-09-19
   ACCEPTED / INTEGRATED; it adds no Wan/VACE integration and native SVD is unchanged. Neutral
   backend selection is explicit (`video_execution.backend_id`); the historical stage-owned bridge
   remains. Details: `docs/Subsystems/Video/PR-VID-120_Neutral_Video_Execution_Contract.md`.
-  `PR-VID-130 — Wan2.2 Experimental Prompt-Directed I2V Vertical Slice` is the next authorized package. Recorded product decisions (not implemented): Wan2.2 is a versioned Comfy workflow with governance_state=experimental and an explicit durable per-job opt-in (never labelled approved); disabled workflows stay absolutely non-runnable; VID-130 gets a bounded resource-readiness guard, not a generic GPU scheduler/lease authority, and it must never terminate, adopt or restart external A1111 or Comfy processes; the historical video bridge stays until every producer emits neutral `video_execution` intent and replay migration/normalization is proven.
+  `PR-VID-130 — Wan2.2 Experimental Prompt-Directed I2V Vertical Slice` is implemented and physically
+  accepted on `video/130-wan22-experimental` (awaiting product-owner acceptance; details in
+  `docs/Subsystems/Video/PR-VID-130_Wan22_Experimental_Vertical_Slice.md`). Wan2.2 is an experimental,
+  per-job opt-in Comfy workflow; SVD stays the default. The earlier VID-130 decision record follows. Recorded product decisions (not implemented): Wan2.2 is a versioned Comfy workflow with governance_state=experimental and an explicit durable per-job opt-in (never labelled approved); disabled workflows stay absolutely non-runnable; VID-130 gets a bounded resource-readiness guard, not a generic GPU scheduler/lease authority, and it must never terminate, adopt or restart external A1111 or Comfy processes; the historical video bridge stays until every producer emits neutral `video_execution` intent and replay migration/normalization is proven.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
