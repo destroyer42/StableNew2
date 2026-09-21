@@ -1,8 +1,9 @@
 # PR-VID-110 — Directed-Motion Local Backend Qualification
 
 Status: qualification evidence; **not an integration**. Lane A (Wan2.2 TI2V-5B) and the
-reference-only half of Lane B (Wan2.1 VACE-1.3B) were physically qualified. The
-motion-transfer comparison is **on HOLD** until an owned human driving clip exists.
+reference-only half of Lane B (Wan2.1 VACE-1.3B) were physically qualified, and Lane A
+was repeated on operator-supplied media. The Lane B control-video (motion-transfer)
+comparison is **on HOLD**: the GPU was lost mid-run (section 9) and it needs a reboot.
 Nothing here registers a production backend, workflow, catalog entry, GUI field, NJR
 schema change, or runner/queue change.
 
@@ -69,8 +70,13 @@ quantised path was used, so all numbers below are stock-Comfy evidence.
 - **SVD baseline**: metrics only, from the six most recent accepted native-SVD clips
   (`output/SVD`, 56 frames @ 28 fps, 576x1024). They were not viewed and are not the same
   source image, so this is a per-pixel-motion reference, not a paired comparison.
-- **Driving clip**: none. The operator did not supply one and no suitable owned human
-  motion clip exists in the repo or output tree.
+- **Operator-supplied media (session C)**: one owned still of a person standing outdoors
+  and one owned barbell-lift clip. The still was upright-corrected and centre-cropped to
+  480x832; the clip was cut to 49 frames at 24 fps, 480x832 (start 5.2 s). The
+  prompt was "bends at the hips and knees, grips a barbell on the ground with both hands, and
+  lifts it while standing up straight". These files and their outputs stay in the
+  git-ignored `reports/vid110/` and are not committed or described further. An earlier
+  candidate folder of prior SVD outputs was declined as source/driving media.
 
 ## 5. Measured results
 
@@ -84,6 +90,7 @@ camera translation removed). SVD baseline = **0.1225**.
 | Wan2.2 I2V turn_raise_arms | 56 s | 11,548 MiB | 6.4 GB | 0.484 | 3.9x | 0.919 |
 | VACE-1.3B reference-only walk_wave | 217 s | 11,562 MiB | 10.4 GB | 0.390 | 3.2x | 0.014 |
 | VACE-1.3B reference-only turn_raise_arms | 205 s | 11,086 MiB | 13.2 GB | 0.352 | 2.9x | 0.006 |
+| Wan2.2 I2V operator still, barbell prompt (session C) | 147 s | 11,690 MiB | 0.05 GB (cold load) | 3.98 | 32x (inflated, see below) | 0.644 |
 
 Peak VRAM includes models cached from the previous run in the same process, so it is a
 ceiling, not a minimum. The first (cold) load of the 10 GB UNet + text encoder drove system
@@ -102,6 +109,7 @@ Visual scorecard (0-5; recorded in `tools/qualification/vid110/scorecard.py`):
 | Wan2.2 turn_raise_arms | 4 | 4 | 3 | 3 | 3 | PASS |
 | VACE walk_wave | 1 | 4 | 4 | 4 | 5 | NO-GO (identity) |
 | VACE turn_raise_arms | 1 | 3 | 3 | 3 | 4 | NO-GO (identity) |
+| Wan2.2 operator still, barbell prompt | 4 | 3 | 3 | 3 | 4 | PASS (motion ratio inflated) |
 
 Observations. Wan2.2: the wave and the arms-overhead motion happen with the source person,
 clothing and framing preserved; the requested walk and turn do not happen (the body stays
@@ -111,12 +119,23 @@ plus an arm raise) with cleaner rendering, but it generates a different person (
 hair, shoes), i.e. the reference image is only weakly bound, and one clip changes sleeves
 mid-way. Both ran on stock nodes with no crash.
 
+Session C (operator media, Wan2.2 only): the person bends, grips a barbell and stands up lifting
+it, as prompted, with the same person and clothing throughout (identity histogram 0.64,
+lower than the studio still because the outdoor scene is far busier). The face is soft
+and blotchy mid-clip, saturation rises with a pink cast late, the camera tilts up in the last
+third so the background changes (drift 3.6 px/frame, motion-area fraction 0.96), and the
+barbell has a plate on one end only. Because that tilt is scene motion, the 32x
+ratio over SVD overstates body motion; the visual score, not the ratio, carries this
+result. The clip's motion curve correlates at r = -0.20 with the driving clip, which is expected:
+Wan2.2 I2V only sees the text prompt, not the driving video, so this run measures prompt-directed
+motion, not motion transfer. Cold-load free RAM again dipped to ~0.05 GB and the machine stayed up.
+
 ## 6. Verdicts
 
 | Candidate | Result | Reason |
 |---|---|---|
 | **Wan2.2 TI2V-5B** (stock Comfy, fp16) | **CONDITIONAL** | Completes in ~1 min per 2 s clip on the 12-GB card; materially more body motion than SVD and keeps the source identity; gesture-level prompts work, locomotion/turn prompts did not; VRAM peaks at ~11.6 of 12.3 GiB (little headroom); RAM-tight cold load; artifacts at 480x832. |
-| **Wan2.1 VACE-1.3B** reference-only | **NO-GO** as identity-preserving I2V; **motion-transfer HOLD** | Strong prompt direction and clean output but the reference identity is not preserved. Its real value (control-video motion transfer) is untested: no driving clip. |
+| **Wan2.1 VACE-1.3B** reference-only | **NO-GO** as identity-preserving I2V; **motion-transfer HOLD** | Strong prompt direction and clean output but the reference identity is not preserved. Its real value (control-video motion transfer) is still untested: the one control-video run (Canny of the operator's clip) was cut short by the GPU loss in section 9. This is not a NO-GO for the control lane. |
 | SCAIL-2 / Wan Animate 2 | **Not qualified (deferred)** | Official Comfy repacks are 14B: smallest weights 16.65 GB (int8_convrot) / 17.7 GB (fp8), and the 11 GB nvfp4-mix targets Blackwell FP4, which Ada lacks. With 12 GB VRAM and ~32 GB RAM shared with the operator's applications there is no credible stock path; community GGUF would be a separate, pinned evidence class, and both need a driving clip anyway. |
 | HunyuanVideo-1.5, LTX-2.5, Wan 3.0/2.6/2.7, MiniMax H3, CogVideoX | **Deferred per brief** | Official runtime/VRAM floors, hosted-only, licensing/territory, or no evidence of an advantage over the Wan candidates; no new evidence changed that. |
 | Native SVD | Reference baseline | Accepted; per-pixel motion 0.1225 on the sampled clips. |
@@ -134,16 +153,31 @@ mid-way. Both ran on stock nodes with no crash.
   lane (VACE with a control video, or a 14B Animate/SCAIL path that this hardware may not run);
   and how a queued job should surface a RAM-hungry cold load and an external-Comfy readiness
   problem (the broken-stderr failure above is an operational hazard for any Comfy-backed video job).
-- Recommended next step: supply an owned full-body human driving clip (and, ideally, an
-  independent full-body source still), then run the VACE control-video comparison (stock
-  `Canny` control first; a pose preprocessor would be a separate pinned custom-node class) and
-  decide between "Wan2.2 experimental workflow" and "wait for a motion-transfer path".
+- Recommended next step: reboot, confirm `nvidia-smi` sees the GPU, then re-run the VACE
+  control-video comparison only (`python -m tools.qualification.vid110.session_c`; the finished
+  Wan2.2 run is cached and will not repeat). Stock `Canny` control first; a pose
+  preprocessor would be a separate pinned custom-node class. Then decide between "Wan2.2
+  experimental workflow" and "wait for a motion-transfer path".
 
 ## 8. Reproduction and evidence
 
-Local only, GPU-bound, never in CI: `python -m tools.qualification.vid110.session_a` then
-`session_b` (both need the GPU free and the five model files above). Deterministic tests
+Local only, GPU-bound, never in CI: `python -m tools.qualification.vid110.session_a`, then
+`session_b`, then `session_c` (which needs operator media at the paths named in the module;
+all need the GPU free and the five model files above). Deterministic tests
 cover inventory, workflow structure, evidence serialization, scoring inputs, the verdict
 rule and the no-production-registration guarantee. Raw evidence (per-run JSON, videos,
 contact sheets, model manifest, owned-Comfy log) is under the git-ignored
 `reports/vid110/`.
+
+## 9. Incident: GPU lost during the VACE control-video run
+
+While the owned Comfy was sampling the VACE-1.3B Canny-control run (25 steps at 5-7 s/it), the
+client got `ConnectionResetError 10054` and the owned process disappeared. Afterwards
+`nvidia-smi` reported "Unable to determine the device handle for GPU0: 0000:01:00.0: GPU is lost.
+Reboot the system to recover this GPU". The operator's external Comfy on port 8000 began
+returning HTTP 500. RAM was healthy (about 22 GB free), the System event log showed no
+nvlddmkm/TDR entry (only an unrelated DCOM 10016), and the Wan2.2 run immediately before it had
+finished cleanly. The cause is **unproven** (a driver/device fault under sustained 12-GB load is
+one candidate; no other has been ruled in or out). Per the brief, all GPU work stopped without an
+automatic retry, and nothing on the machine was restarted or reconfigured. The control-video
+comparison remains incomplete and produces no verdict.

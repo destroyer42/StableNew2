@@ -128,3 +128,35 @@ def contact_sheet(video: Path, target: Path, *, columns: int = 6, count: int = 1
     target.parent.mkdir(parents=True, exist_ok=True)
     cv2.imwrite(str(target), np.vstack(rows))
     return target
+
+
+def motion_curve(video: Path) -> list[float]:
+    """Per-frame local-motion magnitude (camera translation removed) for curve comparison."""
+
+    import cv2
+    import numpy as np
+
+    frames, _ = read_frames(video)
+    gray = [cv2.cvtColor(_small(f), cv2.COLOR_BGR2GRAY) for f in frames]
+    curve: list[float] = []
+    for previous, current in zip(gray, gray[1:], strict=False):
+        flow = cv2.calcOpticalFlowFarneback(previous, current, None, 0.5, 3, 15, 3, 5, 1.2, 0)
+        vectors = flow.reshape(-1, 2)
+        residual = np.linalg.norm(vectors - np.median(vectors, axis=0), axis=1)
+        curve.append(float(residual.mean()))
+    return curve
+
+
+def curve_correlation(a: list[float], b: list[float]) -> float:
+    """Pearson correlation of two motion curves resampled to a common length."""
+
+    import numpy as np
+
+    length = min(len(a), len(b))
+    if length < 3:
+        return 0.0
+    xs = np.interp(np.linspace(0, 1, length), np.linspace(0, 1, len(a)), a)
+    ys = np.interp(np.linspace(0, 1, length), np.linspace(0, 1, len(b)), b)
+    if xs.std() == 0 or ys.std() == 0:
+        return 0.0
+    return float(np.corrcoef(xs, ys)[0, 1])
