@@ -9,6 +9,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from typing import Any
 
+from src.learning.value_identity import readable_value
+
 
 class LearningAnalyticsPanel(ttk.Frame):
     """Panel displaying learning analytics and statistics."""
@@ -120,7 +122,7 @@ class LearningAnalyticsPanel(ttk.Frame):
                     exp.parameter_name or "N/A",
                     exp.total_variants,
                     exp.total_ratings,
-                    exp.best_value or "N/A",
+                    readable_value(exp.best_value) if exp.best_value else "N/A",
                     f"{exp.best_rating:.2f}",
                 ),
             )

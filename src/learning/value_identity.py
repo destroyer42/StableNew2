@@ -74,3 +74,19 @@ def plain_value(value: Any) -> Any:
     if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
         return [plain_value(item) for item in value]
     return value
+
+
+def readable_value(value: Any) -> Any:
+    """Presentation-only form of a variant value; scalars are returned unchanged.
+
+    ``{"name": "add-detail-xl", "weight": 2.0}`` reads ``add-detail-xl @ 2.0``;
+    other structures become compact, key-sorted JSON.  Never use this as data.
+    """
+
+    if isinstance(value, Mapping):
+        if set(value) == {"name", "weight"}:
+            return f"{value['name']} @ {value['weight']}"
+        return json.dumps(plain_value(value), sort_keys=True, separators=(",", ":"), default=str)
+    if isinstance(value, Sequence) and not isinstance(value, (str, bytes, bytearray)):
+        return json.dumps(plain_value(value), separators=(",", ":"), default=str)
+    return value

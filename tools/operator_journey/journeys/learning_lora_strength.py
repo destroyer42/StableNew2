@@ -36,7 +36,13 @@ from tools.operator_journey.observe import (
 )
 from tools.operator_journey.owned import OwnedResources
 from tools.operator_journey.preflight import BackendInfo, fetch_progress, probe_backend
-from tools.operator_journey.tk_driver import ActionTrace, JourneyTimeout, TkDriver, WidgetNotFound
+from tools.operator_journey.tk_driver import (
+    ActionTrace,
+    JourneyTimeout,
+    TkDriver,
+    WidgetNotFound,
+    iter_widgets,
+)
 from tools.operator_journey.workspace import (
     REPO_ROOT,
     AccessSpy,
@@ -55,6 +61,7 @@ PHASES = (
     "run",
     "verify_execution",
     "review_rating",
+    "analytics",
     "shutdown",
 )
 _BASE_PROMPT = "operator journey test, portrait of a warrior, studio lighting"
@@ -217,6 +224,8 @@ class _Journey:
                     self._verify_execution()
                     if self.config.stop_after != "verify_execution":
                         self._review_and_rate()
+                        if self.config.stop_after != "review_rating":
+                            self._view_analytics()
             except (JourneyHold, JourneyAbort, JourneyTimeout, WidgetNotFound) as exc:
                 if isinstance(exc, JourneyHold):
                     self.ev.hold_reason = str(exc)
@@ -775,6 +784,53 @@ class _Journey:
             f"engine recommendations={engine_params}",
         )
         self.checkpoint("rated")
+
+    # -- phase: analytics -----------------------------------------------
+    def _view_analytics(self) -> None:
+        """Open the real Analytics window through its View Analytics button."""
+
+        # Imported here: GUI modules capture state paths at import time, so they
+        # must only be imported after the workspace redirect is active.
+        from src.gui.views.learning_analytics_panel import LearningAnalyticsPanel
+
+        ph = "analytics"
+        d = self.driver
+        review = self.window.learning_tab.review_panel
+        d.invoke(review.analytics_button, label="View Analytics")
+
+        def analytics_window() -> tk.Toplevel | None:
+            for child in iter_widgets(d.root):
+                if isinstance(child, tk.Toplevel) and child.title() == "Learning Analytics":
+                    return child
+            return None
+
+        window = d.wait_until(
+            analytics_window, timeout=15, description="Learning Analytics window opens"
+        )
+        panel = d.find(window, LearningAnalyticsPanel)
+        tree = panel.experiments_tree  # type: ignore[attr-defined]
+        experiment_name = self.state.current_experiment.name
+        d.wait_until(
+            lambda: any(tree.item(k, "text") == experiment_name for k in tree.get_children()),
+            timeout=15,
+            description="Analytics lists the rated experiment",
+            evidence=lambda: [tree.item(k, "text") for k in tree.get_children()],
+        )
+        row = next(
+            tree.item(k, "values")
+            for k in tree.get_children()
+            if tree.item(k, "text") == experiment_name
+        )
+        parameter, variants, ratings, best, best_rating = (str(v) for v in row)
+        self.check(ph, "analytics_parameter", parameter == "LoRA Strength", f"row={row}")
+        self.check(ph, "analytics_counts", (variants, ratings) == ("3", "3"), f"row={row}")
+        self.check(
+            ph,
+            "analytics_best_value",
+            best == f"{self.config.lora_name} @ {_STRENGTHS[-1]}" and best_rating == "5.00",
+            f"row={row}",
+        )
+        self.checkpoint("analytics_viewed")
 
     # -- shutdown ---------------------------------------------------------
     def _shutdown(self, faults: FaultCapture, baseline_threads: set[str]) -> None:

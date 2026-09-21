@@ -6,12 +6,21 @@ PR-LEARN-010: Provides statistical analysis and trend detection.
 from __future__ import annotations
 
 import json
+import logging
 from collections import Counter
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
 
 from src.learning.learning_record import LearningRecordWriter
+from src.learning.value_identity import (
+    VariantValueError,
+    canonical_value_key,
+    plain_value,
+    readable_value,
+)
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -73,7 +82,10 @@ class LearningAnalytics:
         if not records:
             return None
 
+        # Group by a canonical key (structured values such as a LoRA Strength
+        # ``{"name", "weight"}`` are unhashable); keep the semantic value to report.
         value_ratings: dict[Any, list[int]] = {}
+        semantic_values: dict[Any, Any] = {}
         parameter_name = ""
         for record in records:
             metadata = record.get("metadata", {}) or {}
@@ -90,7 +102,17 @@ class LearningAnalytics:
             group_value = metadata.get("variant_value")
             if group_value is None:
                 group_value = metadata.get("image_path") or record.get("run_id")
-            value_ratings.setdefault(group_value, []).append(rating_int)
+            try:
+                key = canonical_value_key(group_value)
+            except VariantValueError as exc:
+                logger.warning(
+                    "Skipping rating in experiment %s: unsupported variant value (%s)",
+                    experiment_id,
+                    exc,
+                )
+                continue
+            semantic_values.setdefault(key, plain_value(group_value))
+            value_ratings.setdefault(key, []).append(rating_int)
 
         if not value_ratings:
             return None
@@ -99,8 +121,10 @@ class LearningAnalytics:
         all_ratings = [r for rs in value_ratings.values() for r in rs]
         # Find best and worst
         value_avgs = {val: sum(ratings) / len(ratings) for val, ratings in value_ratings.items()}
-        best_value = max(value_avgs, key=value_avgs.get, default=None)
-        worst_value = min(value_avgs, key=value_avgs.get, default=None)
+        best_key = max(value_avgs, key=value_avgs.get, default=None)
+        worst_key = min(value_avgs, key=value_avgs.get, default=None)
+        best_value = semantic_values.get(best_key)
+        worst_value = semantic_values.get(worst_key)
 
         return ExperimentSummary(
             experiment_id=experiment_id,
@@ -108,9 +132,9 @@ class LearningAnalytics:
             total_variants=len(value_ratings),
             total_ratings=len(all_ratings),
             best_value=best_value,
-            best_rating=value_avgs.get(best_value, 0) if best_value else 0,
+            best_rating=value_avgs.get(best_key, 0) if best_value else 0,
             worst_value=worst_value,
-            worst_rating=value_avgs.get(worst_value, 0) if worst_value else 0,
+            worst_rating=value_avgs.get(worst_key, 0) if worst_value else 0,
             completion_rate=1.0,  # Would calculate from planned vs actual
         )
 
@@ -251,9 +275,9 @@ class LearningAnalytics:
                         exp.parameter_name,
                         exp.total_variants,
                         exp.total_ratings,
-                        exp.best_value,
+                        readable_value(exp.best_value),
                         exp.best_rating,
-                        exp.worst_value,
+                        readable_value(exp.worst_value),
                         exp.worst_rating,
                     ]
                 )

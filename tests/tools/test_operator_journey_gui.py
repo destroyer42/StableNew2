@@ -234,6 +234,9 @@ def test_full_fake_journey_including_review_and_ratings(tmp_path: Path) -> None:
         "conclusion_scoped_to_lora_strength",
         "gui_recommendations_only_lora_strength",
         "engine_recommends_structured_lora_value_only",
+        "analytics_parameter",
+        "analytics_counts",
+        "analytics_best_value",
     } <= names
     assert all(check["passed"] for check in evidence["checks"])
     assert evidence["isolation_violations"] == []

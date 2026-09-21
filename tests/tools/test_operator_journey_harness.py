@@ -351,3 +351,22 @@ def test_isolation_is_installed_before_production_authorities_open_paths(tmp_pat
     assert spy.violations() == []
     assert (workspace.root / "state" / "jobs.sqlite3").is_file()
     assert (workspace.presets_dir / "global_positive.txt").is_file()
+
+
+def test_importing_the_journey_does_not_import_state_capturing_app_modules() -> None:
+    """GUI modules (sidebar/preview panels) capture state paths at import time.
+
+    They must be imported only after the workspace redirect is active, so importing
+    the CLI/journey must not pull any application module in.
+    """
+
+    code = (
+        "import sys, tools.operator_journey.cli, "
+        "tools.operator_journey.journeys.learning_lora_strength as j;"
+        "bad=[m for m in sys.modules if m.startswith(('src.gui','src.controller','src.app_factory','src.pipeline'))];"
+        "print(bad); sys.exit(1 if bad else 0)"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True, text=True, timeout=120
+    )
+    assert result.returncode == 0, result.stdout + result.stderr

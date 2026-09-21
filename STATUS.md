@@ -412,9 +412,6 @@ incident is closed as an acceptance-harness lifetime defect.
 - Informational Linux/Xvfb isolation failures remain outside the required CI verdict.
 - Legacy stale tests still reflect superseded CLI, compatibility, migration, or
   stale constructor-fixture expectations.
-- `src/learning/learning_analytics.py` still groups raw `variant_value` as a dict
-  key and can fail on structured (composite LoRA) variants; a separate Learning
-  Analytics repair.
 - Discovered Outputs scans existing production output images read-only during a
   journey (no writes); tighten scanner read isolation when that workflow gets its
   own operator journey.
