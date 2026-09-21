@@ -93,7 +93,9 @@ three CFG variants x one image used frozen seed `12345`, each returned
 `all_seeds=[12345]`, and each remained controlled. Final operator acceptance
 also passed for the responsive Learning workflow, current Global Prompt policy
 execution, and a real LoRA Strength experiment with executed-prompt readback.
-`PR-VID-110` directed-motion qualification evidence is recorded in
+`PR-VID-110` is COMPLETE / ACCEPTED / INTEGRATED; `PR-VID-120` is authorized as a separate
+contract-only architecture package (no production Wan/VACE integration). Its
+directed-motion qualification evidence is recorded in
 `docs/Subsystems/Video/PR-VID-110_Directed_Motion_Qualification.md` (qualification only, no
 integration): on the RTX 4070 Ti 12-GB, Wan2.2 TI2V-5B (stock Comfy) is **CONDITIONAL**
 (gesture-level directed motion with identity preserved, ~1 min per 2 s clip, VRAM near the

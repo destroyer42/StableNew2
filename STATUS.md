@@ -12,6 +12,11 @@ Updated: 2026-09-19
   `PR-IMG-110` is integrated; its Ideogram 4 "hardware no-go" is superseded by
   `PR-IMG-110R` (Ideogram 4 NF4 PASS — CONSTRAINED on the 12-GB target; COMPLETE /
   ACCEPTED / INTEGRATED). `PR-IMG-120` remains unauthorized pending a separate owner decision.
+  `PR-VID-110` is COMPLETE / ACCEPTED / INTEGRATED (Wan2.2 TI2V-5B CONDITIONAL and the only
+  currently qualified directed-motion candidate; Wan2.1 VACE-1.3B NO-GO in reference-only,
+  Canny and pose-only modes; native SVD the only accepted production video backend).
+  `PR-VID-120` is authorized as a separate contract-only architecture package (capability-aware,
+  backend-neutral video contract); no production Wan/VACE integration is authorized.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
