@@ -361,3 +361,19 @@ def test_resolver_rejects_wan_without_opt_in_and_unsupported_controls_before_dis
     request.stage_config = config
     resolver.apply(request, resolved)
     assert request.experimental_opt_in is True and request.backend_id == "comfy"
+
+
+def test_a_relative_run_directory_yields_a_single_absolute_artifact_path(
+    tmp_path, monkeypatch
+) -> None:
+    """Found in the real acceptance run: a relative output_dir was joined onto itself."""
+
+    monkeypatch.chdir(tmp_path)
+    client = _FakeComfy(tmp_path)
+    request = _request(tmp_path, opt_in=True)
+    request.output_dir = Path("rel_run")
+    result = _backend(client).execute(SimpleNamespace(), request)
+    assert result is not None
+    primary = Path(result.primary_path)
+    assert primary.is_absolute() and primary.is_file()
+    assert str(primary).count("rel_run") == 1

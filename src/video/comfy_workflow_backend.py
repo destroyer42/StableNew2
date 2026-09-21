@@ -802,7 +802,8 @@ class ComfyWorkflowVideoBackend:
                         subfolder=str(descriptor.get("subfolder") or ""),
                         file_type=str(descriptor.get("type") or "output"),
                     )
-                    descriptor["filename"] = str(local)
+                    # Absolute, so a relative run directory is never joined onto itself.
+                    descriptor["filename"] = str(Path(local).resolve())
                     descriptor["subfolder"] = ""
         return localized
 
