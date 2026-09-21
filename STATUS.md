@@ -83,7 +83,15 @@ invalid. The ambiguous Resume Last, primary generic recent-record Tags editor,
 and global header Automation selector are no longer primary Learning actions.
 Staged Curation can preview learned settings and, after confirmation, apply an
 allowlisted patch only to one newly built derived-job intent before its normal
-NJR/JobService submission. `PR-VID-110` remains a separate product-owner decision.
+NJR/JobService submission.
+`PR-VID-110` directed-motion qualification evidence is recorded in
+`docs/Subsystems/Video/PR-VID-110_Directed_Motion_Qualification.md` (qualification only, no
+integration): on the RTX 4070 Ti 12-GB, Wan2.2 TI2V-5B (stock Comfy) is **CONDITIONAL**
+(gesture-level directed motion with identity preserved, ~1 min per 2 s clip, VRAM near the
+ceiling); Wan2.1 VACE-1.3B reference-only is **NO-GO** for identity preservation, and its
+motion-transfer comparison is on **HOLD** for an owned human driving clip; SCAIL-2/Wan Animate 2
+are deferred (14B, no credible 12-GB path). Whether to integrate any of them is a
+product-owner decision; native SVD remains the only accepted video backend.
 Current Global Positive/Negative text and enablement are frozen into each
 compiled NJR (Learning, PromptPack, and generic jobs) rather than read at
 execution. A `LoRA Strength` variant rewrites the executable prompt, and
