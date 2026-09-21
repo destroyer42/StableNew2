@@ -7,8 +7,8 @@ Updated: 2026-09-19
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: none; `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE /
-  ACCEPTED / INTEGRATED. `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
+- Active objective: none; `PR-LEARN-301`, `PR-TEST-OPERATOR-100` and `PR-LEARN-300`
+  are COMPLETE / ACCEPTED / INTEGRATED. `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -93,6 +93,12 @@ Final operator acceptance is **PASS**: controlled seed proof (three CFG variants
 frozen seed `12345`, each returning `all_seeds=[12345]`), the responsive
 Experiment Design / Plan / Review workflow, current Global Prompt execution in
 the real app, and a real LoRA Strength experiment with actual execution/readback.
+
+`PR-LEARN-301` is **COMPLETE / ACCEPTED / INTEGRATED**: structured/composite
+experiment values (e.g. LoRA Strength `{"name", "weight"}`) are supported in both
+`RecommendationEngine` and `LearningAnalytics` through the shared canonical
+value-identity helper `src/learning/value_identity.py`; the semantic GUI journey
+opens the real View Analytics window and verifies the summary.
 
 `PR-TEST-OPERATOR-100` is **COMPLETE / ACCEPTED / INTEGRATED**. Semantic GUI
 operator journeys are now the preferred mechanical real-GUI acceptance mechanism

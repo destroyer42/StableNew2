@@ -172,6 +172,10 @@ requires an explicitly approved architecture exception.
   `workspace_paths`, `ConfigManager` defaults, PromptPack/output env, and the
   cwd, drops test-mode env switches, and a `UserDataGuard` fails the run if
   protected data or tracked Git files change.
+- Journey modules must be import-safe before the workspace is active: do not
+  eagerly import production GUI/controller/app/pipeline modules (they bind
+  mutable state/config paths at import). Import them only after
+  `OperatorWorkspace.activate()`, and keep deterministic coverage of this boundary.
 - Backends: `--backend fake` for deterministic checks; `--real-backend` only by
   explicit opt-in, never in required CI. Never adopt, start, kill, or restart
   A1111; wait for it to be idle instead of interrupting foreign work. Use the
