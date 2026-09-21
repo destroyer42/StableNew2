@@ -185,7 +185,7 @@ def test_qualification_never_registers_a_production_backend_or_workflow() -> Non
 def test_recorded_scorecard_is_valid_and_deterministic() -> None:
     from tools.qualification.vid110.scorecard import SCORECARD
 
-    assert len(SCORECARD) == 4
+    assert len(SCORECARD) == 5
     for (candidate, lane), (scores, notes) in SCORECARD.items():
         assert ev.scoring_inputs_valid(scores) == [], (candidate, lane)
         assert set(scores) == {c for c in ev.SCORE_CRITERIA if c != "driving_motion_fidelity"}

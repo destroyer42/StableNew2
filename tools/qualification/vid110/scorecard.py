@@ -42,6 +42,22 @@ SCORECARD: dict[tuple[str, str], tuple[dict[str, int], list[str]]] = {
             "Same person, clothing and framing as the source; slight skin-tone shift; camera static.",
         ],
     ),
+    ("wan2.2-ti2v-5b", "user_i2v_prompt"): (
+        {
+            "identity_preservation": 4,
+            "face_stability": 3,
+            "limb_anatomy_integrity": 3,
+            "temporal_coherence": 3,
+            "prompt_action_adherence": 4,
+        },
+        [
+            "Operator-supplied still: the person bends, grips a barbell and stands up lifting it, as prompted.",
+            "Same person, clothing and hair throughout; saturation rises and a pink cast appears late.",
+            "Face is soft and blotchy in mid-clip; hands and legs stay plausible.",
+            "Camera tilts up late in the clip (background changes); the barbell has a plate on one end only.",
+            "The driving clip is not an input to this lane; its motion curve is uncorrelated (r=-0.20).",
+        ],
+    ),
     ("wan2.1-vace-1.3b", "ref2v_walk_wave"): (
         {
             "identity_preservation": 1,
