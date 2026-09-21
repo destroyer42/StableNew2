@@ -95,16 +95,19 @@ frozen seed `12345`, each returning `all_seeds=[12345]`), the responsive
 Experiment Design / Plan / Review workflow, current Global Prompt execution in
 the real app, and a real LoRA Strength experiment with actual execution/readback.
 
-`PR-LEARN-302` makes Discovered Outputs scanning incremental for classified
-artifacts (`src/learning/discovered_scan_service.py`): invalid manifests and
-controlled-experiment artifacts are indexed ineligible; members of an eligible
-group are indexed with their deterministic group id only after the group is
-saved; artifacts waiting for enough siblings are never indexed, so they can still
-form a group later. Existing groups are not rewritten; a pre-existing group is
-backfilled per item only where the persisted item still matches the manifest, so a
-manifest changed after grouping stays reconsidered (its key is not advanced) until
-`Rebuild Scanned Inbox`. Artifacts identical in generation parameters to a grouped
-sibling (deduplicated) are not indexed and are reread each scan.
+`PR-LEARN-302` makes Discovered Outputs scanning incremental for newly classified
+artifacts (`src/learning/discovered_scan_service.py`): members of a newly created
+eligible group are indexed with their deterministic group id only after the group
+is saved, and invalid manifests and controlled-experiment artifacts are indexed
+ineligible. Artifacts still waiting for enough siblings stay unindexed so they can
+form a group later, and a grouped manifest changed later stays reconsidered (its
+stored key is not advanced). Pre-existing scanner groups that lack trustworthy
+scan-index entries are deliberately not backfilled, because persisted items cannot
+prove they still match the manifest (VAE, denoising strength, clip skip, LoRA and
+ADetailer model are not stored); they are rescanned, without duplicating or
+rewriting the group, until `Rebuild Scanned Inbox` reconciles them. Artifacts
+identical in generation parameters to a grouped sibling (deduplicated) are also not
+indexed. This is conservative correctness, not a gap in new-group incremental scanning.
 
 `PR-TEST-OPERATOR-110` is **COMPLETE / ACCEPTED / INTEGRATED**. It adds the `discovered-outputs-review` operator journey
 (`python -m tools.operator_journey discovered-outputs-review`): synthetic outputs

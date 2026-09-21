@@ -121,25 +121,6 @@ class GroupAssignment:
     candidate: DiscoveredReviewExperiment | None
 
 
-def item_reflects_record(item: DiscoveredReviewItem, record: ScanRecord) -> bool:
-    """Whether a persisted item still represents *record*'s scanned generation data."""
-
-    return (
-        item.artifact_path == record.artifact_path
-        and item.stage == record.stage
-        and item.model == record.model
-        and item.sampler == record.sampler
-        and item.scheduler == record.scheduler
-        and item.steps == record.steps
-        and item.cfg_scale == record.cfg_scale
-        and item.seed == record.seed
-        and item.width == record.width
-        and item.height == record.height
-        and item.positive_prompt == record.positive_prompt
-        and item.negative_prompt == record.negative_prompt
-    )
-
-
 class GroupingEngine:
     """Convert a list of ScanRecords into DiscoveredReviewExperiments.
 

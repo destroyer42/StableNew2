@@ -146,18 +146,49 @@ def test_controlled_artifacts_are_indexed_ineligible_until_their_manifest_change
     assert len(_scan(store, output)[0]) == 1
 
 
-def test_legacy_group_is_backfilled_only_for_unchanged_items(world) -> None:
+def test_existing_group_without_index_is_never_backfilled(world) -> None:
+    output, store = world
+    for cfg in (5, 7, 9):
+        _artifact(output, cfg)
+    _scan(store, output)
+    (handle,) = store.list_handles()
+    group = store.load_group(handle.group_id)
+    store.save_item_rating(handle.group_id, group.items[0].item_id, 4)
+    store.close_group(handle.group_id)
+    before = store.load_group(handle.group_id)
+    store.save_scan_index({})  # historical / lost index
+    for _ in range(2):
+        records, outcome = _scan(store, output)
+        assert len(records) == 3 and outcome.new_group_count == 0  # reconsidered every scan
+        assert store.load_scan_index() == {}
+    after = store.load_group(handle.group_id)
+    assert (after.status, [(i.item_id, i.rating) for i in after.items]) == (
+        before.status,
+        [(i.item_id, i.rating) for i in before.items],
+    )
+    assert len(store.list_handles()) == 1
+
+
+@pytest.mark.parametrize("field", ["vae", "clip_skip"])
+def test_manifest_changed_in_a_non_persisted_field_is_never_hidden(world, field: str) -> None:
+    """Items do not store VAE/clip skip, so equality with an old group is unprovable."""
+
     output, store = world
     manifests = [_artifact(output, cfg)[1] for cfg in (5, 7, 9)]
     _scan(store, output)
-    store.save_scan_index({})  # a pre-existing group with no index
-    data = json.loads(manifests[2].read_text(encoding="utf-8"))
-    data["steps"] = 35  # drifted after the group was persisted
-    manifests[2].write_text(json.dumps(data), encoding="utf-8")
-    records, outcome = _scan(store, output)
-    assert len(records) == 3 and outcome.new_group_count == 0
-    indexed = {Path(p).name for p in store.load_scan_index()}
-    assert indexed == {"txt2img_cfg5.png", "txt2img_cfg7.png"}  # drifted one stays reconsiderable
+    (handle,) = store.list_handles()
+    group_before = store.load_group(handle.group_id)
+    store.save_scan_index({})
+    data = json.loads(manifests[1].read_text(encoding="utf-8"))
+    data[field] = "changed-vae" if field == "vae" else 1
+    manifests[1].write_text(json.dumps(data), encoding="utf-8")
+    for _ in range(2):
+        records, _ = _scan(store, output)
+        assert "txt2img_cfg7.png" in {Path(r.artifact_path).name for r in records}
+        assert store.load_scan_index() == {}  # the new key was never persisted
+    assert [i.item_id for i in store.load_group(handle.group_id).items] == [
+        i.item_id for i in group_before.items
+    ]
 
 
 def test_rebuild_reconstructs_the_index_without_touching_files(world) -> None:

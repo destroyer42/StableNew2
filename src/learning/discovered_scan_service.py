@@ -6,11 +6,14 @@ recorded there once the scanner has a definitive answer for it:
 * invalid manifests and controlled-experiment artifacts (never observational
   evidence) are recorded as ineligible;
 * members of an eligible bucket are recorded with their deterministic group id,
-  but only after the group is durably saved, or (for a group that already
-  exists) when the persisted item still reflects the current manifest data.
+  but only after the group is durably saved.
 
 Records in buckets that cannot form a group yet stay unindexed so future
-siblings are scanned together with them.  Existing groups are never rewritten.
+siblings are scanned together with them.  Existing groups are never rewritten and
+their members are never backfilled: a persisted item cannot prove it still matches
+the current manifest (VAE, denoising strength, clip skip, LoRA and ADetailer model
+are not stored), so those artifacts stay reconsiderable until ``Rebuild Scanned
+Inbox`` reconciles them.
 """
 
 from __future__ import annotations
@@ -18,7 +21,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from src.learning.discovered_grouping import GroupingEngine, item_reflects_record
+from src.learning.discovered_grouping import GroupingEngine
 from src.learning.discovered_review_store import DiscoveredReviewStore
 from src.learning.output_scan_models import ScanRecord
 from src.learning.output_scanner import OutputScanner
@@ -52,19 +55,11 @@ def apply_scan(
 
         existing_ids = {h.group_id for h in store.list_handles()}
         for assignment in engine.plan(observational, existing_group_ids=existing_ids):
-            if assignment.candidate is not None:
-                store.save_group(assignment.candidate)  # index only after durable save
-                new_groups += 1
-                indexable = assignment.records
-            else:
-                group = store.load_group(assignment.group_id)
-                items = {i.artifact_path: i for i in (group.items if group else [])}
-                indexable = tuple(
-                    r
-                    for r in assignment.records
-                    if r.artifact_path in items and item_reflects_record(items[r.artifact_path], r)
-                )
-            for record in indexable:
+            if assignment.candidate is None:
+                continue  # existing group: duplicate suppressed by id, index left untouched
+            store.save_group(assignment.candidate)  # index only after durable save
+            new_groups += 1
+            for record in assignment.records:
                 scanner.mark_group_assignment(
                     record.artifact_path, record.scan_key, assignment.group_id, True
                 )
