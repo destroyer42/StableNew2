@@ -7,7 +7,8 @@ Updated: 2026-09-19
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: none; `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
+- Active objective: `PR-LEARN-302` (Discovered Scan Index Completion) is IMPLEMENTED and
+  awaiting product-owner review; `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
   `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE / ACCEPTED / INTEGRATED. `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
@@ -93,6 +94,17 @@ Final operator acceptance is **PASS**: controlled seed proof (three CFG variants
 frozen seed `12345`, each returning `all_seeds=[12345]`), the responsive
 Experiment Design / Plan / Review workflow, current Global Prompt execution in
 the real app, and a real LoRA Strength experiment with actual execution/readback.
+
+`PR-LEARN-302` makes Discovered Outputs scanning incremental for classified
+artifacts (`src/learning/discovered_scan_service.py`): invalid manifests and
+controlled-experiment artifacts are indexed ineligible; members of an eligible
+group are indexed with their deterministic group id only after the group is
+saved; artifacts waiting for enough siblings are never indexed, so they can still
+form a group later. Existing groups are not rewritten; a pre-existing group is
+backfilled per item only where the persisted item still matches the manifest, so a
+manifest changed after grouping stays reconsidered (its key is not advanced) until
+`Rebuild Scanned Inbox`. Artifacts identical in generation parameters to a grouped
+sibling (deduplicated) are not indexed and are reread each scan.
 
 `PR-TEST-OPERATOR-110` is **COMPLETE / ACCEPTED / INTEGRATED**. It adds the `discovered-outputs-review` operator journey
 (`python -m tools.operator_journey discovered-outputs-review`): synthetic outputs
@@ -428,10 +440,6 @@ incident is closed as an acceptance-harness lifetime defect.
 - Informational Linux/Xvfb isolation failures remain outside the required CI verdict.
 - Legacy stale tests still reflect superseded CLI, compatibility, migration, or
   stale constructor-fixture expectations.
-- Discovered scan index: `OutputScanner.scan_incremental()` does not record eligible
-  artifacts in the scan index (it is saved before grouping), so ordinary rescans
-  reread the same manifests; deterministic group IDs keep results correct. A bounded
-  efficiency follow-up: `PR-LEARN-302 — Discovered Scan Index Completion`.
 - Two post-destroy Tcl callback-noise messages appear after an otherwise clean
   graceful shutdown; no Tk/thread error or leak was observed.
 - Local PR-gate execution can be unavailable when local `mypy` is missing;

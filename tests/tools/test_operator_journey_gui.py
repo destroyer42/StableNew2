@@ -274,6 +274,9 @@ def test_discovered_outputs_journey_passes_on_an_isolated_output_tree(tmp_path: 
         "prompt_reports_truthful_counts",
         "dismissed_group_preserved_no_duplicate",
         "rebuilt_group_3_3_0_unrated",
+        "scan_index_complete_for_grouped_artifacts",
+        "unchanged_rescan_is_incremental",
+        "index_reconstructed_after_rebuild",
         "preview_allocated_positive",
         "no_generation_requested",
     } <= names

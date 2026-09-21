@@ -85,6 +85,7 @@ class ScanRecord:
     prompt_hash: str = ""  # Set by scanner after normalisation
     input_lineage_key: str = ""  # Set by scanner after normalisation
     dedupe_key: str = ""  # Set by scanner
+    scan_key: str = ""  # Transient: the manifest scan key the incremental decision used
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -118,6 +119,7 @@ class ScanRecord:
             prompt_hash=str(d.get("prompt_hash") or ""),
             input_lineage_key=str(d.get("input_lineage_key") or ""),
             dedupe_key=str(d.get("dedupe_key") or ""),
+            scan_key=str(d.get("scan_key") or ""),
         )
 
     def get_meaningful_field_map(self) -> dict[str, Any]:

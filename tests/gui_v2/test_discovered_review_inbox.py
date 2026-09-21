@@ -569,6 +569,9 @@ def test_controller_scan_excludes_controlled_experiment_records(tmp_path) -> Non
         def scan_incremental(self):
             return records
 
+        def mark_group_assignment(self, *_args):
+            return None
+
     done = threading.Event()
     completed: list[OutputScanResult] = []
     with patch("src.learning.output_scanner.OutputScanner", _ControlledScanner):

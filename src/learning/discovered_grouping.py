@@ -112,6 +112,34 @@ def _scan_record_to_item(record: ScanRecord) -> DiscoveredReviewItem:
     )
 
 
+@dataclass(frozen=True)
+class GroupAssignment:
+    """One eligible bucket: deterministic group id, members, and the new group if any."""
+
+    group_id: str
+    records: tuple[ScanRecord, ...]
+    candidate: DiscoveredReviewExperiment | None
+
+
+def item_reflects_record(item: DiscoveredReviewItem, record: ScanRecord) -> bool:
+    """Whether a persisted item still represents *record*'s scanned generation data."""
+
+    return (
+        item.artifact_path == record.artifact_path
+        and item.stage == record.stage
+        and item.model == record.model
+        and item.sampler == record.sampler
+        and item.scheduler == record.scheduler
+        and item.steps == record.steps
+        and item.cfg_scale == record.cfg_scale
+        and item.seed == record.seed
+        and item.width == record.width
+        and item.height == record.height
+        and item.positive_prompt == record.positive_prompt
+        and item.negative_prompt == record.negative_prompt
+    )
+
+
 class GroupingEngine:
     """Convert a list of ScanRecords into DiscoveredReviewExperiments.
 
@@ -123,19 +151,18 @@ class GroupingEngine:
     def __init__(self, min_group_size: int = MIN_GROUP_SIZE) -> None:
         self.min_group_size = min_group_size
 
-    def build_candidates(
+    def plan(
         self,
         records: list[ScanRecord],
         existing_group_ids: set[str] | None = None,
-    ) -> list[DiscoveredReviewExperiment]:
-        """Group *records* and return eligible, non-duplicate experiments.
+    ) -> list[GroupAssignment]:
+        """Project *records* onto eligible groups (the grouping authority).
 
-        Parameters
-        ----------
-        records:
-            Normalized ScanRecords from the scanner.
-        existing_group_ids:
-            IDs already present in the store — these groups will not be re-created.
+        One assignment per eligible bucket: its deterministic group id, the member
+        records, and the new candidate experiment (``None`` when the id already
+        exists in the store).  Buckets below the minimum size or without a
+        meaningful varying field are absent, so callers must not treat their
+        records as classified.
         """
         if existing_group_ids is None:
             existing_group_ids = set()
@@ -156,7 +183,7 @@ class GroupingEngine:
             key = _group_key(rec)
             buckets[key].append(rec)
 
-        candidates: list[DiscoveredReviewExperiment] = []
+        assignments: list[GroupAssignment] = []
         for key, bucket_records in sorted(buckets.items(), key=lambda kv: str(kv[0])):
             if len(bucket_records) < self.min_group_size:
                 continue
@@ -165,26 +192,41 @@ class GroupingEngine:
                 # Seed-only or no variation — skip
                 continue
             group_id = _make_group_id(key)
-            if group_id in existing_group_ids:
-                continue
-            display_name = _make_display_name(key, varying)
-            items = [_scan_record_to_item(r) for r in bucket_records]
-            experiment = DiscoveredReviewExperiment(
-                group_id=group_id,
-                display_name=display_name,
-                stage=key.stage,
-                prompt_hash=key.prompt_hash,
-                input_lineage_key=key.input_lineage_key,
-                status=STATUS_WAITING_REVIEW,
-                created_at=_utc_now_iso(),
-                updated_at=_utc_now_iso(),
-                items=items,
-                varying_fields=varying,
-                origin="filesystem_scan",
-            )
-            candidates.append(experiment)
+            candidate: DiscoveredReviewExperiment | None = None
+            if group_id not in existing_group_ids:
+                candidate = DiscoveredReviewExperiment(
+                    group_id=group_id,
+                    display_name=_make_display_name(key, varying),
+                    stage=key.stage,
+                    prompt_hash=key.prompt_hash,
+                    input_lineage_key=key.input_lineage_key,
+                    status=STATUS_WAITING_REVIEW,
+                    created_at=_utc_now_iso(),
+                    updated_at=_utc_now_iso(),
+                    items=[_scan_record_to_item(r) for r in bucket_records],
+                    varying_fields=varying,
+                    origin="filesystem_scan",
+                )
+            assignments.append(GroupAssignment(group_id, tuple(bucket_records), candidate))
+        return assignments
 
-        return candidates
+    def build_candidates(
+        self,
+        records: list[ScanRecord],
+        existing_group_ids: set[str] | None = None,
+    ) -> list[DiscoveredReviewExperiment]:
+        """Group *records* and return eligible, non-duplicate experiments.
+
+        Parameters
+        ----------
+        records:
+            Normalized ScanRecords from the scanner.
+        existing_group_ids:
+            IDs already present in the store — these groups will not be re-created.
+        """
+        return [
+            a.candidate for a in self.plan(records, existing_group_ids) if a.candidate is not None
+        ]
 
     def find_varying_fields(self, records: list[ScanRecord]) -> list[str]:
         """Public wrapper for testing."""

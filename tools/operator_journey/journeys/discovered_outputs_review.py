@@ -223,6 +223,27 @@ class _DiscoveredJourney:
             and all(str(Path(p).resolve()).startswith(workspace_root) for p in referenced),
             f"references={sorted(referenced)}",
         )
+        entries = list(index.values())
+        self.check(
+            ph,
+            "scan_index_complete_for_grouped_artifacts",
+            len(entries) == 3
+            and all(e.eligible and e.group_id == self.group_id and e.scan_key for e in entries),
+            f"index={[(Path(k).name, e.eligible, e.group_id) for k, e in index.items()]}",
+        )
+        before = self.store().load_group(self.group_id)
+        self.scan()  # unchanged rescan: nothing to re-read, nothing new, group untouched
+        after = self.store().load_group(self.group_id)
+        self.check(
+            ph,
+            "unchanged_rescan_is_incremental",
+            "no new groups" in self.last_scan
+            and "(0 eligible artifact(s))" in self.last_scan
+            and [i.item_id for i in after.items] == [i.item_id for i in before.items]
+            and after.status == before.status
+            and len(self.handles()) == 1,
+            f"scan={self.last_scan!r}",
+        )
         self.note("scanned")
 
     def scan(self) -> None:
@@ -506,7 +527,7 @@ class _DiscoveredJourney:
         self.check(
             ph,
             "no_stale_index_entry_survives",
-            str(self.fixture[2].image) not in index,
+            str(self.fixture[2].image) not in index and len(index) == 2,
             f"index={sorted(index)}",
         )
         self.note("cleaned")
@@ -556,6 +577,14 @@ class _DiscoveredJourney:
             and handle.status == "waiting_review"
             and all(item.rating == 0 for item in group.items),
             f"handle={handle}",
+        )
+        index = self.store().load_scan_index()
+        self.check(
+            ph,
+            "index_reconstructed_after_rebuild",
+            len(index) == 3
+            and all(e.eligible and e.group_id == handle.group_id for e in index.values()),
+            f"index={[(Path(k).name, e.eligible, e.group_id) for k, e in index.items()]}",
         )
         self.check(
             ph,

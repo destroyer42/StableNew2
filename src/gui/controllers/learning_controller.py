@@ -3918,7 +3918,7 @@ class LearningController:
         import threading
         from pathlib import Path
 
-        from src.learning.discovered_grouping import GroupingEngine
+        from src.learning.discovered_scan_service import apply_scan
         from src.learning.output_scan_models import OutputScanResult
         from src.learning.output_scanner import OutputScanner
 
@@ -3933,7 +3933,6 @@ class LearningController:
                 scan_index = store.load_scan_index()
                 scanner = OutputScanner(root, scan_index=scan_index)
                 records = scanner.scan_incremental()
-                store.save_scan_index(scanner.scan_index)
 
                 # Controlled artifacts have their own Experiment Review and
                 # must never become duplicate observational evidence.
@@ -3943,20 +3942,13 @@ class LearningController:
                     )
                     return isinstance(context, dict) and bool(context.get("experiment_id"))
 
-                records = [record for record in records if not _is_controlled(record)]
-
-                existing_ids = {h.group_id for h in store.list_handles()}
-                engine = GroupingEngine()
-                candidates = engine.build_candidates(records, existing_group_ids=existing_ids)
-
-                for candidate in candidates:
-                    store.save_group(candidate)
+                outcome = apply_scan(scanner, store, records, is_controlled=_is_controlled)
 
                 result = OutputScanResult(
                     output_root=str(root),
                     success=True,
-                    new_group_count=len(candidates),
-                    record_count=len(records),
+                    new_group_count=outcome.new_group_count,
+                    record_count=outcome.record_count,
                 )
             except Exception as exc:
                 result = OutputScanResult(

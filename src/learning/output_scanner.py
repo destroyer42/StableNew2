@@ -325,6 +325,7 @@ class OutputScanner:
             if record is None:
                 self._mark_indexed(key, scan_key, group_id="", eligible=False)
                 continue
+            record.scan_key = scan_key
             records.append(record)
         return records
 
@@ -337,6 +338,7 @@ class OutputScanner:
                 continue
             record = _record_from_manifest(manifest_path, artifact_path)
             if record is not None:
+                record.scan_key = _manifest_scan_key(manifest_path)
                 records.append(record)
 
         # Image-only fallback for files with no matched manifest
