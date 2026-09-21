@@ -10,7 +10,8 @@ artifact/history change, A1111 or SVD change, and no change to the production `.
 Was the PR-IMG-110 rejection of Ideogram 4 NF4 on the 12 GB target caused by real hardware
 limits, or by acquisition, harness, Diffusers/offload, dtype/kernel or runtime defects?
 
-**Not by a hardware limit.** Every configuration PR-IMG-110 tried either kept ~15 GiB of NF4
+**Not a fundamental hardware-capacity no-go; the 12GB VRAM ceiling requires explicit component
+residency management.** Every configuration PR-IMG-110 tried either kept ~15 GiB of NF4
 weights resident on a 12 GiB card (Windows silently spilled the excess into shared system
 memory, giving ~60 s per denoising step) or used an offload path that does not fit this
 model's structure. With the same official weights and the same official denoising code, a

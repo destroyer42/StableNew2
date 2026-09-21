@@ -277,7 +277,7 @@ Do not begin PR-IMG-120 from either result.
 | P1 | `PR-IMG-100` | Complete / Accepted / Integrated | One typed image backend per image NJR; existing A1111 path preserved behind a StableNew-owned backend contract |
 | P1a | `PR-SVD-100` | Complete / Accepted / Integrated | Non-recursive SVD folder batch submission through ordinary per-source NJRs and one existing JobService batch call |
 | P2 | `PR-IMG-110` | Complete / Ideogram 4 verdict superseded | Generic Diffusers substrate passed; the Ideogram 4 "hardware no-go" was not supported (see P2a); no production backend added |
-| P2a | `PR-IMG-110R` | Complete / awaiting acceptance | Ideogram 4 NF4 PASS — CONSTRAINED on RTX 4070 Ti 12GB up to 1024x1024 `V4_QUALITY_48` with an explicit residency policy (two independent implementations, bit-identical repeats); shipped all-resident and documented offload paths impractical |
+| P2a | `PR-IMG-110R` | Complete / Accepted / Integrated | Ideogram 4 NF4 PASS — CONSTRAINED on RTX 4070 Ti 12GB up to 1024x1024 `V4_QUALITY_48` with an explicit residency policy (two independent implementations, bit-identical repeats); shipped all-resident and documented offload paths impractical |
 | P3 | `PR-IMG-120` | Not authorized; eligible for a separate owner decision | Any Diffusers production slice needs an explicit product-owner decision (custom GPU residency lifecycle/lease, structured-JSON prompt mapping, Ideogram 4 non-commercial license) |
 | P4 | `PR-IMG-130` | Conditional | Capability-aware image backend/model UI and compiler projections |
 
@@ -326,7 +326,7 @@ Diffusers backend was added. Evidence:
 
 ### PR-IMG-110R — Ideogram 4 definitive requalification
 
-Complete (awaiting acceptance): **PASS — CONSTRAINED**. The official `ideogram4` code
+Complete / accepted / integrated: **PASS — CONSTRAINED**. The official `ideogram4` code
 (pinned commit) and Diffusers 0.40.0 both completed 512x512 through 1024x1024
 `V4_QUALITY_48` on the RTX 4070 Ti 12GB, with bit-identical repeats, when the text
 encoder is used first and released and only one transformer is GPU-resident at a

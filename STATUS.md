@@ -10,8 +10,8 @@ Updated: 2026-09-19
 - Active objective: none; `PR-LEARN-302`, `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
   `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE / ACCEPTED / INTEGRATED.
   `PR-IMG-110` is integrated; its Ideogram 4 "hardware no-go" is superseded by
-  `PR-IMG-110R` (Ideogram 4 NF4 PASS — CONSTRAINED on the 12-GB target, branch
-  `img/110r-ideogram4-requalification`, awaiting acceptance).
+  `PR-IMG-110R` (Ideogram 4 NF4 PASS — CONSTRAINED on the 12-GB target; COMPLETE /
+  ACCEPTED / INTEGRATED). `PR-IMG-120` remains unauthorized pending a separate owner decision.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
