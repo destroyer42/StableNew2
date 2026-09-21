@@ -175,7 +175,12 @@ rather than sleeping. Each run writes `evidence.json` + `summary.txt` under the
 ignored `reports/operator_journeys/` and exits 0 (PASS), 1 (FAIL) or 2 (HOLD).
 The first journey is `learning-lora-strength` (Learning -> Designed Experiments ->
 LoRA Strength -> Build Preview Only -> Run Experiment -> queue/SQLite ->
-PipelineRunner -> A1111 -> manifests -> Review ratings). Hermetic harness logic
+PipelineRunner -> A1111 -> manifests -> Review ratings). The second journey,
+`discovered-outputs-review`, needs no generation backend: it scans synthetic
+outputs in the disposable workspace and drives Rescan, Review, observational
+ratings, Done/Restore, Dismiss/rescan/Restore, missing artifacts, Clean Missing
+References and Rebuild Scanned Inbox, while any read or listing of the operator's
+real `output/` tree fails the run. Hermetic harness logic
 is in the required smoke list; Tk-backed end-to-end tests skip without a display.
 
 ### Real-backend gate

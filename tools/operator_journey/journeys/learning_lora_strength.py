@@ -936,7 +936,7 @@ def run_journey(config: JourneyConfig) -> JourneyEvidence:
             f"{info.active_checkpoint!r} to {after.active_checkpoint!r}",
         )
         evidence.isolation_violations.extend(spy.violations())
-        evidence.summary["operator_output_files_read_by_app_scan"] = len(set(spy.read_outputs))
+        evidence.summary["production_output_reads"] = len(set(spy.read_outputs))
         archive_workspace(workspace, evidence, run_dir, discard=config.discard_workspace)
     except JourneyHold as exc:
         evidence.hold_reason = str(exc)

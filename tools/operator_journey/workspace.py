@@ -60,6 +60,11 @@ def _tree_signature(root: Path) -> dict[str, list[int]]:
     for path in sorted(root.rglob("*")):
         if not path.is_file() or "__pycache__" in path.parts:
             continue
+        # SQLite files change whenever the operator's own StableNew has the database
+        # open; the AccessSpy (which records every sqlite3.connect this process makes)
+        # is the authority for whether a journey touched them.
+        if path.name.endswith((".sqlite3", ".sqlite3-wal", ".sqlite3-shm")):
+            continue
         try:
             stat = path.stat()
         except OSError:
@@ -249,7 +254,8 @@ class AccessSpy:
         self.sqlite_opened: list[str] = []
         self.written: list[str] = []
         self.read_protected: list[str] = []
-        self.read_outputs: list[str] = []  # informational: the app scans past outputs
+        self.read_outputs: list[str] = []  # reads of the operator's real output tree
+        self.enumerated: list[str] = []  # directory listings under protected dirs
         self._saved: dict[str, Any] = {}
 
     def _inside(self, path: Path, root: Path) -> bool:
@@ -311,6 +317,21 @@ class AccessSpy:
 
             return wrapper
 
+        real_scandir, real_listdir = os.scandir, os.listdir
+        self._saved.update({"scandir": real_scandir, "listdir": real_listdir})
+
+        def listing(real: Any) -> Any:
+            def wrapper(path: Any = ".", *args: Any, **kwargs: Any) -> Any:
+                if isinstance(path, (str, bytes, os.PathLike)):
+                    target = spy._real_data(os.fsdecode(path))
+                    if target is not None:
+                        spy.enumerated.append(str(target))
+                return real(path, *args, **kwargs)
+
+            return wrapper
+
+        os.scandir = listing(real_scandir)  # type: ignore[assignment]
+        os.listdir = listing(real_listdir)  # type: ignore[assignment]
         sqlite3.connect = connect  # type: ignore[assignment]
         builtins.open = traced(real_open)  # type: ignore[assignment]
         io.open = traced(real_io_open)  # type: ignore[assignment]
@@ -324,6 +345,8 @@ class AccessSpy:
         sqlite3.connect = self._saved["connect"]  # type: ignore[assignment]
         builtins.open = self._saved["open"]  # type: ignore[assignment]
         io.open = self._saved["io_open"]  # type: ignore[assignment]
+        os.scandir = self._saved["scandir"]  # type: ignore[assignment]
+        os.listdir = self._saved["listdir"]  # type: ignore[assignment]
 
     def violations(self) -> list[str]:
         problems = [
@@ -331,4 +354,6 @@ class AccessSpy:
         ]
         problems += [f"wrote production file {p}" for p in sorted(set(self.written))]
         problems += [f"read operator-owned file {p}" for p in sorted(set(self.read_protected))]
+        problems += [f"read production output file {p}" for p in sorted(set(self.read_outputs))]
+        problems += [f"listed production directory {p}" for p in sorted(set(self.enumerated))]
         return problems

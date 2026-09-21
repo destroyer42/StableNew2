@@ -83,7 +83,13 @@ def _require_display() -> None:
         pytest.skip(f"Tk unavailable: {exc}")
 
 
-def _run_cli(tmp_path: Path, *extra: str, timeout: float = 240) -> tuple[int, dict]:
+def _run_cli(
+    tmp_path: Path,
+    *extra: str,
+    timeout: float = 240,
+    journey: str = "learning-lora-strength",
+    backend_args: tuple[str, ...] = ("--backend", "fake"),
+) -> tuple[int, dict]:
     """Run the operator command exactly as Codex would, in its own process.
 
     A subprocess keeps the journey on production configuration; pytest's autouse
@@ -101,9 +107,8 @@ def _run_cli(tmp_path: Path, *extra: str, timeout: float = 240) -> tuple[int, di
             sys.executable,
             "-m",
             "tools.operator_journey",
-            "learning-lora-strength",
-            "--backend",
-            "fake",
+            journey,
+            *backend_args,
             "--hide-window",
             "--discard-workspace",
             "--evidence-dir",
@@ -248,3 +253,32 @@ def test_full_fake_journey_including_review_and_ratings(tmp_path: Path) -> None:
         if '"learning_experiment_rating"' in line
     ]
     assert ratings == [3, 4, 5]
+
+
+def test_discovered_outputs_journey_passes_on_an_isolated_output_tree(tmp_path: Path) -> None:
+    code, evidence = _run_cli(
+        tmp_path, journey="discovered-outputs-review", backend_args=(), timeout=300
+    )
+    failures = [c for c in evidence["checks"] if not c["passed"]]
+    assert code == 0 and evidence["verdict"] == "PASS", (failures, evidence["failed_assertion"])
+    names = {c["name"] for c in evidence["checks"]}
+    assert {
+        "scan_root_inside_workspace",
+        "starting_counts_3_3_0",
+        "ratings_persisted",
+        "listed_as_closed",
+        "listed_as_ignored",
+        "rescan_creates_no_duplicate",
+        "counts_3_2_1",
+        "missing_item_cannot_be_rated",
+        "prompt_reports_truthful_counts",
+        "dismissed_group_preserved_no_duplicate",
+        "rebuilt_group_3_3_0_unrated",
+        "preview_allocated_positive",
+        "no_generation_requested",
+    } <= names
+    assert evidence["summary"]["production_output_reads"] == 0
+    assert evidence["summary"]["production_output_listings"] == 0
+    assert evidence["isolation_violations"] == []
+    assert evidence["captured_errors"] == {"gui": [], "threads": [], "logs": []}
+    assert str(REPO_ROOT / "output") not in evidence["summary"]["scan_root"]

@@ -136,11 +136,14 @@ def test_workspace_redirects_and_restores_every_mutable_authority(tmp_path: Path
 def test_user_data_guard_detects_protected_data_changes(tmp_path: Path) -> None:
     protected = tmp_path / "state"
     protected.mkdir()
-    (protected / "jobs.sqlite3").write_text("original")
+    (protected / "ui_state.json").write_text("original")
+    (protected / "jobs.sqlite3").write_text("db")
     guard = UserDataGuard(repo_root=tmp_path)
     guard.capture()
     assert guard.violations() == []
-    (protected / "jobs.sqlite3").write_text("mutated by a journey")
+    (protected / "jobs.sqlite3").write_text("changed by the operator's own app")
+    assert guard.violations() == []  # SQLite opens are attributed by the AccessSpy instead
+    (protected / "ui_state.json").write_text("mutated by a journey")
     assert any("state/" in problem for problem in guard.violations())
 
 
@@ -370,3 +373,89 @@ def test_importing_the_journey_does_not_import_state_capturing_app_modules() -> 
         [sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True, text=True, timeout=120
     )
     assert result.returncode == 0, result.stdout + result.stderr
+
+
+def test_access_spy_treats_production_output_reads_and_listings_as_violations(
+    tmp_path: Path,
+) -> None:
+    import os
+
+    from tools.operator_journey.workspace import AccessSpy
+
+    repo, work = tmp_path / "repo", tmp_path / "ws"
+    (repo / "output" / "Pipeline").mkdir(parents=True)
+    (repo / "src").mkdir()
+    work.mkdir()
+    real_image = repo / "output" / "Pipeline" / "old.png"
+    real_image.write_bytes(b"png")
+    (repo / "src" / "module.py").write_text("x = 1")
+    (work / "mine.png").write_bytes(b"png")
+    spy = AccessSpy(repo_root=repo, allowed=(work,))
+    with spy:
+        real_image.read_bytes()
+        os.listdir(repo / "output")
+        list(os.scandir(repo / "output" / "Pipeline"))
+        (repo / "src" / "module.py").read_text()  # source reads stay legal
+        (work / "mine.png").read_bytes()
+        list(os.scandir(work))
+    problems = spy.violations()
+    assert any("read production output file" in p and "old.png" in p for p in problems)
+    assert sum("listed production directory" in p for p in problems) == 2
+    assert not any("module.py" in p or "mine.png" in p for p in problems)
+
+
+def test_discovered_journey_fixture_forms_the_expected_group(tmp_path: Path) -> None:
+    from src.learning.discovered_grouping import GroupingEngine
+    from src.learning.output_scanner import OutputScanner
+    from tools.operator_journey.fixtures import write_discovered_fixture
+
+    fixture = write_discovered_fixture(tmp_path / "output")
+    records = OutputScanner(tmp_path / "output").scan_incremental()
+    groups = GroupingEngine().build_candidates(records)
+    assert len(fixture) == 3 and len(records) == 3 and len(groups) == 1
+    assert groups[0].varying_fields == ["cfg_scale"] and len(groups[0].items) == 3
+
+
+def test_diagnostics_bundle_reads_images_from_the_active_workspace_not_the_repo(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The crash-bundle image scan used a repo-root constant and read operator outputs."""
+
+    import io
+    import zipfile
+
+    from src.state.workspace_paths import workspace_paths
+    from src.utils import diagnostics_bundle_v2 as bundle
+
+    seen: list[list[Path]] = []
+    monkeypatch.delenv("PYTEST_CURRENT_TEST", raising=False)
+    monkeypatch.setattr(workspace_paths, "_root", tmp_path.resolve())
+    monkeypatch.setattr(
+        bundle, "_collect_image_paths", lambda roots, limit=25: seen.append(list(roots)) or []
+    )
+    bundle._include_image_metadata(zipfile.ZipFile(io.BytesIO(), "w"), None)
+    assert seen == [[tmp_path.resolve() / "output", tmp_path.resolve() / "outputs"]]
+
+
+def test_default_discovered_scan_root_resolves_inside_the_workspace(tmp_path: Path) -> None:
+    """Auto Root must be workspace-owned before any scan can start (subprocess: GUI
+    modules capture state paths at import, so they may only be imported when isolated)."""
+
+    code = f"""
+import sys
+from pathlib import Path
+from types import SimpleNamespace
+from tools.operator_journey.workspace import OperatorWorkspace
+ws = OperatorWorkspace(root=Path({str(tmp_path / "ws")!r}), webui_base_url="http://127.0.0.1:1")
+with ws.activate():
+    from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
+    from src.utils.config import ConfigManager
+    stub = SimpleNamespace(pipeline_controller=SimpleNamespace(_config_manager=ConfigManager()))
+    root = Path(LearningTabFrame._resolve_discovered_output_root(stub)).resolve()
+    assert root == ws.output_dir.resolve(), (root, ws.output_dir)
+print("ok")
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", code], cwd=REPO_ROOT, capture_output=True, text=True, timeout=180
+    )
+    assert result.returncode == 0 and "ok" in result.stdout, result.stdout + result.stderr

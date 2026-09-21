@@ -8,6 +8,10 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from tools.operator_journey.evidence import FAIL, HOLD, PASS, JourneyEvidence
+from tools.operator_journey.journeys.discovered_outputs_review import (
+    JOURNEY_ID as DISCOVERED_JOURNEY_ID,
+)
+from tools.operator_journey.journeys.discovered_outputs_review import run_discovered_journey
 from tools.operator_journey.journeys.learning_lora_strength import (
     DEFAULT_LORA,
     JOURNEY_ID,
@@ -24,7 +28,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="python -m tools.operator_journey",
         description="Drive the real StableNew Tk GUI through a reference operator journey.",
     )
-    parser.add_argument("journey", choices=[JOURNEY_ID])
+    parser.add_argument("journey", choices=[JOURNEY_ID, DISCOVERED_JOURNEY_ID])
     backend = parser.add_mutually_exclusive_group()
     backend.add_argument("--backend", choices=["fake", "real"], default=None)
     backend.add_argument(
@@ -89,8 +93,14 @@ def format_verdict(evidence: JourneyEvidence) -> str:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
-    evidence = run_journey(config_from_args(args))
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if args.journey == DISCOVERED_JOURNEY_ID:
+        if args.real_backend or args.backend == "real":
+            parser.error("discovered-outputs-review uses no generation backend")
+        evidence = run_discovered_journey(config_from_args(args))
+    else:
+        evidence = run_journey(config_from_args(args))
     print(format_verdict(evidence))
     return EXIT_CODES[evidence.verdict]
 

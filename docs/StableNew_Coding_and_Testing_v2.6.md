@@ -172,6 +172,11 @@ requires an explicitly approved architecture exception.
   `workspace_paths`, `ConfigManager` defaults, PromptPack/output env, and the
   cwd, drops test-mode env switches, and a `UserDataGuard` fails the run if
   protected data or tracked Git files change.
+- Reads and directory listings of the operator's real `output/` tree are isolation
+  violations (not only writes); default scan/diagnostic roots must come from
+  `workspace_paths`, never a repo-root constant. Drive the app under `mainloop`
+  (`TkDriver(use_mainloop=True)`) when production callbacks touch widgets from
+  worker threads, and answer native message boxes only through `DialogSeam`.
 - Journey modules must be import-safe before the workspace is active: do not
   eagerly import production GUI/controller/app/pipeline modules (they bind
   mutable state/config paths at import). Import them only after

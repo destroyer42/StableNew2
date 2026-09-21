@@ -48,14 +48,22 @@ def iter_widgets(parent: tk.Misc) -> Iterator[tk.Misc]:
 class TkDriver:
     """Drive a live Tk application from the UI thread by pumping its event loop."""
 
-    def __init__(self, root: tk.Tk, trace: ActionTrace | None = None) -> None:
+    def __init__(
+        self, root: tk.Tk, trace: ActionTrace | None = None, *, use_mainloop: bool = False
+    ) -> None:
         self.root = root
         self.trace = trace or ActionTrace()
+        # Some production callbacks touch widgets from worker threads, which Tk only
+        # marshals while ``mainloop`` runs (as it always does in the real app).
+        self.use_mainloop = use_mainloop
 
     # -- event loop -----------------------------------------------------
     def pump(self, seconds: float = 0.0) -> None:
         """Process pending Tk events for at least ``seconds`` (0 = one pass)."""
 
+        if self.use_mainloop:
+            self._pump_mainloop(max(0.005, seconds))
+            return
         deadline = time.monotonic() + max(0.0, seconds)
         while True:
             self.root.update_idletasks()
@@ -63,6 +71,16 @@ class TkDriver:
             if time.monotonic() >= deadline:
                 return
             time.sleep(0.005)
+
+    def _pump_mainloop(self, seconds: float) -> None:
+        after_id = self.root.after(max(1, int(seconds * 1000)), self.root.quit)
+        try:
+            self.root.mainloop()
+        finally:
+            try:
+                self.root.after_cancel(after_id)
+            except tk.TclError:
+                pass
 
     def wait_until(
         self,
@@ -199,6 +217,17 @@ class TkDriver:
         listbox.event_generate("<<ListboxSelect>>")
         self.trace.record("select_listbox_row", label=label, index=index)
         self.pump(0.05)
+
+    def select_tree_row(self, tree: ttk.Treeview, iid: str, *, label: str) -> None:
+        """Click a Treeview row: select it and let the app's <<TreeviewSelect>> run."""
+
+        if iid not in tree.get_children():
+            raise WidgetNotFound(f"{label}: row {iid!r} is not in the tree")
+        tree.selection_set(iid)
+        tree.focus(iid)
+        tree.event_generate("<<TreeviewSelect>>")
+        self.trace.record("select_tree_row", label=label, row=iid)
+        self.pump(0.1)
 
     def close_via_window_manager(self) -> None:
         """Trigger the same handler the window's close button runs."""

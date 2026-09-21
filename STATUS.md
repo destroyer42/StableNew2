@@ -7,7 +7,8 @@ Updated: 2026-09-19
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: none; `PR-LEARN-301`, `PR-TEST-OPERATOR-100` and `PR-LEARN-300`
+- Active objective: `PR-TEST-OPERATOR-110` (Discovered Outputs operator journey) is
+  IMPLEMENTED and awaiting product-owner review; `PR-LEARN-301`, `PR-TEST-OPERATOR-100` and `PR-LEARN-300`
   are COMPLETE / ACCEPTED / INTEGRATED. `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
@@ -93,6 +94,16 @@ Final operator acceptance is **PASS**: controlled seed proof (three CFG variants
 frozen seed `12345`, each returning `all_seeds=[12345]`), the responsive
 Experiment Design / Plan / Review workflow, current Global Prompt execution in
 the real app, and a real LoRA Strength experiment with actual execution/readback.
+
+`PR-TEST-OPERATOR-110` adds the `discovered-outputs-review` operator journey
+(`python -m tools.operator_journey discovered-outputs-review`): synthetic outputs
+in the disposable workspace, then Rescan, Review, observational rating,
+Done/Restore, Dismiss/rescan/Restore, missing-artifact handling, Clean Missing
+References and Rebuild Scanned Inbox through the real Tk controls. The earlier
+"scanner reads production output" observation was the crash-bundle image scan
+using a repo-root constant; it now uses the workspace root, and the isolation spy
+fails a journey on any read or listing of the real `output/` tree (0 in the
+accepted run).
 
 `PR-LEARN-301` is **COMPLETE / ACCEPTED / INTEGRATED**: structured/composite
 experiment values (e.g. LoRA Strength `{"name", "weight"}`) are supported in both
@@ -418,9 +429,6 @@ incident is closed as an acceptance-harness lifetime defect.
 - Informational Linux/Xvfb isolation failures remain outside the required CI verdict.
 - Legacy stale tests still reflect superseded CLI, compatibility, migration, or
   stale constructor-fixture expectations.
-- Discovered Outputs scans existing production output images read-only during a
-  journey (no writes); tighten scanner read isolation when that workflow gets its
-  own operator journey.
 - Two post-destroy Tcl callback-noise messages appear after an otherwise clean
   graceful shutdown; no Tk/thread error or leak was observed.
 - Local PR-gate execution can be unavailable when local `mypy` is missing;
