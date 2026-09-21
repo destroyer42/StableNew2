@@ -7,8 +7,7 @@ Updated: 2026-09-19
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: `PR-TEST-OPERATOR-100` (real Tk operator-journey harness) is
-  IMPLEMENTED with a real-journey PASS and awaiting product-owner review; `PR-LEARN-300` is COMPLETE /
+- Active objective: none; `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE /
   ACCEPTED / INTEGRATED. `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
@@ -95,7 +94,9 @@ frozen seed `12345`, each returning `all_seeds=[12345]`), the responsive
 Experiment Design / Plan / Review workflow, current Global Prompt execution in
 the real app, and a real LoRA Strength experiment with actual execution/readback.
 
-`PR-TEST-OPERATOR-100` adds `python -m tools.operator_journey <journey>`: a
+`PR-TEST-OPERATOR-100` is **COMPLETE / ACCEPTED / INTEGRATED**. Semantic GUI
+operator journeys are now the preferred mechanical real-GUI acceptance mechanism
+wherever a journey exists. It adds `python -m tools.operator_journey <journey>`: a
 semantic Tk driver plus isolated workspace and evidence bundle that operates the
 real V2 GUI and only observes the production queue/SQLite/runner/backend path.
 The reference journey `learning-lora-strength` passes end to end against the
@@ -411,6 +412,14 @@ incident is closed as an acceptance-harness lifetime defect.
 - Informational Linux/Xvfb isolation failures remain outside the required CI verdict.
 - Legacy stale tests still reflect superseded CLI, compatibility, migration, or
   stale constructor-fixture expectations.
+- `src/learning/learning_analytics.py` still groups raw `variant_value` as a dict
+  key and can fail on structured (composite LoRA) variants; a separate Learning
+  Analytics repair.
+- Discovered Outputs scans existing production output images read-only during a
+  journey (no writes); tighten scanner read isolation when that workflow gets its
+  own operator journey.
+- Two post-destroy Tcl callback-noise messages appear after an otherwise clean
+  graceful shutdown; no Tk/thread error or leak was observed.
 - Local PR-gate execution can be unavailable when local `mypy` is missing;
   required GitHub mypy and smoke gates are the compatibility verdict.
 
