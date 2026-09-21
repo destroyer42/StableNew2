@@ -286,4 +286,3 @@ identity loss is primarily VACE-1.3B's weak reference binding, with Canny adding
 silhouette leakage on top. **VACE-1.3B is closed as NO-GO for the first production
 controlled-motion backend on this target.** Wan2.2 TI2V-5B (CONDITIONAL) remains the only
 currently qualified directed-motion candidate; native SVD remains the only accepted backend.
-
