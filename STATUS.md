@@ -7,9 +7,9 @@ Updated: 2026-09-19
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: `PR-LEARN-302` (Discovered Scan Index Completion) is IMPLEMENTED and
-  awaiting product-owner review; `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
-  `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE / ACCEPTED / INTEGRATED. `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
+- Active objective: none; `PR-LEARN-302`, `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
+  `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE / ACCEPTED / INTEGRATED.
+  `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -95,7 +95,7 @@ frozen seed `12345`, each returning `all_seeds=[12345]`), the responsive
 Experiment Design / Plan / Review workflow, current Global Prompt execution in
 the real app, and a real LoRA Strength experiment with actual execution/readback.
 
-`PR-LEARN-302` makes Discovered Outputs scanning incremental for newly classified
+`PR-LEARN-302` is **COMPLETE / ACCEPTED / INTEGRATED**. It makes Discovered Outputs scanning incremental for newly classified
 artifacts (`src/learning/discovered_scan_service.py`): members of a newly created
 eligible group are indexed with their deterministic group id only after the group
 is saved, and invalid manifests and controlled-experiment artifacts are indexed
