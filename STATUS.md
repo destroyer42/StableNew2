@@ -9,7 +9,9 @@ Updated: 2026-09-19
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
 - Active objective: none; `PR-LEARN-302`, `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
   `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE / ACCEPTED / INTEGRATED.
-  `PR-IMG-110` remains integrated with an Ideogram 4 target-hardware no-go.
+  `PR-IMG-110` is integrated; its Ideogram 4 "hardware no-go" is superseded by
+  `PR-IMG-110R` (Ideogram 4 NF4 PASS — CONSTRAINED on the 12-GB target, branch
+  `img/110r-ideogram4-requalification`, awaiting acceptance).
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -38,8 +40,15 @@ create an alternate runner path.
 `main` now contains the accepted PR-MVP-080 operator-readiness, PR-MVP-090
 release-proof, and PR-IMG-100 backend-neutral image lines. The v2.6 MVP/release
 proof is complete. PR-IMG-110 is complete: generic Diffusers qualification
-passed, but Ideogram 4 NF4 did not qualify on the supported RTX 4070 Ti 12-GB
-target. IMG-120 is not authorized.
+passed. Its Ideogram 4 NF4 no-go was corrected by PR-IMG-110R: with the official
+code and Diffusers 0.40.0, Ideogram 4 NF4 runs on the RTX 4070 Ti 12-GB up to
+1024x1024 `V4_QUALITY_48` (about 60 s at 768x1024 Turbo, 279-312 s at 1024x1024
+Quality) but only with an explicit GPU residency policy (text encoder first, one
+transformer resident at a time); the shipped all-resident and documented offload
+paths spill into shared memory and are impractical. IMG-120 is not authorized; it is
+eligible for a separate product-owner decision (architecture: custom residency
+lifecycle and exclusive GPU lease; structured-JSON prompt mapping; Ideogram 4
+non-commercial license). Details: `docs/Subsystems/Image/PR-IMG-110R_Ideogram4_Requalification.md`.
 
 PR-SVD-100 is the complete / accepted / integrated post-v2.6 SVD
 submission-convenience package on `main`. It adds non-recursive folder planning and one
@@ -158,8 +167,9 @@ rule.
 
 `PR-IMG-100` does not implement Ideogram, Diffusers image inference, ComfyUI
 still-image execution, or per-stage backend composition. PR-IMG-110 established
-that the generic Diffusers substrate is viable but Ideogram 4 NF4 is not viable
-on the RTX 4070 Ti 12-GB target; it did not authorize a Diffusers backend.
+that the generic Diffusers substrate is viable, and PR-IMG-110R (correcting its
+Ideogram 4 no-go) that Ideogram 4 NF4 is constrained-viable on the RTX 4070 Ti
+12-GB target with an explicit residency policy; neither authorized a Diffusers backend.
 Per-stage backend composition (COA C) and ComfyUI-centric image execution (COA D)
 remain possible future options, but neither may replace StableNew's compiler,
 NJR, queue, runner, artifact, history, replay, cancellation, or process authorities.

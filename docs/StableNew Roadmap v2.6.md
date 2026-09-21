@@ -268,15 +268,17 @@ legacy failures remain non-blocking.
 
 This sequence records the post-v2.6 architecture line. PR-IMG-100 is complete /
 accepted / integrated on `main`.
-PR-IMG-110 completed its separate qualification and returned an Ideogram 4
-target-hardware no-go. Do not begin PR-IMG-120 from this result.
+PR-IMG-110 completed its separate qualification; its Ideogram 4 target-hardware
+no-go was corrected by PR-IMG-110R (PASS — CONSTRAINED, explicit residency policy).
+Do not begin PR-IMG-120 from either result.
 
 | Order | Work | Status | Outcome |
 |---:|---|---|---|
 | P1 | `PR-IMG-100` | Complete / Accepted / Integrated | One typed image backend per image NJR; existing A1111 path preserved behind a StableNew-owned backend contract |
 | P1a | `PR-SVD-100` | Complete / Accepted / Integrated | Non-recursive SVD folder batch submission through ordinary per-source NJRs and one existing JobService batch call |
-| P2 | `PR-IMG-110` | Complete / Ideogram 4 No-Go | Generic Diffusers substrate passed; Ideogram 4 NF4/group-offload did not qualify on RTX 4070 Ti 12GB; no production backend added |
-| P3 | `PR-IMG-120` | Not authorized | A separate product-owner model-selection decision and qualification would be required before any Diffusers production slice |
+| P2 | `PR-IMG-110` | Complete / Ideogram 4 verdict superseded | Generic Diffusers substrate passed; the Ideogram 4 "hardware no-go" was not supported (see P2a); no production backend added |
+| P2a | `PR-IMG-110R` | Complete / awaiting acceptance | Ideogram 4 NF4 PASS — CONSTRAINED on RTX 4070 Ti 12GB up to 1024x1024 `V4_QUALITY_48` with an explicit residency policy (two independent implementations, bit-identical repeats); shipped all-resident and documented offload paths impractical |
+| P3 | `PR-IMG-120` | Not authorized; eligible for a separate owner decision | Any Diffusers production slice needs an explicit product-owner decision (custom GPU residency lifecycle/lease, structured-JSON prompt mapping, Ideogram 4 non-commercial license) |
 | P4 | `PR-IMG-130` | Conditional | Capability-aware image backend/model UI and compiler projections |
 
 ### PR-IMG-100 — backend-neutral image execution (complete / accepted / integrated)
@@ -315,21 +317,34 @@ runtime authority. Its contract is
 ### PR-IMG-110 — Diffusers / Ideogram 4 qualification
 
 This completed target-machine qualification found a viable generic Torch/CUDA /
-Diffusers SDXL control, but an Ideogram 4 NF4 target-hardware no-go. Normal CUDA
-missed the resource/performance criteria; model CPU offload missed the latency
-criterion; and two fresh group-offload attempts faulted or reached no viable
-inference, with `nvlddmkm` Event 153 evidence. No production Diffusers backend
-was added. The full evidence is in
+Diffusers SDXL control. Its Ideogram 4 NF4 "target-hardware no-go" (normal CUDA,
+model CPU offload and group offload attempts) is **superseded**: PR-IMG-110R showed
+those attempts were all-resident VRAM overcommit (Windows shared-memory spill),
+Diffusers offload/loader behaviour and a group-offload software fault. No production
+Diffusers backend was added. Evidence:
 `docs/Subsystems/Image/PR-IMG-110_Diffusers_Ideogram4_Qualification.md`.
 
-PR-IMG-120 is not authorized by this result. A future model choice requires a
-separate product-owner decision and qualification.
+### PR-IMG-110R — Ideogram 4 definitive requalification
+
+Complete (awaiting acceptance): **PASS — CONSTRAINED**. The official `ideogram4` code
+(pinned commit) and Diffusers 0.40.0 both completed 512x512 through 1024x1024
+`V4_QUALITY_48` on the RTX 4070 Ti 12GB, with bit-identical repeats, when the text
+encoder is used first and released and only one transformer is GPU-resident at a
+time. Latency after load: about 60 s (768x1024 Turbo), 116-130 s (1024x1024 Default),
+279-312 s (1024x1024 Quality); peak VRAM 10.4-11.5 GiB of 12.0 GiB. The shipped
+all-resident and documented offload paths give ~60 s per step (spill). Full evidence:
+`docs/Subsystems/Image/PR-IMG-110R_Ideogram4_Requalification.md`.
+
+PR-IMG-120 is not authorized by either result; it is eligible for a separate
+product-owner decision.
 
 ### PR-IMG-120 — conditional Diffusers production slice
 
-Not authorized. PR-IMG-110 established that generic Diffusers is viable but
-Ideogram 4 is not viable on the supported target. A future approved model
-qualification would be required before this production slice can be proposed.
+Not authorized. PR-IMG-110 established that generic Diffusers is viable and
+PR-IMG-110R that Ideogram 4 NF4 is constrained-viable on the supported target
+(explicit residency policy, exclusive GPU). A separate product-owner decision on the
+residency lifecycle, prompt mapping and license is required before this production
+slice can be proposed.
 
 ### PR-IMG-130 — conditional capability-aware UX/compiler
 
@@ -379,9 +394,9 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 ## Next action
 
 `PR-SVD-100 — Folder Batch Submission` is complete / accepted / integrated on
-`main`. PR-IMG-110 is complete with an Ideogram 4 target-hardware no-go; no
-Diffusers production slice is authorized. The next image-model direction needs
-explicit product-owner approval.
+`main`. PR-IMG-110 is complete (its Ideogram 4 no-go superseded by PR-IMG-110R,
+PASS — CONSTRAINED); no Diffusers production slice is authorized. The next
+image-model direction needs explicit product-owner approval.
 PR-MVP-080 is COMPLETE / ACCEPTED / INTEGRATED; its final operator journey, required CI, and
 documentation closeout are complete. Queue/history action-state and no-op cleanup is
 accepted, alongside PromptPack authorship, durable job state, image generation,

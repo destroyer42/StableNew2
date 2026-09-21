@@ -1,6 +1,12 @@
 # PR-IMG-110 — Diffusers / Ideogram 4 Qualification
 
-Status: **COMPLETE — IDEOGRAM 4 NO-GO ON RTX 4070 Ti 12GB; DIFFUSERS SUBSTRATE VIABLE**
+Status: **COMPLETE — DIFFUSERS SUBSTRATE VIABLE.** The Ideogram 4 verdict below is
+**SUPERSEDED** by `PR-IMG-110R_Ideogram4_Requalification.md`: Ideogram 4 NF4 is
+**PASS — CONSTRAINED** on the RTX 4070 Ti 12GB with an explicit residency policy. The
+original "hardware no-go" wording did not hold; the failures recorded here were
+all-resident VRAM overcommit (Windows shared-memory spill), Diffusers offload/loader
+behaviour and a group-offload software fault, not a hardware capacity limit. The
+evidence sections are kept as history.
 
 This is a target-machine qualification only. It did not register a production
 Diffusers backend or change StableNew's compiler, NJR, queue, runner, GUI,
@@ -94,12 +100,12 @@ The repeated group-offload fault/no-inference outcome, combined with the
 previously rejected normal-CUDA and model-CPU-offload paths, makes sequential
 or disk offload diagnostic-only and ineligible for production. Therefore:
 
-**PR-IMG-110 — IDEOGRAM 4 NO-GO ON RTX 4070 Ti 12GB; DIFFUSERS SUBSTRATE
-VIABLE.**
+**PR-IMG-110 (as concluded at the time) — Ideogram 4 NO-GO; DIFFUSERS SUBSTRATE
+VIABLE.** *Superseded for Ideogram 4 by PR-IMG-110R (see the status above); the Diffusers
+substrate finding stands.*
 
-No IMG-120 work is authorized from this result. Any future alternative model
-qualification requires a separate product-owner decision and acceptance
-contract.
+No IMG-120 work is authorized from this result or from PR-IMG-110R. See PR-IMG-110R
+section 9 for the separate product-owner decision it makes eligible.
 
 ## Evidence and validation
 
