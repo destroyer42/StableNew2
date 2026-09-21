@@ -164,7 +164,7 @@ class _DiscoveredJourney:
         self.ev.summary["checkpoints"] = self.checkpoints
         self.ev.summary["dialogs"] = [
             {"kind": c.kind, "title": c.title, "message": c.message, "answer": c.answer}
-            for c in self.dialogs.calls
+            for c in self.dialogs.history
         ]
 
     # -- phase 1: scan --------------------------------------------------

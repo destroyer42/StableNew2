@@ -27,7 +27,8 @@ class DialogRecord:
 class DialogSeam:
     answers: list[bool] = field(default_factory=list)
     default: bool = True
-    calls: list[DialogRecord] = field(default_factory=list)
+    calls: list[DialogRecord] = field(default_factory=list)  # journeys may clear this
+    history: list[DialogRecord] = field(default_factory=list)  # never cleared: evidence
 
     def script(self, *answers: bool) -> None:
         self.answers = list(answers)
@@ -37,12 +38,16 @@ class DialogSeam:
 
     def askyesno(self, title: str = "", message: str = "", **_: object) -> bool:
         answer = self._answer()
-        self.calls.append(DialogRecord("askyesno", str(title), str(message), answer))
+        record = DialogRecord("askyesno", str(title), str(message), answer)
+        self.calls.append(record)
+        self.history.append(record)
         return answer
 
     def info(self, kind: str) -> object:
         def record(title: str = "", message: str = "", **_: object) -> str:
-            self.calls.append(DialogRecord(kind, str(title), str(message)))
+            record = DialogRecord(kind, str(title), str(message))
+            self.calls.append(record)
+            self.history.append(record)
             return "ok"
 
         return record
