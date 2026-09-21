@@ -50,17 +50,29 @@ def _object_info(*, missing_node: str | None = None, files: dict[str, str] | Non
 
 
 def _stats(*, free_mib: float, held_mib: float = 0.0, total_mib: float = 12282.0):
+    # Comfy's own vram_free is not what the guard trusts; the driver probe below is.
     return {
         "devices": [
             {
                 "type": "cuda",
+                "index": 0,
                 "vram_total": total_mib * MIB,
                 "vram_free": free_mib * MIB,
                 "torch_vram_total": held_mib * MIB,
                 "torch_vram_free": 0,
+                "_driver_free_mib": free_mib,
             }
         ]
     }
+
+
+def _driver_probe(stats):
+    device = stats["devices"][0]
+    return lambda _index: (device["vram_total"] / MIB, device["_driver_free_mib"])
+
+
+def _readiness(stats, *, ram_gb: float = 24.0) -> WorkflowResourceReadiness:
+    return WorkflowResourceReadiness(ram_probe=lambda: ram_gb, gpu_probe=_driver_probe(stats))
 
 
 class _FakeComfy:
@@ -113,7 +125,7 @@ def _backend(client, *, ram_gb: float = 24.0) -> ComfyWorkflowVideoBackend:
         process_manager=SimpleNamespace(
             ensure_running=lambda: True, _config=SimpleNamespace(base_url="http://x")
         ),
-        readiness=WorkflowResourceReadiness(ram_probe=lambda: ram_gb),
+        readiness=_readiness(client.stats, ram_gb=ram_gb),
     )
 
 
@@ -236,23 +248,39 @@ def test_dependency_probe_names_missing_files_nodes_and_unverifiable_loaders() -
 # ---------------------------------------------------------------------- resource readiness
 
 
-def test_readiness_uses_comfy_held_vram_and_reports_what_blocks() -> None:
+def test_readiness_uses_driver_free_vram_plus_comfy_held_and_reports_what_blocks() -> None:
     spec = _wan_spec()
-    readiness = WorkflowResourceReadiness(ram_probe=lambda: 24.0)
-    ok = readiness.evaluate(spec, system_stats=_stats(free_mib=10500))
+    ok_stats = _stats(free_mib=10500)
+    ok = _readiness(ok_stats).evaluate(spec, system_stats=ok_stats)
     assert ok.ready and ok.observations["vram_available_to_comfy_mib"] == 10500
-    warm = readiness.evaluate(spec, system_stats=_stats(free_mib=600, held_mib=10200))
-    assert warm.ready  # Comfy's own resident allocation is reusable: not rejected
-    blocked = readiness.evaluate(spec, system_stats=_stats(free_mib=6000, held_mib=100))
+    warm_stats = _stats(free_mib=600, held_mib=10200)
+    assert _readiness(warm_stats).evaluate(spec, system_stats=warm_stats).ready  # warm Comfy ok
+    blocked_stats = _stats(free_mib=6000, held_mib=100)
+    blocked = _readiness(blocked_stats).evaluate(spec, system_stats=blocked_stats)
     assert not blocked.ready and "A1111" in blocked.message and "will not stop" in blocked.message
-    low_ram = WorkflowResourceReadiness(ram_probe=lambda: 9.0).evaluate(
-        spec, system_stats=_stats(free_mib=11000)
-    )
+    low_ram = _readiness(ok_stats, ram_gb=9.0).evaluate(spec, system_stats=ok_stats)
     assert not low_ram.ready and "system RAM" in low_ram.message
-    no_gpu = readiness.evaluate(spec, system_stats={"devices": []})
+    no_gpu = _readiness(ok_stats).evaluate(spec, system_stats={"devices": []})
     assert not no_gpu.ready and "no CUDA device" in no_gpu.message
     ltx = build_default_workflow_registry().get("ltx_multiframe_anchor_v1")
-    assert readiness.evaluate(ltx, system_stats={}).ready  # only declared policies are checked
+    assert _readiness(ok_stats).evaluate(ltx, system_stats={}).ready  # only declared policies
+
+
+def test_comfys_own_free_figure_is_not_trusted_and_an_unreadable_driver_fails_closed() -> None:
+    """Observed live: Comfy said 11,056 MiB free while A1111 held 7,259 MiB (driver: 3,298 free)."""
+
+    spec = _wan_spec()
+    lying = _stats(free_mib=11056)  # what /system_stats claimed
+    driver_truth = WorkflowResourceReadiness(
+        ram_probe=lambda: 24.0, gpu_probe=lambda _i: (12282.0, 3298.0)
+    )
+    result = driver_truth.evaluate(spec, system_stats=lying)
+    assert not result.ready  # the unsafe pass a Comfy-stats guard would have given
+    assert result.observations["comfy_reported_free_mib"] == 11056
+    assert result.observations["vram_free_mib"] == 3298
+    unreadable = WorkflowResourceReadiness(ram_probe=lambda: 24.0, gpu_probe=lambda _i: None)
+    closed = unreadable.evaluate(spec, system_stats=lying)
+    assert not closed.ready and "could not be read" in closed.message
 
 
 # ------------------------------------------------- resolver + backend, fail before queue_prompt

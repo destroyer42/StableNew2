@@ -14,12 +14,17 @@ Thresholds for ``wan22_ti2v_5b`` come from the PR-VID-110 measurements on the RT
 outside the run, i.e. a 9,570 MiB footprint, and the earlier studio runs peaked at 11.1-11.6 GiB
 whole-GPU. Headroom is therefore narrow by measurement, not comfortable.
 
-* **VRAM available to Comfy** = driver-free VRAM + the VRAM Comfy's own allocator already holds
-  (``torch_vram_total``). Memory Comfy holds itself (for example a Wan model that is already
-  loaded) is reusable by Comfy, so a warm, valid state is not rejected; memory held by *other*
-  processes (A1111, desktop apps) is what lowers the number. The floor is 10,000 MiB (the
-  9,570 MiB measured footprint plus ~430 MiB margin). The measure is slightly conservative: the
-  CUDA context Comfy itself owns is counted as outside use.
+* **VRAM available to Comfy** = *driver-reported* free VRAM (``nvidia-smi``) + the VRAM Comfy's
+  own allocator already holds (``torch_vram_total``). Memory Comfy holds itself (for example a Wan
+  model that is already loaded) is reusable by Comfy, so a warm, valid state is not rejected;
+  memory held by *other* processes (A1111, desktop apps) is what lowers the number. The floor is
+  10,000 MiB (the 9,570 MiB measured footprint plus ~430 MiB margin). The measure is slightly
+  conservative: the CUDA context Comfy itself owns is counted as outside use.
+
+  Comfy's own ``/system_stats`` ``vram_free`` is deliberately **not** trusted for the global
+  figure: observed live on the target machine it reported 11,056 MiB free while A1111 held
+  7,259 MiB and the driver reported 3,298 MiB free, which would have passed an unsafe start. If
+  the driver figure cannot be read the check fails closed (blocks) instead of guessing.
 * **Available host RAM** floor 16 GB. The three models are 18.1 GB on disk and are memory-mapped
   on a cold load; qualification runs started with 20.8-27 GB available and still dipped to
   0.01-0.05 GB free transiently. Windows counts standby cache as available, so a warm load is not
@@ -41,6 +46,29 @@ def _host_available_ram_gb() -> float:
     return float(psutil.virtual_memory().available) / 1e9
 
 
+def _driver_gpu_memory_mib(index: int = 0) -> tuple[float, float] | None:
+    """(total, free) MiB as the NVIDIA driver reports them, or None when unreadable."""
+
+    import subprocess
+
+    try:
+        out = subprocess.check_output(
+            [
+                "nvidia-smi",
+                "-i",
+                str(index),
+                "--query-gpu=memory.total,memory.free",
+                "--format=csv,noheader,nounits",
+            ],
+            text=True,
+            timeout=10,
+        )
+        total, free = (float(part) for part in out.strip().splitlines()[0].split(","))
+        return total, free
+    except (OSError, subprocess.SubprocessError, ValueError, IndexError):
+        return None
+
+
 @dataclass(frozen=True, slots=True)
 class ResourceReadinessResult:
     ready: bool
@@ -60,8 +88,14 @@ class ResourceReadinessResult:
 
 
 class WorkflowResourceReadiness:
-    def __init__(self, *, ram_probe: Callable[[], float] | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        ram_probe: Callable[[], float] | None = None,
+        gpu_probe: Callable[[int], tuple[float, float] | None] | None = None,
+    ) -> None:
         self._ram_probe = ram_probe or _host_available_ram_gb
+        self._gpu_probe = gpu_probe or _driver_gpu_memory_mib
 
     @staticmethod
     def policy_for(spec: Any) -> Mapping[str, Any] | None:
@@ -88,18 +122,28 @@ class WorkflowResourceReadiness:
                 )
             else:
                 device = devices[0]
-                total = float(device.get("vram_total") or 0) / _MIB
-                free = float(device.get("vram_free") or 0) / _MIB
                 held_by_comfy = float(device.get("torch_vram_total") or 0) / _MIB
-                available = free + held_by_comfy
+                comfy_reported_free = float(device.get("vram_free") or 0) / _MIB
+                driver = self._gpu_probe(int(device.get("index") or 0))
+                if driver is None:
+                    blocking.append(
+                        "the NVIDIA driver's GPU memory figures could not be read, so GPU "
+                        "readiness cannot be verified (ComfyUI's own free-memory figure is not "
+                        "trusted)"
+                    )
+                    total = free = available = 0.0
+                else:
+                    total, free = driver
+                    available = free + held_by_comfy
                 observations.update(
                     vram_total_mib=round(total),
                     vram_free_mib=round(free),
                     vram_held_by_comfy_mib=round(held_by_comfy),
                     vram_available_to_comfy_mib=round(available),
+                    comfy_reported_free_mib=round(comfy_reported_free),
                     vram_floor_mib=round(vram_floor),
                 )
-                if available < vram_floor:
+                if driver is not None and available < vram_floor:
                     blocking.append(
                         f"only {available:.0f} MiB of GPU memory is available to ComfyUI "
                         f"(needs {vram_floor:.0f} MiB; {total - available:.0f} MiB of {total:.0f} "

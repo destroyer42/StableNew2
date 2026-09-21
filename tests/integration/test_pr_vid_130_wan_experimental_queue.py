@@ -18,10 +18,9 @@ from src.queue.job_model import JobStatus
 from src.video import ComfyWorkflowVideoBackend
 from src.video.workflow_catalog import build_builtin_workflow_specs
 from src.video.workflow_contracts import WorkflowSpec
-from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 from tests.integration.test_pr_vid_120_neutral_video_queue import _build_stack
-from tests.video.test_wan22_experimental_workflow import WAN_ID, _FakeComfy
+from tests.video.test_wan22_experimental_workflow import WAN_ID, _FakeComfy, _readiness, _stats
 
 LTX_ID = "ltx_multiframe_anchor_v1"
 
@@ -133,7 +132,7 @@ def _wan_backend(tmp_path: Path, client: _FakeComfy, registry: WorkflowRegistry 
         process_manager=SimpleNamespace(
             ensure_running=lambda: True, _config=SimpleNamespace(base_url="http://x")
         ),
-        readiness=WorkflowResourceReadiness(ram_probe=lambda: 24.0),
+        readiness=_readiness(client.stats),
     )
 
 
@@ -257,7 +256,7 @@ def test_disabled_workflow_cannot_run_even_with_opt_in(tmp_path) -> None:
 def test_resource_and_dependency_failures_fail_the_job_before_queue_prompt(tmp_path) -> None:
     for kwargs, fragment in (
         (
-            {"stats": {"devices": [{"type": "cuda", "vram_total": 12e9, "vram_free": 1e9}]}},
+            {"stats": _stats(free_mib=1000)},
             "resource",
         ),
         ({"info": {}}, "missing required Comfy dependencies"),
