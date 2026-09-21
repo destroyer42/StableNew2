@@ -37,10 +37,12 @@ class DefaultWorkflowRegistryPort:
         self._registry = registry or build_default_workflow_registry()
 
     def list_specs_for_backend(self, backend_id: str) -> list[Any]:
-        return list(self._registry.list_specs_for_backend(backend_id))
+        # Producers offer approved AND experimental workflows (never disabled); offering is not
+        # authorization: experimental execution needs the job's explicit opt-in.
+        return list(self._registry.list_offerable_specs(backend_id))
 
     def get(self, workflow_id: str, workflow_version: str | None = None) -> Any:
-        return self._registry.get(workflow_id, workflow_version)
+        return self._registry.get_offerable(workflow_id, workflow_version)
 
 
 __all__ = ["DefaultImageRuntimePorts", "DefaultWorkflowRegistryPort"]

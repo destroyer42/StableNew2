@@ -21,8 +21,16 @@ class WorkflowRegistry:
         versions.sort()
 
     @staticmethod
-    def _require_runnable(spec: WorkflowSpec) -> WorkflowSpec:
-        if spec.governance_state != "approved":
+    def _require_runnable(spec: WorkflowSpec, *, allow_experimental: bool = False) -> WorkflowSpec:
+        if spec.is_experimental:
+            # Experimental workflows run only with an explicit, per-job opt-in carried in the
+            # immutable job intent; there is no process-global switch.
+            if not allow_experimental:
+                raise KeyError(
+                    f"Workflow '{spec.workflow_id}' version '{spec.workflow_version}' is "
+                    "experimental and requires an explicit experimental opt-in for this job"
+                )
+        elif spec.governance_state != "approved":
             raise KeyError(
                 f"Workflow '{spec.workflow_id}' version '{spec.workflow_version}' is not approved for execution"
             )
@@ -32,7 +40,13 @@ class WorkflowRegistry:
             )
         return spec
 
-    def get(self, workflow_id: str, workflow_version: str | None = None) -> WorkflowSpec:
+    def get(
+        self,
+        workflow_id: str,
+        workflow_version: str | None = None,
+        *,
+        allow_experimental: bool = False,
+    ) -> WorkflowSpec:
         workflow_key = str(workflow_id or "").strip()
         if not workflow_key:
             raise KeyError("Workflow lookup requires a non-empty workflow_id")
@@ -42,7 +56,7 @@ class WorkflowRegistry:
                 raise KeyError(
                     f"Workflow '{workflow_key}' version '{workflow_version}' is not registered"
                 )
-            return self._require_runnable(self._specs[key])
+            return self._require_runnable(self._specs[key], allow_experimental=allow_experimental)
 
         versions = self._versions_by_id.get(workflow_key) or []
         if not versions:
@@ -51,7 +65,9 @@ class WorkflowRegistry:
             raise KeyError(
                 f"Workflow '{workflow_key}' has multiple versions registered; version is required"
             )
-        return self._require_runnable(self._specs[(workflow_key, versions[0])])
+        return self._require_runnable(
+            self._specs[(workflow_key, versions[0])], allow_experimental=allow_experimental
+        )
 
     def list_workflow_ids(self) -> list[str]:
         return sorted(self._versions_by_id.keys())
@@ -69,6 +85,24 @@ class WorkflowRegistry:
             ],
             key=lambda spec: (spec.workflow_id, spec.workflow_version),
         )
+
+    def list_offerable_specs(self, backend_id: str) -> list[WorkflowSpec]:
+        """Approved and experimental (never disabled) specs, for producers/UI to offer."""
+
+        backend_key = str(backend_id or "").strip()
+        return sorted(
+            [
+                spec
+                for spec in self._specs.values()
+                if spec.backend_id == backend_key and spec.is_offerable
+            ],
+            key=lambda spec: (spec.workflow_id, spec.workflow_version),
+        )
+
+    def get_offerable(self, workflow_id: str, workflow_version: str | None = None) -> WorkflowSpec:
+        """Look a spec up for form validation: experimental allowed, disabled never."""
+
+        return self.get(workflow_id, workflow_version, allow_experimental=True)
 
 
 def build_default_workflow_registry() -> WorkflowRegistry:

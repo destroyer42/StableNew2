@@ -38,6 +38,7 @@ from src.video.video_backend_types import (
     VideoExecutionResult,
 )
 from src.video.workflow_compiler import WorkflowCompiler
+from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
 
@@ -173,6 +174,7 @@ class ComfyWorkflowVideoBackend:
         dependency_probe: ComfyDependencyProbe | None = None,
         depth_map_resolver: DepthMapResolver | None = None,
         process_manager: ComfyProcessManager | None = None,
+        readiness: WorkflowResourceReadiness | None = None,
         base_url: str = "http://127.0.0.1:8188",
         history_poll_interval: float = 0.5,
         history_timeout: float = 120.0,
@@ -182,6 +184,7 @@ class ComfyWorkflowVideoBackend:
         self._client = client
         self._dependency_probe = dependency_probe
         self._depth_map_resolver = depth_map_resolver or DepthMapResolver()
+        self._readiness = readiness or WorkflowResourceReadiness()
         self._process_manager = process_manager
         self._managed_process_manager: ComfyProcessManager | None = None
         self._base_url = str(base_url or "http://127.0.0.1:8188").rstrip("/")
@@ -197,7 +200,11 @@ class ComfyWorkflowVideoBackend:
         if not workflow_id:
             raise ValueError("video workflow requests require an explicit workflow_id")
         version = str(request.workflow_version or stage_config.get("workflow_version") or "")
-        spec = self._workflow_registry.get(workflow_id, version.strip() or None)
+        spec = self._workflow_registry.get(
+            workflow_id,
+            version.strip() or None,
+            allow_experimental=bool(request.experimental_opt_in),
+        )
         missing = sorted(set(request.requested_controls) - set(spec.accepted_controls))
         if missing:
             raise ValueError(
@@ -223,20 +230,33 @@ class ComfyWorkflowVideoBackend:
         if not workflow_id:
             raise ValueError("video_workflow stage requires workflow_id")
 
-        runtime_base_url = self._ensure_runtime_ready()
-        client = self._client or ComfyApiClient(base_url=runtime_base_url)
-        spec = self._workflow_registry.get(workflow_id, workflow_version)
+        # Governance first: an unknown/disabled/un-opted-in workflow never starts a runtime.
+        spec = self._workflow_registry.get(
+            workflow_id, workflow_version, allow_experimental=bool(request.experimental_opt_in)
+        )
         if spec.backend_id != self.backend_id:
             raise ValueError(
                 f"Workflow '{spec.workflow_id}' is registered for backend '{spec.backend_id}', "
                 f"not '{self.backend_id}'"
             )
+        runtime_base_url = self._ensure_runtime_ready()
+        client = self._client or ComfyApiClient(base_url=runtime_base_url)
 
         object_info = client.get_object_info()
         probe = self._dependency_probe or ComfyDependencyProbe(client)
         dependency_result = probe.probe_workflow(spec, object_info=object_info)
         if not dependency_result.ready:
             raise RuntimeError(_format_missing_dependency_message(spec, dependency_result))
+
+        # Bounded, observe-only resource readiness (workflows that declare a policy): a failing
+        # check fails the job before anything is queued; nothing is stopped or restarted.
+        readiness = None
+        if self._readiness.policy_for(spec) is not None:
+            readiness = self._readiness.evaluate(spec, system_stats=client.get_system_stats())
+            if not readiness.ready:
+                raise RuntimeError(
+                    f"Workflow '{spec.workflow_id}' is not resource-ready: {readiness.message}"
+                )
 
         conditioning = self._resolve_conditioning_inputs(
             spec=spec,
@@ -257,6 +277,10 @@ class ComfyWorkflowVideoBackend:
             raise RuntimeError("Comfy queue response did not include prompt_id")
 
         history_entry = self._wait_for_history_entry(client, prompt_id=prompt_id)
+        if str(spec.backend_defaults.get("output_transport") or "") == "comfy_view":
+            history_entry = self._localize_comfy_outputs(
+                client, history_entry, Path(request.output_dir)
+            )
         resolved_outputs = self._resolve_output_paths(
             history_entry=history_entry,
             compiled_outputs=compiled.compiled_outputs,
@@ -445,6 +469,7 @@ class ComfyWorkflowVideoBackend:
             diagnostic_payload={
                 "queue_response": dict(queue_response),
                 "dependency_probe": dependency_result.to_dict(),
+                "resource_readiness": readiness.to_dict() if readiness is not None else None,
                 "history_summary": {
                     "has_outputs": bool(history_entry.get("outputs")),
                     "prompt_id": prompt_id,
@@ -746,6 +771,40 @@ class ComfyWorkflowVideoBackend:
         raise TimeoutError(
             f"Timed out waiting for Comfy workflow history for prompt_id '{prompt_id}'"
         )
+
+    @staticmethod
+    def _localize_comfy_outputs(
+        client: ComfyApiClient, history_entry: Mapping[str, Any], output_dir: Path
+    ) -> dict[str, Any]:
+        """Fetch Comfy-side outputs into the StableNew run directory (which stays the artifact
+        authority) and point the history descriptors at the local copies."""
+
+        localized = deepcopy(dict(history_entry))
+        outputs = localized.get("outputs")
+        if not isinstance(outputs, dict):
+            return localized
+        for node_payload in outputs.values():
+            if not isinstance(node_payload, dict):
+                continue
+            for key in ("gifs", "videos", "images"):
+                descriptors = node_payload.get(key)
+                if not isinstance(descriptors, list):
+                    continue
+                for descriptor in descriptors:
+                    if not isinstance(descriptor, dict) or not descriptor.get("filename"):
+                        continue
+                    if str(descriptor.get("type") or "output") == "temp":
+                        continue
+                    name = str(descriptor["filename"])
+                    local = client.download_view(
+                        name,
+                        output_dir / Path(name).name,
+                        subfolder=str(descriptor.get("subfolder") or ""),
+                        file_type=str(descriptor.get("type") or "output"),
+                    )
+                    descriptor["filename"] = str(local)
+                    descriptor["subfolder"] = ""
+        return localized
 
     def _resolve_output_paths(
         self,

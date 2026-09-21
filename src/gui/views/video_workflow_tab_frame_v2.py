@@ -100,6 +100,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.status_var = tk.StringVar(value="Ready to queue a workflow-driven video job.")
         self.workflow_detail_var = tk.StringVar(value="No workflow selected.")
+        # Per-job authorization for an experimental workflow: off by default, never restored
+        # from saved state and never a global setting.
+        self.experimental_opt_in_var = tk.BooleanVar(value=False)
         self.source_summary_var = tk.StringVar(value="Source: none selected")
         self.effective_settings_var = tk.StringVar(value="Effective settings: defaults loaded")
         self._defaults = dict(defaults)
@@ -252,18 +255,19 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             wraplength=640,
             justify="left",
         ).grid(row=0, column=3, sticky="w", padx=(8, 0), pady=(0, 6))
-        self._add_labeled_entry(
+        self.end_anchor_entry = self._add_labeled_entry(
             body,
             1,
             "End Anchor",
             variable=self.end_anchor_var,
             help_key="end_anchor",
         )
-        ttk.Button(
+        self.end_anchor_browse = ttk.Button(
             body, text="Browse...", style="Dark.TButton", command=self._on_browse_end_anchor
-        ).grid(row=1, column=2, sticky="ew", padx=(6, 0))
+        )
+        self.end_anchor_browse.grid(row=1, column=2, sticky="ew", padx=(6, 0))
 
-        self._add_labeled_entry(
+        self.mid_anchors_entry = self._add_labeled_entry(
             body,
             2,
             "Mid Anchors",
@@ -272,11 +276,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             helper="Optional, separated by ';'",
             help_key="mid_anchors",
         )
-        ttk.Button(
+        self.mid_anchors_browse = ttk.Button(
             body, text="Browse...", style="Dark.TButton", command=self._on_browse_mid_anchors
-        ).grid(row=2, column=2, sticky="ew", padx=(6, 0))
+        )
+        self.mid_anchors_browse.grid(row=2, column=2, sticky="ew", padx=(6, 0))
 
-        self._add_labeled_entry(
+        self.motion_combo = self._add_labeled_entry(
             body,
             3,
             "Motion",
@@ -295,6 +300,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             help_key="output_route",
         )
         conditioning_frame = ttk.LabelFrame(body, text="Advanced Conditioning", padding=8)
+        self.conditioning_frame = conditioning_frame
         conditioning_frame.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(6, 6))
         configure_grid_columns(
             conditioning_frame,
@@ -425,6 +431,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             command=self._on_submit,
         )
         self.queue_workflow_button.pack(side="left")
+        self.experimental_opt_in_check = ttk.Checkbutton(
+            submit_frame,
+            text="Enable experimental workflow for this job",
+            variable=self.experimental_opt_in_var,
+        )
+        # Shown only while an experimental workflow is selected (see _apply_workflow_capabilities).
         self.queue_workflow_tooltip = attach_tooltip(
             self.queue_workflow_button,
             "Queue a workflow-driven video job using the selected workflow, anchors, prompts, and route shown in this tab.",
@@ -527,21 +539,28 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             )
             self._refresh_workspace_summary()
 
-    def get_video_workflow_state(self) -> dict[str, Any]:
+    def get_video_workflow_state(self, *, for_submission: bool = False) -> dict[str, Any]:
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
-        return {
+        visible = dict(workflow_meta.get("form_visibility") or {})
+        supported = (lambda key: bool(visible.get(key, True))) if visible else (lambda key: True)
+        state = {
             "workflow_id": self.workflow_var.get().strip(),
             "workflow_version": str(workflow_meta.get("workflow_version") or "").strip(),
             "source_image_path": self.source_image_var.get().strip(),
-            "end_anchor_path": self.end_anchor_var.get().strip(),
+            # Inputs the selected workflow does not accept are never submitted.
+            "end_anchor_path": self.end_anchor_var.get().strip() if supported("end_anchor") else "",
             "mid_anchor_paths": [
                 item.strip() for item in self.mid_anchors_var.get().split(";") if item.strip()
-            ],
+            ]
+            if supported("mid_anchors")
+            else [],
             "prompt": self.prompt_text.get("1.0", "end").strip(),
             "negative_prompt": self.negative_prompt_text.get("1.0", "end").strip(),
             "motion_profile": self.motion_profile_var.get().strip(),
             "camera_intent": {
-                "preset": self.camera_preset_var.get().strip(),
+                "preset": self.camera_preset_var.get().strip()
+                if supported("camera_intent")
+                else "none",
                 "strength": self.camera_strength_var.get().strip(),
             },
             "controlnet": {
@@ -551,11 +570,21 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 "guidance_end": self.controlnet_guidance_end_var.get().strip(),
             },
             "depth_input": {
-                "mode": self.depth_mode_var.get().strip(),
-                "path": self.depth_path_var.get().strip(),
+                "mode": self.depth_mode_var.get().strip()
+                if supported("depth_conditioning")
+                else "none",
+                "path": self.depth_path_var.get().strip()
+                if supported("depth_conditioning")
+                else "",
             },
             "output_route": self.output_route_var.get().strip(),
         }
+        if for_submission:
+            # The per-job authorization is only ever part of a submission, never saved state.
+            state["experimental_opt_in"] = bool(
+                workflow_meta.get("experimental") and self.experimental_opt_in_var.get()
+            )
+        return state
 
     def restore_video_workflow_state(self, state: dict[str, Any] | None) -> None:
         if not isinstance(state, dict):
@@ -588,10 +617,47 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._set_text_value(self.prompt_text, str(state.get("prompt") or ""))
         self._set_text_value(self.negative_prompt_text, str(state.get("negative_prompt") or ""))
         self._source_bundle = None
+        self.experimental_opt_in_var.set(False)  # authorization is per job, never restored
         self._refresh_workspace_summary()
+
+    def _apply_workflow_capabilities(self, workflow_meta: dict[str, Any]) -> None:
+        """Show/enable only the inputs the selected workflow declares, and the experimental
+        opt-in only for an experimental workflow (unchecked whenever the selection changes)."""
+
+        visible = dict(workflow_meta.get("form_visibility") or {})
+
+        def enabled(key: str) -> bool:
+            return bool(visible.get(key, True)) if visible else True
+
+        def set_state(widget: Any, on: bool) -> None:
+            try:
+                widget.configure(state="normal" if on else "disabled")
+            except Exception:
+                pass
+
+        for widget in (self.end_anchor_entry, self.end_anchor_browse):
+            set_state(widget, enabled("end_anchor"))
+        for widget in (self.mid_anchors_entry, self.mid_anchors_browse):
+            set_state(widget, enabled("mid_anchors"))
+        set_state(self.motion_combo, enabled("motion_profile"))
+        conditioning_on = enabled("camera_intent") or enabled("depth_conditioning")
+        for child in self.conditioning_frame.winfo_children():
+            set_state(child, conditioning_on)
+        if conditioning_on:
+            self._refresh_conditioning_controls_state()
+        experimental = bool(workflow_meta.get("experimental"))
+        if experimental:
+            self.experimental_opt_in_check.pack(side="left", padx=(12, 0))
+        else:
+            self.experimental_opt_in_check.pack_forget()
+            self.experimental_opt_in_var.set(False)
 
     def _refresh_workspace_summary(self) -> None:
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
+        if workflow_meta.get("workflow_id") != getattr(self, "_capability_workflow_id", None):
+            self._capability_workflow_id = workflow_meta.get("workflow_id")
+            self.experimental_opt_in_var.set(False)  # a new selection never inherits opt-in
+            self._apply_workflow_capabilities(workflow_meta)
         self.workflow_detail_var.set(format_workflow_capability_label(workflow_meta))
         summary = summarize_video_workflow_source(
             source_image_path=self.source_image_var.get().strip(),
@@ -744,7 +810,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             messagebox.showerror("Video Workflow", "Video workflow submission is not available.")
             return
         source_image_path = self.source_image_var.get().strip()
-        form_data = self.get_video_workflow_state()
+        form_data = self.get_video_workflow_state(for_submission=True)
         try:
             job_id = handler(source_image_path=source_image_path, form_data=form_data)
         except Exception as exc:

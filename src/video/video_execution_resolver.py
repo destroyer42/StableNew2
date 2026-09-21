@@ -73,6 +73,7 @@ class VideoExecutionIntent:
     workflow_id: str | None
     workflow_version: str | None
     legacy: bool
+    experimental_opt_in: bool = False
 
 
 def _clean(value: Any) -> str:
@@ -112,6 +113,7 @@ class VideoExecutionResolver:
                 )
                 or None,
                 legacy=False,
+                experimental_opt_in=block.get("experimental_opt_in") is True,
             )
         binding = LEGACY_STAGE_BINDINGS.get(stage_type)
         if binding is None:
@@ -187,6 +189,7 @@ class VideoExecutionResolver:
 
         request.task = intent.task
         request.requested_controls = tuple(intent.controls)
+        request.experimental_opt_in = intent.experimental_opt_in
         if intent.workflow_id:
             request.workflow_id = intent.workflow_id
             request.workflow_version = intent.workflow_version
@@ -197,6 +200,7 @@ class VideoExecutionResolver:
             "workflow_id": intent.workflow_id,
             "workflow_version": intent.workflow_version,
             "legacy_stage_routing": intent.legacy,
+            "experimental_opt_in": intent.experimental_opt_in,
         }
         if intent.legacy:
             return

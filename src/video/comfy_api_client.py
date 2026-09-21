@@ -106,6 +106,32 @@ class ComfyApiClient:
             raise RuntimeError("Comfy /upload/image returned a non-dict payload")
         return payload
 
+    def download_view(
+        self,
+        filename: str,
+        destination: str | Path,
+        *,
+        subfolder: str = "",
+        file_type: str = "output",
+        timeout: float = 300.0,
+    ) -> Path:
+        """Fetch one produced file through Comfy's ``/view`` endpoint into ``destination``."""
+
+        target = Path(destination)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        response = self._session.get(
+            f"{self.base_url}/view",
+            params={"filename": filename, "subfolder": subfolder, "type": file_type},
+            stream=True,
+            timeout=timeout,
+        )
+        response.raise_for_status()
+        with target.open("wb") as handle:
+            for chunk in response.iter_content(chunk_size=1 << 20):
+                if chunk:
+                    handle.write(chunk)
+        return target
+
     def _get_json(self, path: str, *, timeout: float) -> dict[str, Any]:
         response = self._session.get(f"{self.base_url}{path}", timeout=timeout)
         response.raise_for_status()

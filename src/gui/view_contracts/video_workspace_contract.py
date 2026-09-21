@@ -44,6 +44,8 @@ def format_workflow_capability_label(spec: dict[str, Any] | None) -> str:
     backend = str(spec.get("backend_id") or "").strip()
     tags = [str(tag).strip() for tag in spec.get("capability_tags") or [] if str(tag).strip()]
     parts = [display_name]
+    if spec.get("experimental"):
+        parts.append("EXPERIMENTAL (per-job opt-in required)")
     if backend:
         parts.append(f"backend={backend}")
     if tags:

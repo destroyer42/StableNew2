@@ -226,6 +226,31 @@ class WorkflowSpec:
         )
 
     @property
+    def is_experimental(self) -> bool:
+        return self.governance_state == WORKFLOW_GOVERNANCE_EXPERIMENTAL
+
+    @property
+    def is_offerable(self) -> bool:
+        """Approved or experimental (pinned) workflows may be shown to an operator; a disabled
+        workflow never is.  Offering is not authorization: experimental execution additionally
+        needs an explicit per-job opt-in (see ``WorkflowRegistry.get``)."""
+
+        return self.governance_state in {
+            WORKFLOW_GOVERNANCE_APPROVED,
+            WORKFLOW_GOVERNANCE_EXPERIMENTAL,
+        } and bool(_normalized_text(self.pinned_revision))
+
+    @property
+    def required_input_names(self) -> tuple[str, ...]:
+        """Binding names the form must supply, derived from the declared input bindings."""
+
+        return tuple(b.binding_name for b in self.input_bindings if b.required)
+
+    @property
+    def declared_input_names(self) -> tuple[str, ...]:
+        return tuple(b.binding_name for b in self.input_bindings)
+
+    @property
     def accepted_controls(self) -> tuple[str, ...]:
         """Neutral video controls this workflow accepts (base controls + capability opt-ins)."""
 

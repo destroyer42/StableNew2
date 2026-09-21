@@ -18,6 +18,7 @@ def test_default_workflow_registry_registers_builtin_ltx_workflow() -> None:
     assert registry.list_workflow_ids() == [
         "ltx_multiframe_anchor_v1",
         "ltx_multiframe_anchor_v1_conditioned",
+        "wan22_ti2v_5b_i2v_v1",
     ]
     spec = registry.get("ltx_multiframe_anchor_v1")
     assert spec.backend_id == "comfy"

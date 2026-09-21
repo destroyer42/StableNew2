@@ -36,6 +36,24 @@ def _has_model_inventory(payload: Any) -> bool:
     return False
 
 
+def _loader_options(payload: Mapping[str, Any], loader: str, input_name: str) -> list[str] | None:
+    """Enumerated choices a stock loader node advertises for ``input_name`` (None if unknown)."""
+
+    node = payload.get(loader) if isinstance(payload, Mapping) else None
+    inputs = node.get("input") if isinstance(node, Mapping) else None
+    if not isinstance(inputs, Mapping):
+        return None
+    for section in ("required", "optional"):
+        spec = (inputs.get(section) or {}).get(input_name) if isinstance(inputs, Mapping) else None
+        if isinstance(spec, (list, tuple)) and spec:
+            first = spec[0]
+            if isinstance(first, (list, tuple)):
+                return [str(item) for item in first]
+            if first == "COMBO" and len(spec) > 1 and isinstance(spec[1], Mapping):
+                return [str(item) for item in spec[1].get("options") or []]
+    return None
+
+
 @dataclass(frozen=True, slots=True)
 class DependencyProbeResult:
     ready: bool
@@ -80,10 +98,23 @@ class ComfyDependencyProbe:
         details: dict[str, Any] = {}
 
         for dependency in spec.dependency_specs:
-            found = _contains_locator(payload, dependency.locator)
-            verifiable = True
-            if dependency.dependency_kind == "checkpoint":
-                verifiable = _has_model_inventory(payload)
+            if dependency.dependency_kind == "stock_node":
+                # Exact class-name match on the node registry, not a substring search.
+                found = dependency.locator in payload
+                verifiable = True
+            elif dependency.dependency_kind == "model_file":
+                # ``version_hint`` names the stock loader input ("UNETLoader.unet_name") whose
+                # advertised choices must contain the exact pinned file.  A file that the
+                # loader cannot list is missing, never assumed present.
+                loader, _, input_name = str(dependency.version_hint or "").partition(".")
+                options = _loader_options(payload, loader, input_name)
+                found = options is not None and dependency.locator in options
+                verifiable = True
+            else:
+                found = _contains_locator(payload, dependency.locator)
+                verifiable = True
+                if dependency.dependency_kind == "checkpoint":
+                    verifiable = _has_model_inventory(payload)
             details[dependency.dependency_id] = {
                 "found": found,
                 "locator": dependency.locator,

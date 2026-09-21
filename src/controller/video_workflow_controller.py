@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import secrets
 from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
@@ -14,6 +15,15 @@ from src.state.output_routing import (
     OUTPUT_ROUTE_TESTING,
 )
 from src.video.continuity_models import normalize_continuity_link
+from src.video.video_execution_resolver import VIDEO_EXECUTION_KEY
+from src.video.video_workflow_intent import (
+    EXPERIMENTAL_OPT_IN_FIELD,
+    build_video_execution_block,
+    capability_errors,
+    default_negative_prompt,
+    form_visibility,
+    mid_anchor_list,
+)
 
 _DEFAULT_OUTPUT_ROUTES = (
     OUTPUT_ROUTE_REPROCESS,
@@ -63,6 +73,10 @@ class VideoWorkflowController:
                     "dependency_specs": [
                         dependency.to_dict() for dependency in spec.dependency_specs
                     ],
+                    "experimental": bool(getattr(spec, "is_experimental", False)),
+                    "required_inputs": list(getattr(spec, "required_input_names", ())),
+                    "accepted_controls": list(getattr(spec, "accepted_controls", ())),
+                    "form_visibility": form_visibility(spec),
                 }
             )
         return records
@@ -93,6 +107,7 @@ class VideoWorkflowController:
                 "path": "",
             },
             "output_route": OUTPUT_ROUTE_REPROCESS,
+            EXPERIMENTAL_OPT_IN_FIELD: False,  # never defaulted on, never persisted globally
             "continuity_pack_id": "",
             "continuity_pack_name": "",
             "continuity_pack_summary": None,
@@ -251,15 +266,17 @@ class VideoWorkflowController:
         except ValueError as exc:
             return False, str(exc)
 
-        end_anchor = Path(str(form_data.get("end_anchor_path") or "").strip())
-        if not end_anchor.exists() or not end_anchor.is_file():
-            return False, "Please choose an end anchor image for the video workflow."
-
-        raw_mid_anchors = form_data.get("mid_anchor_paths") or []
-        if isinstance(raw_mid_anchors, str):
-            raw_mid_anchors = [item.strip() for item in raw_mid_anchors.split(";") if item.strip()]
-        for candidate in raw_mid_anchors:
-            path = Path(str(candidate or "").strip())
+        # Required inputs, accepted controls and experimental opt-in all come from the spec.
+        problems = capability_errors(spec, form_data)
+        if problems:
+            return False, problems[0]
+        end_anchor_text = str(form_data.get("end_anchor_path") or "").strip()
+        if end_anchor_text:
+            end_anchor = Path(end_anchor_text)
+            if not end_anchor.exists() or not end_anchor.is_file():
+                return False, f"End anchor image does not exist: {end_anchor}"
+        for candidate in mid_anchor_list(form_data.get("mid_anchor_paths")):
+            path = Path(candidate)
             if not path.exists() or not path.is_file():
                 return False, f"Mid anchor image does not exist: {path}"
         input_bindings = getattr(spec, "input_bindings", ()) or ()
@@ -302,16 +319,9 @@ class VideoWorkflowController:
         workflow_id = str(form_data.get("workflow_id") or "").strip()
         workflow_version = str(form_data.get("workflow_version") or "").strip() or None
         spec = self._workflow_registry.get(workflow_id, workflow_version)
-        end_anchor_path = str(
-            Path(str(form_data.get("end_anchor_path") or "").strip()).expanduser()
-        )
-
-        raw_mid_anchors = form_data.get("mid_anchor_paths") or []
-        if isinstance(raw_mid_anchors, str):
-            raw_mid_anchors = [item.strip() for item in raw_mid_anchors.split(";") if item.strip()]
-        mid_anchor_paths = [
-            str(Path(str(item)).expanduser()) for item in raw_mid_anchors if str(item).strip()
-        ]
+        end_anchor_text = str(form_data.get("end_anchor_path") or "").strip()
+        end_anchor_path = str(Path(end_anchor_text).expanduser()) if end_anchor_text else ""
+        mid_anchor_paths = mid_anchor_list(form_data.get("mid_anchor_paths"))
 
         output_route = (
             str(form_data.get("output_route") or OUTPUT_ROUTE_REPROCESS).strip()
@@ -321,7 +331,10 @@ class VideoWorkflowController:
             output_route = OUTPUT_ROUTE_REPROCESS
 
         prompt = str(form_data.get("prompt") or "").strip()
-        negative_prompt = str(form_data.get("negative_prompt") or "").strip()
+        negative_prompt = str(form_data.get("negative_prompt") or "").strip() or (
+            default_negative_prompt(spec) if "negative_prompt" in spec.declared_input_names else ""
+        )
+        form_with_defaults = {**form_data, "negative_prompt": negative_prompt}
         motion_profile = str(form_data.get("motion_profile") or "").strip()
         camera_intent = self._normalize_camera_intent(form_data)
         controlnet = self._normalize_controlnet(form_data)
@@ -343,12 +356,23 @@ class VideoWorkflowController:
                 "camera_intent": camera_intent,
                 "controlnet": controlnet,
                 "depth_input": depth_input,
+                # Neutral, explicit execution intent (PR-VID-120 contract); the historical
+                # stage-owned bridge is not needed for work compiled here.
+                VIDEO_EXECUTION_KEY: build_video_execution_block(
+                    spec, {**form_with_defaults, "camera_intent": camera_intent}
+                ),
             },
             "pipeline": {
                 "output_route": output_route,
                 "video_workflow_enabled": True,
             },
         }
+        if "seed" in spec.declared_input_names:
+            # Recorded in the immutable job so a replay reproduces the same sampler seed.
+            seed_value = form_data.get("seed")
+            config["video_workflow"]["seed"] = (
+                int(seed_value) if str(seed_value or "").strip() else secrets.randbelow(2**31 - 1)
+            )
         if continuity_link:
             config["metadata"] = {"continuity": dict(continuity_link)}
 
@@ -358,6 +382,10 @@ class VideoWorkflowController:
                 "workflow_version": spec.workflow_version,
                 "display_name": spec.display_name,
                 "backend_id": spec.backend_id,
+                "governance_state": spec.governance_state,
+                "experimental_opt_in": config["video_workflow"][VIDEO_EXECUTION_KEY][
+                    EXPERIMENTAL_OPT_IN_FIELD
+                ],
                 "output_route": output_route,
                 "camera_intent": camera_intent,
                 "controlnet": controlnet,

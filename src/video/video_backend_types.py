@@ -110,7 +110,8 @@ class VideoExecutionRequest:
 
     ``task`` and ``requested_controls`` are set by the video resolver from explicit intent (or,
     for historical stage-owned records, the bounded compatibility mapping) and validated against
-    the selected backend before dispatch; nothing is dropped or substituted.  Raw workflow or
+    the selected backend before dispatch; nothing is dropped or substituted.  ``experimental_opt_in``
+    is the job's explicit, durable authorization to run an experimental workflow (never global).  Raw workflow or
     model payloads never belong here: they stay adapter-private (``backend_options`` carries only
     opaque adapter options).
     """
@@ -136,6 +137,7 @@ class VideoExecutionRequest:
     context_metadata: dict[str, Any] = field(default_factory=dict)
     task: str = VIDEO_TASK_IMAGE_TO_VIDEO
     requested_controls: tuple[str, ...] = ()
+    experimental_opt_in: bool = False
 
 
 @dataclass(slots=True)

@@ -6,6 +6,13 @@ from types import SimpleNamespace
 from src.controller.app_controller import AppController
 from src.controller.pipeline_controller import PipelineController
 from src.controller.video_workflow_controller import VideoWorkflowController
+from src.video.workflow_contracts import (
+    WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO,
+    WorkflowDependencySpec,
+    WorkflowInputBinding,
+    WorkflowOutputBinding,
+    WorkflowSpec,
+)
 
 
 class _RuntimePortsStub:
@@ -27,30 +34,36 @@ class _RuntimePortsStub:
         return payload
 
 
+def _stub_spec(backend_id: str = "comfy", workflow_version: str = "1.0.0") -> WorkflowSpec:
+    """A real (minimal) spec: producers now derive requirements from declared bindings."""
+
+    return WorkflowSpec(
+        workflow_id="wf-1",
+        workflow_version=workflow_version,
+        backend_id=backend_id,
+        display_name="Workflow One",
+        description="desc",
+        capability_tags=(WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO,),
+        input_bindings=(
+            WorkflowInputBinding(binding_name="start_anchor", source_field="input_image_path"),
+            WorkflowInputBinding(binding_name="end_anchor", source_field="end_anchor_path"),
+            WorkflowInputBinding(binding_name="prompt", source_field="prompt", required=False),
+        ),
+        output_bindings=(
+            WorkflowOutputBinding(binding_name="output_dir", source_field="output_dir"),
+        ),
+        dependency_specs=(
+            WorkflowDependencySpec(dependency_id="d", dependency_kind="custom_node", locator="x"),
+        ),
+    )
+
+
 class _WorkflowRegistryStub:
     def list_specs_for_backend(self, backend_id: str):
-        return [
-            SimpleNamespace(
-                workflow_id="wf-1",
-                workflow_version="1.0.0",
-                backend_id=backend_id,
-                display_name="Workflow One",
-                description="desc",
-                capability_tags=("tag-a",),
-                dependency_specs=(),
-            )
-        ]
+        return [_stub_spec(backend_id)]
 
     def get(self, workflow_id: str, workflow_version: str | None = None):
-        return SimpleNamespace(
-            workflow_id=workflow_id,
-            workflow_version=workflow_version or "1.0.0",
-            backend_id="comfy",
-            display_name="Workflow One",
-            description="desc",
-            capability_tags=("tag-a",),
-            dependency_specs=(),
-        )
+        return _stub_spec(workflow_version=workflow_version or "1.0.0")
 
 
 def test_pipeline_controller_uses_runtime_ports_for_runner_creation() -> None:
