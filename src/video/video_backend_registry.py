@@ -18,9 +18,11 @@ class VideoBackendRegistry:
         if backend_id in self._backends:
             raise ValueError(f"Video backend '{backend_id}' is already registered")
         capabilities = getattr(backend, "capabilities", None)
+        if capabilities is None or not tuple(getattr(capabilities, "tasks", ()) or ()):
+            raise ValueError(f"Video backend '{backend_id}' must declare at least one task")
+        # Stage types are a bounded legacy claim (historical stage-owned routing).  Backends that
+        # declare none, or that share a semantic task with another backend, register freely.
         stage_types = tuple(getattr(capabilities, "stage_types", ()) or ())
-        if not stage_types:
-            raise ValueError(f"Video backend '{backend_id}' must declare at least one stage type")
         for stage_name in stage_types:
             normalized = str(stage_name or "").strip()
             if not normalized:
@@ -41,6 +43,8 @@ class VideoBackendRegistry:
         return self._backends[normalized]
 
     def get_for_stage(self, stage_name: str) -> VideoBackendInterface:
+        """Legacy bridge only: historical stage-owned routing (see video_execution_resolver)."""
+
         normalized = str(stage_name or "").strip()
         backend_id = self._stage_map.get(normalized)
         if backend_id is None:
@@ -49,6 +53,14 @@ class VideoBackendRegistry:
 
     def is_registered_stage(self, stage_name: str) -> bool:
         return str(stage_name or "").strip() in self._stage_map
+
+    def list_backend_ids_for_task(self, task: str) -> list[str]:
+        normalized = str(task or "").strip()
+        return sorted(
+            backend_id
+            for backend_id, backend in self._backends.items()
+            if normalized in tuple(getattr(backend.capabilities, "tasks", ()) or ())
+        )
 
     def list_backend_ids(self) -> list[str]:
         return sorted(self._backends.keys())

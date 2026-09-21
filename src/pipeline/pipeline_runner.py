@@ -61,6 +61,7 @@ from src.video.video_backend_registry import (
     build_default_video_backend_registry,
 )
 from src.video.video_backend_types import VideoExecutionRequest, VideoExecutionResult
+from src.video.video_execution_resolver import VideoExecutionResolver
 
 logger = get_logger(__name__)
 
@@ -313,6 +314,11 @@ class PipelineRunner:
         cls._pack_folder_cache[route_cache_key] = run_dir
         return run_dir
 
+    @property
+    def _video_resolver(self) -> VideoExecutionResolver:
+        # Bound to the current registry so a replaced registry is always the one consulted.
+        return VideoExecutionResolver(self._video_backends)
+
     @staticmethod
     def _stage_config_dict_for_video(njr: NormalizedJobRecord, stage_name: str) -> dict[str, Any]:
         stage_config = next((s for s in njr.stage_chain if s.stage_type == stage_name), None)
@@ -399,8 +405,13 @@ class PipelineRunner:
         variants: list[dict[str, Any]],
         metadata: dict[str, Any],
     ) -> list[str]:
-        backend = self._video_backends.get_for_stage(stage_name)
         config_dict = self._stage_config_dict_for_video(njr, stage_name)
+        # Explicit backend/task/controls are validated before any backend is called; stage-owned
+        # routing survives only as the resolver's bounded legacy bridge.
+        video_intent = self._video_resolver.build_intent(
+            stage_name, config_dict, has_source_image=bool(current_stage_paths)
+        )
+        backend = self._video_resolver.resolve(stage_name, video_intent)
         if stage_name == "animatediff":
             config_dict["enabled"] = True
             if njr.scheduler:
@@ -538,6 +549,7 @@ class PipelineRunner:
                 cancel_token=cancel_token,
                 context_metadata=request_context_metadata,
             )
+            self._video_resolver.apply(request, video_intent)
             execution_result = backend.execute(self._pipeline, request)
             if execution_result is None:
                 continue
@@ -1820,7 +1832,7 @@ class PipelineRunner:
                         "[pipeline/upscale] completed %s image(s)", len(current_stage_paths)
                     )
 
-                elif self._video_backends.is_registered_stage(stage.stage_name):
+                elif self._video_resolver.is_video_stage(stage.stage_name):
                     if not current_stage_paths:
                         logger.warning(
                             "%s stage skipped: no input images from previous stage",

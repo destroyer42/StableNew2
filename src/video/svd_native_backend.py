@@ -4,6 +4,8 @@ from typing import Any
 
 from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 from src.video.video_backend_types import (
+    CONTROL_SOURCE_IMAGE,
+    VIDEO_TASK_IMAGE_TO_VIDEO,
     VideoBackendCapabilities,
     VideoExecutionRequest,
     VideoExecutionResult,
@@ -15,9 +17,9 @@ class SVDNativeVideoBackend:
     capabilities = VideoBackendCapabilities(
         backend_id=backend_id,
         stage_types=("svd_native",),
-        requires_input_image=True,
-        supports_prompt_text=False,
-        supports_negative_prompt=False,
+        tasks=(VIDEO_TASK_IMAGE_TO_VIDEO,),
+        controls=(CONTROL_SOURCE_IMAGE,),
+        required_controls=(CONTROL_SOURCE_IMAGE,),
     )
 
     def execute(self, pipeline: Any, request: VideoExecutionRequest) -> VideoExecutionResult | None:

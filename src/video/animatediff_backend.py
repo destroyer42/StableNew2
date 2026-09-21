@@ -4,6 +4,10 @@ from typing import Any
 
 from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 from src.video.video_backend_types import (
+    CONTROL_NEGATIVE_PROMPT,
+    CONTROL_PROMPT_TEXT,
+    CONTROL_SOURCE_IMAGE,
+    VIDEO_TASK_IMAGE_TO_VIDEO,
     VideoBackendCapabilities,
     VideoExecutionRequest,
     VideoExecutionResult,
@@ -15,9 +19,8 @@ class AnimateDiffVideoBackend:
     capabilities = VideoBackendCapabilities(
         backend_id=backend_id,
         stage_types=("animatediff",),
-        requires_input_image=False,
-        supports_prompt_text=True,
-        supports_negative_prompt=True,
+        tasks=(VIDEO_TASK_IMAGE_TO_VIDEO,),
+        controls=(CONTROL_SOURCE_IMAGE, CONTROL_PROMPT_TEXT, CONTROL_NEGATIVE_PROMPT),
     )
 
     def execute(self, pipeline: Any, request: VideoExecutionRequest) -> VideoExecutionResult | None:

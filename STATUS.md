@@ -15,8 +15,9 @@ Updated: 2026-09-19
   `PR-VID-110` is COMPLETE / ACCEPTED / INTEGRATED (Wan2.2 TI2V-5B CONDITIONAL and the only
   currently qualified directed-motion candidate; Wan2.1 VACE-1.3B NO-GO in reference-only,
   Canny and pose-only modes; native SVD the only accepted production video backend).
-  `PR-VID-120` is authorized as a separate contract-only architecture package (capability-aware,
-  backend-neutral video contract); no production Wan/VACE integration is authorized.
+  `PR-VID-120` (capability-aware, backend-neutral video execution contract) is implemented on
+  `video/120-neutral-video-contract`, awaiting acceptance; it adds no Wan/VACE integration and
+  native SVD is unchanged. Details: `docs/Subsystems/Video/PR-VID-120_Neutral_Video_Execution_Contract.md`.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

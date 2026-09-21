@@ -23,6 +23,16 @@ from src.video.motion.secondary_motion_provenance import extract_secondary_motio
 from src.video.motion.secondary_motion_video_reencode import apply_secondary_motion_to_video
 from src.video.video_artifact_helpers import build_video_artifact_bundle
 from src.video.video_backend_types import (
+    CONTROL_CAMERA_INTENT,
+    CONTROL_CONTROL_VIDEO,
+    CONTROL_END_ANCHOR,
+    CONTROL_MID_ANCHORS,
+    CONTROL_NEGATIVE_PROMPT,
+    CONTROL_POSE_VIDEO,
+    CONTROL_PROMPT_TEXT,
+    CONTROL_SOURCE_IMAGE,
+    CONTROL_START_ANCHOR,
+    VIDEO_TASK_IMAGE_TO_VIDEO,
     VideoBackendCapabilities,
     VideoExecutionRequest,
     VideoExecutionResult,
@@ -139,10 +149,19 @@ class ComfyWorkflowVideoBackend:
     capabilities = VideoBackendCapabilities(
         backend_id=backend_id,
         stage_types=("video_workflow",),
-        requires_input_image=True,
-        supports_prompt_text=True,
-        supports_negative_prompt=True,
-        supports_multiple_anchors=True,
+        tasks=(VIDEO_TASK_IMAGE_TO_VIDEO,),
+        controls=(
+            CONTROL_SOURCE_IMAGE,
+            CONTROL_PROMPT_TEXT,
+            CONTROL_NEGATIVE_PROMPT,
+            CONTROL_START_ANCHOR,
+            CONTROL_END_ANCHOR,
+            CONTROL_MID_ANCHORS,
+            CONTROL_CONTROL_VIDEO,
+            CONTROL_POSE_VIDEO,
+            CONTROL_CAMERA_INTENT,
+        ),
+        required_controls=(CONTROL_SOURCE_IMAGE,),
     )
 
     def __init__(
@@ -168,6 +187,23 @@ class ComfyWorkflowVideoBackend:
         self._base_url = str(base_url or "http://127.0.0.1:8188").rstrip("/")
         self._history_poll_interval = max(history_poll_interval, 0.1)
         self._history_timeout = max(history_timeout, 5.0)
+
+    def validate_workflow(self, request: VideoExecutionRequest) -> None:
+        """Fail before dispatch when the explicit workflow is unknown, not approved, or does not
+        declare a requested control.  Never selects or substitutes a workflow."""
+
+        stage_config = dict(request.stage_config or {})
+        workflow_id = str(request.workflow_id or stage_config.get("workflow_id") or "").strip()
+        if not workflow_id:
+            raise ValueError("video workflow requests require an explicit workflow_id")
+        version = str(request.workflow_version or stage_config.get("workflow_version") or "")
+        spec = self._workflow_registry.get(workflow_id, version.strip() or None)
+        missing = sorted(set(request.requested_controls) - set(spec.accepted_controls))
+        if missing:
+            raise ValueError(
+                f"workflow '{spec.workflow_id}' v{spec.workflow_version} does not declare "
+                f"requested controls {missing}"
+            )
 
     def execute(self, pipeline: Any, request: VideoExecutionRequest) -> VideoExecutionResult | None:
         stage_config = deepcopy(dict(request.stage_config or {}))

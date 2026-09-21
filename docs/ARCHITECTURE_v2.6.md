@@ -339,6 +339,13 @@ Raw backend workflow JSON is private to its backend adapter. It must not leak
 into NJR core, controllers, GUI state, queue records, or history as a public
 StableNew contract.
 
+Video execution is routed by an explicit, capability-checked contract (PR-VID-120): a
+semantic task (`image_to_video`), semantic controls, an explicit `backend_id` and an optional
+versioned workflow, carried in the immutable stage config as a `video_execution` block and resolved
+by one resolver (`src/video/video_execution_resolver.py`) before any backend is called. Stage names
+no longer own backend selection; they survive only as a bounded legacy bridge for historical
+records. See `docs/Subsystems/Video/PR-VID-120_Neutral_Video_Execution_Contract.md`.
+
 Image and video backend registries remain separate unless later evidence proves
 a shared runtime abstraction is materially simpler without weakening typed
 image/video contracts. PR-IMG-100 must not create a premature universal backend

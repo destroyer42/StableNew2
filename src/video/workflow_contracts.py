@@ -8,6 +8,9 @@ WORKFLOW_CAP_SINGLE_IMAGE_TO_VIDEO = "single_image_to_video"
 WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO = "multi_frame_anchor_video"
 WORKFLOW_CAP_SEGMENT_STITCHABLE = "segment_stitchable"
 WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED = "local_process_required"
+WORKFLOW_CAP_CONTROL_VIDEO = "control_video"
+WORKFLOW_CAP_POSE_VIDEO = "pose_video"
+WORKFLOW_CAP_CAMERA_INTENT = "camera_intent"
 WORKFLOW_GOVERNANCE_APPROVED = "approved"
 WORKFLOW_GOVERNANCE_EXPERIMENTAL = "experimental"
 WORKFLOW_GOVERNANCE_DISABLED = "disabled"
@@ -22,6 +25,19 @@ KNOWN_WORKFLOW_CAPABILITY_TAGS = {
     WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO,
     WORKFLOW_CAP_SEGMENT_STITCHABLE,
     WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,
+    WORKFLOW_CAP_CONTROL_VIDEO,
+    WORKFLOW_CAP_POSE_VIDEO,
+    WORKFLOW_CAP_CAMERA_INTENT,
+}
+
+# Neutral video controls every workflow accepts implicitly, plus the controls a workflow must
+# opt into through its capability tags.  Control names are semantic, never model names.
+_WORKFLOW_BASE_CONTROLS = ("source_image", "prompt_text", "negative_prompt")
+_WORKFLOW_TAG_CONTROLS = {
+    WORKFLOW_CAP_MULTI_FRAME_ANCHOR_VIDEO: ("start_anchor", "end_anchor", "mid_anchors"),
+    WORKFLOW_CAP_CONTROL_VIDEO: ("control_video",),
+    WORKFLOW_CAP_POSE_VIDEO: ("pose_video",),
+    WORKFLOW_CAP_CAMERA_INTENT: ("camera_intent",),
 }
 
 
@@ -208,6 +224,15 @@ class WorkflowSpec:
         return self.governance_state == WORKFLOW_GOVERNANCE_APPROVED and bool(
             _normalized_text(self.pinned_revision)
         )
+
+    @property
+    def accepted_controls(self) -> tuple[str, ...]:
+        """Neutral video controls this workflow accepts (base controls + capability opt-ins)."""
+
+        controls = set(_WORKFLOW_BASE_CONTROLS)
+        for tag in self.capability_tags:
+            controls.update(_WORKFLOW_TAG_CONTROLS.get(tag, ()))
+        return tuple(sorted(controls))
 
     @property
     def registry_key(self) -> tuple[str, str]:
