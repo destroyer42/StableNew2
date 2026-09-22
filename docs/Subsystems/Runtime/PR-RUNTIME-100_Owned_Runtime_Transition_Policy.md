@@ -1,7 +1,7 @@
 # PR-RUNTIME-100 — Owned GPU Runtime Transition Policy
 
-Status: **implemented on branch `runtime/100-owned-transition-policy`; awaiting product-owner
-acceptance.** Coordination only: no scheduler, lease, second lifecycle authority, or model
+Status: **COMPLETE / ACCEPTED ON FEATURE BRANCH `runtime/100-owned-transition-policy`; main
+integration awaits explicit product-owner authorization.** Coordination only: no scheduler, lease, second lifecycle authority, or model
 routing. Backend selection, NJR contents and the outer execution path
 (`Intent -> Compiler -> NJR -> JobService -> SQLite -> PipelineRunner.run_njr -> backend ->
 artifact/history`) are unchanged.
@@ -150,7 +150,17 @@ neither manager's stop method, exactly as designed. The owned-release code path 
 `WebUIProcessManager`/`ComfyProcessManager` ownership tests plus the fake-manager coordinator tests
 above; those existing tests were re-run and are unaffected (section 6).
 
-## 8. What this does not claim
+## 8. Required CI
+
+GitHub Actions run `35675495804` passed both required jobs for source commit
+`b8545ec79dab128eeb67b7bcedf6626f7a1746ad`: Python 3.11 and Python 3.12. The
+informational full-suite jobs failed outside this change surface and are not part of the required
+CI verdict. Locally, the focused tests, raw Ruff, compile check, repository-completeness check,
+controller-surface ratchet, and diff check passed. `tools/ci/run_pr_gate.py` was attempted once
+but was blocked because the local environment lacks `mypy`; that is a tooling blocker, not a
+source or test failure.
+
+## 9. What this does not claim
 
 PR-RUNTIME-100 reduces avoidable StableNew-owned runtime contention. It does **not** establish root
 cause for, and makes no claim about fixing, `nvlddmkm` faults, watchdog bugchecks, RAM/XMP
