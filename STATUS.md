@@ -7,10 +7,13 @@ Updated: 2026-09-22
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: `DIAG-GPU-100 — Workstation Hard-Crash Correlation & Survivor Telemetry`;
-  **COMPLETE / ACCEPTED / INTEGRATED**: its forensic record and observation-only survivor
-  telemetry are integrated, with GitHub Actions run 35681930199 required Python 3.11/3.12
-  jobs passing. No root cause or workstation configuration change is accepted. `PR-LEARN-302`, `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
+- Active diagnostic evidence: `DIAG-GPU-110 — Windows Dump Attribution & Driver Stack Analysis`;
+  its read-only report is complete on the feature branch. It confirms the surviving September
+  incidents as paired Windows display-stack black-screen captures while the two `0x133`
+  minidumps remain access-restricted; no individual driver, StableNew, or hardware root cause
+  and no workstation configuration change is accepted. `DIAG-GPU-100` remains
+  **COMPLETE / ACCEPTED / INTEGRATED**, including its observation-only survivor telemetry and
+  GitHub Actions run 35681930199 required Python 3.11/3.12 evidence. `PR-LEARN-302`, `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
   `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE / ACCEPTED / INTEGRATED.
   `PR-IMG-110` is integrated; its Ideogram 4 "hardware no-go" is superseded by
   `PR-IMG-110R` (Ideogram 4 NF4 PASS — CONSTRAINED on the 12-GB target; COMPLETE /
@@ -139,6 +142,10 @@ does not attribute cause to StableNew. Exact-time absence alone does not
 establish that earlier StableNew execution could not have participated in a
 failure sequence. See
 `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`.
+The read-only dump attribution follow-up is
+`docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md`; it selects no
+remediation and retains the owner-gated Intel/ASRock baseline plus DDR5-5600 isolation as the
+next single-variable path.
 Whether to integrate any candidate is a product-owner decision; native SVD remains the
 only accepted video backend.
 Current Global Positive/Negative text and enablement are frozen into each
@@ -460,8 +467,9 @@ passed on the accepted source tree, including required Python 3.11 and 3.12.
 
 1. Maintain the accepted v2.6 and IMG-100 baseline pending explicit product-owner direction.
 
-Next action: **await explicit owner approval for the DIAG-GPU-100 Intel-baseline/DDR5-5600
-isolation; until then, collect survivor telemetry only during ordinary GPU jobs.**
+Next action: **await explicit owner approval for the DIAG-GPU-110/D100 Intel/ASRock
+stability-baseline plus DDR5-5600 isolation; until then, collect survivor telemetry only during
+ordinary GPU jobs.**
 
 PR-MVP-090 is **COMPLETE / ACCEPTED / INTEGRATED**. The final real-backend
 release proof completed without production source changes.
