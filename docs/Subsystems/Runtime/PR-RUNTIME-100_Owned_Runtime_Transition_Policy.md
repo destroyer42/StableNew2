@@ -172,8 +172,8 @@ rerun for this repair.
 
 ## 8. Required CI
 
-GitHub Actions run `35675495804` passed both required jobs for source commit
-`b8545ec79dab128eeb67b7bcedf6626f7a1746ad`: Python 3.11 and Python 3.12. The
+GitHub Actions run `35676810610` passed both required jobs for repair commit
+`69c837d3ce76673b7364fdfc03b245ed90699c24`: Python 3.11 and Python 3.12. The
 informational full-suite jobs failed outside this change surface and are not part of the required
 CI verdict. Locally, the focused tests, raw Ruff, compile check, repository-completeness check,
 controller-surface ratchet, and diff check passed. `tools/ci/run_pr_gate.py` was attempted once
