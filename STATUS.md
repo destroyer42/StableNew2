@@ -48,6 +48,22 @@ Updated: 2026-09-22
   the canonical queue/resolver path (49 frames, 24 fps, 832x480) with no GPU-loss recurrence.
   Required GitHub CI run 35729678881 passed Python 3.11 and 3.12; its informational full-suite
   jobs retain unrelated `xvfb-run` failures.
+  `PR-VID-150 — Wan2.2 Motion Characterization & Prompt Evidence` is **COMPLETE / QUALIFICATION
+  ONLY**, on branch `vid/150-wan22-motion-characterization`, not merged to `main`
+  (`docs/Subsystems/Video/PR-VID-150_Wan22_Motion_Characterization.md`). Three real jobs through
+  the canonical production path, same source/seed/settings, only the positive motion prompt
+  varied: a terse gesture baseline, a structured equivalent gesture, and a structured locomotion
+  request. Structured sequential prompting materially improved the local gesture (roughly 2x the
+  measured motion, smoother temporal metric, adherence intact, minor anatomy cost) versus the
+  terse baseline. The same structured style did not produce whole-body locomotion: the person's
+  feet stayed planted across the clip despite an explicit two-step request, with further anatomy
+  degradation on the swinging arm. Evidence classification:
+  `local_motion_viable_locomotion_weak`. Recommended next package: consumer-GPU motion-backend
+  qualification (a new candidate, likely FramePack and/or LTX-Video 2B) rather than further Wan
+  locomotion prompt tuning; Wan structured-prompt presets for gesture/pose motion remain a
+  separate, lower-effort candidate. No Wan production graph/settings changed; Wan remains
+  experimental and unpromoted. Three clean post-PR-VID-140 GPU exposures with no
+  DIAG-GPU-120/100 recurrence.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

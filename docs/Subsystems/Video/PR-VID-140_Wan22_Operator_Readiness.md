@@ -102,5 +102,6 @@ recurrence, not a PASS/FAIL or root-cause conclusion.
 
 ## Explicit exclusions
 
-No main integration, LTX bridge implementation, Comfy installation or environment repair, timeout
-increase, automatic retry, runtime adoption, GPU/system setting change, or second Wan generation.
+This package's original implementation boundary excluded LTX bridge implementation, Comfy
+installation or environment repair, timeout increase, automatic retry, runtime adoption,
+GPU/system setting change, and a second Wan generation beyond the one real acceptance run above.
