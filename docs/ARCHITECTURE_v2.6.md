@@ -356,6 +356,16 @@ a shared runtime abstraction is materially simpler without weakening typed
 image/video contracts. PR-IMG-100 must not create a premature universal backend
 registry merely because video already uses typed backend adapters.
 
+Before dispatching generation, the A1111, Comfy and native-SVD backends each ask one narrow,
+StableNew-owned coordinator (`RuntimeTransitionCoordinator.prepare_for`,
+`src/services/runtime_transition_service.py`) to release conflicting GPU-heavy residency that
+StableNew itself owns (PR-RUNTIME-100). It is not a second process manager or lifecycle authority:
+`WebUIProcessManager`, `ComfyProcessManager` and `SVDService` remain the sole owners of their own
+release/start operations, and an external or ambiguous runtime is never adopted, stopped or
+restarted — a blocking external runtime fails the job with operator guidance instead. Nothing is
+restarted after a job; the next job's own backend acquires what it needs as before. See
+`docs/Subsystems/Runtime/PR-RUNTIME-100_Owned_Runtime_Transition_Policy.md`.
+
 ## 9. Training execution
 
 Training is a valid typed NJR workload and may delegate to a runner-owned local

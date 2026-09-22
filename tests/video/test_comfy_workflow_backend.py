@@ -186,6 +186,8 @@ def test_comfy_workflow_backend_fails_fast_when_dependencies_missing(
     end_anchor.write_bytes(b"png")
 
     client = Mock()
+    transition = Mock()
+    transition.prepare_for.return_value = Mock(ready=True)
     client.get_object_info.return_value = {"models": {"checkpoints": []}}
     monkeypatch.setattr(
         "src.video.comfy_workflow_backend.wait_for_comfy_ready",
@@ -199,6 +201,7 @@ def test_comfy_workflow_backend_fails_fast_when_dependencies_missing(
     backend = ComfyWorkflowVideoBackend(
         client=client,
         process_manager=_ready_process_manager(),
+        transition=transition,
         history_poll_interval=0.01,
         history_timeout=1.0,
     )
@@ -221,6 +224,7 @@ def test_comfy_workflow_backend_fails_fast_when_dependencies_missing(
         assert "restart ComfyUI" in str(exc)
     else:
         raise AssertionError("Expected missing workflow dependencies to fail execution")
+    transition.prepare_for.assert_called_once_with("comfy")
 
 
 def test_comfy_workflow_backend_execute_segment_stamps_provenance(

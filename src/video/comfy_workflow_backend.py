@@ -9,6 +9,11 @@ from pathlib import Path
 from typing import Any
 
 from src.pipeline.artifact_contract import artifact_manifest_payload
+from src.services.runtime_transition_service import (
+    RUNTIME_COMFY,
+    RuntimeTransitionCoordinator,
+    RuntimeTransitionError,
+)
 from src.video.comfy_api_client import ComfyApiClient
 from src.video.comfy_dependency_probe import ComfyDependencyProbe
 from src.video.comfy_healthcheck import wait_for_comfy_ready
@@ -175,6 +180,7 @@ class ComfyWorkflowVideoBackend:
         depth_map_resolver: DepthMapResolver | None = None,
         process_manager: ComfyProcessManager | None = None,
         readiness: WorkflowResourceReadiness | None = None,
+        transition: RuntimeTransitionCoordinator | None = None,
         base_url: str = "http://127.0.0.1:8188",
         history_poll_interval: float = 0.5,
         history_timeout: float = 120.0,
@@ -185,6 +191,7 @@ class ComfyWorkflowVideoBackend:
         self._dependency_probe = dependency_probe
         self._depth_map_resolver = depth_map_resolver or DepthMapResolver()
         self._readiness = readiness or WorkflowResourceReadiness()
+        self._transition = transition or RuntimeTransitionCoordinator()
         self._process_manager = process_manager
         self._managed_process_manager: ComfyProcessManager | None = None
         self._base_url = str(base_url or "http://127.0.0.1:8188").rstrip("/")
@@ -239,6 +246,13 @@ class ComfyWorkflowVideoBackend:
                 f"Workflow '{spec.workflow_id}' is registered for backend '{spec.backend_id}', "
                 f"not '{self.backend_id}'"
             )
+
+        # Release conflicting StableNew-owned runtime residency (owned A1111, cached SVD state)
+        # before Comfy starts/serves; never touches an external runtime.  See PR-RUNTIME-100.
+        transition = self._transition.prepare_for(RUNTIME_COMFY)
+        if not transition.ready:
+            raise RuntimeTransitionError(transition)
+
         runtime_base_url = self._ensure_runtime_ready()
         client = self._client or ComfyApiClient(base_url=runtime_base_url)
 

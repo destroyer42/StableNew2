@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.services.runtime_transition_service import (
+    RUNTIME_SVD_NATIVE,
+    RuntimeTransitionCoordinator,
+    RuntimeTransitionError,
+)
 from src.video.motion.secondary_motion_provenance import extract_secondary_motion_summary
 from src.video.video_backend_types import (
     CONTROL_SOURCE_IMAGE,
@@ -22,7 +27,16 @@ class SVDNativeVideoBackend:
         required_controls=(CONTROL_SOURCE_IMAGE,),
     )
 
+    def __init__(self, *, transition: RuntimeTransitionCoordinator | None = None) -> None:
+        self._transition = transition or RuntimeTransitionCoordinator()
+
     def execute(self, pipeline: Any, request: VideoExecutionRequest) -> VideoExecutionResult | None:
+        # Release conflicting StableNew-owned runtime residency (owned A1111, owned Comfy) before
+        # native SVD loads; never touches an external runtime.  See PR-RUNTIME-100.
+        transition = self._transition.prepare_for(RUNTIME_SVD_NATIVE)
+        if not transition.ready:
+            raise RuntimeTransitionError(transition)
+
         result = pipeline.run_svd_native_stage(
             input_image_path=request.input_image_path,
             stage_config=dict(request.stage_config or {}),

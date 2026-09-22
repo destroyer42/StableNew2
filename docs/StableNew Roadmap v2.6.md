@@ -109,6 +109,14 @@ workstation since 2026-09-07 (suspects: DDR5-6000 memory OC, power delivery, dri
 doc). Whether to integrate any candidate is a product-owner decision; native SVD remains the
 only accepted video backend.
 
+`PR-RUNTIME-100 — Owned GPU Runtime Transition Policy` is in progress on its
+feature branch. It adds one narrow, target-driven coordinator that asks the
+existing A1111, Comfy, and SVD owners to release only conflicting runtime state
+they prove StableNew owns; it never adopts or mutates external processes, does
+not restore a previous runtime after a job, and does not add a scheduler, lease,
+queue authority, backend routing, or diagnosis of the separate workstation GPU
+reset problem.
+
 ### PR-MVP-045 — PromptPack draft, preview, and queue repair
 
 The production PromptPack workflow now expands Matrix selections into immutable

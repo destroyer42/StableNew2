@@ -255,6 +255,8 @@ def test_unknown_explicit_backend_fails_without_a1111_fallback(tmp_path: Path) -
 @pytest.mark.parametrize("stage_name", ["txt2img", "img2img", "adetailer", "upscale"])
 def test_a1111_adapter_delegates_each_supported_stage(stage_name: str, tmp_path: Path) -> None:
     pipeline = Mock()
+    transition = Mock()
+    transition.prepare_for.return_value = Mock(ready=True)
     method = getattr(pipeline, f"run_{stage_name}_stage")
     output = tmp_path / f"{stage_name}.png"
     method.return_value = {"path": str(output)}
@@ -263,7 +265,7 @@ def test_a1111_adapter_delegates_each_supported_stage(stage_name: str, tmp_path:
         input_path.write_bytes(b"input")
     token = object()
 
-    result = A1111WebUIImageBackend().execute(
+    result = A1111WebUIImageBackend(transition=transition).execute(
         pipeline,
         ImageExecutionRequest(
             backend_id="a1111_webui",
@@ -297,6 +299,7 @@ def test_a1111_adapter_delegates_each_supported_stage(stage_name: str, tmp_path:
 
     assert result is not None
     assert result.backend_id == "a1111_webui"
+    transition.prepare_for.assert_called_once_with("a1111_webui")
     method.assert_called_once()
     assert method.call_args.kwargs["cancel_token"] is token
     if stage_name == "txt2img":

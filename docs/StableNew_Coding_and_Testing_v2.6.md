@@ -161,6 +161,10 @@ requires an explicitly approved architecture exception.
 - Process-lifecycle tests may terminate only test-owned disposable processes.
   Mock `atexit.register` and restore cleanup globals/state so pytest never exits
   with a real runtime-cleanup callback armed.
+- Runtime-transition tests use fake owner managers and cache services. They must
+  prove owner-bound release, external-runtime immutability, action-required and
+  release-failure blocking through the ordinary queue/runner path; they never
+  acquire a real GPU-heavy runtime merely to exercise coordination.
 
 ## Semantic GUI operator journeys
 

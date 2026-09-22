@@ -11,6 +11,11 @@ from src.image_backends.image_backend_types import (
     ImageExecutionRequest,
     ImageExecutionResult,
 )
+from src.services.runtime_transition_service import (
+    RUNTIME_A1111_WEBUI,
+    RuntimeTransitionCoordinator,
+    RuntimeTransitionError,
+)
 
 
 class A1111WebUIImageBackend:
@@ -19,6 +24,9 @@ class A1111WebUIImageBackend:
         backend_id=backend_id,
         stage_types=("txt2img", "img2img", "adetailer", "upscale"),
     )
+
+    def __init__(self, *, transition: RuntimeTransitionCoordinator | None = None) -> None:
+        self._transition = transition or RuntimeTransitionCoordinator()
 
     @staticmethod
     def _stage_executor_config(request: ImageExecutionRequest) -> dict[str, Any]:
@@ -124,11 +132,21 @@ class A1111WebUIImageBackend:
         return {key: value for key, value in config.items() if value is not None}
 
     def execute(self, pipeline: Any, request: ImageExecutionRequest) -> ImageExecutionResult | None:
+        # Release conflicting StableNew-owned runtime residency (owned Comfy, cached SVD state)
+        # before A1111 is used; never touches an external runtime.  See PR-RUNTIME-100.
+        transition = self._transition.prepare_for(RUNTIME_A1111_WEBUI)
+        if not transition.ready:
+            raise RuntimeTransitionError(transition)
+
         if request.stage_name == "txt2img":
             config = self._txt2img_executor_config(request)
             result = pipeline.run_txt2img_stage(
-                request.prompt, request.negative_prompt, config, request.output_dir,
-                image_name=str(request.image_name or "txt2img"), cancel_token=request.cancel_token,
+                request.prompt,
+                request.negative_prompt,
+                config,
+                request.output_dir,
+                image_name=str(request.image_name or "txt2img"),
+                cancel_token=request.cancel_token,
                 learning_sample_names=request.learning_sample_names,
             )
         elif request.stage_name == "img2img":
@@ -136,8 +154,11 @@ class A1111WebUIImageBackend:
                 raise ValueError("img2img requires input image from previous stage")
             config = self._stage_executor_config(request)
             result = pipeline.run_img2img_stage(
-                input_image_path=request.input_image_path, prompt=request.prompt, config=config,
-                output_dir=request.output_dir, image_name=str(request.image_name or "img2img"),
+                input_image_path=request.input_image_path,
+                prompt=request.prompt,
+                config=config,
+                output_dir=request.output_dir,
+                image_name=str(request.image_name or "img2img"),
                 cancel_token=request.cancel_token,
             )
         elif request.stage_name == "adetailer":
@@ -152,9 +173,13 @@ class A1111WebUIImageBackend:
                 config["adetailer_negative_prompt"] = extra_negative
             config["adetailer_enabled"] = True
             result = pipeline.run_adetailer_stage(
-                input_image_path=request.input_image_path, config=config, output_dir=request.output_dir,
-                image_name=str(request.image_name or "adetailer"), prompt=request.prompt,
-                negative_prompt=request.negative_prompt, cancel_token=request.cancel_token,
+                input_image_path=request.input_image_path,
+                config=config,
+                output_dir=request.output_dir,
+                image_name=str(request.image_name or "adetailer"),
+                prompt=request.prompt,
+                negative_prompt=request.negative_prompt,
+                cancel_token=request.cancel_token,
             )
         elif request.stage_name == "upscale":
             if request.input_image_path is None:
@@ -163,8 +188,11 @@ class A1111WebUIImageBackend:
             config.setdefault("prompt", request.prompt)
             config.setdefault("negative_prompt", request.negative_prompt)
             result = pipeline.run_upscale_stage(
-                input_image_path=request.input_image_path, config=config, output_dir=request.output_dir,
-                image_name=str(request.image_name or "upscale"), cancel_token=request.cancel_token,
+                input_image_path=request.input_image_path,
+                config=config,
+                output_dir=request.output_dir,
+                image_name=str(request.image_name or "upscale"),
+                cancel_token=request.cancel_token,
             )
         else:
             raise ValueError(f"A1111 image backend does not support stage '{request.stage_name}'")
@@ -174,5 +202,8 @@ class A1111WebUIImageBackend:
             backend_id=self.backend_id,
             stage_name=request.stage_name,
             result=result,
-            backend_metadata={"backend_id": self.backend_id, "executor": f"pipeline.run_{request.stage_name}_stage"},
+            backend_metadata={
+                "backend_id": self.backend_id,
+                "executor": f"pipeline.run_{request.stage_name}_stage",
+            },
         )

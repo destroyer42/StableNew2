@@ -111,6 +111,8 @@ def test_animatediff_backend_normalizes_executor_result(tmp_path: Path) -> None:
 
 def test_svd_native_backend_normalizes_executor_result(tmp_path: Path) -> None:
     pipeline = Mock()
+    transition = Mock()
+    transition.prepare_for.return_value = Mock(ready=True)
     pipeline.run_svd_native_stage.return_value = {
         "path": str(tmp_path / "svd.mp4"),
         "video_path": str(tmp_path / "svd.mp4"),
@@ -128,7 +130,7 @@ def test_svd_native_backend_normalizes_executor_result(tmp_path: Path) -> None:
             "input_image_path": str(tmp_path / "seed.png"),
         },
     }
-    backend = SVDNativeVideoBackend()
+    backend = SVDNativeVideoBackend(transition=transition)
 
     result = backend.execute(
         pipeline,
@@ -148,6 +150,7 @@ def test_svd_native_backend_normalizes_executor_result(tmp_path: Path) -> None:
 
     assert result is not None
     assert result.backend_id == "svd_native"
+    transition.prepare_for.assert_called_once_with("svd_native")
     assert result.primary_path == str(tmp_path / "svd.mp4")
     assert result.manifest_path == str(tmp_path / "svd.json")
     variant_payload = result.to_variant_payload()
