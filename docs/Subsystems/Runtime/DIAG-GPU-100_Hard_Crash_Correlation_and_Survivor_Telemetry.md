@@ -139,5 +139,10 @@ verdict.
   ambient-runtime dependent in this workstation state: its fake runner reached
   the live external/ambiguous Comfy transition guard before its fake stage.
   This is neither a telemetry assertion failure nor a source regression.
+- Source commit `21ebc891dca02206a21c40144f0646b8bf628b51` passed GitHub Actions
+  run 35679785268 required Python 3.11 and 3.12 jobs. Its informational
+  full-suite jobs failed in the established broader-suite debt surface; the
+  workflow's required conclusion was success and DIAG-GPU-100 does not repair
+  unrelated suite failures.
 - No GPU, A1111, Comfy, SVD, process, driver, BIOS, registry, power, or stress
   operation was performed for DIAG-GPU-100 validation.

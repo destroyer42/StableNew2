@@ -9,6 +9,7 @@ Updated: 2026-09-21
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
 - Active objective: `DIAG-GPU-100 — Workstation Hard-Crash Correlation & Survivor Telemetry`;
   the forensic record and observation-only survivor telemetry are complete on its feature branch,
+  with GitHub Actions run 35679785268 required Python 3.11/3.12 jobs passing;
   but no root cause or workstation configuration change is accepted. `PR-LEARN-302`, `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
   `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE / ACCEPTED / INTEGRATED.
   `PR-IMG-110` is integrated; its Ideogram 4 "hardware no-go" is superseded by
