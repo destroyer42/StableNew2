@@ -32,13 +32,15 @@
     "dedupe_enabled": true,
     "preserve_lora_relative_order": true,
     "preserve_unknown_order": true,
-    "enable_score_based_classification": false,
-    "allow_subject_anchor_boost": false,
+    "enable_score_based_classification": true,
+    "allow_subject_anchor_boost": true,
     "log_before_after": true,
     "log_bucket_assignments": false,
     "large_chunk_warning_threshold": 18,
     "subject_anchor_boost_min_chunk_count": 8,
     "warn_on_large_chunk_count": true,
     "opt_out_pipeline_names": []
-  }
+  },
+  "global_positive_enabled": true,
+  "global_negative_enabled": true
 }
