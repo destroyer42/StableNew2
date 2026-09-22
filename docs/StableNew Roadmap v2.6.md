@@ -109,9 +109,8 @@ workstation since 2026-09-07 (suspects: DDR5-6000 memory OC, power delivery, dri
 doc). Whether to integrate any candidate is a product-owner decision; native SVD remains the
 only accepted video backend.
 
-`PR-RUNTIME-100 — Owned GPU Runtime Transition Policy` is COMPLETE / ACCEPTED on
-its feature branch; integration into `main` awaits explicit product-owner
-authorization. It adds one narrow, target-driven coordinator that asks the
+`PR-RUNTIME-100 — Owned GPU Runtime Transition Policy` is COMPLETE / ACCEPTED /
+INTEGRATED. It adds one narrow, target-driven coordinator that asks the
 existing A1111, Comfy, and SVD owners to release only conflicting runtime state
 they prove StableNew owns; a live/occupied configured endpoint without an owned
 manager handle is an immutable external conflict, so it never adopts or mutates

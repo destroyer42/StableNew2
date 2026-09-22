@@ -1,7 +1,6 @@
 # PR-RUNTIME-100 — Owned GPU Runtime Transition Policy
 
-Status: **COMPLETE / ACCEPTED ON FEATURE BRANCH `runtime/100-owned-transition-policy`; main
-integration awaits explicit product-owner authorization.** Coordination only: no scheduler, lease, second lifecycle authority, or model
+Status: **COMPLETE / ACCEPTED / INTEGRATED.** Coordination only: no scheduler, lease, second lifecycle authority, or model
 routing. Backend selection, NJR contents and the outer execution path
 (`Intent -> Compiler -> NJR -> JobService -> SQLite -> PipelineRunner.run_njr -> backend ->
 artifact/history`) are unchanged.
@@ -158,8 +157,9 @@ prepare_for(svd_native) -> status=ready, ownership_state={a1111_webui: absent, c
 
 This showed, on the real machine, that `get_global_webui_process_manager()` /
 `get_global_comfy_process_manager()` correctly report **no owned process** even while the operator's
-own A1111/Comfy are genuinely live and serving — so the coordinator takes zero action and calls
-neither manager's stop method, exactly as designed. The owned-release code path itself (manager
+own A1111/Comfy are genuinely live and serving. The zero process mutation was correct, but the
+manager-only observation incorrectly classified those conflicting endpoints as absent and returned
+`READY`; that classification defect is what the external-endpoint repair corrected. The owned-release code path itself (manager
 `stop()`/`stop_webui()` returning to a not-running state) is proven by the existing, accepted
 `WebUIProcessManager`/`ComfyProcessManager` ownership tests plus the fake-manager coordinator tests
 above; those existing tests were re-run and are unaffected (section 6).
