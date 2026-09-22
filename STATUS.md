@@ -37,6 +37,17 @@ Updated: 2026-09-22
   immutable; no runtime is restored after a job. It mitigates avoidable
   owned-runtime contention only and makes no claim about the separate
   workstation black-screen/GPU-reset diagnosis.
+  `PR-VID-140` Wan2.2 Operator Readiness is **COMPLETE / ACCEPTED ON FEATURE BRANCH**
+  (`docs/Subsystems/Video/PR-VID-140_Wan22_Operator_Readiness.md`), pending product-owner
+  integration authorization. LTX catalog metadata is retained but disabled because the required
+  `StableNewLTX*Bridge` implementations and accepted real evidence do not exist. Wan remains
+  experimental and per-job opt-in. Its source-aware preparation freezes portrait/square as
+  480x832 and landscape as 832x480 in the submitted NJR, along with the admission-frozen seed.
+  The owned Comfy manager now honors the configured 30-second readiness timeout and poll interval,
+  with bounded owned-process failure evidence. One managed real landscape run completed through
+  the canonical queue/resolver path (49 frames, 24 fps, 832x480) with no GPU-loss recurrence.
+  Required GitHub CI run 35729678881 passed Python 3.11 and 3.12; its informational full-suite
+  jobs retain unrelated `xvfb-run` failures.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
