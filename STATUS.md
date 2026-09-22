@@ -37,9 +37,9 @@ Updated: 2026-09-22
   immutable; no runtime is restored after a job. It mitigates avoidable
   owned-runtime contention only and makes no claim about the separate
   workstation black-screen/GPU-reset diagnosis.
-  `PR-VID-140` Wan2.2 Operator Readiness is **COMPLETE / ACCEPTED ON FEATURE BRANCH**
-  (`docs/Subsystems/Video/PR-VID-140_Wan22_Operator_Readiness.md`), pending product-owner
-  integration authorization. LTX catalog metadata is retained but disabled because the required
+  `PR-VID-140` Wan2.2 Operator Readiness is **COMPLETE / ACCEPTED / INTEGRATED**
+  (`docs/Subsystems/Video/PR-VID-140_Wan22_Operator_Readiness.md`). LTX catalog metadata is
+  retained but disabled because the required
   `StableNewLTX*Bridge` implementations and accepted real evidence do not exist. Wan remains
   experimental and per-job opt-in. Its source-aware preparation freezes portrait/square as
   480x832 and landscape as 832x480 in the submitted NJR, along with the admission-frozen seed.

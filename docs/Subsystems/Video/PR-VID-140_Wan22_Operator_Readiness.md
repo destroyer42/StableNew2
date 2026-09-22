@@ -1,8 +1,7 @@
 # PR-VID-140 â€” Wan2.2 Operator Readiness
 
-Status: **COMPLETE / ACCEPTED ON FEATURE BRANCH**. `main` integration remains pending explicit
-product-owner authorization. This package adds no backend, queue, lifecycle, scheduler, or
-runtime-ownership authority.
+Status: **COMPLETE / ACCEPTED / INTEGRATED**. This package adds no backend, queue, lifecycle,
+scheduler, or runtime-ownership authority.
 
 ## Execution profile and validation plan
 
