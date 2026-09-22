@@ -77,6 +77,44 @@ def test_survivor_telemetry_flushes_a_record_without_clean_close(tmp_path) -> No
     assert records[-1]["stage"] == "txt2img"
 
 
+def test_survivor_telemetry_records_resolved_video_identity_and_boundaries(tmp_path) -> None:
+    recorder = GpuSurvivorTelemetry(
+        job_id="video-job",
+        run_id="video-run",
+        workflow=["video_workflow"],
+        backend_id="a1111_webui",
+        output_dir=tmp_path,
+        interval_s=60,
+        snapshot_provider=_snapshot,
+        presence_provider=lambda: None,
+    )
+
+    recorder.start()
+    recorder.enter_stage("video_workflow")
+    recorder.update_execution_context(
+        backend_id="comfy",
+        workflow_id="wan22_ti2v_5b_i2v_v1",
+        workflow_version="1.0.0",
+    )
+    recorder.record_event("generation_dispatched")
+    recorder.record_event("publication_boundary")
+    recorder.close(outcome="completed")
+
+    records = _read_records(recorder.path)
+    assert [record.get("event") for record in records] == [
+        "job_started",
+        "stage_started",
+        "backend_resolved",
+        "generation_dispatched",
+        "publication_boundary",
+        "job_finished",
+    ]
+    for record in records[2:]:
+        assert record["backend_id"] == "comfy"
+        assert record["workflow_id"] == "wan22_ti2v_5b_i2v_v1"
+        assert record["workflow_version"] == "1.0.0"
+
+
 def test_survivor_telemetry_is_best_effort_when_snapshot_or_output_fails(tmp_path) -> None:
     def _broken_snapshot() -> None:
         raise RuntimeError("nvidia-smi unavailable")

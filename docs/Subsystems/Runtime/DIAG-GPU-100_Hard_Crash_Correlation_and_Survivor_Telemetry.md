@@ -9,7 +9,7 @@ process-lifecycle, or GPU-workload change.
 ## Execution profile
 
 - Classification: Standard local diagnostic/hardening work.
-- Model/reasoning recommendation: GPT-5.6 Terra — High. The work couples local
+- Model/reasoning recommendation: GPT-5.6 Luna — High. The work couples local
   Windows evidence, mutable user runtime state, and a narrow source seam; a
   lower nominal-cost model materially increases evidence-correlation and
   lifecycle-boundary retry risk.
@@ -46,21 +46,21 @@ cause. The machine-readable record is ignored runtime output:
 
 | Incident | OS/GPU evidence | Durable StableNew state | A1111 capture near incident | Classification |
 |---|---|---|---|---|
-| 2026-09-07 17:39:43 | KP41 | No active SQLite job | Progress capture | Open/no proven generation |
-| 2026-09-07 18:54:37 | KP41 | No active SQLite job | Progress plus CUDA unknown-error responses | Open/no proven generation |
-| 2026-09-07 19:34:25 | KP41 | No active SQLite job | Progress plus CUDA unknown-error responses | Open/no proven generation |
-| 2026-09-09 05:04:19 | KP41 | No active SQLite job | No retained window | Evidence unavailable |
-| 2026-09-09 05:48:04 | KP41; later BugCheck `0x133` record | No active SQLite job | Progress capture | Open/no proven generation |
-| 2026-09-13 18:57:58 | KP41 | No active SQLite job | Progress plus CUDA unknown-error responses | Open/no proven generation |
-| 2026-09-14 07:44:09 | KP41; later BugCheck `0x133` record | No active SQLite job | Progress capture | Open/no proven generation |
-| 2026-09-15 19:12:45 | KP41 | No active SQLite job | Files written after restart only | Evidence unavailable |
-| 2026-09-16 06:20:25 | KP41; `WATCHDOG` and `WATCHDOG4401` dumps timestamped 06:20:25 | No active SQLite job | Generation stopped at 37/47; CUDA unknown errors; new capture begins 06:26 | Open/no proven generation |
-| 2026-09-16 08:07:04 | KP41; `WATCHDOG` and `WATCHDOG4401` dumps timestamped 08:07:03 | No active SQLite job | Generation stopped at 12/30; CUDA unknown errors | Open/no proven generation |
-| 2026-09-18 05:30:39 | KP41 | No active SQLite job | No retained window | Evidence unavailable |
-| 2026-09-18 20:47:41 | KP41 | No active SQLite job | Progress plus CUDA unknown-error responses | Open/no proven generation |
-| 2026-09-19 14:17:52 | KP41 | No active SQLite job | Progress plus CUDA unknown-error responses | Open/no proven generation |
-| 2026-09-19 17:15:50 | KP41 | No active SQLite job | Progress plus CUDA unknown-error responses | Open/no proven generation |
-| 2026-09-21 08:19:03 | KP41 | No active SQLite job | No retained window | Evidence unavailable |
+| 2026-09-07 17:39:43 | KP41 | No active SQLite job; no nearby lifecycle row | Progress capture | Open/no proven generation |
+| 2026-09-07 18:54:37 | KP41 | No active SQLite job; no nearby lifecycle row | Progress plus CUDA unknown-error responses | Open/no proven generation |
+| 2026-09-07 19:34:25 | KP41 | No active SQLite job; no nearby lifecycle row | Progress plus CUDA unknown-error responses | Open/no proven generation |
+| 2026-09-09 05:04:19 | KP41 | No active SQLite job; no nearby lifecycle row | No retained window | Evidence unavailable |
+| 2026-09-09 05:48:04 | KP41; later BugCheck `0x133` record | No active SQLite job; no nearby lifecycle row | Progress capture | Open/no proven generation |
+| 2026-09-13 18:57:58 | KP41 | No active SQLite job; no nearby lifecycle row | Progress plus CUDA unknown-error responses | Open/no proven generation |
+| 2026-09-14 07:44:09 | KP41; later BugCheck `0x133` record | No active SQLite job; no nearby lifecycle row | Progress capture | Open/no proven generation |
+| 2026-09-15 19:12:45 | KP41 | No active SQLite job; no nearby lifecycle row | Files written after restart only | Evidence unavailable |
+| 2026-09-16 06:20:25 | KP41; `WATCHDOG` and `WATCHDOG4401` dumps timestamped 06:20:25 | No active SQLite job; no nearby lifecycle row | Generation stopped at 37/47; CUDA unknown errors; new capture begins 06:26 | Open/no proven generation |
+| 2026-09-16 08:07:04 | KP41; `WATCHDOG` and `WATCHDOG4401` dumps timestamped 08:07:03 | No active SQLite job; no nearby lifecycle row | Generation stopped at 12/30; CUDA unknown errors | Open/no proven generation |
+| 2026-09-18 05:30:39 | KP41 | No active SQLite job; no nearby lifecycle row | No retained window | Evidence unavailable |
+| 2026-09-18 20:47:41 | KP41 | No active SQLite job; no nearby lifecycle row | Progress plus CUDA unknown-error responses | Open/no proven generation |
+| 2026-09-19 14:17:52 | KP41 | No active SQLite job; 8 nearby jobs all started after incident (+474-594 s) | Progress plus CUDA unknown-error responses | Nearby lifecycle; no proven active generation |
+| 2026-09-19 17:15:50 | KP41 | No active SQLite job; no nearby lifecycle row | Progress plus CUDA unknown-error responses | Open/no proven generation |
+| 2026-09-21 08:19:03 | KP41 | No active SQLite job; no nearby lifecycle row | No retained window | Evidence unavailable |
 
 There were no WHEA records in the reviewed interval. `nvlddmkm` Event 153
 (`GPUID: 100`) occurred repeatedly in the same period, but was not present at
@@ -74,8 +74,12 @@ is claimed.
 The A1111 text reports `CUDA error: unknown error`; generic diagnostic text in
 those responses must not be read as a confirmed illegal-memory-access finding.
 The capture identifies an interrupted CUDA/A1111 workload, but cannot identify
-the request origin. It therefore does not overturn the SQLite finding that no
-StableNew queue job was active.
+the request origin. No StableNew SQLite job was active at exact recorded
+shutdown timestamps. Nearby lifecycle correlation must be considered separately;
+exact-time absence alone does not establish earlier StableNew execution could not
+have participated in the failure sequence. In the regenerated September record,
+the only nearby jobs were eight jobs that started after the 2026-09-19 14:17:52
+incident; no nearby terminal-before-incident job was observed.
 
 ## Ranked hypotheses
 
@@ -95,27 +99,39 @@ StableNew queue job was active.
    fit, but PSU/cabling/physical state were not observable and no sensor trace
    exists for a crash. No physical intervention was performed.
 4. **StableNew queue/orphan-thread execution defect — low confidence as the
-   immediate crash cause.** Every incident has zero active SQLite jobs; eleven
-   have A1111 activity without job provenance. This does not rule out a
-   separate residency/process issue, but it disproves a current claim that an
-   active StableNew queue job directly caused these incidents.
+   immediate crash cause.** Every incident has zero exact-time active SQLite
+   jobs; one incident also has nearby jobs, all starting after the incident,
+   while eleven have A1111 activity without job provenance. This does not rule
+   out a separate residency/process issue. Exact-time absence alone is not a
+   causal conclusion.
 
 ## Delivered observation boundary
 
 `GpuSurvivorTelemetry` begins only for a GPU-capable NJR inside
 `PipelineRunner.run_njr` (including train-LoRA). It records immediate job/stage
 events and approximately one-second samples with UTC and monotonic timestamps,
-job/run/backend/stage/workflow identity, GPU utilization/memory/temperature/
+job/run/backend/stage/workflow identity, resolved video backend/workflow identity,
+GPU utilization/memory/temperature/
 power/clocks/P-state/PCIe data, host available memory, and cheap process-risk
 presence at boundaries. Each small JSONL record is appended and fsynced; files
 rotate with a bounded retained history. Prior data is never deleted merely
 because a later process starts.
 
+The observer emits `backend_resolved`, `generation_dispatched` immediately before
+the selected image backend or resolver-returned video backend executes,
+`publication_boundary` only after successful output/checkpoint publication, and a
+terminal `job_finished` outcome. Neutral Comfy/Wan records `comfy` plus its
+workflow id/version; native SVD records `svd_native`; legacy video bridge work
+uses the same resolver-returned identity. Cancellation is recorded as
+`cancelled`, not as a successful runner finish.
+
 The recorder cannot alter an NJR, SQLite, queue state, retry/cancel outcome,
 GPU setting, A1111/Comfy/SVD process, or runtime ownership. A recorder failure
 is contained. `tools/diagnostics/correlate_gpu_incidents.py` reads SQLite in
-read-only mode and labels missing coverage as `evidence_unavailable` rather
-than treating it as absence of StableNew.
+read-only mode and reports exact active overlap separately from nearby lifecycle
+rows (`completed_before_incident`, `failed_before_incident`,
+`started_after_incident`, or `active_at_incident`). It preserves unknown and
+unavailable coverage rather than treating it as absence of StableNew.
 
 ## Next isolation experiment — requires owner approval
 
@@ -131,8 +147,8 @@ verdict.
 
 ## Validation
 
-- `8 passed`: survivor recorder, pipeline observer boundary, and synthetic
-  correlation coverage tests.
+- `15 passed`: survivor recorder, pipeline observer boundary, cancellation,
+  resolver identity, and synthetic correlation coverage tests.
 - Changed-file Ruff passed.
 - Controller surface ratchet passed; no controller source changed.
 - Existing `test_pipeline_runner_njr_diagnostics.py` was attempted but is

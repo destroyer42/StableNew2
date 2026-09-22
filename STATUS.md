@@ -131,9 +131,13 @@ leak and gives clean anatomy but the source person is still not reproduced, so t
 VACE's reference binding); SCAIL-2/Wan Animate 2 are deferred (14B, no credible 12-GB
 path). Wan2.2 is the only currently qualified directed-motion candidate. A GPU loss during
 qualification is one of 15 hard resets on the workstation since 2026-09-07. The
-read-only correlation record has no active SQLite job at any incident time, but
-has contemporaneous StableNew-captured A1111 CUDA failure/progress evidence for
-11 incidents; it does not attribute cause to StableNew. See
+read-only correlation record has no SQLite job active at any exact incident
+timestamp; nearby lifecycle correlation is reported separately (one incident
+has eight jobs that all started after the incident). It has contemporaneous
+StableNew-captured A1111 CUDA failure/progress evidence for 11 incidents and
+does not attribute cause to StableNew. Exact-time absence alone does not
+establish that earlier StableNew execution could not have participated in a
+failure sequence. See
 `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`.
 Whether to integrate any candidate is a product-owner decision; native SVD remains the
 only accepted video backend.

@@ -417,6 +417,7 @@ class PipelineRunner:
         cancel_token: CancelToken | None,
         variants: list[dict[str, Any]],
         metadata: dict[str, Any],
+        survivor_telemetry: GpuSurvivorTelemetry | None = None,
     ) -> list[str]:
         config_dict = self._stage_config_dict_for_video(njr, stage_name)
         # Explicit backend/task/controls are validated before any backend is called; stage-owned
@@ -425,6 +426,12 @@ class PipelineRunner:
             stage_name, config_dict, has_source_image=bool(current_stage_paths)
         )
         backend = self._video_resolver.resolve(stage_name, video_intent)
+        if survivor_telemetry is not None:
+            survivor_telemetry.update_execution_context(
+                backend_id=backend.backend_id,
+                workflow_id=video_intent.workflow_id,
+                workflow_version=video_intent.workflow_version,
+            )
         if stage_name == "animatediff":
             config_dict["enabled"] = True
             if njr.scheduler:
@@ -563,6 +570,8 @@ class PipelineRunner:
                 context_metadata=request_context_metadata,
             )
             self._video_resolver.apply(request, video_intent)
+            if survivor_telemetry is not None:
+                survivor_telemetry.record_event("generation_dispatched")
             execution_result = backend.execute(self._pipeline, request)
             if execution_result is None:
                 continue
@@ -710,6 +719,7 @@ class PipelineRunner:
         cancel_token: Any,
         variants: list[dict[str, Any]],
         metadata: dict[str, Any],
+        survivor_telemetry: GpuSurvivorTelemetry | None = None,
     ) -> list[str]:
         """Execute a multi-segment video_workflow sequence.
 
@@ -793,6 +803,7 @@ class PipelineRunner:
                 cancel_token=cancel_token,
                 variants=variants,
                 metadata=metadata,
+                survivor_telemetry=survivor_telemetry,
             )
 
             primary_output = seg_output_paths[0] if seg_output_paths else None
@@ -928,6 +939,7 @@ class PipelineRunner:
         variants: list[dict[str, Any]] = []
         success = False
         error: str | None = None
+        terminal_outcome: str | None = None
         started_at = time.monotonic()
         survivor_telemetry = self._start_gpu_survivor_telemetry(
             njr=njr,
@@ -1003,6 +1015,8 @@ class PipelineRunner:
                 ]
             )
             success = True
+            if survivor_telemetry is not None:
+                survivor_telemetry.record_event("publication_boundary")
             stage_events.append(
                 {
                     "stage": StageTypeEnum.TRAIN_LORA.value,
@@ -1014,7 +1028,11 @@ class PipelineRunner:
             )
             if survivor_telemetry is not None:
                 survivor_telemetry.leave_stage(StageTypeEnum.TRAIN_LORA.value)
+        except CancellationError:
+            terminal_outcome = "cancelled"
+            raise
         except Exception as exc:
+            terminal_outcome = "failed"
             error = str(exc)
             metadata.setdefault("duration_ms", int((time.monotonic() - started_at) * 1000))
             metadata.setdefault(
@@ -1040,7 +1058,9 @@ class PipelineRunner:
             )
         finally:
             if survivor_telemetry is not None:
-                survivor_telemetry.close(outcome="completed" if success else "failed")
+                survivor_telemetry.close(
+                    outcome=terminal_outcome or ("completed" if success else "failed")
+                )
 
         result = PipelineRunResult(
             run_id=njr.job_id,
@@ -1215,6 +1235,7 @@ class PipelineRunner:
             backend_id=image_backend_id or None,
         )
         telemetry_closed = False
+        terminal_outcome: str | None = None
 
         def _should_reraise_for_queue_retry(exc: Exception) -> bool:
             diagnostics = getattr(exc, "diagnostics_context", None)
@@ -1400,6 +1421,7 @@ class PipelineRunner:
                         prompt=stage.prompt_text,
                         negative_prompt=negative_prompt,
                         cancel_token=cancel_token,
+                        survivor_telemetry=survivor_telemetry,
                         selected_model=self._selected_stage_model(
                             "txt2img", config_dict, njr=njr
                         ),
@@ -1491,6 +1513,7 @@ class PipelineRunner:
                             prompt=prompt,
                             negative_prompt=negative_prompt,
                             cancel_token=cancel_token,
+                            survivor_telemetry=survivor_telemetry,
                             selected_model=self._selected_stage_model(
                                 "img2img", config_dict, njr=njr
                             ),
@@ -1636,6 +1659,7 @@ class PipelineRunner:
                             prompt=prompt,
                             negative_prompt=negative_prompt,
                             cancel_token=cancel_token,
+                            survivor_telemetry=survivor_telemetry,
                             selected_model=self._selected_stage_model(
                                 "adetailer", config_dict, njr=njr
                             ),
@@ -1820,6 +1844,7 @@ class PipelineRunner:
                             prompt=prompt,
                             negative_prompt=negative_prompt,
                             cancel_token=cancel_token,
+                            survivor_telemetry=survivor_telemetry,
                             selected_model=self._selected_stage_model(
                                 "upscale", config_dict, njr=njr
                             ),
@@ -1898,6 +1923,7 @@ class PipelineRunner:
                             cancel_token=cancel_token,
                             variants=variants,
                             metadata=metadata,
+                            survivor_telemetry=survivor_telemetry,
                         )
                     else:
                         current_stage_paths = self._execute_video_stage(
@@ -1910,6 +1936,7 @@ class PipelineRunner:
                             cancel_token=cancel_token,
                             variants=variants,
                             metadata=metadata,
+                            survivor_telemetry=survivor_telemetry,
                         )
                     logger.info(
                         "[BATCH_PIPELINE] %s completed %d output artifact(s)",
@@ -1937,6 +1964,8 @@ class PipelineRunner:
                         "cancelled": False,
                     }
                 )
+                if survivor_telemetry is not None and current_stage_paths:
+                    survivor_telemetry.record_event("publication_boundary")
                 if survivor_telemetry is not None:
                     survivor_telemetry.leave_stage(stage.stage_name)
 
@@ -1980,8 +2009,10 @@ class PipelineRunner:
                 )
                 metadata["adaptive_refinement"] = refinement_payload
         except CancellationError:
+            terminal_outcome = "cancelled"
             raise
         except Exception as exc:
+            terminal_outcome = "failed"
             error = str(exc)
             logger.error("[pipeline] execution failed: %s", exc, exc_info=True)
             stage_events.append(
@@ -1998,7 +2029,9 @@ class PipelineRunner:
                 raise
         finally:
             if survivor_telemetry is not None and not telemetry_closed:
-                survivor_telemetry.close(outcome="failed" if error else "runner_finished")
+                survivor_telemetry.close(
+                    outcome=terminal_outcome or ("runner_finished" if success else "failed")
+                )
                 telemetry_closed = True
             # PR-PIPE-001: Clear job ID from executor after execution
             self._pipeline._current_job_id = None
@@ -2200,15 +2233,14 @@ class PipelineRunner:
         cancel_token: CancelToken | None,
         selected_model: str | None,
         selected_vae: str | None,
+        survivor_telemetry: GpuSurvivorTelemetry | None = None,
         image_count: int = 1,
         learning_sample_names: bool = False,
     ) -> dict[str, Any] | None:
         backend = self._image_backends.get(backend_id)
         raw_config = thaw_json(getattr(njr, "config", {}))
         stage_data = dict(stage_config or {})
-        execution_result = backend.execute(
-            self._pipeline,
-            ImageExecutionRequest(
+        request = ImageExecutionRequest(
                 backend_id=backend_id,
                 stage_name=stage_name,
                 stage_config=dict(stage_config),
@@ -2255,8 +2287,10 @@ class PipelineRunner:
                     "stage": stage_name,
                     "provenance": thaw_json(getattr(njr, "extra_metadata", {})),
                 },
-            ),
         )
+        if survivor_telemetry is not None:
+            survivor_telemetry.record_event("generation_dispatched")
+        execution_result = backend.execute(self._pipeline, request)
         return execution_result.to_variant_payload() if execution_result else None
 
     def set_status_callback(self, callback: Callable[[dict[str, Any]], None] | None) -> None:

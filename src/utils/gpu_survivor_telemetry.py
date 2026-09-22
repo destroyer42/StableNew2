@@ -41,6 +41,8 @@ class GpuSurvivorTelemetry:
         run_id: str,
         workflow: list[str],
         backend_id: str | None,
+        workflow_id: str | None = None,
+        workflow_version: str | None = None,
         output_dir: Path | str = DEFAULT_OUTPUT_DIR,
         interval_s: float = 1.0,
         max_bytes: int = 2_000_000,
@@ -52,6 +54,8 @@ class GpuSurvivorTelemetry:
         self._run_id = str(run_id)
         self._workflow = [str(stage) for stage in workflow]
         self._backend_id = str(backend_id or "") or None
+        self._workflow_id = str(workflow_id or "") or None
+        self._workflow_version = str(workflow_version or "") or None
         self._stage: str | None = None
         self._output_dir = Path(output_dir)
         self._path = self._output_dir / "survivor.jsonl"
@@ -98,6 +102,38 @@ class GpuSurvivorTelemetry:
         with self._lock:
             self._stage = str(stage)
             self._record_event("stage_finished")
+
+    def update_execution_context(
+        self,
+        *,
+        backend_id: str | None = None,
+        workflow_id: str | None = None,
+        workflow_version: str | None = None,
+    ) -> None:
+        """Record the canonical backend/workflow resolved for the next dispatch."""
+
+        with self._lock:
+            if backend_id:
+                self._backend_id = str(backend_id)
+            if workflow_id:
+                self._workflow_id = str(workflow_id)
+            if workflow_version:
+                self._workflow_version = str(workflow_version)
+            self._record_event("backend_resolved")
+
+    def record_event(
+        self,
+        event: str,
+        *,
+        outcome: str | None = None,
+        include_presence: bool = False,
+    ) -> None:
+        """Record an observer-only execution boundary without changing runtime state."""
+
+        with self._lock:
+            self._record_event(
+                str(event), outcome=outcome, include_presence=include_presence
+            )
 
     def close(self, *, outcome: str) -> None:
         """Stop sampling and add one final best-effort job event."""
@@ -154,6 +190,8 @@ class GpuSurvivorTelemetry:
                 "backend_id": self._backend_id,
                 "stage": self._stage,
                 "workflow": list(self._workflow),
+                "workflow_id": self._workflow_id,
+                "workflow_version": self._workflow_version,
             }
 
     def _safe_snapshot(self) -> Mapping[str, Any] | None:

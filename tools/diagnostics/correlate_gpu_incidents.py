@@ -91,6 +91,113 @@ def _active_jobs(incident: datetime, jobs: Iterable[Mapping[str, Any]]) -> list[
     return active
 
 
+_TERMINAL_FAILURE_STATUSES = frozenset(
+    {
+        "failed",
+        "error",
+        "errored",
+        "cancelled",
+        "canceled",
+        "aborted",
+        "timed_out",
+        "timeout",
+    }
+)
+
+
+def _nearby_jobs(
+    incident: datetime,
+    jobs: Iterable[Mapping[str, Any]],
+    *,
+    window: timedelta,
+) -> list[dict[str, Any]]:
+    """Return lifecycle records near an incident without inferring causation.
+
+    A job is nearby when one of its durable lifecycle timestamps falls inside
+    the configured window, or when its known interval overlaps the incident.
+    The relation is deliberately descriptive: a completed or failed job near
+    an incident was not active at that incident unless its interval proves it.
+    """
+
+    selected: list[dict[str, Any]] = []
+    lower = incident - window
+    upper = incident + window
+    for job in jobs:
+        parsed = {
+            name: _safe_time(job.get(name))
+            for name in ("started_at", "completed_at", "updated_at")
+        }
+        started_at = parsed["started_at"]
+        completed_at = parsed["completed_at"]
+        updated_at = parsed["updated_at"]
+        active_at_incident = bool(
+            started_at is not None
+            and started_at <= incident
+            and (completed_at is None or completed_at >= incident)
+        )
+        lifecycle_times = [(name, value) for name, value in parsed.items() if value is not None]
+        in_window = any(lower <= value <= upper for _, value in lifecycle_times)
+        interval_overlaps = bool(
+            started_at is not None
+            and started_at <= upper
+            and (completed_at is None or completed_at >= lower)
+        )
+        if not in_window and not interval_overlaps:
+            continue
+
+        status = str(job.get("status") or "").strip().lower()
+        if active_at_incident:
+            relation = "active_at_incident"
+            relevant_name, relevant_time = "started_at", started_at
+        elif started_at is not None and started_at > incident and started_at <= upper:
+            relation = "started_after_incident"
+            relevant_name, relevant_time = "started_at", started_at
+        elif (
+            status in _TERMINAL_FAILURE_STATUSES
+            and (completed_at is not None and completed_at <= incident)
+        ):
+            relation = "failed_before_incident"
+            relevant_name, relevant_time = "completed_at", completed_at
+        elif completed_at is not None and completed_at <= incident:
+            relation = "completed_before_incident"
+            relevant_name, relevant_time = "completed_at", completed_at
+        elif updated_at is not None and updated_at <= incident:
+            relation = (
+                "failed_before_incident"
+                if status in _TERMINAL_FAILURE_STATUSES
+                else "completed_before_incident"
+            )
+            relevant_name, relevant_time = "updated_at", updated_at
+        else:
+            relation = "nearby_lifecycle"
+            relevant_name, relevant_time = min(
+                lifecycle_times, key=lambda item: abs(item[1] - incident)
+            )
+
+        selected.append(
+            {
+                "job_id": job.get("job_id"),
+                "status": job.get("status"),
+                "source": job.get("source"),
+                "started_at": job.get("started_at"),
+                "completed_at": job.get("completed_at"),
+                "updated_at": job.get("updated_at"),
+                "relation": relation,
+                "relevant_lifecycle_field": relevant_name,
+                "relevant_lifecycle_timestamp": (
+                    relevant_time.isoformat() if relevant_time is not None else None
+                ),
+                "delta_seconds": (
+                    round((relevant_time - incident).total_seconds(), 3)
+                    if relevant_time is not None
+                    else None
+                ),
+            }
+        )
+    selected.sort(key=lambda item: abs(float(item["delta_seconds"] or 0)))
+    return selected
+
+
 def _telemetry_near(
     incident: datetime,
     records: Iterable[Mapping[str, Any]],
@@ -136,6 +243,7 @@ def correlate(
     for raw_incident in incidents:
         timestamp = _parse_timestamp(str(raw_incident["timestamp_utc"]))
         active_jobs = _active_jobs(timestamp, jobs_list)
+        nearby_jobs = _nearby_jobs(timestamp, jobs_list, window=window)
         nearby_telemetry = _telemetry_near(timestamp, telemetry_list, window=window)
         telemetry_times = [
             sample_time
@@ -153,6 +261,8 @@ def correlate(
         ]
         if active_jobs or nearby_telemetry:
             classification = "proven_active_stablenew_gpu_work"
+        elif nearby_jobs:
+            classification = "nearby_stablenew_lifecycle_no_proven_active_generation"
         elif nearby_webui:
             classification = "stablenew_open_no_proven_active_generation"
         elif sqlite_available and telemetry_covers_incident and webui_available:
@@ -165,6 +275,7 @@ def correlate(
                 "incident": dict(raw_incident),
                 "classification": classification,
                 "active_sqlite_jobs": active_jobs,
+                "nearby_sqlite_jobs": nearby_jobs,
                 "nearby_survivor_telemetry": nearby_telemetry,
                 "nearby_webui_log_files": nearby_webui,
                 "source_availability": {

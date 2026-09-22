@@ -69,3 +69,68 @@ def test_correlation_uses_read_only_sqlite_lifecycle_and_survivor_records(tmp_pa
     assert result[0]["classification"] == "proven_active_stablenew_gpu_work"
     assert result[0]["active_sqlite_jobs"][0]["job_id"] == "job-1"
     assert result[0]["nearby_survivor_telemetry"][0]["stage"] == "txt2img"
+
+
+def test_correlation_distinguishes_nearby_terminal_jobs_from_active_jobs() -> None:
+    tool = _load_tool()
+    incident = "2026-09-16T06:20:25Z"
+    result = tool.correlate(
+        [{"timestamp_utc": incident}],
+        jobs=[
+            {
+                "job_id": "completed-before",
+                "status": "completed",
+                "started_at": "2026-09-16T06:18:00Z",
+                "completed_at": "2026-09-16T06:19:55Z",
+                "updated_at": "2026-09-16T06:19:55Z",
+                "source": "queue",
+            },
+            {
+                "job_id": "failed-before",
+                "status": "failed",
+                "started_at": "2026-09-16T06:17:00Z",
+                "completed_at": "2026-09-16T06:19:00Z",
+                "updated_at": "2026-09-16T06:19:00Z",
+                "source": "queue",
+            },
+            {
+                "job_id": "outside-window",
+                "status": "completed",
+                "started_at": "2026-09-16T05:00:00Z",
+                "completed_at": "2026-09-16T05:01:00Z",
+                "updated_at": "2026-09-16T05:01:00Z",
+                "source": "queue",
+            },
+        ],
+        telemetry=[],
+        webui_log_files=[],
+    )
+
+    nearby = {job["job_id"]: job for job in result[0]["nearby_sqlite_jobs"]}
+    assert result[0]["active_sqlite_jobs"] == []
+    assert result[0]["classification"] == "nearby_stablenew_lifecycle_no_proven_active_generation"
+    assert nearby["completed-before"]["relation"] == "completed_before_incident"
+    assert nearby["failed-before"]["relation"] == "failed_before_incident"
+    assert nearby["completed-before"]["delta_seconds"] < 0
+    assert "outside-window" not in nearby
+
+
+def test_correlation_normalizes_naive_local_and_aware_timestamps() -> None:
+    tool = _load_tool()
+    result = tool.correlate(
+        [{"timestamp_utc": "2026-09-16T06:20:25Z"}],
+        jobs=[
+            {
+                "job_id": "active-aware",
+                "status": "running",
+                "started_at": "2026-09-16T02:20:00-04:00",
+                "completed_at": None,
+                "updated_at": "2026-09-16T06:20:00+00:00",
+                "source": "queue",
+            }
+        ],
+        telemetry=None,
+        webui_log_files=None,
+    )
+    assert result[0]["active_sqlite_jobs"][0]["job_id"] == "active-aware"
+    assert result[0]["nearby_sqlite_jobs"][0]["relation"] == "active_at_incident"
