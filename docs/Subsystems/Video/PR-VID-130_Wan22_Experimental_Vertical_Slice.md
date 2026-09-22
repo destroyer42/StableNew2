@@ -79,6 +79,10 @@ box hidden).
   and RAM (9.8 GB), naming A1111 without touching it.
 - Ownership is unchanged: managed Comfy is the process StableNew launched; an external Comfy is never adopted,
   stopped or replaced (the existing manager still refuses to start over a healthy external endpoint).
+  VID-130 adds **no** production process-termination or restart authority. The only code that stops a process is
+  the local acceptance harness (`tools/acceptance/vid130_wan_acceptance.py`), and it may stop only the managed
+  Comfy process that its own run launched and still owns (`ComfyProcessManager.owns_process`); external runtimes
+  are never asked to stop.
 
 ## 6. Evidence
 
@@ -101,6 +105,15 @@ registry, StableNew-managed Comfy on the configured endpoint after the operator 
 | GPU | 71 C, 241 W | 72 C, 241 W, clock >= 2,610 MHz, throttle `0x405` |
 | Faults | none | none (no GPU loss, no reset) |
 
+The harness's first version orphaned the StableNew-launched Comfy when an exception occurred during closeout after
+the job had run (cleanup then covered only `run_once`). It is repaired: from the moment the runtime stack starts
+being built until `run_acceptance` returns, one `finally` runs `_teardown`, which stops the owned Comfy (never an
+unowned one), then the job runner, then closes the repository, each step guarded, never masking the run's own
+exception or turning a failed run into success, and preserving partial evidence. Covered by
+`tests/tools/test_vid130_acceptance_cleanup.py` (including the real controller->queue->`run_njr` path with a fake
+backend that fails in post-run evidence processing). The accepted real-GPU evidence below was produced before
+this repair and was not rerun.
+
 Run 1 exposed one real defect: a relative run directory made the artifact path join onto itself (and broke the
 container-metadata step). Fixed (`Path(...).resolve()`) with a regression test; run 2 shows correct artifact paths.
 Run 2 recorded job `9445ce93...`, backend `comfy`, task `image_to_video`, workflow `wan22_ti2v_5b_i2v_v1` `1.0.0`,
@@ -118,4 +131,5 @@ and reprocess builders, and every historical replayed NJR. Only `VideoWorkflowCo
 still needs all producers neutral plus proven replay normalization.
 
 Not in this diff: VACE, SCAIL/Wan Animate, alternate Wan quantizations, custom Comfy nodes, a GPU scheduler/lease,
-any process termination/restart, a new NJR field, or SVD changes.
+any production process termination/restart authority (the acceptance harness releases only the managed Comfy it
+launched), a new NJR field, or SVD changes.
