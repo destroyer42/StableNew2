@@ -54,6 +54,7 @@ from src.training.character_embedder import CharacterEmbedder
 from src.training.lora_manager import LoRAManager
 from src.utils import LogContext, StructuredLogger, get_logger, log_with_ctx
 from src.utils.config import ConfigManager
+from src.utils.gpu_survivor_telemetry import GpuSurvivorTelemetry
 from src.video.motion.secondary_motion_policy_service import SecondaryMotionPolicyService
 from src.video.motion.secondary_motion_provenance import build_secondary_motion_summary
 from src.video.video_backend_registry import (
@@ -113,6 +114,18 @@ def _build_secondary_motion_runtime_block(
 
 
 DEFAULT_JOB_TIMEOUT_SEC: float = 600.0
+GPU_CAPABLE_STAGE_NAMES = frozenset(
+    {
+        "txt2img",
+        "img2img",
+        "adetailer",
+        "upscale",
+        "animatediff",
+        "svd_native",
+        "video_workflow",
+        "train_lora",
+    }
+)
 
 
 class PipelineJobTimeoutError(Exception):
@@ -916,6 +929,17 @@ class PipelineRunner:
         success = False
         error: str | None = None
         started_at = time.monotonic()
+        survivor_telemetry = self._start_gpu_survivor_telemetry(
+            njr=njr,
+            run_id=njr.job_id,
+            workflow=[StageTypeEnum.TRAIN_LORA.value],
+            backend_id="character_training",
+        )
+        if survivor_telemetry is not None:
+            survivor_telemetry.enter_stage(
+                StageTypeEnum.TRAIN_LORA.value,
+                backend_id="character_training",
+            )
 
         try:
             self._ensure_not_cancelled(cancel_token, "train_lora setup")
@@ -988,6 +1012,8 @@ class PipelineRunner:
                     "output_paths": [weight_path],
                 }
             )
+            if survivor_telemetry is not None:
+                survivor_telemetry.leave_stage(StageTypeEnum.TRAIN_LORA.value)
         except Exception as exc:
             error = str(exc)
             metadata.setdefault("duration_ms", int((time.monotonic() - started_at) * 1000))
@@ -1012,6 +1038,9 @@ class PipelineRunner:
                     "error_message": error,
                 }
             )
+        finally:
+            if survivor_telemetry is not None:
+                survivor_telemetry.close(outcome="completed" if success else "failed")
 
         result = PipelineRunResult(
             run_id=njr.job_id,
@@ -1179,6 +1208,13 @@ class PipelineRunner:
             metadata["image_backend_id"] = image_backend_id
         metadata["output_dir"] = str(run_dir)
         metadata["output_route"] = output_route
+        survivor_telemetry = self._start_gpu_survivor_telemetry(
+            njr=njr,
+            run_id=run_id,
+            workflow=stage_chain,
+            backend_id=image_backend_id or None,
+        )
+        telemetry_closed = False
 
         def _should_reraise_for_queue_retry(exc: Exception) -> bool:
             diagnostics = getattr(exc, "diagnostics_context", None)
@@ -1298,6 +1334,11 @@ class PipelineRunner:
 
                 # PR-HARDEN-008: Enforce per-job wall-clock ceiling before each stage
                 self._check_job_deadline(job_start_time, stage.stage_name)
+                if survivor_telemetry is not None:
+                    survivor_telemetry.enter_stage(
+                        stage.stage_name,
+                        backend_id=image_backend_id or None,
+                    )
 
                 # Increment stage index for runtime status tracking
                 # (Will be reset to 0 at the start of next NJR execution)
@@ -1896,6 +1937,8 @@ class PipelineRunner:
                         "cancelled": False,
                     }
                 )
+                if survivor_telemetry is not None:
+                    survivor_telemetry.leave_stage(stage.stage_name)
 
                 # Increment stage index for next iteration
                 self._pipeline._current_stage_index += 1
@@ -1954,6 +1997,9 @@ class PipelineRunner:
             if checkpoint_callback is not None and _should_reraise_for_queue_retry(exc):
                 raise
         finally:
+            if survivor_telemetry is not None and not telemetry_closed:
+                survivor_telemetry.close(outcome="failed" if error else "runner_finished")
+                telemetry_closed = True
             # PR-PIPE-001: Clear job ID from executor after execution
             self._pipeline._current_job_id = None
             self._pipeline._current_njr_sha256 = None
@@ -2072,6 +2118,7 @@ class PipelineRunner:
         video_backend_registry: VideoBackendRegistry | None = None,
         character_embedder: CharacterEmbedder | None = None,
         lora_manager: LoRAManager | None = None,
+        survivor_telemetry_factory: Callable[..., GpuSurvivorTelemetry] | None = None,
     ) -> None:
         from src.pipeline.executor import Pipeline
 
@@ -2083,6 +2130,10 @@ class PipelineRunner:
         self._learning_record_callback = on_learning_record
         self._last_run_result: PipelineRunResult | None = None
         self._runs_base_dir = runs_base_dir or "output"
+        self._survivor_telemetry_factory = survivor_telemetry_factory or GpuSurvivorTelemetry
+        self._survivor_telemetry_output_dir = (
+            Path(self._runs_base_dir).parent / "reports" / "diagnostics" / "gpu_survivor"
+        )
         self._learning_enabled = bool(learning_enabled)
         self._sequencer = sequencer or StageSequencer()
         self._image_backends = image_backend_registry or build_default_image_backend_registry()
@@ -2092,6 +2143,32 @@ class PipelineRunner:
         self._secondary_motion_policy_service = SecondaryMotionPolicyService()
         self._character_embedder = character_embedder
         self._lora_manager = lora_manager
+
+    def _start_gpu_survivor_telemetry(
+        self,
+        *,
+        njr: NormalizedJobRecord,
+        run_id: str,
+        workflow: list[str],
+        backend_id: str | None,
+    ) -> GpuSurvivorTelemetry | None:
+        """Start an observation-only recorder for a GPU-capable job."""
+
+        if not any(stage in GPU_CAPABLE_STAGE_NAMES for stage in workflow):
+            return None
+        try:
+            recorder = self._survivor_telemetry_factory(
+                job_id=njr.job_id,
+                run_id=run_id,
+                workflow=workflow,
+                backend_id=backend_id,
+                output_dir=self._survivor_telemetry_output_dir,
+            )
+            recorder.start()
+            return recorder
+        except Exception:
+            logger.debug("GPU survivor telemetry could not start", exc_info=True)
+            return None
 
     def _resolve_image_backend_id(self, njr: NormalizedJobRecord, stage_names: list[str]) -> str:
         """Resolve and validate one image backend before any stage dispatch."""

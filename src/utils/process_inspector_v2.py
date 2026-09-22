@@ -245,6 +245,84 @@ def collect_gpu_snapshot() -> dict[str, object] | None:
     return {"provider": "nvidia-smi", "devices": devices}
 
 
+def collect_gpu_survivor_snapshot(*, timeout_s: float = 1.0) -> dict[str, object] | None:
+    """Return compact best-effort metrics for durable GPU incident telemetry.
+
+    This is deliberately observational: it only invokes ``nvidia-smi`` and
+    reads host available memory.  Callers must treat missing values as unknown,
+    never as evidence that a GPU or process was absent.
+    """
+
+    nvidia_smi = shutil.which("nvidia-smi")
+    if not nvidia_smi:
+        return None
+    fields = (
+        "index,name,utilization.gpu,memory.total,memory.used,temperature.gpu,"
+        "power.draw,power.limit,clocks.gr,clocks.mem,pstate,"
+        "pcie.link.gen.current,pcie.link.width.current"
+    )
+    try:
+        result = subprocess.run(
+            [nvidia_smi, f"--query-gpu={fields}", "--format=csv,noheader,nounits"],
+            capture_output=True,
+            text=True,
+            timeout=max(0.1, float(timeout_s)),
+            check=False,
+        )
+    except Exception:
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+
+    keys = (
+        "index",
+        "name",
+        "utilization_gpu_pct",
+        "memory_total_mb",
+        "memory_used_mb",
+        "temperature_c",
+        "power_draw_w",
+        "power_limit_w",
+        "graphics_clock_mhz",
+        "memory_clock_mhz",
+        "pstate",
+        "pcie_link_generation",
+        "pcie_link_width",
+    )
+    numeric_keys = set(keys) - {"name", "pstate"}
+    devices: list[dict[str, object]] = []
+    for line in result.stdout.splitlines():
+        values = [value.strip() for value in line.split(",")]
+        if len(values) != len(keys):
+            continue
+        device: dict[str, object] = {}
+        for key, value in zip(keys, values, strict=True):
+            if value.upper() in {"N/A", "[N/A]", ""}:
+                device[key] = None
+            elif key in numeric_keys:
+                try:
+                    device[key] = int(float(value)) if key in {"index", "pcie_link_generation", "pcie_link_width"} else float(value)
+                except ValueError:
+                    device[key] = None
+            else:
+                device[key] = value
+        devices.append(device)
+    if not devices:
+        return None
+
+    host_available_memory_mb: float | None = None
+    if psutil is not None:
+        try:
+            host_available_memory_mb = round(psutil.virtual_memory().available / (1024 * 1024), 1)
+        except Exception:
+            pass
+    return {
+        "provider": "nvidia-smi",
+        "devices": devices,
+        "host_available_memory_mb": host_available_memory_mb,
+    }
+
+
 def collect_process_risk_snapshot(
     *,
     rss_mb_threshold: float = 512.0,

@@ -34,6 +34,13 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/queue/job_history_store.py`, and `src/history/`.
 - Execution: `src/queue/single_node_runner.py`,
   `src/pipeline/pipeline_runner.py`, and `src/pipeline/executor.py`.
+- GPU hard-crash evidence (observation only):
+  `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`
+  -> `src/utils/gpu_survivor_telemetry.py` ->
+  `src/utils/process_inspector_v2.py::collect_gpu_survivor_snapshot` ->
+  `src/pipeline/pipeline_runner.py`; offline correlation is
+  `tools/diagnostics/correlate_gpu_incidents.py`. These surfaces do not own
+  queue state, runtime lifecycle, GPU settings, or execution control.
 - Current A1111 image implementation boundary: `src/api/`,
   `src/pipeline/payload_builder.py`, and the typed image handlers in
   `src/pipeline/executor.py`.

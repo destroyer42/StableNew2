@@ -7,7 +7,9 @@ Updated: 2026-09-21
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active objective: none; `PR-LEARN-302`, `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
+- Active objective: `DIAG-GPU-100 — Workstation Hard-Crash Correlation & Survivor Telemetry`;
+  the forensic record and observation-only survivor telemetry are complete on its feature branch,
+  but no root cause or workstation configuration change is accepted. `PR-LEARN-302`, `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
   `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE / ACCEPTED / INTEGRATED.
   `PR-IMG-110` is integrated; its Ideogram 4 "hardware no-go" is superseded by
   `PR-IMG-110R` (Ideogram 4 NF4 PASS — CONSTRAINED on the 12-GB target; COMPLETE /
@@ -127,9 +129,12 @@ stock-Canny and pose-skeleton-only control modes (pose control removes the scene
 leak and gives clean anatomy but the source person is still not reproduced, so the limit is
 VACE's reference binding); SCAIL-2/Wan Animate 2 are deferred (14B, no credible 12-GB
 path). Wan2.2 is the only currently qualified directed-motion candidate. A GPU loss during
-qualification is one of about 15 unexplained hard resets on the
-workstation since 2026-09-07 (suspects: DDR5-6000 memory OC, power delivery, driver; see the
-doc). Whether to integrate any candidate is a product-owner decision; native SVD remains the
+qualification is one of 15 hard resets on the workstation since 2026-09-07. The
+read-only correlation record has no active SQLite job at any incident time, but
+has contemporaneous StableNew-captured A1111 CUDA failure/progress evidence for
+11 incidents; it does not attribute cause to StableNew. See
+`docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`.
+Whether to integrate any candidate is a product-owner decision; native SVD remains the
 only accepted video backend.
 Current Global Positive/Negative text and enablement are frozen into each
 compiled NJR (Learning, PromptPack, and generic jobs) rather than read at
@@ -450,7 +455,8 @@ passed on the accepted source tree, including required Python 3.11 and 3.12.
 
 1. Maintain the accepted v2.6 and IMG-100 baseline pending explicit product-owner direction.
 
-Next action: **await explicit product-owner direction**.
+Next action: **await explicit owner approval for the DIAG-GPU-100 Intel-baseline/DDR5-5600
+isolation; until then, collect survivor telemetry only during ordinary GPU jobs.**
 
 PR-MVP-090 is **COMPLETE / ACCEPTED / INTEGRATED**. The final real-backend
 release proof completed without production source changes.
