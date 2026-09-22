@@ -2,10 +2,11 @@
 
 ## Status
 
-**Evidence record complete on `diag/gpu-110-windbg-attribution`; no
-component-level root cause or workstation change is accepted.** This is a
-read-only attribution pass over surviving dumps. It does not authorize a
-driver, BIOS, power, memory, cabling, registry, process, or workload change.
+**DIAG-GPU-110 — COMPLETE / ACCEPTED / INTEGRATED.** The evidence record
+establishes strong cross-incident convergence on the Windows
+black-screen/display capture domain, without driver- or component-level
+attribution. It does not authorize a driver, BIOS, power, memory, cabling,
+registry, process, or workload change.
 
 ## Execution profile
 
@@ -90,27 +91,31 @@ not as request-provenance evidence.
 
 ## Attribution and decision gate
 
-**Classification: display-stack-domain convergence with generic, unresolved
-`0x133` DPC attribution.** Confidence is high that the 2026-09-16 artifacts are
-display black-screen captures; confidence is low for any individual driver or
-physical component. The two inaccessible `0x133` dumps prevent the required
-triage-block and `!dpcs` inspection, so this pass cannot elevate NVIDIA,
-another third-party driver, PCIe/power, StableNew, or a CUDA workload to a
-root-cause finding.
+**Classification: strong cross-incident convergence on the Windows
+black-screen/display capture domain, without driver- or component-level
+attribution; generic, unresolved `0x133` DPC attribution.** Confidence is high
+that the 2026-09-16 artifacts are display black-screen captures; confidence is
+low for any individual driver or physical component. The two inaccessible
+`0x133` dumps prevent the required triage-block and `!dpcs` inspection, so this
+pass cannot elevate NVIDIA, another third-party driver, PCIe/power, StableNew,
+or a CUDA workload to a root-cause finding.
 
-The applicable next path is **C — the already-proposed Intel/ASRock stability
-baseline plus DDR5-5600 isolation**, subject to explicit product-owner approval.
-It is selected because the recurring `0x133 Arg1=1` records remain generic and
-unattributed, while the display captures provide failure-domain correlation but
-not NVIDIA-driver attribution. It is a single-variable isolation, not a remedy
-claim. No part of that experiment was performed here.
+The applicable next path is **C — disable XMP and establish DDR5 at the
+CPU-supported 5600 MT/s baseline as one variable**, subject to the separately
+authorized isolation objective. It is selected because the recurring
+`0x133 Arg1=1` records remain generic and unattributed, while the display
+captures provide failure-domain correlation but not NVIDIA-driver attribution.
+It is a single-variable isolation, not a remedy claim. No part of that
+experiment was performed here.
 
-Before any such owner-approved change, preserve/copy the two `0x133` minidumps
+Before that owner-authorized change, preserve/copy the two `0x133` minidumps
 through a normal administrator-supported Windows evidence workflow and rerun
 the prescribed `!analyze -v`, `.bugcheck`, `kv`, `!dpcs`, module, and triage
-block commands. Do not combine that future baseline with a driver cleanup,
-HAGS, GPU power/clock, VBIOS, cabling, or physical-inspection change. No
-evidence in this record triggers the powered-off hardware-inspection path.
+block commands. Do not combine the future XMP-off/5600 experiment with CPU
+Baseline/Default profile changes, BIOS flashing, NVIDIA-driver changes, HAGS,
+Windows power-plan changes, GPU clocks/power changes, or physical GPU/PSU
+intervention. No evidence in this record triggers the powered-off
+hardware-inspection path.
 
 ## Validation and scope boundary
 
