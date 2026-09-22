@@ -1,6 +1,6 @@
 # PR-VID-150 — Wan2.2 Motion Characterization & Prompt Evidence
 
-Status: **COMPLETE / QUALIFICATION ONLY**. This package adds no backend, queue, lifecycle,
+Status: **COMPLETE / ACCEPTED / INTEGRATED**. This package adds no backend, queue, lifecycle,
 scheduler, runtime-ownership, or production-graph authority. It changes no Wan production
 setting. Whether to act on its recommendation is a separate product-owner decision.
 
@@ -228,5 +228,7 @@ should not be expected to solve locomotion.
 
 No new video backend, no Wan production graph/settings change, no resolution/frame-count increase,
 no promotion of Wan from experimental, no Video Workflow UI redesign, no Learning integration, no
-autonomous prompt rewriting, no fourth generation, no automatic retry, no GPU/BIOS/driver change,
-and no `main` integration of this branch (product-owner review required).
+autonomous prompt rewriting, no fourth generation, no automatic retry, and no GPU/BIOS/driver
+change. This package's original implementation boundary excluded `main` integration pending
+product-owner review of the aggregate diff; that review is recorded in this document's closeout
+and integration proceeded fast-forward-only with no additional source change.

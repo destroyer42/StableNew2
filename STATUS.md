@@ -48,8 +48,8 @@ Updated: 2026-09-22
   the canonical queue/resolver path (49 frames, 24 fps, 832x480) with no GPU-loss recurrence.
   Required GitHub CI run 35729678881 passed Python 3.11 and 3.12; its informational full-suite
   jobs retain unrelated `xvfb-run` failures.
-  `PR-VID-150 — Wan2.2 Motion Characterization & Prompt Evidence` is **COMPLETE / QUALIFICATION
-  ONLY**, on branch `vid/150-wan22-motion-characterization`, not merged to `main`
+  `PR-VID-150 — Wan2.2 Motion Characterization & Prompt Evidence` is **COMPLETE / ACCEPTED /
+  INTEGRATED**
   (`docs/Subsystems/Video/PR-VID-150_Wan22_Motion_Characterization.md`). Three real jobs through
   the canonical production path, same source/seed/settings, only the positive motion prompt
   varied: a terse gesture baseline, a structured equivalent gesture, and a structured locomotion
