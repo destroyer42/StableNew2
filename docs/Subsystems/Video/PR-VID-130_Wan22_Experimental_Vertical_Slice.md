@@ -1,7 +1,6 @@
 # PR-VID-130 — Wan2.2 Experimental Prompt-Directed I2V Vertical Slice
 
-Status: **implemented and physically accepted on branch `video/130-wan22-experimental`; awaiting
-product-owner acceptance/integration.** One real Wan2.2 TI2V-5B job ran through the production path
+Status: **COMPLETE / ACCEPTED / INTEGRATED** (physically accepted on the target machine). One real Wan2.2 TI2V-5B job ran through the production path
 on the RTX 4070 Ti 12 GB. Native SVD remains the accepted, default production video backend and is
 unchanged. Wan2.2 is **experimental and opt-in**: it is never approved, never a default, and makes
 no identity-preservation or performance-transfer claim. VACE-1.3B stays NO-GO and unregistered.
