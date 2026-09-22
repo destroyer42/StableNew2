@@ -67,6 +67,26 @@ Updated: 2026-09-22
   gesture/pose motion remain a separate, lower-effort candidate. No Wan production graph/settings
   changed; Wan remains experimental and unpromoted. Three clean post-PR-VID-140 GPU exposures with
   no DIAG-GPU-120/100 recurrence.
+  `PR-VID-160A — Consumer-GPU Directed-Motion Candidate Feasibility` is **COMPLETE / ACCEPTED /
+  INTEGRATED**
+  (`docs/Subsystems/Video/PR-VID-160A_Consumer_GPU_Motion_Candidate_Feasibility.md`), superseding
+  PR-VID-150's tentative "FramePack and/or LTX-Video 2B" framing with a researched decision.
+  Evidence classification: `BOUNDED_FEASIBILITY_PROBE_REQUIRED`. Wan2.2-Animate-14B Move mode
+  (motion transferred from a driving video onto a reference-image character, rather than
+  text-prompted motion) is the single lead feasibility candidate: it directly targets the
+  PR-VID-150 locomotion gap and structurally separates identity from motion, addressing the
+  PR-VID-110 VACE reference-binding failure. LTX-2 and HunyuanVideo-1.5 fail current official
+  hard hardware gates for the RTX 4070 Ti 12 GB target; FramePack's official low-VRAM claim is
+  contradicted by unresolved upstream evidence and has a weaker Comfy integration fit; legacy
+  LTX-Video 2B remains an unverified, vendor-deprioritized fallback. For Wan2.2-Animate-14B, Gate
+  C (12 GB VRAM) remains plausible on community GGUF evidence but unproven at StableNew's exact
+  settings, and Gate D (32 GB host RAM) remains the principal open resource risk: StableNew's own
+  accepted Wan2.2 5B telemetry already shows near-zero available host-RAM headroom, and community
+  reports in the same wrapper ecosystem describe far worse memory pressure on 14B-class models. No
+  model or backend is yet accepted; no model was installed and no environment or GPU state changed
+  to produce this evidence. Next objective: `PR-VID-160B — Wan2.2-Animate Target-Hardware
+  Feasibility Probe`, a bounded resource-feasibility probe (not model installation or full
+  qualification) requiring separate explicit authorization.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

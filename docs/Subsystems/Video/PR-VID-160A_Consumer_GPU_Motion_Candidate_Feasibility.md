@@ -1,8 +1,8 @@
 # PR-VID-160A — Consumer-GPU Directed-Motion Candidate Feasibility
 
-Status: **COMPLETE / RESEARCH-DECISION EVIDENCE ONLY**. No model was downloaded, no environment
-was changed, no GPU workload ran, and no production source changed. Start
-`main @ 1b01ab5451a9cc8b86623728ac7fbbd03b379f34`.
+Status: **COMPLETE / ACCEPTED / INTEGRATED**. This is research/decision evidence only: no model was
+downloaded, no environment was changed, no GPU workload ran, and no production source changed.
+Start `main @ 1b01ab5451a9cc8b86623728ac7fbbd03b379f34`.
 
 ## Purpose
 
@@ -304,5 +304,6 @@ run on the new file.
 No model was downloaded or installed. No Python/CUDA/driver/environment change was made. No GPU
 generation ran. No production `src/` file changed. No queue/history/runner/backend authority
 changed. Wan production settings/governance are unchanged; Wan2.2 TI2V-5B remains the only
-integrated Wan workflow and remains experimental. This package does not authorize PR-VID-160
-physical qualification; it only recommends the smallest next probe.
+integrated Wan workflow and remains experimental. Integrating this research/decision document does
+not authorize PR-VID-160B physical qualification, model installation, or environment mutation; it
+only accepts the feasibility-probe direction and recommends the smallest next probe.
