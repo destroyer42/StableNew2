@@ -7,12 +7,13 @@ Updated: 2026-09-22
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active diagnostic evidence: `DIAG-GPU-110 — Windows Dump Attribution & Driver Stack Analysis`;
-  **COMPLETE / ACCEPTED / INTEGRATED**. Its read-only report establishes strong cross-incident
-  convergence on the Windows black-screen/display capture domain, without driver- or
-  component-level attribution. The two `0x133` minidumps remain access-restricted; no
-  individual driver, StableNew, or hardware root cause and no workstation configuration change
-  is accepted. `DIAG-GPU-100` remains
+- Active diagnostic evidence: `DIAG-GPU-120 — DDR5-5600 XMP Isolation` — **OBSERVATION IN
+  PROGRESS**. The operator changed XMP DDR5-6000 to XMP DDR5-5600; XMP remains enabled. This
+  is an isolation experiment, not a PASS, stability fix, or root-cause verdict. `DIAG-GPU-110`
+  is **COMPLETE / ACCEPTED / INTEGRATED**: its read-only report establishes strong
+  cross-incident convergence on the Windows black-screen/display capture domain, without
+  driver- or component-level attribution. The two `0x133` minidumps remain access-restricted;
+  no individual driver, StableNew, or hardware root cause is accepted. `DIAG-GPU-100` remains
   **COMPLETE / ACCEPTED / INTEGRATED**, including its observation-only survivor telemetry and
   GitHub Actions run 35681930199 required Python 3.11/3.12 evidence. `PR-LEARN-302`, `PR-TEST-OPERATOR-110`, `PR-LEARN-301`,
   `PR-TEST-OPERATOR-100` and `PR-LEARN-300` are COMPLETE / ACCEPTED / INTEGRATED.
@@ -145,8 +146,8 @@ failure sequence. See
 `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`.
 The read-only dump attribution follow-up is
 `docs/Subsystems/Runtime/DIAG-GPU-110_Windows_Dump_Attribution.md`; it selects no
-remediation. The separately authorized next isolation is one variable only: disable XMP and
-establish DDR5 at the CPU-supported 5600 MT/s baseline.
+remediation. DIAG-GPU-120 records the already-performed one-variable transition from XMP
+DDR5-6000 to XMP DDR5-5600; it does not disable XMP or establish a JEDEC baseline.
 Whether to integrate any candidate is a product-owner decision; native SVD remains the
 only accepted video backend.
 Current Global Positive/Negative text and enablement are frozen into each
@@ -468,9 +469,9 @@ passed on the accepted source tree, including required Python 3.11 and 3.12.
 
 1. Maintain the accepted v2.6 and IMG-100 baseline pending explicit product-owner direction.
 
-Next action: **perform the separately authorized DIAG-GPU-110 isolation: disable XMP and
-establish DDR5 at the CPU-supported 5600 MT/s baseline as one variable; do not combine it with
-any CPU profile, BIOS, driver, HAGS, power-plan, GPU-power/clock, or physical-hardware change.**
+Next action: **DIAG-GPU-120 ordinary-use observation at XMP DDR5-5600. Do not introduce a
+second variable; preserve survivor telemetry and capture Windows evidence if the established
+black-screen/GPU-loss failure recurs.**
 
 PR-MVP-090 is **COMPLETE / ACCEPTED / INTEGRATED**. The final real-backend
 release proof completed without production source changes.
