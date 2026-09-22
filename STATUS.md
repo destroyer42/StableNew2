@@ -59,11 +59,14 @@ Updated: 2026-09-22
   feet stayed planted across the clip despite an explicit two-step request, with further anatomy
   degradation on the swinging arm. Evidence classification:
   `local_motion_viable_locomotion_weak`. Recommended next package: consumer-GPU motion-backend
-  qualification (a new candidate, likely FramePack and/or LTX-Video 2B) rather than further Wan
-  locomotion prompt tuning; Wan structured-prompt presets for gesture/pose motion remain a
-  separate, lower-effort candidate. No Wan production graph/settings changed; Wan remains
-  experimental and unpromoted. Three clean post-PR-VID-140 GPU exposures with no
-  DIAG-GPU-120/100 recurrence.
+  qualification (a candidate better suited to whole-body/directed motion) rather than further Wan
+  locomotion prompt tuning; FramePack and/or an LTX-Video 2B research lane are plausible starting
+  points but neither is selected or locked in, and candidate selection requires a fresh
+  research/feasibility comparison against current upstream implementations and the RTX 4070 Ti
+  12 GB / 32 GB RAM target before any qualification work begins. Wan structured-prompt presets for
+  gesture/pose motion remain a separate, lower-effort candidate. No Wan production graph/settings
+  changed; Wan remains experimental and unpromoted. Three clean post-PR-VID-140 GPU exposures with
+  no DIAG-GPU-120/100 recurrence.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

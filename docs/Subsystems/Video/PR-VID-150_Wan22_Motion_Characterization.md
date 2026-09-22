@@ -174,10 +174,14 @@ on the moving limb degraded further under the harder motion request.
 ## Recommended next package
 
 Per the evidence classification, the next highest-value investment is **consumer-GPU
-motion-backend qualification** (a new candidate — likely FramePack and/or LTX-Video 2B research
-lane) rather than further Wan2.2 prompt tuning for locomotion; Wan2.2 structured-prompt presets
-for local gesture/pose motion remain a reasonable, separate, lower-effort follow-up for operator
-presets given the clean A→B result, but should not be expected to solve locomotion.
+motion-backend qualification** — a new candidate better suited to whole-body/directed motion —
+rather than further Wan2.2 prompt tuning for locomotion. FramePack and/or an LTX-Video 2B research
+lane are plausible starting points based on their public positioning, but neither is selected or
+locked in by this package: candidate selection requires a fresh research/feasibility comparison
+against current upstream implementations and the RTX 4070 Ti 12 GB / 32 GB RAM target before any
+qualification work begins. Wan2.2 structured-prompt presets for local gesture/pose motion remain a
+reasonable, separate, lower-effort follow-up for operator presets given the clean A→B result, but
+should not be expected to solve locomotion.
 
 ## Architecture and lifetime review
 
