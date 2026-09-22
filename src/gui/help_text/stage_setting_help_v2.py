@@ -127,6 +127,7 @@ VIDEO_WORKFLOW_SETTING_HELP = {
     "end_anchor": "Optional image that the sequence should move toward. Use it only for workflows designed to honor end-state guidance.",
     "mid_anchors": "Optional semicolon-separated guide images for intermediate beats. Add them when a workflow supports staged transitions and the sequence needs stronger structural guidance across time.",
     "motion": "High-level motion intensity profile. Gentle preserves realism best, balanced is a safer default for general motion, and dynamic pushes stronger movement with more drift risk.",
+    "seed": "Leave blank or enter Random to let StableNew choose one seed before the job is queued. Enter a non-negative integer to reproduce a specific run; the frozen seed is kept with the queued job and replay.",
     "output_route": "Controls where the resulting workflow artifacts are routed for follow-up work. Choose the route that best matches whether the next step is review/reprocess or clip assembly.",
     "camera_preset": "Structured camera-intent preset passed into conditioned workflows. Leave it on none for unconditioned runs, or choose a preset when the workflow should bias movement toward a specific cinematic camera move.",
     "camera_strength": "How strongly the selected camera intent should influence the workflow. Lower values keep the original anchor structure more intact; higher values push the authored camera move harder and increase drift risk.",

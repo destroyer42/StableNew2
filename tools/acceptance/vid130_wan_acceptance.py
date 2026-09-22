@@ -190,15 +190,23 @@ def _collect_completed_evidence(
         except Exception as exc:  # noqa: BLE001 - metrics are evidence, not the gate
             evidence["video"]["metrics_error"] = str(exc)[:200]
     replayed = stack.controller.replay_job_from_history(job_id)
-    replay_jobs = stack.queue.list_jobs(JobStatus.QUEUED)
+    replay_job = next(
+        (
+            candidate
+            for candidate in stack.queue.list_jobs(JobStatus.QUEUED)
+            if candidate._normalized_record is not None
+            and candidate._normalized_record.source.parent_job_id == job_id
+        ),
+        None,
+    )
     evidence["replay"] = {
         "created": replayed,
-        "parent_job_id": replay_jobs[0]._normalized_record.source.parent_job_id
-        if replay_jobs
+        "parent_job_id": replay_job._normalized_record.source.parent_job_id
+        if replay_job is not None
         else None,
         "same_video_execution": bool(
-            replay_jobs
-            and replay_jobs[0]
+            replay_job is not None
+            and replay_job
             ._normalized_record.stage_chain[0]
             .to_dict()["extra"]["video_execution"]
             == stage["video_execution"]

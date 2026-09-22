@@ -201,6 +201,40 @@ def test_cleanup_never_turns_a_failed_acceptance_into_success(monkeypatch, isola
     assert fakes.manager.stop_calls == 1
 
 
+def test_completed_evidence_selects_the_replay_for_the_completed_job() -> None:
+    def queued_job(parent_job_id: str, video_execution: dict[str, object]):
+        return SimpleNamespace(
+            _normalized_record=SimpleNamespace(
+                source=SimpleNamespace(parent_job_id=parent_job_id),
+                stage_chain=[SimpleNamespace(to_dict=lambda: {"extra": {"video_execution": video_execution}})],
+            )
+        )
+
+    expected_execution = {"backend_id": "comfy", "workflow_id": "wan"}
+    stale_replay = queued_job("older-job", {"backend_id": "legacy"})
+    current_replay = queued_job("completed-job", expected_execution)
+    stack = SimpleNamespace(
+        controller=SimpleNamespace(replay_job_from_history=lambda _job_id: 1),
+        queue=SimpleNamespace(list_jobs=lambda _status: [stale_replay, current_replay]),
+    )
+    evidence: dict = {}
+
+    harness._collect_completed_evidence(
+        stack,
+        evidence,
+        "completed-job",
+        {"video_execution": expected_execution},
+        SimpleNamespace(result={}),
+        lambda _result: [],
+    )
+
+    assert evidence["replay"] == {
+        "created": 1,
+        "parent_job_id": "completed-job",
+        "same_video_execution": True,
+    }
+
+
 def test_main_stops_before_building_anything_when_an_external_comfy_is_serving(
     monkeypatch, capsys
 ) -> None:

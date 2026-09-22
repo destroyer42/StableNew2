@@ -5,12 +5,41 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
+import pytest
+
 from src.video import (
     ComfyHealthCheckTimeout,
     ComfyWorkflowVideoBackend,
     DepthResolutionResult,
     VideoExecutionRequest,
 )
+from src.video.workflow_catalog import build_builtin_workflow_specs
+from src.video.workflow_contracts import WorkflowSpec
+from src.video.workflow_registry import WorkflowRegistry
+
+
+def _backend_contract_registry() -> WorkflowRegistry:
+    """Test-only registry for generic backend behavior of retained LTX metadata.
+
+    The production catalog keeps these entries disabled; this fixture never
+    reaches the production registry or an operator-facing surface.
+    """
+
+    registry = WorkflowRegistry()
+    for spec in build_builtin_workflow_specs():
+        values = {field: getattr(spec, field) for field in spec.__dataclass_fields__}
+        if spec.workflow_id.startswith("ltx_"):
+            values["governance_state"] = "approved"
+        registry.register(WorkflowSpec(**values))
+    return registry
+
+
+@pytest.fixture(autouse=True)
+def _use_test_only_ltx_contract_registry(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "src.video.comfy_workflow_backend.build_default_workflow_registry",
+        _backend_contract_registry,
+    )
 
 
 def _ready_process_manager(base_url: str = "http://127.0.0.1:8188") -> object:

@@ -138,11 +138,16 @@ class ComfyProcessManager:
 
     def check_health(self) -> bool:
         base_url = self._configured_base_url()
-        return wait_for_comfy_ready(
-            base_url,
-            timeout=15.0,
-            poll_interval=1.0,
-        )
+        try:
+            return wait_for_comfy_ready(
+                base_url,
+                timeout=self._config.startup_timeout_seconds,
+                poll_interval=self._config.poll_interval_seconds,
+            )
+        except Exception as exc:
+            if self.owns_process:
+                raise ComfyStartupError(self._startup_failure_detail(base_url, exc)) from exc
+            raise
 
     def ensure_running(self) -> bool:
         if self.is_running():
@@ -175,6 +180,31 @@ class ComfyProcessManager:
         if self._config.base_url:
             return self._config.base_url
         return os.environ.get("STABLENEW_COMFY_BASE_URL", "http://127.0.0.1:8188")
+
+    def _startup_failure_detail(self, base_url: str, error: Exception) -> str:
+        """Return bounded diagnostics for a failed process this manager owns.
+
+        The manager already retains bounded output tails.  Including them here
+        preserves the state available at readiness failure before an owner
+        releases its process, without discovering or inspecting any external
+        runtime.
+        """
+
+        process = self._process
+        pid = getattr(process, "pid", None)
+        return_code = process.poll() if process is not None else None
+        process_state = "alive" if return_code is None else f"exited (return code {return_code})"
+        return (
+            "Managed ComfyUI did not become ready "
+            f"(pid={pid}, process={process_state}, endpoint={base_url}, "
+            f"timeout_seconds={self._config.startup_timeout_seconds}): {error}; "
+            f"stdout_tail={self._bounded_output_tail(self._stdout_tail)!r}; "
+            f"stderr_tail={self._bounded_output_tail(self._stderr_tail)!r}"
+        )
+
+    @staticmethod
+    def _bounded_output_tail(lines: deque[str]) -> list[str]:
+        return [line[:240] for line in list(lines)[-10:]]
 
     def _start_output_thread(
         self,

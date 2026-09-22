@@ -109,10 +109,11 @@ def _build_ltx_multiframe_anchor_v1() -> WorkflowSpec:
                 description="StableNew LTX bridge nodes required to execute the pinned workflow.",
             ),
         ),
-        governance_state="approved",
+        governance_state="disabled",
         pinned_revision="catalog:ltx_multiframe_anchor_v1@1.0.0",
         governance_notes=(
-            "StableNew-managed pinned builtin workflow. Changes require catalog and registry review."
+            "DISABLED: required StableNewLTXAnchorBridge implementation and accepted runtime evidence are absent. "
+            "Contract metadata is retained for future qualification; this workflow is not operator-offerable or runnable."
         ),
         backend_defaults={
             "workflow_family": "ltx",
@@ -298,10 +299,11 @@ def _build_ltx_multiframe_anchor_v1_conditioned() -> WorkflowSpec:
                 description="A depth-capable ControlNet checkpoint visible to ComfyUI.",
             ),
         ),
-        governance_state="approved",
+        governance_state="disabled",
         pinned_revision="catalog:ltx_multiframe_anchor_v1_conditioned@1.0.0",
         governance_notes=(
-            "StableNew-managed pinned builtin conditioned workflow. Changes require catalog and registry review."
+            "DISABLED: required StableNewLTXDepthControlBridge implementation and accepted runtime evidence are absent. "
+            "Contract metadata is retained for future qualification; this workflow is not operator-offerable or runnable."
         ),
         backend_defaults={
             "workflow_family": "ltx",
@@ -444,6 +446,18 @@ def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
                 backend_key="seed",
                 description="Sampler seed recorded in the immutable job for exact replay.",
             ),
+            WorkflowInputBinding(
+                binding_name="target_width",
+                source_field="stage_config.source_preparation.target_dimensions.width",
+                backend_key="target_width",
+                description="Frozen source-aware target width selected before queue admission.",
+            ),
+            WorkflowInputBinding(
+                binding_name="target_height",
+                source_field="stage_config.source_preparation.target_dimensions.height",
+                backend_key="target_height",
+                description="Frozen source-aware target height selected before queue admission.",
+            ),
         ),
         output_bindings=(
             WorkflowOutputBinding(
@@ -503,6 +517,24 @@ def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
                 "min_available_to_comfy_vram_mib": 10000,
                 "min_available_ram_gb": 16.0,
             },
+            "source_preparation": {
+                "resize_policy": "cover_resize_center_crop",
+                "portrait_target": {"width": 480, "height": 832},
+                "landscape_target": {"width": 832, "height": 480},
+                "square_orientation": "portrait",
+            },
+            "operator_projection": {
+                "fixed_settings": {
+                    "frames": 49,
+                    "fps": 24,
+                    "steps": 20,
+                    "cfg": 5,
+                    "sampler": "uni_pc",
+                    "scheduler": "simple",
+                    "geometry": "source-aware: portrait 480x832; landscape 832x480; square uses portrait",
+                    "workflow_identity": "stock ComfyUI Wan2.2 TI2V-5B, catalog-pinned",
+                }
+            },
             "prompt_template": {
                 "1": {
                     "class_type": "UNETLoader",
@@ -539,8 +571,8 @@ def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
                     "class_type": "Wan22ImageToVideoLatent",
                     "inputs": {
                         "vae": ["3", 0],
-                        "width": 480,
-                        "height": 832,
+                        "width": "{{input.target_width}}",
+                        "height": "{{input.target_height}}",
                         "length": 49,
                         "batch_size": 1,
                         "start_image": ["7", 0],

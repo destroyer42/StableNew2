@@ -23,7 +23,11 @@ from src.video.video_backend_types import (
     CONTROL_SOURCE_IMAGE,
 )
 from src.video.video_execution_resolver import VideoContractError, VideoExecutionResolver
-from src.video.workflow_catalog import WAN22_MODEL_FILES, WAN22_STOCK_NODES
+from src.video.workflow_catalog import (
+    WAN22_MODEL_FILES,
+    WAN22_STOCK_NODES,
+    build_builtin_workflow_specs,
+)
 from src.video.workflow_compiler import WorkflowCompiler
 from src.video.workflow_contracts import WorkflowSpec
 from src.video.workflow_readiness import WorkflowResourceReadiness
@@ -135,7 +139,14 @@ def _request(tmp: Path, *, opt_in: bool, seed: int = 7) -> VideoExecutionRequest
     return VideoExecutionRequest(
         backend_id="comfy",
         stage_name="video_workflow",
-        stage_config={"workflow_id": WAN_ID, "workflow_version": "1.0.0", "seed": seed},
+        stage_config={
+            "workflow_id": WAN_ID,
+            "workflow_version": "1.0.0",
+            "seed": seed,
+            "source_preparation": {
+                "target_dimensions": {"width": 480, "height": 832},
+            },
+        },
         output_dir=tmp / "run",
         input_image_path=source,
         prompt="the person waves",
@@ -156,7 +167,13 @@ def test_wan_is_registered_as_experimental_with_exact_pins_and_no_extra_controls
     assert spec.governance_state == "experimental" and spec.is_experimental
     assert spec.backend_id == "comfy" and spec.workflow_version == "1.0.0"
     assert spec.pinned_revision == "catalog:wan22_ti2v_5b_i2v_v1@1.0.0"
-    assert set(spec.required_input_names) == {"source_image", "prompt", "seed"}  # no end anchor
+    assert set(spec.required_input_names) == {
+        "source_image",
+        "prompt",
+        "seed",
+        "target_width",
+        "target_height",
+    }  # no end anchor
     assert "end_anchor" not in spec.declared_input_names
     assert set(spec.accepted_controls) == {"source_image", "prompt_text", "negative_prompt"}
     assert not {CONTROL_CONTROL_VIDEO, CONTROL_POSE_VIDEO, CONTROL_END_ANCHOR} & set(
@@ -262,7 +279,9 @@ def test_readiness_uses_driver_free_vram_plus_comfy_held_and_reports_what_blocks
     assert not low_ram.ready and "system RAM" in low_ram.message
     no_gpu = _readiness(ok_stats).evaluate(spec, system_stats={"devices": []})
     assert not no_gpu.ready and "no CUDA device" in no_gpu.message
-    ltx = build_default_workflow_registry().get("ltx_multiframe_anchor_v1")
+    ltx = next(
+        item for item in build_builtin_workflow_specs() if item.workflow_id == "ltx_multiframe_anchor_v1"
+    )
     assert _readiness(ok_stats).evaluate(ltx, system_stats={}).ready  # only declared policies
 
 

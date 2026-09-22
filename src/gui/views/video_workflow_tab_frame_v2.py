@@ -75,6 +75,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.motion_profile_var = tk.StringVar(
             value=str(defaults.get("motion_profile") or "gentle")
         )
+        self.seed_var = tk.StringVar(value=str(defaults.get("seed") or ""))
         self.camera_preset_var = tk.StringVar(
             value=str(camera_intent_defaults.get("preset") or "none")
         )
@@ -105,6 +106,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.experimental_opt_in_var = tk.BooleanVar(value=False)
         self.source_summary_var = tk.StringVar(value="Source: none selected")
         self.effective_settings_var = tk.StringVar(value="Effective settings: defaults loaded")
+        self._submitted_effective_settings: dict[str, Any] = {}
         self._defaults = dict(defaults)
 
         self.columnconfigure(0, weight=1)
@@ -138,6 +140,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.source_image_var,
             self.end_anchor_var,
             self.mid_anchors_var,
+            self.motion_profile_var,
+            self.seed_var,
             self.depth_mode_var,
             self.depth_path_var,
             self.camera_preset_var,
@@ -173,6 +177,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             "prompt": "",
             "negative_prompt": "",
             "motion_profile": "gentle",
+            "seed": "",
             "camera_intent": {"preset": "none", "strength": 0.35},
             "controlnet": {
                 "model": "depth",
@@ -233,8 +238,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                 secondary_weight=1,
             ),
         )
-        body.rowconfigure(7, weight=1)
         body.rowconfigure(8, weight=1)
+        body.rowconfigure(9, weight=1)
         self._body_frame = body
 
         self.workflow_combo: ttk.Combobox = cast(
@@ -290,9 +295,16 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             values=_MOTION_PROFILES,
             help_key="motion",
         )
+        self.seed_label = ttk.Label(body, text="Seed", style="Dark.TLabel")
+        self.seed_label.grid(row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
+        self.seed_entry = ttk.Entry(body, textvariable=self.seed_var, style="Dark.TEntry", width=40)
+        self.seed_entry.grid(row=4, column=1, sticky="ew", pady=(0, 6))
+        self._attach_setting_help(
+            "seed", VIDEO_WORKFLOW_SETTING_HELP["seed"], self.seed_label, self.seed_entry
+        )
         self._add_labeled_entry(
             body,
-            4,
+            5,
             "Output Route",
             combo=True,
             variable=self.output_route_var,
@@ -301,7 +313,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         conditioning_frame = ttk.LabelFrame(body, text="Advanced Conditioning", padding=8)
         self.conditioning_frame = conditioning_frame
-        conditioning_frame.grid(row=5, column=0, columnspan=4, sticky="ew", pady=(6, 6))
+        conditioning_frame.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(6, 6))
         configure_grid_columns(
             conditioning_frame,
             build_form_column_specs(
@@ -388,17 +400,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             app_state=self.app_state,
             wraplength=900,
         )
-        self.workflow_help_panel.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(8, 6))
+        self.workflow_help_panel.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(8, 6))
 
         prompt_label = ttk.Label(body, text="Prompt", style="Dark.TLabel")
-        prompt_label.grid(row=7, column=0, sticky="nw", padx=(0, 8), pady=(8, 6))
+        prompt_label.grid(row=8, column=0, sticky="nw", padx=(0, 8), pady=(8, 6))
         self.prompt_text = tk.Text(
             body,
             height=5,
             wrap="word",
         )
         style_text_widget(self.prompt_text, elevated=True)
-        self.prompt_text.grid(row=7, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
+        self.prompt_text.grid(row=8, column=1, columnspan=3, sticky="nsew", pady=(8, 6))
         self._attach_setting_help(
             "prompt",
             VIDEO_WORKFLOW_SETTING_HELP["prompt"],
@@ -407,14 +419,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
 
         negative_label = ttk.Label(body, text="Negative", style="Dark.TLabel")
-        negative_label.grid(row=8, column=0, sticky="nw", padx=(0, 8), pady=(0, 6))
+        negative_label.grid(row=9, column=0, sticky="nw", padx=(0, 8), pady=(0, 6))
         self.negative_prompt_text = tk.Text(
             body,
             height=4,
             wrap="word",
         )
         style_text_widget(self.negative_prompt_text, elevated=True)
-        self.negative_prompt_text.grid(row=8, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
+        self.negative_prompt_text.grid(row=9, column=1, columnspan=3, sticky="nsew", pady=(0, 6))
         self._attach_setting_help(
             "negative",
             VIDEO_WORKFLOW_SETTING_HELP["negative"],
@@ -423,7 +435,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
 
         submit_frame = ttk.Frame(body, style="Panel.TFrame")
-        submit_frame.grid(row=9, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+        submit_frame.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(10, 0))
         self.queue_workflow_button = ttk.Button(
             submit_frame,
             text="Queue Video Workflow",
@@ -556,7 +568,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             else [],
             "prompt": self.prompt_text.get("1.0", "end").strip(),
             "negative_prompt": self.negative_prompt_text.get("1.0", "end").strip(),
-            "motion_profile": self.motion_profile_var.get().strip(),
             "camera_intent": {
                 "preset": self.camera_preset_var.get().strip()
                 if supported("camera_intent")
@@ -579,6 +590,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             },
             "output_route": self.output_route_var.get().strip(),
         }
+        if supported("motion_profile"):
+            state["motion_profile"] = self.motion_profile_var.get().strip()
+        if supported("seed"):
+            state["seed"] = self.seed_var.get().strip()
         if for_submission:
             # The per-job authorization is only ever part of a submission, never saved state.
             state["experimental_opt_in"] = bool(
@@ -602,6 +617,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.motion_profile_var.set(
             str(state.get("motion_profile") or self.motion_profile_var.get())
         )
+        self.seed_var.set(str(state.get("seed") or ""))
         camera_intent = dict(state.get("camera_intent") or {})
         controlnet = dict(state.get("controlnet") or {})
         depth_input = dict(state.get("depth_input") or {})
@@ -640,6 +656,14 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         for widget in (self.mid_anchors_entry, self.mid_anchors_browse):
             set_state(widget, enabled("mid_anchors"))
         set_state(self.motion_combo, enabled("motion_profile"))
+        if enabled("seed"):
+            self.seed_label.grid()
+            self.seed_entry.grid()
+            set_state(self.seed_entry, True)
+        else:
+            self.seed_label.grid_remove()
+            self.seed_entry.grid_remove()
+            self.seed_var.set("")
         conditioning_on = enabled("camera_intent") or enabled("depth_conditioning")
         for child in self.conditioning_frame.winfo_children():
             set_state(child, conditioning_on)
@@ -675,12 +699,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         workflow_source = (
             "default"
             if workflow_value == str(self._defaults.get("workflow_id") or "").strip()
-            else "selected here"
-        )
-        motion_value = self.motion_profile_var.get().strip() or "gentle"
-        motion_source = (
-            "default"
-            if motion_value == str(self._defaults.get("motion_profile") or "gentle").strip()
             else "selected here"
         )
         output_value = self.output_route_var.get().strip() or OUTPUT_ROUTE_REPROCESS
@@ -721,9 +739,43 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             if depth_mode == "none"
             else f"controlnet={control_model}@{control_weight}[{guide_start}-{guide_end}]"
         )
-        self.effective_settings_var.set(
-            f"Effective settings: workflow={workflow_value} [{workflow_source}] | motion={motion_value} [{motion_source}] | output={output_value} [{output_source}] | anchor plan={anchor_state} | {conditioning_depth} | {camera_summary} | {control_summary}"
-        )
+        effective_parts = [
+            f"workflow={workflow_value} [{workflow_source}]",
+            f"output={output_value} [{output_source}]",
+            f"anchor plan={anchor_state}",
+        ]
+        visible = dict(workflow_meta.get("form_visibility") or {})
+        if not visible or visible.get("motion_profile", False):
+            motion_value = self.motion_profile_var.get().strip() or "gentle"
+            motion_source = (
+                "default"
+                if motion_value == str(self._defaults.get("motion_profile") or "gentle").strip()
+                else "selected here"
+            )
+            effective_parts.append(f"motion={motion_value} [{motion_source}]")
+        if not visible or visible.get("seed", False):
+            seed_value = self.seed_var.get().strip() or "Random (frozen at admission)"
+            effective_parts.append(f"seed={seed_value}")
+        if not visible or visible.get("camera_intent", False) or visible.get("depth_conditioning", False):
+            effective_parts.extend((conditioning_depth, camera_summary, control_summary))
+        fixed_settings = dict(workflow_meta.get("operator_projection") or {}).get("fixed_settings")
+        if isinstance(fixed_settings, dict):
+            fixed_text = ", ".join(
+                f"{key}={value}" for key, value in fixed_settings.items() if value not in (None, "")
+            )
+            if fixed_text:
+                effective_parts.append(f"fixed: {fixed_text}")
+        submitted_seed = self._submitted_effective_settings.get("seed")
+        submitted_source = self._submitted_effective_settings.get("source_preparation")
+        if submitted_seed is not None:
+            effective_parts.append(f"submitted seed={submitted_seed}")
+        if isinstance(submitted_source, dict):
+            target = dict(submitted_source.get("target_dimensions") or {})
+            if target.get("width") and target.get("height"):
+                effective_parts.append(
+                    f"submitted target={target['width']}x{target['height']}"
+                )
+        self.effective_settings_var.set("Effective settings: " + " | ".join(effective_parts))
 
     def _set_text_value(self, widget: tk.Text, value: str) -> None:
         widget.delete("1.0", "end")
@@ -817,5 +869,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             messagebox.showerror("Video Workflow", str(exc))
             self.status_var.set(f"Video workflow queue failed: {exc}")
             return
-        self.status_var.set(f"Queued video workflow job {job_id}")
+        self._submitted_effective_settings = dict(
+            form_data.get("_stable_new_submission_projection") or {}
+        )
+        submitted_seed = self._submitted_effective_settings.get("seed")
+        status_suffix = f" (seed {submitted_seed})" if submitted_seed is not None else ""
+        self.status_var.set(f"Queued video workflow job {job_id}{status_suffix}")
+        self._refresh_workspace_summary()
         messagebox.showinfo("Video Workflow", f"Queued video workflow job {job_id}")

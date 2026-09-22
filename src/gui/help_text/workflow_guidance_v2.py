@@ -130,7 +130,8 @@ def build_video_workflow_guidance() -> ActionExplainerContent:
         bullets=(
             "Workflow picks the authored generation recipe and capability limits for this job.",
             "End Anchor and Mid Anchors are for workflows that need guide images across the sequence; leave them empty when the selected workflow does not require them.",
-            "Secondary motion is most useful when the base image already reads clearly and the shot needs more guided movement than a simple SVD pass would provide.",
+            "Describe subject motion and camera movement plainly (for example, 'the subject turns slowly while the camera pushes in'). Guidance is not silently rewritten; the submitted prompt is what the workflow receives.",
+            "Some experimental workflows show fixed, qualification-backed settings and a seed field. Leave seed blank for one frozen admission-time seed, or enter an integer for repeatability.",
             "Output Route decides whether the resulting artifacts should be easier to pick up in reprocess-oriented areas or in clip-assembly flows.",
         ),
     )

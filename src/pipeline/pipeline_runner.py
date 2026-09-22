@@ -658,6 +658,7 @@ class PipelineRunner:
             or frame_path_count
             or len(artifact_records)
         )
+        source_preparation = config_dict.get("source_preparation")
         if next_stage_paths or manifest_paths or artifact_records or thumbnail_path:
             aggregate = {
                 "stage": stage_name,
@@ -675,6 +676,8 @@ class PipelineRunner:
                 "count": output_count,
                 "artifacts": artifact_records,
             }
+            if isinstance(source_preparation, dict):
+                aggregate["source_preparation"] = dict(source_preparation)
             if continuity_link:
                 aggregate["continuity"] = dict(continuity_link)
             metadata.setdefault("video_artifacts", {})[stage_name] = dict(aggregate)
@@ -703,6 +706,8 @@ class PipelineRunner:
                 "primary_path": next_stage_paths[0] if next_stage_paths else None,
                 "artifacts": artifact_records,
             }
+            if isinstance(source_preparation, dict):
+                video_backend_results[stage_name]["source_preparation"] = dict(source_preparation)
             if continuity_link:
                 video_backend_results[stage_name]["continuity"] = dict(continuity_link)
 

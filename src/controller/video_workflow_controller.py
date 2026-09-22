@@ -23,7 +23,9 @@ from src.video.video_workflow_intent import (
     default_negative_prompt,
     form_visibility,
     mid_anchor_list,
+    parse_seed_input,
 )
+from src.video.workflow_source_preparation import prepare_declared_workflow_source
 
 _DEFAULT_OUTPUT_ROUTES = (
     OUTPUT_ROUTE_REPROCESS,
@@ -77,6 +79,9 @@ class VideoWorkflowController:
                     "required_inputs": list(getattr(spec, "required_input_names", ())),
                     "accepted_controls": list(getattr(spec, "accepted_controls", ())),
                     "form_visibility": form_visibility(spec),
+                    "operator_projection": self._mapping_dict(
+                        (getattr(spec, "backend_defaults", None) or {}).get("operator_projection")
+                    ),
                 }
             )
         return records
@@ -92,6 +97,7 @@ class VideoWorkflowController:
             "prompt": "",
             "negative_prompt": "",
             "motion_profile": "gentle",
+            "seed": "",
             "camera_intent": {
                 "preset": "none",
                 "strength": 0.35,
@@ -263,6 +269,8 @@ class VideoWorkflowController:
             self._normalize_camera_intent(form_data)
             self._normalize_controlnet(form_data)
             depth_input = self._normalize_depth_input(form_data)
+            if "seed" in spec.declared_input_names:
+                parse_seed_input(form_data.get("seed"))
         except ValueError as exc:
             return False, str(exc)
 
@@ -342,37 +350,60 @@ class VideoWorkflowController:
         output_dir = getattr(self._app_controller, "output_dir", None) or "output"
         continuity_link = self._build_continuity_link(form_data)
 
+        workflow_config: dict[str, Any] = {
+            "enabled": True,
+            "workflow_id": workflow_id,
+            "workflow_version": spec.workflow_version,
+            "backend_id": spec.backend_id,
+            "prompt": prompt,
+            "negative_prompt": negative_prompt,
+            # Neutral, explicit execution intent (PR-VID-120 contract); the historical
+            # stage-owned bridge is not needed for work compiled here.
+            VIDEO_EXECUTION_KEY: build_video_execution_block(
+                spec, {**form_with_defaults, "camera_intent": camera_intent}
+            ),
+        }
+        declared_inputs = set(spec.declared_input_names)
+        if "end_anchor" in declared_inputs:
+            workflow_config["end_anchor_path"] = end_anchor_path
+        if "mid_anchors" in declared_inputs:
+            workflow_config["mid_anchor_paths"] = mid_anchor_paths
+        if "motion_profile" in declared_inputs:
+            workflow_config["motion_profile"] = motion_profile
+        if "camera_preset" in declared_inputs:
+            workflow_config["camera_intent"] = camera_intent
+        if any(name in declared_inputs for name in ("depth_map", "controlnet_model")):
+            workflow_config["controlnet"] = controlnet
+            workflow_config["depth_input"] = depth_input
+
+        prepared_source_path = str(Path(source_image_path).expanduser())
+        source_preparation: dict[str, Any] | None = None
+        backend_defaults = getattr(spec, "backend_defaults", None) or {}
+        preparation_policy = backend_defaults.get("source_preparation")
+        if isinstance(preparation_policy, Mapping):
+            prepared_source = prepare_declared_workflow_source(
+                source_path=source_image_path,
+                output_root=output_dir,
+                policy=preparation_policy,
+            )
+            source_preparation = prepared_source.to_stage_config()
+            workflow_config["source_preparation"] = source_preparation
+            prepared_source_path = prepared_source.prepared_image_path
+
         config: dict[str, Any] = {
-            "video_workflow": {
-                "enabled": True,
-                "workflow_id": workflow_id,
-                "workflow_version": spec.workflow_version,
-                "backend_id": spec.backend_id,
-                "end_anchor_path": end_anchor_path,
-                "mid_anchor_paths": mid_anchor_paths,
-                "motion_profile": motion_profile,
-                "prompt": prompt,
-                "negative_prompt": negative_prompt,
-                "camera_intent": camera_intent,
-                "controlnet": controlnet,
-                "depth_input": depth_input,
-                # Neutral, explicit execution intent (PR-VID-120 contract); the historical
-                # stage-owned bridge is not needed for work compiled here.
-                VIDEO_EXECUTION_KEY: build_video_execution_block(
-                    spec, {**form_with_defaults, "camera_intent": camera_intent}
-                ),
-            },
+            "video_workflow": workflow_config,
             "pipeline": {
                 "output_route": output_route,
                 "video_workflow_enabled": True,
             },
         }
-        if "seed" in spec.declared_input_names:
+        frozen_seed: int | None = None
+        if "seed" in declared_inputs:
             # Recorded in the immutable job so a replay reproduces the same sampler seed.
-            seed_value = form_data.get("seed")
-            config["video_workflow"]["seed"] = (
-                int(seed_value) if str(seed_value or "").strip() else secrets.randbelow(2**31 - 1)
-            )
+            frozen_seed = parse_seed_input(form_data.get("seed"))
+            if frozen_seed is None:
+                frozen_seed = secrets.randbelow(2**31)
+            workflow_config["seed"] = frozen_seed
         if continuity_link:
             config["metadata"] = {"continuity": dict(continuity_link)}
 
@@ -387,17 +418,23 @@ class VideoWorkflowController:
                     EXPERIMENTAL_OPT_IN_FIELD
                 ],
                 "output_route": output_route,
-                "camera_intent": camera_intent,
-                "controlnet": controlnet,
-                "depth_input": depth_input,
             }
         }
+        if "camera_intent" in workflow_config:
+            extra_metadata["video_workflow"]["camera_intent"] = camera_intent
+        if "controlnet" in workflow_config:
+            extra_metadata["video_workflow"]["controlnet"] = controlnet
+            extra_metadata["video_workflow"]["depth_input"] = depth_input
+        if source_preparation:
+            extra_metadata["video_workflow"]["source_preparation"] = dict(source_preparation)
+        if frozen_seed is not None:
+            extra_metadata["video_workflow"]["seed"] = frozen_seed
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
 
         builder = ReprocessJobBuilder()
         njr = builder.build_reprocess_job(
-            input_image_paths=[str(Path(source_image_path).expanduser())],
+            input_image_paths=[prepared_source_path],
             stages=["video_workflow"],
             config=config,
             output_dir=str(output_dir),
@@ -414,4 +451,9 @@ class VideoWorkflowController:
         job_ids = job_service.submit_njrs([njr], SubmissionPolicy())
         if not job_ids:
             raise RuntimeError("Failed to enqueue video workflow job")
+        form_data["_stable_new_submission_projection"] = {
+            "job_id": job_ids[0],
+            "seed": frozen_seed,
+            "source_preparation": dict(source_preparation or {}),
+        }
         return job_ids[0]

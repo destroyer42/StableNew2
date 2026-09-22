@@ -10,9 +10,10 @@ from src.video import (
     WorkflowSpec,
     build_default_workflow_registry,
 )
+from src.video.workflow_catalog import build_builtin_workflow_specs
 
 
-def test_default_workflow_registry_registers_builtin_ltx_workflow() -> None:
+def test_default_workflow_registry_retains_but_disables_unimplemented_ltx_contracts() -> None:
     registry = build_default_workflow_registry()
 
     assert registry.list_workflow_ids() == [
@@ -20,16 +21,25 @@ def test_default_workflow_registry_registers_builtin_ltx_workflow() -> None:
         "ltx_multiframe_anchor_v1_conditioned",
         "wan22_ti2v_5b_i2v_v1",
     ]
-    spec = registry.get("ltx_multiframe_anchor_v1")
+    spec = next(
+        spec for spec in build_builtin_workflow_specs() if spec.workflow_id == "ltx_multiframe_anchor_v1"
+    )
     assert spec.backend_id == "comfy"
     assert spec.workflow_version == "1.0.0"
-    assert spec.governance_state == "approved"
+    assert spec.governance_state == WORKFLOW_GOVERNANCE_DISABLED
     assert spec.pinned_revision == "catalog:ltx_multiframe_anchor_v1@1.0.0"
     assert "multi_frame_anchor_video" in spec.capability_tags
     assert any(binding.binding_name == "end_anchor" for binding in spec.input_bindings)
-    conditioned = registry.get("ltx_multiframe_anchor_v1_conditioned")
+    conditioned = next(
+        spec
+        for spec in build_builtin_workflow_specs()
+        if spec.workflow_id == "ltx_multiframe_anchor_v1_conditioned"
+    )
     assert conditioned.pinned_revision == "catalog:ltx_multiframe_anchor_v1_conditioned@1.0.0"
     assert any(binding.binding_name == "depth_map" for binding in conditioned.input_bindings)
+    assert [spec.workflow_id for spec in registry.list_offerable_specs("comfy")] == [
+        "wan22_ti2v_5b_i2v_v1"
+    ]
 
 
 def test_workflow_registry_rejects_duplicate_workflow_versions() -> None:

@@ -41,6 +41,26 @@ def default_negative_prompt(spec: Any) -> str:
     return _text((getattr(spec, "backend_defaults", None) or {}).get("default_negative_prompt"))
 
 
+def parse_seed_input(value: Any) -> int | None:
+    """Normalize an operator seed without generating one.
+
+    ``None``, an empty value, and ``Random`` deliberately mean that admission must
+    freeze a fresh seed.  Keeping that distinction here prevents execution-time
+    sampling from becoming an implicit source of nondeterminism.
+    """
+
+    text = _text(value)
+    if not text or text.lower() == "random":
+        return None
+    try:
+        seed = int(text)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("Seed must be a non-negative integer or 'Random'.") from exc
+    if seed < 0 or seed >= 2**31:
+        raise ValueError("Seed must be between 0 and 2147483647.")
+    return seed
+
+
 def experimental_opt_in_granted(spec: Any, form_data: Mapping[str, Any]) -> bool:
     """True only for an experimental spec whose job form explicitly ticked the opt-in."""
 
@@ -117,6 +137,7 @@ def form_visibility(spec: Any) -> dict[str, bool]:
         "camera_intent": CONTROL_CAMERA_INTENT in accepted and "camera_preset" in declared,
         "depth_conditioning": "depth_map" in declared,
         "motion_profile": "motion_profile" in declared,
+        "seed": "seed" in declared,
         "negative_prompt": CONTROL_NEGATIVE_PROMPT in accepted and "negative_prompt" in declared,
         "experimental": bool(getattr(spec, "is_experimental", False)),
     }
@@ -131,5 +152,6 @@ __all__ = [
     "experimental_opt_in_granted",
     "form_visibility",
     "mid_anchor_list",
+    "parse_seed_input",
     "requested_controls",
 ]

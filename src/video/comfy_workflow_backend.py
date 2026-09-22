@@ -399,6 +399,9 @@ class ComfyWorkflowVideoBackend:
                 artifact_type="video",
             ),
         }
+        source_preparation = _mapping_dict(stage_config.get("source_preparation"))
+        if source_preparation:
+            metadata_payload["source_preparation"] = source_preparation
         if resolved_outputs.get("secondary_motion"):
             metadata_payload["secondary_motion"] = dict(resolved_outputs["secondary_motion"])
             metadata_payload["secondary_motion_summary"] = dict(
@@ -467,6 +470,8 @@ class ComfyWorkflowVideoBackend:
                 else None,
             ),
         }
+        if source_preparation:
+            raw_result["source_preparation"] = source_preparation
         return VideoExecutionResult.from_stage_result(
             backend_id=self.backend_id,
             stage_name=request.stage_name,

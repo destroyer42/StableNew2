@@ -60,31 +60,12 @@ def _block(record) -> dict:
     return stage["extra"]["video_execution"]
 
 
-def test_ltx_submission_now_emits_the_neutral_block_and_still_needs_its_end_anchor(
-    tmp_path,
-) -> None:
-    source, end = _images(tmp_path)
+def test_ltx_submission_is_rejected_before_queue_admission(tmp_path) -> None:
+    _source, _end = _images(tmp_path)
     controller, submitted = _capture_controller(tmp_path)
     ok, reason = controller.validate_form_data({"workflow_id": LTX_ID, "workflow_version": "1.0.0"})
-    assert not ok and "end anchor" in reason  # required by the LTX spec's own bindings
-    controller.submit_video_workflow_job(
-        source_image_path=source,
-        form_data={
-            "workflow_id": LTX_ID,
-            "workflow_version": "1.0.0",
-            "end_anchor_path": str(end),
-            "prompt": "slow pan",
-        },
-    )
-    [record] = submitted
-    assert _block(record) == {
-        "backend_id": "comfy",
-        "task": "image_to_video",
-        "controls": ["end_anchor", "prompt_text", "source_image"],
-        "workflow_id": LTX_ID,
-        "workflow_version": "1.0.0",
-        "experimental_opt_in": False,
-    }
+    assert not ok and "not approved" in str(reason)
+    assert submitted == []
 
 
 def test_wan_admission_is_capability_driven_and_records_the_per_job_opt_in(tmp_path) -> None:
@@ -111,18 +92,18 @@ def test_wan_admission_is_capability_driven_and_records_the_per_job_opt_in(tmp_p
     assert block["experimental_opt_in"] is True and block["task"] == "image_to_video"
     assert block["controls"] == ["negative_prompt", "prompt_text", "source_image"]
     extra = record.stage_chain[0].to_dict()["extra"]
-    assert extra["end_anchor_path"] == "" and extra["mid_anchor_paths"] == []
+    assert "end_anchor_path" not in extra and "mid_anchor_paths" not in extra
     assert isinstance(extra["seed"], int)  # recorded for exact replay
+    assert extra["source_preparation"]["target_dimensions"] == {"width": 480, "height": 832}
 
 
 def test_specs_projection_marks_wan_experimental_and_hides_unsupported_inputs(tmp_path) -> None:
     controller, _ = _capture_controller(tmp_path)
     specs = {s["workflow_id"]: s for s in controller.list_workflow_specs()}
-    assert specs[WAN_ID]["experimental"] is True and specs[LTX_ID]["experimental"] is False
+    assert specs[WAN_ID]["experimental"] is True and LTX_ID not in specs
     assert specs[WAN_ID]["form_visibility"]["end_anchor"] is False
     assert specs[WAN_ID]["form_visibility"]["experimental"] is True
-    assert specs[LTX_ID]["form_visibility"]["end_anchor"] is True
-    assert specs[LTX_ID]["form_visibility"]["experimental"] is False
+    assert specs[WAN_ID]["form_visibility"]["seed"] is True
 
 
 def _wan_backend(tmp_path: Path, client: _FakeComfy, registry: WorkflowRegistry | None = None):
@@ -136,8 +117,9 @@ def _wan_backend(tmp_path: Path, client: _FakeComfy, registry: WorkflowRegistry 
     )
 
 
-def _real_submit(tmp_path: Path, service, form) -> str:
+def _real_submit(tmp_path: Path, service, form, *, source_dimensions: tuple[int, int] = (16, 16)) -> str:
     source, _ = _images(tmp_path)
+    Image.new("RGB", source_dimensions, "navy").save(source)
     app = SimpleNamespace(job_service=service, output_dir=str(tmp_path / "output"))
     return VideoWorkflowController(app_controller=app).submit_video_workflow_job(
         source_image_path=source, form_data=form
@@ -151,16 +133,23 @@ def test_wan_job_runs_through_queue_sqlite_runner_artifact_and_replays_with_its_
     repository, queue, service, controller = _build_stack(
         tmp_path, [_wan_backend(tmp_path, client)]
     )
-    job_id = _real_submit(tmp_path, service, _wan_form())
+    job_id = _real_submit(tmp_path, service, _wan_form(seed="4242"))
 
     reloaded = repository.get_job_model(job_id)  # persisted NJR keeps the explicit authorization
     stage = reloaded._normalized_record.stage_chain[0].to_dict()["extra"]
     assert stage["video_execution"]["experimental_opt_in"] is True
     assert stage["video_execution"]["backend_id"] == "comfy"
-    service.runner.run_once(queue.get_job(job_id))
+    assert stage["seed"] == 4242
+    queued = queue.get_job(job_id)
+    stage = queued._normalized_record.stage_chain[0].to_dict()["extra"]
+    service.runner.run_once(queued)
     done = repository.get_job(job_id)
     assert done is not None and done.status is JobStatus.COMPLETED
     assert len(client.queued) == 1
+    prompt = client.queued[0]["prompt"]
+    assert prompt["8"]["inputs"]["width"] == 480
+    assert prompt["8"]["inputs"]["height"] == 832
+    assert prompt["9"]["inputs"]["seed"] == 4242
     [artifact] = collect_canonical_artifacts(done.result)
     assert artifact["stage"] == "video_workflow" and Path(artifact["primary_path"]).is_file()
 
@@ -173,6 +162,35 @@ def test_wan_job_runs_through_queue_sqlite_runner_artifact_and_replays_with_its_
     service.runner.run_once(replay)
     assert repository.get_job(record.job_id).status is JobStatus.COMPLETED
     assert len(client.queued) == 2
+    service.runner.stop()
+    repository.close()
+
+
+def test_wan_landscape_source_freezes_geometry_into_the_compiled_graph_and_result(tmp_path) -> None:
+    client = _FakeComfy(tmp_path)
+    repository, queue, service, _controller = _build_stack(
+        tmp_path, [_wan_backend(tmp_path, client)]
+    )
+    job_id = _real_submit(
+        tmp_path,
+        service,
+        _wan_form(seed="77"),
+        source_dimensions=(160, 90),
+    )
+
+    queued = queue.get_job(job_id)
+    stage = queued._normalized_record.stage_chain[0].to_dict()["extra"]
+    service.runner.run_once(queued)
+
+    done = repository.get_job(job_id)
+    assert done is not None and done.status is JobStatus.COMPLETED
+    prompt = client.queued[0]["prompt"]
+    assert prompt["8"]["inputs"]["width"] == 832
+    assert prompt["8"]["inputs"]["height"] == 480
+    assert stage["seed"] == 77
+    assert stage["source_preparation"]["target_dimensions"] == {"width": 832, "height": 480}
+    artifact = done.result["metadata"]["video_workflow_artifact"]
+    assert artifact["source_preparation"]["original_source_path"].endswith("source.png")
     service.runner.stop()
     repository.close()
 
