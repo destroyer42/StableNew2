@@ -56,13 +56,21 @@ Target-driven release policy (product decision, unchanged by implementation):
 | `comfy` | owned `a1111_webui`, cached SVD state |
 | `svd_native` | owned `a1111_webui`, owned `comfy` (its own cache is not released) |
 
-Per-runtime resolution: no manager -> `absent` (nothing to do); manager exists but not running ->
+Per-runtime resolution (superseded below for external endpoints): no manager -> `absent` (nothing to do); manager exists but not running ->
 `not_running` (nothing to do — **never stopped merely for existing**); `owns_process` true ->
 `owned`, release attempted through that manager's own boundary, verified by the manager's own
 post-condition (`not is_running()`); `owns_process` false while live -> `external`, **no method on
 the manager is even called**, `status=action_required` with operator guidance. SVD cache release
 uses `SVDService().clear_model_cache()` directly (the class-level `_pipeline_cache` is shared by
 every `SVDService`/`SVDRunner` instance, so this is authoritative and requires no second cache).
+
+**External endpoint correction.** A manager handle is not endpoint presence. When there is no
+manager, or its handle is not running, the coordinator now makes one read-only probe of that
+runtime's configured endpoint: a refused/free endpoint remains `absent` or `not_running`; a
+healthy expected endpoint or any occupied/ambiguous endpoint is `external` and returns
+`status=action_required`. The probes are `probe_webui_endpoint()` at the configured A1111 URL and
+existing `probe_comfy_endpoint()` at the configured Comfy URL; neither discovers ports nor
+identifies OS processes. No external endpoint is adopted, stopped, terminated, restarted, or killed.
 
 Nothing is restarted afterward. The target's own existing owner remains responsible for
 starting/loading what it needs; this package never centralizes startup.
@@ -106,20 +114,26 @@ Wan itself may proceed *after* transition; its thresholds were not moved or dupl
 
 ## 6. Deterministic evidence
 
-- `tests/services/test_runtime_transition_service.py` (10 tests, fakes only): each target's exact
+- `tests/services/test_runtime_transition_service.py` (12 tests, fakes only): each target's exact
   release set; external managers never stopped; absent/not-running runtimes never stopped; owned
   release failure (stop returns false, or raises) blocks with `RELEASE_FAILED` and is not retried;
   SVD cache release failure blocks; alternating `a1111 -> comfy -> a1111` reuses the same fake
   managers with no restore-after-release; `RuntimeTransitionError` carries the full result; unknown
   target rejected; SVD cache release goes through the real `SVDService` class and a later job's
   cache lookup is a normal miss (not corruption).
-- `tests/integration/test_pr_runtime_100_transition_queue.py` (3 tests): the **real**
+- `tests/integration/test_pr_runtime_100_transition_queue.py` (4 tests): the **real**
   `SVDNativeVideoBackend` (only `SVDRunner` faked, matching the accepted PR-MVP-070 pattern) through
   the real `SVDController -> NJR -> JobService -> SQLite -> PipelineRunner.run_njr` path —
   (a) owned A1111 + Comfy really released via their real manager objects, job completes normally;
   (b) an external Comfy blocks with `action_required`, is never touched, job fails with no
   automatic requeue (`QUEUED`/`RUNNING` both empty afterward); (c) a release that does not actually
   succeed blocks dispatch, attempted exactly once (no retry loop).
+- The endpoint-presence repair adds deterministic no-manager and idle-manager cases for both
+  configured A1111 and Comfy endpoints; a live/occupied endpoint is `EXTERNAL`/`ACTION_REQUIRED`,
+  a refused endpoint permits transition, and the queue-path test proves the external Comfy case
+  blocks before `Pipeline.run_svd_native_stage` without retry, requeue, fallback, or mutation.
+- `tests/api/test_healthcheck_v2.py` proves A1111's read-only configured-endpoint classification:
+  healthy expected response, occupied/non-expected response, and refused/free endpoint.
 - Regression: `tests/image_backends`, `tests/video`, `tests/pipeline`, `tests/controller` (A1111/SVD
   surfaces), and the PR-VID-120/130 queue-integration suites show the same 86 pre-existing,
   environment-dependent local failures before and after this branch (none new;
@@ -142,13 +156,19 @@ SVD cache at rest: {}
 prepare_for(svd_native) -> status=ready, ownership_state={a1111_webui: absent, comfy: absent}
 ```
 
-This proves, on the real machine, that `get_global_webui_process_manager()` /
+This showed, on the real machine, that `get_global_webui_process_manager()` /
 `get_global_comfy_process_manager()` correctly report **no owned process** even while the operator's
 own A1111/Comfy are genuinely live and serving — so the coordinator takes zero action and calls
 neither manager's stop method, exactly as designed. The owned-release code path itself (manager
 `stop()`/`stop_webui()` returning to a not-running state) is proven by the existing, accepted
 `WebUIProcessManager`/`ComfyProcessManager` ownership tests plus the fake-manager coordinator tests
 above; those existing tests were re-run and are unaffected (section 6).
+
+The earlier `READY` classification was a defect, not acceptance evidence: manager-only inspection
+missed the genuinely live external endpoints. The repaired coordinator now observes only the two
+configured endpoints and reports `EXTERNAL` / `ACTION_REQUIRED` for a healthy expected service or
+occupied/ambiguous endpoint. It still invokes neither manager stop method. No GPU generation was
+rerun for this repair.
 
 ## 8. Required CI
 

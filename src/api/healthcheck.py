@@ -112,6 +112,33 @@ def _probe_progress_endpoint(url: str, timeout: float) -> bool:
     return response.status_code == 200
 
 
+def probe_webui_endpoint(base_url: str, *, timeout: float = 0.5) -> str:
+    """Classify one configured WebUI endpoint without starting or changing a runtime.
+
+    ``free`` means the configured endpoint refused the read-only connection.  Any reachable,
+    slow, malformed, or non-WebUI HTTP service is conservatively ``occupied``: it may be an
+    external process and lifecycle ownership is not established by a port.  A valid models
+    response is ``healthy``.  This deliberately probes only the caller-supplied endpoint; it
+    does not perform port discovery.
+    """
+
+    try:
+        response = requests.get(
+            _build_url(base_url, MODELS_PATH), timeout=max(float(timeout), 0.01)
+        )
+    except requests.exceptions.ConnectionError:
+        return "free"
+    except requests.RequestException:
+        return "occupied"
+    if response.status_code != 200:
+        return "occupied"
+    try:
+        payload = response.json()
+    except Exception:
+        return "occupied"
+    return "healthy" if isinstance(payload, (list, dict)) else "occupied"
+
+
 def wait_for_webui_ready(base_url: str, timeout: float = 30.0, poll_interval: float = 0.5) -> bool:
     logger = get_logger(__name__)
     ctx = LogContext(subsystem="api")

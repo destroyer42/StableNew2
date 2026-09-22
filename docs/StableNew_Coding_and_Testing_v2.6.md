@@ -230,6 +230,11 @@ PRs while their known legacy or environment-dependent failures remain. Update
 the recorded evidence only after comparable required CI or a documented
 acceptance run.
 
+Runtime-transition tests must inject endpoint-presence probes and use temporary
+state: a test must not inherit a developer's live A1111 or Comfy endpoint. Cover
+both an owned manager release and a configured external/ambiguous endpoint that
+blocks before backend dispatch without any lifecycle mutation.
+
 ## Change review
 
 Before completion, verify:

@@ -10,8 +10,8 @@ release operation to the runtime's own existing owner and never persists state o
 - ``SVDService`` remains the sole authority over the native SVD pipeline cache;
   ``clear_model_cache()`` is the only release boundary used here.
 
-An **external or ambiguous** runtime (one this session did not launch, i.e. ``owns_process`` is
-False while the process is live) is never adopted, stopped or restarted. When one blocks
+An **external or ambiguous** runtime (one this session did not launch, including a live configured
+endpoint without a manager process handle) is never adopted, stopped or restarted. When one blocks
 readiness for the requested target, this service reports ``ACTION_REQUIRED`` with operator
 guidance and takes no OS action; it does not wait for the external process to disappear.
 
@@ -138,6 +138,39 @@ def _default_svd_service() -> Any:
     return SVDService()
 
 
+def _configured_endpoint(setting_name: str, environment_name: str, default: str) -> str:
+    """Read one existing configured endpoint without constructing or starting a manager."""
+
+    import os
+
+    from src.utils.config import ConfigManager
+
+    settings = ConfigManager().load_settings()
+    return str(settings.get(setting_name) or "").strip() or os.environ.get(environment_name, default)
+
+
+def _default_webui_endpoint_presence() -> bool:
+    """Observe only the configured WebUI endpoint; never discover or mutate processes."""
+
+    from src.api.healthcheck import probe_webui_endpoint
+
+    base_url = _configured_endpoint(
+        "webui_base_url", "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
+    )
+    return probe_webui_endpoint(base_url, timeout=0.5) != "free"
+
+
+def _default_comfy_endpoint_presence() -> bool:
+    """Observe only the configured Comfy endpoint; never discover or mutate processes."""
+
+    from src.video.comfy_healthcheck import probe_comfy_endpoint
+
+    base_url = _configured_endpoint(
+        "comfy_base_url", "STABLENEW_COMFY_BASE_URL", "http://127.0.0.1:8188"
+    )
+    return probe_comfy_endpoint(base_url, timeout=0.5) != "free"
+
+
 @dataclass
 class RuntimeTransitionCoordinator:
     """Delegates every release to the runtime's existing owner; owns no lifecycle state itself."""
@@ -145,6 +178,8 @@ class RuntimeTransitionCoordinator:
     webui_manager_getter: Callable[[], Any] = field(default=_default_webui_manager)
     comfy_manager_getter: Callable[[], Any] = field(default=_default_comfy_manager)
     svd_service_factory: Callable[[], Any] = field(default=_default_svd_service)
+    webui_endpoint_present: Callable[[], bool] = field(default=_default_webui_endpoint_presence)
+    comfy_endpoint_present: Callable[[], bool] = field(default=_default_comfy_endpoint_presence)
 
     def prepare_for(self, target: str) -> RuntimeTransitionResult:
         """Release conflicting StableNew-owned runtime residency ahead of dispatching ``target``.
@@ -207,7 +242,7 @@ class RuntimeTransitionCoordinator:
     ) -> tuple[RuntimeOwnershipState, list[str], list[str], str | None]:
         manager = self._get_manager(runtime_id)
         if manager is None:
-            return RuntimeOwnershipState.ABSENT, [], [], None
+            return self._classify_unmanaged_endpoint(runtime_id, absent=True)
         try:
             is_running = bool(manager.is_running())
         except Exception as exc:  # noqa: BLE001 - a broken probe blocks, it does not mutate
@@ -218,7 +253,7 @@ class RuntimeTransitionCoordinator:
                 f"{runtime_id}: could not verify runtime state ({type(exc).__name__}: {exc})",
             )
         if not is_running:
-            return RuntimeOwnershipState.NOT_RUNNING, [], [], None
+            return self._classify_unmanaged_endpoint(runtime_id, absent=False)
         owns_process = bool(getattr(manager, "owns_process", False))
         if not owns_process:
             return (
@@ -248,12 +283,45 @@ class RuntimeTransitionCoordinator:
             )
         return RuntimeOwnershipState.OWNED, [runtime_id], [runtime_id], None
 
+    def _classify_unmanaged_endpoint(
+        self, runtime_id: str, *, absent: bool
+    ) -> tuple[RuntimeOwnershipState, list[str], list[str], str | None]:
+        """Treat a live configured endpoint without ownership as immutable external state."""
+
+        try:
+            endpoint_present = self._endpoint_present(runtime_id)
+        except Exception as exc:  # noqa: BLE001 - failed observation is ambiguous, never mutable
+            return (
+                RuntimeOwnershipState.EXTERNAL,
+                [],
+                [],
+                f"{runtime_id}: could not verify configured endpoint ({type(exc).__name__}: {exc}); "
+                "treating it as external/ambiguous and taking no action.",
+            )
+        if endpoint_present:
+            return (
+                RuntimeOwnershipState.EXTERNAL,
+                [],
+                [],
+                f"{runtime_id}: configured endpoint is live or occupied without StableNew ownership. "
+                "StableNew will not adopt, stop, or restart it; close it yourself (or free its "
+                "resources) before this job can proceed.",
+            )
+        return (RuntimeOwnershipState.ABSENT if absent else RuntimeOwnershipState.NOT_RUNNING), [], [], None
+
     def _get_manager(self, runtime_id: str) -> Any:
         if runtime_id == RUNTIME_A1111_WEBUI:
             return self.webui_manager_getter()
         if runtime_id == RUNTIME_COMFY:
             return self.comfy_manager_getter()
         raise ValueError(f"'{runtime_id}' has no managed-process owner")
+
+    def _endpoint_present(self, runtime_id: str) -> bool:
+        if runtime_id == RUNTIME_A1111_WEBUI:
+            return bool(self.webui_endpoint_present())
+        if runtime_id == RUNTIME_COMFY:
+            return bool(self.comfy_endpoint_present())
+        raise ValueError(f"'{runtime_id}' has no configured endpoint")
 
     @staticmethod
     def _stop_managed_runtime(runtime_id: str, manager: Any) -> None:

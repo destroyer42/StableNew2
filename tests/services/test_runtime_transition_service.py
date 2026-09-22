@@ -64,12 +64,19 @@ class _FakeSVDService:
 
 
 def _coordinator(
-    *, webui: object | None = None, comfy: object | None = None, svd: object | None = None
+    *,
+    webui: object | None = None,
+    comfy: object | None = None,
+    svd: object | None = None,
+    webui_endpoint_present: bool = False,
+    comfy_endpoint_present: bool = False,
 ) -> RuntimeTransitionCoordinator:
     return RuntimeTransitionCoordinator(
         webui_manager_getter=lambda: webui,
         comfy_manager_getter=lambda: comfy,
         svd_service_factory=lambda: svd or _FakeSVDService(),
+        webui_endpoint_present=lambda: webui_endpoint_present,
+        comfy_endpoint_present=lambda: comfy_endpoint_present,
     )
 
 
@@ -130,6 +137,47 @@ def test_a_non_conflicting_absent_or_not_running_runtime_is_never_stopped() -> N
     result = _coordinator(webui=not_running).prepare_for(RUNTIME_COMFY)
     assert not_running.stop_calls == 0  # nothing to release; it is not merely stopped on sight
     assert result.ownership_state[RUNTIME_A1111_WEBUI] is RuntimeOwnershipState.NOT_RUNNING
+
+
+def test_live_configured_endpoint_without_owned_handle_is_external_and_never_stopped() -> None:
+    """The normal external-runtime case has no manager process object at all."""
+
+    no_manager_comfy = _coordinator(comfy_endpoint_present=True).prepare_for(RUNTIME_A1111_WEBUI)
+    assert no_manager_comfy.status is RuntimeTransitionStatus.ACTION_REQUIRED
+    assert no_manager_comfy.ownership_state[RUNTIME_COMFY] is RuntimeOwnershipState.EXTERNAL
+    assert no_manager_comfy.releases_attempted == ("svd_native_cache",)
+
+    idle_manager_comfy = _FakeManager(running=False, owned=False)
+    idle_manager_comfy_result = _coordinator(
+        comfy=idle_manager_comfy, comfy_endpoint_present=True
+    ).prepare_for(RUNTIME_A1111_WEBUI)
+    assert idle_manager_comfy_result.status is RuntimeTransitionStatus.ACTION_REQUIRED
+    assert idle_manager_comfy_result.ownership_state[RUNTIME_COMFY] is RuntimeOwnershipState.EXTERNAL
+    assert idle_manager_comfy.stop_calls == 0
+
+    no_manager_webui = _coordinator(webui_endpoint_present=True).prepare_for(RUNTIME_COMFY)
+    assert no_manager_webui.status is RuntimeTransitionStatus.ACTION_REQUIRED
+    assert no_manager_webui.ownership_state[RUNTIME_A1111_WEBUI] is RuntimeOwnershipState.EXTERNAL
+
+    unmanaged_webui = _FakeManager(running=False, owned=False, stop_name="stop_webui")
+    idle_manager_webui = _coordinator(
+        webui=unmanaged_webui, webui_endpoint_present=True
+    ).prepare_for(RUNTIME_COMFY)
+    assert idle_manager_webui.status is RuntimeTransitionStatus.ACTION_REQUIRED
+    assert idle_manager_webui.ownership_state[RUNTIME_A1111_WEBUI] is RuntimeOwnershipState.EXTERNAL
+    assert unmanaged_webui.stop_calls == 0
+    assert any("will not adopt, stop, or restart" in blocker for blocker in idle_manager_webui.blockers)
+
+
+def test_free_configured_endpoint_does_not_block_and_external_target_is_not_a_conflict() -> None:
+    absent = _coordinator(webui_endpoint_present=False).prepare_for(RUNTIME_COMFY)
+    assert absent.ready
+    assert absent.ownership_state[RUNTIME_A1111_WEBUI] is RuntimeOwnershipState.ABSENT
+
+    # Comfy itself is the target here, so an external Comfy endpoint is not a conflicting runtime.
+    external_target = _coordinator(comfy_endpoint_present=True).prepare_for(RUNTIME_COMFY)
+    assert external_target.ready
+    assert RUNTIME_COMFY not in external_target.ownership_state
 
 
 def test_owned_release_failure_blocks_and_is_diagnostic_not_a_generation_fallback() -> None:

@@ -174,7 +174,16 @@ def test_fake_backend_traverses_job_service_sqlite_and_canonical_result(tmp_path
 def test_runner_keeps_model_vae_policy_neutral_and_adapter_translates_aliases(
     tmp_path: Path,
 ) -> None:
-    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "artifacts"))
+    transition = Mock()
+    transition.prepare_for.return_value = Mock(ready=True)
+    image_backends = ImageBackendRegistry()
+    image_backends.register(A1111WebUIImageBackend(transition=transition))
+    runner = PipelineRunner(
+        Mock(),
+        Mock(),
+        runs_base_dir=str(tmp_path / "artifacts"),
+        image_backend_registry=image_backends,
+    )
     pipeline = Mock()
     pipeline.client = Mock()
     txt_path = tmp_path / "txt.png"

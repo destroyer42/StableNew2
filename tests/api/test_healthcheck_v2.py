@@ -9,6 +9,7 @@ from src.api.healthcheck import (
     OPTIONS_PATH,
     PROGRESS_PATH,
     WebUIHealthCheckTimeout,
+    probe_webui_endpoint,
     wait_for_webui_ready,
 )
 
@@ -30,6 +31,24 @@ def test_wait_for_webui_ready_succeeds_when_models_endpoint_ready(monkeypatch):
     monkeypatch.setattr("src.api.healthcheck.requests.get", fake_get)
 
     assert wait_for_webui_ready("http://127.0.0.1:7860", timeout=1.0, poll_interval=0.01) is True
+
+
+def test_probe_webui_endpoint_distinguishes_free_healthy_and_occupied(monkeypatch):
+    monkeypatch.setattr(
+        "src.api.healthcheck.requests.get", lambda *_args, **_kwargs: _DummyResponse(200, payload=[])
+    )
+    assert probe_webui_endpoint("http://127.0.0.1:7860") == "healthy"
+
+    monkeypatch.setattr(
+        "src.api.healthcheck.requests.get", lambda *_args, **_kwargs: _DummyResponse(503)
+    )
+    assert probe_webui_endpoint("http://127.0.0.1:7860") == "occupied"
+
+    def _refused(*_args, **_kwargs):
+        raise requests.exceptions.ConnectionError("connection refused")
+
+    monkeypatch.setattr("src.api.healthcheck.requests.get", _refused)
+    assert probe_webui_endpoint("http://127.0.0.1:7860") == "free"
 
 
 def test_wait_for_webui_ready_does_not_return_true_on_progress_only(monkeypatch, caplog):

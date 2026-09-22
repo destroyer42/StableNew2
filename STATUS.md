@@ -25,8 +25,9 @@ Updated: 2026-09-21
   FEATURE BRANCH**; integration into `main` awaits explicit product-owner authorization.
   It coordinates release of conflicting StableNew-owned A1111,
   Comfy, or cached SVD residency before the already-selected backend prepares;
-  existing owners remain sole lifecycle authorities, external runtimes are
-  immutable, and no runtime is restored after a job. It mitigates avoidable
+  existing owners remain sole lifecycle authorities. A configured live/occupied
+  A1111 or Comfy endpoint without an owned manager handle is external and
+  immutable; no runtime is restored after a job. It mitigates avoidable
   owned-runtime contention only and makes no claim about the separate
   workstation black-screen/GPU-reset diagnosis.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
@@ -76,8 +77,9 @@ artifact authorities.
 PR-RUNTIME-100 is **COMPLETE / ACCEPTED ON FEATURE BRANCH** and adds no queue, lifecycle, scheduler, lease, or backend-selection
 authority. Its one coordinator delegates release only to `WebUIProcessManager`,
 `ComfyProcessManager`, and `SVDService` at the A1111, Comfy, and native-SVD
-backend preparation seams. A failed owned release blocks dispatch; an observed
-external conflict is action-required and is never mutated. Its acceptance record
+backend preparation seams. A failed owned release blocks dispatch; a read-only
+configured endpoint probe classifies a live/occupied unmanaged conflict as
+action-required and never mutates it. Its acceptance record
 is `docs/Subsystems/Runtime/PR-RUNTIME-100_Owned_Runtime_Transition_Policy.md`.
 
 PR-LEARN-300 is **COMPLETE / ACCEPTED / INTEGRATED**. Its evidence-integrity and workflow slices give Designed

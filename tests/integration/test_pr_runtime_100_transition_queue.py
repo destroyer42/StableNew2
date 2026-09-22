@@ -194,6 +194,41 @@ def test_an_external_conflicting_runtime_blocks_dispatch_without_mutation_or_ret
     repository.close()
 
 
+def test_external_configured_endpoint_without_manager_blocks_before_svd_dispatch(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """An operator-run Comfy has no manager handle but must still block native SVD."""
+
+    source_path = tmp_path / "selected.png"
+    Image.new("RGB", (32, 32), "navy").save(source_path)
+    _fake_svd_runner_module(monkeypatch, source_path)
+    coordinator = RuntimeTransitionCoordinator(
+        webui_manager_getter=lambda: None,
+        comfy_manager_getter=lambda: None,
+        webui_endpoint_present=lambda: False,
+        comfy_endpoint_present=lambda: True,
+    )
+    repository, queue, service = _build_stack(tmp_path, coordinator=coordinator)
+    run_svd_native_stage_called = False
+
+    def _unexpected_svd_dispatch(*_args, **_kwargs):
+        nonlocal run_svd_native_stage_called
+        run_svd_native_stage_called = True
+        raise AssertionError("transition must block before SVD dispatch")
+
+    monkeypatch.setattr("src.pipeline.executor.Pipeline.run_svd_native_stage", _unexpected_svd_dispatch)
+    job_id = _submit(service, source_path)
+    service.runner.run_once(queue.get_job(job_id))
+
+    failed = repository.get_job(job_id)
+    assert failed is not None and failed.status is JobStatus.FAILED
+    assert run_svd_native_stage_called is False
+    assert "action_required" in str(failed.error_message or failed.result).lower()
+    assert queue.list_jobs(JobStatus.QUEUED) == []
+    assert queue.list_jobs(JobStatus.RUNNING) == []
+    repository.close()
+
+
 def test_a_failed_owned_release_blocks_dispatch_and_never_falls_through_to_generation(
     tmp_path: Path, monkeypatch
 ) -> None:

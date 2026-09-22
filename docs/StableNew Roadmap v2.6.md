@@ -113,7 +113,9 @@ only accepted video backend.
 its feature branch; integration into `main` awaits explicit product-owner
 authorization. It adds one narrow, target-driven coordinator that asks the
 existing A1111, Comfy, and SVD owners to release only conflicting runtime state
-they prove StableNew owns; it never adopts or mutates external processes, does
+they prove StableNew owns; a live/occupied configured endpoint without an owned
+manager handle is an immutable external conflict, so it never adopts or mutates
+external processes, does
 not restore a previous runtime after a job, and does not add a scheduler, lease,
 queue authority, backend routing, or diagnosis of the separate workstation GPU
 reset problem.
