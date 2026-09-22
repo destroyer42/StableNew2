@@ -108,15 +108,26 @@ Gates: **A** whole-body motion capability · **B** identity/reference binding ·
   for the weak-reference-binding failure mode PR-VID-110 recorded for Wan2.1 VACE (VACE reproduced
   a *different* person with the driving clip's motion; Animate's stated design goal is to keep the
   reference person's identity while only importing motion).
-- **C (community, plausible but not StableNew-verified):** A community GGUF conversion
-  (`QuantStack/Wan2.2-Animate-14B-GGUF`) via the mature, widely-used `city96/ComfyUI-GGUF` node is
-  reported working at 12 GB VRAM up to Q8 with a 25-frame loop; Q4_K_M is reported at ~10–12 GB.
-  The *official* checkpoint (fp8/bf16, via Kijai's node, per the official `docs.comfy.org` Animate
-  page) targets 24 GB+ for "smooth 720p." No official or community figure was found for our exact
-  settings (480×832 portrait, 49 frames, single case) — plausible, not confirmed.
+- **C (mixed; corrected below):** The official `docs.comfy.org` Wan2.2-Animate workflow page states
+  the required components (the fp8/bf16 diffusion checkpoint, `wan_2.1_vae`, `umt5_xxl` text
+  encoder, `clip_vision_h`, plus the official workflow's additional `KJNodes` and
+  `comfyui_controlnet_aux` custom-node dependencies for pose/face extraction) but **does not state
+  a specific VRAM minimum** — its only memory-related guidance is to "use a small size for video
+  generation, in case you don't have enough VRAM." The "24 GB+ for smooth 720p" figure in earlier
+  drafting of this document was sourced from third-party tutorial/guide sites (e.g. Apatero,
+  NextDiffusion-style guides surfaced in search results), not from official Wan-AI or Comfy
+  documentation, and is corrected here to **community** evidence rather than an official
+  requirement. Separately, a community GGUF conversion (`QuantStack/Wan2.2-Animate-14B-GGUF`) via
+  the mature, widely-used `city96/ComfyUI-GGUF` node is reported (**community**) working at 12 GB
+  VRAM up to Q8 with a 25-frame loop; Q4_K_M is reported at ~10–12 GB. **Official upstream does not
+  establish a supported 12-GB Wan2.2-Animate path. Community GGUF/offload evidence makes 12-GB
+  execution plausible enough to justify a bounded feasibility probe, but exact RTX 4070 Ti 12-GB
+  VRAM and 32-GB host-RAM feasibility remain unproven.**
 - **D (the decisive open risk):** This is the gate that cannot be resolved from secondhand evidence:
-  - Official/community guidance for T5-XXL CPU offload on the base Wan-14B line already states
-    "32 GB minimum, strongly recommended" — i.e., our exact ceiling, with zero documented margin.
+  - **Community** guidance (tutorial/guide sites, not an official Wan-AI/Comfy source) for T5-XXL
+    CPU offload on the base Wan-14B line states "32 GB minimum, strongly recommended" for that
+    offload strategy — i.e., our exact ceiling, with zero documented margin. No official upstream
+    source stating an explicit host-RAM minimum for Wan2.2-Animate was found either way.
   - An **open, unresolved** upstream issue on `kijai/ComfyUI-WanVideoWrapper` — the same wrapper
     the official Animate workflow references for its fp8 checkpoint —
     ([#1017](https://github.com/kijai/ComfyUI-WanVideoWrapper/issues/1017)) reports a 64 GB-RAM /
@@ -205,7 +216,19 @@ eliminated or materially weaker on the evidence above. The probe exists to resol
 cannot settle, before authorizing a full three-case physical motion characterization of the kind
 PR-VID-150 ran for Wan2.2 TI2V-5B.
 
-## Smallest proposed PR-VID-160 physical qualification contract (not authorized by this package)
+## Proposed next package (not authorized by this package)
+
+**`PR-VID-160B — Wan2.2-Animate Target-Hardware Feasibility Probe`**
+
+This is a **resource feasibility probe**, not a full motion-quality qualification, and is not
+authorized here. Its first question is:
+
+> Can the smallest credible Wan2.2-Animate GGUF/quantized Comfy path complete one bounded short
+> Move-mode generation on RTX 4070 Ti 12 GB + 32 GB RAM without resource exhaustion, shared-memory
+> collapse, GPU loss, or violating StableNew runtime ownership?
+
+Only after that question passes should character-identity and locomotion quality be characterized
+in a separate, later package.
 
 If a future package is separately authorized to proceed:
 
@@ -215,19 +238,25 @@ If a future package is separately authorized to proceed:
 2. Run **one** minimal, short-loop generation (e.g., the smallest supported frame count/loop, not
    PR-VID-150's full 49-frame case) through the canonical production path, with the existing
    `ResourceSampler` telemetry attached, watching `ram_available_min_gb` specifically.
-3. Apply a hard stop rule: if available host RAM approaches exhaustion or the existing production
-   resource-readiness guard blocks, stop and report — do not retry, do not lower the guard.
-4. This single bounded run's purpose is narrowly to answer Gate D (does a 32 GB host survive one
-   Wan2.2-Animate-14B GGUF load-and-generate on this exact machine) — not to re-run PR-VID-150's
-   A/B/C prompt-structure comparison, which is already answered.
-5. Only if that probe survives cleanly should a PR-VID-150-style bounded three-case motion-transfer
-   characterization (varying driving-video complexity, e.g., gesture-only vs. walking driving clip)
-   be proposed as a separate, explicitly authorized package.
+3. Apply a hard stop rule: if available host RAM approaches exhaustion, the existing production
+   resource-readiness guard blocks, shared-memory collapse is observed, or GPU loss occurs — stop
+   and report; do not retry, do not lower the guard, and do not violate StableNew's existing
+   runtime-ownership rules (no adopting/restarting an unmanaged process).
+4. This single bounded run's purpose is narrowly the resource-feasibility question above — not to
+   re-run PR-VID-150's A/B/C prompt-structure comparison, which is already answered, and not to
+   characterize identity or locomotion quality yet.
+5. Only if that probe survives cleanly should a PR-VID-150-style bounded motion-transfer
+   characterization (identity retention, locomotion quality, varying driving-video complexity) be
+   proposed as a separate, explicitly authorized package.
 
 ## StableNew architecture review
 
 The selected candidate (Wan2.2-Animate-14B, if a future probe clears Gate D) maps onto the existing
-architecture without new authority:
+architecture without new authority, conceptually reusing the same canonical path already accepted
+for Wan2.2 TI2V-5B:
+
+`Intent -> immutable NJR -> JobService -> SQLite -> PipelineRunner.run_njr -> VideoExecutionResolver
+-> existing Comfy VideoBackend -> Artifact/History`
 
 - Reuses the existing `VideoExecutionResolver` and `VideoBackendRegistry` — no new backend-selection
   authority.
