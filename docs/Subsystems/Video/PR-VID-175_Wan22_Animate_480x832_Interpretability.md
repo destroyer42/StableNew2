@@ -1,9 +1,9 @@
 # PR-VID-175 — Wan2.2-Animate 480×832 Interpretability Gate
 
-Status: **COMPLETE / `ANIMATE_480x832_INTERPRETABLE_PASS`**. Qualification/characterization only.
-No production `src/` change, no backend, no queue/history authority, no GUI/controller/resolver
-change, no Wan production graph/settings change, no workflow registration, no production
-integration. Start `main @ a4272a18f1c4d3f38ebd43f401e61a5eb5313e37`.
+Status: **COMPLETE / ACCEPTED / INTEGRATED — `ANIMATE_480x832_INTERPRETABLE_PASS`**.
+Qualification/characterization only. No production `src/` change, no backend, no queue/history
+authority, no GUI/controller/resolver change, no Wan production graph/settings change, no workflow
+registration, no production integration. Start `main @ a4272a18f1c4d3f38ebd43f401e61a5eb5313e37`.
 
 ## Question asked
 
