@@ -159,6 +159,22 @@ Updated: 2026-09-22
   VRAM / 32 GB RAM workstation, before any production-integration decision. No production Wan/backend
   setting or governance changed; Animate remains unregistered. Three additional clean DIAG-GPU-120
   exposures; not a PASS or root-cause conclusion.
+  `PR-VID-175 — Wan2.2-Animate 480x832 Interpretability Gate`
+  (`docs/Subsystems/Video/PR-VID-175_Wan22_Animate_480x832_Interpretability.md`) answered that
+  question with one physical run: PR-VID-170 Case C's exact real hip-hinge motion/reference/seed/
+  official settings, unchanged except `256x256 -> 480x832`. Completed cleanly (no safety stop, no
+  CUDA OOM, no GPU loss). Result: **`ANIMATE_480x832_INTERPRETABLE_PASS`** — direct inspection of
+  the full 13-frame clip shows identity, anatomy, and the hip-hinge motion progression are now all
+  clearly assessable (a qualitative step-change from PR-VID-170), and the severe unrequested camera
+  zoom/reframing is resolved for subject framing, though background hallucination/instability
+  persists as a separate, still-present issue. Resource cost increased measurably (VRAM headroom
+  954 MiB vs 1,445 MiB; commit headroom 11.66 GB vs 17.95 GB; wall time ~2x) but stayed well clear
+  of every commit-aware safety threshold. This is an interpretability-gate result only, not a
+  product-value characterization. No production Wan/backend setting or governance changed; Animate
+  remains unregistered; no sampler/CFG/steps tuning performed; no move to 720x1280 in this package.
+  Next objective: the controlled A/B/C motion-transfer characterization at 480x832 (PR-VID-170's
+  case structure, now at an interpretable resolution), official settings held fixed. One additional
+  clean DIAG-GPU-120 exposure; not a PASS or root-cause conclusion.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
