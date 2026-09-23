@@ -133,10 +133,27 @@ Updated: 2026-09-22
   package (Run 1's tool-initiated interruption, Run 2's normal completion); neither is a PASS or
   root-cause conclusion; DIAG-GPU-120 remains observation-only.
 
-  Next objective: bounded Wan2.2-Animate motion-transfer characterization on the accepted
-  small-envelope configuration, evaluating identity retention, driving-motion adherence,
-  locomotion/weight transfer, anatomy, temporal coherence, and resource margin before any
-  production integration decision.
+  `PR-VID-170 — Wan2.2-Animate Motion-Transfer Characterization`
+  (`docs/Subsystems/Video/PR-VID-170_Wan22_Animate_Motion_Transfer_Characterization.md`) ran that
+  characterization: three real cases (A local gesture, B locomotion, C whole-body weight shift; A/B
+  synthetic deterministic pose sequences, C the real PR-VID-110 hip-hinge clip — no suitable
+  existing three-way real driving-motion inventory existed, documented in the report) at official
+  Wan2.2-Animate-14B sampling settings (`steps=20, cfg=1.0, shift=5.0, sampler=uni_pc`, sourced
+  directly from `Wan-Video/Wan2.2`'s config, not invented) on the accepted 256x256/13-frame
+  envelope. All three completed cleanly (no safety stop, no CUDA OOM, no GPU loss). Result:
+  **`ANIMATE_QUALITY_INSUFFICIENT_AT_SMALL_ENVELOPE`** — pervasive visual noise, unrequested camera
+  zoom/reframing, and unresolvable face/identity detail in all three cases prevented a confident
+  identity/locomotion/anatomy judgment either way; this is an envelope/settings limitation, not a
+  capability verdict. Comparison to PR-VID-150 (locomotion) and PR-VID-110/VACE (identity) is
+  inconclusive for the same reason. One falsifiable lead for the next package: PR-VID-160B/C's
+  resource-testing settings (`cfg=5, shift=8, steps=4`) produced visibly cleaner output at the same
+  resolution than this package's official `cfg=1.0` settings, suggesting `cfg` may be a bigger
+  quality driver than resolution — not tested further here (would require a fourth generation).
+  Next objective: a controlled larger-envelope Wan2.2-Animate qualification (resolution/frame count
+  raised from this package's deliberately minimal envelope), isolating whether `cfg=1.0` specifically
+  drives the quality loss, before any production-integration decision. No production Wan/backend
+  setting or governance changed; Animate remains unregistered. Three additional clean DIAG-GPU-120
+  exposures; not a PASS or root-cause conclusion.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
