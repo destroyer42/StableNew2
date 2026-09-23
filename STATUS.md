@@ -125,12 +125,18 @@ Updated: 2026-09-22
   the original warning line), system commit peaked at 69.1% of a 63.76 GB commit limit with 19.71 GB
   of headroom remaining throughout, no CUDA OOM, no GPU loss, clean owned-runtime teardown. No quant,
   geometry, frame count, step count, `face_video`, Comfy memory flag, or pagefile setting was changed
-  between runs. Recommendation: the next package is a bounded Wan2.2-Animate motion-transfer
-  characterization (identity retention, locomotion, driving-motion adherence, anatomy, temporal
-  coherence) — not a return to PR-VID-160A candidate research. No production Wan/backend setting or
-  governance changed; Animate remains unregistered. Two clean high-load DIAG-GPU-120 exposures now
-  recorded for this package (Run 1's tool-initiated interruption, Run 2's normal completion); neither
-  is a PASS or root-cause conclusion; DIAG-GPU-120 remains observation-only.
+  between runs. This establishes that 32 GB host RAM is sufficient for the exact tested minimal
+  Move-mode configuration; it does not establish full-resolution 480x832 feasibility, 49-frame
+  feasibility, production-quality-settings feasibility, general Wan2.2-Animate feasibility at all
+  workloads, or production readiness. No production Wan/backend setting or governance changed;
+  Animate remains unregistered. Two clean high-load DIAG-GPU-120 exposures now recorded for this
+  package (Run 1's tool-initiated interruption, Run 2's normal completion); neither is a PASS or
+  root-cause conclusion; DIAG-GPU-120 remains observation-only.
+
+  Next objective: bounded Wan2.2-Animate motion-transfer characterization on the accepted
+  small-envelope configuration, evaluating identity retention, driving-motion adherence,
+  locomotion/weight transfer, anatomy, temporal coherence, and resource margin before any
+  production integration decision.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

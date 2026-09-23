@@ -1,10 +1,10 @@
 # PR-VID-160C — Wan2.2-Animate True Move-Mode Resource Closure
 
-Status: **COMPLETE / RESOURCE GATE CLOSED — `MOVE_MODE_RESOURCE_PASS_32GB`** (commit-aware
+Status: **COMPLETE / ACCEPTED / INTEGRATED — `MOVE_MODE_RESOURCE_PASS_32GB`** (commit-aware
 adjudication; supersedes the interim `MOVE_MODE_RESOURCE_NO_GO_RAM` reading from the first run's
-physical-RAM-only guard — see "Adjudication" below). This is a qualification-only
-resource-feasibility probe. It adds no production `src/` change, no backend, no queue/history
-authority, and no Wan production graph/settings change. Start
+physical-RAM-only guard — see "Adjudication" below; Run 1's evidence is preserved unmodified, not
+erased). This is a qualification-only resource-feasibility probe. It adds no production `src/`
+change, no backend, no queue/history authority, and no Wan production graph/settings change. Start
 `main @ a4d27fe539520076b25f393a023d60150d53e3d3`.
 
 ## Outcome asked
