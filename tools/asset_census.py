@@ -13,17 +13,15 @@ import hashlib
 import json
 import struct
 from collections import defaultdict
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Iterable
-
+from typing import Any
 
 HASH_CHUNK_SIZE = 1024 * 1024
 MAX_SAFETENSORS_HEADER_BYTES = 64 * 1024 * 1024
-MODEL_EXTENSIONS = frozenset(
-    {".bin", ".ckpt", ".gguf", ".onnx", ".pt", ".pth", ".safetensors"}
-)
+MODEL_EXTENSIONS = frozenset({".bin", ".ckpt", ".gguf", ".onnx", ".pt", ".pth", ".safetensors"})
 SHA256_RE = frozenset("0123456789abcdef")
 
 
