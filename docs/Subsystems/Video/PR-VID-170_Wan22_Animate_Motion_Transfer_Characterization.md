@@ -1,9 +1,9 @@
 # PR-VID-170 — Wan2.2-Animate Motion-Transfer Characterization
 
-Status: **COMPLETE / `ANIMATE_QUALITY_INSUFFICIENT_AT_SMALL_ENVELOPE`**. Qualification/
-characterization only. No production `src/` change, no backend, no queue/history authority, no
-GUI/controller/resolver change, no Wan production graph/settings change, no workflow registration.
-Start `main @ 1bca3e5520389cf6b159db0b27f0257fff8ae127`.
+Status: **COMPLETE / `ANIMATE_QUALITY_INSUFFICIENT_AT_SMALL_ENVELOPE` / PENDING MAIN INTEGRATION**.
+Qualification/characterization only. No production `src/` change, no backend, no queue/history
+authority, no GUI/controller/resolver change, no Wan production graph/settings change, no workflow
+registration. Start `main @ 1bca3e5520389cf6b159db0b27f0257fff8ae127`.
 
 ## Product question asked
 
@@ -34,6 +34,15 @@ Retrieved directly from the official `Wan-Video/Wan2.2` GitHub repository (Apach
 | default `prompt` | `视频中的人在做动作` ("the person in the video is performing an action") | `wan/configs/wan_animate_14B.py` |
 | `frame_num` (official default) | 77 | `wan/configs/wan_animate_14B.py` |
 | `sample_fps` (official default) | 30 | `wan/configs/wan_animate_14B.py` |
+| `SUPPORTED_SIZES['animate-14B']` | `('720*1280', '1280*720')` — **only** these two sizes are supported | `wan/configs/__init__.py` |
+| `--size` default | `'1280*720'` | `generate.py` argparse default |
+
+**Official upstream Animate support is materially larger than this package's qualification
+envelope**: the model officially supports only 720×1280/1280×720 (defaulting to 1280×720), 77
+frames, 30 fps. This package's 256×256/13-frame/8 fps envelope is therefore a **deliberately
+resource-constrained qualification envelope, not an upstream-representative quality envelope** —
+256×256 is not even among the two officially supported sizes. This context is carried into the
+Decision classification and Recommended next package sections below.
 
 `sample_solver='unipc'` maps **directly and unambiguously** to the already-used local Comfy
 `uni_pc` sampler — no inference or unsupported mapping was needed; `'dpm++'` is only the other
@@ -269,14 +278,19 @@ specific controlled 256×256/13-frame envelope, at these settings, did not produ
 interpretable enough to answer the product question either way. A controlled larger-envelope
 qualification is needed before a product viability judgment can be made.
 
-One specific, falsifiable observation worth carrying into that next package: PR-VID-160B/160C's
-*resource-testing* settings (`cfg=5, shift=8, steps=4`) at the identical 256×256/13-frame envelope
-produced comparatively clean, clearly recognizable (if unrefined) renders of the reference person
-(see those reports' extracted frames) — markedly cleaner than this package's *official-default*
-settings (`cfg=1.0, shift=5.0, steps=20`) produced here. This suggests the specific setting
-combination — most plausibly `cfg=1.0`'s near-absence of guidance — may be contributing to the
-degradation independent of resolution, and is worth isolating (not resolution alone) in a future
-package's own Phase A. This package does not test that hypothesis further; doing so would require a
+**Correction (product-owner review):** an earlier draft of this section speculated that `cfg=1.0`
+specifically — rather than resolution — might be the dominant driver of the observed degradation,
+and proposed isolating `cfg=1.0` versus resolution in a future package. That framing is corrected
+here: `cfg=1.0` (`sample_guide_scale`) is the model's own official Animate guidance baseline (Phase
+A), not an unvalidated or experimental setting, and should remain **fixed**, not treated as a
+variable to tune, in any future characterization. The far more parsimonious explanation, now that
+official supported geometry has been recorded (Phase A/B above), is simply that **256×256 is not
+even among the two officially supported Animate sizes** (`720×1280`/`1280×720`) — this package
+qualified the model at roughly a fifth of its smallest officially validated linear dimension.
+PR-VID-160B/160C's resource-testing settings (`cfg=5, shift=8, steps=4`) did produce visibly
+cleaner output at the same 256×256 envelope, but that observation does not establish `cfg` as the
+cause; it is recorded here only as a raw data point, not as a hypothesis this package endorses
+pursuing. This package does not test resolution sensitivity further; doing so would require a
 fourth generation, which is not authorized here.
 
 ## DIAG-GPU-120
@@ -294,14 +308,19 @@ work; no model promotion.
 
 ## Recommended next package
 
-A controlled **larger-envelope Wan2.2-Animate qualification** (resolution and/or frame count raised
-from this package's deliberately minimal 256×256/13-frame envelope) is needed before the product
-question (identity retention, locomotion, turning, anatomy, temporal coherence) can be answered.
-That future package should also isolate whether `cfg=1.0` specifically (versus resolution alone) is
-the dominant quality driver observed here, and — separately — should prefer at least one genuinely
-real (not synthetic) locomotion driving clip if one can be sourced without a new dependency, so the
-locomotion case is not solely dependent on an idealized procedural walk cycle. Neither of those
-questions is answered or attempted by this package.
+**Controlled larger-envelope Animate characterization with official inference settings held
+fixed** (`cfg=1.0`, `shift=5.0`, `steps=20`, `sampler=uni_pc` unchanged — Phase A's official
+baseline, not a variable), to determine whether increasing spatial resolution toward the officially
+supported sizes (`720×1280`/`1280×720`; frame count/fps may also need to move toward the official
+77/30 defaults) makes identity/anatomy/motion-transfer output interpretable on the current 12 GB
+VRAM / 32 GB RAM workstation — this package's PR-VID-160B/C resource evidence already establishes
+that the backbone alone fits with real margin at small geometry, so the open question is purely
+whether a larger, officially-representative geometry remains resource-feasible and produces
+interpretable output, not whether the settings need retuning. Separately, and not blocking that
+question, a future package should prefer at least one genuinely real (not synthetic) locomotion
+driving clip if one can be sourced without a new dependency, so the locomotion case is not solely
+dependent on an idealized procedural walk cycle. This package does not authorize or attempt either
+step.
 
 ## Docs/Git
 

@@ -145,13 +145,18 @@ Updated: 2026-09-22
   zoom/reframing, and unresolvable face/identity detail in all three cases prevented a confident
   identity/locomotion/anatomy judgment either way; this is an envelope/settings limitation, not a
   capability verdict. Comparison to PR-VID-150 (locomotion) and PR-VID-110/VACE (identity) is
-  inconclusive for the same reason. One falsifiable lead for the next package: PR-VID-160B/C's
-  resource-testing settings (`cfg=5, shift=8, steps=4`) produced visibly cleaner output at the same
-  resolution than this package's official `cfg=1.0` settings, suggesting `cfg` may be a bigger
-  quality driver than resolution — not tested further here (would require a fourth generation).
-  Next objective: a controlled larger-envelope Wan2.2-Animate qualification (resolution/frame count
-  raised from this package's deliberately minimal envelope), isolating whether `cfg=1.0` specifically
-  drives the quality loss, before any production-integration decision. No production Wan/backend
+  inconclusive for the same reason. Official upstream Animate support is materially larger than
+  this qualification envelope: the model supports only `720x1280`/`1280x720` (default `1280x720`),
+  77 frames, 30 fps — 256x256 is not even among the officially supported sizes, so the tested
+  envelope is a deliberately resource-constrained qualification envelope, not an
+  upstream-representative one. `cfg=1.0` is the model's own official Animate guidance baseline
+  (Phase A), not an unvalidated setting, and should remain fixed, not tuned, going forward; an
+  earlier draft of this record speculated `cfg=1.0` itself might be the dominant quality driver,
+  which is corrected here as unsupported. Next objective: a controlled larger-envelope Wan2.2-Animate
+  characterization with official inference settings held fixed (`cfg=1.0, shift=5.0, steps=20,
+  sampler=uni_pc`), to determine whether increasing spatial resolution toward the officially
+  supported sizes makes identity/anatomy/motion-transfer output interpretable on the current 12 GB
+  VRAM / 32 GB RAM workstation, before any production-integration decision. No production Wan/backend
   setting or governance changed; Animate remains unregistered. Three additional clean DIAG-GPU-120
   exposures; not a PASS or root-cause conclusion.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
