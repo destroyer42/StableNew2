@@ -87,6 +87,20 @@ Updated: 2026-09-22
   to produce this evidence. Next objective: `PR-VID-160B — Wan2.2-Animate Target-Hardware
   Feasibility Probe`, a bounded resource-feasibility probe (not model installation or full
   qualification) requiring separate explicit authorization.
+  `PR-VID-160B` (`docs/Subsystems/Video/PR-VID-160B_Wan22_Animate_Target_Hardware_Feasibility.md`,
+  branch `vid/160b-animate-feasibility-probe`, not merged to `main`) ran the one authorized
+  qualification-only physical attempt: `Wan2.2-Animate-14B-Q3_K_M.gguf` (community GGUF quant,
+  chosen over the task's Q4_K_M default for VRAM margin) via a frozen minimal graph dispatched
+  directly to a manager-owned Comfy instance (Animate is not a registered StableNew workflow; no
+  `VideoWorkflowController`/NJR path was used). Result: **`RESOURCE_FEASIBILITY_PASS`** at reduced
+  geometry (256x256, 13 frames, 4 steps, Move-mode `pose_video`/`face_video` omitted) — VRAM peaked
+  at 11,396 MiB of 12,282 MiB, host RAM never dropped below 4.7 GB available, no safety-stop, no
+  GPU loss, clean teardown, and a valid decodable MP4 was produced in 30.4 s. This establishes only
+  a resource floor: it does not prove 480x832 feasibility, 49-frame feasibility, true Move-mode
+  motion-conditioning resource cost, quality, or identity retention. No production Wan/backend
+  setting or governance changed; Animate remains unregistered. Recommended next package (not yet
+  authorized): a bounded Wan2.2-Animate motion-transfer characterization with real driving material
+  and incremental geometry scale-up.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

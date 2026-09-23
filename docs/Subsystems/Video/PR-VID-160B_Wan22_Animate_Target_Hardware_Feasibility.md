@@ -1,6 +1,6 @@
 # PR-VID-160B — Wan2.2-Animate Target-Hardware Feasibility Probe
 
-Status: **PHASES A-G COMPLETE / PHYSICAL DISPATCH DEFERRED**. This is a qualification-only
+Status: **COMPLETE / QUALIFICATION-ONLY PHYSICAL RESULT OBTAINED**. This is a qualification-only
 resource-feasibility probe. It adds no production `src/` change, no backend, no queue/history
 authority, and no Wan production graph/settings change. Start
 `main @ a203b831083caa334057d6e9f1b001e41937decb`.
@@ -11,14 +11,18 @@ Can one smallest-credible Wan2.2-Animate-14B GGUF Move-mode generation execute o
 12 GB / 32 GB RAM Windows machine without unsafe host-memory exhaustion, VRAM failure,
 shared/pagefile collapse, GPU loss, or violation of StableNew runtime ownership?
 
-**This session did not obtain a physical answer.** Discovery, dependency minimization, asset
-staging, and qualification tooling (built and deterministically tested) are complete and frozen.
-The one authorized physical generation was deliberately **not** submitted because Phase G's own
+**Yes, at the frozen reduced-geometry graph.** Discovery, dependency minimization, asset staging,
+and qualification tooling (built and deterministically tested) completed in an earlier part of this
+session; the one authorized physical generation was initially withheld because Phase G's own
 precondition — "GPU must be idle enough that unrelated workloads do not contaminate the result" —
-was not met: the operator's own A1111 WebUI and the StableNew GUI application were both observed
-live and resident on this machine during this session (see Phase G below). This is not a defect in
-Wan2.2-Animate, the GGUF path, or this tooling; it is an environmental precondition that must be
-re-checked before the next attempt.
+was not met (the operator's own A1111 WebUI and the StableNew GUI application were both observed
+live and resident). The operator subsequently confirmed the GPU was free; this session re-verified
+that directly, then ran the one authorized physical attempt. It completed cleanly: no safety stop,
+no CUDA/GPU-loss, VRAM peaked at 11,396 MiB (886 MiB below the 12,282 MiB ceiling), host RAM never
+dropped below 4.7 GB available, and a valid, decodable 256×256/13-frame/8fps H.264 MP4 was produced
+in 30.4 s. See Phase H/I. This establishes a **resource floor only** — it does not prove Move-mode
+motion-transfer feasibility, 480×832 feasibility, 49-frame feasibility, quality, or identity
+retention (see Phase B/I for exactly what was and was not exercised).
 
 ## Phase A — dependency and environment discovery (read-only; nothing modified)
 
@@ -159,64 +163,85 @@ process cleanup (including a failing `stop()` not being swallowed), and safety-s
 (low-RAM-for-two-consecutive-samples, and `ComfyClient.wait` actually interrupting and raising when
 `abort_reason` fires). Ruff clean on all touched files. `git diff --check` clean.
 
-## Phase F — telemetry (ready, not yet exercised by a real run)
+## Phase F — telemetry (real run)
 
-Captured every ~0.5 s once a probe runs: GPU VRAM used, temperature, power, utilization; host
-available RAM; swap used (GB and %). Flushed per sample to `reports/vid160b/telemetry.csv` so a
-hard failure still leaves a trail. Windows shared-GPU-memory counters and per-process RSS were
-scoped out as optional/low-complexity per the package's own instruction; their absence would not
-have blocked the probe.
+Captured every ~0.5 s for the full 30.4 s run (56 samples): GPU VRAM used, temperature, power,
+utilization; host available RAM; swap used (GB and %). Flushed per sample to
+`reports/vid160b/telemetry.csv`. Windows shared-GPU-memory counters and per-process RSS were
+scoped out as optional/low-complexity per the package's own instruction; not needed to answer the
+gate.
 
-## Phase G — safety stop: **precondition failed, dispatch deferred**
-
-Before dispatch, this session checked GPU idleness twice, about a minute apart:
-
-| Check | Result |
+| Metric | Value |
 |---|---|
-| GPU memory used | **8,642 MiB / 12,282 MiB** (both checks identical) |
-| GPU utilization | 0–1% |
-| `nvidia-smi --query-compute-apps` | A1111 WebUI (`stable-diffusion-webui\venv\...\python.exe launch.py`) resident |
-| Other live processes observed | Two `python -m src.main` StableNew GUI processes also running |
+| Samples | 56 |
+| VRAM baseline / peak | 1,563 MiB / **11,396 MiB** (of 12,282 MiB total; 886 MiB headroom) |
+| Host RAM available, minimum | **4.7 GB** (well above the 1.0 GB stop threshold) |
+| Swap used, peak | 1.85 GB (5.4% of configured swap) |
+| Temperature, peak | 59 °C |
+| Power, peak | 209.06 W |
+| Stop reason | none (empty) |
+| Wall time | 30.4 s |
 
-A static, non-fluctuating 8.6 GB VRAM residency with 0–1% utilization is consistent with the
-operator's own A1111 session having a checkpoint loaded (idle but resident), not a transient spike.
-Combined with StableNew's own GUI running live, this is real, current use of the machine, not
-leftover process debris. Phase G's own precondition — "GPU must be idle enough that unrelated
-workloads do not contaminate the result" — was not met, and with only ~3.6 GB of the 12 GB card
-free, the probe would not have had enough VRAM margin for the ~8.63 GB transformer plus text
-encoder/VAE/CLIP-Vision residency regardless.
+## Phase G — safety stop
 
-**Decision: do not dispatch.** Forcing the probe through now would either fail immediately on VRAM
-pressure (contaminating the resource-feasibility answer with an unrelated cause) or contend with
-the operator's active A1111/StableNew session. Per the package's own hard-stop instruction not to
-"lower the threshold" or push through a failing precondition, this session stopped before Phase H.
+**First check (deferred session):** GPU memory used was **8,642 MiB / 12,282 MiB**, static across
+two checks a minute apart, with A1111 WebUI resident (`nvidia-smi --query-compute-apps`) and two
+`python -m src.main` StableNew GUI processes also live. This failed the idle precondition and the
+probe was deliberately not dispatched (see prior closeout).
+
+**Retry (this run):** the operator reported the GPU was no longer blocked. Re-verified directly
+before dispatch: GPU memory used **1,406 MiB / 12,282 MiB**, 0% utilization, `nvidia-smi
+--query-compute-apps` showing only ordinary desktop/OS processes, and no Comfy/A1111/StableNew
+Python process running. The idle precondition was met. Staged assets
+(`Wan2.2-Animate-14B-Q3_K_M.gguf`, `clip_vision_h.safetensors`) and the `ComfyUI-GGUF` custom node
+were reverified present and unchanged from Phase C/D before proceeding. No threshold, quant, or
+environment change was made for this retry — it is the exact frozen probe from the deferred
+session, run once the precondition it was waiting on was satisfied.
+
+During the run itself: the frozen host-RAM/swap safety-stop rule never tripped (`stop_reason`
+empty throughout); no CUDA OOM or Comfy allocation failure occurred; no GPU-lost/black-screen/
+max-fan signature occurred.
 
 ## Phase H — one physical attempt
 
-**Not submitted.** Zero Comfy prompts were queued this session. The frozen graph, assets, and
-tooling are staged and ready; `python -m tools.qualification.vid160b.run <reference_image> --dry`
-can be used to re-verify the endpoint/preflight state at any time without submitting anything.
+**Submitted, exactly once.** `prompt_id=2516c65b-9b81-49f2-9164-d687ad57c7a9`. The full frozen
+graph (`UnetLoaderGGUF` → `CLIPLoader`/`VAELoader`/`CLIPVisionLoader` → `CLIPTextEncode`×2 →
+`CLIPVisionEncode` → `ModelSamplingSD3` → `WanAnimateToVideo` → `KSampler` → `TrimVideoLatent` →
+`VAEDecode` → `CreateVideo` → `SaveVideo`) executed end to end and returned a completed Comfy
+history entry with one output file. Downloaded to `reports/vid160b/probe_output.mp4` (29,743
+bytes). `ffprobe` confirms a valid, decodable H.264 stream: 256×256, 8 fps, exactly 13 frames —
+matching the frozen spec exactly. A middle frame was extracted and visually inspected: a coherent
+(if square-cropped, head-truncated) render of the reference image's torso/clothing, not noise or a
+corrupted/black frame — no obvious graph or function failure. No fine-grained identity or
+locomotion-quality evaluation was performed (out of scope for this probe; `pose_video`/`face_video`
+were not supplied, so Move-mode motion conditioning was not exercised — see Phase B). The Comfy
+process this run's own `ComfyProcessManager` launched was released in `finally`; `nvidia-smi`
+afterward showed a clean return to idle (1,403 MiB, 0% utilization) and no lingering Comfy/Python
+process. `managed_comfy_owned: true`, `teardown_errors: []`.
 
 ## Phase I — decision classification
 
-**`RESOURCE_FEASIBILITY_INCONCLUSIVE`**
+**`RESOURCE_FEASIBILITY_PASS`**
 
-Per the package's own definition: "Use only when a separable non-resource defect prevents testing
-the intended gate." The GPU being contended by the operator's own concurrent, live A1111/StableNew
-usage is exactly that — a separable environmental condition unrelated to Wan2.2-Animate's actual
-resource footprint — not a resource failure of the candidate itself. This is not a reinterpreted
-OOM: no generation was attempted, so no OOM or any other failure signature occurred.
+All PASS conditions were met: generation completed; output is decodable and matches the frozen
+spec; no CUDA/GPU loss; no safety stop; no severe commit/pagefile collapse (swap peaked at 5.4%);
+the manager-owned runtime exited cleanly. This means only: **a lower-bound Wan2.2-Animate-14B GGUF
+resource path is physically viable on this RTX 4070 Ti 12 GB / 32 GB RAM machine**, at Q3_K_M
+quantization, 256×256, 13 frames, 4 steps, and with Move-mode motion/face conditioning inputs
+omitted. It does **not** authorize production integration, and it does **not** prove 480×832
+feasibility, 49-frame feasibility, quality, or identity retention — those remain open questions for
+a future characterization package.
 
 ## Phase J — consequences (not implemented; recommendation only)
 
-Retry this exact frozen probe (same branch, same tooling, same quant/graph/thresholds — no
-environment or quant change needed) once the operator confirms the GPU is idle: A1111 (or any other
-GPU consumer) closed, and ideally the StableNew GUI's own generation activity idle too. This is a
-resumption of PR-VID-160B, not a new package. If the retry then produces `RESOURCE_FEASIBILITY_PASS`
-or `_CONSTRAINED`, PR-VID-160A's Phase J consequences apply as written (PASS → bounded Move-mode
-motion-transfer characterization with real identity/locomotion evaluation; CONSTRAINED →
-product-owner review of the resource margin). A NO-GO outcome returns to PR-VID-160A's candidate
-research per its own consequence table.
+Per the package's own PASS consequence: the next proposed package is a **bounded Wan2.2-Animate
+motion-transfer characterization** using real StableNew reference/driving material, including
+identity retention and locomotion quality — this time exercising true Move-mode conditioning
+(`pose_video`/`face_video`, which this probe deliberately omitted) and, if resource headroom
+allows, moving geometry/frame count toward PR-VID-150's 480×832/49-frame scale incrementally rather
+than in one jump, since this PASS's 886 MiB VRAM headroom and reduced 256×256/13-frame/4-step
+graph leave real uncertainty about margin at production-scale settings. That package is a
+**product-owner decision**, not authorized by this one.
 
 ## Architecture effect
 
@@ -233,22 +258,36 @@ unregistered as a StableNew workflow. No production `src/` file changed.
 - No broader suite run (no source outside the new qualification tree changed).
 - No GitHub CI obtained yet for this branch; not required to delay a docs/tooling-only closeout,
   and moot until this branch is pushed.
+- Physical acceptance evidence: one real Comfy run, `ffprobe`-verified valid output, telemetry
+  captured throughout, clean teardown verified by direct `nvidia-smi`/process re-check afterward.
 
 ## Remaining uncertainty
 
-Everything Phase H would have answered: whether the frozen Q3_K_M/256×256/13-frame/4-step graph
-actually completes on this machine within VRAM, and whether host RAM/swap stay within the frozen
-safety thresholds. None of that is known yet.
+- Whether the same frozen graph holds VRAM/RAM margin at production-scale geometry (480×832,
+  49 frames) rather than this probe's reduced 256×256/13-frame/4-step settings — not answered by
+  this PASS.
+- Whether supplying real `pose_video`/`face_video` Move-mode conditioning changes the resource
+  profile materially (additional conditioning tensors/branches were not exercised here).
+- Whether character-identity retention and locomotion-transfer quality are actually useful at any
+  settings — entirely unaddressed by a resource-only probe.
+- Whether Q3_K_M's quantization level (chosen for margin over the task's Q4_K_M default) preserves
+  enough quality for a useful characterization, versus needing to move up a quant tier once more
+  VRAM margin is confirmed available at reduced geometry.
 
 ## Recommended next package
 
-Resume PR-VID-160B on this same branch once the GPU-idle precondition is met; do not open a new
-package number for the retry.
+A product-owner-authorized **bounded Wan2.2-Animate motion-transfer characterization**: real
+StableNew reference/driving material, true Move-mode conditioning (`pose_video`/`face_video`),
+identity-retention and locomotion-quality evaluation, and an incremental (not one-jump) move toward
+production-scale geometry/frame count while re-checking VRAM/RAM margin at each step. This is a new
+package (working name `PR-VID-160C` or similar), not a continuation of this resource-only probe,
+which has now answered the question it was scoped to answer.
 
 ## Explicit confirmations
 
 No model was promoted to production. No `VideoWorkflowController`/NJR/`VideoExecutionResolver`
 change occurred. No Torch/CUDA/Python replacement occurred. No GPU/BIOS/driver/XMP change occurred.
-No second generation, no retry, and no quant/threshold change were made after a failure, because no
-generation was attempted. `src/controller/app_controller.py` and `presets/global_positive.txt`
+Exactly one generation was submitted this session (`prompt_id=2516c65b-9b81-49f2-9164-d687ad57c7a9`);
+no second generation and no retry occurred, and no quant/threshold change was made after a failure,
+because there was no failure. `src/controller/app_controller.py` and `presets/global_positive.txt`
 (pre-existing unrelated local state) remained untouched and unstaged throughout.
