@@ -1,8 +1,8 @@
 # PR-VID-160B — Wan2.2-Animate Target-Hardware Feasibility Probe
 
-Status: **`PR-VID-160B — PARTIAL EVIDENCE ACCEPTED / MOVE-MODE RESOURCE GATE STILL OPEN`**. This is
-a qualification-only resource-feasibility probe. It adds no production `src/` change, no backend,
-no queue/history authority, and no Wan production graph/settings change. Start
+Status: **`PR-VID-160B — PARTIAL EVIDENCE ACCEPTED / INTEGRATED — MOVE-MODE RESOURCE GATE STILL
+OPEN`**. This is a qualification-only resource-feasibility probe. It adds no production `src/`
+change, no backend, no queue/history authority, and no Wan production graph/settings change. Start
 `main @ a203b831083caa334057d6e9f1b001e41937decb`.
 
 ## Outcome asked

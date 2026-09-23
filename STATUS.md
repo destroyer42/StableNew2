@@ -87,10 +87,9 @@ Updated: 2026-09-22
   to produce this evidence. Next objective: `PR-VID-160B — Wan2.2-Animate Target-Hardware
   Feasibility Probe`, a bounded resource-feasibility probe (not model installation or full
   qualification) requiring separate explicit authorization.
-  `PR-VID-160B` (`docs/Subsystems/Video/PR-VID-160B_Wan22_Animate_Target_Hardware_Feasibility.md`,
-  branch `vid/160b-animate-feasibility-probe`, not merged to `main`) is
-  **`PARTIAL EVIDENCE ACCEPTED / MOVE-MODE RESOURCE GATE STILL OPEN`**. It ran the one authorized
-  qualification-only physical attempt: `Wan2.2-Animate-14B-Q3_K_M.gguf` (community GGUF quant,
+  `PR-VID-160B` (`docs/Subsystems/Video/PR-VID-160B_Wan22_Animate_Target_Hardware_Feasibility.md`)
+  is **`PARTIAL EVIDENCE ACCEPTED / INTEGRATED — MOVE-MODE RESOURCE GATE STILL OPEN`**. It ran the
+  one authorized qualification-only physical attempt: `Wan2.2-Animate-14B-Q3_K_M.gguf` (community GGUF quant,
   chosen over the task's Q4_K_M default for VRAM margin) via a frozen minimal graph dispatched
   directly to a manager-owned Comfy instance (Animate is not a registered StableNew workflow; no
   `VideoWorkflowController`/NJR path was used). The run omitted `pose_video` (the input that
