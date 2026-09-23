@@ -1,6 +1,6 @@
 # PR-VID-170 — Wan2.2-Animate Motion-Transfer Characterization
 
-Status: **COMPLETE / `ANIMATE_QUALITY_INSUFFICIENT_AT_SMALL_ENVELOPE` / PENDING MAIN INTEGRATION**.
+Status: **COMPLETE / ACCEPTED / INTEGRATED — `ANIMATE_QUALITY_INSUFFICIENT_AT_SMALL_ENVELOPE`**.
 Qualification/characterization only. No production `src/` change, no backend, no queue/history
 authority, no GUI/controller/resolver change, no Wan production graph/settings change, no workflow
 registration. Start `main @ 1bca3e5520389cf6b159db0b27f0257fff8ae127`.
