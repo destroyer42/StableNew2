@@ -1,28 +1,27 @@
 # PR-VID-160B — Wan2.2-Animate Target-Hardware Feasibility Probe
 
-Status: **COMPLETE / QUALIFICATION-ONLY PHYSICAL RESULT OBTAINED**. This is a qualification-only
-resource-feasibility probe. It adds no production `src/` change, no backend, no queue/history
-authority, and no Wan production graph/settings change. Start
+Status: **`PR-VID-160B — PARTIAL EVIDENCE ACCEPTED / MOVE-MODE RESOURCE GATE STILL OPEN`**. This is
+a qualification-only resource-feasibility probe. It adds no production `src/` change, no backend,
+no queue/history authority, and no Wan production graph/settings change. Start
 `main @ a203b831083caa334057d6e9f1b001e41937decb`.
 
 ## Outcome asked
 
-Can one smallest-credible Wan2.2-Animate-14B GGUF Move-mode generation execute on this RTX 4070 Ti
-12 GB / 32 GB RAM Windows machine without unsafe host-memory exhaustion, VRAM failure,
+Can one smallest-credible Wan2.2-Animate-14B GGUF **Move-mode** generation execute on this RTX 4070
+Ti 12 GB / 32 GB RAM Windows machine without unsafe host-memory exhaustion, VRAM failure,
 shared/pagefile collapse, GPU loss, or violation of StableNew runtime ownership?
 
-**Yes, at the frozen reduced-geometry graph.** Discovery, dependency minimization, asset staging,
-and qualification tooling (built and deterministically tested) completed in an earlier part of this
-session; the one authorized physical generation was initially withheld because Phase G's own
-precondition — "GPU must be idle enough that unrelated workloads do not contaminate the result" —
-was not met (the operator's own A1111 WebUI and the StableNew GUI application were both observed
-live and resident). The operator subsequently confirmed the GPU was free; this session re-verified
-that directly, then ran the one authorized physical attempt. It completed cleanly: no safety stop,
-no CUDA/GPU-loss, VRAM peaked at 11,396 MiB (886 MiB below the 12,282 MiB ceiling), host RAM never
-dropped below 4.7 GB available, and a valid, decodable 256×256/13-frame/8fps H.264 MP4 was produced
-in 30.4 s. See Phase H/I. This establishes a **resource floor only** — it does not prove Move-mode
-motion-transfer feasibility, 480×832 feasibility, 49-frame feasibility, quality, or identity
-retention (see Phase B/I for exactly what was and was not exercised).
+**Not yet fully answered.** The one authorized physical generation completed cleanly and produced
+valuable, accepted evidence, but it did **not** supply `pose_video` — the input that actually
+exercises Move-mode motion transfer (`face_video` is a separate, optional expression-guidance
+input). What was proven is the resource floor of the Animate-14B GGUF backbone
+inference/decode path alone: no safety stop, no CUDA/GPU-loss, VRAM peaked at 11,396 MiB (886 MiB
+below the 12,282 MiB ceiling), host RAM never dropped below 4.7 GB available, and a valid,
+decodable 256×256/13-frame/8fps H.264 MP4 was produced in 30.4 s (see Phase H). This sub-finding is
+recorded as **`ANIMATE_BACKBONE_RESOURCE_FLOOR_PASS`** (Phase I) — a descriptive result, not a new
+production-governance classification, and not the same claim as "Move-mode is resource-feasible."
+The true pose-driven Move-mode resource cost remains an open gate (see Gate C/D below and
+PR-VID-160C).
 
 ## Phase A — dependency and environment discovery (read-only; nothing modified)
 
@@ -221,27 +220,49 @@ process. `managed_comfy_owned: true`, `teardown_errors: []`.
 
 ## Phase I — decision classification
 
-**`RESOURCE_FEASIBILITY_PASS`**
+**Package status: `PR-VID-160B — PARTIAL EVIDENCE ACCEPTED / MOVE-MODE RESOURCE GATE STILL OPEN`**
 
-All PASS conditions were met: generation completed; output is decodable and matches the frozen
-spec; no CUDA/GPU loss; no safety stop; no severe commit/pagefile collapse (swap peaked at 5.4%);
-the manager-owned runtime exited cleanly. This means only: **a lower-bound Wan2.2-Animate-14B GGUF
-resource path is physically viable on this RTX 4070 Ti 12 GB / 32 GB RAM machine**, at Q3_K_M
-quantization, 256×256, 13 frames, 4 steps, and with Move-mode motion/face conditioning inputs
-omitted. It does **not** authorize production integration, and it does **not** prove 480×832
-feasibility, 49-frame feasibility, quality, or identity retention — those remain open questions for
-a future characterization package.
+**Sub-finding: `ANIMATE_BACKBONE_RESOURCE_FLOOR_PASS`** (descriptive; not a production-governance
+classification).
+
+Every PASS-shaped condition was met for the graph actually run: generation completed; output is
+decodable and matches the frozen spec; no CUDA/GPU loss; no safety stop; no severe commit/pagefile
+collapse (swap peaked at 5.4%); the manager-owned runtime exited cleanly. But the original
+acceptance contract for this package explicitly called for a bounded **Move-mode** generation with
+a driving/control sequence, and the run that actually executed omitted both `pose_video` (the
+motion-transfer input) and `face_video` (the optional expression input). The result therefore
+proves only: **the Wan2.2-Animate-14B GGUF backbone (transformer load, text encoder, CLIP Vision
+reference path, VAE, sampler, decode) is physically viable on this RTX 4070 Ti 12 GB / 32 GB RAM
+machine at reduced geometry (Q3_K_M, 256×256, 13 frames, 4 steps)**. It does not establish that true
+pose-driven Move mode is resource-feasible, does not authorize production integration, and does not
+prove 480×832 feasibility, 49-frame feasibility, quality, or identity retention.
+
+### Gate C — VRAM: materially de-risked, not fully closed
+
+The Animate GGUF backbone completed at **11,396 MiB peak** on the 12,282 MiB GPU, leaving only
+**~886 MiB margin**. That is real, positive evidence that the backbone alone fits with some room to
+spare. But because the pose-guidance branch was absent from the executed graph, the true Move-mode
+peak VRAM — with whatever additional conditioning tensors/cross-attention the pose branch adds —
+remains **unmeasured**. Do not read 886 MiB as the actual Move-mode margin; it is the margin for a
+strictly smaller graph than Move mode.
+
+### Gate D — host RAM: strongly de-risked, not fully closed
+
+The completed lower-bound run retained **4.7 GB available host RAM** and low swap pressure (5.4%
+peak), substantially better than the accepted Wan2.2 TI2V-5B runs (which drove available RAM to
+~0.01–0.02 GB on this same machine). That is a strong positive signal for the backbone alone. But
+actual pose-guidance processing was absent from this run, so **do not extrapolate 4.7 GB minimum
+directly to a full Move-mode workload** — pose/face conditioning may add its own host-RAM cost
+(e.g., loading a driving-video tensor, any additional preprocessing) that this run did not exercise.
 
 ## Phase J — consequences (not implemented; recommendation only)
 
-Per the package's own PASS consequence: the next proposed package is a **bounded Wan2.2-Animate
-motion-transfer characterization** using real StableNew reference/driving material, including
-identity retention and locomotion quality — this time exercising true Move-mode conditioning
-(`pose_video`/`face_video`, which this probe deliberately omitted) and, if resource headroom
-allows, moving geometry/frame count toward PR-VID-150's 480×832/49-frame scale incrementally rather
-than in one jump, since this PASS's 886 MiB VRAM headroom and reduced 256×256/13-frame/4-step
-graph leave real uncertainty about margin at production-scale settings. That package is a
-**product-owner decision**, not authorized by this one.
+The Move-mode resource gate remains open. The next proposed package is
+**`PR-VID-160C — Wan2.2-Animate True Move-Mode Resource Closure`** (see the contract boundary
+below) — not a full motion-quality/identity characterization yet, and not authorized by this
+package. That package should answer whether the same already-proven backbone configuration also
+holds when a real `pose_video` is supplied, before any later package attempts identity-retention or
+locomotion-quality evaluation or moves geometry toward PR-VID-150's 480×832/49-frame scale.
 
 ## Architecture effect
 
@@ -249,6 +270,13 @@ None. This probe dispatches directly to a manager-owned Comfy instance exactly a
 `tools/qualification/vid110`/`vid130` already do; it never touches `VideoWorkflowController`, the
 NJR contract, `JobService`, SQLite queue/history, or `VideoExecutionResolver`. Animate remains
 unregistered as a StableNew workflow. No production `src/` file changed.
+
+## DIAG-GPU-120
+
+This run is recorded as **one additional clean high-load GPU exposure**: sustained VRAM residency
+near the 12 GB ceiling (11,396 MiB peak) with clean completion, no GPU-lost/black-screen/max-fan
+signature, and a clean return to idle afterward. This does **not** mark DIAG-GPU-120 PASS and makes
+no hardware/root-cause conclusion; DIAG-GPU-120 remains observation-only.
 
 ## Validation
 
@@ -276,12 +304,30 @@ unregistered as a StableNew workflow. No production `src/` file changed.
 
 ## Recommended next package
 
-A product-owner-authorized **bounded Wan2.2-Animate motion-transfer characterization**: real
-StableNew reference/driving material, true Move-mode conditioning (`pose_video`/`face_video`),
-identity-retention and locomotion-quality evaluation, and an incremental (not one-jump) move toward
-production-scale geometry/frame count while re-checking VRAM/RAM margin at each step. This is a new
-package (working name `PR-VID-160C` or similar), not a continuation of this resource-only probe,
-which has now answered the question it was scoped to answer.
+**`PR-VID-160C — Wan2.2-Animate True Move-Mode Resource Closure`** (recorded here, not executed).
+Its sole remaining question:
+
+> Can the same already-proven Animate GGUF configuration complete one small pose-driven Move-mode
+> generation when a real `pose_video` is supplied, without crossing RAM/VRAM/stability limits?
+
+Contract boundary for that package:
+
+- Reuse the already-installed `Wan2.2-Animate-14B-Q3_K_M.gguf` quant and existing model assets — do
+  not redownload or switch quant.
+- Reuse the existing `tools/qualification/vid160b/` harness and telemetry (safety-stop rule
+  unchanged unless evidence from that run specifically warrants revisiting it).
+- Reuse the same or a similarly minimal 256×256/short-frame workload — isolate the marginal cost of
+  adding `pose_video`, not a jump to production-scale geometry.
+- Supply `pose_video` only; a `face_video` is not required unless current `WanAnimateToVideo` graph
+  semantics turn out to require it once inspected. Prefer `pose_video` alone to isolate the motion
+  branch and minimize incremental resource cost.
+- Do not install `comfyui_controlnet_aux`/`KJNodes`/DWPose solely to manufacture the control input
+  if a valid preprocessed pose-video asset can be supplied directly (matching this package's own
+  Phase B/C dependency-minimization precedent).
+- One bounded physical attempt, same no-retry/safety-stop discipline as this package.
+
+This is a distinct package from a full identity-retention/locomotion-quality characterization,
+which remains a later, separately authorized step once the Move-mode resource gate itself closes.
 
 ## Explicit confirmations
 

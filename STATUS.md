@@ -88,19 +88,27 @@ Updated: 2026-09-22
   Feasibility Probe`, a bounded resource-feasibility probe (not model installation or full
   qualification) requiring separate explicit authorization.
   `PR-VID-160B` (`docs/Subsystems/Video/PR-VID-160B_Wan22_Animate_Target_Hardware_Feasibility.md`,
-  branch `vid/160b-animate-feasibility-probe`, not merged to `main`) ran the one authorized
+  branch `vid/160b-animate-feasibility-probe`, not merged to `main`) is
+  **`PARTIAL EVIDENCE ACCEPTED / MOVE-MODE RESOURCE GATE STILL OPEN`**. It ran the one authorized
   qualification-only physical attempt: `Wan2.2-Animate-14B-Q3_K_M.gguf` (community GGUF quant,
   chosen over the task's Q4_K_M default for VRAM margin) via a frozen minimal graph dispatched
   directly to a manager-owned Comfy instance (Animate is not a registered StableNew workflow; no
-  `VideoWorkflowController`/NJR path was used). Result: **`RESOURCE_FEASIBILITY_PASS`** at reduced
-  geometry (256x256, 13 frames, 4 steps, Move-mode `pose_video`/`face_video` omitted) — VRAM peaked
-  at 11,396 MiB of 12,282 MiB, host RAM never dropped below 4.7 GB available, no safety-stop, no
-  GPU loss, clean teardown, and a valid decodable MP4 was produced in 30.4 s. This establishes only
-  a resource floor: it does not prove 480x832 feasibility, 49-frame feasibility, true Move-mode
-  motion-conditioning resource cost, quality, or identity retention. No production Wan/backend
-  setting or governance changed; Animate remains unregistered. Recommended next package (not yet
-  authorized): a bounded Wan2.2-Animate motion-transfer characterization with real driving material
-  and incremental geometry scale-up.
+  `VideoWorkflowController`/NJR path was used). The run omitted `pose_video` (the input that
+  actually exercises Move-mode motion transfer) and `face_video` (optional expression guidance), so
+  it does not answer the package's original Move-mode question. Sub-finding:
+  **`ANIMATE_BACKBONE_RESOURCE_FLOOR_PASS`** (descriptive, not a production-governance
+  classification) — the Animate-14B GGUF backbone alone (transformer load, text encoder, CLIP
+  Vision, VAE, sampler, decode) completed cleanly at reduced geometry (256x256, 13 frames, 4 steps):
+  VRAM peaked at 11,396 MiB of 12,282 MiB (~886 MiB margin), host RAM never dropped below 4.7 GB
+  available, no safety-stop, no GPU loss, clean teardown, valid decodable MP4 in 30.4 s. Gate C
+  (VRAM): materially de-risked but not fully closed — true Move-mode peak VRAM with the pose branch
+  is unmeasured. Gate D (host RAM): strongly de-risked but not fully closed — do not extrapolate
+  4.7 GB minimum to a full Move-mode workload. One additional clean high-load DIAG-GPU-120 exposure;
+  not a PASS or root-cause conclusion. No production Wan/backend setting or governance changed;
+  Animate remains unregistered. Recommended next package (not yet authorized):
+  `PR-VID-160C — Wan2.2-Animate True Move-Mode Resource Closure`, reusing the same quant/assets/
+  harness with a real `pose_video` at similarly minimal geometry, before any later
+  identity/locomotion-quality characterization.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
