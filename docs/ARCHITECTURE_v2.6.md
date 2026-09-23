@@ -431,6 +431,15 @@ labels remain bounded presentation text. The experiment review workspace is a
 projection over canonical variant/image references and ratings, not a second
 history or artifact store.
 
+### Local asset identity versus live WebUI resources
+
+`src.assets.AssetRegistry` is the single offline local-file identity boundary
+for supported A1111-compatible assets. SHA-256 identifies content; paths and
+filenames are locations/aliases. Its user-local cache is an optimization, not
+an authority, and it never contacts A1111 or mutates an NJR. The independent
+`WebUIResourceService` remains the read-only projection of what a running
+A1111 exposes. Local existence and runtime availability must not be conflated.
+
 A backend-neutral image boundary does not create a new artifact or history
 authority. Backend results must normalize into the existing canonical artifact
 and execution-result contracts. Backend identity/model-family information may be

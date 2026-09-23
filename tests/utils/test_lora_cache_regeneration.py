@@ -10,10 +10,10 @@ def test_lora_scan_regenerates_without_repository_cache(tmp_path, monkeypatch):
     lora_file.parent.mkdir(parents=True)
     lora_file.write_bytes(b"test-lora")
 
-    cache_file = Path("data/lora_cache.json")
-    assert not cache_file.exists()
+    legacy_cache_file = Path("data/lora_cache.json")
+    assert not legacy_cache_file.exists()
 
     resources = LoRAScanner(webui_root).scan_loras()
 
     assert set(resources) == {"example"}
-    assert cache_file.exists()
+    assert not legacy_cache_file.exists()

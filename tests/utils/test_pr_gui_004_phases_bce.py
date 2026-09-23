@@ -58,15 +58,12 @@ def test_lora_scanner_and_cache():
     print(f"   Search 'cyber': {results}")
     assert "cyberpunk-city" in results
 
-    # Test cache save/load
-    print("\n3. Testing cache persistence...")
-    cache_file = scanner._cache_file
-    assert cache_file.exists(), "Cache file should exist"
-
-    # Create new scanner instance (should load from cache)
+    # Test registry-backed projection refresh (legacy scanner owns no cache).
+    print("\n3. Testing registry-backed refresh...")
     scanner2 = LoRAScanner(test_dir)
-    assert len(scanner2._lora_cache) == 3, "Cache should be loaded"
-    print(f"   Loaded {len(scanner2._lora_cache)} LoRAs from cache")
+    scanner2.scan_loras()
+    assert len(scanner2._lora_cache) == 3, "Registry projection should be populated"
+    print(f"   Projected {len(scanner2._lora_cache)} LoRAs from Asset Registry")
 
     # Test get_lora_info
     print("\n4. Testing cached info retrieval...")
@@ -85,8 +82,6 @@ def test_lora_scanner_and_cache():
     import shutil
 
     shutil.rmtree(test_dir)
-    if cache_file.exists():
-        cache_file.unlink()
     print("   Cleanup complete")
 
     print("\n[OK] LoRA Scanner tests passed!")
@@ -140,8 +135,6 @@ def test_autocomplete_data():
     import shutil
 
     shutil.rmtree(test_dir)
-    if scanner._cache_file.exists():
-        scanner._cache_file.unlink()
 
     print("\n[OK] Autocomplete tests passed!")
 

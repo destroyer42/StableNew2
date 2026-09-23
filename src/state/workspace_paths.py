@@ -58,6 +58,10 @@ class WorkspacePaths:
             path.mkdir(parents=True, exist_ok=True)
         return path
 
+    def asset_registry_cache(self) -> Path:
+        """Return the mutable local Asset Registry cache path."""
+        return self.state_dir(create=False) / "asset_registry_v1.json"
+
     def queue_state(self) -> Path:
         """Return the legacy queue JSON path for offline migration only."""
         return self.state_dir(create=False) / "queue_state_v2.json"
