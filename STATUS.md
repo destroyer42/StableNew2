@@ -175,6 +175,26 @@ Updated: 2026-09-22
   Next objective: the controlled A/B/C motion-transfer characterization at 480x832 (PR-VID-170's
   case structure, now at an interpretable resolution), official settings held fixed. One additional
   clean DIAG-GPU-120 exposure; not a PASS or root-cause conclusion.
+  `PR-VID-180 — Wan2.2-Animate 480x832 Motion-Transfer Characterization`
+  (`docs/Subsystems/Video/PR-VID-180_Wan22_Animate_480x832_Motion_Transfer_Characterization.md`)
+  answered that objective with two physical runs (Case A gesture, Case B locomotion; Case C reused
+  read-only from PR-VID-175's accepted evidence, not rerun). Both completed cleanly (no safety stop,
+  no CUDA OOM, no GPU loss) with resource cost closely matching PR-VID-175 Case C. Result:
+  **`ANIMATE_CHARACTERIZATION_INCONCLUSIVE`** — gesture and locomotion both failed clearly with this
+  package's synthetic stick-figure driving-pose input (Case A: no recognizable subject at all;
+  Case B: subject stays identifiable and well-framed but does not step or translate at all despite
+  an unambiguous gait pose signal), in contrast with Case C's real-photographic-pose success at the
+  same envelope/settings. The package could not separate "Animate cannot transfer gesture/
+  locomotion" from "Animate's `pose_video` conditioning needs a real/photographic driving signal,
+  not this synthetic stick-figure convention" — that confound, not a resource/stability failure, is
+  why the result is inconclusive rather than a capability verdict either way. Background
+  hallucination is now confirmed common across all three cases tested (not Case-C-specific) and
+  independently severe. No production Wan/backend setting or governance changed; Animate remains
+  unregistered; no settings tuning performed. Next objective: isolate the synthetic-vs-real
+  driving-pose confound with real photographic gesture/locomotion footage at the same 480x832
+  envelope before any gesture/locomotion product verdict; background-hallucination mitigation
+  research is warranted independently. Two additional clean DIAG-GPU-120 exposures; not a PASS or
+  root-cause conclusion.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
