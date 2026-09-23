@@ -107,22 +107,30 @@ Updated: 2026-09-22
   Animate remains unregistered.
   `PR-VID-160C — Wan2.2-Animate True Move-Mode Resource Closure`
   (`docs/Subsystems/Video/PR-VID-160C_Wan22_Animate_Move_Mode_Resource_Closure.md`) closes the
-  Move-mode resource gate PR-VID-160B left open, with a durable result:
-  **`MOVE_MODE_RESOURCE_NO_GO_RAM`**. Reusing the identical Q3_K_M quant/assets/harness/seed/
-  geometry (256x256, 13 frames, 4 steps) plus a real, reused/adapted `pose_video` (deterministically
-  resampled from the existing accepted PR-VID-110 skeleton-only control clip, no new dependency),
-  the one authorized attempt was safety-stopped: available host RAM fell to 0.77 GB (below the
-  unchanged 1.0 GB / 2-consecutive-sample threshold) before generation completed. No CUDA OOM, no
-  GPU loss; clean tool-initiated interruption, clean owned-runtime teardown, full recovery to idle
-  and ~18 GB free RAM confirmed afterward. Versus PR-VID-160B's backbone-only PASS (4.7 GB RAM
-  minimum), adding `pose_video` cost at least ~3.93 GB of host RAM headroom at this smallest
-  credible scale — the decisive, comparable delta; VRAM/wall-time are not comparable since the run
-  did not complete. Recommendation: return to PR-VID-160A candidate research rather than continue
-  tuning Wan2.2-Animate quant/settings; Wan2.2-Animate's Move-mode capability is not currently
-  resource-feasible on this 32 GB machine even at minimal scale. No production Wan/backend setting
-  or governance changed; Animate remains unregistered. One additional clean high-load DIAG-GPU-120
-  exposure (tool-initiated interruption, not an uncontrolled stop); not a PASS or root-cause
-  conclusion.
+  Move-mode resource gate PR-VID-160B left open, with an adjudicated result:
+  **`MOVE_MODE_RESOURCE_PASS_32GB`** (supersedes the interim `MOVE_MODE_RESOURCE_NO_GO_RAM`
+  reading below). Run 1, reusing the identical Q3_K_M quant/assets/harness/seed/geometry (256x256,
+  13 frames, 4 steps) plus a real, reused/adapted `pose_video` (deterministically resampled from the
+  existing accepted PR-VID-110 skeleton-only control clip, no new dependency), was safety-stopped by
+  a coarse guard: available *physical* RAM fell to 0.77 GB (below the original 1.0 GB /
+  2-consecutive-sample threshold) before generation completed. That proved the guard fired as
+  designed; it did not by itself prove Windows/Comfy could not complete with 32 GB RAM, since
+  low available physical RAM is not the same signal as actual virtual-memory (commit) exhaustion. A
+  product-owner-authorized commit-aware adjudication (Run 2) added Windows-native system-commit
+  telemetry (`tools/qualification/vid160c/win_memory.py`, `ctypes` only, no new dependency) and
+  replaced the physical-RAM-only abort with a commit-aware rule (commit ≥97% or headroom <1.0 GB for
+  2 consecutive samples, plus a 0.25 GB physical-RAM emergency floor; the original 1.0 GB threshold
+  now a warning only), then reran the byte-identical graph/assets/settings once. Run 2 **completed**:
+  valid 256x256/13-frame/8fps output, physical RAM never dropped below 2.95 GB (never even crossing
+  the original warning line), system commit peaked at 69.1% of a 63.76 GB commit limit with 19.71 GB
+  of headroom remaining throughout, no CUDA OOM, no GPU loss, clean owned-runtime teardown. No quant,
+  geometry, frame count, step count, `face_video`, Comfy memory flag, or pagefile setting was changed
+  between runs. Recommendation: the next package is a bounded Wan2.2-Animate motion-transfer
+  characterization (identity retention, locomotion, driving-motion adherence, anatomy, temporal
+  coherence) — not a return to PR-VID-160A candidate research. No production Wan/backend setting or
+  governance changed; Animate remains unregistered. Two clean high-load DIAG-GPU-120 exposures now
+  recorded for this package (Run 1's tool-initiated interruption, Run 2's normal completion); neither
+  is a PASS or root-cause conclusion; DIAG-GPU-120 remains observation-only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
