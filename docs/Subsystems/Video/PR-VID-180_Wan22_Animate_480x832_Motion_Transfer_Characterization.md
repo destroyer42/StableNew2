@@ -1,9 +1,10 @@
 # PR-VID-180 — Wan2.2-Animate 480×832 Motion-Transfer Characterization
 
-Status: **COMPLETE / `ANIMATE_CHARACTERIZATION_INCONCLUSIVE`**. Qualification/characterization
-only. No production `src/` change, no backend, no queue/history authority, no GUI/controller/
-resolver change, no Wan production graph/settings change, no workflow registration, no production
-integration. Start `main @ 908c9f65a8ebe1a11f88eb822429bf9122cf774c`.
+Status: **COMPLETE / `ANIMATE_CHARACTERIZATION_INCONCLUSIVE` / PENDING MAIN INTEGRATION**. Secondary
+finding: **`BACKGROUND_INSTABILITY_CROSS_CASE`**. Qualification/characterization only. No production
+`src/` change, no backend, no queue/history authority, no GUI/controller/resolver change, no Wan
+production graph/settings change, no workflow registration, no production integration. Start
+`main @ 908c9f65a8ebe1a11f88eb822429bf9122cf774c`.
 
 ## Question asked
 
@@ -16,10 +17,13 @@ background hallucination/instability PR-VID-175 observed is Case-C-specific, com
 inputs, or severe enough to block an experimental StableNew integration.
 
 **Answer, stated up front:** gesture (A) and locomotion (B) both failed clearly at 480×832 using
-this package's synthetic stick-figure driving-pose input — but that result is confounded by driving
--pose *representation*, not isolated to resolution or to Animate's underlying capability. See
-"Confound: synthetic vs. real driving-pose format" below. Background instability is common across
-all three cases (not Case-C-specific) and is independently severe.
+this package's procedurally-rendered synthetic pose-control input — but that result is confounded by
+driving-pose *conditioning representation*, not isolated to resolution or to Animate's underlying
+capability. Case C's successful input was still a pose-control video, not raw photography — the
+material distinction is that it was **detector-derived from real human motion**, where A/B were
+**manually rendered procedural stick figures**. See "Pose-conditioning-representation confound"
+below. Background instability is common across all three cases (not Case-C-specific); see
+`BACKGROUND_INSTABILITY_CROSS_CASE` below.
 
 ## Reuse of PR-VID-175 Case C
 
@@ -227,16 +231,17 @@ full-resolution frames `frame_a_{0,6,12}.png`, `frame_b_{0,6,12}.png` — not co
 | Background stability | 1 — indistinguishable from subject failure; the whole frame hallucinates | 1 — severe, pervasive background hallucination (scrambled geometric shapes, garbled pseudo-text) plus an unexplained secondary humanoid-ish artifact not present in the driving signal |
 | Overall usefulness | 1 — not useful; establishes only that this driving-pose input produced no interpretable gesture output at 480×832 | 1 — not useful for the product's central locomotion question; the stepping signal was not visibly followed |
 
-## Background behavior across A/B/C
+## Background behavior across A/B/C — `BACKGROUND_INSTABILITY_CROSS_CASE`
 
 Background instability is **common across all three motion inputs tested, not Case-C-specific**:
 severe/total in A (no subject/background distinction survives), severe in B (scrambled
 shapes/pseudo-text plus an unexplained ghost figure alongside an otherwise-stable foreground
 subject), and present-but-secondary in C (PR-VID-175: subject clearly assessable, background
-"remains" unstable). Read together with PR-VID-175, background hallucination looks like an
-independent, cross-case property of this graph/settings combination at 480×832 — severe enough on
-its own that it would need bounded mitigation research before any production-adjacent use, even in
-a hypothetical future case where gesture/locomotion transfer is confirmed viable.
+"remains" unstable). Read together with PR-VID-175, background hallucination is a **material
+independent quality defect** in this graph/settings combination at 480×832, requiring separate
+mitigation/adjudication before any production promotion. This is **not** stated as a definitively
+independent production NO-GO: it can become a production blocker later if mitigation proves
+ineffective or architecturally unacceptable, but that determination is not made by this package.
 
 ## Explicit gates
 
@@ -249,35 +254,85 @@ animation; the main figure does not move at all.
 
 **Identity gate: MIXED, weak overall.** Identity did not survive in A (no person). In B, clothing/
 build-level consistency is plausible but facial identity is unconfirmed. In reused C, PR-VID-175
-found identity clearly assessable. Identity was only clearly retained when the driving signal was a
-real photographic pose video (C), not a synthetic stick-figure one (A/B) — see next section.
+found identity clearly assessable. Identity was only clearly retained when the driving pose was
+detector-derived from real human motion (C), not procedurally synthesized (A/B) — see next section.
+No broader identity verdict is drawn from this alone; see historical comparisons below.
 
 **Background gate: FAILED across all three cases**, recorded separately per instruction: subject
 success (C) did not come with background success, and subject failure (A/B) does not explain away
 the background finding as merely downstream of subject failure, since B's foreground subject was
 comparatively stable while its background was not.
 
-## Confound: synthetic vs. real driving-pose format
+## Pose-conditioning-representation confound
 
-This is the central interpretive finding of this package. Case A/B used the same
-deterministic-but-synthetic, colored-line-on-black stick-figure pose control PR-VID-170 introduced
-(no real gesture/locomotion footage was available locally, exactly as PR-VID-170 disclosed). Case C
-used a real, photographic PR-VID-110 pose video. At the *same* interpretable 480×832 envelope and
-*identical* official inference settings:
+This is the central interpretive finding of this package, and its wording matters: the confound is
+**not** "synthetic vs. real photographic input." Case C's driving input was *also* a pose-control
+video, not raw photography — every case in this lineage conditions `WanAnimateToVideo` on a
+rendered pose signal, never on a photographic frame directly. The material distinction is in how
+that pose-control video was produced:
 
-- Real pose video (C): identity, anatomy, and motion all clearly assessable (PR-VID-175).
-- Synthetic pose video (A, B): identity/anatomy/motion transfer all failed or were materially weak.
+- **Case C**: a real PR-VID-110 pose-control video — **detector-derived from real human motion**
+  (a real person's motion captured on video, then rendered to a pose-control clip).
+- **Case A/B**: `tools/qualification/vid180/native_pose.py`'s **procedural synthetic pose
+  conditioning** — a manually parameterized forward-kinematics stick figure with no real human
+  motion behind it at all (colored line segments on black, drawn from closed-form trigonometric
+  joint formulas).
+
+At the *same* interpretable 480×832 envelope and *identical* official inference settings:
+
+- Detector-derived, real-motion pose input (C): identity, anatomy, and motion all clearly
+  assessable (PR-VID-175).
+- Procedural synthetic pose input (A, B): identity/anatomy/motion transfer all failed or were
+  materially weak.
 
 The evidence in this package cannot separate two different explanations for A/B's failure:
 **(1)** Wan2.2-Animate genuinely cannot transfer gesture/locomotion well even at an interpretable
-envelope, or **(2)** Wan2.2-Animate's `pose_video` conditioning expects a driving signal closer in
-representation to what it was trained on (plausibly a real-derived pose-estimator render, e.g.
-DWPose-style, extracted from actual footage) and responds poorly to this package's simplified
-synthetic stick-figure convention, independent of the model's true gesture/locomotion capability.
-PR-VID-170's `synthetic_pose.py` docstring already flagged this class of limitation ("not
-robustness to real-world motion-capture noise"); this package's result is the first direct evidence
-that the gap may be larger than a robustness nuance. This is exactly why the classification below is
-`ANIMATE_CHARACTERIZATION_INCONCLUSIVE` rather than a capability verdict.
+envelope, or **(2)** Wan2.2-Animate's `pose_video` conditioning expects a driving signal closer to
+what its own upstream preprocessing produces (see next section) and responds poorly to this
+package's procedural stick-figure convention, independent of the model's true gesture/locomotion
+capability. PR-VID-170's `synthetic_pose.py` docstring already flagged this class of limitation
+("not robustness to real-world motion-capture noise"); this package's result is the first direct
+evidence that the gap may be larger than a robustness nuance. **This is the strongest current
+root-cause hypothesis, not a proven cause** — it has not been adjudicated, and doing so is this
+package's recommended next objective. This is exactly why the classification below is
+`ANIMATE_CHARACTERIZATION_INCONCLUSIVE` rather than a capability verdict, and A/B must not be read
+as clean evidence that Animate cannot perform gesture or locomotion: the physical outputs clearly
+failed the requested motions, but their conditioning representation was not shown to be
+upstream-equivalent.
+
+## Upstream Wan2.2-Animate preprocessing semantics (recorded for adjudication, not proven applied here)
+
+Official Wan2.2-Animate's own animation preprocessing pipeline, as currently documented upstream,
+does not take a hand-drawn pose video as input. It:
+
+1. receives a real driving video and a reference image;
+2. runs whole-body pose detection on the driving video;
+3. constructs a Wan `AAPoseMeta` (whole-body pose metadata: body, head, and hand structure);
+4. optionally retargets the detected driving pose toward the reference character's body
+   proportions;
+5. renders `src_pose.mp4` using the upstream AAPose visual representation from that (retargeted)
+   metadata;
+6. separately generates `src_face.mp4` from the same driving video.
+
+The upstream `src_pose.mp4` representation carries materially richer body/head/hand semantics
+(whole-body keypoint structure, proportion retargeting) than this package's procedural A/B skeleton
+renderer, which draws only a dozen straight line segments from closed-form joint-angle formulas with
+no head/hand articulation and no retargeting step. **A/B are therefore plausibly out-of-distribution
+conditioning inputs relative to what `WanAnimateToVideo` was trained to expect.** This is recorded
+here as the strongest current root-cause hypothesis for A/B's failure; it is not proven to be the
+sole cause, and this package performs no further generation to test it. Adjudicating it is the
+recommended next objective below.
+
+## `face_video` interpretation
+
+Official Animate's pipeline normally supplies `src_face.mp4` alongside `src_pose.mp4` (step 6
+above). PR-VID-180 intentionally held `face_video` absent, exactly as PR-VID-170/175 did before it.
+However, reused Case C still demonstrated interpretable identity and body motion **without**
+`face_video` — so the absence of face conditioning does not by itself explain the differential
+result between Case C (succeeded) and Case A/B (failed): all three cases shared the same
+`face_video`-absent condition, and only the pose-input *representation* varied. `face_video` is
+**not** added in this package and remains a possible later quality/identity variable, to be tested
+only after body-motion (pose-representation) behavior is established.
 
 ## Historical comparisons
 
@@ -285,18 +340,21 @@ that the gap may be larger than a robustness nuance. This is exactly why the cla
 PR-VID-150's own text-inferred stepping attempt at least produced visible (if planted-feet) leg
 motion. Case B here was given an unambiguous, externally supplied stepping/translation pose signal
 — in principle an easier task than inferring motion from text — and produced *no* visible leg
-articulation at all. **This does not confirm Animate solved PR-VID-150's locomotion gap; on this
-evidence it does not, and the result is if anything more negative than PR-VID-150's own attempt** —
-though, per the confound above, this may reflect the driving-pose format rather than a genuine
+articulation at all. Case B did **not** demonstrate improvement over the established planted-feet
+problem. But because its driving-pose conditioning representation is confounded (procedural
+synthetic, not detector-derived), this package does **not** conclude that Animate itself failed
+locomotion — the result is if anything more negative than PR-VID-150's own attempt, but per the
+confound above this may reflect the pose-conditioning representation rather than a genuine
 regression in underlying capability. This is a product-capability comparison, not a controlled
 numerical one (different models, different envelopes, different settings).
 
 **Versus PR-VID-110/VACE (reference-binding failure):** VACE could not reproduce the reference
-person's identity while following motion. Here, Case C (real pose video) does retain identity while
-following motion — a genuine, positive point of contrast with VACE, already recorded in PR-VID-175.
-Cases A/B (synthetic pose video) do **not** extend that result: identity did not reliably survive
-either. **The VACE-identity improvement demonstrated so far is tied to a real photographic driving
-signal, not yet shown to generalize to a synthetic one.**
+person's identity while following motion. Case C demonstrates that Animate **can** retain useful
+reference identity under at least one detector-derived, real-motion pose input — a genuine, positive
+point of contrast with VACE, already recorded in PR-VID-175. Cases A/B (procedural synthetic pose
+conditioning) do **not** show that this generalizes: identity did not reliably survive either. No
+broader identity verdict is drawn yet — only that the one demonstrated success used real-motion
+-derived pose conditioning, not procedural conditioning.
 
 ## Decision classification
 
@@ -308,17 +366,20 @@ finding, not an artifact of missing evidence (both runs completed cleanly, graph
 validation passed, resource telemetry was unremarkable, and the failure was confirmed by direct
 full-resolution frame inspection, not only thumbnails). What remains open is the *cause*: this
 package cannot separate "Animate cannot transfer gesture/locomotion" from "Animate's `pose_video`
-conditioning needs a real/photographic-style driving signal, not a synthetic stick-figure one" —
-because the one case that succeeded (C) used a real pose video and the two that failed (A, B) used
-a synthetic one. Per this package's own definition, resource/stability failures would get their own
-report and stop the package; that did not happen here (all three cases completed cleanly and well
-within safety thresholds) — this is a characterization result, not a resource-failure report.
+conditioning needs a detector-derived, real-motion driving signal, not a procedurally-rendered
+stick-figure one" — because the one case that succeeded (C) used a detector-derived pose video and
+the two that failed (A, B) used procedural synthetic conditioning. Per this package's own
+definition, resource/stability failures would get their own report and stop the package; that did
+not happen here (all three cases completed cleanly and well within safety thresholds) — this is a
+characterization result, not a resource-failure report.
 
 This does **not** mean Animate is confirmed capable or confirmed incapable of gesture/locomotion
-transfer. It does **not** license moving to `ANIMATE_MOTION_TRANSFER_VIABLE_480x832` or to
-`ANIMATE_NOT_VIABLE_480x832` on the current evidence. It does mean background hallucination is a
-separate, common, cross-case concern that would need bounded mitigation research regardless of how
-the confound resolves.
+transfer, and A/B must **not** be read as clean evidence that it cannot: the outputs clearly failed
+the requested motions, but their conditioning representation was not shown to be
+upstream-equivalent. It does **not** license moving to `ANIMATE_MOTION_TRANSFER_VIABLE_480x832` or
+to `ANIMATE_NOT_VIABLE_480x832` on the current evidence. It does mean background hallucination
+(`BACKGROUND_INSTABILITY_CROSS_CASE`) is a separate, common, cross-case concern that would need
+separate mitigation/adjudication regardless of how the pose-conditioning confound resolves.
 
 ## DIAG-GPU-120
 
@@ -338,13 +399,15 @@ Animate integration begun.
 
 ## Recommended next package
 
-Before any gesture/locomotion product verdict: a package that isolates the synthetic-vs-real
-driving-pose confound directly — e.g. sourcing or adapting real photographic gesture and locomotion
-footage (mirroring how PR-VID-175 adapted `reports/vid110/inputs/pose_user.mp4` for Case C) and
-rerunning the equivalent of Case A/B with a real driving signal instead of `synthetic_pose`-style
-output, at the same frozen 480×832/official-settings envelope. Separately, and regardless of that
-result, background-hallucination bounded mitigation research is warranted given its consistent
-presence across all three cases tested so far (PR-VID-175 + this package).
+Not another synthetic-pose experiment. The correct next objective is to **adjudicate the
+pose-conditioning representation confound using real human gesture and locomotion driving footage
+processed through an upstream-compatible Wan Animate whole-body pose pipeline at the already-proven
+480×832 envelope, while holding the Animate inference graph/settings fixed.** `face_video` should
+remain absent for that first adjudication so pose representation stays the primary changed variable;
+only after body-motion behavior is established should face conditioning be tested separately.
+
+Background mitigation (`BACKGROUND_INSTABILITY_CROSS_CASE`) is a **separate future objective**, not
+bundled into the pose-conditioning adjudication above.
 
 ## Docs / Git
 

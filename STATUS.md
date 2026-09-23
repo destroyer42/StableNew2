@@ -180,21 +180,31 @@ Updated: 2026-09-22
   answered that objective with two physical runs (Case A gesture, Case B locomotion; Case C reused
   read-only from PR-VID-175's accepted evidence, not rerun). Both completed cleanly (no safety stop,
   no CUDA OOM, no GPU loss) with resource cost closely matching PR-VID-175 Case C. Result:
-  **`ANIMATE_CHARACTERIZATION_INCONCLUSIVE`** — gesture and locomotion both failed clearly with this
-  package's synthetic stick-figure driving-pose input (Case A: no recognizable subject at all;
-  Case B: subject stays identifiable and well-framed but does not step or translate at all despite
-  an unambiguous gait pose signal), in contrast with Case C's real-photographic-pose success at the
-  same envelope/settings. The package could not separate "Animate cannot transfer gesture/
-  locomotion" from "Animate's `pose_video` conditioning needs a real/photographic driving signal,
-  not this synthetic stick-figure convention" — that confound, not a resource/stability failure, is
-  why the result is inconclusive rather than a capability verdict either way. Background
-  hallucination is now confirmed common across all three cases tested (not Case-C-specific) and
-  independently severe. No production Wan/backend setting or governance changed; Animate remains
-  unregistered; no settings tuning performed. Next objective: isolate the synthetic-vs-real
-  driving-pose confound with real photographic gesture/locomotion footage at the same 480x832
-  envelope before any gesture/locomotion product verdict; background-hallucination mitigation
-  research is warranted independently. Two additional clean DIAG-GPU-120 exposures; not a PASS or
-  root-cause conclusion.
+  **`PR-VID-180 — COMPLETE / ANIMATE_CHARACTERIZATION_INCONCLUSIVE / PENDING MAIN INTEGRATION`**,
+  secondary finding **`BACKGROUND_INSTABILITY_CROSS_CASE`** — gesture and locomotion both failed
+  clearly with this package's procedural synthetic pose-control input (Case A: no recognizable
+  subject at all; Case B: subject stays identifiable and well-framed but does not step or translate
+  at all despite an unambiguous gait pose signal), in contrast with Case C's success. The material
+  confound is not "synthetic vs. real photographic input" (every case conditions on a pose-control
+  video, never on raw photography) but **procedural synthetic pose conditioning (A/B: a manually
+  parameterized stick figure, no real human motion behind it) vs. detector-derived real-human pose
+  conditioning (C: rendered from a real person's captured motion)**. Official Wan2.2-Animate's own
+  preprocessing detects whole-body pose from real driving footage, builds retargeted `AAPoseMeta`,
+  and renders its own richer `src_pose.mp4`/`src_face.mp4` — materially richer than this package's
+  procedural renderer — making this the strongest current root-cause hypothesis for A/B's failure,
+  not a proven cause. A/B must not be read as clean evidence Animate cannot do gesture/locomotion:
+  the outputs clearly failed, but their conditioning representation was not shown to be
+  upstream-equivalent. `face_video` stayed absent throughout (including Case C's success), so it
+  does not explain the differential result by itself and remains untested as a separate variable.
+  Background hallucination is confirmed common across all three cases (not Case-C-specific) — a
+  material independent quality defect requiring separate mitigation/adjudication, not yet a
+  definitive production NO-GO. No production Wan/backend setting or governance changed; Animate
+  remains unregistered; no settings tuning performed. Next objective: adjudicate the
+  pose-conditioning-representation confound using real human gesture/locomotion driving footage
+  processed through an upstream-compatible Wan Animate whole-body pose pipeline at the
+  already-proven 480x832 envelope, inference graph/settings held fixed, `face_video` still absent;
+  background-hallucination mitigation is a separate future objective. Two additional clean
+  DIAG-GPU-120 exposures; not a PASS or root-cause conclusion.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
