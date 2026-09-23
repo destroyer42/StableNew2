@@ -180,7 +180,7 @@ Updated: 2026-09-22
   answered that objective with two physical runs (Case A gesture, Case B locomotion; Case C reused
   read-only from PR-VID-175's accepted evidence, not rerun). Both completed cleanly (no safety stop,
   no CUDA OOM, no GPU loss) with resource cost closely matching PR-VID-175 Case C. Result:
-  **`PR-VID-180 — COMPLETE / ANIMATE_CHARACTERIZATION_INCONCLUSIVE / PENDING MAIN INTEGRATION`**,
+  **`PR-VID-180 — COMPLETE / ACCEPTED / INTEGRATED — ANIMATE_CHARACTERIZATION_INCONCLUSIVE`**,
   secondary finding **`BACKGROUND_INSTABILITY_CROSS_CASE`** — gesture and locomotion both failed
   clearly with this package's procedural synthetic pose-control input (Case A: no recognizable
   subject at all; Case B: subject stays identifiable and well-framed but does not step or translate

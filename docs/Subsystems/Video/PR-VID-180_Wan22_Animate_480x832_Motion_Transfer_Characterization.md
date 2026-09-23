@@ -1,6 +1,6 @@
 # PR-VID-180 — Wan2.2-Animate 480×832 Motion-Transfer Characterization
 
-Status: **COMPLETE / `ANIMATE_CHARACTERIZATION_INCONCLUSIVE` / PENDING MAIN INTEGRATION**. Secondary
+Status: **COMPLETE / ACCEPTED / INTEGRATED — `ANIMATE_CHARACTERIZATION_INCONCLUSIVE`**. Secondary
 finding: **`BACKGROUND_INSTABILITY_CROSS_CASE`**. Qualification/characterization only. No production
 `src/` change, no backend, no queue/history authority, no GUI/controller/resolver change, no Wan
 production graph/settings change, no workflow registration, no production integration. Start
