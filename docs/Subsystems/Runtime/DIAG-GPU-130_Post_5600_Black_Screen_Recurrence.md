@@ -7,6 +7,14 @@ display/live-kernel incident while StableNew had just-completed and immediately 
 `txt2img` work. It does not attribute the display failure to StableNew, A1111, NVIDIA, the GPU,
 power delivery, PCIe, RAM, or any other component.
 
+**Amended conclusion (2026-09-24, product-owner direction):** NVIDIA driver-package isolation is
+**deprioritized** by cross-version recurrence evidence - the failure family has recurred across
+driver versions, so a driver-package change is no longer the recommended next variable. The next
+isolation should target the **platform baseline, one variable at a time** (see "Next single
+isolation variable"). This amendment changes the recommendation only; it adds no new incident
+evidence to this package and attributes no component. The cross-version recurrence evidence is
+owner-supplied and is not reproduced in this document.
+
 ## Execution profile
 
 - Classification: Standard local forensic diagnostic work.
@@ -114,7 +122,7 @@ timings/controller behavior were not observed and component attribution remains 
 
 | Hypothesis class | New evidence | Direction | Critical blocker |
 |---|---|---|---|
-| GPU/display driver/device-reset path | New `141` plus `1B8`; GPU telemetry disappears shortly afterward. | Strengthened at failure-domain level. | No readable dump stack or reset reason. |
+| GPU/display driver/device-reset path | New `141` plus `1B8`; GPU telemetry disappears shortly afterward. Owner-supplied cross-version recurrence (2026-09-24 amendment). | Strengthened at failure-domain level; a single driver-package version as the cause is weakened by recurrence across versions. | No readable dump stack or reset reason. |
 | GPU hardware | Same symptom family recurs. | Unchanged. | No hardware diagnostics or substitution evidence. |
 | PSU / GPU power delivery / cabling | 273.8 W is sub-limit; no power event. | Unchanged. | No rail/cable telemetry or inspection evidence. |
 | PCIe / slot / motherboard | Gen4 x16 immediately before incident; no WHEA. | Unchanged. | No physical or platform diagnostic evidence. |
@@ -127,12 +135,18 @@ timings/controller behavior were not observed and component attribution remains 
 
 ## Next single isolation variable
 
-**Recommend one owner-authorized NVIDIA driver-package isolation**: cleanly install one selected
-alternative NVIDIA driver build while holding DDR5-5600/XMP, BIOS limits, HAGS, Windows power
-plan, GPU power/clock settings, and physical hardware unchanged. This is the smallest reversible
-variable aimed directly at the repeatedly reproduced display/live-kernel domain after the memory
-profile transition proved insufficient. Do not execute it in this package or combine it with any
-other configuration or hardware action.
+**Amended recommendation (2026-09-24): isolate the platform baseline, one variable at a time.**
+The original recommendation - one owner-authorized NVIDIA driver-package isolation - is
+**deprioritized**: the failure family has recurred across driver versions (owner-supplied
+cross-version recurrence evidence), so swapping a driver build is unlikely to discriminate the
+cause. The next isolation should instead move the platform baseline (for example memory
+configuration/profile, firmware/BIOS defaults, PCIe link configuration, or CPU/power settings),
+changing exactly **one** variable per isolation while holding everything else - including the
+driver, HAGS, Windows power plan, GPU power/clock settings, and physical hardware - unchanged and
+recording the platform state before and after. Which variable comes first is an owner decision and
+is not selected by this package. The earlier driver-package option is not excluded permanently; it
+is deferred behind platform-baseline evidence. Do not execute any isolation in this package or
+combine it with any other configuration or hardware action.
 
 ## Boundaries and validation
 

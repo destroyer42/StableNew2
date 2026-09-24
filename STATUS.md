@@ -12,9 +12,10 @@ Updated: 2026-09-23
   the established hard failure recurred. The incident has new WER `141` and `1B8` evidence and
   survivor telemetry proving immediately preceding StableNew A1111 `txt2img` work; it does not
   attribute a component or StableNew as the cause. DDR5-5600 was insufficient to eliminate the
-  failure, but memory/platform stability remains unexcluded. The one recommended next owner-
-  authorized variable is an NVIDIA driver-package isolation; do not combine it with XMP, HAGS,
-  power, BIOS, or physical-hardware changes. `DIAG-GPU-110`
+  failure, but memory/platform stability remains unexcluded. **Amended 2026-09-24:** NVIDIA
+  driver-package isolation is deprioritized by cross-version recurrence evidence (owner-supplied);
+  the next isolation should target the platform baseline, one variable at a time, with all other
+  configuration and hardware (including the driver) held unchanged. `DIAG-GPU-110`
   is **COMPLETE / ACCEPTED / INTEGRATED**: its read-only report establishes strong
   cross-incident convergence on the Windows black-screen/display capture domain, without
   driver- or component-level attribution. The two `0x133` minidumps remain access-restricted;
