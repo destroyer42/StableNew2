@@ -144,7 +144,10 @@ configuration/profile, firmware/BIOS defaults, PCIe link configuration, or CPU/p
 changing exactly **one** variable per isolation while holding everything else - including the
 driver, HAGS, Windows power plan, GPU power/clock settings, and physical hardware - unchanged and
 recording the platform state before and after. Which variable comes first is an owner decision and
-is not selected by this package. The earlier driver-package option is not excluded permanently; it
+is not selected by this package. **Owner plan (2026-09-24):** DIAG-GPU-130 stays unresolved for
+now; at the next reboot the owner will remove the RAM XMP profile (the single platform-baseline
+variable, everything else unchanged) and will report any recurrence so it can be monitored and
+investigated. No crash observed since is claimed here. The earlier driver-package option is not excluded permanently; it
 is deferred behind platform-baseline evidence. Do not execute any isolation in this package or
 combine it with any other configuration or hardware action.
 

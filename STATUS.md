@@ -15,7 +15,10 @@ Updated: 2026-09-23
   failure, but memory/platform stability remains unexcluded. **Amended 2026-09-24:** NVIDIA
   driver-package isolation is deprioritized by cross-version recurrence evidence (owner-supplied);
   the next isolation should target the platform baseline, one variable at a time, with all other
-  configuration and hardware (including the driver) held unchanged. `DIAG-GPU-110`
+  configuration and hardware (including the driver) held unchanged. **Owner plan (2026-09-24):**
+  DIAG-GPU-130 stays unresolved for now; at the next reboot the owner will remove the RAM XMP
+  profile (the one platform-baseline variable) and report any recurrence so it can be monitored and
+  investigated. `DIAG-GPU-110`
   is **COMPLETE / ACCEPTED / INTEGRATED**: its read-only report establishes strong
   cross-incident convergence on the Windows black-screen/display capture domain, without
   driver- or component-level attribution. The two `0x133` minidumps remain access-restricted;
