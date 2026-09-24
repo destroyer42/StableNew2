@@ -210,6 +210,20 @@ Updated: 2026-09-23
   already-proven 480x832 envelope, inference graph/settings held fixed, `face_video` still absent;
   background-hallucination mitigation is a separate future objective. Two additional clean
   DIAG-GPU-120 exposures; not a PASS or root-cause conclusion.
+  `PR-VID-181 — Wan2.2-Animate Upstream-Compatible Real-Driving Pose Adjudication`
+  (`docs/Subsystems/Video/PR-VID-181_Wan22_Animate_Real_Driving_Pose_Adjudication.md`), branch
+  `vid/181-animate-real-driving-pose-adjudication` (pending owner review, not integrated), did the
+  **preprocessing gate only**: **`PREPROCESSING_GATE_PASS / GPU ADJUDICATION BLOCKED BY
+  DIAG-GPU-130`**. Pinned `Wan-Video/Wan2.2 @ 1ea34ff4`; a disposable CPU-only environment outside
+  every StableNew/Comfy/A1111 runtime (both ONNX sessions proven `CPUExecutionProvider`, CUDA never
+  initialized); the official example produced a valid upstream-representation `src_pose.mp4`; two
+  real single-person stock clips (Mixkit; license terms text not machine-verified, internal use
+  only) were converted through the upstream whole-body pose path with `retarget_flag=False` and
+  frozen to 480x832/13f/8fps controls. Case A (gesture) passes visual preflight; Case B
+  (locomotion) passes with caveats (silhouetted source, two glitch frames, 0.8 s window). No Comfy,
+  A1111, CUDA or Animate generation occurred; Animate capability is **not** classified. Remaining
+  block: the separate NVIDIA driver-package isolation under DIAG-GPU-130, plus owner acceptance of
+  the Case B control and license basis, before the two Animate generations.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
