@@ -440,6 +440,15 @@ an authority, and it never contacts A1111 or mutates an NJR. The independent
 `WebUIResourceService` remains the read-only projection of what a running
 A1111 exposes. Local existence and runtime availability must not be conflated.
 
+`src.assets.AssetMetadataService` is the read-only factual-enrichment and
+compatibility-profile layer over registry identities. It may inspect bounded
+file headers and locally supplied sidecars, documentation, and exact-SHA legacy
+cache records, but it does not establish identity, contact a network, persist a
+second authority, or alter generation policy/NJR semantics. Values retain
+source/evidence provenance and conflicts rather than turning inference into a
+creator claim. Compatibility is factual (`compatible`, `incompatible`, or
+`unknown`); recommendation and automatic selection remain a later policy layer.
+
 A backend-neutral image boundary does not create a new artifact or history
 authority. Backend results must normalize into the existing canonical artifact
 and execution-result contracts. Backend identity/model-family information may be
