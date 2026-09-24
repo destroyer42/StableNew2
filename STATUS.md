@@ -15,7 +15,10 @@ Updated: 2026-09-23
   failure, but memory/platform stability remains unexcluded. **Amended 2026-09-24:** NVIDIA
   driver-package isolation is deprioritized by cross-version recurrence evidence (owner-supplied);
   the next isolation should target the platform baseline, one variable at a time, with all other
-  configuration and hardware (including the driver) held unchanged. `DIAG-GPU-110`
+  configuration and hardware (including the driver) held unchanged. **Owner plan (2026-09-24):**
+  DIAG-GPU-130 stays unresolved for now; at the next reboot the owner will remove the RAM XMP
+  profile (the one platform-baseline variable) and report any recurrence so it can be monitored and
+  investigated. `DIAG-GPU-110`
   is **COMPLETE / ACCEPTED / INTEGRATED**: its read-only report establishes strong
   cross-incident convergence on the Windows black-screen/display capture domain, without
   driver- or component-level attribution. The two `0x133` minidumps remain access-restricted;
@@ -225,10 +228,10 @@ Updated: 2026-09-23
   0.40-of-width root translation; a plain full-detail walker was not found in ~330 screened
   clips). No Comfy,
   A1111, CUDA or Animate generation occurred; Animate capability is **not** classified. Remaining
-  block: DIAG-GPU-130 unresolved (next: an owner-selected platform-baseline isolation, one variable
-  at a time, or explicit owner authorization to generate), plus owner confirmation of the Mixkit license
-  basis, before the two Animate generations. The owner accepted the silhouetted step/jog Case B
-  control (2026-09-24).
+  block: DIAG-GPU-130 unresolved by owner decision (XMP removal planned at next reboot, recurrences
+  to be reported) and no owner authorization to generate yet. The owner accepted the silhouetted
+  step/jog Case B control and confirmed the Mixkit license is fine for personal-use testing
+  (2026-09-24).
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

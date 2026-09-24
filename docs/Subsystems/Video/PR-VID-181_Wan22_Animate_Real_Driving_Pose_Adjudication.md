@@ -202,9 +202,7 @@ runner authority created.
 is **not** classified. The two Animate generations (real-human gesture, real-human locomotion at
 480×832, inference frozen, `face_video` absent) remain the adjudicating experiment.
 
-Remaining blocks before that experiment: (1) DIAG-GPU-130 remains unresolved - the next
-platform-baseline isolation (one variable at a time, owner-selected) must be executed and
-reviewed, or the owner must explicitly authorize generation against the unresolved state; (2) the product owner must still confirm the Mixkit license terms (the Case B control - silhouetted step/jog, 1.2 s - was **accepted by the product owner as the locomotion control** on 2026-09-24); (3) a thin VID-181 runner over `vid170.graph`/`vid160b`/`vid160c` must be added at
+Remaining blocks before that experiment: (1) DIAG-GPU-130 remains unresolved by owner decision (2026-09-24): the owner plans to remove the RAM XMP profile at the next reboot and report any recurrence for monitoring/investigation, and has **not** authorized Animate generation - an explicit owner go-ahead is still required before any GPU run; (2) resolved: the Mixkit license was confirmed acceptable by the owner for this personal-use testing (2026-09-24) and the Case B control (silhouetted step/jog, 1.2 s) was accepted as the locomotion control; (3) a thin VID-181 runner over `vid170.graph`/`vid160b`/`vid160c` must be added at
 that time.
 
 ## Docs / Git
