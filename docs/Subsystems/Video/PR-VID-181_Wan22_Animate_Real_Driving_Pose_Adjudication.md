@@ -204,9 +204,7 @@ is **not** classified. The two Animate generations (real-human gesture, real-hum
 
 Remaining blocks before that experiment: (1) DIAG-GPU-130 remains unresolved - the next
 platform-baseline isolation (one variable at a time, owner-selected) must be executed and
-reviewed, or the owner must explicitly authorize generation against the unresolved state; (2) the product owner should accept the Case B
-control (silhouetted step/jog, 1.2 s; a plain full-detail walker was not found in the searched
-catalogues) and confirm the Mixkit license terms; (3) a thin VID-181 runner over `vid170.graph`/`vid160b`/`vid160c` must be added at
+reviewed, or the owner must explicitly authorize generation against the unresolved state; (2) the product owner must still confirm the Mixkit license terms (the Case B control - silhouetted step/jog, 1.2 s - was **accepted by the product owner as the locomotion control** on 2026-09-24); (3) a thin VID-181 runner over `vid170.graph`/`vid160b`/`vid160c` must be added at
 that time.
 
 ## Docs / Git

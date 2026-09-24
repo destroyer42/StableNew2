@@ -226,8 +226,9 @@ Updated: 2026-09-23
   clips). No Comfy,
   A1111, CUDA or Animate generation occurred; Animate capability is **not** classified. Remaining
   block: DIAG-GPU-130 unresolved (next: an owner-selected platform-baseline isolation, one variable
-  at a time, or explicit owner authorization to generate), plus owner acceptance of the Case B
-  control and license basis, before the two Animate generations.
+  at a time, or explicit owner authorization to generate), plus owner confirmation of the Mixkit license
+  basis, before the two Animate generations. The owner accepted the silhouetted step/jog Case B
+  control (2026-09-24).
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
