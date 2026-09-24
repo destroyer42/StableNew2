@@ -1,15 +1,20 @@
 # StableNew current state
 
-Updated: 2026-09-22
+Updated: 2026-09-23
 
 ## Repository
 
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active diagnostic evidence: `DIAG-GPU-120 — DDR5-5600 XMP Isolation` — **OBSERVATION IN
-  PROGRESS**. The operator changed XMP DDR5-6000 to XMP DDR5-5600; XMP remains enabled. This
-  is an isolation experiment, not a PASS, stability fix, or root-cause verdict. `DIAG-GPU-110`
+- Active diagnostic evidence: `DIAG-GPU-130 - Post-5600 Black-Screen Recurrence` - **CAPTURED /
+  ISOLATION DECISION REQUIRED**. Windows-visible memory remains DDR5-5600 with XMP enabled, yet
+  the established hard failure recurred. The incident has new WER `141` and `1B8` evidence and
+  survivor telemetry proving immediately preceding StableNew A1111 `txt2img` work; it does not
+  attribute a component or StableNew as the cause. DDR5-5600 was insufficient to eliminate the
+  failure, but memory/platform stability remains unexcluded. The one recommended next owner-
+  authorized variable is an NVIDIA driver-package isolation; do not combine it with XMP, HAGS,
+  power, BIOS, or physical-hardware changes. `DIAG-GPU-110`
   is **COMPLETE / ACCEPTED / INTEGRATED**: its read-only report establishes strong
   cross-incident convergence on the Windows black-screen/display capture domain, without
   driver- or component-level attribution. The two `0x133` minidumps remain access-restricted;

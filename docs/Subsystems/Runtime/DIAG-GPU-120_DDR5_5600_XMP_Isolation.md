@@ -2,7 +2,15 @@
 
 ## Status
 
-**OBSERVATION IN PROGRESS.** This is an initial post-change checkpoint, not a PASS, FAIL, root-cause, or stability verdict. Ordinary StableNew use is the only authorized exposure source; no workload was created for this diagnostic.
+**RECURRENCE CAPTURED - TRANSITION INSUFFICIENT.** The observation was closed by the
+2026-09-23 recurrence recorded in `DIAG-GPU-130`. Windows directly still reports both DIMMs at
+5600 MT/s (XMP remains operator-reported enabled). The established hard failure recurred under
+that condition, so the DDR5-5600 transition was insufficient to eliminate it and a simple
+"DDR5-6000 alone causes the crash" hypothesis is weakened. This does not prove RAM, IMC, CPU,
+or platform stability uninvolved: timings/controller behavior remain unobserved, and the current
+record does not establish that any other machine variable was unchanged beyond the evidence
+captured there. No second variable was intentionally changed by this diagnostic before the
+recurrence.
 
 ## Execution profile
 
