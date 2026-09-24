@@ -216,22 +216,25 @@ Updated: 2026-09-23
   DIAG-GPU-120 exposures; not a PASS or root-cause conclusion.
   `PR-VID-181 — Wan2.2-Animate Upstream-Compatible Real-Driving Pose Adjudication`
   (`docs/Subsystems/Video/PR-VID-181_Wan22_Animate_Real_Driving_Pose_Adjudication.md`), branch
-  `vid/181-animate-real-driving-pose-adjudication` (pending owner review, not integrated), did the
-  **preprocessing gate only**: **`PREPROCESSING_GATE_PASS / GPU ADJUDICATION BLOCKED BY
-  DIAG-GPU-130`**. Pinned `Wan-Video/Wan2.2 @ 1ea34ff4`; a disposable CPU-only environment outside
-  every StableNew/Comfy/A1111 runtime (both ONNX sessions proven `CPUExecutionProvider`, CUDA never
-  initialized); the official example produced a valid upstream-representation `src_pose.mp4`; two
-  real single-person stock clips (Mixkit; license terms text not machine-verified, internal use
-  only) were converted through the upstream whole-body pose path with `retarget_flag=False` and
-  frozen to 480x832/13f/8fps controls. Case A (gesture) passes visual preflight; Case B
-  (locomotion) passes on a re-sourced clean window (silhouetted step/jog, 1.2 s, static camera,
-  0.40-of-width root translation; a plain full-detail walker was not found in ~330 screened
-  clips). No Comfy,
-  A1111, CUDA or Animate generation occurred; Animate capability is **not** classified. Remaining
-  block: DIAG-GPU-130 unresolved by owner decision (XMP removal planned at next reboot, recurrences
-  to be reported) and no owner authorization to generate yet. The owner accepted the silhouetted
-  step/jog Case B control and confirmed the Mixkit license is fine for personal-use testing
-  (2026-09-24).
+  `vid/181-animate-real-driving-pose-adjudication` (pending owner review, not integrated), ran the
+  adjudication: pinned `Wan-Video/Wan2.2 @ 1ea34ff4` whole-body pose preprocessing ran CPU-only in a
+  disposable environment outside every StableNew/Comfy/A1111 runtime; two real single-person stock
+  clips (Mixkit; owner confirmed the license for personal-use testing) became frozen 480x832/13f/8fps
+  controls (`retarget_flag=False`); after the owner's explicit GPU go-ahead, exactly two Animate
+  generations ran at the frozen 480x832 configuration (no retries, no safety stop, commit peak
+  ~77%). Result: **`ANIMATE_REAL_POSE_LOCAL_MOTION_ONLY`**, secondary
+  **`BACKGROUND_INSTABILITY_CROSS_CASE`**. Case A (gesture) now transfers onto a recognisable person
+  (motion-curve correlation 0.42, versus -0.09 for PR-VID-180's synthetic control) with clothing
+  drift from the driving footage, so the procedural-vs-upstream conditioning representation was a
+  material cause of PR-VID-180's gesture failure. Case B (locomotion) repeats PR-VID-180's failure
+  pattern - the reference-identity subject stays planted while a separate blurred figure performs
+  the stepping and travels - so better pose conditioning alone does not deliver locomotion at this
+  envelope. Caveats: one seed, one silhouetted 1.2 s control, no retargeting, no `face_video`. No
+  production Wan/backend setting or governance changed; Animate remains unregistered. Next
+  (owner's choice, one variable each): same Case B control with upstream basic retargeting; then
+  `face_video`; background mitigation is separate. Two additional clean DIAG-GPU-120 exposures (DDR5-5600/XMP
+  still enabled at the runs); not a PASS or root-cause conclusion; DIAG-GPU-130 stays unresolved with
+  XMP removal planned at the next reboot.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
