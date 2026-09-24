@@ -12,9 +12,10 @@ Updated: 2026-09-23
   the established hard failure recurred. The incident has new WER `141` and `1B8` evidence and
   survivor telemetry proving immediately preceding StableNew A1111 `txt2img` work; it does not
   attribute a component or StableNew as the cause. DDR5-5600 was insufficient to eliminate the
-  failure, but memory/platform stability remains unexcluded. The one recommended next owner-
-  authorized variable is an NVIDIA driver-package isolation; do not combine it with XMP, HAGS,
-  power, BIOS, or physical-hardware changes. `DIAG-GPU-110`
+  failure, but memory/platform stability remains unexcluded. **Amended 2026-09-24:** NVIDIA
+  driver-package isolation is deprioritized by cross-version recurrence evidence (owner-supplied);
+  the next isolation should target the platform baseline, one variable at a time, with all other
+  configuration and hardware (including the driver) held unchanged. `DIAG-GPU-110`
   is **COMPLETE / ACCEPTED / INTEGRATED**: its read-only report establishes strong
   cross-incident convergence on the Windows black-screen/display capture domain, without
   driver- or component-level attribution. The two `0x133` minidumps remain access-restricted;
@@ -222,8 +223,9 @@ Updated: 2026-09-23
   frozen to 480x832/13f/8fps controls. Case A (gesture) passes visual preflight; Case B
   (locomotion) passes with caveats (silhouetted source, two glitch frames, 0.8 s window). No Comfy,
   A1111, CUDA or Animate generation occurred; Animate capability is **not** classified. Remaining
-  block: the separate NVIDIA driver-package isolation under DIAG-GPU-130, plus owner acceptance of
-  the Case B control and license basis, before the two Animate generations.
+  block: DIAG-GPU-130 unresolved (next: an owner-selected platform-baseline isolation, one variable
+  at a time, or explicit owner authorization to generate), plus owner acceptance of the Case B
+  control and license basis, before the two Animate generations.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

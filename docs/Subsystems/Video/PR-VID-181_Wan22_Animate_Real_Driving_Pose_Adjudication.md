@@ -13,9 +13,11 @@ conditioning failed while detector-derived real-human Case C succeeded. PR-VID-1
 needs real gesture/locomotion footage converted through Wan2.2-Animate's own whole-body pose
 semantics, then two Animate generations at the proven 480×832 envelope.
 
-DIAG-GPU-130 (post-DDR5-5600 black-screen recurrence) is the active machine authority: the next
-authorized isolation variable is an NVIDIA driver-package change, and deliberate high-load
-Animate/Comfy/A1111 generation is **not** authorized until that is executed and reviewed. This
+DIAG-GPU-130 (post-DDR5-5600 black-screen recurrence) is the active machine authority.
+Its conclusion was amended 2026-09-24: NVIDIA driver-package isolation is deprioritized by
+cross-version recurrence evidence, and the next isolation targets the platform baseline, one
+variable at a time. Deliberate high-load Animate/Comfy/A1111 generation is **not** authorized
+until the owner authorizes it against DIAG-GPU-130's then-current state. This
 package therefore did **preprocessing only**: CPU-only pose extraction, source acquisition and
 provenance, deterministic control preparation, tests and documentation. Comfy, A1111 and CUDA were
 never started or initialized, and preprocessing is not counted as a DIAG-GPU-120 exposure.
@@ -191,8 +193,9 @@ runner authority created.
 is **not** classified. The two Animate generations (real-human gesture, real-human locomotion at
 480×832, inference frozen, `face_video` absent) remain the adjudicating experiment.
 
-Remaining blocks before that experiment: (1) the separate NVIDIA driver-package isolation under
-DIAG-GPU-130 must be completed and accepted; (2) the product owner should accept the Case B
+Remaining blocks before that experiment: (1) DIAG-GPU-130 remains unresolved - the next
+platform-baseline isolation (one variable at a time, owner-selected) must be executed and
+reviewed, or the owner must explicitly authorize generation against the unresolved state; (2) the product owner should accept the Case B
 control given its caveats (or direct a cleaner static-camera walking source) and confirm the Mixkit
 license terms; (3) a thin VID-181 runner over `vid170.graph`/`vid160b`/`vid160c` must be added at
 that time.
