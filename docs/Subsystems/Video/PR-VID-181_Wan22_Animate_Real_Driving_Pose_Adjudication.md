@@ -1,7 +1,7 @@
 # PR-VID-181 — Wan2.2-Animate Upstream-Compatible Real-Driving Pose Adjudication — Preprocessing Gate
 
-Status: **`PREPROCESSING_GATE_PASS / GPU ADJUDICATION BLOCKED BY DIAG-GPU-130`** (with the Case B
-caveats recorded below). Qualification only. No production `src/` change, no backend, no
+Status: **`PREPROCESSING_GATE_PASS / GPU ADJUDICATION BLOCKED BY DIAG-GPU-130`** (Case B re-sourced
+to a cleaner window; residual caveats recorded below). Qualification only. No production `src/` change, no backend, no
 resolver/controller/queue/NJR change, no workflow registration. Start
 `main @ 435b6130360201cb958f146bc8e742960268af0d`. **No Animate generation was run; Animate
 capability is not classified by this package.**
@@ -81,8 +81,9 @@ lines (`tools/qualification/vid181/provenance.py:tree_sha256`).
    source puts a small figure in a letterboxed landscape pose frame (observed in a first attempt:
    the rendered figure was a tiny stick figure), which would not be a fair Animate control. A fixed
    crop never removes image-space root translation and never stretches pose geometry.
-5. Video writing uses upstream's own `moviepy` `ImageSequenceClip.write_videofile`; moviepy writes
-   one frame fewer than requested for short clips (e.g. 19 pose frames from a 20-frame clip).
+5. Video writing uses upstream's own `moviepy` `ImageSequenceClip.write_videofile`; moviepy can write
+   one frame fewer than requested for very short clips (seen on a rejected 20-frame Case B window:
+   19 pose frames); the accepted windows read back their full frame counts.
 
 ## Official-example smoke gate — PASS
 
@@ -109,9 +110,15 @@ the fetched page HTML; the license terms text itself is loaded dynamically by mi
 was **not machine-verified in this session**. Use here is internal local qualification only; the
 clips are not committed or redistributed. The product owner should confirm the license terms before
 any redistribution or reuse beyond local qualification. Download date 2026-09-23. Selection
-history: many candidates were screened; static-camera lateral walkers are rare in this catalogue,
-and a first walking candidate (#4855) was **rejected** because its camera pans with the subject
-(no image-space root translation).
+history: about 330 Mixkit clips were screened (CPU YOLO person detector plus optical-flow camera
+motion: static camera, exactly one person, real lateral travel). Static-camera single-person
+lateral walkers are essentially absent from that catalogue, and Pexels/Pixabay block automated
+access (HTTP 403); Internet Archive public-domain search returned old films with cuts. A first
+walking candidate (#4855) was **rejected** because its camera pans with the subject (no image-space
+root translation). Clip #583 was kept, and a first 4.1-4.9 s window of it was **rejected** for
+detector glitches (lower-body keypoint confidence min 0.52, one spurious foot line, one dropped
+leg) in favour of the 3.0-4.2 s window below (lower-body confidence min 0.89). The rejected-window
+outputs are kept in the workspace for comparison.
 
 | | Case A — gesture | Case B — locomotion |
 |---|---|---|
@@ -119,20 +126,20 @@ and a first walking candidate (#4855) was **rejected** because its camera pans w
 | Download | `assets.mixkit.co/videos/1053/1053-720.mp4` | `assets.mixkit.co/videos/583/583-720.mp4` |
 | Original SHA-256 | `f4d36d3e4948c98f4e9f573b346718e524def852d31bb35f253273521de5f910` | `da49964c6d418ae7a7cc6b8972617d6e35bff588e656d55f67d645974b4cd346` |
 | Original | 1280×720, 24 fps, 507 frames | 1280×720, 24 fps, 240 frames |
-| Window | 0.5 s + 6.0 s (arm raise from low lunge to overhead, hold, open overhead) | 4.1 s + 0.8 s (silhouetted athlete stepping across a static frame) |
-| Fixed crop | x=490 y=0, 377×676 | x=250 y=20, 377×676 |
-| Driving clip SHA-256 (464×832, 24 fps) | `59cf380c7e0076ae649c4bf824cddc18795610af029fb2f61d20f777a67ba024` (144 frames) | `99b86c663f03d1cf7ee6ac34b31684858d0684b5a976d13806f9a52c34de3896` (20 frames) |
+| Window | 0.5 s + 6.0 s (arm raise from low lunge to overhead, hold, open overhead) | 3.0 s + 1.2 s (silhouetted athlete stepping/jogging left to right across a static frame) |
+| Fixed crop | x=490 y=0, 377×676 | x=140 y=20, 377×676 |
+| Driving clip SHA-256 (464×832, 24 fps) | `59cf380c7e0076ae649c4bf824cddc18795610af029fb2f61d20f777a67ba024` (144 frames) | `afe3637aa060fd5855d2feb37b58ab81d300252615daa2b0b8f202d8158edce4` (29 frames) |
 
 ## Pose extraction (upstream path, CPU-only, `retarget_flag=False`)
 
 | | Case A | Case B |
 |---|---|---|
-| Body-keypoint confidence, per-frame mean (min / mean) | 0.838 / 0.894 | 0.735 / 0.812 |
-| Full upstream `src_pose.mp4` SHA-256 | `8ecc7fff56b60093a4ed224a72e3b1dc0962378a50c6628214daa5b1126f04d9` (464×832, 24 fps, 144 f) | `be3de8e1260b63946d8dc516deb249d9b647ae900254614696ea81fab3bc53e4` (464×832, 24 fps, 19 f) |
-| Final control SHA-256 (480×832, 13 f, 8 fps) | `96705f92ddd123ee6f8382f4b5926ceac1366687f4dbfa8683e6f5af146c3cbf` | `76f7124a19ab78b911df6afc044f1385910ace9e2b15afc31cf6126a7e6bdee3` |
-| Selected source-frame indices | 0, 11, 23, 35, 47, 59, 71, 83, 95, 107, 119, 131, 143 | 0, 1, 3, 4, 6, 7, 9, 10, 12, 13, 15, 16, 18 |
+| Body-keypoint confidence, per-frame mean (min / mean) | 0.838 / 0.894 | 0.825 / 0.856 (lower-body knees/ankles: min 0.891, mean 0.906) |
+| Full upstream `src_pose.mp4` SHA-256 | `8ecc7fff56b60093a4ed224a72e3b1dc0962378a50c6628214daa5b1126f04d9` (464×832, 24 fps, 144 f) | `0b7087eff9bf73dd8d9fe6de64a036aeb275f555d19ff445a766eeb8236e2d4b` (464×832, 24 fps, 29 f) |
+| Final control SHA-256 (480×832, 13 f, 8 fps) | `96705f92ddd123ee6f8382f4b5926ceac1366687f4dbfa8683e6f5af146c3cbf` | `b685a39d3ab374d0b7b05ba287964038b6ab6ebd3bba6ed757138057468a288c` |
+| Selected source-frame indices | 0, 11, 23, 35, 47, 59, 71, 83, 95, 107, 119, 131, 143 | 0, 2, 4, 7, 9, 11, 14, 16, 18, 21, 23, 25, 28 |
 | Adaptation | 8 px black side padding (464→480), scale 1.0 | same |
-| `src_face.mp4` SHA-256 (generated; not consumed) | `251ccddf62877eee8aafa52404ab0b51e71a7048fd920e7cd614e7968f738a6a` | `b0afaf3960bf8f75f14113dc231ede30bb21119f84850633fbb8ee97a7676ce3` |
+| `src_face.mp4` SHA-256 (generated; not consumed) | `251ccddf62877eee8aafa52404ab0b51e71a7048fd920e7cd614e7968f738a6a` | `1daef201600fd8e0d4f4705d21993d28764108c683dea851a7f3d1c5aa615012` |
 
 Frame selection is the accepted evenly-spaced `numpy.linspace` convention (identical to
 PR-VID-160C/170/175/180); no frame was hand-picked.
@@ -142,14 +149,16 @@ PR-VID-160C/170/175/180); no frame was hand-picked.
 - **Case A — PASS.** The upstream representation clearly contains the gesture: arms swing up from
   a low lunge, hold overhead with visible finger strokes, then open into a V. Full-body legs and
   head markers are present. The first frame's detection is folded/noisy (start of the crouch).
-- **Case B — PASS with caveats.** The final pose contains alternating leg progression and
-  continuous left-to-right root translation (head marker drifts from about 0.40 to 0.79 of the
-  tile width across the 13 frames, roughly 0.39 of the frame width). Caveats: the silhouetted
-  source reduces detector quality — one frame has a spurious long foot line and one frame drops a
-  leg — so this control is noisier than Case A; the window is 0.8 s (a jog/step cadence), and
-  moviepy dropped one pose frame. The defining motions are preserved, so the control was not
-  rejected, but these artifacts should be weighed by the product owner before an Animate run is
-  spent on it.
+- **Case B — PASS.** The final pose shows a clean, consistent skeleton in all 13 frames (no
+  spurious limb lines, no dropped legs; lower-body keypoint confidence min 0.891), alternating leg
+  progression with growing knee lift, and monotonic left-to-right root translation: the rendered
+  bounding-box center moves 0.29 → 0.69 of the frame width (0.40 of the width) with the figure at
+  about 0.59 of the canvas height; the camera is static. Residual caveats: the source is a
+  silhouette against the sky (dark figure, no clothing/face detail — the detector still tracked it
+  well), the motion is a warm-up step/jog with accelerating cadence rather than a plain walk, and
+  the window is 1.2 s. The defining motions (alternating steps, foot/leg progression, root
+  translation) are all present. The final control hash reproduced exactly when the window was
+  re-run from scratch.
 
 ## Retarget and face policy
 
@@ -196,8 +205,8 @@ is **not** classified. The two Animate generations (real-human gesture, real-hum
 Remaining blocks before that experiment: (1) DIAG-GPU-130 remains unresolved - the next
 platform-baseline isolation (one variable at a time, owner-selected) must be executed and
 reviewed, or the owner must explicitly authorize generation against the unresolved state; (2) the product owner should accept the Case B
-control given its caveats (or direct a cleaner static-camera walking source) and confirm the Mixkit
-license terms; (3) a thin VID-181 runner over `vid170.graph`/`vid160b`/`vid160c` must be added at
+control (silhouetted step/jog, 1.2 s; a plain full-detail walker was not found in the searched
+catalogues) and confirm the Mixkit license terms; (3) a thin VID-181 runner over `vid170.graph`/`vid160b`/`vid160c` must be added at
 that time.
 
 ## Docs / Git

@@ -221,7 +221,9 @@ Updated: 2026-09-23
   real single-person stock clips (Mixkit; license terms text not machine-verified, internal use
   only) were converted through the upstream whole-body pose path with `retarget_flag=False` and
   frozen to 480x832/13f/8fps controls. Case A (gesture) passes visual preflight; Case B
-  (locomotion) passes with caveats (silhouetted source, two glitch frames, 0.8 s window). No Comfy,
+  (locomotion) passes on a re-sourced clean window (silhouetted step/jog, 1.2 s, static camera,
+  0.40-of-width root translation; a plain full-detail walker was not found in ~330 screened
+  clips). No Comfy,
   A1111, CUDA or Animate generation occurred; Animate capability is **not** classified. Remaining
   block: DIAG-GPU-130 unresolved (next: an owner-selected platform-baseline isolation, one variable
   at a time, or explicit owner authorization to generate), plus owner acceptance of the Case B

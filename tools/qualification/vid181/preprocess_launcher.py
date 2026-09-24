@@ -113,12 +113,14 @@ def main(argv: list[str] | None = None) -> int:
 
     cond_images = []
     body_conf = []
+    lower_conf = []
     for meta in metas:
         aa = AAPoseMeta.from_humanapi_meta(meta)
         canvas = np.zeros_like(frames[0])
         drawn = draw_aapose_by_meta_new(canvas, aa)
         cond_images.append(padding_resize(drawn, refer_img.shape[0], refer_img.shape[1]))
         body_conf.append(float(np.asarray(meta["keypoints_body"])[:, 2].mean()))
+        lower_conf.append(float(np.asarray(meta["keypoints_body"])[[9, 10, 12, 13], 2].mean()))
 
     pose_path_out, face_path_out = out / "src_pose.mp4", out / "src_face.mp4"
     mpy.ImageSequenceClip(face_images, fps=fps).write_videofile(str(face_path_out), logger=None)
@@ -155,6 +157,7 @@ def main(argv: list[str] | None = None) -> int:
         "processed_indices_head": idxs[:5],
         "pose_output_size": [int(cond_images[0].shape[1]), int(cond_images[0].shape[0])],
         "per_frame_body_conf_mean_min": min(body_conf),
+        "per_frame_lower_body_conf": [round(c, 3) for c in lower_conf],
         "per_frame_body_conf_mean_mean": float(np.mean(body_conf)),
         "src_pose": {"path": str(pose_path_out), "sha256": prov.sha256_of(pose_path_out)},
         "src_face": {"path": str(face_path_out), "sha256": prov.sha256_of(face_path_out)},
