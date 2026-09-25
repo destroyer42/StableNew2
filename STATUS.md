@@ -233,14 +233,18 @@ Updated: 2026-09-25
   the stepping and travels - so better pose conditioning alone does not deliver locomotion at this
   envelope. Caveats: one seed, one silhouetted 1.2 s control, no retargeting, no `face_video`. No
   production Wan/backend setting or governance changed; Animate remains unregistered. Next
-  distinct objective: `PR-VID-182 — Wan2.2-Animate Case-B Basic Pose-Retargeting Adjudication`:
-  test whether upstream basic pose retargeting resolves the ghost-subject/reference-binding failure
-  by changing only `retarget_flag=False` to `retarget_flag=True`, with `use_flux=False`. Freeze the
-  same Case-B raw driving footage and reference, pinned Wan SHA, 480x832/13f/8fps, 20 steps,
-  cfg 1.0, shift 5.0, UniPC/simple, seed, model assets, no `face_video`, and no background mitigation;
-  one future generation. PR-VID-182 is not started. VID-181's two clean generations occurred while
-  DDR5-5600/XMP was still enabled and are not a DIAG-GPU stability PASS. DIAG-GPU-130 now records
-  XMP-OFF isolation in progress / observation only.
+  `PR-VID-182 — Wan2.2-Animate Case-B Basic Pose-Retargeting Adjudication`
+  (`docs/Subsystems/Video/PR-VID-182_Wan22_Animate_Basic_Pose_Retargeting_Adjudication.md`) is
+  **COMPLETE - `BASIC_RETARGET_PRECONDITION_NOT_MET`**. Pinned Wan upstream basic retargeting
+  requires both the reference and the first driving frame to be front-facing and stretched/standard.
+  The frozen reference satisfies that condition, but the exact Case-B frame 0 is a lateral-profile,
+  high-knee step/jog silhouette, so it does not. The package stopped before preprocessing, Comfy,
+  or GPU work: no source/window/crop/reference change, calibration frame, Flux, `face_video`,
+  retargeted control, or Animate generation occurred. A next package requires product-owner choice
+  between enhanced retargeting with the exact comparator (`use_flux=True`) and a new compliant
+  driving source for basic retargeting; neither is selected. VID-181's two clean generations
+  occurred while DDR5-5600/XMP was still enabled and are not a DIAG-GPU stability PASS.
+  DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

@@ -296,17 +296,16 @@ None. Qualification tooling only (`tools/qualification/vid181/`). No StableNew, 
 environment changed; no production dependency added; no queue, history, resolver, controller or
 runner authority created.
 
-## Next video objective (not started)
+## Subsequent basic-retarget applicability result
 
-**`PR-VID-182 — Wan2.2-Animate Case-B Basic Pose-Retargeting Adjudication`** asks whether upstream
-basic pose retargeting solves the spatial/reference-binding failure where locomotion is assigned
-to a ghost subject rather than the reference person. The single changed conditioning variable is
-`retarget_flag=False → retarget_flag=True`, with `use_flux=False`. Freeze the same Case-B raw driving
-footage and reference, pinned Wan upstream SHA, 480×832, 13 frames, 8 fps, 20 steps, CFG 1.0,
-shift 5.0, UniPC/simple, seed, and model assets; keep `face_video` absent and do not mitigate the
-background. One future Animate generation is expected. Do not execute VID-182 as part of this
-closeout. Gesture-only experimental use is supported by Case A subject to clothing drift and
-background defects; Animate is not promoted for locomotion on this evidence.
+`PR-VID-182 — Wan2.2-Animate Case-B Basic Pose-Retargeting Adjudication` subsequently found
+**`BASIC_RETARGET_PRECONDITION_NOT_MET`** before preprocessing or GPU work. Pinned upstream basic
+retargeting requires both the reference and first driving frame to be front-facing and stretched;
+the frozen Case-B frame 0 is a lateral-profile, high-knee step/jog silhouette. No source/window/
+crop/reference change, Flux, `face_video`, retargeted control, or Animate generation occurred.
+See `PR-VID-182_Wan22_Animate_Basic_Pose_Retargeting_Adjudication.md`. Gesture-only experimental
+use remains supported by Case A subject to clothing drift and background defects; Animate is not
+promoted for locomotion on this evidence.
 
 ## Docs / Git
 
