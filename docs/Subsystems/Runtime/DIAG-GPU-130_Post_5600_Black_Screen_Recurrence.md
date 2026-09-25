@@ -144,12 +144,21 @@ configuration/profile, firmware/BIOS defaults, PCIe link configuration, or CPU/p
 changing exactly **one** variable per isolation while holding everything else - including the
 driver, HAGS, Windows power plan, GPU power/clock settings, and physical hardware - unchanged and
 recording the platform state before and after. Which variable comes first is an owner decision and
-is not selected by this package. **Owner plan (2026-09-24):** DIAG-GPU-130 stays unresolved for
-now; at the next reboot the owner will remove the RAM XMP profile (the single platform-baseline
-variable, everything else unchanged) and will report any recurrence so it can be monitored and
-investigated. No crash observed since is claimed here. The earlier driver-package option is not excluded permanently; it
-is deferred behind platform-baseline evidence. Do not execute any isolation in this package or
-combine it with any other configuration or hardware action.
+is not selected by this package. **Owner-confirmed intervention (2026-09-25):** the owner removed
+the RAM XMP profile before rebooting. This is XMP-OFF isolation in progress / observation only.
+The post-change boot is `2026-09-25 07:06:20 ET`; read-only Windows CIM capture at
+`2026-09-25 10:32:03 ET` reports `Win32_OperatingSystem.LastBootUpTime` as
+`2026-09-25T07:06:20.5000000-04:00` and both 16 GiB DIMMs (`17179869184` bytes; Micron
+`CP16G60C36U5B.M8D1`): `Controller0-ChannelA-DIMM1` (serial `EB472282`) and
+`Controller1-ChannelA-DIMM1` (serial `EB472250`). Each reports `Speed=5600`,
+`ConfiguredClockSpeed=5600`, `ConfiguredVoltage=1100 mV` (`MinVoltage=1100`, `MaxVoltage=1350`),
+`SMBIOSMemoryType=34`, and `FormFactor=8`. Windows does not establish
+the firmware XMP toggle itself, Intel Baseline/Default, timings, or memory-controller state. This
+observation is not a PASS, fix, or root-cause attribution. No crash-free interval beyond this
+observation is claimed. The earlier driver-package option is not excluded permanently; it is
+deferred behind platform-baseline evidence. Continue ordinary-use observation and report any
+recurrence for monitoring; do not deliberately stress-test or combine this with another
+configuration or hardware action.
 
 ## Boundaries and validation
 

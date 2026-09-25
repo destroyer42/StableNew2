@@ -1,7 +1,7 @@
 # PR-VID-181 — Wan2.2-Animate Upstream-Compatible Real-Driving Pose Adjudication
 
-Status: **`ANIMATE_REAL_POSE_LOCAL_MOTION_ONLY`** (primary), secondary finding
-**`BACKGROUND_INSTABILITY_CROSS_CASE`**. Qualification only. No production `src/` change, no
+Status: **`PR-VID-181 — COMPLETE / ACCEPTED / INTEGRATED — ANIMATE_REAL_POSE_LOCAL_MOTION_ONLY`**;
+secondary finding **`BACKGROUND_INSTABILITY_CROSS_CASE`**. Qualification only. No production `src/` change, no
 backend, no resolver/controller/queue/NJR change, no workflow registration. Start
 `main @ 435b6130360201cb958f146bc8e742960268af0d`. Two Animate generations were run (Case A
 gesture, Case B locomotion) after the owner's explicit go-ahead; a preprocessing gate preceded them.
@@ -15,8 +15,12 @@ semantics, then two Animate generations at the proven 480×832 envelope.
 
 DIAG-GPU-130 (post-DDR5-5600 black-screen recurrence) stays unresolved by owner decision. Its
 conclusion was amended 2026-09-24 (driver-package isolation deprioritized by cross-version
-recurrence evidence; next isolation targets the platform baseline, one variable at a time), and
-the owner plans to remove the RAM XMP profile at the next reboot and report any recurrence. The
+recurrence evidence; next isolation targets the platform baseline, one variable at a time). The
+owner subsequently confirmed removal of the RAM XMP profile before the 2026-09-25 07:06:20 ET
+reboot; Windows observed both DIMMs at configured 5600 MT/s and 1100 mV. Windows cannot confirm
+the firmware toggle, Intel Baseline/Default, timings, or controller state. This remains
+XMP-OFF isolation in progress / observation only, not a PASS, fix, or root-cause attribution.
+These VID-181 generations preceded the intervention and used the prior machine state. The
 owner gave an explicit GPU go-ahead on 2026-09-24, so the package proceeded in two stages:
 **(1)** CPU-only preprocessing (no Comfy, A1111 or CUDA; not counted as a DIAG-GPU-120 exposure),
 then **(2)** exactly two Animate generations under the unchanged commit-aware safety thresholds.
@@ -281,22 +285,28 @@ rejected; driving crop exact 29:52 aspect and filter shape; future Animate spec 
 `git diff --check` clean. Physical preprocessing evidence lives in the workspace, not the repo, and
 detector accuracy is not unit-tested with mocks.
 
+StableNew Actions run `36001972330`: required Python 3.11 and 3.12 jobs passed. The informational
+broader configured suites retain the known `Run broader configured suite (Xvfb)` failures. VID-181
+qualification source is unchanged since that run; this integration reuses that green required-CI
+evidence. No GPU workload was run for this closeout.
+
 ## Architecture effect
 
 None. Qualification tooling only (`tools/qualification/vid181/`). No StableNew, Comfy or A1111
 environment changed; no production dependency added; no queue, history, resolver, controller or
 runner authority created.
 
-## Recommended next objective
+## Next video objective (not started)
 
-Do not promote Animate for locomotion on this evidence. One-variable follow-ups that the evidence
-motivates (owner to choose; each is a single generation and should be authorized against
-DIAG-GPU-130's then-current state): (1) the same Case B control with upstream **basic pose
-retargeting** (`retarget_flag=True`, no Flux) so the skeleton is anchored to the reference's body
-position and proportions — the most direct test of whether the ghost figure is a spatial-binding
-problem; (2) `face_video` as a separate identity variable; (3) a non-silhouette locomotion control.
-Background mitigation remains a separate future objective. Gesture-only experimental use is
-supported by Case A, subject to the clothing drift and background defects.
+**`PR-VID-182 — Wan2.2-Animate Case-B Basic Pose-Retargeting Adjudication`** asks whether upstream
+basic pose retargeting solves the spatial/reference-binding failure where locomotion is assigned
+to a ghost subject rather than the reference person. The single changed conditioning variable is
+`retarget_flag=False → retarget_flag=True`, with `use_flux=False`. Freeze the same Case-B raw driving
+footage and reference, pinned Wan upstream SHA, 480×832, 13 frames, 8 fps, 20 steps, CFG 1.0,
+shift 5.0, UniPC/simple, seed, and model assets; keep `face_video` absent and do not mitigate the
+background. One future Animate generation is expected. Do not execute VID-182 as part of this
+closeout. Gesture-only experimental use is supported by Case A subject to clothing drift and
+background defects; Animate is not promoted for locomotion on this evidence.
 
 ## Docs / Git
 
@@ -304,5 +314,6 @@ New: this report, `tools/qualification/vid181/` (`provenance.py`, `preprocess_la
 `driving_prep.py`, `finalize.py`, `run.py`), `tests/tools/test_vid181_preprocessing_gate.py`,
 `tests/tools/test_vid181_runner.py`. Not committed: detector checkpoints, raw/trimmed/cropped
 footage, pose and generated videos, telemetry, the disposable environment and the upstream
-checkout (`reports/` is git-ignored). Not integrated to `main` without product-owner review. No
-third generation and no retry occurred; no production, Comfy-configuration or A1111 change.
+checkout (`reports/` is git-ignored). Integrated to `main` with product-owner acceptance and
+fast-forward-only main integration. Exactly two generations and no retries occurred; no
+production, Comfy-configuration or A1111 change.

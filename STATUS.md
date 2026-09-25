@@ -1,24 +1,27 @@
 # StableNew current state
 
-Updated: 2026-09-23
+Updated: 2026-09-25
 
 ## Repository
 
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Active diagnostic evidence: `DIAG-GPU-130 - Post-5600 Black-Screen Recurrence` - **CAPTURED /
-  ISOLATION DECISION REQUIRED**. Windows-visible memory remains DDR5-5600 with XMP enabled, yet
-  the established hard failure recurred. The incident has new WER `141` and `1B8` evidence and
-  survivor telemetry proving immediately preceding StableNew A1111 `txt2img` work; it does not
-  attribute a component or StableNew as the cause. DDR5-5600 was insufficient to eliminate the
-  failure, but memory/platform stability remains unexcluded. **Amended 2026-09-24:** NVIDIA
-  driver-package isolation is deprioritized by cross-version recurrence evidence (owner-supplied);
-  the next isolation should target the platform baseline, one variable at a time, with all other
-  configuration and hardware (including the driver) held unchanged. **Owner plan (2026-09-24):**
-  DIAG-GPU-130 stays unresolved for now; at the next reboot the owner will remove the RAM XMP
-  profile (the one platform-baseline variable) and report any recurrence so it can be monitored and
-  investigated. `DIAG-GPU-110`
+- Active diagnostic evidence: `DIAG-GPU-130 - Post-5600 Black-Screen Recurrence` - **XMP-OFF
+  ISOLATION IN PROGRESS / OBSERVATION ONLY**. The owner confirms the RAM XMP profile has now been
+  removed. After the 2026-09-25 07:06:20 ET boot, Windows reports both DIMMs at DDR5-5600,
+  configured 5600 MT/s and 1100 mV; Windows does not establish the firmware XMP toggle, Intel
+  Baseline/Default, timings, or controller state. This is not a PASS, fix, or root-cause verdict.
+  The prior recurrence under reported DDR5-5600/XMP remains captured; subsequent ordinary-use
+  observation must preserve survivor telemetry and Windows evidence. The current baseline has not
+  been deliberately stress-tested. The earlier 5600/XMP recurrence remains documented with its
+  WER `141` and `1B8` evidence and survivor telemetry proving immediately preceding StableNew A1111
+  `txt2img` work; it does not attribute a component or StableNew as the cause. DDR5-5600 was
+  insufficient to eliminate the failure, but memory/platform stability remains unexcluded.
+  **Amended 2026-09-24:** NVIDIA driver-package isolation is deprioritized by cross-version
+  recurrence evidence (owner-supplied); the next isolation should target the platform baseline,
+  one variable at a time, with all other configuration and hardware (including the driver) held
+  unchanged. `DIAG-GPU-110`
   is **COMPLETE / ACCEPTED / INTEGRATED**: its read-only report establishes strong
   cross-incident convergence on the Windows black-screen/display capture domain, without
   driver- or component-level attribution. The two `0x133` minidumps remain access-restricted;
@@ -214,9 +217,8 @@ Updated: 2026-09-23
   already-proven 480x832 envelope, inference graph/settings held fixed, `face_video` still absent;
   background-hallucination mitigation is a separate future objective. Two additional clean
   DIAG-GPU-120 exposures; not a PASS or root-cause conclusion.
-  `PR-VID-181 — Wan2.2-Animate Upstream-Compatible Real-Driving Pose Adjudication`
-  (`docs/Subsystems/Video/PR-VID-181_Wan22_Animate_Real_Driving_Pose_Adjudication.md`), branch
-  `vid/181-animate-real-driving-pose-adjudication` (pending owner review, not integrated), ran the
+  `PR-VID-181 — COMPLETE / ACCEPTED / INTEGRATED — ANIMATE_REAL_POSE_LOCAL_MOTION_ONLY`
+  (`docs/Subsystems/Video/PR-VID-181_Wan22_Animate_Real_Driving_Pose_Adjudication.md`), ran the
   adjudication: pinned `Wan-Video/Wan2.2 @ 1ea34ff4` whole-body pose preprocessing ran CPU-only in a
   disposable environment outside every StableNew/Comfy/A1111 runtime; two real single-person stock
   clips (Mixkit; owner confirmed the license for personal-use testing) became frozen 480x832/13f/8fps
@@ -231,10 +233,14 @@ Updated: 2026-09-23
   the stepping and travels - so better pose conditioning alone does not deliver locomotion at this
   envelope. Caveats: one seed, one silhouetted 1.2 s control, no retargeting, no `face_video`. No
   production Wan/backend setting or governance changed; Animate remains unregistered. Next
-  (owner's choice, one variable each): same Case B control with upstream basic retargeting; then
-  `face_video`; background mitigation is separate. Two additional clean DIAG-GPU-120 exposures (DDR5-5600/XMP
-  still enabled at the runs); not a PASS or root-cause conclusion; DIAG-GPU-130 stays unresolved with
-  XMP removal planned at the next reboot.
+  distinct objective: `PR-VID-182 — Wan2.2-Animate Case-B Basic Pose-Retargeting Adjudication`:
+  test whether upstream basic pose retargeting resolves the ghost-subject/reference-binding failure
+  by changing only `retarget_flag=False` to `retarget_flag=True`, with `use_flux=False`. Freeze the
+  same Case-B raw driving footage and reference, pinned Wan SHA, 480x832/13f/8fps, 20 steps,
+  cfg 1.0, shift 5.0, UniPC/simple, seed, model assets, no `face_video`, and no background mitigation;
+  one future generation. PR-VID-182 is not started. VID-181's two clean generations occurred while
+  DDR5-5600/XMP was still enabled and are not a DIAG-GPU stability PASS. DIAG-GPU-130 now records
+  XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -667,9 +673,10 @@ passed on the accepted source tree, including required Python 3.11 and 3.12.
 
 1. Maintain the accepted v2.6 and IMG-100 baseline pending explicit product-owner direction.
 
-Next action: **DIAG-GPU-120 ordinary-use observation at XMP DDR5-5600. Do not introduce a
-second variable; preserve survivor telemetry and capture Windows evidence if the established
-black-screen/GPU-loss failure recurs.**
+Next action: **Continue ordinary-use observation under the owner-confirmed XMP-off condition and
+the directly observed 5600 MT/s DIMM fields. Preserve survivor telemetry and capture Windows
+evidence if the established black-screen/GPU-loss failure recurs. Do not introduce a second
+isolation variable.**
 
 PR-MVP-090 is **COMPLETE / ACCEPTED / INTEGRATED**. The final real-backend
 release proof completed without production source changes.
