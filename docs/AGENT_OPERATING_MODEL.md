@@ -29,20 +29,119 @@ Specialists:
 - **StableNew Verifier** — independent acceptance review and test evidence.
 - **StableNew Security Review** — triggered security review for sensitive
   surfaces.
-- **StableNew Release** — branch/PR/CI closeout and only explicitly authorized,
-  verified integration.
+- **StableNew Release** — pre-build feature-branch bootstrap, branch/PR/CI
+  closeout, and only explicitly authorized, verified integration.
+
+### Capability and permission model
+
+Luna, Terra, Sol, and Astra are provider-neutral capability classes. They are
+guidance for selecting the lowest effective available reasoning/model tier;
+they are not vendor names, model mappings, or authority grants. Use the lowest
+class that can reliably complete the assigned work and escalate only when
+discovery or validation shows that the current class is insufficient:
+
+- **Luna** — narrow documentation/configuration edits, straightforward
+  read-only inspection, and focused validation.
+- **Terra** — bounded implementation, repair, and deterministic test work
+  within an understood surface.
+- **Sol** — materially uncertain, cross-surface, or architecture-sensitive
+  work requiring deeper analysis and independent evidence.
+- **Astra** — high-risk security, release, or integration analysis where the
+  cost of an incorrect decision is substantial.
+
+Capability is separate from authorization. Global permissions remain
+conservative. Full Access is session-specific to top-level Release Git
+lifecycle operations: narrowly authorized feature-branch bootstrap and
+authorized publication/closeout; it changes available capability, not owner
+authorization. Git/publication operations that mutate `.git` are supported
+only in that top-level Release session using Full Access. A nested Release is
+not a supported Git mutation path. Bootstrap and publication/closeout are two
+distinct, mutually exclusive Git lifecycle modes; bootstrap authority never
+carries forward publication authority.
+
+There is no custom Git authority or tool, and no broad permission change. No
+agent is thereby authorized to merge or target `main`, publish a release,
+deploy, mutate secrets, or perform destructive actions. Those actions still
+require explicit owner authorization naming the action and target/scope.
 
 ## Normal delivery flow
 
-`End state -> Research (when needed) -> Architecture/plan -> Build -> Verify ->
-Security (when triggered) -> PR-ready -> CI/review repair -> owner merge/release`
+`End state -> Delivery startup check -> [not already on an appropriate
+short-lived branch? emit Branch Bootstrap Capsule -> explicit operator
+transition -> top-level Release + Full Access bootstrap -> explicit return to
+Delivery] -> Research (when needed) -> Architecture/plan -> Build -> Verify ->
+Security (when triggered) -> Release-ready capsule -> explicit operator
+transition -> top-level Release -> Full Access closeout -> owner merge/release`
 
 Not every task uses every stage.
+
+### Branch bootstrap
+
+Before delegating implementation, Delivery checks the current branch, HEAD,
+and worktree. If the workspace is already on an appropriate short-lived
+feature branch with state matching the supplied package, Delivery skips
+bootstrap and proceeds directly to normal routing — the fast path.
+
+If implementation is required and the current branch is `main` or another
+long-lived target, Delivery stops before Builder edits and emits a **Branch
+Bootstrap Capsule** rather than creating or switching branches itself,
+staging, committing, mutating `.git`, spawning/nesting Release, or sending
+Builder to edit `main`. The capsule contains:
+
+- workspace path, when known;
+- current branch;
+- current HEAD;
+- target/base ref, normally `origin/main`;
+- worktree and untracked-file state;
+- coherent package title/outcome;
+- proposed short-lived feature-branch name;
+- bootstrap authorization: create and/or switch to the approved short-lived
+  feature branch necessary for this package — nothing more;
+- prohibited actions: source/docs/config edits, staging, commit, push, PR
+  creation, merge, long-lived-target mutation, force-push, tag/release,
+  deployment, destructive migration, secrets/credentials.
+
+The operator starts or selects a top-level StableNew Release session with
+Full Access to independently verify the capsule and, within bootstrap
+authority only, create/switch to the authorized short-lived branch, verify
+the resulting HEAD/branch/worktree, report it, and stop. Release performs no
+source edits and no publication under bootstrap authority alone. The operator
+then explicitly returns to Delivery, which resumes under normal permissions
+and routes to Researcher/Architect/Builder as usual.
+
+Delivery is an orchestration-only coordinator. It routes work, preserves the
+handoff contract, and reports the compact delivery capsule; it does not edit
+code, docs, or configuration and does not become a Git or product authority.
+Delivery ends after accepted Builder -> Verifier evidence and Security Review
+evidence when triggered. It cannot commit, push, open a pull request, merge, or
+mutate `.git`.
+
+Native custom-agent handoff is unavailable in the current Codex Agent Host
+(`CODEX_AGENT_HOST_NATIVE_HANDOFF_UNAVAILABLE`). When publication was
+requested, Delivery must not nest, create, or spawn Release, switch workspace
+or branch, mutate Git, or claim native handoff support. Instead it ends with a
+compact Release-ready capsule and explicitly directs the operator to start or
+select a top-level StableNew Release session in the same verified workspace.
+The capsule contains the workspace path if known; branch; HEAD; `origin/main`;
+expected changed-file set; Verifier verdict; Security verdict when applicable;
+validation evidence; authorized publication actions; and prohibited actions.
+
+Top-level Release independently validates the capsule before mutation,
+reacquires current Git/ref/diff state, reuses accepted evidence only while
+unchanged, and performs only explicitly authorized publication actions. The
+operator selects session-specific Full Access for authorized closeout; it is a
+capability, not authorization. Explicit owner approval remains required for
+main integration, merge, tag/release, deployment, destructive migration,
+secrets, force-push, and protected actions. A nested Release path is not
+supported.
 
 ### Narrow change
 
 Skip research and architecture delegation when current code and acceptance are
-obvious. Builder implements, Verifier checks, Release prepares the PR.
+obvious. Builder implements and Verifier checks; insert Security Review when
+triggered. Delivery ends with accepted evidence and, when publication was
+requested, a Release-ready capsule plus explicit operator transition to a
+top-level Release session for authorized closeout.
 
 ### Standard change
 
@@ -67,6 +166,16 @@ Task-specific procedure lives in skills and is loaded on demand.
 
 Persistent project truth stays in canonical repository docs. Do not use chat
 history as an architecture authority.
+
+### Default startup context
+
+The current checkout, the prompt/work-package contract, and the applicable
+repository-local canonical authorities are sufficient by default. Routine
+package startup must not inspect `~/.codex/memories`, provider memory,
+historical chats, archived plans, or similar historical sources. Use such
+sources only for an explicitly historical question or for a specifically
+identified fact missing from the current prompt and repository evidence; keep
+any retrieval targeted to that question or fact rather than broad.
 
 Agents should acquire repository state once, reuse it while unchanged, and
 avoid repeatedly reading the full roadmap or architecture. Start from
@@ -104,6 +213,17 @@ must name the integration action and target.
 7. Use the lowest reasoning/model tier that reliably fits the execution class.
 8. Escalate only when discovery proves the current execution class is
    insufficient.
+
+Each authored PR or bounded work package records:
+
+- **Execution Profile + Model/Reasoning Recommendation** — execution class,
+  selected capability class, and why it is the lowest effective available
+  tier, including retry/failure cost where relevant;
+- **Controller Surface Assessment** — whether controller/coordinator product
+  code is touched; orchestration-only Delivery does not count as product
+  controller code;
+- **Token-Efficient Validation Plan** — the smallest focused checks, evidence
+  reuse conditions, and any required full gate or CI follow-up.
 
 ## Security/release triggers
 

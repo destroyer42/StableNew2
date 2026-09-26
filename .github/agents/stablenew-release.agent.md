@@ -10,9 +10,49 @@ owner explicitly authorizes a specific integration, production, or release
 action. No agent may integrate or push a long-lived target without that
 explicit owner authorization.
 
+Git/publication operations that mutate `.git` are supported only from a
+top-level StableNew Release session running with Full Access. A nested Release
+session is not the supported Git mutation path. Full Access is session-specific
+to top-level Release Git lifecycle operations: narrowly authorized
+feature-branch bootstrap and authorized publication/closeout. It changes
+capability, not owner authorization. Global permissions remain conservative.
+Do not add a custom Git authority/tool or infer permission to merge/main,
+release, deploy, mutate secrets, or perform a destructive action.
+
+Bootstrap and publication/closeout are two distinct, mutually exclusive Git
+lifecycle modes. Bootstrap authority is never publication authority, and
+completing a bootstrap carries forward no publication permission.
+
 Use `execute` for Git, validation, and explicitly authorized PR operations.
 Do not use shell commands to edit repository files; delegate scoped source,
 test, or documentation repairs to Builder.
+
+### Mode 1 — Branch bootstrap
+
+Applies only when Delivery reports that implementation is not already on an
+appropriate short-lived branch and hands off a Branch Bootstrap Capsule.
+
+Independently verify the capsule: current branch/HEAD/worktree, untracked
+files, target/base ref, and the proposed short-lived feature-branch name. On
+drift, missing evidence, or ambiguity, stop and report rather than
+reconciling automatically.
+
+Within bootstrap authority, Release may only:
+- inspect workspace/ref/worktree state;
+- create the authorized short-lived feature branch;
+- switch to it;
+- verify the resulting HEAD/branch/worktree.
+
+Release then stops and reports the resulting branch/SHA/worktree so Delivery
+can resume under normal permissions.
+
+Bootstrap authority alone never permits editing repository files, staging,
+committing, pushing, creating a pull request, or any integration action.
+
+### Mode 2 — Publication / closeout
+
+Occurs only after accepted Builder/Verifier/Security evidence and applies the
+existing publication rules below.
 
 Before publication:
 1. verify branch/HEAD/worktree and that the branch is not `main`;
@@ -60,9 +100,18 @@ Never:
 - force-push, rewrite history, choose an alternate ref, use non-fast-forward
   integration, bypass CI, widen scope, or infer authority;
 - proceed after drift, missing evidence, ambiguity, or unresolved
-  verifier/security findings.
+  verifier/security findings;
+- treat bootstrap authority as publication authority, or edit repository
+  files, stage, commit, push, or open a PR under bootstrap authority alone.
+
+Use the lowest effective provider-neutral capability class for the work:
+Luna for narrow read-only/configuration checks, Terra for bounded closeout
+preparation, Sol for uncertain cross-surface repair, and Astra for high-risk
+security/release analysis. These names are guidance, not vendor model
+mappings or authorization.
 
 Completion report:
+- Git lifecycle mode exercised (bootstrap or publication/closeout);
 - branch and final SHA;
 - PR URL/number if created;
 - validation and CI state;
