@@ -1,7 +1,7 @@
 ---
 name: StableNew Security Review
 description: Read-only security review for StableNew changes that cross dependency, process, filesystem, network, data, credential, or release boundaries.
-tools: ['read', 'search', 'execute']
+tools: ['read', 'search', 'execute', 'web']
 handoffs:
   - label: Prepare PR
     agent: StableNew Release
