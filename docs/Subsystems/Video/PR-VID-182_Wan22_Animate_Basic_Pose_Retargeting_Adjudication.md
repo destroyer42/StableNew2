@@ -1,6 +1,6 @@
 # PR-VID-182 - Wan2.2-Animate Case-B Basic Pose-Retargeting Adjudication
 
-Status: **`COMPLETE - BASIC_RETARGET_PRECONDITION_NOT_MET`**. No upstream retargeting
+Status: **`PR-VID-182 — COMPLETE / ACCEPTED / INTEGRATED — BASIC_RETARGET_PRECONDITION_NOT_MET`**. No upstream retargeting
 preprocessing and no Animate generation occurred. This qualification package makes no production
 `src/`, backend, controller, resolver, queue, NJR, workflow-registration, or architecture change.
 
@@ -92,15 +92,13 @@ not rerun.
 No raw footage, derived inspection frame, generated media, controls, telemetry, assets, or
 disposable environment is committed.
 
-## Recommended next package (requires product-owner selection)
+## Recommended next package (not started)
 
-There is no valid one-variable continuation of **basic** retargeting with this exact Case-B input.
-The next package requires an explicit product decision between two materially different paths:
-
-1. an upstream enhanced-retargeting qualification using the exact Case-B source/reference, which
-   preserves the direct comparator but adds the separate `use_flux=True` image-editing variable and
-   its asset/runtime implications; or
-2. a basic-retargeting qualification with a newly selected front-facing, stretched driving first
-   frame, which preserves basic retargeting but loses the exact Case-B source comparator.
-
-Neither path is selected or started here.
+**PR-VID-183 — Basic-Retargeting Controlled A/B With a Compliant Real-Human Locomotion Source**
+is the accepted next objective. Select and freeze a new naturally compliant real-human locomotion
+source whose initial frame satisfies upstream basic-retarget requirements. Generate two controls
+from that same source: A with `retarget_flag=False`, and B with `retarget_flag=True` and
+`use_flux=False`. Keep identical Animate inference settings for both, omit `face_video`, apply no
+background mitigation, and compare reference-bound locomotion directly. Do not begin PR-VID-183 in
+this closeout. The previously identified enhanced-retargeting path using the exact Case-B comparator
+remains a separate possible future path requiring its own explicit authorization.
