@@ -424,6 +424,80 @@ reference/driving inputs, seeds, and the frame-count deviation (60 vs. the 81-fr
 documented above as the largest valid real window). **If credits run out, stop in table order and
 report what completed — no paid top-up.**
 
+### Pre-generation blocker resolution (addendum, 2026-09-26, before any run)
+
+Opening the live template surfaced four real gaps the static blueprint JSON alone did not answer.
+All four are resolved below from **ComfyUI's actual node source**
+(`comfy_extras/nodes_wan.py`, `Comfy-Org/ComfyUI`, fetched directly), not inference. Full detail,
+including every per-run widget value, is in `tools/qualification/vid184/run_manifest.json`.
+
+**1-2. Prompt / pose_prompt text (identical across all 5 runs, official upstream format).** The
+shipped Comfy Cloud template ships demo placeholder text (a pink-hair character / street-dance
+description) — this is a hosted-template onboarding default, not present in the raw downloaded
+blueprint JSON (whose own `widgets_values` show empty strings there). It must be fully cleared, not
+left concatenated with the text below. The official upstream convention (`Wan-Video/Wan-Animate-2`
+README, verified with a real example) is two labeled sections combined into one string —
+*"Character appearance description: ... Background description: ..."* — objective/factual, no
+action or emotion. `pose_prompt` is a separate field (feeds `positive_pose`, per the node's own
+tooltip: "Prompt for the pose-video branch, describing the motion rather than the character"),
+written the same objective way but describing only the driving clip's motion.
+
+- **`prompt`:** "Character appearance description: A young adult woman with dark hair pulled back,
+  standing upright and facing forward with her arms relaxed at her sides. She wears a fitted dark
+  navy short-sleeve athletic top with a V-neck and dark navy full-length leggings, with white
+  athletic sneakers featuring teal accent trim. Background description: An abstract, softly blurred
+  backdrop of pale white, lavender, and pale green geometric and glass-like shapes, evenly and
+  brightly lit, with no other objects or decoration." (written from directly viewing the frozen
+  reference image, not assumed)
+- **`pose_prompt`:** "A person performs a high-knee running drill that transitions into a full
+  sprinting stride, moving laterally from left to right across a static frame with continuous
+  forward locomotion and alternating arm-leg swing." (written from the same contact-sheet visual
+  inspection used to select the retrim window)
+
+**3. `length` when it exceeds/undershoots the driving clip's real frame count — confirmed from
+`WanAnimate2ToVideo.execute()`.** If the driving video has **more** frames than `length`, it is
+truncated: `pose_video[video_frame_offset:][:length]` — no error. If it has **fewer**, the tail is
+padded by **holding the last frame**: `torch.cat((pose_video,) + (pose_video[-1:],) * (length -
+pose_video.shape[0]), dim=0)` — a frozen repeat, not new motion; still no error. The UI's `step=4`
+on the `length` widget is a spinner-increment nicety, not a validated constraint in `execute()` —
+any positive integer is legal. **Exact legal length per run:** runs 1-4 use **length=60** (not the
+81 default — deliberately, so the padded/frozen tail that 81 would produce doesn't dilute
+`root_translation_fraction`); run 5 uses **length=13**, which truncates the *same* 60-frame driving
+file to its first 13 frames via this same mechanism — no separate short driving asset is needed.
+
+**4. Cache OFF for run 5 — confirmed from `WanAnimate2Cache.define_schema()`: the exposed widgets
+cannot do it.** `device` options are exactly `['cpu','gpu']` (no off/none); `dtype` options are
+exactly `['default','int8','int4']`. The node unconditionally attaches a `PoseBranchCache` to the
+model whenever it sits in the graph — no combo value disables it. True cache-OFF requires bypassing
+the node inside the subgraph:
+1. Open (double-click, or right-click → Open Subgraph/Enter) the "Motion Transfer (Wan Animate 2)"
+   subgraph for the Distilled workflow.
+2. Inside it, find the node named `WanAnimate2Cache` (single MODEL in, single MODEL out, between the
+   model/LoRA chain and the sampler).
+3. Select only that node.
+4. Right-click → "Bypass" (or select it and press Ctrl+B) — it should render muted/dashed.
+5. Confirm the MODEL wire now passes straight through it (ComfyUI auto-routes a bypassed
+   single-in/single-out node's matching-type wire).
+6. Exit back to the top-level graph.
+7. Leave the outer `cache_device`/`cache_dtype` widgets at their shipped defaults — once bypassed,
+   the node that would read them never executes, so their values are inert.
+
+**5. Second (bypassed) Motion Transfer subgraph:** leave it bypassed for all 5 runs — not part of
+this matrix; do not enable, connect, or run it.
+
+**6. Which saved video is needed:** **both**. The plain generated clip is required for the
+detector-based scorer — the side-by-side comparison doubles the frame width and puts the driving
+clip's own subject in the same frame, which would corrupt the person-detector's box coordinates and
+could register a false "ghost" detection. The side-by-side is for Rob's own visual review at the
+human verdict gate only; the scorer never reads it. Ten files total (5 runs × 2 videos), named
+`run{index}_{workflow}_{seed-label}_generated.mp4` / `..._sidebyside.mp4`.
+
+**7. Post-return validation (added to the checklist):** before scoring, check each returned file's
+embedded workflow metadata (if present) and Rob's exported workflow JSON against
+`run_manifest.json` — confirm the actual checkpoint, seed, length, and cache-bypass state match what
+was pre-registered before treating any output as valid evidence. A mismatch is reported, not
+silently scored.
+
 ### Human verdict gate (amendment section 6) — PR #9 merge suspended until recorded
 
 Rob reviews all outputs **before** seeing any metric score. Best-effort blinding:
@@ -638,12 +712,17 @@ PR #9 as the pre-registration of record. What Rob needs to do:
    SHA-256 `362c86cc...`) and the frozen driving clip
    (`C:\Users\rob\qual\vid184\src\B_locomotion_driving_60f.mp4`, SHA-256 `d0f7abea...`) — do not
    pre-resize either.
-3. For each of the 5 rows in the run matrix above (full machine-readable detail in
-   `tools/qualification/vid184/run_manifest.json`): select the named workflow, set the seed control
-   to fixed with the given seed, leave every other setting at the shipped default except run 5's
-   cache removal, run it, and save the output video.
-4. Stop in table order if credits run out; no paid top-up.
-5. Send the 5 output files (or however many completed) back for scoring and the blind-seal/human
+3. Clear the demo placeholder text and enter the pre-registered `prompt`/`pose_prompt` text from
+   "Pre-generation blocker resolution" above, identically for all 5 runs.
+4. For each of the 5 rows in the run matrix above (full machine-readable detail in
+   `tools/qualification/vid184/run_manifest.json`): select the named workflow, set `length` (60 for
+   runs 1-4, 13 for run 5), set the seed control to fixed with the given seed, leave every other
+   setting at the shipped default, and — **only for run 5** — bypass the `WanAnimate2Cache` node
+   inside the subgraph per the 7-step procedure above. Leave the second (already-bypassed) Motion
+   Transfer subgraph untouched. Run it and save **both** the generated clip and the side-by-side
+   comparison.
+5. Stop in table order if credits run out; no paid top-up.
+6. Send the output files (or however many completed) back for scoring and the blind-seal/human
    review steps in Phase D.
 
 No further action from this session until those outputs are returned.
