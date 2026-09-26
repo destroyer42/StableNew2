@@ -29,8 +29,8 @@ Specialists:
 - **StableNew Verifier** — independent acceptance review and test evidence.
 - **StableNew Security Review** — triggered security review for sensitive
   surfaces.
-- **StableNew Release** — branch/PR/CI closeout and only explicitly authorized,
-  verified integration.
+- **StableNew Release** — pre-build feature-branch bootstrap, branch/PR/CI
+  closeout, and only explicitly authorized, verified integration.
 
 ### Capability and permission model
 
@@ -50,11 +50,14 @@ discovery or validation shows that the current class is insufficient:
   cost of an incorrect decision is substantial.
 
 Capability is separate from authorization. Global permissions remain
-conservative. Full Access is session-specific to a top-level StableNew Release
-session during authorized closeout; it changes available capability, not owner
+conservative. Full Access is session-specific to top-level Release Git
+lifecycle operations: narrowly authorized feature-branch bootstrap and
+authorized publication/closeout; it changes available capability, not owner
 authorization. Git/publication operations that mutate `.git` are supported
 only in that top-level Release session using Full Access. A nested Release is
-not a supported Git mutation path.
+not a supported Git mutation path. Bootstrap and publication/closeout are two
+distinct, mutually exclusive Git lifecycle modes; bootstrap authority never
+carries forward publication authority.
 
 There is no custom Git authority or tool, and no broad permission change. No
 agent is thereby authorized to merge or target `main`, publish a release,
@@ -63,11 +66,48 @@ require explicit owner authorization naming the action and target/scope.
 
 ## Normal delivery flow
 
-`End state -> Research (when needed) -> Architecture/plan -> Build -> Verify ->
+`End state -> Delivery startup check -> [not already on an appropriate
+short-lived branch? emit Branch Bootstrap Capsule -> explicit operator
+transition -> top-level Release + Full Access bootstrap -> explicit return to
+Delivery] -> Research (when needed) -> Architecture/plan -> Build -> Verify ->
 Security (when triggered) -> Release-ready capsule -> explicit operator
 transition -> top-level Release -> Full Access closeout -> owner merge/release`
 
 Not every task uses every stage.
+
+### Branch bootstrap
+
+Before delegating implementation, Delivery checks the current branch, HEAD,
+and worktree. If the workspace is already on an appropriate short-lived
+feature branch with state matching the supplied package, Delivery skips
+bootstrap and proceeds directly to normal routing — the fast path.
+
+If implementation is required and the current branch is `main` or another
+long-lived target, Delivery stops before Builder edits and emits a **Branch
+Bootstrap Capsule** rather than creating or switching branches itself,
+staging, committing, mutating `.git`, spawning/nesting Release, or sending
+Builder to edit `main`. The capsule contains:
+
+- workspace path, when known;
+- current branch;
+- current HEAD;
+- target/base ref, normally `origin/main`;
+- worktree and untracked-file state;
+- coherent package title/outcome;
+- proposed short-lived feature-branch name;
+- bootstrap authorization: create and/or switch to the approved short-lived
+  feature branch necessary for this package — nothing more;
+- prohibited actions: source/docs/config edits, staging, commit, push, PR
+  creation, merge, long-lived-target mutation, force-push, tag/release,
+  deployment, destructive migration, secrets/credentials.
+
+The operator starts or selects a top-level StableNew Release session with
+Full Access to independently verify the capsule and, within bootstrap
+authority only, create/switch to the authorized short-lived branch, verify
+the resulting HEAD/branch/worktree, report it, and stop. Release performs no
+source edits and no publication under bootstrap authority alone. The operator
+then explicitly returns to Delivery, which resumes under normal permissions
+and routes to Researcher/Architect/Builder as usual.
 
 Delivery is an orchestration-only coordinator. It routes work, preserves the
 handoff contract, and reports the compact delivery capsule; it does not edit
