@@ -274,13 +274,18 @@ Updated: 2026-09-25
   pre-registered Phase C scoring contract (`tools/qualification/vid184/scoring_contract.py`,
   hash-frozen before any Animate-2 output exists) and the Phase F backend-neutral contract mapping
   (no `src/` change; existing `control_video`/`pose_video` controls remain unused by the Video
-  Workflow producer) are both complete. Phase D (the remote official-Comfy reference-capability
-  gate) is blocked on two explicit owner decisions: (1) Comfy Cloud account/upload authorization
-  — 5 free GPU runs are offered with no card required, so cost may be zero, but no account/upload
-  proceeds without explicit authorization — and (2) a license/source decision for the driving
-  clip (the existing PR-VID-181 Mixkit #583 case has an unverified redistribution license). No
-  Animate-2 output has been generated, no cloud spend or upload occurred, and no production `src/`,
-  workflow-registration, GUI/controller, Comfy-config, or GPU/driver/pagefile change was made.
+  Workflow producer) are both complete. The driving-clip license/source decision is **RESOLVED
+  2026-09-26 by explicit owner risk-acceptance**: direct verification of Mixkit's actual terms found
+  a genuinely ambiguous redistribution/third-party clause with no explicit AI/ML-use carve-out; the
+  owner was given that exact finding and explicitly directed proceeding with the existing PR-VID-181
+  Mixkit #583 Case A/B clips for this specific two-run internal qualification test, accepting the
+  disclosed risk — this is not a finding that the license clearly permits the use, and does not
+  extend beyond this specific two-run test. Phase D (the remote official-Comfy reference-capability
+  gate) remains blocked on one open decision: Comfy Cloud account/upload authorization — 5 free GPU
+  runs are offered with no card required, so cost may be zero, but no account/upload proceeds
+  without explicit authorization. No Animate-2 output has been generated, no cloud spend or upload
+  occurred, and no production `src/`, workflow-registration, GUI/controller, Comfy-config, or
+  GPU/driver/pagefile change was made.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 

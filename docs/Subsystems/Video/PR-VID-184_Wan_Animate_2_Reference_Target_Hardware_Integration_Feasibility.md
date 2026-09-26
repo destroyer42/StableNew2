@@ -157,28 +157,39 @@ used, so reusing it preserves direct historical comparability against the docume
 failure (`ANIMATE_REAL_POSE_LOCAL_MOTION_ONLY` / `BASIC_RETARGET_APPLIES;
 REFERENCE_BOUND_LOCOMOTION_NOT_DEMONSTRATED`).
 
-**Two unresolved blockers prevent freezing this as the Phase D case today** (both are Hard Stops
-per this package's own contract, not this author's judgment call):
+**Blocker 1 (license) is resolved by explicit owner risk-acceptance, not by a favorable license
+reading.** Direct verification of Mixkit's actual terms (`mixkit.co/terms/`, `mixkit.co/llm-info/`,
+corroborated by an independent third-party license guide) found the operative clause: *"rent,
+license, sublicense, sell, resell or otherwise commercially exploit or make Mixkit or any Item
+available to any third party,"* summarized elsewhere as *"cannot redistribute raw, unedited clip
+files... on any platform."* No source found an explicit carve-out for using a clip as input to a
+third-party AI/ML processing service, and Mixkit's own AI-focused FAQ page (`mixkit.co/llm-info/`)
+does not address AI/ML use at all. This remains genuinely ambiguous, not clearly permitted. The
+product owner was given this exact finding and explicitly directed proceeding anyway, on the basis
+that a two-run internal qualification test (not redistribution, not a competing stock-media use) is
+low-risk enough to accept: **"Accept the risk explicitly... a two-run internal qualification test,
+not redistribution or competing-service use, is low-risk enough to proceed anyway"** (owner
+decision, 2026-09-26). This authorizes uploading this specific clip to Comfy Cloud for this specific
+two-run (Case A/B) qualification test; it is not a general finding that the license permits
+third-party AI use, and does not extend to any other reuse.
 
-1. **License/external-use permission is unresolved.** PR-VID-181's own report states the Mixkit
-   "Stock Video Free License" terms were fetched but **not machine-verified**, and explicitly limits
-   use to "internal local qualification only... not committed or redistributed," requiring
-   product-owner confirmation "before any redistribution or reuse beyond local qualification."
-   Uploading this clip to a third-party cloud service (Comfy Cloud) is exactly that kind of reuse
-   beyond local qualification, regardless of whether the cloud run itself is free.
-2. **Duration is short relative to the official envelope.** The existing driving window is 1.2 s /
-   29 frames at 24 fps. Phase A found the practical duration ceiling for Wan-Animate-2 sits near
-   81 frames / ~5 s (item 8); using the existing 1.2 s window would materially under-fill that
-   envelope and weakens the "prefer the normal 81-frame reference envelope" instruction, though it
-   would not invalidate a shorter-window test on its own.
+**Blocker 2 (duration) is a recorded limitation, not resolved.** The existing driving window is
+1.2 s / 29 frames at 24 fps. Phase A found the practical duration ceiling for Wan-Animate-2 sits near
+81 frames / ~5 s (item 8); using the existing 1.2 s window materially under-fills that envelope and
+weakens the "prefer the normal 81-frame reference envelope" instruction, though it does not
+invalidate a shorter-window test on its own. Proceeding with the existing PR-VID-181 case accepts
+this as a documented caveat on Case B's result, exactly as PR-VID-181/183 already did for their own
+generations.
 
-No source/reference substitution has been made silently. Resolving blocker 1 (either an explicit
-owner confirmation that the existing Mixkit clip's license permits this specific third-party-cloud
-use, or an explicit decision to source a new public-domain/CC0 substitute with equivalent
-locomotion semantics) is one of the two items in the owner-authorization request below. Reusing
-identity_hist_mean and camera_drift_px/motion_area_fraction metrics from
-`tools/qualification/vid110/metrics.py` remains planned once a case is frozen; no new metric
-implementation was needed for those three.
+**Still blocking Phase D:** the separate Comfy Cloud account-creation/upload authorization (see
+"Phase D status and owner decisions required" below) has not yet been given.
+
+No source/reference substitution has been made. The PR-VID-181 Case A (gesture)/Case B (locomotion)
+pair is therefore the frozen Phase D case, pending only the remaining Comfy Cloud
+account/upload authorization below. Reusing `identity_hist_mean` and
+`camera_drift_px`/`motion_area_fraction` metrics from `tools/qualification/vid110/metrics.py`
+remains planned for scoring once the runs execute; no new metric implementation was needed for
+those three.
 
 ---
 
@@ -213,21 +224,21 @@ none has been generated.
 Phase D requires Comfy Cloud execution of the official Base-oriented and native Distilled workflows
 against the frozen Case A/B driving/reference pair, at the normal official 81-frame envelope where
 supported. **This has not happened.** Per this package's own external-service authorization
-boundary and Hard Stops, two explicit owner decisions are needed before it can:
+boundary and Hard Stops, one explicit owner decision remains before it can proceed:
 
-1. **Cloud account/upload authorization.** Comfy Cloud offers 5 free GPU runs with no card required
-   (Phase A item 11), so the two planned runs (Case A, Case B) may be able to complete at **zero
-   monetary cost** if that free-tier claim holds and no payment method is required to create the
-   account. Regardless of cost, this package does not create a third-party account or upload any
-   media without explicit owner authorization naming the provider (Comfy Cloud) and confirming
-   acceptance of its retention/privacy terms (not independently verified beyond the pricing/
-   availability facts in item 11). If the free tier turns out to require payment info or is
+1. **Driving-video license/source decision — RESOLVED 2026-09-26 by explicit owner risk-acceptance.**
+   See "Phase B" above: the license terms are genuinely ambiguous (verified directly, not assumed);
+   the owner was given that exact finding and explicitly directed proceeding with the existing
+   PR-VID-181 Case A/B Mixkit clips for this specific two-run internal qualification test, accepting
+   the disclosed risk. This is not a finding that the license clearly permits the use.
+2. **Cloud account/upload authorization — STILL OPEN.** Comfy Cloud offers 5 free GPU runs with no
+   card required (Phase A item 11), so the two planned runs (Case A, Case B) may be able to complete
+   at **zero monetary cost** if that free-tier claim holds and no payment method is required to
+   create the account. Regardless of cost, this package does not create a third-party account or
+   upload any media without explicit owner authorization naming the provider (Comfy Cloud) and
+   confirming acceptance of its retention/privacy terms (not independently verified beyond the
+   pricing/availability facts in item 11). If the free tier turns out to require payment info or is
    otherwise unavailable, report that and stop before incurring any cost.
-2. **Driving-video license/source decision (Phase B blocker 1).** Either explicit confirmation that
-   the existing Mixkit #583 clip's "Stock Video Free License" terms permit uploading it to a
-   third-party cloud inference provider, or an explicit decision to source a public-domain/CC0
-   substitute with equivalent single-person lateral-locomotion semantics (accepting that this
-   weakens direct historical comparison against PR-VID-181/183's exact case).
 
 No files have been uploaded and no cloud spend has occurred. Per this package's own instruction,
 completing this no-cost/no-upload preparation and asking once is sufficient; **this same
@@ -330,8 +341,8 @@ generated in this package).
 
 ## What is explicitly NOT authorized next
 
-- Any Comfy Cloud account creation, media upload, or spend, until the owner answers the two
-  decisions above.
+- Any Comfy Cloud account creation, media upload, or spend, until the owner answers the remaining
+  cloud-authorization decision above.
 - Any local physical Animate-2 GPU workload (Phase E execution).
 - Any production `src/` change, workflow registration, GUI/controller change, new backend, or model
   promotion.
