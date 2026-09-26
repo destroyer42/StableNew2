@@ -8,12 +8,13 @@ generation. Its authoritative remote is
 long-lived branch, the current release line is v2.6 MVP recovery, and
 `STATUS.md` states current priorities.
 
-Repository authority, in order of use, is this file, `STATUS.md`,
-`docs/CODEX_MAP.md`, the relevant `docs/ARCHITECTURE_v2.6.md` section, and the
-relevant `docs/StableNew_Coding_and_Testing_v2.6.md` section. The roadmap is
-authoritative for sequencing. Current repository authority outranks stale
-chats, branches, plans, snapshots, archives, and memory; use historical
-material only for a specific historical question.
+Current checkout, branch, HEAD, and diff are primary truth and precede
+interpretation from repository-local authorities. The durable authority chain
+is this file and `STATUS.md`, then the relevant `docs/CODEX_MAP.md`, relevant
+architecture/testing authority, and roadmap for sequencing. Historical chats,
+old branches, stale planning files, snapshots, archives, and memory never
+override current repository evidence; use them only for a specific historical
+question.
 
 ## 2. Runtime and architecture invariants
 
@@ -26,8 +27,9 @@ The canonical outer path is:
 - `NormalizedJobRecord` is the immutable, versioned executable envelope.
 - `JobService.submit_njrs` is the application submission boundary.
 - `PipelineRunner.run_njr` is the sole public production runner entry.
-- Queue/history own mutable status, progress, retry, cancellation, error, and
-  result state. Do not create competing cancellation or process authority.
+- `JobRepository` backed by SQLite owns immutable NJR snapshots and mutable
+  lifecycle state; queue and history are repository projections. Do not create
+  a second queue, history, lifecycle, cancellation, or process authority.
 - Replay creates a new NJR identity with parent lineage on the same path.
   PromptPack identity exists only for PromptPack-sourced work.
 - GUI captures intent and renders projections; it does not build backend
@@ -84,9 +86,13 @@ outputs, and untracked user data. Never reset, overwrite, or delete them.
 Do not push, merge, rewrite history, delete remote state, publish, deploy, or
 mutate secrets without explicit owner authorization.
 
-Do not adopt, kill, restart, or otherwise mutate an external runtime. Do not
-change external hardware, GPU, firmware, model, backend, or configuration
-state unless the approved work package explicitly authorizes that action.
+StableNew may control lifecycle only for a process its appropriate process
+manager launched and owns. An external A1111/Comfy process may use supported
+API, health/progress observation, and A1111 interrupt/cancellation, but is
+never adopted, terminated, killed, or restarted automatically; ambiguous
+dispatched generation POSTs are never automatically replayed. Do not change
+external hardware, GPU, firmware, model, backend, or configuration state unless
+the approved work package explicitly authorizes that action.
 
 ## 6. Validation authority
 
