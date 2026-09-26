@@ -1,13 +1,13 @@
 # PR-VID-183 - Wan2.2-Animate Basic-Retargeting Controlled A/B
 
-Status: **`PR-VID-183 — COMPLETE / REVIEW REQUIRED — BASIC_RETARGET_APPLIES; REFERENCE_BOUND_LOCOMOTION_NOT_DEMONSTRATED`**.
+Status: **`PR-VID-183 — COMPLETE / ACCEPTED / INTEGRATED — BASIC_RETARGET_APPLIES; REFERENCE_BOUND_LOCOMOTION_NOT_DEMONSTRATED`**.
 
 This qualification-only package tested the upstream basic-retarget applicability gate that PR-VID-182 could not exercise. It adds no production backend, controller, resolver, graph, or workflow registration. The result is evidence for product-owner adjudication, not an Animate capability pass or a DIAG-GPU stability pass.
 
 ## Execution profile
 
 - **Execution class:** Standard qualification; Local/Desktop only because the proof requires local source media, the disposable CPU detector environment, managed Comfy, telemetry, and read-only machine-state capture.
-- **Model/reasoning recommendation:** GPT-5.6 Terra — High. The real-workload safety and provenance gates make retry avoidance more valuable than a lower nominal model cost.
+- **Model/reasoning recommendation:** GPT-5.6 Luna — Medium for this documentation-only closeout; Local/Desktop execution preserves the existing local evidence and ref-verification boundary.
 - **Controller surface assessment:** none. No `src/` production controller, coordinator, resolver, backend, runner, or graph changed; the qualification runner remains outside the product execution path.
 - **Token-efficient validation plan:** reuse VID-181 graph/ownership/telemetry evidence; run the new deterministic guards and touched-surface Ruff/formatter checks; use the disposable existing CPU environment for detector work; run exactly the two preauthorized GPU arms; leave the full local gate to GitHub if a prescribed local tool is absent.
 
@@ -67,6 +67,14 @@ This does not reinterpret the result as a general Wan/Animate failure, nor does 
 - `ruff format --check` on those surfaces: pass.
 - New deterministic tests: 5 passed in the repository interpreter, with the two OpenCV synthetic video cases skipped because that interpreter lacks OpenCV; the existing qualification environment has OpenCV 5.0.0, NumPy 2.4.6, ONNX Runtime 1.30.0, and CPU-only Torch 2.14.0.
 - `py_compile` for the new package and `git diff --check`: pass.
-- The local repository interpreter lacks NumPy/OpenCV for inherited VID-181 tests; no environment was modified. GitHub Python 3.11/3.12 is the canonical integration verdict.
+- The local repository interpreter lacks NumPy/OpenCV for inherited VID-181 tests and local mypy is absent; no environment was modified. GitHub Actions run `36213829612` is the canonical integration verdict: required Python 3.11 and 3.12 passed; informational full-suite failures were limited to the known Xvfb broader-suite step.
 
 No production source changed. No controller/coordinator surface was touched. All reports, controls, telemetry, source media, and outputs remain ignored local evidence under `reports/vid183/` or `C:\Users\rob\qual\vid183\`.
+
+## Product-owner acceptance and closeout
+
+The controlled A/B is accepted as valid. Basic retargeting materially changed the conditioning and output, so this is not `ANIMATE_BASIC_RETARGET_NO_EFFECT`; neither arm demonstrated clean stable reference-bound walking, so this is not a reference-bound locomotion success and is not a general Wan/Animate NO-GO. The secondary finding remains `BACKGROUND_INSTABILITY_CROSS_CASE`.
+
+The immediate next objective is not further Wan2.2-Animate locomotion tuning through basic retargeting, `face_video`, or FLUX enhanced-retargeting. The next distinct objective is **PR-VID-184 — Wan-Animate-2 Target-Hardware & Integration Feasibility Research**. No PR-VID-184 implementation is included here.
+
+DIAG-GPU-130 remains **`XMP-OFF ISOLATION IN PROGRESS / OBSERVATION ONLY`**. These two clean ordinary high-load observations are not a stability PASS, fix, or root-cause conclusion. Animate remains unregistered, and this package makes no production controller, resolver, backend, queue, NJR, or runtime-authority change.

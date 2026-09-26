@@ -242,7 +242,7 @@ Updated: 2026-09-25
   or GPU work: no source/window/crop/reference change, calibration frame, Flux, `face_video`,
   retargeted control, or Animate generation occurred. A next package requires product-owner choice
   between enhanced retargeting with the exact comparator (`use_flux=True`) and a new compliant
-  driving source for basic retargeting; **PR-VID-183 — COMPLETE / REVIEW REQUIRED —
+  driving source for basic retargeting; **PR-VID-183 — COMPLETE / ACCEPTED / INTEGRATED —
   `BASIC_RETARGET_APPLIES; REFERENCE_BOUND_LOCOMOTION_NOT_DEMONSTRATED`** now closes that controlled
   A/B with a new, naturally compliant real-human source. Its fixed 8.000-9.625 s Mixkit #4856
   window produced distinct CPU-only controls for A (`retarget_flag=False`) and B
@@ -250,10 +250,13 @@ Updated: 2026-09-25
   with no `face_video`, background mitigation, retries, or third generation. B called pinned
   upstream basic `get_retarget_pose` and changed the control materially, but rendered a cropped
   lower-body subject and exaggerated split-step/lunge rather than stable reference-bound walking;
-  A was initially more complete but also distorted later. The evidence is review-ready, not a
-  general Animate failure or product acceptance: see
-  `docs/Subsystems/Video/PR-VID-183_Wan22_Animate_Basic_Retargeting_Controlled_AB.md`. No next
-  video objective is authorized pending product-owner adjudication. VID-181's two clean generations occurred while DDR5-5600/XMP was still enabled and are
+  A was initially more complete but also distorted later. The product decision is not to continue
+  tuning Wan2.2-Animate locomotion through basic retargeting, `face_video`, or FLUX enhanced-retargeting
+  as the immediate next objective. This does not remove the qualification evidence or make Animate a
+  general model NO-GO; see
+  `docs/Subsystems/Video/PR-VID-183_Wan22_Animate_Basic_Retargeting_Controlled_AB.md`. The next distinct
+  objective is **PR-VID-184 — Wan-Animate-2 Target-Hardware & Integration Feasibility Research**;
+  no PR-VID-184 implementation is included in this closeout. VID-181's two clean generations occurred while DDR5-5600/XMP was still enabled and are
   not a DIAG-GPU stability PASS.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
