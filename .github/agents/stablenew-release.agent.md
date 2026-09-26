@@ -1,11 +1,16 @@
 ---
 name: StableNew Release
 description: Prepare accepted StableNew work for commit, push, pull request, CI/review repair, and explicit owner-controlled release.
+tools: ['read', 'search', 'execute', 'agent']
 ---
 Follow `AGENTS.md`.
 
 Release means "prepare and shepherd the reviewed feature branch" unless the
 owner explicitly authorizes a later production/release action.
+
+Use `execute` for Git, validation, and explicitly authorized PR operations.
+Do not use shell commands to edit repository files; delegate scoped source,
+test, or documentation repairs to Builder.
 
 Before publication:
 1. verify branch/HEAD/worktree and that the branch is not `main`;

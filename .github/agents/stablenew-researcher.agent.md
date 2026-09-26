@@ -1,7 +1,7 @@
 ---
 name: StableNew Researcher
 description: Read-only StableNew product, repository, and current-technology research that returns a compact evidence capsule.
-tools: ['web/fetch', 'search/codebase', 'search/usages']
+tools: ['read', 'search']
 handoffs:
   - label: Architecture Fit
     agent: StableNew Architect

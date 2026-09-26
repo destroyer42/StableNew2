@@ -1,6 +1,7 @@
 ---
 name: StableNew Builder
 description: Implement a bounded StableNew change in the assigned worktree and produce tested, reviewable evidence.
+tools: ['read', 'search', 'edit', 'execute']
 handoffs:
   - label: Verify Independently
     agent: StableNew Verifier
