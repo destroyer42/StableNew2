@@ -64,18 +64,44 @@ require explicit owner authorization naming the action and target/scope.
 ## Normal delivery flow
 
 `End state -> Research (when needed) -> Architecture/plan -> Build -> Verify ->
-Security (when triggered) -> PR-ready -> CI/review repair -> owner merge/release`
+Security (when triggered) -> Release-ready capsule -> explicit operator
+transition -> top-level Release -> Full Access closeout -> owner merge/release`
 
 Not every task uses every stage.
 
 Delivery is an orchestration-only coordinator. It routes work, preserves the
 handoff contract, and reports the compact delivery capsule; it does not edit
 code, docs, or configuration and does not become a Git or product authority.
+Delivery ends after accepted Builder -> Verifier evidence and Security Review
+evidence when triggered. It cannot commit, push, open a pull request, merge, or
+mutate `.git`.
+
+Native custom-agent handoff is unavailable in the current Codex Agent Host
+(`CODEX_AGENT_HOST_NATIVE_HANDOFF_UNAVAILABLE`). When publication was
+requested, Delivery must not nest, create, or spawn Release, switch workspace
+or branch, mutate Git, or claim native handoff support. Instead it ends with a
+compact Release-ready capsule and explicitly directs the operator to start or
+select a top-level StableNew Release session in the same verified workspace.
+The capsule contains the workspace path if known; branch; HEAD; `origin/main`;
+expected changed-file set; Verifier verdict; Security verdict when applicable;
+validation evidence; authorized publication actions; and prohibited actions.
+
+Top-level Release independently validates the capsule before mutation,
+reacquires current Git/ref/diff state, reuses accepted evidence only while
+unchanged, and performs only explicitly authorized publication actions. The
+operator selects session-specific Full Access for authorized closeout; it is a
+capability, not authorization. Explicit owner approval remains required for
+main integration, merge, tag/release, deployment, destructive migration,
+secrets, force-push, and protected actions. A nested Release path is not
+supported.
 
 ### Narrow change
 
 Skip research and architecture delegation when current code and acceptance are
-obvious. Builder implements, Verifier checks, Release prepares the PR.
+obvious. Builder implements and Verifier checks; insert Security Review when
+triggered. Delivery ends with accepted evidence and, when publication was
+requested, a Release-ready capsule plus explicit operator transition to a
+top-level Release session for authorized closeout.
 
 ### Standard change
 
