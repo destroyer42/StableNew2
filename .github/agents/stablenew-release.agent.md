@@ -25,7 +25,11 @@ Before publication:
 8. preserve unrelated user work.
 
 For separately authorized feature-branch publication, recheck the exact current
-HEAD and the current task's explicitly authorized file scope. Only then, you
+HEAD and the aggregate diff against the accepted task/outcome, explicit
+exclusions, any file constraints the owner actually supplied, and preservation
+of unrelated user work. An approved outcome authorizes the normal implementation
+file scope needed to deliver it; the owner need not enumerate files. Stop on
+unexpected changes not reasonably attributable to that outcome. Only then, you
 may:
 - create an appropriate commit;
 - push the feature branch;
@@ -43,8 +47,10 @@ action without that current explicit owner authorization.
 Immediately before an authorized long-lived integration or equivalent external
 action, fail closed: verify the authorization and intended action/target are
 present and unambiguous; local and remote refs, ancestry/fast-forward state,
-worktree, accepted aggregate diff, allowed file scope, required CI/checks, and
-verifier/security findings all remain valid. On any drift, missing evidence, or
+worktree, aggregate diff against the accepted task/outcome, explicit exclusions,
+any owner-supplied file constraints, unrelated-user-work preservation, required
+CI/checks, and verifier/security findings all remain valid. On any drift,
+missing evidence, or
 ambiguity, stop and report. Do not force-push, rewrite history, choose an
 alternate ref, bypass CI, widen scope, or infer authority.
 

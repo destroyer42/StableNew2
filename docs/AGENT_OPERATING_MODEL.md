@@ -181,14 +181,20 @@ action without that current explicit owner authorization.
 Immediately before an authorized long-lived integration or equivalent external
 action, fail closed: verify the authorization and intended action/target are
 present and unambiguous; local and remote refs, ancestry/fast-forward state,
-worktree, accepted aggregate diff, allowed file scope, required CI/checks, and
-verifier/security findings all remain valid. On any drift, missing evidence, or
+worktree, aggregate diff against the accepted task/outcome, explicit exclusions,
+any owner-supplied file constraints, unrelated-user-work preservation, required
+CI/checks, and verifier/security findings all remain valid. On any drift,
+missing evidence, or
 ambiguity, stop and report. Do not force-push, rewrite history, choose an
 alternate ref, bypass CI, widen scope, or infer authority.
 
 Separately authorized feature-branch publication may create, commit, and push
-only after rechecking the exact current HEAD and current task's explicitly
-authorized file scope; it never authorizes long-lived-target integration. CI
+only after rechecking the exact current HEAD and aggregate diff against the
+accepted task/outcome, explicit exclusions, any file constraints the owner
+actually supplied, and preservation of unrelated user work. An approved outcome
+authorizes its normal implementation file scope without an owner file list;
+unexpected changes not reasonably attributable to that outcome stop publication.
+It never authorizes long-lived-target integration. CI
 and review may be repaired only within the accepted task scope.
 
 If StableNew later gains a fully automated release pipeline, production
