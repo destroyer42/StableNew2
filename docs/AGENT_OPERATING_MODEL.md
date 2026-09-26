@@ -32,12 +32,45 @@ Specialists:
 - **StableNew Release** — branch/PR/CI closeout and only explicitly authorized,
   verified integration.
 
+### Capability and permission model
+
+Luna, Terra, Sol, and Astra are provider-neutral capability classes. They are
+guidance for selecting the lowest effective available reasoning/model tier;
+they are not vendor names, model mappings, or authority grants. Use the lowest
+class that can reliably complete the assigned work and escalate only when
+discovery or validation shows that the current class is insufficient:
+
+- **Luna** — narrow documentation/configuration edits, straightforward
+  read-only inspection, and focused validation.
+- **Terra** — bounded implementation, repair, and deterministic test work
+  within an understood surface.
+- **Sol** — materially uncertain, cross-surface, or architecture-sensitive
+  work requiring deeper analysis and independent evidence.
+- **Astra** — high-risk security, release, or integration analysis where the
+  cost of an incorrect decision is substantial.
+
+Capability is separate from authorization. Global permissions remain
+conservative. Full Access is session-specific to a top-level StableNew Release
+session during authorized closeout; it changes available capability, not owner
+authorization. Git/publication operations that mutate `.git` are supported
+only in that top-level Release session using Full Access. A nested Release is
+not a supported Git mutation path.
+
+There is no custom Git authority or tool, and no broad permission change. No
+agent is thereby authorized to merge or target `main`, publish a release,
+deploy, mutate secrets, or perform destructive actions. Those actions still
+require explicit owner authorization naming the action and target/scope.
+
 ## Normal delivery flow
 
 `End state -> Research (when needed) -> Architecture/plan -> Build -> Verify ->
 Security (when triggered) -> PR-ready -> CI/review repair -> owner merge/release`
 
 Not every task uses every stage.
+
+Delivery is an orchestration-only coordinator. It routes work, preserves the
+handoff contract, and reports the compact delivery capsule; it does not edit
+code, docs, or configuration and does not become a Git or product authority.
 
 ### Narrow change
 
@@ -67,6 +100,16 @@ Task-specific procedure lives in skills and is loaded on demand.
 
 Persistent project truth stays in canonical repository docs. Do not use chat
 history as an architecture authority.
+
+### Default startup context
+
+The current checkout, the prompt/work-package contract, and the applicable
+repository-local canonical authorities are sufficient by default. Routine
+package startup must not inspect `~/.codex/memories`, provider memory,
+historical chats, archived plans, or similar historical sources. Use such
+sources only for an explicitly historical question or for a specifically
+identified fact missing from the current prompt and repository evidence; keep
+any retrieval targeted to that question or fact rather than broad.
 
 Agents should acquire repository state once, reuse it while unchanged, and
 avoid repeatedly reading the full roadmap or architecture. Start from
@@ -104,6 +147,17 @@ must name the integration action and target.
 7. Use the lowest reasoning/model tier that reliably fits the execution class.
 8. Escalate only when discovery proves the current execution class is
    insufficient.
+
+Each authored PR or bounded work package records:
+
+- **Execution Profile + Model/Reasoning Recommendation** — execution class,
+  selected capability class, and why it is the lowest effective available
+  tier, including retry/failure cost where relevant;
+- **Controller Surface Assessment** — whether controller/coordinator product
+  code is touched; orchestration-only Delivery does not count as product
+  controller code;
+- **Token-Efficient Validation Plan** — the smallest focused checks, evidence
+  reuse conditions, and any required full gate or CI follow-up.
 
 ## Security/release triggers
 

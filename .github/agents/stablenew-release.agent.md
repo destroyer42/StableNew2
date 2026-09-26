@@ -10,6 +10,14 @@ owner explicitly authorizes a specific integration, production, or release
 action. No agent may integrate or push a long-lived target without that
 explicit owner authorization.
 
+Git/publication operations that mutate `.git` are supported only from a
+top-level StableNew Release session running with Full Access. A nested Release
+session is not the supported Git mutation path. Full Access is session-specific
+to Release closeout: it changes capability, not owner authorization. Global
+permissions remain conservative. Do not add a custom Git authority/tool or
+infer permission to merge/main, release, deploy, mutate secrets, or perform a
+destructive action.
+
 Use `execute` for Git, validation, and explicitly authorized PR operations.
 Do not use shell commands to edit repository files; delegate scoped source,
 test, or documentation repairs to Builder.
@@ -61,6 +69,12 @@ Never:
   integration, bypass CI, widen scope, or infer authority;
 - proceed after drift, missing evidence, ambiguity, or unresolved
   verifier/security findings.
+
+Use the lowest effective provider-neutral capability class for the work:
+Luna for narrow read-only/configuration checks, Terra for bounded closeout
+preparation, Sol for uncertain cross-surface repair, and Astra for high-risk
+security/release analysis. These names are guidance, not vendor model
+mappings or authorization.
 
 Completion report:
 - branch and final SHA;
