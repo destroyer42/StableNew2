@@ -1,0 +1,73 @@
+{
+  "contract_version": "PR-VID-184.v1",
+  "contract_sha256": "30608f7a3595d5db000946fbb4941918fdf6dd09cdf8fa1387a7953ed706543c",
+  "scorer_modules": [
+    "tools/qualification/vid184/detect_runner.py",
+    "tools/qualification/vid184/tracking.py"
+  ],
+  "scorer_validation_date": "2026-09-26",
+  "acceptance_rule": "Positive control must pass all three detector-dependent metrics; every negative control must fail at least one.",
+  "cases": {
+    "positive_driving_60f": {
+      "role": "positive_control",
+      "video_path": "C:\\Users\\rob\\qual\\vid184\\src\\B_locomotion_driving_60f.mp4",
+      "video_sha256": "d0f7abeaaa3bc0a37ceefca76c130afdfbb3bb3b81d30480c6fd07321bd1d72f",
+      "description": "PR-VID-184 frozen retrimmed driving clip itself (2.30-4.80s window of Mixkit #583), not a generated output -- the ground-truth locomotion signal.",
+      "yolo_model_sha256": "89b526498a6d55f869a6ab52e3a2eb20ad45b3711c1f7de3dd9ca0b399dfd6d7",
+      "frame_count": 60,
+      "primary_subject_continuity": 1.0,
+      "primary_subject_continuity_pass": true,
+      "ghost_actor_persistence": 1,
+      "ghost_actor_persistence_pass": true,
+      "root_translation_fraction": 0.8266,
+      "root_translation_fraction_pass": true,
+      "all_three_pass": true
+    },
+    "negative_vid181_locomotion": {
+      "role": "negative_control",
+      "video_path": "C:\\Users\\rob\\projects\\StableNew\\reports\\vid181\\run_b\\case_b_output.mp4",
+      "video_sha256": "a36041142897b8230e0414c3db334d9d661f628ac04a847557bd597ef0b0a257",
+      "description": "PR-VID-181 accepted Case B (locomotion) Animate v1 output: ANIMATE_REAL_POSE_LOCAL_MOTION_ONLY -- documented planted reference subject plus a separate moving ghost figure.",
+      "yolo_model_sha256": "89b526498a6d55f869a6ab52e3a2eb20ad45b3711c1f7de3dd9ca0b399dfd6d7",
+      "frame_count": 13,
+      "primary_subject_continuity": 0.7692,
+      "primary_subject_continuity_pass": false,
+      "ghost_actor_persistence": 6,
+      "ghost_actor_persistence_pass": false,
+      "root_translation_fraction": 0.1242,
+      "root_translation_fraction_pass": false,
+      "all_three_pass": false
+    },
+    "negative_vid183_A": {
+      "role": "negative_control",
+      "video_path": "C:\\Users\\rob\\projects\\StableNew\\reports\\vid183\\run_a\\case_a_output.mp4",
+      "video_sha256": "103cb0efe7744a6009c6a2c29f083e93b10a0e43789edb7d28d14d1e168524d5",
+      "description": "PR-VID-183 accepted Arm A output: BASIC_RETARGET_APPLIES; REFERENCE_BOUND_LOCOMOTION_NOT_DEMONSTRATED -- documented distorted/non-translating figure.",
+      "yolo_model_sha256": "89b526498a6d55f869a6ab52e3a2eb20ad45b3711c1f7de3dd9ca0b399dfd6d7",
+      "frame_count": 13,
+      "primary_subject_continuity": 1.0,
+      "primary_subject_continuity_pass": true,
+      "ghost_actor_persistence": 0,
+      "ghost_actor_persistence_pass": true,
+      "root_translation_fraction": 0.0252,
+      "root_translation_fraction_pass": false,
+      "all_three_pass": false
+    },
+    "negative_vid183_B": {
+      "role": "negative_control",
+      "video_path": "C:\\Users\\rob\\projects\\StableNew\\reports\\vid183\\run_b\\case_b_output.mp4",
+      "video_sha256": "664771f63f75bb2047cf8f9497d1f1f568d2130b27f3cb45c14a46224f20adab",
+      "description": "PR-VID-183 accepted Arm B output: same classification -- documented cropped lower-body/exaggerated split-step, not stable reference-bound walking.",
+      "yolo_model_sha256": "89b526498a6d55f869a6ab52e3a2eb20ad45b3711c1f7de3dd9ca0b399dfd6d7",
+      "frame_count": 13,
+      "primary_subject_continuity": 1.0,
+      "primary_subject_continuity_pass": true,
+      "ghost_actor_persistence": 2,
+      "ghost_actor_persistence_pass": true,
+      "root_translation_fraction": 0.0794,
+      "root_translation_fraction_pass": false,
+      "all_three_pass": false
+    }
+  },
+  "detector_json_note": "Per-case raw detector JSON (person boxes per frame) and the retrimmed/output MP4 files live in the disposable qual workspace, not committed; this file is the reviewable committed evidence (hashes, scored metric values, pass/fail against the frozen contract)."
+}

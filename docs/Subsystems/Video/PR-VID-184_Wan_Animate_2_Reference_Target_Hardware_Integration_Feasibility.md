@@ -1,26 +1,44 @@
 # PR-VID-184 - Wan-Animate-2 Reference Capability, Target-Hardware & Integration Feasibility
 
-Status: **`PR-VID-184 — IN PROGRESS — PHASE A-C/F COMPLETE; PHASE D BLOCKED PENDING OWNER
-AUTHORIZATION`**. This is a research/feasibility-planning package. No Animate-2 output has been
+Status: **`PR-VID-184 — IN PROGRESS — PRE-REGISTRATION COMPLETE; AWAITING OWNER-OPERATED CLOUD
+EXECUTION`**. This is a research/feasibility-planning package. No Animate-2 output has been
 generated, no Comfy Cloud run has occurred, no production `src/` change was made, no workflow was
 registered, and no GPU/Comfy-config/pagefile/driver setting was changed. Q1-Q4 (see below) are not
-yet answered; Phase D (the remote official-Comfy reference-capability gate) is the blocking
-prerequisite and requires two explicit owner decisions before it can run (see "Phase D status and
-owner decisions required").
+yet answered. The owner authorized Comfy Cloud use (Free Tier account created 2026-09-26) and
+issued a pre-upload amendment (below) correcting the experiment design and adding a
+control-validated scorer, pre-registered run matrix, and a human-verdict gate. Per that
+amendment, cloud execution is owner-operated: this package stops after pushing the pre-registration
+and hands off to the owner to run the pre-registered matrix and return outputs.
 
 ## Execution profile
 
-- **Execution class:** Terra High equivalent — bounded multi-source research, evidence-anchored
-  planning, and qualification-tooling authoring; no architecture decision made.
+- **Execution class:** Standard (owner correction 2026-09-26, supersedes the original "Terra High"
+  label) — research, qualification tooling, and docs; no `src/` change.
 - **Model/reasoning recommendation:** Claude Sonnet 5, High effort for synthesis/writing; a
-  general-purpose web-research subagent (current, dated, source-tagged) for Phase A, per the
-  repository's provider-neutral Terra guidance.
+  general-purpose web-research subagent (current, dated, source-tagged) for Phase A and the
+  Comfy-version-gap addendum, per the repository's provider-neutral capability guidance.
 - **Controller surface assessment:** none. No `src/` production controller, coordinator, resolver,
   backend, runner, or graph changed. `src/video/video_backend_types.py` and
   `src/video/video_workflow_intent.py` were inspected read-only for Phase F contract mapping.
-- **Token-efficient validation plan:** deterministic scoring-contract tests only (no GPU/network);
-  Ruff/format on the new Python surfaces; `git diff --check`; required GitHub Python 3.11/3.12 CI.
-  Do not chase informational full-suite/Journey debt unrelated to this package.
+- **Token-efficient validation plan:** deterministic tests only (no GPU/network) for the scoring
+  contract, the tracker, and the blinding tool; Ruff/format on the new Python surfaces;
+  `git diff --check`; required GitHub Python 3.11/3.12 CI. Do not chase informational
+  full-suite/Journey debt unrelated to this package.
+
+## Owner amendment (2026-09-26, pre-upload/pre-generation)
+
+Applies to PR #9 at or after `47a0588`; no Animate-2 output existed at amendment time, so this is a
+pre-registration amendment, not a post-hoc change. It corrected five things, each reflected in the
+sections below: (1) the cloud A/B is **Base+LightX2V vs. Distilled** (workflow identity), not
+"Case A/B" (which already means gesture/locomotion in PR-VID-170/180/181, and retarget-off/on in
+PR-VID-183 — reusing that label for a third meaning was rejected); (2) the 29-frame driving clip is
+retrimmed to a longer window from the same source file; (3) the scoring contract must be
+control-validated (against real detector output, not just frozen thresholds) before any upload;
+(4) a fixed 5-run matrix with two pre-registered seeds, run remotely against shipped-default
+settings for runs 1-4 and a cache-OFF local-candidate configuration for run 5; (5) a human verdict
+gate — Rob scores the pre-registered rubric blind to metrics and to arm identity, and PR #9 does not
+merge until that verdict is recorded. Never describe Base+LightX2V as pristine upstream Base (the
+LightX2V LoRA already step-distills it; see "Official Base-oriented settings" below).
 
 ## Accepted prior evidence (not repeated)
 
@@ -147,138 +165,157 @@ using lower-step/no-CFG-style inference per current upstream settings (`--step 1
 
 ---
 
-## Phase B — Frozen reference-capability experiment (not yet run)
+## Phase B — Frozen reference-capability experiment (pre-registered, not yet run)
 
-**Corrected experiment design (owner correction, 2026-09-26):** the remote capability A/B is not
+**Experiment design (owner amendment, 2026-09-26):** the remote capability A/B is not
 "gesture vs. locomotion." It isolates the two official Comfy Wan-Animate-2 execution variants using
-the SAME frozen reference image and the SAME frozen locomotion driving video:
+the SAME frozen reference image and the SAME frozen locomotion driving video, named by workflow
+identity (never "Case A/B" — that label already means gesture/locomotion in PR-VID-170/180/181 and
+retarget-off/on in PR-VID-183):
 
-- **Case A:** official current Comfy Base-oriented Wan-Animate-2 workflow
-  (`motion_transfer_wan_animate_2.json`) at its normal reference envelope/settings.
-- **Case B:** official current Comfy native Distilled Wan-Animate-2 workflow
+- **Base+LightX2V:** official current Comfy Base-oriented Wan-Animate-2 workflow
+  (`motion_transfer_wan_animate_2.json`) at its normal reference envelope/settings. Never described
+  as pristine upstream Base — the LightX2V LoRA already step-distills it to 6-step LCM sampling (see
+  "Official Base+LightX2V settings" below).
+- **Distilled:** official current Comfy native Distilled Wan-Animate-2 workflow
   (`motion_transfer_wan_animate_2_distilled.json`) at its normal reference envelope/settings.
 
 This determines whether the official Comfy reference stack can deliver reference-bound locomotion
-at all, and whether Base-oriented vs. Distilled materially changes the result, before any local
+at all, and whether Base+LightX2V vs. Distilled materially changes the result, before any local
 RTX 4070 Ti compromise is introduced. Gesture evidence from PR-VID-181 Case A remains historical
 context only; no primary cloud qualification run is spent on gesture unless the locomotion A/B
 completes and a further run is separately justified.
 
-**Frozen assets (both cases, unchanged between them):**
+**Frozen assets (both workflows, unchanged between them):**
 
 - **Reference image:** `reports/vid110/inputs/source_fullbody.png`, SHA-256
-  `362c86cc83876e340b8927dd54a0f55af1c5fb82c1e9c98d624e67044afa71bb`, 480x832 RGB. This is a
-  StableNew-generated synthetic person (Wan2.2 TI2V-5B text-to-video, seed 110110, first frame — see
-  PR-VID-110) — **not a real photo of an identifiable person**, so it carries no third-party rights
-  or privacy/consent question, unlike the driving video. Reused unchanged since PR-VID-110 through
-  PR-VID-183 (six prior packages), which preserves direct continuity with every prior Animate result.
-- **Driving video:** the PR-VID-181 Case B **raw color driving clip** (not the rendered
-  pose-skeleton derivative) — 464x832, 24 fps, 29 frames, SHA-256
-  `afe3637aa060fd5855d2feb37b58ab81d300252615daa2b0b8f202d8158edce4`, a fixed non-tracking crop
-  (x=140,y=20,377x676) of Mixkit #583 "Woman doing warm-up exercises" (original 1280x720/24fps/240
-  frames, SHA-256 `da49964c6d418ae7a7cc6b8972617d6e35bff588e656d55f67d645974b4cd346`, window 3.0-4.2s).
-  The raw clip (not the v1 skeleton render) is correct because Wan-Animate-2 consumes the driving
-  video directly with no separate pose-extraction stage (Phase A item 12); the v1 `src_pose.mp4`
-  artifact is v1-architecture-specific and not an input either official Wan-Animate-2 template
-  expects. It shows one intended person, clear lateral locomotion/root-translation across the frame
-  (driving-control centroid moved 0.29 -> 0.69 of frame width in the v1 pose extraction), a static
-  camera, full body visible, and no bystanders — the same case PR-VID-181/183 already used, so
-  reusing it preserves direct historical comparability against the documented Animate-v1 failure
+  `362c86cc83876e340b8927dd54a0f55af1c5fb82c1e9c98d624e67044afa71bb`, 480x832 RGB. StableNew-generated
+  synthetic person (Wan2.2 TI2V-5B text-to-video, seed 110110 — see PR-VID-110), not a real photo, so
+  it carries no third-party rights/privacy question. Reused unchanged since PR-VID-110 through
+  PR-VID-183 (six prior packages). **Not pre-resized** — fed to each template's own load/resize path
+  as-is; the effective generation geometry will be recorded from the actual run, not assumed.
+- **Driving video — retrimmed 2026-09-26 (resolves the frame-count gap):** a **longer window of the
+  same Mixkit #583 source file**, using PR-VID-181's exact fixed crop unchanged
+  (`crop=377:676:140:20,scale=464:832:flags=lanczos` from `tools/qualification/vid181/driving_prep.py`,
+  called directly, not reimplemented) — only the time window changed, no tracking/panning crop (that
+  would erase the root translation being measured).
+
+  | Field | Value |
+  | --- | --- |
+  | Source file (verified, unchanged since PR-VID-181) | `583-720.mp4`, SHA-256 `da49964c6d418ae7a7cc6b8972617d6e35bff588e656d55f67d645974b4cd346`, 1280x720/24fps/240 frames (10 s) |
+  | Window | 2.30 s - 4.80 s (was 3.0-4.2 s) |
+  | Frame count / fps / duration | **60 frames / 24 fps / 2.50 s** |
+  | Crop | `x=140,y=20,377x676` (identical to PR-VID-181), scaled to 464x832 |
+  | Retrimmed file SHA-256 | `d0f7abeaaa3bc0a37ceefca76c130afdfbb3bb3b81d30480c6fd07321bd1d72f` |
+  | Encoding | H.264, `crf=12`, `preset=slow`, `yuv420p` (same as PR-VID-181) |
+
+  **Window selection:** contact sheets at 0.25 s and then per-frame (1/24 s) granularity across the
+  full 10 s source (under the exact fixed crop above) showed the subject enters the crop around
+  t=2.24-2.28 s and exits abruptly around t=4.87-4.90 s (a fast sprint-away exit). The chosen
+  2.30-4.80 s window sits with margin inside that fully-in-frame range on both ends; every one of the
+  60 frames was visually spot-checked via a full contact sheet — the subject stays completely in
+  frame throughout, transitioning from high-knee running to a full sprint stride with continuous
+  left-to-right root translation.
+  **The 81-frame official default was not reachable**: the subject is only continuously,
+  fully in-frame for about 2.6 s under this exact crop (extending it further would need panning the
+  crop, which the amendment explicitly forbids since it would erase the measured root translation).
+  60 frames is documented here as the largest valid count, per the amendment's own fallback
+  instruction, not the 81-frame target.
+  **Frame-rate/sampling note:** direct inspection of the official blueprint's internal subgraph
+  (`GetVideoComponents`, `TrimVideoLatent`, `ImageFromBatch` nodes) found no explicit fps-resampling/
+  retiming node — the driving video is decoded and consumed at its own native rate with no
+  configurable resample widget. The retrimmed clip is a direct 24fps crop of the original real-time
+  footage (never sped up/slowed down), so it is supplied in real-time motion as required. Whether
+  frames beyond the driving clip's own 60 are looped, padded, or simply absent relative to the
+  template's 81-frame `length` target was **not determined from the static graph alone** — this is a
+  real open question only the actual run will answer, which is exactly why using the largest valid
+  real window was the responsible choice rather than guessing at padding/looping semantics with a
+  much shorter clip. The 29-frame PR-VID-181 file remains historical evidence and is **not**
+  uploaded.
+  It shows one intended person, clear lateral locomotion/root-translation, a static camera, full body
+  visible, no bystanders — the same underlying source PR-VID-181/183 already used, preserving direct
+  historical comparability against the documented Animate-v1 failure
   (`ANIMATE_REAL_POSE_LOCAL_MOTION_ONLY` / `BASIC_RETARGET_APPLIES;
   REFERENCE_BOUND_LOCOMOTION_NOT_DEMONSTRATED`).
 
-**Blocker 1 (license) is resolved by explicit owner risk-acceptance, not by a favorable license
-reading.** Direct verification of Mixkit's actual terms (`mixkit.co/terms/`, `mixkit.co/llm-info/`,
-corroborated by an independent third-party license guide) found the operative clause: *"rent,
-license, sublicense, sell, resell or otherwise commercially exploit or make Mixkit or any Item
-available to any third party,"* summarized elsewhere as *"cannot redistribute raw, unedited clip
-files... on any platform."* No source found an explicit carve-out for using a clip as input to a
-third-party AI/ML processing service, and Mixkit's own AI-focused FAQ page (`mixkit.co/llm-info/`)
-does not address AI/ML use at all. This remains genuinely ambiguous, not clearly permitted. The
-product owner was given this exact finding and explicitly directed proceeding anyway, on the basis
-that a two-run internal qualification test (not redistribution, not a competing stock-media use) is
-low-risk enough to accept: **"Accept the risk explicitly... a two-run internal qualification test,
-not redistribution or competing-service use, is low-risk enough to proceed anyway"** (owner
-decision, 2026-09-26). This authorizes uploading this specific clip to Comfy Cloud for this specific
-two-run (Case A/B) qualification test; it is not a general finding that the license permits
-third-party AI use, and does not extend to any other reuse.
+**License (resolved by explicit owner risk-acceptance, not by a favorable license reading).** Direct
+verification of Mixkit's actual terms (`mixkit.co/terms/`, `mixkit.co/llm-info/`, corroborated by an
+independent third-party license guide) found the operative clause: *"rent, license, sublicense, sell,
+resell or otherwise commercially exploit or make Mixkit or any Item available to any third party,"*
+summarized elsewhere as *"cannot redistribute raw, unedited clip files... on any platform."* No
+source found an explicit carve-out for third-party AI/ML use. The owner was given this exact finding
+and explicitly directed proceeding anyway: **"Accept the risk explicitly... a two-run internal
+qualification test, not redistribution or competing-service use, is low-risk enough to proceed
+anyway"** (owner decision, 2026-09-26), reaffirmed when authorizing Comfy Cloud use for this specific
+retrimmed clip from the same source file. Not a general finding that the license permits third-party
+AI use, and does not extend beyond this qualification test.
 
-**Blocker 2 (duration) is a recorded limitation, not resolved, and is now more concrete.** The
-existing driving clip is 1.2 s / 29 frames at 24 fps. Both official templates' shipped default
-`length` widget is **81 frames** (see "Official Base-oriented settings" / "Official Distilled
-settings" below, read directly from the current Comfy-Org blueprint JSON, not paraphrased). Using
-the existing 29-frame clip as-is materially under-fills that default and it is unverified whether
-the templates loop/pad a shorter driving video to the target length or require it to already be
->= `length` frames. **Recommended resolution (not yet decided/executed): retrim a longer continuous
-window from the same already-risk-accepted Mixkit #583 source file** — the original clip is 240
-frames/10 s, so a longer window is available without introducing any new asset or reopening the
-license question, since it is the identical file the owner already accepted the risk for. This is
-a preflight decision to make before running, not resolved in this report.
+No source/reference substitution has been made — same source file, longer window, same crop. The
+Base+LightX2V / Distilled pair against this frozen reference/driving asset pair is the pre-registered
+Phase D case (see "Run matrix" under Phase D below for the full 5-run schedule, seeds, and settings).
 
-**Still blocking Phase D:** the separate Comfy Cloud account-creation/upload authorization (see
-"Phase D status and owner decisions required" below) has not yet been given.
+### Official Base+LightX2V settings (verified from the current shipped Comfy-Org blueprint JSON, internal node graph, not just outer widgets)
 
-No source/reference substitution has been made. The Base-oriented (Case A) / Distilled (Case B)
-pair against this frozen reference/driving asset pair is the frozen Phase D case, pending only the
-remaining Comfy Cloud account/upload authorization and the duration preflight decision above.
-Reusing `identity_hist_mean` and `camera_drift_px`/`motion_area_fraction` metrics from
-`tools/qualification/vid110/metrics.py` remains planned for scoring once the runs execute; no new
-metric implementation was needed for those three.
-
-### Official Base-oriented settings (verified from the current shipped Comfy-Org blueprint JSON)
-
-Source: `Comfy-Org/workflow_templates` repo, `blueprints/motion_transfer_wan_animate_2.json`
-(fetched and parsed directly, not paraphrased from documentation prose).
+Source: `Comfy-Org/workflow_templates` repo, `blueprints/motion_transfer_wan_animate_2.json`,
+downloaded and parsed directly — both the outer subgraph's exposed widgets and the internal
+28-node subgraph definition (`WanAnimate2ToVideo`, `BasicScheduler`, `ModelSamplingSD3`,
+`KSamplerSelect`, `SamplerCustom`, `WanAnimate2Cache`, `ResizeImageMaskNode` x2,
+`ContextWindowsManual`, `GetVideoComponents`, `TrimVideoLatent`, etc. — 28 nodes total).
 
 | Setting | Value |
 | --- | --- |
 | Checkpoint | `wan_animate_2_int8_convrot.safetensors` + LoRA `lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors` |
 | Text encoder / CLIP vision / VAE | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` / `clip_vision_h.safetensors` / `Wan2_1_VAE_bf16.safetensors` |
-| Resolution / length | 482x854 / 81 frames |
+| Outer exposed resolution / length | 482x854 (`resize_type.width`/`height_1`) / 81 frames |
+| `ResizeImageMaskNode` (x2) actual resize targets | 481x854 and 482x854, mode `scale dimensions`/`center`/`area` |
+| `WanAnimate2ToVideo` node's own raw widget defaults | `[832, 480, 81, 1, 0, 1, 0, 1, 1]` — width/height ordering not independently confirmed field-by-field; likely overridden by the linked outer resize control rather than used as-is (not conclusively verified without running ComfyUI itself) |
 | Sampler / scheduler / shift | `lcm` / `simple` / 5 |
-| Steps / cfg | **6** / 1 |
+| Steps / cfg | **6** / 1 (`BasicScheduler=['simple',6,1]`, `SamplerCustom=[True,2,'randomize',1]` → cfg=1) |
 | reference_image_strength / pose_strength / pose_start-end_percent | 1 / 1 / 0-1 (applied across the full clip) |
-| enable_context_window / trim_duplicated_frame | False / False |
-| cache_device / cache_dtype | `gpu` / `int8` (no separate enable/disable toggle was found in the top-level widgets — this is the shipped default, not a documentation assumption) |
+| enable_context_window / trim_duplicated_frame | False / False (gated by `PrimitiveBoolean=[False]` / `ComfySwitchNode=[False]`) |
+| `WanAnimate2Cache` node | `['gpu','int8']` — present as a normal graph node with no separate enable/disable toggle found; this is the shipped default, not a documentation assumption |
+| Default seed control | `control_after_generate='randomize'` — **must be overridden to `'fixed'` with the pre-registered seed** for runs 1-4 (see run matrix) |
 
 **Correction to Phase A's framing:** despite the "Base-oriented" name, this shipped template does
 **not** run pristine Base's own 40-step CFG sampling — the LightX2V LoRA already collapses it to
 6-step LCM sampling with `cfg=1` (i.e., no classifier-free guidance). A test of pristine,
 unaccelerated Base (`wan_animate_2_bf16.safetensors`, no LoRA, 40 real CFG steps) would require a
-materially different, non-default workflow and is not what "Case A, official template, unmodified"
-runs. This package treats the shipped default template as the correct "Base-oriented" case per the
-owner's framing (official current Comfy stack, normal settings), not the pristine checkpoint.
+materially different, non-default workflow and is not what this shipped template runs. Per the
+owner amendment, this arm is named **Base+LightX2V**, never "pristine Base."
 
 **Also corrects Phase A item 9's cache assumption:** the shipped default here is `cache_device=gpu`,
 `cache_dtype=int8`, not the CPU/off default that general Comfy documentation described as advisable
-for memory-constrained setups. Whether this specific cloud template's cache node can be reconfigured
-or bypassed by the operator was not determined from the JSON alone. This is a real discrepancy
-between generic guidance and the actual shipped defaults, recorded rather than silently reconciled.
+for memory-constrained setups; the `WanAnimate2Cache` node stores activations as lossy int8. Whether
+the node can be reconfigured or bypassed by the operator was not determined from the JSON alone —
+run 5's local-candidate configuration (Phase E) makes disabling it an explicit, documented graph
+change rather than assuming it is already off.
 
 ### Official Distilled settings (verified from the current shipped Comfy-Org blueprint JSON)
 
 Source: `blueprints/motion_transfer_wan_animate_2_distilled.json`, same repo, fetched and parsed
-directly.
+directly (also 28 internal nodes).
 
-Identical to the Base-oriented table above except: **checkpoint** is
+Identical to the Base+LightX2V table above except: **checkpoint** is
 `wan_animate_2_distill_int8_convrot.safetensors` alone (no LoRA — it is upstream's own native
-distillation, not an accelerated Base), and **steps = 10** (vs. 6 for Base-oriented). Sampler
-(`lcm`), scheduler (`simple`), shift (5), cfg (1), resolution/length (482x854/81), reference/pose
-strengths, context-window/trim/cache defaults are all identical between the two templates.
+distillation, not an accelerated Base), and **steps = 10** (`BasicScheduler=['simple',10,1]`, vs. 6
+for Base+LightX2V). Sampler (`lcm`), scheduler (`simple`), shift (5), cfg (1),
+resolution/length (482x854/81), reference/pose strengths, context-window/trim/cache defaults are all
+identical between the two templates.
 
-**Material finding for the user's stated purpose:** the two official templates' sampling recipes
+**Material finding for the owner's stated purpose:** the two official templates' sampling recipes
 are nearly identical (same sampler/scheduler/shift/cfg/geometry/cache), differing mainly in
 checkpoint (LoRA-accelerated Base vs. native-distilled unet) and step count (6 vs. 10). Any output
-difference between Case A and Case B would therefore mainly reflect the checkpoint/step-count
-difference, not a fundamentally different sampling paradigm — useful context for interpreting a
-Base-vs-Distilled delta once the runs exist.
+difference between Base+LightX2V and Distilled would therefore mainly reflect the checkpoint/
+step-count difference, not a fundamentally different sampling paradigm — useful context for
+interpreting a Base-vs-Distilled delta once the runs exist.
 
 **Terminology finding relevant to Phase F:** both official blueprints label the raw-driving-video
 input socket `pose_video` (type `VIDEO`), even though Wan-Animate-2 takes it as a raw, unprocessed
-driving video with no separate pose-extraction stage. Upstream/Comfy itself reuses the "pose_video"
-name for this input. This is worth weighing against Phase F's tentative `motion_source_video`
-recommendation in a future contract-change package — not acted on here, since no contract change is
-authorized in PR-VID-184 regardless.
+driving video with no separate pose-extraction stage — confirmed directly from the input labels in
+the downloaded blueprint JSON (`{"label": "pose_video", "name": "video", "type": "VIDEO"}`), not
+inferred. Upstream/Comfy itself reuses the "pose_video" name for a raw driving video. See Phase F for
+the owner's correction that raw RGB driving footage is not `pose_video` in StableNew's own semantic
+sense, notwithstanding Comfy's own socket label.
 
 ---
 
@@ -300,72 +337,173 @@ any Animate-2 output exists, with `FROZEN_CONTRACT_SHA256` pinning the exact met
 `motion_curve_correlation`, `identity_hist_mean`, `camera_drift_px`, and `motion_area_fraction` are
 **reused** from `tools/qualification/vid110/metrics.py` (`motion_curve`, `curve_correlation`,
 `clip_metrics`) without modification. `primary_subject_continuity` and `ghost_actor_persistence`
-are **new** and require the disposable CPU-only person-detector environment used by
-`tools/qualification/vid181/preprocess_launcher.py`; their thresholds are frozen now so they cannot
-be tuned after seeing results, but their executable implementation is deferred to Phase D/E, which
-has not been authorized (see below). No threshold was chosen after viewing any Animate-2 output —
-none has been generated.
+are **new** and require a person detector; their thresholds were frozen before any scorer code
+existed, so they could not be tuned to fit results that did not yet exist. No threshold was chosen
+after viewing any Animate-2 output — none has been generated.
+
+### Scorer implementation and control validation (owner amendment section 3.2, complete)
+
+`tools/qualification/vid184/detect_runner.py` runs the same pinned `yolov10m.onnx` detector
+PR-VID-181 already used (SHA-256 `89b526498a6d55f869a6ab52e3a2eb20ad45b3711c1f7de3dd9ca0b399dfd6d7`,
+verified unchanged), executed **only** in the disposable CPU-only environment (same isolation split
+as every prior PR-VID-1xx package: detector inference outside the StableNew `.venv`, consuming only
+plain JSON in the production interpreter). `tools/qualification/vid184/tracking.py` is pure stdlib
+(no numpy/cv2/onnxruntime import) — a greedy nearest-centroid single-track algorithm over the
+per-frame person boxes, computing `primary_subject_continuity`, `ghost_actor_persistence`, and
+`root_translation_fraction`. It has no identity/ReID model, so it cannot itself confirm the tracked
+figure matches the *reference image's* identity — only that a single detection persists
+continuously; this scope limit is recorded, not hidden. 14 deterministic synthetic-box tests
+(`tests/tools/test_vid184_tracking.py`, `tests/tools/test_vid184_scoring_contract.py`) pass with no
+GPU/network dependency.
+
+Per the amendment's required gate, the scorer was run against real video before any upload:
+
+| Case | Role | Frames | `primary_subject_continuity` | `ghost_actor_persistence` | `root_translation_fraction` | All 3 pass? |
+| --- | --- | ---: | ---: | ---: | ---: | --- |
+| Retrimmed driving clip (frozen, this package) | positive control | 60 | 1.000 (pass, >=0.90) | 1 (pass, <=2) | 0.827 (pass, >=0.15) | **yes** |
+| PR-VID-181 Case B output (`ANIMATE_REAL_POSE_LOCAL_MOTION_ONLY`) | negative control | 13 | 0.769 (**fail**) | 6 (**fail**) | 0.124 (**fail**) | no |
+| PR-VID-183 Arm A output (`REFERENCE_BOUND_LOCOMOTION_NOT_DEMONSTRATED`) | negative control | 13 | 1.000 (pass) | 0 (pass) | 0.025 (**fail**) | no |
+| PR-VID-183 Arm B output (same classification) | negative control | 13 | 1.000 (pass) | 2 (pass, boundary) | 0.079 (**fail**) | no |
+
+The scorer separated the controls correctly on the first attempt — no iteration was needed. It also
+recovered documented nuance rather than a blunt pass/fail: the PR-VID-181 case (a literal second
+"ghost" figure carrying the motion) fails continuity and ghost-persistence in addition to root
+translation, while the two PR-VID-183 arms (documented as a distorted/non-translating figure, not a
+second figure) pass continuity and ghost-persistence but fail specifically on root translation —
+matching each package's own prose findings. Full results, hashes, and the acceptance rule are
+committed in `tools/qualification/vid184/control_validation.json`; the negative-control output files
+themselves (located in a sibling checkout's `reports/vid181/` and `reports/vid183/` — not the
+`StableNew-main` git-ignored `reports/` tree) and the detector JSON stay in the disposable qual
+workspace, not committed, consistent with every prior PR-VID-1xx package.
+
+The arm-blinding mechanism for the post-generation human verdict gate (amendment section 6) is
+built and tested now, ahead of having real outputs: `tools/qualification/vid184/blind_seal.py`
+copies each run's output to a randomly-ID'd filename and commits only the SHA-256 of the
+label-to-ID mapping before Rob's review; a `verify` command later confirms the revealed mapping
+still matches that committed hash, so a mapping cannot be silently altered between commit and
+reveal. 4 deterministic tests (`tests/tools/test_vid184_blind_seal.py`) pass.
 
 ---
 
-## Phase D status and owner decisions required (BLOCKED — not yet run)
+## Phase D status: pre-registration complete, cloud execution is owner-operated
 
-Phase D requires Comfy Cloud execution of the official Base-oriented and native Distilled workflows
-against the frozen Case A/B driving/reference pair, at the normal official 81-frame envelope where
-supported. **This has not happened.** Per this package's own external-service authorization
-boundary and Hard Stops, one explicit owner decision remains before it can proceed:
+**Cloud account/upload authorization: GRANTED 2026-09-26.** The owner created a Comfy Cloud account
+(Free Tier, GitHub sign-in, no payment method) and authorized use of it for this package. Corrected
+cost framing stands as researched: current official mechanism is a **Free Tier of 400 credits/month,
+no card required**; a separate "5 free runs on real GPUs" claim also appears on Comfy's pricing page
+with unclear relationship to the Free Tier; **no Wan-Animate-2-specific credit cost was found
+anywhere** (the only benchmark located, ~11 credits/5s, is for a different, lighter template) — cost
+is not guaranteed to be $0. Verified privacy facts stand: inputs/outputs are not used for AI
+training and are private by default; retention is vague ("as long as needed... varies by data
+type"). No files have been uploaded and no cloud spend has occurred as of this report.
 
-1. **Driving-video license/source decision — RESOLVED 2026-09-26 by explicit owner risk-acceptance.**
-   See "Phase B" above: the license terms are genuinely ambiguous (verified directly, not assumed);
-   the owner was given that exact finding and explicitly directed proceeding with the existing
-   PR-VID-181 Mixkit #583 driving clip for this specific two-run internal qualification test,
-   accepting the disclosed risk. This is not a finding that the license clearly permits the use.
-2. **Cloud account/upload authorization — STILL OPEN.** Corrected 2026-09-26: Comfy's current
-   official mechanism (`blog.comfy.org`, dated 2026-03-02) is a **Free Tier of 400 credits/month, no
-   card required**, sign-in via Google. A separate claim of "5 free runs on real GPUs — no credit
-   card required" also currently appears on `comfy.org/pricing`; its exact relationship to the
-   400-credit Free Tier (same mechanism described two ways, vs. a separate one-time trial) was not
-   determined from any source fetched. **No official, current, Wan-Animate-2-specific credit cost
-   was found anywhere.** The only credit-cost benchmark located (~11 credits per 5 s video) is
-   explicitly for a different, lighter "Wan 2.2 Image-to-Video" template and should not be assumed
-   to transfer to Wan-Animate-2's heavier 14B dual-branch architecture. A rough, explicitly uncertain
-   estimate — given the official templates run only 6 (Base-oriented) or 10 (Distilled) sampling
-   steps, which partially offsets the larger model — is on the order of a few dozen credits per run,
-   comfortably inside 400/month if that estimate holds, but **this is not a guarantee of $0 cost**,
-   per the owner's explicit instruction not to state one. Regardless of cost, this package does not
-   create a third-party account or upload any media without explicit owner authorization naming the
-   provider (Comfy Cloud).
+**Cloud execution is owner-operated (amendment section 5).** Per the amendment, this package does
+not drive the Comfy Cloud UI itself: Rob runs the pre-registered matrix below on his own account and
+returns the output files. This package's job ends at pushing the pre-registration (this document,
+the scoring contract, control-validation results, and the run manifest) and handing off — see
+"Hand-off" at the end of this document.
 
-   **Verified current privacy/storage facts** (`support.comfy.org`, "Data & Storage on Cloud"
-   article, fetched directly): *"Comfy does not use your inputs or outputs to train generative AI or
-   diffusion models."* *"By default, all your inputs, outputs, and workflows are private to your
-   account."* Retention: *"Comfy retains customer data for as long as needed to provide the products
-   and comply with applicable obligations. Retention periods may vary depending on data type"* — no
-   exact deletion timeline is stated. A separate (not independently re-verified verbatim in this
-   pass) summary claims customers retain full ownership/rights in submitted inputs and generated
-   outputs; this is reported but not confirmed to the same verification standard as the three quotes
-   above. If the Free Tier turns out to require payment info or is otherwise unavailable, report that
-   and stop before incurring any cost.
+### Run matrix (pre-registered, amendment section 4; full detail in `tools/qualification/vid184/run_manifest.json`)
 
-No files have been uploaded and no cloud spend has occurred. Per this package's own instruction,
-completing this no-cost/no-upload preparation and asking once is sufficient; **this same
-session/package resumes once authorization is given rather than requiring a new work-package
-prompt.**
+Two fixed seeds, derived deterministically from the frozen driving clip's own SHA-256 (first/next 14
+hex chars as integers — reproducible, fixed before any generation, not chosen after seeing output):
+**S1 = 58819112904309696**, **S2 = 46017787086728211**. Both official templates default their seed
+control to `'randomize'` — **this must be changed to `'fixed'`** with the seed below before each run.
 
-Q1 (reference-bound locomotion capability) cannot be answered without Phase D. Given Phase A item
+| # | Workflow | Frames | Cache | Seed | Purpose |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Distilled | 60 (frozen driving-clip count) | shipped default (gpu/int8) | S1 | reference capability |
+| 2 | Base+LightX2V | 60 | shipped default | S1 | reference capability |
+| 3 | Distilled | 60 | shipped default | S2 | seed replication |
+| 4 | Base+LightX2V | 60 | shipped default | S2 | seed replication |
+| 5 | Distilled | 13 (local-candidate; paper-only hypothesis, see Phase E) | **OFF** (remove/bypass the `WanAnimate2Cache` node — documented graph change) | S1 | local-candidate configuration, run remotely; separates configuration effects from future hardware effects; not a reference arm, cannot establish Q1 alone |
+
+Runs 1-4 use shipped template settings exactly (sampler `lcm`, scheduler `simple`, shift 5, cfg 1,
+reference/pose strengths 1, pose applied across the full clip), except the pre-registered
+reference/driving inputs, seeds, and the frame-count deviation (60 vs. the 81-frame default,
+documented above as the largest valid real window). **If credits run out, stop in table order and
+report what completed — no paid top-up.**
+
+### Human verdict gate (amendment section 6) — PR #9 merge suspended until recorded
+
+Rob reviews all outputs **before** seeing any metric score. Best-effort blinding:
+`tools/qualification/vid184/blind_seal.py` relabels each output with a random sealed ID and this
+package commits only the hash of that mapping before hand-off — the real mapping is not committed
+until after Rob's review is recorded, so it is provably the same mapping before and after. Rob then
+scores the pre-registered human-visual-rubric (Phase C) per clip and gives a **PASS / PARTIAL /
+FAIL** verdict for reference-bound locomotion. That verdict is the capability classification;
+metrics are corroboration, and any disagreement between them is recorded explicitly rather than
+silently resolved either way. **PR #9's merge authorization is suspended until this verdict is
+recorded and the classification is final; it then resumes unchanged** — no new merge authorization
+is needed once this gate closes cleanly.
+
+Q1 (reference-bound locomotion capability) cannot be answered without these runs. Given Phase A item
 13's finding that no upstream/community source addresses the ghosting/locomotion question either
 way, there is no literature substitute for running the controlled test.
 
 ---
 
-## Phase E — Target-hardware feasibility (not started; gated on Phase D passing or being strong enough to justify local testing)
+## Phase E — Target-hardware feasibility: preliminary paper-only budget (amendment section 4, run 5 prerequisite)
 
-Not performed. Recorded here only as a Q2-relevant risk carried forward from Phase A: upstream issue
-#5 (a possible fp32-residency bug doubling DiT memory to ~65.6 GB on single-GPU setups) is directly
-adverse to the RTX 4070 Ti 12 GB / 32 GB RAM target and must be checked (patched/avoided or
-confirmed not to reproduce) before any physical local budget is built, in addition to the existing
-cache-OFF-by-default and CUDA Sysmem Fallback research the package specifies. No local Animate-2 GPU
-workload has run, and none is authorized in PR-VID-184 regardless of Phase D's outcome.
+No physical local run has occurred and none is authorized in PR-VID-184 regardless of Phase D's
+outcome. This is paper-only synthesis of Phase A/B facts already gathered, to pre-register run 5's
+"minimal documented graph change" and leading local-candidate window before any generation.
+
+**Cache modes, budgeted separately (amendment requirement):**
+- **Cache OFF (local default unless the budget below proves headroom):** removes the
+  `WanAnimate2Cache` node's ~12.5 GB additional cost entirely (Phase A item 9, quantified from
+  Comfy's own docs at 480x832/81f/bf16 — our candidate window is smaller, so the real cost would be
+  less, but no smaller-window figure was published). Costs sampling *time* (no activation reuse),
+  not memory.
+- **Cache GPU mode (the shipped default):** stores int8 activations in **VRAM** — direct competition
+  with the 12 GB budget already carrying the 14B UNET/LoRA/text-encoder/VAE/CLIP-vision stack; not
+  recommended for a first local attempt.
+- **Cache CPU mode (an alternative `device` value the node exposes, not the shipped default for
+  either official template):** moves the ~12.5 GB cost to **host RAM** instead of VRAM — direct
+  competition with the 32 GB RAM budget, which StableNew's own accepted Wan2.2 5B telemetry already
+  shows can run with near-zero headroom under load (PR-VID-150/160C history). Not evaluated further
+  here; recorded as the theoretical middle option between OFF and GPU.
+
+**Local default recommendation stays cache OFF** unless a future budget pass, informed by real Comfy
+Cloud VRAM/RAM telemetry from the runs above, proves headroom for GPU or CPU mode.
+
+**Material new risk (Phase A item 10, carried forward):** an open, unreproduced upstream bug report
+(issue #5) describes the DiT possibly loading in fp32 instead of bf16 on single-GPU setups
+(~65.6 GB vs. an expected ~32.8 GB) due to `set_default_dtype` being called after the transformer is
+built. This is directly adverse to any 12 GB/32 GB local attempt and must be checked (reproduced,
+avoided, or confirmed patched) before a real physical budget is finalized — not yet done.
+
+**Leading local-candidate window (paper-only hypothesis, run 5):** 13 frames / 480x832 — the
+proven-safe Wan2.2-Animate-14B local envelope already used successfully on this exact RTX 4070 Ti
+across PR-VID-160C/170/175/180/181 (Q3_K_M quant, not the INT8 ConvRot quant Wan-Animate-2 ships).
+This is carried over as a starting hypothesis only — it has **not** been independently verified for
+Wan-Animate-2's different architecture/quantization, and is explicitly labeled as such in
+`run_manifest.json`.
+
+**Comfy version gap (amendment section 7, dedicated research pass, complete):** StableNew's existing
+managed Comfy Desktop install is pinned at **ComfyUI 0.3.65** (`comfyui_version.py`; also
+`src/video/workflow_catalog.py:509`), **PyTorch 2.8.0+cu129**, **Python 3.10.6**, at
+`E:\Users\rober\ComfyUI\.venv-explicit` — externally-managed, not a StableNew pip dependency.
+Wan-Animate-2's native `WanAnimate2ToVideo`/`WanAnimate2Cache` nodes shipped in **ComfyUI v0.31.0**
+(2026-08-07/08, `docs.comfy.org/changelog`) — a real gap of roughly 10 months and ~30 GitHub
+releases, not a patch bump. No first-party evidence of a forced PyTorch/CUDA bump (ComfyUI's own
+`requirements.txt` has never pinned an exact torch version across `0.3.65`/`0.31.0`/current
+`0.37.0`), so a version-only upgrade is plausible but unconfirmed without attempting it.
+**A separate, fully isolated ComfyUI install (own directory, own venv, own port) is standard,
+uncomplicated architecture and does not require touching the existing managed install's environment,
+node set, or version pin at all** — the only shared resource is the physical GPU and its one
+kernel-mode driver (userspace CUDA ships bundled per-install inside each install's own torch wheel,
+so two installs can run different CUDA userspace versions concurrently without conflict). This means
+a second isolated install introduces **no new software-version variable** into DIAG-GPU-130, though
+running any GPU workload on it is still GPU activity of the kind DIAG-GPU-130's current "XMP-OFF
+isolation in progress / observation only" state asks not to combine with deliberate stress-testing —
+a scheduling/timing consideration for the owner, not an architectural blocker. **Recommendation for
+the eventual local physical probe: an isolated install, not an upgrade of the existing managed
+Comfy.**
+
+**CUDA Sysmem Fallback Policy:** not changed and not researched further in this pass beyond what
+prior packages already recorded; still explicitly out of scope for any setting mutation in
+PR-VID-184.
 
 ---
 
@@ -379,17 +517,29 @@ Inspected `src/video/video_backend_types.py` and `src/video/video_workflow_inten
 - `src/video/video_workflow_intent.py` currently contains **no reference** to `control_video` or
   `pose_video` (confirmed via search) — the Video Workflow producer does not yet emit either
   control, matching this package's starting fact.
-- A raw Wan-Animate-2 driving video is a single continuous motion source consumed directly by the
-  transformer (Phase A item 12), not a pre-extracted pose representation. It is closer in shape to
-  the existing `pose_video` semantic (a video-shaped motion-conditioning input) than to
-  `control_video` (which in the current contract is undifferentiated video conditioning generally),
-  but neither existing control was defined with Wan-Animate-2's single-stage architecture in mind,
-  and reusing `pose_video` for a raw un-preprocessed driving clip would be a semantic stretch — the
-  existing v1 pipeline's `pose_video` was always a *rendered pose representation*, not a raw driving
-  video. A future, distinct neutral concept such as `motion_source_video` is more honest to what
-  Wan-Animate-2 actually consumes, but **no contract change is made in this package**: PR-VID-184
-  does not add a new video task or control merely to reserve one, per this package's own
-  instruction, and no Animate-2 integration is authorized yet regardless.
+- **Owner correction (amendment section 7): raw RGB driving footage is not `pose_video`.** A raw
+  Wan-Animate-2 driving video is a single continuous motion source consumed directly by the
+  transformer (Phase A item 12), not a pre-extracted pose representation — StableNew's existing
+  `pose_video` semantic was defined for the v1 pipeline's *rendered pose skeleton* (see
+  `tools/qualification/vid181/`'s `src_pose.mp4` artifacts), a materially different thing even
+  though Comfy's own official blueprint JSON happens to label its raw-video input socket
+  `"pose_video"` too (verified directly from the downloaded template — see Phase B). Reusing
+  StableNew's `pose_video` control for a raw driving clip would conflate two different concepts that
+  merely share a name upstream. `control_video` is also not a clean fit (undifferentiated video
+  conditioning generally, not defined with Wan-Animate-2's single-stage architecture in mind). A
+  future, distinct neutral concept such as `motion_source_video` is more honest to what Wan-Animate-2
+  actually consumes, but **no contract change is made in this package**: PR-VID-184 does not add a
+  new video task or control merely to reserve one, and no Animate-2 integration is authorized yet
+  regardless.
+- **Durable identity for the driving input (amendment section 7):** consistent with native-SVD
+  source provenance (where paths are convenience references, not durable identity), any future
+  Animate-2 contract must key the driving input's identity on its **content SHA-256**
+  (`d0f7abeaaa3bc0a37ceefca76c130afdfbb3bb3b81d30480c6fd07321bd1d72f` for this package's frozen
+  clip), not a filesystem path. Replay semantics must resolve the driving input the same way native
+  SVD resolves source-image provenance today. License provenance (Mixkit #583, item page URL, the
+  ambiguous-terms finding, and the owner's explicit risk-acceptance) must travel with that identity
+  wherever it is recorded, not just in this document. No contract change implementing this is made
+  in this package; it is a requirement for whichever future package adds the driving-input control.
 - `VideoExecutionRequest.workflow_inputs` (a `dict[str, Any]`) and `backend_options` (opaque,
   adapter-private) already exist and could carry a resolved driving-video path without any schema
   change, the same way other backend-specific inputs are threaded today — this was confirmed by
@@ -411,50 +561,89 @@ Inspected `src/video/video_backend_types.py` and `src/video/video_workflow_inten
 
 ## Package outcome — Q1-Q4
 
-- **Q1 (reference capability):** **NOT YET ANSWERED.** Blocked on Phase D (see above). No current
-  upstream/community source resolves it either way (Phase A item 13).
+- **Q1 (reference capability):** **NOT YET ANSWERED.** Blocked on the owner running the
+  pre-registered matrix and recording the human verdict (see Phase D). No current upstream/community
+  source resolves it either way (Phase A item 13) — no literature substitute exists.
 - **Q2 (target-hardware feasibility):** **NOT YET ANSWERED.** Blocked on Q1 passing or being strong
-  enough to justify local testing, per the decision tree (Phase G). A material new risk (upstream
-  issue #5, possible fp32 2x-memory bug on single-GPU setups) is now on record for whoever runs
-  Phase E.
+  enough to justify local testing, per the decision tree (Phase G). A preliminary paper-only budget
+  is complete (Phase E): cache-mode tradeoffs quantified, a material new risk (upstream issue #5,
+  possible fp32 2x-memory bug on single-GPU setups) is on record, a leading local-candidate window is
+  hypothesized (unverified), and the Comfy version-gap research recommends an isolated install for
+  the eventual physical probe.
 - **Q3 (backend-neutral integration fit):** **Answered, conditionally.** Yes — the existing
   backend-neutral contract can carry a future Animate-2 adapter without adding a second queue,
-  runner, lifecycle authority, or model-specific controller (Phase F). No production change was made
-  or is authorized.
+  runner, lifecycle authority, or model-specific controller (Phase F), provided a future control
+  keys driving-input identity on content SHA-256, not a path, and does not conflate Comfy's
+  `pose_video` socket label with StableNew's own `pose_video` semantic. No production change was
+  made or is authorized.
 - **Q4 (product decision):** **Not reached.** The pre-decided decision tree (Phase G, Outcomes 1-5)
-  requires Q1 first. No classification is assigned yet; `REMOTE_REFERENCE_GATE_BLOCKED` is not
-  claimed as a terminal classification either, because the gate is blocked on pending owner
-  authorization, not on a technical inability to run it (Comfy Cloud does host the required official
-  workflows per Phase A item 11) — those are different situations and this package does not conflate
-  them.
+  requires Q1 first, which requires the owner-operated cloud runs and the human verdict gate.
 
 ## Validation
 
-- `tools/qualification/vid184/scoring_contract.py` and `tests/tools/test_vid184_scoring_contract.py`:
-  `ruff check` clean, `ruff format --check` clean, `python -m pytest
-  tests/tools/test_vid184_scoring_contract.py -q`: **8 passed**, no GPU/network/Comfy dependency.
+- `tools/qualification/vid184/` (`scoring_contract.py`, `detect_runner.py`, `tracking.py`,
+  `blind_seal.py`) and `tests/tools/test_vid184_*.py`: `ruff check` clean, `ruff format --check`
+  clean, `python -m pytest tests/tools/test_vid184_scoring_contract.py
+  tests/tools/test_vid184_tracking.py tests/tools/test_vid184_blind_seal.py -q`: **18 passed**, no
+  GPU/network dependency for any committed test (detector inference itself requires the disposable
+  CPU-only environment and real video files, exercised for this report's control-validation pass but
+  not part of the committed CI-run test suite).
 - `git diff --check`: clean.
 - No `src/` production file was modified; `src/video/video_backend_types.py` and
   `src/video/video_workflow_intent.py` were read-only inspected.
 - No model, Comfy config, pagefile, driver, or GPU setting was changed. No workflow was registered.
-  No cloud account was created and no media was uploaded.
+  The owner created the Comfy Cloud account; this package uploaded nothing and incurred no spend.
+- **Security Review:** not triggered. `vid184` tooling built in this package performs no network
+  access and downloads no remote content; `detect_runner.py` reads a local video file and a local
+  pinned ONNX model and writes local JSON; `blind_seal.py` copies local files and writes local JSON.
+  Per the amendment's own trigger condition, this stays unreviewed until/unless that changes.
 
 ## Docs / Git
 
 New: this report, `tools/qualification/vid184/scoring_contract.py`,
-`tests/tools/test_vid184_scoring_contract.py`, the `STATUS.md` entry, and the `docs/CODEX_MAP.md`
-row for PR-VID-184. Not committed: any downloaded/cloud test media (none was downloaded or
-generated in this package).
+`tools/qualification/vid184/detect_runner.py`, `tools/qualification/vid184/tracking.py`,
+`tools/qualification/vid184/blind_seal.py`, `tools/qualification/vid184/control_validation.json`,
+`tools/qualification/vid184/run_manifest.json`, `tests/tools/test_vid184_scoring_contract.py`,
+`tests/tools/test_vid184_tracking.py`, `tests/tools/test_vid184_blind_seal.py`, the `STATUS.md`
+entry, and the `docs/CODEX_MAP.md` row for PR-VID-184. Not committed: the retrimmed driving clip,
+the frozen reference image copy, detector JSON, and the negative-control output videos used for
+control validation — all stay in disposable local workspaces
+(`C:\Users\rob\qual\vid184\`, plus the negative controls read from a sibling checkout's
+`reports/vid181/`/`reports/vid183/`), consistent with every prior PR-VID-1xx package; their content
+hashes are committed in `control_validation.json`/`run_manifest.json` instead.
 
 ## What is explicitly NOT authorized next
 
-- Any Comfy Cloud account creation, media upload, or spend, until the owner answers the remaining
-  cloud-authorization decision above.
-- Any local physical Animate-2 GPU workload (Phase E execution).
+- Any local physical Animate-2 GPU workload (Phase E execution) — paper-only budget only in this
+  package.
 - Any production `src/` change, workflow registration, GUI/controller change, new backend, or model
   promotion.
 - Any Comfy config, pagefile, driver, or GPU-setting mutation (including the CUDA Sysmem Fallback
   Policy research question, which remains research-only in this package).
+- Any other upload, another cloud provider, paid credits, or agent-held credentials — cloud execution
+  is owner-operated only (amendment section 5).
+- Merging PR #9 before the human verdict gate (Phase D) is recorded and final.
 - Beginning the local physical Animate-2 qualification or an experimental production vertical slice
-  in this same package, even after Phase D authorization is given — those remain separate,
-  separately authorized future packages per the decision tree (Phase G).
+  in this same package, even after Q1-Q4 are answered — those remain separate, separately authorized
+  future packages per the decision tree (Phase G).
+
+## Hand-off to owner-operated cloud execution
+
+Everything above this line is pushed to `feature/pr-vid-184-wan-animate2-feasibility` /
+PR #9 as the pre-registration of record. What Rob needs to do:
+
+1. On the new Comfy Cloud account, open the **Wan Animate 2** template (both the Base-oriented and
+   Distilled workflow variants are available from the same template page).
+2. Upload the frozen reference image (`reports/vid110/inputs/source_fullbody.png` in this repo,
+   SHA-256 `362c86cc...`) and the frozen driving clip
+   (`C:\Users\rob\qual\vid184\src\B_locomotion_driving_60f.mp4`, SHA-256 `d0f7abea...`) — do not
+   pre-resize either.
+3. For each of the 5 rows in the run matrix above (full machine-readable detail in
+   `tools/qualification/vid184/run_manifest.json`): select the named workflow, set the seed control
+   to fixed with the given seed, leave every other setting at the shipped default except run 5's
+   cache removal, run it, and save the output video.
+4. Stop in table order if credits run out; no paid top-up.
+5. Send the 5 output files (or however many completed) back for scoring and the blind-seal/human
+   review steps in Phase D.
+
+No further action from this session until those outputs are returned.

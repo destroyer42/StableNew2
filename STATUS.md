@@ -258,7 +258,7 @@ Updated: 2026-09-25
   clean generations occurred while DDR5-5600/XMP was still enabled and are not a DIAG-GPU stability
   PASS.
   `PR-VID-184 — Wan-Animate-2 Reference Capability, Target-Hardware & Integration Feasibility` is
-  **IN PROGRESS — PHASE A-C/F COMPLETE; PHASE D BLOCKED PENDING OWNER AUTHORIZATION**
+  **IN PROGRESS — PRE-REGISTRATION COMPLETE; AWAITING OWNER-OPERATED CLOUD EXECUTION**
   (`docs/Subsystems/Video/PR-VID-184_Wan_Animate_2_Reference_Target_Hardware_Integration_Feasibility.md`).
   Current-source research (dated 2026-09-26) confirms Wan-Animate-2 is real, released
   2026-08-07 (Base + Distillation, Apache 2.0), consumes a raw driving video directly with no
@@ -274,32 +274,44 @@ Updated: 2026-09-25
   pre-registered Phase C scoring contract (`tools/qualification/vid184/scoring_contract.py`,
   hash-frozen before any Animate-2 output exists) and the Phase F backend-neutral contract mapping
   (no `src/` change; existing `control_video`/`pose_video` controls remain unused by the Video
-  Workflow producer) are both complete. The owner corrected the experiment design 2026-09-26: the
-  cloud A/B is Base-oriented-workflow vs. native-Distilled-workflow (not gesture vs. locomotion),
+  Workflow producer) are both complete. A 2026-09-26 owner amendment corrected the experiment design:
+  the cloud A/B is named **Base+LightX2V vs. Distilled** (workflow identity, never "Case A/B" — that
+  label already means gesture/locomotion in PR-VID-170/180/181 and retarget-off/on in PR-VID-183),
   using the SAME frozen reference image (`reports/vid110/inputs/source_fullbody.png`, a
-  StableNew-generated synthetic person, no third-party rights question) and the SAME frozen
-  PR-VID-181 Mixkit #583 raw driving clip. Direct parsing of the current official Comfy-Org
-  blueprint JSON (not documentation prose) found both templates ship 482x854/81 frames, `lcm`
-  sampler, `simple` scheduler, shift 5, cfg 1, and `cache_device=gpu`/`cache_dtype=int8` by default —
-  correcting the earlier general-docs-based cache-OFF assumption — differing only in checkpoint
-  (LoRA-accelerated Base vs. native-distilled unet) and step count (6 vs. 10); despite its name, the
-  "Base-oriented" template already runs 6-step LCM sampling via the LightX2V LoRA, not pristine
-  Base's 40-step CFG sampling. The existing driving clip (29 frames) under-fills the 81-frame
-  default; retrimming a longer window from the same already-risk-accepted Mixkit #583 source file is
-  the recommended fix, not yet decided. The driving-clip license/source decision is **RESOLVED
-  2026-09-26 by explicit owner risk-acceptance**: direct verification of Mixkit's actual terms found
-  a genuinely ambiguous redistribution/third-party clause with no explicit AI/ML-use carve-out; the
-  owner was given that exact finding and explicitly directed proceeding with this specific two-run
-  internal qualification test, accepting the disclosed risk — this is not a finding that the license
-  clearly permits the use. Phase D remains blocked on one open decision: Comfy Cloud account/upload
-  authorization. Corrected cost framing: the current official mechanism is a Free Tier of 400
-  credits/month with no card required (not "5 free GPU runs," though that claim separately still
-  appears on Comfy's pricing page); no Wan-Animate-2-specific credit cost was found, so cost is not
-  guaranteed to be $0. Verified current privacy facts (`support.comfy.org`): inputs/outputs are not
-  used for AI training and are private by default; retention is vague ("as long as needed... varies
-  by data type"). No Animate-2 output has been generated, no cloud spend or upload occurred, and no
-  production `src/`, workflow-registration, GUI/controller, Comfy-config, or GPU/driver/pagefile
-  change was made.
+  StableNew-generated synthetic person) and a **retrimmed** driving clip: 60 frames / 2.30-4.80s of
+  the same Mixkit #583 source file (was 29 frames / 3.0-4.2s), same fixed crop, visually verified
+  frame-by-frame fully in-frame throughout; 81 frames (the shipped template default) was not
+  reachable under that exact crop. Direct parsing of the current official Comfy-Org blueprint JSON's
+  internal node graph (not just outer widgets) found both templates ship `lcm` sampler, `simple`
+  scheduler, shift 5, cfg 1, and `WanAnimate2Cache` device=gpu/dtype=int8 by default, differing only
+  in checkpoint and step count (6 for Base+LightX2V via the LightX2V step-distillation LoRA, 10 for
+  Distilled); despite the name, Base+LightX2V does not run pristine Base's 40-step CFG sampling. A
+  new detector-based scorer (`tools/qualification/vid184/detect_runner.py` + `tracking.py`, the
+  pinned PR-VID-181 YOLO checkpoint, isolated in the same disposable CPU-only environment) was built
+  and control-validated before any upload: it correctly passes the frozen driving clip itself
+  (positive control, all 3 detector-dependent metrics pass) and correctly fails all three accepted
+  negative-control outputs (PR-VID-181 Case B, PR-VID-183 Arms A/B) on `root_translation_fraction`,
+  with the PR-VID-181 case additionally failing continuity/ghost-persistence — matching each
+  package's own documented failure character. A 5-run matrix is pre-registered
+  (`tools/qualification/vid184/run_manifest.json`) with two seeds derived deterministically from the
+  driving clip's own hash, plus a best-effort arm-blinding tool
+  (`tools/qualification/vid184/blind_seal.py`) for the post-generation human verdict gate: Rob scores
+  the pre-registered rubric blind to metrics and arm identity, and that verdict is the capability
+  classification (metrics corroborate); PR #9 does not merge until it is recorded. The driving-clip
+  license/source decision is **RESOLVED 2026-09-26 by explicit owner risk-acceptance** (terms
+  genuinely ambiguous, no AI/ML-use carve-out found, owner directed proceeding anyway for this
+  specific qualification test). **Comfy Cloud account/upload authorization is GRANTED 2026-09-26**
+  (Free Tier, GitHub sign-in, no payment method) — corrected cost framing: current mechanism is 400
+  credits/month, not "5 free GPU runs"; no Wan-Animate-2-specific credit cost was found, so cost is
+  not guaranteed to be $0. Per the amendment, **cloud execution is owner-operated**: this package
+  pushes the pre-registration and hands off to Rob to run the matrix and return outputs; no upload or
+  spend has occurred from this session. A dedicated research pass found StableNew's managed Comfy
+  (0.3.65) is ~10 months/~30 releases behind the version Wan-Animate-2's nodes need (v0.31.0+), with
+  no forced PyTorch/CUDA bump evident; an isolated separate install is architecturally clean (no new
+  software variable for DIAG-GPU-130, though it is still GPU activity to schedule around the current
+  observation window) and is the recommendation for any future physical local probe. No Animate-2
+  output has been generated, no production `src/`, workflow-registration, GUI/controller,
+  Comfy-config, or GPU/driver/pagefile change was made.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 

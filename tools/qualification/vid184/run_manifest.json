@@ -1,0 +1,98 @@
+{
+  "pre_registered": "2026-09-26",
+  "note": "Pre-registration of record per PR-VID-184 owner amendment section 3-4. Any later threshold or matrix change is a labelled post-hoc deviation, not a silent edit of this file.",
+  "frozen_inputs": {
+    "reference_image": {
+      "path": "reports/vid110/inputs/source_fullbody.png",
+      "sha256": "362c86cc83876e340b8927dd54a0f55af1c5fb82c1e9c98d624e67044afa71bb",
+      "dimensions": [480, 832]
+    },
+    "driving_video": {
+      "path": "C:\\Users\\rob\\qual\\vid184\\src\\B_locomotion_driving_60f.mp4",
+      "sha256": "d0f7abeaaa3bc0a37ceefca76c130afdfbb3bb3b81d30480c6fd07321bd1d72f",
+      "source": "Mixkit #583 'Woman doing warm-up exercises' (https://mixkit.co/free-stock-video/woman-doing-warm-up-exercises-583/), same fixed crop as PR-VID-181 (x=140,y=20,377x676 -> 464x832), window retrimmed to 2.30-4.80s (was 3.0-4.2s)",
+      "frames": 60,
+      "fps": 24,
+      "duration_s": 2.5,
+      "license_basis": "Mixkit Stock Video Free License; terms genuinely ambiguous on third-party AI/ML upload, owner explicitly accepted the risk for this specific two-run-family qualification test on 2026-09-26 (see PR-VID-184 report, Phase B)"
+    },
+    "resize_policy": "Do not pre-resize; feed frozen files to each template's own load/resize path and record the effective generation geometry from the actual run."
+  },
+  "seeds": {
+    "derivation": "First 14 and next 14 hex chars of the frozen driving video's SHA-256, interpreted as integers -- deterministic and reproducible, fixed before any generation, not chosen after seeing any output.",
+    "S1": 58819112904309696,
+    "S2": 46017787086728211,
+    "sampler_mode": "fixed (control_after_generate='fixed', NOT 'randomize' -- the official templates default to 'randomize' and must be overridden per run)"
+  },
+  "run_matrix": [
+    {
+      "index": 1,
+      "workflow": "Distilled",
+      "workflow_file": "motion_transfer_wan_animate_2_distilled.json",
+      "checkpoint": "wan_animate_2_distill_int8_convrot.safetensors",
+      "steps": 10,
+      "frames": "frozen driving-video frame count (60)",
+      "cache": "shipped default (device=gpu, dtype=int8)",
+      "seed": 58819112904309696,
+      "purpose": "reference capability"
+    },
+    {
+      "index": 2,
+      "workflow": "Base+LightX2V",
+      "workflow_file": "motion_transfer_wan_animate_2.json",
+      "checkpoint": "wan_animate_2_int8_convrot.safetensors + lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors LoRA",
+      "steps": 6,
+      "frames": "frozen driving-video frame count (60)",
+      "cache": "shipped default (device=gpu, dtype=int8)",
+      "seed": 58819112904309696,
+      "purpose": "reference capability"
+    },
+    {
+      "index": 3,
+      "workflow": "Distilled",
+      "workflow_file": "motion_transfer_wan_animate_2_distilled.json",
+      "checkpoint": "wan_animate_2_distill_int8_convrot.safetensors",
+      "steps": 10,
+      "frames": "frozen driving-video frame count (60)",
+      "cache": "shipped default (device=gpu, dtype=int8)",
+      "seed": 46017787086728211,
+      "purpose": "seed replication"
+    },
+    {
+      "index": 4,
+      "workflow": "Base+LightX2V",
+      "workflow_file": "motion_transfer_wan_animate_2.json",
+      "checkpoint": "wan_animate_2_int8_convrot.safetensors + lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors LoRA",
+      "steps": 6,
+      "frames": "frozen driving-video frame count (60)",
+      "cache": "shipped default (device=gpu, dtype=int8)",
+      "seed": 46017787086728211,
+      "purpose": "seed replication"
+    },
+    {
+      "index": 5,
+      "workflow": "Distilled",
+      "workflow_file": "motion_transfer_wan_animate_2_distilled.json",
+      "checkpoint": "wan_animate_2_distill_int8_convrot.safetensors",
+      "steps": 10,
+      "frames": "local-candidate window (paper-only leading hypothesis: 13 frames / 480x832, the proven-safe Wan2.2-Animate-14B local envelope from PR-VID-160C/175/180/181 on this same RTX 4070 Ti -- NOT independently verified for Wan-Animate-2, see Phase E budget)",
+      "cache": "OFF (minimal documented graph change: bypass/remove the WanAnimate2Cache node from the shipped default graph)",
+      "seed": 58819112904309696,
+      "purpose": "local-candidate configuration effect, run remotely -- separates configuration effects from future hardware effects; not a reference arm; cannot establish Q1 alone"
+    }
+  ],
+  "shared_settings_all_runs": {
+    "sampler": "lcm",
+    "scheduler": "simple",
+    "shift": 5,
+    "cfg": 1,
+    "reference_image_strength": 1,
+    "pose_strength": 1,
+    "pose_start_end_percent": [0, 1],
+    "enable_context_window": false,
+    "trim_duplicated_frame": false,
+    "note": "Shipped template defaults, verified directly from the current Comfy-Org blueprint JSON (not documentation prose); unchanged except the pre-registered inputs/seeds/frame-count deviation and run 5's cache change."
+  },
+  "stop_rule": "If credits run out, stop in table order (1,2,3,4,5) and report what completed. No paid top-up.",
+  "cache_note": "The shipped WanAnimate2Cache stores activations as lossy int8 -- runs 1-4 use this shipped default as-is; only run 5 disables it."
+}
