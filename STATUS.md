@@ -254,10 +254,33 @@ Updated: 2026-09-25
   tuning Wan2.2-Animate locomotion through basic retargeting, `face_video`, or FLUX enhanced-retargeting
   as the immediate next objective. This does not remove the qualification evidence or make Animate a
   general model NO-GO; see
-  `docs/Subsystems/Video/PR-VID-183_Wan22_Animate_Basic_Retargeting_Controlled_AB.md`. The next distinct
-  objective is **PR-VID-184 — Wan-Animate-2 Target-Hardware & Integration Feasibility Research**;
-  no PR-VID-184 implementation is included in this closeout. VID-181's two clean generations occurred while DDR5-5600/XMP was still enabled and are
-  not a DIAG-GPU stability PASS.
+  `docs/Subsystems/Video/PR-VID-183_Wan22_Animate_Basic_Retargeting_Controlled_AB.md`. VID-181's two
+  clean generations occurred while DDR5-5600/XMP was still enabled and are not a DIAG-GPU stability
+  PASS.
+  `PR-VID-184 — Wan-Animate-2 Reference Capability, Target-Hardware & Integration Feasibility` is
+  **IN PROGRESS — PHASE A-C/F COMPLETE; PHASE D BLOCKED PENDING OWNER AUTHORIZATION**
+  (`docs/Subsystems/Video/PR-VID-184_Wan_Animate_2_Reference_Target_Hardware_Integration_Feasibility.md`).
+  Current-source research (dated 2026-09-26) confirms Wan-Animate-2 is real, released
+  2026-08-07 (Base + Distillation, Apache 2.0), consumes a raw driving video directly with no
+  intermediate pose-extractor stage (unlike v1), and has two distinct official Comfy workflows
+  (Base-oriented INT8 ConvRot + LightX2V LoRA; native distilled INT8 ConvRot) plus separate
+  pristine bf16 checkpoints. `WanAnimate2Cache` is confirmed a speed-for-memory tradeoff
+  (~12.5 GB extra RAM at 480x832/81f/bf16 for roughly halved generation time), so cache defaults
+  OFF for any future constrained-memory qualification. No current upstream or community source
+  answers the single decisive question (whether reference-bound locomotion/root translation is
+  possible without a planted subject or a separate "ghost" figure — the exact PR-VID-181/183
+  failure mode); an open, unreproduced upstream bug report (fp32 DiT residency, ~65.6 GB, on
+  single-GPU setups) is a new risk carried forward for the RTX 4070 Ti 12 GB target. The
+  pre-registered Phase C scoring contract (`tools/qualification/vid184/scoring_contract.py`,
+  hash-frozen before any Animate-2 output exists) and the Phase F backend-neutral contract mapping
+  (no `src/` change; existing `control_video`/`pose_video` controls remain unused by the Video
+  Workflow producer) are both complete. Phase D (the remote official-Comfy reference-capability
+  gate) is blocked on two explicit owner decisions: (1) Comfy Cloud account/upload authorization
+  — 5 free GPU runs are offered with no card required, so cost may be zero, but no account/upload
+  proceeds without explicit authorization — and (2) a license/source decision for the driving
+  clip (the existing PR-VID-181 Mixkit #583 case has an unverified redistribution license). No
+  Animate-2 output has been generated, no cloud spend or upload occurred, and no production `src/`,
+  workflow-registration, GUI/controller, Comfy-config, or GPU/driver/pagefile change was made.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
