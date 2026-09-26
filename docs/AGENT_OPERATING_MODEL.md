@@ -13,7 +13,8 @@ PR preparation inside an approved outcome.
 
 ## Control plane
 
-The preferred interactive surface is the VS Code Agents window.
+The VS Code Agents window is the supported current orchestration
+implementation; it is not a universal or repository authority.
 
 Use `StableNew Delivery` as the normal entry point. It delegates to specialist
 agents with isolated contexts and returns only the information needed to
@@ -28,8 +29,8 @@ Specialists:
 - **StableNew Verifier** — independent acceptance review and test evidence.
 - **StableNew Security Review** — triggered security review for sensitive
   surfaces.
-- **StableNew Release** — branch/PR/CI closeout; never direct-to-main production
-  release without owner approval.
+- **StableNew Release** — branch/PR/CI closeout and only explicitly authorized,
+  verified integration.
 
 ## Normal delivery flow
 
@@ -71,6 +72,11 @@ Agents should acquire repository state once, reuse it while unchanged, and
 avoid repeatedly reading the full roadmap or architecture. Start from
 `STATUS.md` and the relevant `CODEX_MAP.md` row.
 
+Reuse accepted exact-SHA evidence while relevant source is unchanged; a
+documentation-only change does not invalidate source/runtime evidence. Do not
+reuse evidence after a relevant source change, and do not broaden work merely
+because an informational check is unrelated or unavailable.
+
 ## Worktree policy
 
 Use a dedicated worktree for significant feature, refactor, or bug-fix work.
@@ -80,6 +86,10 @@ multiple editing agents write into the same worktree concurrently.
 
 Read-only Researcher, Architect, Verifier, and Security Review may inspect the
 same worktree. Only one Builder owns edits at a time.
+
+Preserve unrelated dirty work and user data. A Release agent may integrate or
+push a long-lived target only after explicit owner authorization; authorization
+must name the integration action and target.
 
 ## Token policy
 
@@ -130,6 +140,19 @@ Do not stop for ordinary file selection, refactoring needed for correctness,
 test selection, implementation detail, or repair of failures caused by the
 authorized change.
 
+## Checkpoint and documentation discipline
+
+For Narrow and Standard work, use one focused discovery pass, one coherent
+implementation pass, one focused repair pass, and final verification. Checkpoint
+after two materially different failure classes; a further class is a mandatory
+stop/report. Stop when the accepted phase is complete rather than beginning the
+next roadmap item. Architectural work requires owner continuation.
+
+Before the next functional phase, verify exact SHA/diff and applicable
+validation/required CI, accept based on behavior and architecture rather than
+tests alone, determine whether canonical truth changed, and update only the
+affected canonical authority. Do not narrate commits in canonical docs.
+
 ## Definition of PR-ready
 
 A work package is PR-ready only when:
@@ -146,13 +169,27 @@ A work package is PR-ready only when:
 - security review has passed when triggered;
 - remaining debt/risk is stated.
 
-## Production rule
+## Integration and production rule
 
-No agent directly pushes to `main`.
+An agent may integrate or push a long-lived target, merge a PR, release/tag,
+deploy, mutate secrets/credentials, perform a destructive migration, or take an
+irreversible/shared external action only when the current task has explicit
+owner authorization naming the action and target/scope. A repository policy may
+prescribe procedure, preconditions, or automation; it cannot authorize an
+action without that current explicit owner authorization.
 
-Agents may prepare and push a feature branch and create a PR when authorized.
-CI and review may be repaired automatically. Merge/release/deployment requires
-an explicit owner action or an explicitly approved repository policy.
+Immediately before an authorized long-lived integration or equivalent external
+action, fail closed: verify the authorization and intended action/target are
+present and unambiguous; local and remote refs, ancestry/fast-forward state,
+worktree, accepted aggregate diff, allowed file scope, required CI/checks, and
+verifier/security findings all remain valid. On any drift, missing evidence, or
+ambiguity, stop and report. Do not force-push, rewrite history, choose an
+alternate ref, bypass CI, widen scope, or infer authority.
+
+Separately authorized feature-branch publication may create, commit, and push
+only after rechecking the exact current HEAD and current task's explicitly
+authorized file scope; it never authorizes long-lived-target integration. CI
+and review may be repaired only within the accepted task scope.
 
 If StableNew later gains a fully automated release pipeline, production
 credentials should live only in the CI environment and should never be

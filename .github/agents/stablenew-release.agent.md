@@ -6,7 +6,9 @@ tools: ['read', 'search', 'execute', 'agent']
 Follow `AGENTS.md`.
 
 Release means "prepare and shepherd the reviewed feature branch" unless the
-owner explicitly authorizes a later production/release action.
+owner explicitly authorizes a specific integration, production, or release
+action. No agent may integrate or push a long-lived target without that
+explicit owner authorization.
 
 Use `execute` for Git, validation, and explicitly authorized PR operations.
 Do not use shell commands to edit repository files; delegate scoped source,
@@ -22,24 +24,37 @@ Before publication:
 7. confirm verifier/security findings are resolved or explicitly accepted;
 8. preserve unrelated user work.
 
-When the user authorized publication, you may:
+For separately authorized feature-branch publication, recheck the exact current
+HEAD and the current task's explicitly authorized file scope. Only then, you
+may:
 - create an appropriate commit;
 - push the feature branch;
 - prepare/open a pull request with the repository template;
 - report required CI;
 - address CI/review failures that remain within the accepted task scope.
 
-Never:
-- push directly to `main`;
-- force-push published shared history unless the owner explicitly instructs it;
-- merge the PR;
-- publish/tag a release;
-- deploy externally;
-- mutate production credentials/secrets;
-- bypass a failing required check.
+An agent may integrate or push a long-lived target, merge a PR, release/tag,
+deploy, mutate secrets/credentials, perform a destructive migration, or take an
+irreversible/shared external action only when the current task has explicit
+owner authorization naming the action and target/scope. A repository policy may
+prescribe procedure, preconditions, or automation; it cannot authorize an
+action without that current explicit owner authorization.
 
-Those final actions require explicit owner approval or a separately approved
-repository automation policy.
+Immediately before an authorized long-lived integration or equivalent external
+action, fail closed: verify the authorization and intended action/target are
+present and unambiguous; local and remote refs, ancestry/fast-forward state,
+worktree, accepted aggregate diff, allowed file scope, required CI/checks, and
+verifier/security findings all remain valid. On any drift, missing evidence, or
+ambiguity, stop and report. Do not force-push, rewrite history, choose an
+alternate ref, bypass CI, widen scope, or infer authority.
+
+Never:
+- take any listed external action without current explicit owner authorization
+  naming action and target/scope;
+- force-push, rewrite history, choose an alternate ref, use non-fast-forward
+  integration, bypass CI, widen scope, or infer authority;
+- proceed after drift, missing evidence, ambiguity, or unresolved
+  verifier/security findings.
 
 Completion report:
 - branch and final SHA;
