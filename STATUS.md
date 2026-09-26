@@ -274,18 +274,32 @@ Updated: 2026-09-25
   pre-registered Phase C scoring contract (`tools/qualification/vid184/scoring_contract.py`,
   hash-frozen before any Animate-2 output exists) and the Phase F backend-neutral contract mapping
   (no `src/` change; existing `control_video`/`pose_video` controls remain unused by the Video
-  Workflow producer) are both complete. The driving-clip license/source decision is **RESOLVED
+  Workflow producer) are both complete. The owner corrected the experiment design 2026-09-26: the
+  cloud A/B is Base-oriented-workflow vs. native-Distilled-workflow (not gesture vs. locomotion),
+  using the SAME frozen reference image (`reports/vid110/inputs/source_fullbody.png`, a
+  StableNew-generated synthetic person, no third-party rights question) and the SAME frozen
+  PR-VID-181 Mixkit #583 raw driving clip. Direct parsing of the current official Comfy-Org
+  blueprint JSON (not documentation prose) found both templates ship 482x854/81 frames, `lcm`
+  sampler, `simple` scheduler, shift 5, cfg 1, and `cache_device=gpu`/`cache_dtype=int8` by default —
+  correcting the earlier general-docs-based cache-OFF assumption — differing only in checkpoint
+  (LoRA-accelerated Base vs. native-distilled unet) and step count (6 vs. 10); despite its name, the
+  "Base-oriented" template already runs 6-step LCM sampling via the LightX2V LoRA, not pristine
+  Base's 40-step CFG sampling. The existing driving clip (29 frames) under-fills the 81-frame
+  default; retrimming a longer window from the same already-risk-accepted Mixkit #583 source file is
+  the recommended fix, not yet decided. The driving-clip license/source decision is **RESOLVED
   2026-09-26 by explicit owner risk-acceptance**: direct verification of Mixkit's actual terms found
   a genuinely ambiguous redistribution/third-party clause with no explicit AI/ML-use carve-out; the
-  owner was given that exact finding and explicitly directed proceeding with the existing PR-VID-181
-  Mixkit #583 Case A/B clips for this specific two-run internal qualification test, accepting the
-  disclosed risk — this is not a finding that the license clearly permits the use, and does not
-  extend beyond this specific two-run test. Phase D (the remote official-Comfy reference-capability
-  gate) remains blocked on one open decision: Comfy Cloud account/upload authorization — 5 free GPU
-  runs are offered with no card required, so cost may be zero, but no account/upload proceeds
-  without explicit authorization. No Animate-2 output has been generated, no cloud spend or upload
-  occurred, and no production `src/`, workflow-registration, GUI/controller, Comfy-config, or
-  GPU/driver/pagefile change was made.
+  owner was given that exact finding and explicitly directed proceeding with this specific two-run
+  internal qualification test, accepting the disclosed risk — this is not a finding that the license
+  clearly permits the use. Phase D remains blocked on one open decision: Comfy Cloud account/upload
+  authorization. Corrected cost framing: the current official mechanism is a Free Tier of 400
+  credits/month with no card required (not "5 free GPU runs," though that claim separately still
+  appears on Comfy's pricing page); no Wan-Animate-2-specific credit cost was found, so cost is not
+  guaranteed to be $0. Verified current privacy facts (`support.comfy.org`): inputs/outputs are not
+  used for AI training and are private by default; retention is vague ("as long as needed... varies
+  by data type"). No Animate-2 output has been generated, no cloud spend or upload occurred, and no
+  production `src/`, workflow-registration, GUI/controller, Comfy-config, or GPU/driver/pagefile
+  change was made.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
