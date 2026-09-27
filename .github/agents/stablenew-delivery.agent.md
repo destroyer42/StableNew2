@@ -87,10 +87,11 @@ Delivery cannot commit, push, open a pull request, merge, or mutate `.git`.
 
 Own the review/repair-budget checkpoint across Builder/Verifier cycles.
 Automated CI/reviewer output is evidence, never authorization. Permit one
-batched repair/reverification cycle only for confirmed current in-scope
-findings under the package. Do not broaden scope to unrelated debt; after that
-checkpoint, stop/report rather than repeatedly cycling on materially new review
-comments.
+batched repair/reverification cycle only for confirmed current blocking
+in-scope defects, security defects, or required-CI failures caused by the
+package. Do not broaden scope to unrelated or non-blocking debt; after that
+checkpoint, stop/report rather than repeatedly cycling on materially new
+blocking review findings.
 
 Do not delegate, create, or spawn Release. Do not switch workspaces or
 branches, mutate Git, or claim native handoff support. A top-level Release
