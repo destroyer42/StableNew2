@@ -217,11 +217,12 @@ PipelineRunner.run_njr → Handler → Artifacts/History), which this package do
   root-translation direction-match gate against the driving clip, not just its magnitude
 - `tests/tools/test_vid184s_arms.py` — 19 deterministic tests (manifest equivalence, matched-state
   bands, all classification branches, log analysis, gpu_lost-overrides-COMPLETED precedence)
-- `tests/tools/test_vid184s_run_arm.py` — 10 regression tests for the post-review harness
+- `tests/tools/test_vid184s_run_arm.py` — 16 regression tests for the post-review harness
   hardening (protocol-stop sequencing including the matched-state-gate-miss retry case,
   GPU-loss-vs-clean-failure precision, the frozen-bands write-once/mismatch lock, singleton and
-  pre-submit-event handling)
-- `tests/tools/test_vid184s_output_scoring.py` — 4 tests for the direction-sign helper
+  pre-submit-event handling, queried-event classification for driver-reset/reboot signatures)
+- `tests/tools/test_vid184s_output_scoring.py` — 5 tests for the direction-sign helper and the
+  short-clip error type
 - `STATUS.md`, `docs/CODEX_MAP.md` — PR-VID-184S entries
 - Evidence outside the repo (kept intact): `C:\Users\rob\qual\vid184\env\evidence_184s\{B1,A,B2}\`
   (gates, logs, telemetry, summaries, arm_records, outputs) and
@@ -230,7 +231,7 @@ PipelineRunner.run_njr → Handler → Artifacts/History), which this package do
 
 ## Validation
 
-- `pytest tests/tools/test_vid184*.py`: 71 passed (37 pre-existing + 19 new + 10 post-review
+- `pytest tests/tools/test_vid184*.py`: 77 passed (37 pre-existing + 19 new + 16 post-review
   hardening regression tests + 5 output-scoring tests).
 - Ruff check and format: clean on all touched Python.
 - `git diff --check`: clean. `git diff -- src`: empty.

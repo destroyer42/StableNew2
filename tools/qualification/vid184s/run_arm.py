@@ -336,15 +336,45 @@ def _events_since(events: Any, since_epoch_s: float) -> list[dict[str, Any]]:
     return kept
 
 
+# Event-log signals EVENT_QUERY (run_arm_b.py) was built to catch, mapped to the outcome they
+# indicate. WHEA is a hardware-level fault (SEVERE). A display-driver reset (4101, or any
+# nvlddmkm-provider event) is a GPU-loss signature that recovers without a reboot. Id 41
+# (Kernel-Power, unexpected shutdown) and 6008 (unexpected previous shutdown) indicate the system
+# actually went down, which is more severe than a driver TDR. Ids 1/153/157 alone are the
+# generic-informational false positives already documented (EVENT_QUERY's ``Id -in @(...)``
+# matches many unrelated providers) and are not treated as either signal.
+_SEVERE_EVENT_IDS = frozenset({41, 6008})
+_GPU_LOST_EVENT_IDS = frozenset({4101})
+
+
+def _classify_events(events: list[dict[str, Any]]) -> tuple[bool, bool]:
+    """Returns (severe_system_fault, gpu_lost_signature) from the queried Windows events."""
+    severe = False
+    gpu_lost = False
+    for e in events:
+        provider = str(e.get("ProviderName", ""))
+        event_id = e.get("Id")
+        if "WHEA" in provider:
+            severe = True
+        elif "nvlddmkm" in provider:
+            gpu_lost = True
+        elif event_id in _SEVERE_EVENT_IDS:
+            severe = True
+        elif event_id in _GPU_LOST_EVENT_IDS:
+            gpu_lost = True
+    return severe, gpu_lost
+
+
 def build_record(arm: str, gate: dict[str, Any], s: dict[str, Any]) -> dict[str, Any]:
     events = _as_event_list(s.get("events_since_submit"))
-    whea = [e for e in events if "WHEA" in str(e.get("ProviderName", ""))]
+    event_severe, event_gpu_lost = _classify_events(events)
     fl = s.get("final_log") or {}
-    # Device loss requires nvidia-smi itself to have failed, or a loss-specific log signature
-    # (device-side assert / illegal memory access / unspecified launch failure / "GPU is lost").
-    # A recoverable CUDA error (e.g. plain OOM) or a HostBuffer error with nvidia-smi still
-    # healthy is a clean failure, not device loss -- classify() treats those differently.
-    gpu_lost = bool(s.get("gpu_query_failed") or fl.get("gpu_lost"))
+    # Device loss requires nvidia-smi itself to have failed, a loss-specific log signature
+    # (device-side assert / illegal memory access / unspecified launch failure / "GPU is lost"),
+    # or a matching queried Windows event (display-driver reset). A recoverable CUDA error (e.g.
+    # plain OOM) or a HostBuffer error with nvidia-smi still healthy is a clean failure, not
+    # device loss -- classify() treats those differently.
+    gpu_lost = bool(s.get("gpu_query_failed") or fl.get("gpu_lost") or event_gpu_lost)
     return {
         "arm": arm,
         "boot_time": gate["boot_time"],
@@ -352,7 +382,7 @@ def build_record(arm: str, gate: dict[str, Any], s: dict[str, Any]) -> dict[str,
         "outcome": s.get("outcome"),
         "peaks": s.get("peaks"),
         "gpu_lost": gpu_lost,
-        "severe_system_fault": bool(whea),
+        "severe_system_fault": event_severe,
         "matched_state_gate_not_met": bool(s.get("matched_state_gate_not_met")),
         "pre_dispatch_state": s.get("pre_dispatch_state"),
         "matched_state": s.get("matched_state"),

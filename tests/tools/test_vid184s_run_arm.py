@@ -125,6 +125,55 @@ def test_events_since_drops_pre_submit_events_keeps_unparseable() -> None:
     assert run_arm._events_since(before, submit) == []
 
 
+def test_classify_events_whea_is_severe() -> None:
+    events = [{"Id": 17, "ProviderName": "Microsoft-Windows-WHEA-Logger"}]
+    assert run_arm._classify_events(events) == (True, False)
+
+
+def test_classify_events_nvlddmkm_provider_is_gpu_lost() -> None:
+    events = [{"Id": 14, "ProviderName": "nvlddmkm"}]
+    assert run_arm._classify_events(events) == (False, True)
+
+
+def test_classify_events_driver_tdr_4101_is_gpu_lost() -> None:
+    events = [{"Id": 4101, "ProviderName": "Display"}]
+    assert run_arm._classify_events(events) == (False, True)
+
+
+def test_classify_events_unexpected_shutdown_41_and_6008_are_severe() -> None:
+    assert run_arm._classify_events([{"Id": 41, "ProviderName": "Microsoft-Windows-Kernel-Power"}]) == (
+        True, False,
+    )  # fmt: skip
+    assert run_arm._classify_events([{"Id": 6008, "ProviderName": "EventLog"}]) == (True, False)
+
+
+def test_classify_events_generic_informational_ids_are_noise() -> None:
+    events = [
+        {"Id": 1, "ProviderName": "Microsoft-Windows-IsolatedUserMode"},
+        {"Id": 153, "ProviderName": "Disk"},
+        {"Id": 157, "ProviderName": "Disk"},
+    ]
+    assert run_arm._classify_events(events) == (False, False)
+
+
+def test_build_record_uses_event_classification_for_severe_and_gpu_lost() -> None:
+    gate = {"boot_time": "t", "minutes_since_boot": 1.0}
+    tdr = run_arm.build_record(
+        "A", gate,
+        {"outcome": "COMPLETED", "gpu_query_failed": False, "final_log": {},
+         "events_since_submit": [{"Id": 4101, "ProviderName": "Display"}]},
+    )  # fmt: skip
+    assert tdr["gpu_lost"] is True
+    assert tdr["severe_system_fault"] is False
+
+    reboot = run_arm.build_record(
+        "A", gate,
+        {"outcome": "PROCESS_EXITED", "gpu_query_failed": False, "final_log": {},
+         "events_since_submit": [{"Id": 41, "ProviderName": "Microsoft-Windows-Kernel-Power"}]},
+    )  # fmt: skip
+    assert reboot["severe_system_fault"] is True
+
+
 def test_build_record_survives_a_singleton_powershell_event_object() -> None:
     """ConvertTo-Json emits a bare object, not a one-element array, for exactly one match --
     build_record must not raise when events_since_submit is that bare dict."""
