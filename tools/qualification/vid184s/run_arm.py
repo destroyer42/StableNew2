@@ -277,8 +277,18 @@ def main() -> int:
         )
 
 
+def _as_event_list(events: Any) -> list[dict[str, Any]]:
+    """``ConvertTo-Json`` emits a bare object (not a one-element array) when PowerShell's
+    filtered event query matches exactly one event; normalize before iterating."""
+    if events is None:
+        return []
+    if isinstance(events, dict):
+        return [events]
+    return list(events)
+
+
 def build_record(arm: str, gate: dict[str, Any], s: dict[str, Any]) -> dict[str, Any]:
-    events = s.get("events_since_submit") or []
+    events = _as_event_list(s.get("events_since_submit"))
     whea = [e for e in events if "WHEA" in str(e.get("ProviderName", ""))]
     fl = s.get("final_log") or {}
     # Device loss requires nvidia-smi itself to have failed, or a loss-specific log signature

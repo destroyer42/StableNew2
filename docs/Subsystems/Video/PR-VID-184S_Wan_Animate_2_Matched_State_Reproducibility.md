@@ -210,6 +210,8 @@ PipelineRunner.run_njr → Handler → Artifacts/History), which this package do
   comparison from saved Comfy output (CPU venv, no GPU)
 - `tests/tools/test_vid184s_arms.py` — 18 deterministic tests (manifest equivalence, matched-state
   bands, all classification branches, log analysis)
+- `tests/tools/test_vid184s_run_arm.py` — 6 regression tests for the post-review harness hardening
+  (protocol-stop sequencing, GPU-loss-vs-clean-failure precision)
 - `STATUS.md`, `docs/CODEX_MAP.md` — PR-VID-184S entries
 - Evidence outside the repo (kept intact): `C:\Users\rob\qual\vid184\env\evidence_184s\{B1,A,B2}\`
   (gates, logs, telemetry, summaries, arm_records, outputs) and
@@ -217,7 +219,8 @@ PipelineRunner.run_njr → Handler → Artifacts/History), which this package do
 
 ## Validation
 
-- `pytest tests/tools/test_vid184*.py`: 55 passed (37 pre-existing + 18 new).
+- `pytest tests/tools/test_vid184*.py`: 61 passed (37 pre-existing + 18 new + 6 post-review
+  hardening regression tests).
 - Ruff check and format: clean on all touched Python.
 - `git diff --check`: clean. `git diff -- src`: empty.
 - Local `python tools/ci/run_pr_gate.py`: stops on the known missing-mypy tooling blocker (unchanged

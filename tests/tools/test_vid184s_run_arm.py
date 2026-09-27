@@ -84,3 +84,22 @@ def test_build_record_distinguishes_clean_failure_from_gpu_loss() -> None:
         {"outcome": "PROCESS_EXITED", "gpu_query_failed": False, "final_log": {"gpu_lost": 1}},
     )  # fmt: skip
     assert real_loss_via_signature["gpu_lost"] is True
+
+
+def test_build_record_survives_a_singleton_powershell_event_object() -> None:
+    """ConvertTo-Json emits a bare object, not a one-element array, for exactly one match --
+    build_record must not raise when events_since_submit is that bare dict."""
+    gate = {"boot_time": "t", "minutes_since_boot": 1.0}
+    singleton = run_arm.build_record(
+        "A", gate,
+        {"outcome": "COMPLETED", "events_since_submit": {"TimeCreated": "x", "Id": 1,
+                                                           "ProviderName": "Microsoft-Windows-Kernel-Power"}},
+    )  # fmt: skip
+    assert singleton["severe_system_fault"] is False
+
+    whea_singleton = run_arm.build_record(
+        "A", gate,
+        {"outcome": "COMPLETED", "events_since_submit": {"TimeCreated": "x", "Id": 1,
+                                                           "ProviderName": "Microsoft-Windows-WHEA-Logger"}},
+    )  # fmt: skip
+    assert whea_singleton["severe_system_fault"] is True
