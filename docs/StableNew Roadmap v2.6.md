@@ -415,17 +415,63 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 - per-stage image backend composition and ComfyUI image execution until their
   own post-v2.6 decisions/acceptance contracts are approved.
 
-## Next action
+## Current three-lane frontier
 
-`PR-SVD-100 — Folder Batch Submission` is complete / accepted / integrated on
-`main`. PR-IMG-110 is complete (its Ideogram 4 no-go superseded by PR-IMG-110R,
-PASS — CONSTRAINED); no Diffusers production slice is authorized. The next
-image-model direction needs explicit product-owner approval.
-PR-MVP-080 is COMPLETE / ACCEPTED / INTEGRATED; its final operator journey, required CI, and
-documentation closeout are complete. Queue/history action-state and no-op cleanup is
-accepted, alongside PromptPack authorship, durable job state, image generation,
-native SVD XT, the Phase 0 runtime/bootstrap prerequisite, real portrait
-source-aware SVD geometry, and duration-preserving RIFE interpolation semantics.
+The lanes use bounded short-lived branches/PRs and periodically reconverge on
+current `main`; they are not long-lived divergent branches. Separate worktrees
+isolate source, not GPU/live runtimes/user data. Actual PromptPacks, settings,
+SQLite, and configured endpoints require explicit isolation or authorization;
+deliberate real-model inference and platform/hardware changes are serialized and
+separately owner-authorized. Lane A ordinarily needs neither lock. The
+landing/current package reacquires `main` before updating canonical frontier
+summaries.
 
-PR-MVP-080, PR-MVP-090, and PR-IMG-100 are accepted and integrated. PR-IMG-100
-was executed as one coherent work package.
+### Lane A — Product Quality & Deterministic Engineering
+
+Normal work uses disposable state and fake runtimes, without a real configured
+endpoint or GPU dependency.
+
+1. `PR-TEST-TRUTH-120 — Deterministic Test Truth Repair & Residual Census`:
+   repair known platform-mutation and unintended configured-production-endpoint
+   classes; then perform a residual census, including current local PR-gate and
+   toolchain truth rather than accepting repeated missing-`mypy` ambiguity.
+2. `PR-ASSET-120 — Provenance-Rich Asset Metadata Enrichment and Compatibility
+   Profiles`: offline/observational.
+3. `WP-PACK-AUDIT-100 — PromptPack & Saved-Settings Quality Census`: structural
+   checks are independent of Asset-120; compatibility checks consume Asset-120
+   when available.
+4. Later: compatibility/advisory UX and targeted Learning improvements justified
+   by clean inputs and evidence.
+
+FLUX/model qualification does not live in Lane A.
+
+### Lane B — Platform Stability & Forensics
+
+Lane B remains `DIAG-GPU-130`; it does not create a new diagnostic identity.
+Its bounded continuation will attempt administrator-supported preservation and
+analysis of the two historically access-restricted `0x133` dumps if recoverable,
+reconcile the XMP-off clean/high-load exposure with available survivor and
+qualification telemetry, define a practical GPU-active-exposure operational exit
+criterion (explicitly not statistical root-cause proof), and identify the exact
+evidence bundle/action on recurrence. It then becomes dormant and event-driven.
+A new hardware/platform variable requires an owner decision. PR-VID-184/184R/184S
+may inform the diagnosis but cannot establish the same or a different failure
+family without supporting evidence.
+
+### Lane C — Model Qualification & Capability Expansion
+
+Image and video qualification share real GPU/runtime state and qualification
+infrastructure, so both belong here.
+
+1. `PR-VID-185 — Wan-Animate-2 Promotion Gate & Production-Readiness
+   Adjudication`: no GPU run or integration. Start from accepted PR-VID-184S
+   evidence; reconcile `WAN_ANIMATE_2_OWNER_MOTION_VALUE_PASS` with the still
+   failing frozen motion-correlation metric, decide whether that metric is a
+   valid blocker/guardrail, and define representative resource/usability and
+   promotion evidence. Do not repeat B1/A/B2 merely to increase N.
+2. `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware Qualification` is separately
+   owner-authorized for model/download/GPU state.
+3. Production integration is only for an explicitly selected evidence-backed
+   capability, extending PR-RUNTIME-100 ownership/coexistence behavior when a
+   runtime actually becomes production. Extract reusable qualification primitives
+   only after at least two qualifications show genuinely common needs.

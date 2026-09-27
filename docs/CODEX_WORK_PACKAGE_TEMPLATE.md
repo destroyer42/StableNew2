@@ -38,6 +38,12 @@ authorities and exact start state.
 - Existing exact-SHA evidence reused:
 - New manual or runtime evidence:
 - Known blockers or non-blocking debt:
+- Existing non-blocking CI/review debt to ignore unless caused by this package:
+- Review/Repair Budget: one batched repair/reverification cycle for confirmed
+  current in-scope findings; stale/duplicate/already-fixed findings authorize no
+  edits and consume no cycle.
+- Physical/External Evidence Freeze (when applicable):
+- Stop condition after the allowed repair/reverification cycle:
 
 ## Token-Efficient Validation Plan
 
@@ -50,7 +56,8 @@ authorities and exact start state.
 ## Stop conditions
 
 - Higher execution class or architecture decision discovered:
-- More than two materially different failure classes:
+- A materially new blocking failure class remains or appears after the one
+  allowed batched repair and independent reverification:
 - Scope begins expanding into the next roadmap phase:
 
 ## Documentation impact

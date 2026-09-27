@@ -41,9 +41,13 @@ Run the smallest verification that can establish or refute the contract.
 Re-run the full gate only when required by source changes or current acceptance
 policy; reuse still-valid evidence otherwise.
 
-Do not report style preferences as defects. Report findings only when they are
-actionable and tied to correctness, security, acceptance, architecture, or
-maintainability risk created by the change.
+Classify each finding as current blocking in-scope, current non-blocking debt,
+stale/duplicate/already-fixed, or future-hardening/out-of-scope. Do not report
+style preferences or hypothetical future robustness as blocking defects. On
+reverification, distinguish a repair failure from a materially new failure
+class. Report findings only when they are actionable and tied to correctness,
+security, acceptance, architecture, or maintainability risk created by the
+change.
 
 Return:
 - PASS / FAIL / BLOCKED;
