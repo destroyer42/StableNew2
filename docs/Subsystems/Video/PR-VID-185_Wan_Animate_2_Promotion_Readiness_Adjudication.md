@@ -128,7 +128,7 @@ representative-state requirement.
 | Physical RAM | Capture minimum available RAM and machine-responsiveness evidence; B1/B2's roughly 14 GB margin and A's 1.94 GB minimum establish pressure contrast, not an acceptance threshold |
 | VRAM | Capture peak/headroom and require no CUDA OOM or device-loss evidence; the current evidence does not establish a general minimum headroom |
 | Wall time | Capture completion time against the frozen envelope and documented operator expectation; the current evidence does not establish a product timeout |
-| Artifact | Decodable video with the requested geometry/fps/frame count, persisted hash/manifest, and durable artifact/history linkage |
+| Artifact | Decodable requested artifact with the requested geometry/fps/frame count, persisted hash/manifest, and durable qualification-local artifact/evidence provenance; canonical JobRepository artifact/history linkage is deferred to the separately authorized integration package |
 | Teardown | Owned process exits cleanly; GPU returns to idle; no HostBuffer, CUDA, traceback, safety-stop, display-loss, or ambiguous-dispatch evidence |
 | Usability | No intervention beyond the documented launch procedure; no severe host-memory pressure, unsafe system state, or unexplained output nondeterminism |
 
@@ -175,6 +175,9 @@ canonical queue/NJR/runner path. It must extend `PR-RUNTIME-100` for owned runti
 coexistence and preserve external-runtime immutability. No production backend, workflow,
 GUI exposure, compiler, controller, scheduler, process manager, or runner change is part
 of PR-VID-185.
+
+That later integration must validate canonical artifact/history persistence through the
+existing queue/repository/runner path.
 
 Qualification remains evidence-specific. No universal resource framework is justified;
 common infrastructure should wait until another candidate demonstrates a genuinely shared
