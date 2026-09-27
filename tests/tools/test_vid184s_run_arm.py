@@ -86,6 +86,45 @@ def test_build_record_distinguishes_clean_failure_from_gpu_loss() -> None:
     assert real_loss_via_signature["gpu_lost"] is True
 
 
+def test_no_repeat_attempt_after_a_matched_state_gate_miss(_tmp_root: Path) -> None:
+    """A gate miss writes arm_record.json without SUBMITTED.marker (no submission occurred);
+    that must still block a repeat attempt at the same arm."""
+    _write_record(_tmp_root, "B1", outcome="COMPLETED", peaks={"commit_peak_percent": 50})
+    (_tmp_root / "reference_state.json").write_text("{}")
+    assert not (_tmp_root / "A" / "SUBMITTED.marker").exists()
+    _write_record(_tmp_root, "A", matched_state_gate_not_met=True)
+    fails = run_arm.sequence_failures("A")
+    assert any("A" in f and "no repeat attempt is authorized" in f for f in fails)
+
+
+def test_lock_frozen_bands_writes_once_and_flags_mismatch(_tmp_root: Path) -> None:
+    assert run_arm.lock_frozen_bands() is None
+    saved = json.loads((_tmp_root / "frozen_bands.json").read_text())
+    assert saved == run_arm.frozen_bands()
+    # Second call with unchanged constants: still no mismatch, file untouched.
+    assert run_arm.lock_frozen_bands() is None
+
+    tampered = {**saved, "commit_percent_points": 999.0}
+    (_tmp_root / "frozen_bands.json").write_text(json.dumps(tampered))
+    mismatch = run_arm.lock_frozen_bands()
+    assert mismatch is not None and "differs" in mismatch
+    # Must not silently overwrite the tampered/mismatched file with the current constants.
+    assert json.loads((_tmp_root / "frozen_bands.json").read_text()) == tampered
+
+
+def test_events_since_drops_pre_submit_events_keeps_unparseable() -> None:
+    submit = 1790504626.0  # seconds
+    before = {"TimeCreated": "/Date(1790504620000)/", "Id": 1, "ProviderName": "Boot"}
+    after = {"TimeCreated": "/Date(1790504630000)/", "Id": 41, "ProviderName": "Kernel-Power"}
+    unparseable = {"TimeCreated": "not-a-date", "Id": 6008, "ProviderName": "EventLog"}
+    kept = run_arm._events_since([before, after, unparseable], submit)
+    assert kept == [after, unparseable]
+
+    # Singleton PowerShell object (bare dict) is normalized before filtering, not dropped.
+    assert run_arm._events_since(after, submit) == [after]
+    assert run_arm._events_since(before, submit) == []
+
+
 def test_build_record_survives_a_singleton_powershell_event_object() -> None:
     """ConvertTo-Json emits a bare object, not a one-element array, for exactly one match --
     build_record must not raise when events_since_submit is that bare dict."""

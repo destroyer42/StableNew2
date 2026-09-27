@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import time
@@ -56,6 +57,15 @@ def sequence_failures(arm: str) -> list[str]:
     idx = arms.ARMS.index(arm)
     if (ROOT / arm / "SUBMITTED.marker").exists():
         fails.append(f"{arm} already submitted: no retry is authorized")
+    own_record = ROOT / arm / "arm_record.json"
+    if own_record.exists():
+        # A matched-state gate miss writes arm_record.json without SUBMITTED.marker (no
+        # submission occurred), so the marker check above would not catch a repeat attempt.
+        # Any existing record -- submitted or gate-miss -- is a terminal result for this arm.
+        own_status = arms.arm_status(json.loads(own_record.read_text()))
+        fails.append(
+            f"{arm} already produced arm_record.json (outcome {own_status!r}): no repeat attempt is authorized"
+        )
     for prev in arms.ARMS[:idx]:
         prev_record = ROOT / prev / "arm_record.json"
         if not prev_record.exists():
@@ -114,6 +124,21 @@ def pagefile_usage() -> str:
     ).stdout.strip()  # fmt: skip
 
 
+def lock_frozen_bands() -> str | None:
+    """Write ``frozen_bands.json`` once, before Arm B1; on every later invocation verify the
+    on-disk bands still match the checked-out ``arms.py`` constants instead of overwriting them,
+    so the audit trail of "frozen before any result" cannot be silently replaced later."""
+    path = ROOT / "frozen_bands.json"
+    current = frozen_bands()
+    if not path.exists():
+        path.write_text(json.dumps(current, indent=2))
+        return None
+    existing = json.loads(path.read_text())
+    if existing != current:
+        return "frozen_bands.json exists and differs from the current arms.py constants"
+    return None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--arm", choices=arms.ARMS, required=True)
@@ -128,7 +153,7 @@ def main() -> int:
     rab.EVID = evid
     tag = "dry" if args.dry else "run"
     ROOT.mkdir(parents=True, exist_ok=True)
-    (ROOT / "frozen_bands.json").write_text(json.dumps(frozen_bands(), indent=2))
+    bands_mismatch = lock_frozen_bands()
 
     manifest = arms.arm_manifest(arm)
     manifest_ok = (
@@ -159,6 +184,8 @@ def main() -> int:
             "another GPU compute process is present: the qualification env must be the only "
             "GPU workload (matched-state protocol precondition)"
         )
+    if bands_mismatch:
+        g["failures"].append(bands_mismatch)
     g["idle_baseline"] = idle_baseline()
     (evid / f"gate_{tag}.json").write_text(json.dumps(g, indent=2, default=str))
     print(
@@ -240,7 +267,12 @@ def main() -> int:
         summary["gpu_after_teardown"] = rab.gpu_query()
         summary["pagefile_after"] = pagefile_usage()
         minutes = max(5, int((time.time() - result["submit_time"]) / 60) + 2)
-        summary["events_since_submit"] = rab.event_log(minutes)
+        # The PowerShell query window is intentionally wider than the run itself (safety margin),
+        # but every arm starts shortly after a fresh boot, so it can otherwise include pre-submit
+        # boot-time events; filter down to the actual post-submit interval before persisting.
+        summary["events_since_submit"] = _events_since(
+            rab.event_log(minutes), result["submit_time"]
+        )
         final_text = log_path.read_text(encoding="utf-8", errors="replace")
         summary["final_log"] = arms.analyze_log(final_text)
         code = 0 if result.get("outcome") == "COMPLETED" else 5
@@ -285,6 +317,23 @@ def _as_event_list(events: Any) -> list[dict[str, Any]]:
     if isinstance(events, dict):
         return [events]
     return list(events)
+
+
+def _event_epoch_seconds(event: dict[str, Any]) -> float | None:
+    """Parse PowerShell's ``ConvertTo-Json`` .NET date format, e.g. ``/Date(1790504626168)/``."""
+    m = re.match(r"/Date\((\d+)\)/", str(event.get("TimeCreated", "")))
+    return int(m.group(1)) / 1000.0 if m else None
+
+
+def _events_since(events: Any, since_epoch_s: float) -> list[dict[str, Any]]:
+    """Drop events timestamped before ``since_epoch_s``; keep an unparseable timestamp rather
+    than silently discard evidence."""
+    kept = []
+    for e in _as_event_list(events):
+        ts = _event_epoch_seconds(e)
+        if ts is None or ts >= since_epoch_s:
+            kept.append(e)
+    return kept
 
 
 def build_record(arm: str, gate: dict[str, Any], s: dict[str, Any]) -> dict[str, Any]:
