@@ -254,10 +254,40 @@ Updated: 2026-09-25
   tuning Wan2.2-Animate locomotion through basic retargeting, `face_video`, or FLUX enhanced-retargeting
   as the immediate next objective. This does not remove the qualification evidence or make Animate a
   general model NO-GO; see
-  `docs/Subsystems/Video/PR-VID-183_Wan22_Animate_Basic_Retargeting_Controlled_AB.md`. The next distinct
-  objective is **PR-VID-184 — Wan-Animate-2 Target-Hardware & Integration Feasibility Research**;
-  no PR-VID-184 implementation is included in this closeout. VID-181's two clean generations occurred while DDR5-5600/XMP was still enabled and are
-  not a DIAG-GPU stability PASS.
+  `docs/Subsystems/Video/PR-VID-183_Wan22_Animate_Basic_Retargeting_Controlled_AB.md`. VID-181's two
+  clean generations occurred while DDR5-5600/XMP was still enabled and are not a DIAG-GPU stability
+  PASS.
+  `PR-VID-184 — Wan-Animate-2 Reference Capability, Target-Hardware & Integration Feasibility` is
+  **COMPLETE / CLOSED — MODEL CAPABILITY UNKNOWN; REMOTE GATE BLOCKED_BY_SUBSCRIPTION; LOCAL
+  TARGET-HARDWARE NO-GO AT THE FROZEN ENVELOPE**
+  (`docs/Subsystems/Video/PR-VID-184_Wan_Animate_2_Reference_Target_Hardware_Integration_Feasibility.md`).
+  Qualification/feasibility evidence only; no production `src/`, workflow, backend, queue, runner or
+  GUI/controller change. Wan-Animate-2 (released 2026-08-07, Base + Distillation, Apache 2.0, raw
+  driving video, two official Comfy workflows) is real, but **no Animate-2 output was ever produced,
+  so its reference-bound locomotion, motion fidelity, identity, ghost-actor, anatomy and background
+  behavior are UNKNOWN**. The remote official Comfy reference test could not be queued
+  (`REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION`: *"A cloud subscription is required to queue
+  workflows."*; Comfy's advertised free tier was not usable; no paid access was authorized, no cloud
+  generation occurred) — an access outcome, not a capability failure. The one owner-authorized local
+  attempt (isolated qualification-only ComfyUI 0.37.0 outside the untouched StableNew-managed Comfy;
+  Distilled INT8 ConvRot, cache OFF, frozen reference, 39-frame/24 fps/1.625 s locomotion input with
+  legal internal length 41, fixed seed, one submission) passed setup and graph validation, queued with
+  zero node errors, then failed **mid-sampling, during the 10th of 10 sampler steps** (`hostbuf_file_reader_read failed`, raised from a weight-read call in the traceback, then
+  CUDA unknown/sticky error) and left the GPU in a lost-device state requiring reboot, with Windows
+  commit at approximately 95–98 % (previous accepted maximum in this line ~81.7 %). Classified
+  `WAN_ANIMATE_2_LOCAL_TARGET_HARDWARE_NO_GO_AT_FROZEN_ENVELOPE — GPU_DEVICE_LOSS_DURING_SAMPLING`
+  with secondary `WINDOWS_COMMIT_PRESSURE_EXTREME`: a hardware/resource-envelope NO-GO for that
+  envelope only, **not a model NO-GO**; commit pressure and device loss co-occurred but causality is
+  unproven. No output, no retry; the authorization is exhausted and no further Animate-2 GPU run is
+  authorized. The ~25 GB aggregate on-disk model assets prove full simultaneous VRAM residency at
+  on-disk size is impossible on 12 GB; actual runtime residency/offload behavior was not established.
+  Wan-Animate-2 stays architecturally compatible with a future `backend_id=comfy` experimental
+  workflow (no production contract change authorized). The next step is an owner ROI/product decision
+  among remote capability adjudication (paid, separately authorized), 32→64 GB RAM, a higher-VRAM GPU,
+  or deferring Animate-2; none is selected or authorized. This event was recorded as an additional
+  GPU-loss observation in the DIAG-GPU-130 record without merging root-cause interpretation: no WHEA,
+  Kernel-Power 41, 6008 or 4101 event was found in the inspected window, which does not prove a
+  different cause and is not a stability PASS.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
