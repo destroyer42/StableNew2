@@ -1,3 +1,4 @@
+import os
 import types
 from unittest import mock
 
@@ -34,7 +35,10 @@ def test_start_windows_bat_uses_cmd_wrapper_without_shell(monkeypatch):
     dummy = DummyProcess()
     popen_mock = mock.Mock(return_value=dummy)
     monkeypatch.setattr("subprocess.Popen", popen_mock)
-    monkeypatch.setattr("src.api.webui_process_manager.os.name", "nt", raising=False)
+    monkeypatch.setattr(
+        "src.api.webui_process_manager.os",
+        types.SimpleNamespace(name="nt", environ=os.environ),
+    )
     monkeypatch.setattr(
         "src.api.webui_process_manager.build_process_container",
         mock.Mock(return_value=mock.Mock()),
