@@ -328,8 +328,6 @@ class WebUIProcessManager:
             # keeping the process in our job/container avoids detached orphan trees.
             creationflags = 0
             if os.name == "nt":
-                import subprocess
-
                 # CREATE_NEW_PROCESS_GROUP = 0x00000200
                 creationflags = 0x00000200
                 if launch_in_new_console:
