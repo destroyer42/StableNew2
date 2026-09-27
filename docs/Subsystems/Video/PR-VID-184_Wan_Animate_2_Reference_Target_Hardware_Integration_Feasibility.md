@@ -1,14 +1,16 @@
 # PR-VID-184 - Wan-Animate-2 Reference Capability, Target-Hardware & Integration Feasibility
 
-Status: **`PR-VID-184 — IN PROGRESS — PRE-REGISTRATION COMPLETE; AWAITING OWNER-OPERATED CLOUD
-EXECUTION`**. This is a research/feasibility-planning package. No Animate-2 output has been
-generated, no Comfy Cloud run has occurred, no production `src/` change was made, no workflow was
-registered, and no GPU/Comfy-config/pagefile/driver setting was changed. Q1-Q4 (see below) are not
-yet answered. The owner authorized Comfy Cloud use (Free Tier account created 2026-09-26) and
-issued a pre-upload amendment (below) correcting the experiment design and adding a
-control-validated scorer, pre-registered run matrix, and a human-verdict gate. Per that
-amendment, cloud execution is owner-operated: this package stops after pushing the pre-registration
-and hands off to the owner to run the pre-registered matrix and return outputs.
+Status: **`PR-VID-184 — IN PROGRESS — REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION`**. This is a
+research/feasibility-planning package. No Animate-2 output has been generated, no Comfy Cloud run
+has occurred, no production `src/` change was made, no workflow was registered, and no
+GPU/Comfy-config/pagefile/driver setting was changed. Q1-Q4 (see below) are not yet answered. The
+owner created a Comfy Cloud account and fully configured the pre-registered workflow, but the first
+attempted run was blocked **before queueing** with *"A cloud subscription is required to queue
+workflows"* — no free credits were available on the account despite Comfy's own advertised Free
+Tier/"5 free runs" claims (2026-09-26, owner-observed). **This is classified as an
+infrastructure/access result, not a Wan-Animate-2 capability finding**, and this package is not
+abandoned: see "Phase D — REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION" and the reframed Phase G
+decision tree below for how the package continues without paid remote access.
 
 ## Execution profile
 
@@ -93,9 +95,31 @@ distinguished from community reports; no community anecdote used as acceptance e
 6. **Comfy version/nodes.** Docs specify current/nightly ComfyUI (announcement 2026-08-08). No
    third-party custom nodes required — implemented as core ComfyUI nodes (`WanAnimate2ToVideo`,
    `WanAnimate2Cache`, `WanAnimate2LoopSampler`). [FIRST-PARTY]
-7. **Assets.** Model/LoRA/text-encoder/CLIP-vision/VAE filenames are listed in the paragraph above
-   and the tutorial; **no file sizes were surfaced** in any reachable source. [FIRST-PARTY names /
-   UNKNOWN sizes]
+7. **Assets — sizes filled in 2026-09-26 (continued no-cost research after the subscription
+   block).** Verified directly from the `Comfy-Org/Wan-Animate-2` Hugging Face repository (119 GB
+   total):
+
+   | File | Size | Used in this package's pre-registered runs? |
+   | --- | ---: | --- |
+   | `wan_animate_2_bf16.safetensors` (pristine Base) | 32.8 GB | No |
+   | `wan_animate_2_distill_bf16.safetensors` (pristine Distilled) | 32.8 GB | No |
+   | `wan_animate_2_int8_convrot.safetensors` | 16.7 GB | Yes — Base+LightX2V (runs 2, 4) |
+   | `wan_animate_2_distill_int8_convrot.safetensors` | 16.7 GB | Yes — Distilled (runs 1, 3, 5) |
+   | `lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors` (LoRA) | 738 MB | Yes — Base+LightX2V only |
+   | `umt5_xxl_fp16.safetensors` | 11.4 GB | No |
+   | `umt5_xxl_fp8_e4m3fn_scaled.safetensors` | 6.74 GB | Yes — both workflows |
+   | `Wan2_1_VAE_bf16.safetensors` | 254 MB | Yes — both workflows |
+   | `clip_vision_h.safetensors` | 1.26 GB | Yes — both workflows |
+
+   The 32.8 GB pristine-bf16 figure independently **cross-validates** item 10's upstream bug report,
+   which separately estimated "~32.8 GB expected" bf16 DiT memory from a different angle (a
+   dtype-residency argument, not a file-size lookup) — two independent methods landing on the same
+   number is corroborating, not coincidental. **Combined on-disk footprint for this package's actual
+   pre-registered Distilled workflow is ~25.0 GB** (16.7 + 6.74 + 0.254 + 1.26), and **~25.7 GB for
+   Base+LightX2V** (+0.738 GB LoRA) — both far exceed a 12 GB card's VRAM as a naive simultaneous
+   sum, confirming that sequential/offloaded loading (not all components resident in VRAM at once)
+   is **mandatory**, not optional, for any local attempt on the RTX 4070 Ti — carried into the Phase E
+   budget below. [FIRST-PARTY, Hugging Face repository file listing]
 8. **Frame/geometry conventions.** The official `WanAnimate2Cache` doc's own reference example uses
    480x832, 81 frames, bf16. Comfy Cloud's landing page cites "81 frames, 18 fps, 640x640, 4-step"
    as its credit-cost example. 720P/480P are the named supported tiers. An open, unresolved upstream
@@ -385,23 +409,37 @@ reveal. 4 deterministic tests (`tests/tools/test_vid184_blind_seal.py`) pass.
 
 ---
 
-## Phase D status: pre-registration complete, cloud execution is owner-operated
+## Phase D — REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION (2026-09-26)
 
-**Cloud account/upload authorization: GRANTED 2026-09-26.** The owner created a Comfy Cloud account
-(Free Tier, GitHub sign-in, no payment method) and authorized use of it for this package. Corrected
-cost framing stands as researched: current official mechanism is a **Free Tier of 400 credits/month,
-no card required**; a separate "5 free runs on real GPUs" claim also appears on Comfy's pricing page
-with unclear relationship to the Free Tier; **no Wan-Animate-2-specific credit cost was found
-anywhere** (the only benchmark located, ~11 credits/5s, is for a different, lighter template) — cost
-is not guaranteed to be $0. Verified privacy facts stand: inputs/outputs are not used for AI
-training and are private by default; retention is vague ("as long as needed... varies by data
-type"). No files have been uploaded and no cloud spend has occurred as of this report.
+**Superseded claim, corrected in place rather than deleted (audit trail):** this document and
+`STATUS.md` previously stated Comfy's current official mechanism is *"a Free Tier of 400
+credits/month, no card required"* with a separate *"5 free runs on real GPUs"* claim, sourced from
+Comfy's own marketing/support pages (`blog.comfy.org`, `comfy.org/pricing`). **That claim is now
+superseded for this package by directly observed product behavior on the owner's real account: the
+owner created the account, fully configured the pre-registered Distilled workflow, and the first
+attempted run was blocked before queueing with the literal message *"A cloud subscription is
+required to queue workflows"* — no free credits were available.** No source found afterward
+distinguishes whether this is a Wan-Animate-2-specific gate (a "premium"/partner-node template
+excluded from the general free tier) or the general free-tier claim simply not matching current
+product behavior; that distinction was not resolved and is not load-bearing for this package either
+way. **First-hand observation of the actual product on the actual account overrides the earlier
+secondary marketing/support-page research** — this is not a case of picking one source over another
+arbitrarily, it is live evidence superseding a documentation claim, which is the correct precedence.
+Verified privacy facts (not use for AI training, private-by-default) are unaffected by this
+correction and still stand. No files have been uploaded and no cloud spend has occurred.
 
-**Cloud execution is owner-operated (amendment section 5).** Per the amendment, this package does
-not drive the Comfy Cloud UI itself: Rob runs the pre-registered matrix below on his own account and
-returns the output files. This package's job ends at pushing the pre-registration (this document,
-the scoring contract, control-validation results, and the run manifest) and handing off — see
-"Hand-off" at the end of this document.
+**Classification: `REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION`.** This is an infrastructure/
+access result, not a Wan-Animate-2 capability finding — it says nothing about whether the official
+Comfy reference stack can or cannot deliver reference-bound locomotion (Q1 remains genuinely
+unanswered, not "failed"). Per explicit owner instruction: **do not subscribe, purchase credits,
+create another cloud account/provider, or upload/run anything further without separate owner
+authorization.** This package is **not abandoned** — see "Phase G — decision tree" below for how it
+continues, and "Reframed next physical recommendation" for what changes.
+
+The 5-run matrix below **remains the pre-registration of record** (unchanged, still valid) for if
+and when remote access is separately authorized in the future (subscription, or an alternate
+rented-GPU provider, each its own future owner decision) — it is not deleted, just currently
+unexecutable.
 
 ### Run matrix (pre-registered, amendment section 4; full detail in `tools/qualification/vid184/run_manifest.json`)
 
@@ -498,30 +536,65 @@ embedded workflow metadata (if present) and Rob's exported workflow JSON against
 was pre-registered before treating any output as valid evidence. A mismatch is reported, not
 silently scored.
 
-### Human verdict gate (amendment section 6) — PR #9 merge suspended until recorded
+### Human verdict gate (amendment section 6) — remains valid pre-registration for if/when remote runs occur
 
-Rob reviews all outputs **before** seeing any metric score. Best-effort blinding:
-`tools/qualification/vid184/blind_seal.py` relabels each output with a random sealed ID and this
-package commits only the hash of that mapping before hand-off — the real mapping is not committed
-until after Rob's review is recorded, so it is provably the same mapping before and after. Rob then
-scores the pre-registered human-visual-rubric (Phase C) per clip and gives a **PASS / PARTIAL /
-FAIL** verdict for reference-bound locomotion. That verdict is the capability classification;
-metrics are corroboration, and any disagreement between them is recorded explicitly rather than
-silently resolved either way. **PR #9's merge authorization is suspended until this verdict is
-recorded and the classification is final; it then resumes unchanged** — no new merge authorization
-is needed once this gate closes cleanly.
+Unchanged and still binding whenever the 5-run matrix eventually executes (remote or as a future
+comparison baseline): Rob reviews all outputs **before** seeing any metric score. Best-effort
+blinding: `tools/qualification/vid184/blind_seal.py` relabels each output with a random sealed ID
+and this package commits only the hash of that mapping before hand-off — the real mapping is not
+committed until after Rob's review is recorded, so it is provably the same mapping before and after.
+Rob then scores the pre-registered human-visual-rubric (Phase C) per clip and gives a **PASS /
+PARTIAL / FAIL** verdict for reference-bound locomotion. That verdict is the capability
+classification; metrics are corroboration, and any disagreement between them is recorded explicitly
+rather than silently resolved either way. **PR #9's merge authorization remains suspended until a
+verdict is recorded and the classification is final** — currently blocked on `Q1` being unanswered
+at all (see below), not on the review mechanics.
 
-Q1 (reference-bound locomotion capability) cannot be answered without these runs. Given Phase A item
-13's finding that no upstream/community source addresses the ghosting/locomotion question either
-way, there is no literature substitute for running the controlled test.
+### Reframed next physical recommendation (2026-09-26, following the subscription block)
+
+With the remote reference gate blocked by access rather than capability, and no automatic
+continuation to paid access authorized, the pragmatic next evidence-gathering step — **if the
+owner separately authorizes it** — is **one bounded local Wan-Animate-2 Distilled run on the RTX
+4070 Ti 12 GB / 32 GB machine, cache OFF, at the smallest credible locomotion-preserving envelope**
+(paper-only leading hypothesis: 13 frames / 480x832, per Phase E below — unverified for
+Wan-Animate-2's architecture/quant, not yet run). This is **not authorized by this update** — it
+requires the same explicit GPU-workload authorization every prior local qualification package in
+this line has required, and none has been given here.
+
+**The interpretive limit must travel with this recommendation, not be lost:** because there is no
+remote reference baseline, a local failure at this envelope would be **genuinely ambiguous** — it
+could mean Wan-Animate-2 cannot do reference-bound locomotion at all, or it could mean this
+specific constrained local envelope (small resolution/frame-count, INT8 quant, cache OFF, a 12 GB
+card) is simply insufficient while the model is capable at its full official settings. Neither this
+package nor any future one may quietly resolve that ambiguity in either direction without new
+evidence.
+
+- **If the local run later succeeds** (clean reference-bound locomotion at this envelope): that is
+  sufficient positive evidence on its own — **a paid remote baseline becomes unnecessary**, since a
+  local pass at a harder (more constrained) envelope implies capability at the easier official
+  settings.
+- **If the local run later fails or is ambiguous:** paid Comfy Cloud access, an alternate rented-GPU
+  provider, or a pristine-upstream adjudication each become **a separate ROI decision for the owner**
+  — ambiguous local evidence does not by itself authorize automatically continuing to paid access;
+  that authorization must be sought explicitly, the same way this package has sought it at every
+  other spend/access boundary.
+
+No GPU/CUDA/pagefile/driver/Comfy-configuration change is authorized in PR-VID-184 regardless of
+this reframing.
+
+Q1 (reference-bound locomotion capability) cannot be answered without an actual controlled test —
+remote (currently blocked) or local (not yet authorized). Given Phase A item 13's finding that no
+upstream/community source addresses the ghosting/locomotion question either way, there is no
+literature substitute for running one.
 
 ---
 
-## Phase E — Target-hardware feasibility: preliminary paper-only budget (amendment section 4, run 5 prerequisite)
+## Phase E — Target-hardware feasibility: preliminary paper-only budget
 
-No physical local run has occurred and none is authorized in PR-VID-184 regardless of Phase D's
-outcome. This is paper-only synthesis of Phase A/B facts already gathered, to pre-register run 5's
-"minimal documented graph change" and leading local-candidate window before any generation.
+No physical local run has occurred and none is authorized in PR-VID-184. This remains paper-only
+synthesis of Phase A/B facts already gathered. Originally scoped to pre-register run 5's remote
+"minimal documented graph change" and local-candidate window; now doubles as the budget behind the
+reframed next physical recommendation above, since the remote gate is currently blocked.
 
 **Cache modes, budgeted separately (amendment requirement):**
 - **Cache OFF (local default unless the budget below proves headroom):** removes the
@@ -538,8 +611,13 @@ outcome. This is paper-only synthesis of Phase A/B facts already gathered, to pr
   shows can run with near-zero headroom under load (PR-VID-150/160C history). Not evaluated further
   here; recorded as the theoretical middle option between OFF and GPU.
 
-**Local default recommendation stays cache OFF** unless a future budget pass, informed by real Comfy
-Cloud VRAM/RAM telemetry from the runs above, proves headroom for GPU or CPU mode.
+**Local default recommendation stays cache OFF** unless a future budget pass, informed by real
+telemetry from an actual run (remote or local), proves headroom for GPU or CPU mode. This is now
+the primary reason cache OFF is not merely a memory-savings default but a **precondition**: Phase A
+item 7's real asset sizes put the Distilled workflow's combined on-disk footprint at ~25.0 GB
+(checkpoint + text encoder + VAE + CLIP vision) against a 12 GB card — cache's own ~12.5 GB
+additional cost (scaled down for our smaller candidate window, exact figure unpublished) would only
+worsen an already offload-dependent budget.
 
 **Material new risk (Phase A item 10, carried forward):** an open, unreproduced upstream bug report
 (issue #5) describes the DiT possibly loading in fp32 instead of bf16 on single-GPU setups
@@ -633,25 +711,66 @@ Inspected `src/video/video_backend_types.py` and `src/video/video_workflow_inten
 
 ---
 
+## Phase G — Decision tree (current node: gate blocked by access)
+
+The original decision tree framed five outcomes keyed to a remote reference-capability result that
+has not been obtainable. Recorded here in full for the first time (previously only referenced by
+name), plus the new branch this package's actual path took.
+
+- **Current node — remote gate blocked by access, not capability (this package, 2026-09-26):**
+  neither a pass nor a fail; classified `REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION`. Per the
+  reframed recommendation above, the next step *if separately authorized* is one bounded local
+  Distilled run (cache OFF, smallest credible envelope) rather than waiting indefinitely on
+  currently-inaccessible paid remote access. This is not a substitute for Outcomes 1-5 below — it is
+  the path taken because none of them could be reached.
+- **Outcome 1 — remote official Comfy reference fails** (both workflows fail stable reference-bound
+  locomotion, if/when actually run): classify the Comfy reference path NO-GO/PARTIAL precisely; do
+  not proceed to local hardware squeezing on that basis alone; do not claim the whole open-model
+  ecosystem is incapable; recommend parking reference-bound locomotion for this StableNew release
+  unless the owner explicitly authorizes a pristine-upstream/rented-GPU adjudication; retain
+  gesture/local-motion options separately.
+- **Outcome 2 — remote passes, local resource outlook is poor:** reframe the next owner decision as
+  ROI among 64 GB system RAM, a higher-VRAM GPU, remote/cloud execution, or deferring the capability.
+  64 GB RAM should be listed as available only after DIAG-GPU-130 concludes — memory is the variable
+  currently under isolation. Do not launch an open-ended optimization campaign.
+- **Outcome 3 — remote passes and local execution is plausible:** recommend one bounded physical
+  qualification package — Distilled first, cache OFF, smallest credible legal temporal window
+  preserving locomotion evidence, 480-class geometry, exactly one physical attempt initially,
+  telemetry and existing commit-aware safety handling, no silent sysmem-policy change. (This is the
+  same shape the current-node recommendation above borrows, decoupled from requiring a prior remote
+  pass, since remote access is currently blocked rather than merely unattempted.)
+- **Outcome 4 — local later passes but quality regresses versus remote:** permit at most one bounded
+  adjudication of a clearly identified resource/quality compromise; do not begin iterative tuning.
+- **Outcome 5 — capability and local feasibility both pass:** the next package may implement an
+  EXPERIMENTAL StableNew vertical slice through `video_execution -> VideoExecutionResolver ->
+  backend_id=comfy -> versioned workflow`, with explicit per-job opt-in; native SVD remains
+  production/default until separately promoted.
+
+---
+
 ## Package outcome — Q1-Q4
 
-- **Q1 (reference capability):** **NOT YET ANSWERED.** Blocked on the owner running the
-  pre-registered matrix and recording the human verdict (see Phase D). No current upstream/community
-  source resolves it either way (Phase A item 13) — no literature substitute exists.
-- **Q2 (target-hardware feasibility):** **NOT YET ANSWERED.** Blocked on Q1 passing or being strong
-  enough to justify local testing, per the decision tree (Phase G). A preliminary paper-only budget
-  is complete (Phase E): cache-mode tradeoffs quantified, a material new risk (upstream issue #5,
+- **Q1 (reference capability):** **NOT YET ANSWERED — remote gate blocked by access, not
+  capability.** `REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION` (Phase D). No current
+  upstream/community source resolves it either way (Phase A item 13) — no literature substitute
+  exists. The pre-registered 5-run matrix and human verdict gate remain valid for whenever remote
+  access is separately authorized; the reframed next step is one bounded local run, itself not yet
+  authorized.
+- **Q2 (target-hardware feasibility):** **NOT YET ANSWERED.** A preliminary paper-only budget is
+  complete (Phase E): cache-mode tradeoffs quantified, a material new risk (upstream issue #5,
   possible fp32 2x-memory bug on single-GPU setups) is on record, a leading local-candidate window is
-  hypothesized (unverified), and the Comfy version-gap research recommends an isolated install for
-  the eventual physical probe.
+  hypothesized (13f/480x832, cache OFF — unverified), and the Comfy version-gap research recommends
+  an isolated install for the eventual physical probe. This budget is now also the basis for the
+  reframed next-step recommendation, not gated on a remote pass it cannot currently obtain.
 - **Q3 (backend-neutral integration fit):** **Answered, conditionally.** Yes — the existing
   backend-neutral contract can carry a future Animate-2 adapter without adding a second queue,
   runner, lifecycle authority, or model-specific controller (Phase F), provided a future control
   keys driving-input identity on content SHA-256, not a path, and does not conflate Comfy's
   `pose_video` socket label with StableNew's own `pose_video` semantic. No production change was
   made or is authorized.
-- **Q4 (product decision):** **Not reached.** The pre-decided decision tree (Phase G, Outcomes 1-5)
-  requires Q1 first, which requires the owner-operated cloud runs and the human verdict gate.
+- **Q4 (product decision):** **Not reached.** The decision tree (Phase G) currently sits at the
+  "gate blocked by access" node, not any of Outcomes 1-5 — those require an actual remote or local
+  run this package has not been authorized to execute.
 
 ## Validation
 
@@ -688,25 +807,43 @@ hashes are committed in `control_validation.json`/`run_manifest.json` instead.
 
 ## What is explicitly NOT authorized next
 
-- Any local physical Animate-2 GPU workload (Phase E execution) — paper-only budget only in this
-  package.
+- **Subscribing to Comfy Cloud, purchasing credits, or creating another cloud account/provider** —
+  explicit owner instruction after the subscription block; any of these requires a new, separate
+  owner authorization naming the action.
+- Any local physical Animate-2 GPU workload (Phase E execution, including the reframed
+  recommendation's bounded local run) — paper-only budget/recommendation only in this package; not
+  authorized to execute.
 - Any production `src/` change, workflow registration, GUI/controller change, new backend, or model
   promotion.
 - Any Comfy config, pagefile, driver, or GPU-setting mutation (including the CUDA Sysmem Fallback
   Policy research question, which remains research-only in this package).
-- Any other upload, another cloud provider, paid credits, or agent-held credentials — cloud execution
-  is owner-operated only (amendment section 5).
-- Merging PR #9 before the human verdict gate (Phase D) is recorded and final.
+- Any further upload or run against the existing Comfy Cloud account (it cannot queue without a
+  subscription regardless).
+- Merging PR #9 before the human verdict gate is recorded and final — currently blocked on `Q1`
+  being unanswered at all, not just on review mechanics.
 - Beginning the local physical Animate-2 qualification or an experimental production vertical slice
   in this same package, even after Q1-Q4 are answered — those remain separate, separately authorized
   future packages per the decision tree (Phase G).
 
-## Hand-off to owner-operated cloud execution
+## Hand-off: awaiting owner decision (remote gate blocked)
 
-Everything above this line is pushed to `feature/pr-vid-184-wan-animate2-feasibility` /
-PR #9 as the pre-registration of record. What Rob needs to do:
+Everything above this line is pushed to `feature/pr-vid-184-wan-animate2-feasibility` / PR #9 as the
+pre-registration of record — it remains valid for whenever remote access is separately authorized.
+**No execution is pending hand-off right now**: the Comfy Cloud account cannot queue workflows
+without a subscription, and this package does not subscribe, pay, or open another account/provider
+on its own. The next action is an owner decision, not a checklist to run:
 
-1. On the new Comfy Cloud account, open the **Wan Animate 2** template (both the Base-oriented and
+- Authorize a Comfy Cloud subscription or an alternate paid/rented-GPU provider (a new, separate
+  spend decision) and this package resumes the 5-run matrix hand-off below unchanged; or
+- Authorize the reframed bounded local run (RTX 4070 Ti, Distilled workflow, cache OFF, ~13f/480x832
+  leading candidate — Phase E/G) as the next evidence-gathering step instead; or
+- Decide neither is warranted right now and leave PR-VID-184 open/paused with this evidence as the
+  record.
+
+If/when remote access is authorized, the original hand-off checklist still applies (kept below for
+that future point):
+
+1. On the Comfy Cloud account, open the **Wan Animate 2** template (both the Base-oriented and
    Distilled workflow variants are available from the same template page).
 2. Upload the frozen reference image (`reports/vid110/inputs/source_fullbody.png` in this repo,
    SHA-256 `362c86cc...`) and the frozen driving clip
@@ -725,4 +862,5 @@ PR #9 as the pre-registration of record. What Rob needs to do:
 6. Send the output files (or however many completed) back for scoring and the blind-seal/human
    review steps in Phase D.
 
-No further action from this session until those outputs are returned.
+No further action from this session until the owner decides which path (remote access
+authorization, local-run authorization, or pause) to take.

@@ -258,7 +258,7 @@ Updated: 2026-09-25
   clean generations occurred while DDR5-5600/XMP was still enabled and are not a DIAG-GPU stability
   PASS.
   `PR-VID-184 — Wan-Animate-2 Reference Capability, Target-Hardware & Integration Feasibility` is
-  **IN PROGRESS — PRE-REGISTRATION COMPLETE; AWAITING OWNER-OPERATED CLOUD EXECUTION**
+  **IN PROGRESS — REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION**
   (`docs/Subsystems/Video/PR-VID-184_Wan_Animate_2_Reference_Target_Hardware_Integration_Feasibility.md`).
   Current-source research (dated 2026-09-26) confirms Wan-Animate-2 is real, released
   2026-08-07 (Base + Distillation, Apache 2.0), consumes a raw driving video directly with no
@@ -297,21 +297,34 @@ Updated: 2026-09-25
   driving clip's own hash, plus a best-effort arm-blinding tool
   (`tools/qualification/vid184/blind_seal.py`) for the post-generation human verdict gate: Rob scores
   the pre-registered rubric blind to metrics and arm identity, and that verdict is the capability
-  classification (metrics corroborate); PR #9 does not merge until it is recorded. The driving-clip
-  license/source decision is **RESOLVED 2026-09-26 by explicit owner risk-acceptance** (terms
-  genuinely ambiguous, no AI/ML-use carve-out found, owner directed proceeding anyway for this
-  specific qualification test). **Comfy Cloud account/upload authorization is GRANTED 2026-09-26**
-  (Free Tier, GitHub sign-in, no payment method) — corrected cost framing: current mechanism is 400
-  credits/month, not "5 free GPU runs"; no Wan-Animate-2-specific credit cost was found, so cost is
-  not guaranteed to be $0. Per the amendment, **cloud execution is owner-operated**: this package
-  pushes the pre-registration and hands off to Rob to run the matrix and return outputs; no upload or
-  spend has occurred from this session. A dedicated research pass found StableNew's managed Comfy
+  classification (metrics corroborate). The driving-clip license/source decision is **RESOLVED
+  2026-09-26 by explicit owner risk-acceptance** (terms genuinely ambiguous, no AI/ML-use carve-out
+  found, owner directed proceeding anyway for this specific qualification test). The owner created a
+  Comfy Cloud account and fully configured the pre-registered workflow, but the first attempted run
+  was **blocked before queueing** with *"A cloud subscription is required to queue workflows"* — no
+  free credits were available. **This supersedes this package's earlier "Free Tier of 400
+  credits/month" / "5 free runs" cost framing**, which was sourced from Comfy's own marketing/support
+  pages and is now corrected in place by directly observed product behavior on the real account.
+  Classified **`REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION`** — an infrastructure/access result,
+  not a Wan-Animate-2 capability finding; Q1 remains genuinely unanswered, not failed. Per explicit
+  owner instruction, this package does not subscribe, purchase credits, or create another cloud
+  account/provider without separate authorization, and is not abandoned. The reframed next physical
+  recommendation (Phase G): if separately authorized, one bounded local Wan-Animate-2 Distilled run
+  on the RTX 4070 Ti 12 GB / 32 GB machine, cache OFF, at the smallest credible locomotion-preserving
+  envelope (paper-only leading hypothesis: 13 frames/480x832, unverified) — with the explicit caveat
+  that a local failure would be ambiguous without a remote reference baseline, and that an ambiguous
+  local result does not by itself authorize continuing to paid remote/rented-GPU adjudication, which
+  remains a separate future ROI decision. A dedicated research pass found StableNew's managed Comfy
   (0.3.65) is ~10 months/~30 releases behind the version Wan-Animate-2's nodes need (v0.31.0+), with
   no forced PyTorch/CUDA bump evident; an isolated separate install is architecturally clean (no new
   software variable for DIAG-GPU-130, though it is still GPU activity to schedule around the current
-  observation window) and is the recommendation for any future physical local probe. No Animate-2
-  output has been generated, no production `src/`, workflow-registration, GUI/controller,
-  Comfy-config, or GPU/driver/pagefile change was made.
+  observation window) and is the recommendation for any future physical local probe. Real asset
+  sizes (Hugging Face `Comfy-Org/Wan-Animate-2`, 119 GB repo) confirm the pre-registered Distilled
+  workflow's combined on-disk footprint is ~25.0 GB against a 12 GB card, making sequential/offloaded
+  loading mandatory, not optional; the 32.8 GB pristine-bf16 figure independently cross-validates the
+  earlier fp32-bug report's separately-derived "~32.8 GB expected" estimate. No Animate-2 output has
+  been generated, no production `src/`, workflow-registration, GUI/controller, Comfy-config, or
+  GPU/driver/pagefile change was made.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 

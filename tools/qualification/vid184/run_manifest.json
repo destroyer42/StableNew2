@@ -1,6 +1,7 @@
 {
   "pre_registered": "2026-09-26",
   "amended": "2026-09-26T2 (pre-generation addition: prompts, exact per-run widget values, length semantics, cache-bypass procedure -- resolved from ComfyUI's actual WanAnimate2ToVideo/WanAnimate2Cache source, comfy_extras/nodes_wan.py, Comfy-Org/ComfyUI)",
+  "execution_status": "BLOCKED_BY_SUBSCRIPTION as of 2026-09-26T3: the owner's Comfy Cloud account cannot queue workflows without a paid subscription ('A cloud subscription is required to queue workflows'), despite Comfy's own advertised Free Tier/'5 free runs' claims, which are superseded for this package by this observed behavior. Zero runs have executed. This matrix remains the pre-registration of record for if/when remote access is separately authorized (subscription or an alternate provider); it is not deleted or invalidated by the block.",
   "note": "Pre-registration of record per PR-VID-184 owner amendment section 3-4. Any later threshold or matrix change is a labelled post-hoc deviation, not a silent edit of this file.",
   "frozen_inputs": {
     "reference_image": {
