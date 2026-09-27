@@ -127,10 +127,14 @@ def arm_status(a: dict[str, Any] | None) -> str:
         return "MATCHED_STATE_GATE_NOT_MET"
     if a.get("severe_system_fault"):
         return "SEVERE"
-    if a.get("outcome") == "COMPLETED":
-        return "COMPLETED"
+    # gpu_lost is checked before outcome: nvidia-smi can fail mid-run (recorded as gpu_lost)
+    # even when Comfy's own /history status later reports "completed" once the query loop
+    # gives up on it -- that is a device-loss event, not a clean completion, and must not be
+    # masked by the reported outcome.
     if a.get("gpu_lost"):
         return "GPU_LOSS"
+    if a.get("outcome") == "COMPLETED":
+        return "COMPLETED"
     return "CLEAN_FAIL"
 
 

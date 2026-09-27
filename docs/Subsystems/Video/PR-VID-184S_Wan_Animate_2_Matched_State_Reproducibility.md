@@ -208,8 +208,8 @@ PipelineRunner.run_njr → Handler → Artifacts/History), which this package do
   matched-state gate, fresh-boot check, per-arm evidence)
 - `tools/qualification/vid184s/output_scoring.py` — frozen-metric re-scoring and cross-output
   comparison from saved Comfy output (CPU venv, no GPU)
-- `tests/tools/test_vid184s_arms.py` — 18 deterministic tests (manifest equivalence, matched-state
-  bands, all classification branches, log analysis)
+- `tests/tools/test_vid184s_arms.py` — 19 deterministic tests (manifest equivalence, matched-state
+  bands, all classification branches, log analysis, gpu_lost-overrides-COMPLETED precedence)
 - `tests/tools/test_vid184s_run_arm.py` — 10 regression tests for the post-review harness
   hardening (protocol-stop sequencing including the matched-state-gate-miss retry case,
   GPU-loss-vs-clean-failure precision, the frozen-bands write-once/mismatch lock, singleton and
@@ -221,7 +221,7 @@ PipelineRunner.run_njr → Handler → Artifacts/History), which this package do
 
 ## Validation
 
-- `pytest tests/tools/test_vid184*.py`: 65 passed (37 pre-existing + 18 new + 10 post-review
+- `pytest tests/tools/test_vid184*.py`: 66 passed (37 pre-existing + 19 new + 10 post-review
   hardening regression tests).
 - Ruff check and format: clean on all touched Python.
 - `git diff --check`: clean. `git diff -- src`: empty.

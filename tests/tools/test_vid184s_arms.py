@@ -114,6 +114,15 @@ def test_incomplete_has_no_labels() -> None:
     assert arms.classify({"B1": _arm(), "A": None, "B2": None})["labels"] == []
 
 
+def test_gpu_lost_overrides_a_completed_outcome() -> None:
+    """A transient nvidia-smi failure during monitoring, recorded as gpu_lost, must be classified
+    GPU_LOSS even if Comfy's own status later reports outcome COMPLETED."""
+    compromised = _arm("COMPLETED", gpu_lost=True)
+    assert arms.arm_status(compromised) == "GPU_LOSS"
+    res = arms.classify({"B1": _arm(), "A": compromised, "B2": _arm()})
+    assert "PINNED_MEMORY_EFFECT_REPRODUCED_UNDER_MATCHED_STATE" in res["labels"]
+
+
 def test_analyze_log_pinned_and_errors() -> None:
     on = arms.analyze_log("Enabled pinned memory 13010.0\n 9/10 [02:10<00:14, 14.5s/it]\n")
     assert on["enabled_pinned_memory_value"] == "13010.0" and on["last_step_seen"] == 9
