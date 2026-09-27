@@ -126,11 +126,17 @@ RAM available fell to 1.94 GB, a low margin that never triggered the commit-awar
 |---|---|---|---|---|---|
 | Primary subject continuity | 1.0 | 1.0 | 1.0 | ≥ 0.90 | PASS (all) |
 | Ghost-actor persistence | 0 | 0 | 0 | ≤ 2 | PASS (all) |
-| Root translation fraction | 0.623 | 0.628 | 0.623 | ≥ 0.15 | PASS (all) |
+| Root translation fraction | 0.623 | 0.628 | 0.623 | ≥ 0.15 and direction-matched | PASS (all) |
 | Motion-curve correlation (vs driving clip) | 0.151 | 0.139 | 0.151 | ≥ 0.30 | **FAIL (all)** |
 | Identity-hist mean (corroborating only) | 0.950 | 0.950 | 0.950 | — | — |
 | Camera drift (px) | 0.004 | 0.004 | 0.004 | — | — |
 | Motion-area fraction | 0.274 | 0.273 | 0.274 | — | — |
+
+The frozen contract's `ROOT_TRANSLATION_DIRECTION_MUST_MATCH` gate is enforced, not just the
+magnitude threshold: the driving clip's own primary-track centroid moves left-to-right (first
+centroid x 28.6px → last 275.4px of 464px width), and all three arms' outputs move the same
+direction (B1/B2 first 71.2px → last 370.0px; A first 69.0px → last 370.7px, of the 480px output
+width) — direction-matched in all three, so this does not change any pass/fail result above.
 
 ### Cross-output similarity/variance (frame-level comparison of the 39-frame trims)
 
@@ -207,22 +213,25 @@ PipelineRunner.run_njr → Handler → Artifacts/History), which this package do
   `run_arm_b.py` (gates, ownership check, teardown, telemetry, safety stop reused; adds sequencing,
   matched-state gate, fresh-boot check, per-arm evidence)
 - `tools/qualification/vid184s/output_scoring.py` — frozen-metric re-scoring and cross-output
-  comparison from saved Comfy output (CPU venv, no GPU)
+  comparison from saved Comfy output (CPU venv, no GPU); enforces the frozen contract's
+  root-translation direction-match gate against the driving clip, not just its magnitude
 - `tests/tools/test_vid184s_arms.py` — 19 deterministic tests (manifest equivalence, matched-state
   bands, all classification branches, log analysis, gpu_lost-overrides-COMPLETED precedence)
 - `tests/tools/test_vid184s_run_arm.py` — 10 regression tests for the post-review harness
   hardening (protocol-stop sequencing including the matched-state-gate-miss retry case,
   GPU-loss-vs-clean-failure precision, the frozen-bands write-once/mismatch lock, singleton and
   pre-submit-event handling)
+- `tests/tools/test_vid184s_output_scoring.py` — 4 tests for the direction-sign helper
 - `STATUS.md`, `docs/CODEX_MAP.md` — PR-VID-184S entries
 - Evidence outside the repo (kept intact): `C:\Users\rob\qual\vid184\env\evidence_184s\{B1,A,B2}\`
   (gates, logs, telemetry, summaries, arm_records, outputs) and
-  `C:\Users\rob\qual\vid184\env\analysis_184s\{B1,A,B2}\` (trims, detections, scores)
+  `C:\Users\rob\qual\vid184\env\analysis_184s\{B1,A,B2}\` (trims, detections, scores, driving-clip
+  detection)
 
 ## Validation
 
-- `pytest tests/tools/test_vid184*.py`: 66 passed (37 pre-existing + 19 new + 10 post-review
-  hardening regression tests).
+- `pytest tests/tools/test_vid184*.py`: 70 passed (37 pre-existing + 19 new + 10 post-review
+  hardening regression tests + 4 direction-sign tests).
 - Ruff check and format: clean on all touched Python.
 - `git diff --check`: clean. `git diff -- src`: empty.
 - Local `python tools/ci/run_pr_gate.py`: stops on the known missing-mypy tooling blocker (unchanged

@@ -50,6 +50,25 @@ def probe(webm: Path) -> dict[str, Any]:
     return json.loads(r.stdout)["streams"][0]
 
 
+def _direction_sign(first: float | None, last: float | None) -> int:
+    if first is None or last is None or first == last:
+        return 0
+    return 1 if last > first else -1
+
+
+def driving_direction(work_root: Path) -> int:
+    """Sign of the driving clip's own first->last primary-track centroid displacement, used to
+    enforce the frozen contract's ``ROOT_TRANSLATION_DIRECTION_MUST_MATCH``."""
+    from tools.qualification.vid184 import detect_runner, tracking
+
+    payload = detect_runner.run(
+        model_path=DETECTOR_MODEL, video_path=DRIVING, out_path=work_root / "driving_detect.json",
+        score_threshold=detect_runner.DEFAULT_SCORE_THRESHOLD,
+    )  # fmt: skip
+    t = tracking.track(payload)
+    return _direction_sign(t.first_centroid_x, t.last_centroid_x)
+
+
 def score(webm: Path, work: Path) -> dict[str, Any]:
     from tools.qualification.vid110 import metrics as m
     from tools.qualification.vid184 import detect_runner, tracking
@@ -65,12 +84,19 @@ def score(webm: Path, work: Path) -> dict[str, Any]:
     curve = m.motion_curve(trimmed)
     corr = m.curve_correlation(curve, m.motion_curve(DRIVING))
     cm = m.clip_metrics(trimmed, source_image=REFERENCE)
+    out_sign = _direction_sign(t.first_centroid_x, t.last_centroid_x)
+    drive_sign = driving_direction(work.parent)
+    direction_matches = out_sign != 0 and out_sign == drive_sign
+    root_translation_pass = t.root_translation_fraction >= sc.ROOT_TRANSLATION_FRACTION_PASS and (
+        not sc.ROOT_TRANSLATION_DIRECTION_MUST_MATCH or direction_matches
+    )
     return {
         "source_probe": probe(webm),
         "trimmed_frames": cm.frames,
         "primary_subject_continuity": t.primary_subject_continuity,
         "ghost_actor_persistence": t.ghost_actor_persistence,
         "root_translation_fraction": round(t.root_translation_fraction, 3),
+        "root_translation_direction_matches_driving": direction_matches,
         "motion_curve_correlation": round(corr, 3),
         "identity_hist_mean": round(cm.identity_hist_mean or 0.0, 3),
         "identity_hist_min": round(cm.identity_hist_min or 0.0, 3),
@@ -79,7 +105,7 @@ def score(webm: Path, work: Path) -> dict[str, Any]:
         "passes": {
             "continuity": t.primary_subject_continuity >= sc.PRIMARY_SUBJECT_MIN_TRACK_COVERAGE,
             "ghost": t.ghost_actor_persistence <= sc.GHOST_ACTOR_MAX_PERSISTENT_FRAMES,
-            "root_translation": t.root_translation_fraction >= sc.ROOT_TRANSLATION_FRACTION_PASS,
+            "root_translation": root_translation_pass,
             "motion_curve": corr >= sc.MOTION_CURVE_CORRELATION_PASS,
         },
         "motion_curve": [round(x, 4) for x in curve],
