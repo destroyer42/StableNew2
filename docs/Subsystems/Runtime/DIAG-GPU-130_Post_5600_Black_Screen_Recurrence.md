@@ -5,10 +5,13 @@
 **XMP-OFF RECURRENCE - ACTIVE OBSERVATION / EXIT CRITERION NOT MET.** This evidence-only package
 records the 2026-09-23 recurrence with proven immediately preceding StableNew/A1111 `txt2img`
 work and a further 2026-09-26 post-XMP-OFF recurrence with WER `141`/`1B8` artifacts and an
-unexpected restart. The latter has no surviving workload identity or GPU telemetry, so it is
-classified as the known display/live-kernel family without workload attribution. Nothing here
-attributes either failure to StableNew, A1111, NVIDIA, the GPU, power delivery, PCIe, RAM, or any
-other component.
+unexpected restart. The latter retains known immediately preceding PR-VID-184 Arm A
+Wan-Animate-2 GPU-loss workload context, about 20 minutes before the Kernel-Power 41/6008
+recovery boot, but no continuous survivor telemetry ties the exact `141`/`1B8` interval to that
+workload. It is therefore classified as the known display/live-kernel family without workload
+attribution. That temporal correlation neither causes the restart nor proves or falsifies
+failure-family equivalence. Nothing here attributes either failure to StableNew, A1111, NVIDIA,
+the GPU, power delivery, PCIe, RAM, or any other component.
 
 **Amended conclusion (2026-09-24, product-owner direction):** NVIDIA driver-package isolation is
 **deprioritized** by cross-version recurrence evidence - the failure family has recurred across
@@ -69,12 +72,13 @@ The retained Windows evidence shows a second post-XMP-OFF failure boundary:
 | WER | `WATCHDOG-20260926-2150.dmp`, LiveKernel `141`; `WATCHDOG4400-20260926-2150.dmp`, LiveKernel `1B8` | Same broad display/live-kernel family; the named dumps are not readable in this pass. |
 | Event Log 6008 | 22:06:46 ET unexpected shutdown; Event 6008 recorded 22:07:33 ET | Restart boundary, not a component-failure timestamp. |
 | Kernel-Power 41 | 22:07:24 ET | Restart marker only, not a cause. |
-| Workload / survivor telemetry | No retained StableNew job identity or GPU sample for this interval | GPU-active exposure and workload provenance are unknown; do not count this as a qualified exposure. |
+| Workload / survivor telemetry | Known immediately preceding PR-VID-184 Arm A Wan-Animate-2 GPU-loss workload context; its run was about 20 minutes before the 41/6008 recovery boot | No continuous survivor telemetry ties the exact `141`/`1B8` interval to that workload. GPU-active exposure and workload provenance for the interval are unknown; do not count this as a qualified exposure. |
 | Other reviewed events | No new `0x133` record in this incident window; no attribution event was found | Does not clear any component or establish a different family. |
 
 This recurrence means XMP-OFF has not produced a clean exit from the observed failure family. It
 also cannot be used to judge whether the failure occurred during GPU-active work. The PR-VID-184
-GPU-loss observation remains a separate, explicitly unmerged evidence class.
+GPU-loss observation remains a separate, explicitly unmerged evidence class: its temporal
+proximity neither causes the restart nor proves or falsifies failure-family equivalence.
 
 ## Restricted `0x133` dump attempt
 
@@ -261,7 +265,7 @@ single-variable decision.
 
 ## Additional GPU-loss observation (2026-09-26, PR-VID-184)
 
-During the single owner-authorized, isolated, non-StableNew Wan-Animate-2 sampling attempt (10th of 10 sampler steps)
+During the single owner-authorized, isolated, non-StableNew Wan-Animate-2 Arm A sampling attempt (10th of 10 sampler steps)
 recorded in `docs/Subsystems/Video/PR-VID-184_Wan_Animate_2_Reference_Target_Hardware_Integration_Feasibility.md`
 (Phase H), the GPU entered a lost-device state (`CUDA_ERROR_UNKNOWN`/sticky CUDA error; `nvidia-smi`
 reported the GPU lost and requested a reboot) while Windows system commit was approximately 95–98 %.
@@ -269,8 +273,11 @@ A read-only System-log query over the roughly 10 minutes around it found no WHEA
 unexpected-shutdown 6008 or display-driver-reset 4101 event. This event did not reproduce the
 DIAG-GPU-130 Windows-event signature in the inspected window. That is descriptive only: it does not
 prove a different cause, does not clear the hardware or the driver, does not prove commit exhaustion,
-and is not a stability PASS. It is not merged into this diagnosis's root-cause interpretation; the
-status above is unchanged.
+and is not a stability PASS. Kernel-Power 41 and 6008 occurred at the recovery boot about 20 minutes
+after Arm A, outside that inspected window. The retained evidence has no continuous survivor telemetry
+tying the exact `141`/`1B8` interval to Arm A; the temporal context neither causes the restart nor
+proves or falsifies failure-family equivalence. It is not merged into this diagnosis's root-cause
+interpretation; the status above is unchanged.
 
 ## Boundaries and validation
 
