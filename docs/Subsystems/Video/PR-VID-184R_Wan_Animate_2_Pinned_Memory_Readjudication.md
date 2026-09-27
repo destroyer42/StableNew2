@@ -123,3 +123,13 @@ Not selected here. Reasonable branches: record a human visual verdict on the out
 replicate/second-seed adjudication or the paid remote baseline from PR-VID-184 is worth its cost; or
 decide whether a future experimental `backend_id=comfy` package (with pinned memory disabled recorded as
 a required launch condition) is warranted. All require separate authorization.
+
+## Harness hardening after review
+
+Post-run review (PR #10) led to three hardening edits in `tools/qualification/vid184r/run_arm_b.py`,
+made after the single authorized submission and not re-executed (no further GPU run is authorized):
+the gate now also verifies the frozen ComfyUI SHA, torch, and comfy-aimdo versions (all matched at run
+time: 73c9bad4…, 2.14.0+cu130, 0.5.5); the owned process is torn down before the slow post-stop event-log
+query; and the process exit code is nonzero unless the outcome is `COMPLETED`. The evidence for the
+completed run was produced by the pre-hardening harness; the frozen versions were separately confirmed
+above.

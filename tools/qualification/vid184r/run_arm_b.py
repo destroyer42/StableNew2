@@ -147,6 +147,15 @@ def gate() -> dict[str, Any]:
     for name in fw["model_sha256"]:
         hashes[name] = sha256(ENV / "models" / name)
     g["hashes"] = hashes
+    head = sh(["git", "-C", str(am.COMFY_ROOT), "rev-parse", "HEAD"]).stdout.strip()
+    g["comfyui_sha"] = head
+    if head != fw["comfyui_sha"]:
+        g["failures"].append("ComfyUI checkout SHA differs from frozen workload")
+    for pkg, key in (("torch", "torch"), ("comfy_aimdo", "comfy_aimdo")):
+        got = sh([am.PY_EXE, "-c", f"import importlib.metadata as m;print(m.version('{pkg.replace('_', '-')}'))"]).stdout.strip()  # fmt: skip
+        g[f"{pkg}_version"] = got
+        if got != fw[key]:
+            g["failures"].append(f"{pkg} version differs from frozen workload")
     expected = {"graph": fw["graph_sha256"], "reference": fw["reference_sha256"], "driving_39f": fw["driving_39f_sha256"], **fw["model_sha256"]}  # fmt: skip
     for k, v in expected.items():
         if hashes[k] != v:
@@ -352,10 +361,13 @@ def main() -> int:
         summary["snapshot_before_submit"] = commit_snapshot()
         summary["gpu_before_submit"] = gpu_query()
         summary.update(run_and_monitor(proc, log_path))
+        summary["teardown"] = teardown(proc)  # stop the workload before slow diagnostics
         summary["events_after_60min"] = event_log(60)
-        return 0
+        return 0 if summary.get("outcome") == "COMPLETED" else 5
     finally:
-        summary["teardown"] = teardown(proc)
+        summary.setdefault("teardown", None)
+        if summary["teardown"] is None:
+            summary["teardown"] = teardown(proc)
         summary["outputs_after"] = [p.name for p in (ENV / "outputs").iterdir()]
         (EVID / f"summary_{tag}.json").write_text(json.dumps(summary, indent=2, default=str))
         print(json.dumps(summary, indent=2, default=str))
