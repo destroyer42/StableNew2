@@ -147,6 +147,16 @@ def test_classify_events_unexpected_shutdown_41_and_6008_are_severe() -> None:
     assert run_arm._classify_events([{"Id": 6008, "ProviderName": "EventLog"}]) == (True, False)
 
 
+def test_classify_events_requires_the_matching_provider_for_scoped_ids() -> None:
+    # Same numeric IDs from an unrelated provider: not a real signal (IDs are provider-scoped).
+    events = [
+        {"Id": 41, "ProviderName": "Some-Unrelated-App"},
+        {"Id": 6008, "ProviderName": "Some-Unrelated-App"},
+        {"Id": 4101, "ProviderName": "Some-Unrelated-App"},
+    ]
+    assert run_arm._classify_events(events) == (False, False)
+
+
 def test_classify_events_generic_informational_ids_are_noise() -> None:
     events = [
         {"Id": 1, "ProviderName": "Microsoft-Windows-IsolatedUserMode"},

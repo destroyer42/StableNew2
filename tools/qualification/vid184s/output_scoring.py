@@ -109,6 +109,7 @@ def score(webm: Path, work: Path) -> dict[str, Any]:
         not sc.ROOT_TRANSLATION_DIRECTION_MUST_MATCH or direction_matches
     )
     return {
+        "source_webm": str(webm),
         "source_probe": probe(webm),
         "trimmed_frames": cm.frames,
         "primary_subject_continuity": t.primary_subject_continuity,
@@ -142,16 +143,28 @@ def _centroids(payload: dict[str, Any]) -> list[float | None]:
     return out
 
 
+def _read_trimmed_source_frames(webm: Path) -> list[Any]:
+    """Decode the ORIGINAL saved Comfy output directly (no re-encode) and trim to the evidence
+    window the same way ``legal_length.trim_to_evidence_window`` does -- keep the leading frames,
+    drop the trailing ones. Used for pixel-level comparison so a claim of frame identity reflects
+    the actual generated pixels, not an artifact of ``trim_to_mp4``'s lossy H.264 intermediate."""
+    from tools.qualification.vid110 import metrics as m
+    from tools.qualification.vid184 import legal_length as ll
+
+    frames, _fps = m.read_frames(webm)
+    return ll.trim_to_evidence_window(frames, EVIDENCE_FRAMES)
+
+
 def compare(
-    a_mp4: Path, b_mp4: Path, a_score: dict[str, Any], b_score: dict[str, Any]
+    a_webm: Path, b_webm: Path, a_score: dict[str, Any], b_score: dict[str, Any]
 ) -> dict[str, Any]:
     import cv2
     import numpy as np
 
     from tools.qualification.vid110 import metrics as m
 
-    fa, _ = m.read_frames(a_mp4)
-    fb, _ = m.read_frames(b_mp4)
+    fa = _read_trimmed_source_frames(a_webm)
+    fb = _read_trimmed_source_frames(b_webm)
     n = min(len(fa), len(fb))
     psnr, hist = [], []
     for x, y in zip(fa[:n], fb[:n], strict=True):
@@ -215,7 +228,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         sa = json.loads((args.a / "score.json").read_text())
         sb = json.loads((args.b / "score.json").read_text())
-        print(json.dumps(compare(args.a / "trim39.mp4", args.b / "trim39.mp4", sa, sb), indent=2))
+        # Compare pixels decoded directly from the original saved outputs, not the lossy H.264
+        # trim39.mp4 intermediate score() uses for the detector/metrics pipeline.
+        print(
+            json.dumps(compare(Path(sa["source_webm"]), Path(sb["source_webm"]), sa, sb), indent=2)
+        )
     return 0
 
 

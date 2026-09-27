@@ -140,19 +140,25 @@ width) — direction-matched in all three, so this does not change any pass/fail
 
 ### Cross-output similarity/variance (frame-level comparison of the 39-frame trims)
 
+Frames are decoded directly from each arm's original saved VP9 output (no re-encoded
+intermediate) and trimmed the same way `legal_length.trim_to_evidence_window` does, so a claim of
+pixel identity reflects the actual generated pixels rather than an artifact of the lossy H.264
+intermediate the detector pipeline uses for convenience.
+
 | Pair | PSNR mean / min (dB) | HSV-hist correlation | Root-trajectory correlation / RMS (px) | Motion-curve correlation (between outputs) |
 |---|---|---|---|---|
-| B1 ↔ B2 | 99.0 / 99.0 | 1.000 | 1.000 / 0.0 | 1.000 |
-| B1 ↔ A | 29.45 / 23.56 | 0.999 | 1.000 / 0.9 | 0.994 |
-| A ↔ B2 | 29.45 / 23.56 | 0.999 | 1.000 / 0.9 | 0.994 |
+| B1 ↔ B2 | 99.0 / 99.0 | 1.0000 | 1.000 / 0.0 | 1.000 |
+| B1 ↔ A | 29.49 / 23.58 | 0.9991 | 1.000 / 0.9 | 0.994 |
+| A ↔ B2 | 29.49 / 23.58 | 0.9991 | 1.000 / 0.9 | 0.994 |
 
-B1 and B2 decode to pixel-identical frames (PSNR at the tool's ceiling, i.e. zero measured MSE)
-despite different container SHA-256 hashes — the file-level hash difference is VP9
-container/encoder non-determinism, not a content difference; same seed, same launch args, same
-frozen workload reproduces the same generation exactly. Arm A's output is visibly close but not
-identical to B1/B2 (mean PSNR ≈ 29 dB, motion-curve correlation between outputs 0.994): a small,
-consistent numerical effect of enabling pinned memory on this otherwise identical run, well short of
-a different or degraded result. No output looks materially worse than the accepted PR-VID-184R
+B1 and B2 decode to pixel-identical frames (PSNR at the tool's ceiling, i.e. zero measured MSE,
+verified from the original VP9 output, not a re-encoded copy) despite different container
+SHA-256 hashes — the file-level hash difference is VP9 container/encoder non-determinism, not a
+content difference; same seed, same launch args, same frozen workload reproduces the same
+generation exactly. Arm A's output is visibly close but not identical to B1/B2 (mean PSNR ≈ 29 dB,
+motion-curve correlation between outputs 0.994): a small, consistent numerical effect of enabling
+pinned memory on this otherwise identical run, well short of a different or degraded result. No
+output looks materially worse than the accepted PR-VID-184R
 artifact; B1/B2 are that same artifact (byte-for-byte at the decoded-frame level).
 
 ## Pre-registered classification (applied mechanically by `tools/qualification/vid184s/arms.classify`)
@@ -217,10 +223,11 @@ PipelineRunner.run_njr → Handler → Artifacts/History), which this package do
   root-translation direction-match gate against the driving clip, not just its magnitude
 - `tests/tools/test_vid184s_arms.py` — 19 deterministic tests (manifest equivalence, matched-state
   bands, all classification branches, log analysis, gpu_lost-overrides-COMPLETED precedence)
-- `tests/tools/test_vid184s_run_arm.py` — 16 regression tests for the post-review harness
+- `tests/tools/test_vid184s_run_arm.py` — 17 regression tests for the post-review harness
   hardening (protocol-stop sequencing including the matched-state-gate-miss retry case,
   GPU-loss-vs-clean-failure precision, the frozen-bands write-once/mismatch lock, singleton and
-  pre-submit-event handling, queried-event classification for driver-reset/reboot signatures)
+  pre-submit-event handling, provider-scoped queried-event classification for driver-reset/reboot
+  signatures)
 - `tests/tools/test_vid184s_output_scoring.py` — 5 tests for the direction-sign helper and the
   short-clip error type
 - `STATUS.md`, `docs/CODEX_MAP.md` — PR-VID-184S entries
@@ -231,7 +238,7 @@ PipelineRunner.run_njr → Handler → Artifacts/History), which this package do
 
 ## Validation
 
-- `pytest tests/tools/test_vid184*.py`: 77 passed (37 pre-existing + 19 new + 16 post-review
+- `pytest tests/tools/test_vid184*.py`: 78 passed (37 pre-existing + 19 new + 17 post-review
   hardening regression tests + 5 output-scoring tests).
 - Ruff check and format: clean on all touched Python.
 - `git diff --check`: clean. `git diff -- src`: empty.

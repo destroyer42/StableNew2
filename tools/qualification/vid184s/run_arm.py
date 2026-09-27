@@ -343,8 +343,12 @@ def _events_since(events: Any, since_epoch_s: float) -> list[dict[str, Any]]:
 # actually went down, which is more severe than a driver TDR. Ids 1/153/157 alone are the
 # generic-informational false positives already documented (EVENT_QUERY's ``Id -in @(...)``
 # matches many unrelated providers) and are not treated as either signal.
-_SEVERE_EVENT_IDS = frozenset({41, 6008})
-_GPU_LOST_EVENT_IDS = frozenset({4101})
+# Windows event IDs are provider-scoped: EVENT_QUERY's ``Id -in @(41, 6008, 4101, ...)`` clause
+# matches that number from ANY provider (the same over-matching already documented for bare
+# Id=1 informational noise), so an unrelated provider reusing 41/6008/4101 must not be treated as
+# a real signal -- require the specific provider each canonical event actually comes from.
+_SEVERE_EVENT_SIGNATURES = {(41, "Kernel-Power"), (6008, "EventLog")}
+_GPU_LOST_EVENT_SIGNATURES = {(4101, "Display")}
 
 
 def _classify_events(events: list[dict[str, Any]]) -> tuple[bool, bool]:
@@ -358,9 +362,9 @@ def _classify_events(events: list[dict[str, Any]]) -> tuple[bool, bool]:
             severe = True
         elif "nvlddmkm" in provider:
             gpu_lost = True
-        elif event_id in _SEVERE_EVENT_IDS:
+        elif any(event_id == i and p in provider for i, p in _SEVERE_EVENT_SIGNATURES):
             severe = True
-        elif event_id in _GPU_LOST_EVENT_IDS:
+        elif any(event_id == i and p in provider for i, p in _GPU_LOST_EVENT_SIGNATURES):
             gpu_lost = True
     return severe, gpu_lost
 
