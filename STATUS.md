@@ -755,10 +755,44 @@ passed on the accepted source tree, including required Python 3.11 and 3.12.
 
 1. Maintain the accepted v2.6 and IMG-100 baseline pending explicit product-owner direction.
 
-Next action: **Continue ordinary-use observation under the owner-confirmed XMP-off condition and
-the directly observed 5600 MT/s DIMM fields. Preserve survivor telemetry and capture Windows
-evidence if the established black-screen/GPU-loss failure recurs. Do not introduce a second
-isolation variable.**
+## Current execution frontier
+
+The next phase uses three bounded, periodically reconverging lanes. Separate
+worktrees isolate source only. Actual PromptPacks, settings, SQLite, and
+configured endpoints require explicit isolation or authorization. Deliberate
+real-model inference and platform/hardware changes are serialized and separately
+owner-authorized. Lane A ordinarily needs neither real-state nor machine/GPU
+access. Landing/current packages reacquire `main` before updating this frontier;
+these are not long-lived divergent branches.
+
+1. **Lane A — Product Quality & Deterministic Engineering.** Start
+   `PR-TEST-TRUTH-120 — Deterministic Test Truth Repair & Residual Census` to
+   repair platform-mutation and unintended configured-production-endpoint test
+   classes, record current local PR-gate/toolchain truth, and census residual
+   failures. Follow with `PR-ASSET-120 — Provenance-Rich Asset Metadata
+   Enrichment and Compatibility Profiles` (offline/observational) and
+   `WP-PACK-AUDIT-100 — PromptPack & Saved-Settings Quality Census`; structural
+   checks do not depend on Asset-120, while compatibility checks consume it once
+   available. FLUX/model qualification is not a Lane A activity.
+2. **Lane B — Platform Stability & Forensics.** Continue the existing
+   `DIAG-GPU-130` identity: preserve/analyze recoverable restricted `0x133`
+   dumps with administrator support, reconcile XMP-off clean/high-load exposure,
+   define an operational GPU-active-exposure exit criterion (not root-cause
+   proof), and specify recurrence evidence/action. Then remain dormant and
+   event-driven. A new hardware/platform variable needs an owner decision;
+   PR-VID-184/184R/184S may inform, but cannot classify, the failure family
+   without supporting evidence.
+3. **Lane C — Model Qualification & Capability Expansion.** Start
+   `PR-VID-185 — Wan-Animate-2 Promotion Gate & Production-Readiness
+   Adjudication` from accepted PR-VID-184S evidence only: no GPU run or
+   integration, reconcile the owner motion-value pass with the frozen failing
+   motion-correlation metric, and define representative resource/usability and
+   promotion evidence without repeating B1/A/B2 for N. Then consider separately
+   owner-authorized `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware
+   Qualification`. Production integration requires an explicitly selected,
+   evidence-backed capability and extends existing PR-RUNTIME-100 ownership only
+   when a runtime becomes production; extract qualification primitives only after
+   two genuinely common needs are demonstrated.
 
 PR-MVP-090 is **COMPLETE / ACCEPTED / INTEGRATED**. The final real-backend
 release proof completed without production source changes.

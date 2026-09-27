@@ -24,6 +24,12 @@ Before editing:
 Implement the smallest complete solution. Normal refactors required for
 correctness are authorized; unrelated cleanup is not.
 
+Repair only confirmed batched findings sent under the current package. For a
+completed physical qualification, obey the post-runtime evidence freeze: do not
+add permanent tests or hardening for hypothetical future one-off harness use
+unless required by accepted evidence claims, security, or the current acceptance
+contract.
+
 Preserve StableNew's canonical runtime and ownership boundaries. Do not create
 parallel runtime authorities or direct GUI/backend paths.
 

@@ -54,6 +54,16 @@ committing, pushing, creating a pull request, or any integration action.
 Occurs only after accepted Builder/Verifier/Security evidence and applies the
 existing publication rules below.
 
+Before acting on CI/review feedback, re-check every finding against current
+HEAD. Automated reviewer comments never grant scope. Batch confirmed current
+blocking findings through the bounded Builder/Verifier repair path; Release does
+not edit files or push one commit per bot comment. After the authorized
+repair/reverification budget is consumed, a materially new finding is a
+stop/report boundary. When acceptance, required CI, and review/security
+conditions are met, close out rather than continue optional hardening. These
+rules preserve all existing owner authorization requirements and do not expand
+tools or permissions.
+
 Before publication:
 1. verify branch/HEAD/worktree and that the branch is not `main`;
 2. inspect the final diff and untracked files;

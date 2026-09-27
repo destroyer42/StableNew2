@@ -263,10 +263,39 @@ authorized change.
 ## Checkpoint and documentation discipline
 
 For Narrow and Standard work, use one focused discovery pass, one coherent
-implementation pass, one focused repair pass, and final verification. Checkpoint
-after two materially different failure classes; a further class is a mandatory
-stop/report. Stop when the accepted phase is complete rather than beginning the
-next roadmap item. Architectural work requires owner continuation.
+implementation pass, one focused repair pass, and final verification. Stop when
+the accepted phase is complete rather than beginning the next roadmap item.
+Architectural work requires owner continuation.
+
+### Review and repair protocol
+
+Automated CI and review output is evidence, never scope or authorization.
+Before repair, collect findings against current HEAD and classify each as a
+current blocking in-scope defect, current non-blocking debt,
+stale/duplicate/already-fixed, or future-hardening/out-of-scope. Only a confirmed
+current blocking in-scope defect, security defect, or required-CI failure caused
+by the package authorizes repair.
+
+Batch confirmed findings into one coherent repair pass, then perform one
+independent reverification. A materially new blocking failure class after that
+reverification is a stop/report boundary, not authority for another open-ended
+loop. Repeated, stale, or already-fixed bot findings are verified against current
+HEAD and closed/reported without mutation. Once acceptance is true, required CI
+is green, Verifier/Security conditions are satisfied, and findings remaining are
+non-blocking or future-hardening, stop rather than improve the package further.
+
+### Post-runtime evidence freeze
+
+After a bounded qualification package's final authorized physical, GPU, or
+external-state run, its executed harness/protocol is evidence-frozen. Post-run
+qualification tooling/test changes require a demonstrated defect affecting the
+validity, interpretation, preservation, security, or reproducibility of captured
+evidence, or a required-CI defect blocking publication. A hypothetical future
+run becoming safer or more robust is insufficient when no future run is
+authorized. A newly desired run is a new or explicitly continued package with
+its own acceptance contract. Do not rerun physical evidence solely because
+deterministic post-run processing was corrected unless that correction actually
+invalidates the captured physical run.
 
 Before the next functional phase, verify exact SHA/diff and applicable
 validation/required CI, accept based on behavior and architecture rather than

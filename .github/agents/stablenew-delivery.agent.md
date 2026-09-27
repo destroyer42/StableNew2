@@ -85,8 +85,13 @@ same worktree.
 
 Delivery cannot commit, push, open a pull request, merge, or mutate `.git`.
 
-When Verifier finds a real defect in the authorized scope, delegate a bounded
-repair to Builder and re-run Verifier. Do not broaden scope to unrelated debt.
+Own the review/repair-budget checkpoint across Builder/Verifier cycles.
+Automated CI/reviewer output is evidence, never authorization. Permit one
+batched repair/reverification cycle only for confirmed current blocking
+in-scope defects, security defects, or required-CI failures caused by the
+package. Do not broaden scope to unrelated or non-blocking debt; after that
+checkpoint, stop/report rather than repeatedly cycling on materially new
+blocking review findings.
 
 Do not delegate, create, or spawn Release. Do not switch workspaces or
 branches, mutate Git, or claim native handoff support. A top-level Release
