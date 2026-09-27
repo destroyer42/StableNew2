@@ -288,6 +288,22 @@ Updated: 2026-09-25
   GPU-loss observation in the DIAG-GPU-130 record without merging root-cause interpretation: no WHEA,
   Kernel-Power 41, 6008 or 4101 event was found in the inspected window, which does not prove a
   different cause and is not a stability PASS.
+  `PR-VID-184R — Wan-Animate-2 Pinned-Memory / HostBuffer Re-adjudication`
+  (`docs/Subsystems/Video/PR-VID-184R_Wan_Animate_2_Pinned_Memory_Readjudication.md`) is **COMPLETE**:
+  one owner-authorized GPU submission of the exact PR-VID-184 frozen workload (same isolated
+  ComfyUI 0.37.0 environment, same hashes, cache OFF, 39-frame/24 fps input, legal length 41) with only
+  `--disable-pinned-memory` added. It **completed** (10/10 sampler steps, output produced, GPU healthy,
+  no HostBuffer/CUDA error), where PR-VID-184 lost the GPU at step 10/10. Classified
+  `WAN_ANIMATE_2_LOCAL_EXECUTION_PASS_WITH_PINNED_MEMORY_DISABLED` and
+  `PINNED_MEMORY_PATH_MATERIALLY_IMPLICATED` — a contributor, not proven sole cause: one run against
+  one run, with uncontrolled state differences (fresh boot; commit 34 → 57 % vs 58 → 98 %). This narrows
+  PR-VID-184's configuration-specific local NO-GO (which stays an accurate record of its tested
+  configuration) but is not a hardware clearance or a DIAG-GPU-130 result. The output (480×848, 41 frames
+  trimmed to 39) passes three of four frozen gates (continuity 1.0, ghost 0, root translation 0.623) and
+  misses `motion_curve_correlation` (0.151 vs 0.30); agent visual inspection shows a reference-looking
+  subject carrying the motion with no ghost figure, no owner verdict yet — motion quality is PARTIAL,
+  model capability PARTIAL and unadjudicated. No further GPU run or production integration is
+  authorized; next steps are owner decisions.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 

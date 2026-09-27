@@ -1,0 +1,87 @@
+{
+  "package": "PR-VID-184R",
+  "date": "2026-09-26",
+  "arm": "B",
+  "submissions": 1,
+  "retries": 0,
+  "variable": "--disable-pinned-memory (only intended difference from PR-VID-184 Arm A)",
+  "execution_outcome": "COMPLETED (execution_success; 10/10 sampler steps at ~14.6 s/it; Prompt executed in 163.99 s; harness wall 165.8 s)",
+  "prompt_id": "b50391a0-ba84-4aa9-9250-d2fbcfe2e0bc",
+  "classifications": {
+    "execution": "WAN_ANIMATE_2_LOCAL_EXECUTION_PASS_WITH_PINNED_MEMORY_DISABLED",
+    "causal": "PINNED_MEMORY_PATH_MATERIALLY_IMPLICATED (not proven sole cause; single-run comparison with uncontrolled system-state differences)",
+    "motion": "PARTIAL: 3 of 4 frozen detector/timing gates pass (continuity, ghost persistence, root translation); motion_curve_correlation 0.151 below the 0.30 gate; agent visual inspection only, owner human verdict not recorded"
+  },
+  "preflight_dry_run_gate": {
+    "boot_minutes_before_gate": 31.5,
+    "gpu": "RTX 4070 Ti driver 617.14, 10,976 MiB free",
+    "commit_percent": 28.49,
+    "commit_headroom_gb": 39.16,
+    "physical_available_gb": 18.73,
+    "pagefile": "C:\\pagefile.sys AllocatedBaseSize 23552 MB, CurrentUsage 0",
+    "port_free": true,
+    "graph_validation": "VALID: True, zero node errors",
+    "manifest_diff": "launch_args (+--disable-pinned-memory), arm, evidence_dir, pinned_memory_expected only"
+  },
+  "arm_b_telemetry": {
+    "samples": 82,
+    "interval_s": 2,
+    "vram_peak_mib": 11881,
+    "vram_peak_note": "reached in the third sample during model staging",
+    "commit_start_percent": 34.21,
+    "commit_peak_percent": 57.46,
+    "commit_min_headroom_gb": 23.3,
+    "commit_sampling_steady_percent": "~53.4-53.8",
+    "physical_min_available_gb": 11.83,
+    "temp_peak_c": 81,
+    "power_peak_w": 255.92,
+    "first_sampler_step_at_s": 26.6,
+    "safety_stop": null,
+    "gpu_query_failed": false,
+    "not_captured": "per-process working set (harness sampled the venv launcher shim PID, value invalid); shared-GPU-memory behavior"
+  },
+  "arm_a_reference": {
+    "source": "PR-VID-184 local_attempt_evidence.json",
+    "commit_preflight_percent": 57.78,
+    "commit_monitor_start_percent": 86.68,
+    "commit_peak_percent": 98.15,
+    "commit_steady_percent": "~95.1-95.9",
+    "vram_used_mib": "8747-10600",
+    "pinned_memory_log": "Enabled pinned memory 13010.0 (MiB)"
+  },
+  "log_comparison": "Identical model staging lines in both arms (same 'prepared for dynamic VRAM loading' sizes; dynamic VRAM remained enabled). Arm B log: no 'Enabled pinned memory' line, no HostBuffer/CUDA errors, 0 tracebacks.",
+  "event_log": "Read-only System-log query (last 60 min) before and after the run returned the same seven boot-time events only (incl. Kernel-Power 41 and 6008 ~20 min after Arm A, i.e. at the recovery boot); no WHEA, 4101, or nvlddmkm event and no new event during Arm B.",
+  "teardown": {
+    "owned_pid": 16484,
+    "exit_code": 1,
+    "port_listening_after": false,
+    "post_run_nvidia_smi": "RTX 4070 Ti normal"
+  },
+  "output": {
+    "file": "vid184_run5_generated_00001_.webm",
+    "sha256": "c669c216b8f745755f9529cd0ad16ae422151c68a529699bed91a668f899c50d",
+    "codec": "vp9",
+    "geometry": "480x848",
+    "fps": 24,
+    "decoded_frames": 41,
+    "trimmed_39f_mp4_sha256": "420a5b50eb10b9a6fe7e7802ed72021b258749662b3192836bbbaa962b66f84e",
+    "trimmed_frames": 39,
+    "note": "effective geometry 480x848 observed here for the first time (template derives width/height at runtime)"
+  },
+  "frozen_metrics_on_39f": {
+    "primary_subject_continuity": 1.0,
+    "primary_subject_continuity_pass": true,
+    "ghost_actor_persistence": 0,
+    "ghost_actor_persistence_pass": true,
+    "root_translation_fraction": 0.623,
+    "root_translation_fraction_pass": true,
+    "motion_curve_correlation": 0.151,
+    "motion_curve_correlation_pass": false,
+    "identity_hist_mean": 0.949,
+    "identity_hist_min": 0.903,
+    "camera_drift_px": 0.004,
+    "motion_area_fraction": 0.274,
+    "note": "identity_hist is corroborating only (palette-dominated); detector cannot confirm the tracked figure is the reference subject"
+  },
+  "frozen_contract_sha256": "30608f7a3595d5db000946fbb4941918fdf6dd09cdf8fa1387a7953ed706543c"
+}
