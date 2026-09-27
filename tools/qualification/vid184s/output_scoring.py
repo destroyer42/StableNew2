@@ -30,6 +30,10 @@ FFMPEG = (
 EVIDENCE_FRAMES = 39
 
 
+class ShortClipError(ValueError):
+    """The saved output has fewer decodable frames than the frozen evidence window."""
+
+
 def trim_to_mp4(webm: Path, out: Path) -> Path:
     out.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -37,6 +41,20 @@ def trim_to_mp4(webm: Path, out: Path) -> Path:
          "-c:v", "libx264", "-crf", "12", "-pix_fmt", "yuv420p", str(out)],
         check=True,
     )  # fmt: skip
+    # A source with fewer than EVIDENCE_FRAMES decodable frames still lets ffmpeg reach EOF and
+    # emit a short (but otherwise valid) file; the downstream metrics would then silently score
+    # a partial/truncated generation as if it were the full 39-frame evidence window.
+    ffprobe = FFMPEG.replace("ffmpeg.exe", "ffprobe.exe")
+    r = subprocess.run(
+        [ffprobe, "-v", "error", "-count_frames", "-select_streams", "v:0",
+         "-show_entries", "stream=nb_read_frames", "-of", "json", str(out)],
+        capture_output=True, text=True, check=True,
+    )  # fmt: skip
+    got = int(json.loads(r.stdout)["streams"][0]["nb_read_frames"])
+    if got != EVIDENCE_FRAMES:
+        raise ShortClipError(
+            f"{webm} trimmed to {got} frames, not the frozen evidence window of {EVIDENCE_FRAMES}"
+        )
     return out
 
 

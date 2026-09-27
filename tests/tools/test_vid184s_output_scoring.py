@@ -27,3 +27,9 @@ def test_direction_sign_missing_centroid_is_zero() -> None:
     assert output_scoring._direction_sign(None, 20.0) == 0
     assert output_scoring._direction_sign(10.0, None) == 0
     assert output_scoring._direction_sign(None, None) == 0
+
+
+def test_short_clip_error_is_a_value_error() -> None:
+    # trim_to_mp4 itself needs ffmpeg/ffprobe (not exercised here); this only pins the raised
+    # type so a caller can catch ShortClipError specifically or ValueError generically.
+    assert issubclass(output_scoring.ShortClipError, ValueError)

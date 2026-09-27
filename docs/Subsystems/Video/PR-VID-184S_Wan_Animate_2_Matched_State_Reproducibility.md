@@ -230,8 +230,8 @@ PipelineRunner.run_njr → Handler → Artifacts/History), which this package do
 
 ## Validation
 
-- `pytest tests/tools/test_vid184*.py`: 70 passed (37 pre-existing + 19 new + 10 post-review
-  hardening regression tests + 4 direction-sign tests).
+- `pytest tests/tools/test_vid184*.py`: 71 passed (37 pre-existing + 19 new + 10 post-review
+  hardening regression tests + 5 output-scoring tests).
 - Ruff check and format: clean on all touched Python.
 - `git diff --check`: clean. `git diff -- src`: empty.
 - Local `python tools/ci/run_pr_gate.py`: stops on the known missing-mypy tooling blocker (unchanged
