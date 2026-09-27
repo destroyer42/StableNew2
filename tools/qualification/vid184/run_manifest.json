@@ -1,7 +1,7 @@
 {
   "pre_registered": "2026-09-26",
   "amended": "2026-09-26T2 (pre-generation addition: prompts, exact per-run widget values, length semantics, cache-bypass procedure); 2026-09-26T3 (revised run 5 evidence window 13->39 frames); 2026-09-26T4 (legal Wan 4n+1 length correction applied to ALL runs, per tools/qualification/vid184/legal_length.py)",
-  "execution_status": "LOCAL RUN 5 AUTHORIZED as of 2026-09-26T5: owner explicitly authorized exactly one bounded local Wan-Animate-2 Distilled physical qualification run (run 5 only), conditional on the legal-length correction below. Runs 1-4 remain BLOCKED_BY_SUBSCRIPTION (the owner's Comfy Cloud account cannot queue workflows without a paid subscription -- 'A cloud subscription is required to queue workflows' -- despite Comfy's own advertised Free Tier/'5 free runs' claims, superseded for this package by this observed behavior) and are NOT authorized for execution; their corrected values below are pre-registration-only, for if/when remote access is separately authorized. Zero runs have executed as of this revision.",
+  "execution_status": "CLOSED 2026-09-26: run 5 was submitted exactly once (prompt_id df209e41-21d1-4dfe-ac38-558aec7c1c07) and failed during the 10th of 10 sampler steps with GPU device loss; no output was produced; no retry; the authorization is exhausted (see local_attempt_evidence.json). Runs 1-4 remain BLOCKED_BY_SUBSCRIPTION and unexecuted. This matrix is retained only as a pre-registration that a separate owner authorization could execute.",
   "note": "Pre-registration of record per PR-VID-184 owner amendment section 3-4. Any later threshold or matrix change is a labelled post-hoc deviation, not a silent edit of this file.",
   "frozen_inputs": {
     "reference_image": {
@@ -182,7 +182,7 @@
       "generation_length": 41,
       "evidence_frames": 39,
       "post_processing": "trim final 2 frames from decoded output -> 39 frames (tools/qualification/vid184/legal_length.trim_to_evidence_window)",
-      "authorized_for_execution": true,
+      "authorized_for_execution": false,
       "authorization": "Owner explicit authorization, 2026-09-26: exactly one bounded local Wan-Animate-2 Distilled physical qualification run, conditional on this legal-length correction. No retry. No second run.",
       "driving_video_input": "run5_driving_video_candidate (39-frame file above) fed as-is; the node's own hold-last-frame padding supplies the 2 extra frames needed to reach generation_length=41 -- no driving-video content modification.",
       "width_height": "482x854 (shipped default, unchanged)",

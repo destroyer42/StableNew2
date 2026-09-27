@@ -258,77 +258,36 @@ Updated: 2026-09-25
   clean generations occurred while DDR5-5600/XMP was still enabled and are not a DIAG-GPU stability
   PASS.
   `PR-VID-184 — Wan-Animate-2 Reference Capability, Target-Hardware & Integration Feasibility` is
-  **IN PROGRESS — REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION**
+  **COMPLETE / CLOSED — MODEL CAPABILITY UNKNOWN; REMOTE GATE BLOCKED_BY_SUBSCRIPTION; LOCAL
+  TARGET-HARDWARE NO-GO AT THE FROZEN ENVELOPE**
   (`docs/Subsystems/Video/PR-VID-184_Wan_Animate_2_Reference_Target_Hardware_Integration_Feasibility.md`).
-  Current-source research (dated 2026-09-26) confirms Wan-Animate-2 is real, released
-  2026-08-07 (Base + Distillation, Apache 2.0), consumes a raw driving video directly with no
-  intermediate pose-extractor stage (unlike v1), and has two distinct official Comfy workflows
-  (Base-oriented INT8 ConvRot + LightX2V LoRA; native distilled INT8 ConvRot) plus separate
-  pristine bf16 checkpoints. `WanAnimate2Cache` is confirmed a speed-for-memory tradeoff
-  (~12.5 GB extra RAM at 480x832/81f/bf16 for roughly halved generation time), so cache defaults
-  OFF for any future constrained-memory qualification. No current upstream or community source
-  answers the single decisive question (whether reference-bound locomotion/root translation is
-  possible without a planted subject or a separate "ghost" figure — the exact PR-VID-181/183
-  failure mode); an open, unreproduced upstream bug report (fp32 DiT residency, ~65.6 GB, on
-  single-GPU setups) is a new risk carried forward for the RTX 4070 Ti 12 GB target. The
-  pre-registered Phase C scoring contract (`tools/qualification/vid184/scoring_contract.py`,
-  hash-frozen before any Animate-2 output exists) and the Phase F backend-neutral contract mapping
-  (no `src/` change; existing `control_video`/`pose_video` controls remain unused by the Video
-  Workflow producer) are both complete. A 2026-09-26 owner amendment corrected the experiment design:
-  the cloud A/B is named **Base+LightX2V vs. Distilled** (workflow identity, never "Case A/B" — that
-  label already means gesture/locomotion in PR-VID-170/180/181 and retarget-off/on in PR-VID-183),
-  using the SAME frozen reference image (`reports/vid110/inputs/source_fullbody.png`, a
-  StableNew-generated synthetic person) and a **retrimmed** driving clip: 60 frames / 2.30-4.80s of
-  the same Mixkit #583 source file (was 29 frames / 3.0-4.2s), same fixed crop, visually verified
-  frame-by-frame fully in-frame throughout; 81 frames (the shipped template default) was not
-  reachable under that exact crop. Direct parsing of the current official Comfy-Org blueprint JSON's
-  internal node graph (not just outer widgets) found both templates ship `lcm` sampler, `simple`
-  scheduler, shift 5, cfg 1, and `WanAnimate2Cache` device=gpu/dtype=int8 by default, differing only
-  in checkpoint and step count (6 for Base+LightX2V via the LightX2V step-distillation LoRA, 10 for
-  Distilled); despite the name, Base+LightX2V does not run pristine Base's 40-step CFG sampling. A
-  new detector-based scorer (`tools/qualification/vid184/detect_runner.py` + `tracking.py`, the
-  pinned PR-VID-181 YOLO checkpoint, isolated in the same disposable CPU-only environment) was built
-  and control-validated before any upload: it correctly passes the frozen driving clip itself
-  (positive control, all 3 detector-dependent metrics pass) and correctly fails all three accepted
-  negative-control outputs (PR-VID-181 Case B, PR-VID-183 Arms A/B) on `root_translation_fraction`,
-  with the PR-VID-181 case additionally failing continuity/ghost-persistence — matching each
-  package's own documented failure character. A 5-run matrix is pre-registered
-  (`tools/qualification/vid184/run_manifest.json`) with two seeds derived deterministically from the
-  driving clip's own hash, plus a best-effort arm-blinding tool
-  (`tools/qualification/vid184/blind_seal.py`) for the post-generation human verdict gate: Rob scores
-  the pre-registered rubric blind to metrics and arm identity, and that verdict is the capability
-  classification (metrics corroborate). The driving-clip license/source decision is **RESOLVED
-  2026-09-26 by explicit owner risk-acceptance** (terms genuinely ambiguous, no AI/ML-use carve-out
-  found, owner directed proceeding anyway for this specific qualification test). The owner created a
-  Comfy Cloud account and fully configured the pre-registered workflow, but the first attempted run
-  was **blocked before queueing** with *"A cloud subscription is required to queue workflows"* — no
-  free credits were available. **This supersedes this package's earlier "Free Tier of 400
-  credits/month" / "5 free runs" cost framing**, which was sourced from Comfy's own marketing/support
-  pages and is now corrected in place by directly observed product behavior on the real account.
-  Classified **`REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION`** — an infrastructure/access result,
-  not a Wan-Animate-2 capability finding; Q1 remains genuinely unanswered, not failed. Per explicit
-  owner instruction, this package does not subscribe, purchase credits, or create another cloud
-  account/provider without separate authorization, and is not abandoned. The reframed next physical
-  recommendation (Phase G): if separately authorized, one bounded local Wan-Animate-2 Distilled run
-  on the RTX 4070 Ti 12 GB / 32 GB machine, cache OFF, at the smallest credible locomotion-preserving
-  envelope (revised 2026-09-26: 39 frames/480x832 at native 24fps = 1.625s, matching the accepted
-  PR-VID-183 locomotion-window standard — the original 13-frame hypothesis carried over v1's proven
-  frame count without correcting for frame rate and would have covered only 0.542s; empirically
-  measured with the existing local detector/tracker, root_translation_fraction 0.532 vs. 0.171,
-  model-level behavior still unverified) — with the explicit caveat that a local failure would be
-  ambiguous without a remote reference baseline, and that an ambiguous local result does not by
-  itself authorize continuing to paid remote/rented-GPU adjudication, which remains a separate
-  future ROI decision. A dedicated research pass found StableNew's managed Comfy
-  (0.3.65) is ~10 months/~30 releases behind the version Wan-Animate-2's nodes need (v0.31.0+), with
-  no forced PyTorch/CUDA bump evident; an isolated separate install is architecturally clean (no new
-  software variable for DIAG-GPU-130, though it is still GPU activity to schedule around the current
-  observation window) and is the recommendation for any future physical local probe. Real asset
-  sizes (Hugging Face `Comfy-Org/Wan-Animate-2`, 119 GB repo) confirm the pre-registered Distilled
-  workflow's combined on-disk footprint is ~25.0 GB against a 12 GB card, making sequential/offloaded
-  loading mandatory, not optional; the 32.8 GB pristine-bf16 figure independently cross-validates the
-  earlier fp32-bug report's separately-derived "~32.8 GB expected" estimate. No Animate-2 output has
-  been generated, no production `src/`, workflow-registration, GUI/controller, Comfy-config, or
-  GPU/driver/pagefile change was made.
+  Qualification/feasibility evidence only; no production `src/`, workflow, backend, queue, runner or
+  GUI/controller change. Wan-Animate-2 (released 2026-08-07, Base + Distillation, Apache 2.0, raw
+  driving video, two official Comfy workflows) is real, but **no Animate-2 output was ever produced,
+  so its reference-bound locomotion, motion fidelity, identity, ghost-actor, anatomy and background
+  behavior are UNKNOWN**. The remote official Comfy reference test could not be queued
+  (`REMOTE_REFERENCE_GATE_BLOCKED_BY_SUBSCRIPTION`: *"A cloud subscription is required to queue
+  workflows."*; Comfy's advertised free tier was not usable; no paid access was authorized, no cloud
+  generation occurred) — an access outcome, not a capability failure. The one owner-authorized local
+  attempt (isolated qualification-only ComfyUI 0.37.0 outside the untouched StableNew-managed Comfy;
+  Distilled INT8 ConvRot, cache OFF, frozen reference, 39-frame/24 fps/1.625 s locomotion input with
+  legal internal length 41, fixed seed, one submission) passed setup and graph validation, queued with
+  zero node errors, then failed **mid-sampling, during the 10th of 10 sampler steps** (`hostbuf_file_reader_read failed`, raised from a weight-read call in the traceback, then
+  CUDA unknown/sticky error) and left the GPU in a lost-device state requiring reboot, with Windows
+  commit at approximately 95–98 % (previous accepted maximum in this line ~81.7 %). Classified
+  `WAN_ANIMATE_2_LOCAL_TARGET_HARDWARE_NO_GO_AT_FROZEN_ENVELOPE — GPU_DEVICE_LOSS_DURING_SAMPLING`
+  with secondary `WINDOWS_COMMIT_PRESSURE_EXTREME`: a hardware/resource-envelope NO-GO for that
+  envelope only, **not a model NO-GO**; commit pressure and device loss co-occurred but causality is
+  unproven. No output, no retry; the authorization is exhausted and no further Animate-2 GPU run is
+  authorized. The ~25 GB aggregate on-disk model assets prove full simultaneous VRAM residency at
+  on-disk size is impossible on 12 GB; actual runtime residency/offload behavior was not established.
+  Wan-Animate-2 stays architecturally compatible with a future `backend_id=comfy` experimental
+  workflow (no production contract change authorized). The next step is an owner ROI/product decision
+  among remote capability adjudication (paid, separately authorized), 32→64 GB RAM, a higher-VRAM GPU,
+  or deferring Animate-2; none is selected or authorized. This event was recorded as an additional
+  GPU-loss observation in the DIAG-GPU-130 record without merging root-cause interpretation: no WHEA,
+  Kernel-Power 41, 6008 or 4101 event was found in the inspected window, which does not prove a
+  different cause and is not a stability PASS.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 

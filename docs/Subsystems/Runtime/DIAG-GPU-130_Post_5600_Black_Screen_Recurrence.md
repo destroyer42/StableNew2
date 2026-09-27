@@ -160,6 +160,19 @@ deferred behind platform-baseline evidence. Continue ordinary-use observation an
 recurrence for monitoring; do not deliberately stress-test or combine this with another
 configuration or hardware action.
 
+## Additional GPU-loss observation (2026-09-26, PR-VID-184)
+
+During the single owner-authorized, isolated, non-StableNew Wan-Animate-2 sampling attempt (10th of 10 sampler steps)
+recorded in `docs/Subsystems/Video/PR-VID-184_Wan_Animate_2_Reference_Target_Hardware_Integration_Feasibility.md`
+(Phase H), the GPU entered a lost-device state (`CUDA_ERROR_UNKNOWN`/sticky CUDA error; `nvidia-smi`
+reported the GPU lost and requested a reboot) while Windows system commit was approximately 95–98 %.
+A read-only System-log query over the roughly 10 minutes around it found no WHEA, Kernel-Power 41,
+unexpected-shutdown 6008 or display-driver-reset 4101 event. This event did not reproduce the
+DIAG-GPU-130 Windows-event signature in the inspected window. That is descriptive only: it does not
+prove a different cause, does not clear the hardware or the driver, does not prove commit exhaustion,
+and is not a stability PASS. It is not merged into this diagnosis's root-cause interpretation; the
+status above is unchanged.
+
 ## Boundaries and validation
 
 - No GPU workload, stress test, replay, retry, queue mutation, process action, driver action,
