@@ -116,10 +116,14 @@ distinguished from community reports; no community anecdote used as acceptance e
    dtype-residency argument, not a file-size lookup) — two independent methods landing on the same
    number is corroborating, not coincidental. **Combined on-disk footprint for this package's actual
    pre-registered Distilled workflow is ~25.0 GB** (16.7 + 6.74 + 0.254 + 1.26), and **~25.7 GB for
-   Base+LightX2V** (+0.738 GB LoRA) — both far exceed a 12 GB card's VRAM as a naive simultaneous
-   sum, confirming that sequential/offloaded loading (not all components resident in VRAM at once)
-   is **mandatory**, not optional, for any local attempt on the RTX 4070 Ti — carried into the Phase E
-   budget below. [FIRST-PARTY, Hugging Face repository file listing]
+   Base+LightX2V** (+0.738 GB LoRA) — both exceed a 12 GB card's VRAM as a naive simultaneous sum of
+   on-disk file sizes. **This demonstrates that full simultaneous VRAM residency of every asset at
+   its on-disk size is arithmetically impossible on a 12 GB card — it does not by itself demonstrate
+   which runtime mechanism (sequential loading, CPU/disk offload, partial residency, or simply an
+   OOM failure) ComfyUI actually applies**, since on-disk file size is not the same as peak runtime
+   VRAM usage and no local run has been measured yet. Carried into the Phase E budget below as an
+   arithmetic constraint, not a claimed mechanism. [FIRST-PARTY, Hugging Face repository file
+   listing]
 8. **Frame/geometry conventions.** The official `WanAnimate2Cache` doc's own reference example uses
    480x832, 81 frames, bf16. Comfy Cloud's landing page cites "81 frames, 18 fps, 640x640, 4-step"
    as its credit-cost example. 720P/480P are the named supported tiers. An open, unresolved upstream
@@ -454,7 +458,7 @@ control to `'randomize'` — **this must be changed to `'fixed'`** with the seed
 | 2 | Base+LightX2V | 60 | shipped default | S1 | reference capability |
 | 3 | Distilled | 60 | shipped default | S2 | seed replication |
 | 4 | Base+LightX2V | 60 | shipped default | S2 | seed replication |
-| 5 | Distilled | 13 (local-candidate; paper-only hypothesis, see Phase E) | **OFF** (remove/bypass the `WanAnimate2Cache` node — documented graph change) | S1 | local-candidate configuration, run remotely; separates configuration effects from future hardware effects; not a reference arm, cannot establish Q1 alone |
+| 5 | Distilled | 39 (local-candidate, 1.625s @ native 24fps — revised/validated, see Phase E) | **OFF** (remove/bypass the `WanAnimate2Cache` node — documented graph change) | S1 | local-candidate configuration, run remotely; separates configuration effects from future hardware effects; not a reference arm, cannot establish Q1 alone |
 
 Runs 1-4 use shipped template settings exactly (sampler `lcm`, scheduler `simple`, shift 5, cfg 1,
 reference/pose strengths 1, pose applied across the full clip), except the pre-registered
@@ -500,8 +504,9 @@ pose_video.shape[0]), dim=0)` — a frozen repeat, not new motion; still no erro
 on the `length` widget is a spinner-increment nicety, not a validated constraint in `execute()` —
 any positive integer is legal. **Exact legal length per run:** runs 1-4 use **length=60** (not the
 81 default — deliberately, so the padded/frozen tail that 81 would produce doesn't dilute
-`root_translation_fraction`); run 5 uses **length=13**, which truncates the *same* 60-frame driving
-file to its first 13 frames via this same mechanism — no separate short driving asset is needed.
+`root_translation_fraction`); run 5 uses **length=39** (revised from an earlier 13-frame hypothesis
+— see Phase E), which truncates the *same* 60-frame driving file to its first 39 frames via this
+same mechanism — no separate short driving asset is needed.
 
 **4. Cache OFF for run 5 — confirmed from `WanAnimate2Cache.define_schema()`: the exposed widgets
 cannot do it.** `device` options are exactly `['cpu','gpu']` (no off/none); `dtype` options are
@@ -556,8 +561,10 @@ With the remote reference gate blocked by access rather than capability, and no 
 continuation to paid access authorized, the pragmatic next evidence-gathering step — **if the
 owner separately authorizes it** — is **one bounded local Wan-Animate-2 Distilled run on the RTX
 4070 Ti 12 GB / 32 GB machine, cache OFF, at the smallest credible locomotion-preserving envelope**
-(paper-only leading hypothesis: 13 frames / 480x832, per Phase E below — unverified for
-Wan-Animate-2's architecture/quant, not yet run). This is **not authorized by this update** — it
+(leading candidate, revised and empirically validated 2026-09-26: 39 frames / 480x832 / native
+24 fps = exactly 1.625 s, matching the accepted PR-VID-183 locomotion-window standard — see Phase E
+below; still unverified for Wan-Animate-2's model-level architecture/quant behavior, not yet run).
+This is **not authorized by this update** — it
 requires the same explicit GPU-workload authorization every prior local qualification package in
 this line has required, and none has been given here.
 
@@ -612,12 +619,15 @@ reframed next physical recommendation above, since the remote gate is currently 
   here; recorded as the theoretical middle option between OFF and GPU.
 
 **Local default recommendation stays cache OFF** unless a future budget pass, informed by real
-telemetry from an actual run (remote or local), proves headroom for GPU or CPU mode. This is now
-the primary reason cache OFF is not merely a memory-savings default but a **precondition**: Phase A
-item 7's real asset sizes put the Distilled workflow's combined on-disk footprint at ~25.0 GB
-(checkpoint + text encoder + VAE + CLIP vision) against a 12 GB card — cache's own ~12.5 GB
-additional cost (scaled down for our smaller candidate window, exact figure unpublished) would only
-worsen an already offload-dependent budget.
+telemetry from an actual run (remote or local), proves headroom for GPU or CPU mode. Phase A item
+7's real asset sizes put the Distilled workflow's combined on-disk footprint at ~25.0 GB (checkpoint
++ text encoder + VAE + CLIP vision) against a 12 GB card — an arithmetic fact that full simultaneous
+VRAM residency at on-disk size is impossible, not a claim about which runtime mechanism ComfyUI
+actually uses to handle it (unmeasured). Cache's own additional cost (~12.5 GB at the much larger
+480x832/81f/bf16 reference point Comfy published; the real cost at our smaller 39-frame candidate is
+unpublished and presumably smaller, but not measured) would only add further pressure on top of an
+already-tight budget, reinforcing cache OFF as the safer starting choice regardless of the exact
+mechanism.
 
 **Material new risk (Phase A item 10, carried forward):** an open, unreproduced upstream bug report
 (issue #5) describes the DiT possibly loading in fp32 instead of bf16 on single-GPU setups
@@ -625,12 +635,47 @@ worsen an already offload-dependent budget.
 built. This is directly adverse to any 12 GB/32 GB local attempt and must be checked (reproduced,
 avoided, or confirmed patched) before a real physical budget is finalized — not yet done.
 
-**Leading local-candidate window (paper-only hypothesis, run 5):** 13 frames / 480x832 — the
-proven-safe Wan2.2-Animate-14B local envelope already used successfully on this exact RTX 4070 Ti
-across PR-VID-160C/170/175/180/181 (Q3_K_M quant, not the INT8 ConvRot quant Wan-Animate-2 ships).
-This is carried over as a starting hypothesis only — it has **not** been independently verified for
-Wan-Animate-2's different architecture/quantization, and is explicitly labeled as such in
-`run_manifest.json`.
+**Leading local-candidate window — revised 2026-09-26 (owner correction, empirically validated, not
+just recalculated on paper).** The original 13-frame hypothesis simply carried over v1's proven-safe
+*frame count* (PR-VID-160C/170/175/180/181) without correcting for frame rate: v1's 13 frames ran at
+**8 fps** (1.625 s of real motion — matching the exact accepted PR-VID-183 natural-locomotion
+window duration), but Wan-Animate-2 consumes driving frames 1:1 with no automatic resampling, and
+our driving clip is native **24 fps**. 13 frames at 24 fps is only **0.542 s** — materially shorter
+than the accepted locomotion standard, likely truncating the stride cycle rather than preserving it.
+
+**Revised envelope: 39 frames at native 24 fps = exactly 1.625 s** — obtained by truncating the
+*already-approved* 60-frame retrimmed clip to its first 39 frames (`pose_video[:39]`, the same
+mechanism `WanAnimate2ToVideo.execute()` already uses) — no new asset, no new hash, no new license
+question, and no resampling deviation from the driving clip's native rate (24 fps sits inside
+Comfy's own recommended ~16-24 fps preparation range). This was not just derived arithmetically; it
+was **measured with the same detector/tracker already built and control-validated** for Phase C,
+run locally against both candidates (no GPU, no cloud):
+
+| Candidate | Duration | `root_translation_fraction` | `primary_subject_continuity` | `ghost_actor_persistence` |
+| --- | --- | ---: | ---: | ---: |
+| 13 frames @ 24fps (original hypothesis) | 0.542 s | **0.171** (barely clears the 0.15 gate) | 1.000 | 0 |
+| **39 frames @ 24fps (revised)** | **1.625 s** | **0.532** (>3x the 13-frame candidate) | 1.000 | 0 |
+
+A full-frame contact sheet of the 39-frame candidate was also visually inspected: clear alternating
+left/right high-knee stride progression across the whole window, continuous left-to-right root
+translation, subject fully in frame throughout — the complete accepted locomotion event, not a
+truncated slice.
+
+**Why not the resampled alternatives (~33f/20fps, ~37f/22-24fps) also suggested for evaluation:**
+both would require producing a *new*, resampled driving asset (a fresh retrim/re-encode step,
+new hash, re-verification) to cover the same ~1.625 s at a lower frame density than 39f/24fps native
+— strictly less temporal information for no offsetting benefit, since resource cost scales with
+frame count and 33-39 frames is not a materially different resource burden either way. The
+native-rate truncation dominates on every axis considered: exact duration match to the accepted
+standard, no new asset, no resampling deviation, and empirically the strongest measured signal.
+**39 frames / 480x832 / cache OFF is the revised leading local candidate**, updated in
+`run_manifest.json`; still a hypothesis pending an actual GPU run, and still not independently
+verified for Wan-Animate-2's architecture/quantization at the model-output level (this validation
+only concerns the driving-video *input*, not model behavior on it).
+
+**Legal frame-count constraint check:** `WanAnimate2ToVideo`'s `length` input has no hard step-4
+validation (confirmed earlier from `execute()` — see Phase D addendum); 39 is a legal, arbitrary
+positive integer, same as 13 or 60.
 
 **Comfy version gap (amendment section 7, dedicated research pass, complete):** StableNew's existing
 managed Comfy Desktop install is pinned at **ComfyUI 0.3.65** (`comfyui_version.py`; also
@@ -759,7 +804,9 @@ name), plus the new branch this package's actual path took.
 - **Q2 (target-hardware feasibility):** **NOT YET ANSWERED.** A preliminary paper-only budget is
   complete (Phase E): cache-mode tradeoffs quantified, a material new risk (upstream issue #5,
   possible fp32 2x-memory bug on single-GPU setups) is on record, a leading local-candidate window is
-  hypothesized (13f/480x832, cache OFF — unverified), and the Comfy version-gap research recommends
+  hypothesized and empirically pre-validated on the driving-video input (39f/480x832/24fps = 1.625s,
+  cache OFF — root_translation_fraction 0.532 vs. 0.171 for the original 13-frame hypothesis; model
+  behavior itself remains unverified), and the Comfy version-gap research recommends
   an isolated install for the eventual physical probe. This budget is now also the basis for the
   reframed next-step recommendation, not gated on a remote pass it cannot currently obtain.
 - **Q3 (backend-neutral integration fit):** **Answered, conditionally.** Yes — the existing
@@ -835,7 +882,7 @@ on its own. The next action is an owner decision, not a checklist to run:
 
 - Authorize a Comfy Cloud subscription or an alternate paid/rented-GPU provider (a new, separate
   spend decision) and this package resumes the 5-run matrix hand-off below unchanged; or
-- Authorize the reframed bounded local run (RTX 4070 Ti, Distilled workflow, cache OFF, ~13f/480x832
+- Authorize the reframed bounded local run (RTX 4070 Ti, Distilled workflow, cache OFF, 39f/480x832
   leading candidate — Phase E/G) as the next evidence-gathering step instead; or
 - Decide neither is warranted right now and leave PR-VID-184 open/paused with this evidence as the
   record.
@@ -853,7 +900,7 @@ that future point):
    "Pre-generation blocker resolution" above, identically for all 5 runs.
 4. For each of the 5 rows in the run matrix above (full machine-readable detail in
    `tools/qualification/vid184/run_manifest.json`): select the named workflow, set `length` (60 for
-   runs 1-4, 13 for run 5), set the seed control to fixed with the given seed, leave every other
+   runs 1-4, 39 for run 5), set the seed control to fixed with the given seed, leave every other
    setting at the shipped default, and — **only for run 5** — bypass the `WanAnimate2Cache` node
    inside the subgraph per the 7-step procedure above. Leave the second (already-bypassed) Motion
    Transfer subgraph untouched. Run it and save **both** the generated clip and the side-by-side

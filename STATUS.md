@@ -311,10 +311,14 @@ Updated: 2026-09-25
   account/provider without separate authorization, and is not abandoned. The reframed next physical
   recommendation (Phase G): if separately authorized, one bounded local Wan-Animate-2 Distilled run
   on the RTX 4070 Ti 12 GB / 32 GB machine, cache OFF, at the smallest credible locomotion-preserving
-  envelope (paper-only leading hypothesis: 13 frames/480x832, unverified) — with the explicit caveat
-  that a local failure would be ambiguous without a remote reference baseline, and that an ambiguous
-  local result does not by itself authorize continuing to paid remote/rented-GPU adjudication, which
-  remains a separate future ROI decision. A dedicated research pass found StableNew's managed Comfy
+  envelope (revised 2026-09-26: 39 frames/480x832 at native 24fps = 1.625s, matching the accepted
+  PR-VID-183 locomotion-window standard — the original 13-frame hypothesis carried over v1's proven
+  frame count without correcting for frame rate and would have covered only 0.542s; empirically
+  measured with the existing local detector/tracker, root_translation_fraction 0.532 vs. 0.171,
+  model-level behavior still unverified) — with the explicit caveat that a local failure would be
+  ambiguous without a remote reference baseline, and that an ambiguous local result does not by
+  itself authorize continuing to paid remote/rented-GPU adjudication, which remains a separate
+  future ROI decision. A dedicated research pass found StableNew's managed Comfy
   (0.3.65) is ~10 months/~30 releases behind the version Wan-Animate-2's nodes need (v0.31.0+), with
   no forced PyTorch/CUDA bump evident; an isolated separate install is architecturally clean (no new
   software variable for DIAG-GPU-130, though it is still GPU activity to schedule around the current

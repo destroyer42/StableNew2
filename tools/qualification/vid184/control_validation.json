@@ -69,5 +69,34 @@
       "all_three_pass": false
     }
   },
-  "detector_json_note": "Per-case raw detector JSON (person boxes per frame) and the retrimmed/output MP4 files live in the disposable qual workspace, not committed; this file is the reviewable committed evidence (hashes, scored metric values, pass/fail against the frozen contract)."
+  "detector_json_note": "Per-case raw detector JSON (person boxes per frame) and the retrimmed/output MP4 files live in the disposable qual workspace, not committed; this file is the reviewable committed evidence (hashes, scored metric values, pass/fail against the frozen contract).",
+  "local_candidate_envelope_comparison": {
+    "purpose": "Revise the run-5 local-candidate frame count (owner correction 2026-09-26): the original 13-frame hypothesis carried over v1 proven-safe FRAME COUNT without correcting for frame rate (v1 ran at 8fps = 1.625s; our clip is native 24fps). Compares the original 13-frame candidate against a revised 39-frame candidate (39 = round(1.625s * 24fps)), both obtained by truncating the same approved 60-frame driving file -- no new asset.",
+    "date": "2026-09-26",
+    "candidates": {
+      "candidate_13f": {
+        "source_truncation": "first 13 frames of B_locomotion_driving_60f.mp4",
+        "sha256": "560e4b8ef7729b35e8677bebd9ff84f766889fc317cf08b51a16103efe8cedfe",
+        "duration_s": 0.542,
+        "frame_count": 13,
+        "primary_subject_continuity": 1.0,
+        "ghost_actor_persistence": 0,
+        "root_translation_fraction": 0.171,
+        "root_translation_fraction_pass": true,
+        "note": "Barely clears the 0.15 pass gate; materially shorter than the accepted PR-VID-183 1.625s locomotion-window standard."
+      },
+      "candidate_39f": {
+        "source_truncation": "first 39 frames of B_locomotion_driving_60f.mp4",
+        "sha256": "d761eb58876cef2bd344731d3dd482b5f59cbd9478c6e8b5e0da94c48266677d",
+        "duration_s": 1.625,
+        "frame_count": 39,
+        "primary_subject_continuity": 1.0,
+        "ghost_actor_persistence": 0,
+        "root_translation_fraction": 0.532,
+        "root_translation_fraction_pass": true,
+        "note": "Exactly matches the accepted PR-VID-183 1.625s locomotion-window standard at native 24fps (no resampling). Visually confirmed (full contact sheet) to contain clear alternating left/right stride progression throughout, subject fully in frame. 3.1x the root_translation_fraction of the 13-frame candidate. SELECTED as the revised run-5 local-candidate envelope."
+      }
+    },
+    "conclusion": "This measures the DRIVING-VIDEO INPUT only (motion content of the candidate envelope), not Wan-Animate-2 model output behavior -- no GPU/cloud run was performed. It resolves which candidate to feed the model, not what the model will do with it."
+  }
 }
