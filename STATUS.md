@@ -331,6 +331,16 @@ Updated: 2026-09-27
   A and not a hardware clearance, not a DIAG-GPU-130 result, and does not rewrite PR-VID-184 or
   PR-VID-184R. No further GPU run (all three authorized submissions used) or production integration
   is authorized; next steps are owner decisions.
+  `PR-VID-185 — Wan-Animate-2 Promotion Gate & Production-Readiness Adjudication` is **COMPLETE /
+  TECHNICALLY NOT YET PROMOTION-READY / NO PRODUCTION INTEGRATION**
+  (`docs/Subsystems/Video/PR-VID-185_Wan_Animate_2_Promotion_Readiness_Adjudication.md`). The owner
+  `WAN_ANIMATE_2_OWNER_MOTION_VALUE_PASS` is preserved, as is the frozen
+  `motion_curve_correlation` FAIL (0.139–0.151 vs 0.30). The metric is adjudicated as a useful
+  non-blocking guardrail rather than a sufficient hard blocker because it measures global optical-flow
+  motion-energy timing, not identity-bound product motion; the threshold and historical result remain
+  unchanged. Pinned-OFF is the preferred tested configuration, but representative accumulated-state
+  resource/usability evidence is still required before a separate owner-authorized experimental
+  integration decision. No GPU/model/runtime action or production source change occurred.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
@@ -792,12 +802,12 @@ these are not long-lived divergent branches.
    dormant/event-driven. A new hardware/platform variable needs an owner decision;
    PR-VID-184/184R/184S may inform, but cannot classify, the failure family
    without supporting evidence.
-3. **Lane C — Model Qualification & Capability Expansion.** Start
-   `PR-VID-185 — Wan-Animate-2 Promotion Gate & Production-Readiness
-   Adjudication` from accepted PR-VID-184S evidence only: no GPU run or
-   integration, reconcile the owner motion-value pass with the frozen failing
-   motion-correlation metric, and define representative resource/usability and
-   promotion evidence without repeating B1/A/B2 for N. Then consider separately
+3. **Lane C — Model Qualification & Capability Expansion.** `PR-VID-185 —
+   Wan-Animate-2 Promotion Gate & Production-Readiness Adjudication` is complete
+   as a no-GPU/no-integration adjudication from accepted PR-VID-184S evidence:
+   the owner motion-value pass is reconciled with the frozen failing
+   motion-correlation metric as a non-blocking guardrail, and representative
+   resource/usability evidence is defined without repeating B1/A/B2 for N. Then consider separately
    owner-authorized `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware
    Qualification`. Production integration requires an explicitly selected,
    evidence-backed capability and extends existing PR-RUNTIME-100 ownership only
