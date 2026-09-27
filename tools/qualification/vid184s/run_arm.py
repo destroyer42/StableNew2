@@ -57,8 +57,23 @@ def sequence_failures(arm: str) -> list[str]:
     if (ROOT / arm / "SUBMITTED.marker").exists():
         fails.append(f"{arm} already submitted: no retry is authorized")
     for prev in arms.ARMS[:idx]:
-        if not (ROOT / prev / "arm_record.json").exists():
+        prev_record = ROOT / prev / "arm_record.json"
+        if not prev_record.exists():
             fails.append(f"{prev} has not been run: order is B1 -> A -> B2")
+            continue
+        status = arms.arm_status(json.loads(prev_record.read_text()))
+        # Per the pre-registered protocol: B1 must COMPLETE before A runs (any failure there
+        # invalidates the causal comparison). Before A -> B2, only a SEVERE system-level fault
+        # or a matched-state gate miss stops the package; GPU loss or a clean failure in A is
+        # an authorized continuation point (operator-mediated recovery reboot before B2).
+        stops_here = status == "SEVERE" or status == "MATCHED_STATE_GATE_NOT_MET" or (
+            prev == "B1" and status != "COMPLETED"
+        )  # fmt: skip
+        if stops_here:
+            fails.append(
+                f"{prev} outcome was {status!r}: the pre-registered protocol requires the "
+                f"package to stop before {arm} runs"
+            )
     if arm != "B1" and not (ROOT / "reference_state.json").exists():
         fails.append("B1 reference state missing")
     return fails
@@ -139,6 +154,11 @@ def main() -> int:
     g["failures"] += g["sequence_failures"] if not args.dry else []
     if g["hidden_flags"] or not manifest_ok:
         g["failures"].append("manifest/flag check failed")
+    if g.get("other_gpu_compute_processes"):
+        g["failures"].append(
+            "another GPU compute process is present: the qualification env must be the only "
+            "GPU workload (matched-state protocol precondition)"
+        )
     g["idle_baseline"] = idle_baseline()
     (evid / f"gate_{tag}.json").write_text(json.dumps(g, indent=2, default=str))
     print(
@@ -261,12 +281,11 @@ def build_record(arm: str, gate: dict[str, Any], s: dict[str, Any]) -> dict[str,
     events = s.get("events_since_submit") or []
     whea = [e for e in events if "WHEA" in str(e.get("ProviderName", ""))]
     fl = s.get("final_log") or {}
-    gpu_lost = bool(
-        s.get("gpu_query_failed")
-        or fl.get("cuda_error")
-        or fl.get("gpu_lost")
-        or fl.get("hostbuffer_error")
-    )
+    # Device loss requires nvidia-smi itself to have failed, or a loss-specific log signature
+    # (device-side assert / illegal memory access / unspecified launch failure / "GPU is lost").
+    # A recoverable CUDA error (e.g. plain OOM) or a HostBuffer error with nvidia-smi still
+    # healthy is a clean failure, not device loss -- classify() treats those differently.
+    gpu_lost = bool(s.get("gpu_query_failed") or fl.get("gpu_lost"))
     return {
         "arm": arm,
         "boot_time": gate["boot_time"],
