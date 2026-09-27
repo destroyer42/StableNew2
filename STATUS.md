@@ -304,6 +304,24 @@ Updated: 2026-09-25
   subject carrying the motion with no ghost figure, no owner verdict yet — motion quality is PARTIAL,
   model capability PARTIAL and unadjudicated. No further GPU run or production integration is
   authorized; next steps are owner decisions.
+  `PR-VID-184S — Wan-Animate-2 Matched-State Pinned-Memory B1→A→B2 Reproducibility`
+  (`docs/Subsystems/Video/PR-VID-184S_Wan_Animate_2_Matched_State_Reproducibility.md`) is
+  **COMPLETE**: the owner recorded `WAN_ANIMATE_2_OWNER_MOTION_VALUE_PASS` on the accepted PR-VID-184R
+  output (kept separate from the automated `motion_curve_correlation` metric, which stays FAIL/PARTIAL
+  at 0.151 vs 0.30). Three owner-authorized GPU submissions ran in order under a frozen matched-state
+  protocol (commit ±3pp / RAM ±1.5GB / VRAM ±512MiB vs the Arm-B1 fresh-boot reference): Arm B1
+  (`--disable-pinned-memory`) completed; Arm A (pinned memory enabled, matched-state gate passed)
+  also **completed** this time — the original PR-VID-184 GPU loss did not reproduce; Arm B2
+  (`--disable-pinned-memory` again) completed and decoded pixel-identical to B1. Classified
+  `WAN_ANIMATE_2_LOCAL_EXECUTION_REPRODUCIBLE_WITH_PINNED_MEMORY_DISABLED`,
+  `ORIGINAL_PINNED_MEMORY_FAILURE_NOT_REPRODUCED_UNDER_MATCHED_STATE`, and — recorded separately —
+  `PINNED_MEMORY_RESOURCE_PRESSURE_EFFECT_REPRODUCED` (Arm A's commit peak 73.15% was 20.24 points
+  above B1/B2's ~52-53%, past the pre-registered 10-point threshold, with RAM available falling to a
+  low 1.94 GB minimum without tripping the safety stop). This weakens but does not eliminate the
+  inference that disabling pinned memory is necessary for success on this workload; it is n=1 for Arm
+  A and not a hardware clearance, not a DIAG-GPU-130 result, and does not rewrite PR-VID-184 or
+  PR-VID-184R. No further GPU run (all three authorized submissions used) or production integration
+  is authorized; next steps are owner decisions.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
