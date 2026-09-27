@@ -170,9 +170,10 @@ evidence, or a genuinely new failure class.
 
 ## DIAG-GPU-120 conclusion
 
-Windows currently reports both DIMMs at 5600 MT/s and 1250 mV; XMP remains operator-reported
-enabled. The established failure recurred under that post-DIAG-GPU-120 condition. The DDR5-5600
-transition was therefore insufficient to eliminate the fault and weakens a simple
+At the time of that earlier recurrence, Windows reported both DIMMs at 5600 MT/s and 1250 mV; XMP
+remained operator-reported enabled. The established failure recurred under that post-DIAG-GPU-120
+condition. This is distinct from the current post-XMP-OFF state, which reports 5600 MT/s and 1100
+mV. The DDR5-5600 transition was therefore insufficient to eliminate the fault and weakens a simple
 "DDR5-6000 alone" explanation. It does not rule out RAM, IMC, CPU, or platform stability because
 timings/controller behavior were not observed and component attribution remains unavailable.
 
@@ -238,8 +239,9 @@ state:
    qualifying period.
 
 The current count is **zero qualified post-XMP-OFF exposure sessions** in the retained evidence:
-the 2026-09-26 recurrence has no survivor telemetry or workload identity and therefore cannot be
-counted. The criterion is consequently not met and the posture remains active observation. A
+the 2026-09-26 recurrence retains known immediately preceding PR-VID-184 Arm A context, but no
+continuous survivor telemetry ties the exact `141`/`1B8` incident interval to it; it cannot count
+as qualified clean GPU-active exposure. The criterion is consequently not met and the posture remains active observation. A
 future recurrence before the threshold resets the exposure count and triggers the protocol below.
 
 ## Exact recurrence evidence-preservation protocol
