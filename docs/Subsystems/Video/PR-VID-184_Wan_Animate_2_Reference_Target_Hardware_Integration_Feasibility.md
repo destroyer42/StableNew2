@@ -452,13 +452,17 @@ hex chars as integers — reproducible, fixed before any generation, not chosen 
 **S1 = 58819112904309696**, **S2 = 46017787086728211**. Both official templates default their seed
 control to `'randomize'` — **this must be changed to `'fixed'`** with the seed below before each run.
 
-| # | Workflow | Frames | Cache | Seed | Purpose |
-| --- | --- | --- | --- | --- | --- |
-| 1 | Distilled | 60 (frozen driving-clip count) | shipped default (gpu/int8) | S1 | reference capability |
-| 2 | Base+LightX2V | 60 | shipped default | S1 | reference capability |
-| 3 | Distilled | 60 | shipped default | S2 | seed replication |
-| 4 | Base+LightX2V | 60 | shipped default | S2 | seed replication |
-| 5 | Distilled | 39 (local-candidate, 1.625s @ native 24fps — revised/validated, see Phase E) | **OFF** (remove/bypass the `WanAnimate2Cache` node — documented graph change) | S1 | local-candidate configuration, run remotely; separates configuration effects from future hardware effects; not a reference arm, cannot establish Q1 alone |
+Per the legal-length correction (3b above), the `length` sent to the node is not the same as the
+evidence-frame count — the node's own padding fills the gap, and a post-hoc trim removes it after
+decode, before scoring.
+
+| # | Workflow | Generation `length` | Evidence frames (after trim) | Cache | Seed | Authorized? | Purpose |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Distilled | 61 | 60 | shipped default (gpu/int8) | S1 | **No — BLOCKED_BY_SUBSCRIPTION** | reference capability |
+| 2 | Base+LightX2V | 61 | 60 | shipped default | S1 | **No — BLOCKED_BY_SUBSCRIPTION** | reference capability |
+| 3 | Distilled | 61 | 60 | shipped default | S2 | **No — BLOCKED_BY_SUBSCRIPTION** | seed replication |
+| 4 | Base+LightX2V | 61 | 60 | shipped default | S2 | **No — BLOCKED_BY_SUBSCRIPTION** | seed replication |
+| 5 | Distilled | 41 | 39 (1.625s @ native 24fps — revised/validated, see Phase E) | **OFF** (remove/bypass the `WanAnimate2Cache` node — documented graph change) | S1 | **Yes — owner-authorized 2026-09-26, exactly one submission, no retry** | the single authorized local physical qualification run, evaluated against the full capability/resource gates |
 
 Runs 1-4 use shipped template settings exactly (sampler `lcm`, scheduler `simple`, shift 5, cfg 1,
 reference/pose strengths 1, pose applied across the full clip), except the pre-registered
@@ -502,11 +506,31 @@ truncated: `pose_video[video_frame_offset:][:length]` — no error. If it has **
 padded by **holding the last frame**: `torch.cat((pose_video,) + (pose_video[-1:],) * (length -
 pose_video.shape[0]), dim=0)` — a frozen repeat, not new motion; still no error. The UI's `step=4`
 on the `length` widget is a spinner-increment nicety, not a validated constraint in `execute()` —
-any positive integer is legal. **Exact legal length per run:** runs 1-4 use **length=60** (not the
-81 default — deliberately, so the padded/frozen tail that 81 would produce doesn't dilute
-`root_translation_fraction`); run 5 uses **length=39** (revised from an earlier 13-frame hypothesis
-— see Phase E), which truncates the *same* 60-frame driving file to its first 39 frames via this
-same mechanism — no separate short driving asset is needed.
+any positive integer is legal *at this node's own input-validation level*.
+
+**3b. Legal `4n+1` length — a separate, more severe constraint found one level deeper, in the VAE
+itself (owner-directed verification, 2026-09-26, before GPU dispatch).** `WanVAE.encode()`
+(`comfy/ldm/wan/vae.py`, fetched directly) floors **any** input pixel-frame count down to the
+nearest `4n+1` value before encoding: `t = 1 + ((t - 1) // 4) * 4`. This runs on every `vae.encode()`
+call inside `WanAnimate2ToVideo.execute()` — both the placeholder canvas latent and the pose_video
+driving-conditioning latent. A non-`4n+1` `length` therefore **silently drops trailing real driving
+frames** during this internal encode — materially more severe than the harmless truncate/pad
+behavior above, which is intentional. Neither **60** (runs 1-4) nor **39** (run 5) is itself legal
+(`60`: `59%4=3`; `39`: `38%4=2`). New tool
+(`tools/qualification/vid184/legal_length.py`, 12 deterministic tests, no GPU/network) computes the
+smallest legal `4n+1` value covering a frozen evidence window and trims a decoded output back down
+post-hoc:
+
+| | Evidence frames (frozen, unchanged) | Generation `length` sent to the node | Node's own padding | Post-hoc trim before scoring |
+| --- | ---: | ---: | --- | --- |
+| Runs 1-4 | 60 | **61** | 1 held-last-frame repeat | drop final 1 frame -> 60 |
+| Run 5 | 39 | **41** | 2 held-last-frame repeats | drop final 2 frames -> 39 |
+
+The extra internal frames use the **same already-documented hold-last-frame padding** — no new
+mechanism, and no driving-video content is modified to manufacture the legal length; the existing
+frozen evidence files are fed as-is and the node's own padding supplies the rest. Ceiling (not
+flooring) was chosen specifically so every real evidence frame survives untouched — flooring would
+have silently discarded real frames instead of adding mechanically-explained padding.
 
 **4. Cache OFF for run 5 — confirmed from `WanAnimate2Cache.define_schema()`: the exposed widgets
 cannot do it.** `device` options are exactly `['cpu','gpu']` (no off/none); `dtype` options are

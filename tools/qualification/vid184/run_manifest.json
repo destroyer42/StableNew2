@@ -1,7 +1,7 @@
 {
   "pre_registered": "2026-09-26",
-  "amended": "2026-09-26T2 (pre-generation addition: prompts, exact per-run widget values, length semantics, cache-bypass procedure -- resolved from ComfyUI's actual WanAnimate2ToVideo/WanAnimate2Cache source, comfy_extras/nodes_wan.py, Comfy-Org/ComfyUI)",
-  "execution_status": "BLOCKED_BY_SUBSCRIPTION as of 2026-09-26T3: the owner's Comfy Cloud account cannot queue workflows without a paid subscription ('A cloud subscription is required to queue workflows'), despite Comfy's own advertised Free Tier/'5 free runs' claims, which are superseded for this package by this observed behavior. Zero runs have executed. This matrix remains the pre-registration of record for if/when remote access is separately authorized (subscription or an alternate provider); it is not deleted or invalidated by the block.",
+  "amended": "2026-09-26T2 (pre-generation addition: prompts, exact per-run widget values, length semantics, cache-bypass procedure); 2026-09-26T3 (revised run 5 evidence window 13->39 frames); 2026-09-26T4 (legal Wan 4n+1 length correction applied to ALL runs, per tools/qualification/vid184/legal_length.py)",
+  "execution_status": "LOCAL RUN 5 AUTHORIZED as of 2026-09-26T5: owner explicitly authorized exactly one bounded local Wan-Animate-2 Distilled physical qualification run (run 5 only), conditional on the legal-length correction below. Runs 1-4 remain BLOCKED_BY_SUBSCRIPTION (the owner's Comfy Cloud account cannot queue workflows without a paid subscription -- 'A cloud subscription is required to queue workflows' -- despite Comfy's own advertised Free Tier/'5 free runs' claims, superseded for this package by this observed behavior) and are NOT authorized for execution; their corrected values below are pre-registration-only, for if/when remote access is separately authorized. Zero runs have executed as of this revision.",
   "note": "Pre-registration of record per PR-VID-184 owner amendment section 3-4. Any later threshold or matrix change is a labelled post-hoc deviation, not a silent edit of this file.",
   "frozen_inputs": {
     "reference_image": {
@@ -20,6 +20,12 @@
       "motion_description_for_pose_prompt_writing": "A person performs a high-knee running drill that transitions into a full sprinting stride, moving laterally left to right across a static frame with continuous forward locomotion and alternating arm-leg swing.",
       "license_basis": "Mixkit Stock Video Free License; terms genuinely ambiguous on third-party AI/ML upload, owner explicitly accepted the risk for this specific qualification-test family on 2026-09-26 (see PR-VID-184 report, Phase B)"
     },
+    "run5_driving_video_candidate": {
+      "path": "C:\\Users\\rob\\qual\\vid184\\src\\B_locomotion_driving_39f_candidate.mp4",
+      "sha256": "d761eb58876cef2bd344731d3dd482b5f59cbd9478c6e8b5e0da94c48266677d",
+      "derivation": "First 39 frames of the driving_video above (truncation, no re-encode of content), 464x832, 24fps, 1.625s -- empirically validated: root_translation_fraction=0.532, full visual contact-sheet check confirmed alternating stride progression throughout.",
+      "frames": 39
+    },
     "resize_policy": "Do not pre-resize; feed frozen files to each template's own load/resize path (width/height widgets stay at shipped default 482x854) and record the effective generation geometry from the actual run."
   },
   "prompts_identical_across_all_5_runs": {
@@ -32,7 +38,20 @@
     "source": "comfy_extras/nodes_wan.py, class WanAnimate2ToVideo.execute() (Comfy-Org/ComfyUI, fetched directly)",
     "if_driving_frames_greater_than_length": "Truncated: `pose_video = pose_video[video_frame_offset:][:length]` -- only the first `length` frames of the driving clip are used, no error.",
     "if_driving_frames_less_than_length": "Padded by holding the last frame: `pose_video = torch.cat((pose_video,) + (pose_video[-1:],) * (length - pose_video.shape[0]), dim=0)` -- the tail is a frozen repeat of the last real frame, not new motion. No error, but the padded tail dilutes any motion measurement across the full `length`.",
-    "conclusion": "No crash either way; length is not hard-constrained to multiples of 4 despite the UI 'step=4' (that is a spinner-increment nicety, not a validated constraint in execute()) -- any positive integer is legal. Chose length=60 (not the 81 default) for runs 1-4 specifically to avoid a 21-frame frozen-tail diluting root_translation_fraction; chose length=39 for run 5 (revised 2026-09-26 from an initial length=13 hypothesis that did not preserve the accepted PR-VID-183 1.625s locomotion-window standard at our clip's native 24fps -- see run 5's length_note), which truncates the SAME 60-frame driving file to its first 39 frames via this same mechanism -- no separate short driving asset is needed."
+    "conclusion": "length is not hard-constrained to multiples of 4 at the WanAnimate2ToVideo node's own input-validation level despite the UI 'step=4' (that is a spinner-increment nicety) -- but see legal_wan_length_correction below for a separate, more severe constraint discovered one level deeper, inside the VAE encode itself."
+  },
+  "legal_wan_length_correction": {
+    "discovered": "2026-09-26 (owner-directed verification before GPU dispatch)",
+    "source": "comfy/ldm/wan/vae.py, class WanVAE.encode() (Comfy-Org/ComfyUI, fetched directly)",
+    "the_bug": "WanVAE.encode() floors ANY input pixel-frame count down to the nearest 4n+1 value before encoding: `t = 1 + ((t - 1) // 4) * 4`. This runs on EVERY vae.encode() call inside WanAnimate2ToVideo.execute() -- both the placeholder canvas latent (image shaped [length,H,W,3]) and the pose_video driving-conditioning latent (also shaped [length,H,W,3] after truncate/pad). A non-4n+1 `length` therefore silently drops trailing REAL driving frames during this internal encode -- materially more severe than the already-documented truncate/pad behavior, which is intentional and harmless.",
+    "affected_runs": "ALL 5 runs, not just run 5 -- the flooring applies uniformly to any length value. Runs 1-4's originally-chosen length=60 is NOT itself legal (60-1=59, 59%4=3!= 0); it would floor to 57 internally, silently dropping the last 3 frames.",
+    "tooling": "tools/qualification/vid184/legal_length.py (smallest_legal_wan_length, trim_to_evidence_window), verified by 12 deterministic tests in tests/tools/test_vid184_legal_length.py (no GPU/network).",
+    "corrected_lengths": {
+      "runs_1_4": {"evidence_frames": 60, "internal_generation_length": 61, "padding_added_by_node": "1 held-last-frame repeat (60 real frames < 61 requested)", "post_processing": "trim decoded output's final 1 frame -> 60 frames before scoring/handoff"},
+      "run_5": {"evidence_frames": 39, "internal_generation_length": 41, "padding_added_by_node": "2 held-last-frame repeats (39 real frames < 41 requested)", "post_processing": "trim decoded output's final 2 frames -> 39 frames before scoring/handoff"}
+    },
+    "padding_mechanism_for_the_extra_internal_frames": "The 1 (runs 1-4) or 2 (run 5) extra internal frames use the SAME already-documented official-node behavior as any other length > driving-frame-count case: WanAnimate2ToVideo.execute()'s own hold-last-frame padding (see length_semantics_verified_from_source above), not a new or different mechanism. No driving-video content is modified to manufacture the legal length -- the existing frozen evidence-window files (39f candidate / 60f full clip) are used as-is; the node's own padding supplies the extra frames needed to reach the legal length.",
+    "why_not_floor_instead_of_ceil": "Flooring (e.g. 37 for the 39-frame evidence window) would DISCARD 2 real evidence frames rather than pad with 2 mechanically-explained held-last-frame repeats; ceiling to the next legal length and trimming the padded tail post-decode preserves every real evidence frame untouched."
   },
   "seeds": {
     "derivation": "First 14 and next 14 hex chars of the frozen driving video's SHA-256, interpreted as integers -- deterministic and reproducible, fixed before any generation, not chosen after seeing any output.",
@@ -60,7 +79,11 @@
       "workflow_file": "motion_transfer_wan_animate_2_distilled.json",
       "checkpoint": "wan_animate_2_distill_int8_convrot.safetensors",
       "steps": 10,
-      "length": 60,
+      "generation_length": 61,
+      "evidence_frames": 60,
+      "post_processing": "trim final 1 frame from decoded output -> 60 frames",
+      "authorized_for_execution": false,
+      "execution_blocker": "BLOCKED_BY_SUBSCRIPTION",
       "width_height": "482x854 (shipped default, unchanged)",
       "reference_image_strength": 1,
       "pose_strength": 1,
@@ -81,7 +104,11 @@
       "workflow_file": "motion_transfer_wan_animate_2.json",
       "checkpoint": "wan_animate_2_int8_convrot.safetensors + lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors LoRA",
       "steps": 6,
-      "length": 60,
+      "generation_length": 61,
+      "evidence_frames": 60,
+      "post_processing": "trim final 1 frame from decoded output -> 60 frames",
+      "authorized_for_execution": false,
+      "execution_blocker": "BLOCKED_BY_SUBSCRIPTION",
       "width_height": "482x854 (shipped default, unchanged)",
       "reference_image_strength": 1,
       "pose_strength": 1,
@@ -102,7 +129,11 @@
       "workflow_file": "motion_transfer_wan_animate_2_distilled.json",
       "checkpoint": "wan_animate_2_distill_int8_convrot.safetensors",
       "steps": 10,
-      "length": 60,
+      "generation_length": 61,
+      "evidence_frames": 60,
+      "post_processing": "trim final 1 frame from decoded output -> 60 frames",
+      "authorized_for_execution": false,
+      "execution_blocker": "BLOCKED_BY_SUBSCRIPTION",
       "width_height": "482x854 (shipped default, unchanged)",
       "reference_image_strength": 1,
       "pose_strength": 1,
@@ -123,7 +154,11 @@
       "workflow_file": "motion_transfer_wan_animate_2.json",
       "checkpoint": "wan_animate_2_int8_convrot.safetensors + lightx2v_I2V_14B_480p_cfg_step_distill_rank64_bf16.safetensors LoRA",
       "steps": 6,
-      "length": 60,
+      "generation_length": 61,
+      "evidence_frames": 60,
+      "post_processing": "trim final 1 frame from decoded output -> 60 frames",
+      "authorized_for_execution": false,
+      "execution_blocker": "BLOCKED_BY_SUBSCRIPTION",
       "width_height": "482x854 (shipped default, unchanged)",
       "reference_image_strength": 1,
       "pose_strength": 1,
@@ -144,8 +179,12 @@
       "workflow_file": "motion_transfer_wan_animate_2_distilled.json",
       "checkpoint": "wan_animate_2_distill_int8_convrot.safetensors",
       "steps": 10,
-      "length": 39,
-      "length_note": "REVISED 2026-09-26 (owner correction): the original 13-frame hypothesis carried over v1's proven-safe frame COUNT without correcting for frame rate -- v1 ran 13 frames at 8fps (1.625s, matching the accepted PR-VID-183 locomotion-window standard), but Wan-Animate-2 consumes frames 1:1 at our clip's native 24fps, so 13 frames there is only 0.542s. 39 frames at native 24fps = exactly 1.625s, obtained by truncating the SAME 60-frame driving file (pose_video[:39], no new asset/hash/license question, no resampling deviation from native rate). Empirically validated with the existing local detector/tracker (no GPU/cloud): root_translation_fraction=0.532 (vs 0.171 for the 13-frame candidate, both against the 0.15 pass gate) and a full visual contact-sheet check confirmed clear alternating stride progression throughout. Candidate file: C:\\Users\\rob\\qual\\vid184\\src\\B_locomotion_driving_39f_candidate.mp4, SHA-256 d761eb58876cef2bd344731d3dd482b5f59cbd9478c6e8b5e0da94c48266677d. Model-level behavior on this input remains unverified -- only the input's own motion content was measured.",
+      "generation_length": 41,
+      "evidence_frames": 39,
+      "post_processing": "trim final 2 frames from decoded output -> 39 frames (tools/qualification/vid184/legal_length.trim_to_evidence_window)",
+      "authorized_for_execution": true,
+      "authorization": "Owner explicit authorization, 2026-09-26: exactly one bounded local Wan-Animate-2 Distilled physical qualification run, conditional on this legal-length correction. No retry. No second run.",
+      "driving_video_input": "run5_driving_video_candidate (39-frame file above) fed as-is; the node's own hold-last-frame padding supplies the 2 extra frames needed to reach generation_length=41 -- no driving-video content modification.",
       "width_height": "482x854 (shipped default, unchanged)",
       "reference_image_strength": 1,
       "pose_strength": 1,
@@ -158,7 +197,7 @@
       "cache_bypassed": true,
       "seed": 58819112904309696,
       "seed_control": "fixed",
-      "purpose": "local-candidate configuration effect, run remotely -- separates configuration effects from future hardware effects; not a reference arm; cannot establish Q1 alone"
+      "purpose": "the single authorized local physical qualification run -- evaluated against the full PR-VID-184 capability/resource gates, not merely 'configuration effect'"
     }
   ],
   "shared_settings_all_runs": {
@@ -166,14 +205,14 @@
     "scheduler": "simple",
     "shift": 5,
     "cfg": 1,
-    "note": "Shipped template defaults, verified directly from the current Comfy-Org blueprint JSON AND the live ComfyUI node source (not documentation prose). Deviations from shipped defaults are: prompt/pose_prompt (shipped empty/demo -> pre-registered text above), length (shipped 81 -> 60 for runs 1-4, 13 for run 5, reasoned above), seed control (shipped randomize -> fixed), and run 5's cache bypass. Everything else stays at shipped default."
+    "note": "Shipped template defaults, verified directly from the current Comfy-Org blueprint JSON AND the live ComfyUI node source (not documentation prose). Deviations from shipped defaults are: prompt/pose_prompt (shipped empty/demo -> pre-registered text above), generation_length (shipped 81 -> 61 for runs 1-4, 41 for run 5, each the smallest legal 4n+1 covering the evidence window, with post-hoc trim back to the evidence-frame count), seed control (shipped randomize -> fixed), and run 5's cache bypass. Everything else stays at shipped default."
   },
   "output_files_needed_per_run": {
     "both_required": "The plain generated clip AND the side-by-side comparison video the graph also saves.",
     "why_both": "The generated clip alone is required for the detector-based scorer (tracking.py) -- a side-by-side composite doubles the frame width and puts the driving clip's own subject in the same frame, which would corrupt the person-detector's box coordinates and could register as a false 'ghost' detection. The side-by-side is for Rob's own human-verdict-gate visual review convenience only; the scorer never reads it.",
     "naming_convention": "run{index}_{workflow_lowercase}_{seedlabel}_generated.mp4 and ..._sidebyside.mp4, e.g. run1_distilled_s1_generated.mp4 / run1_distilled_s1_sidebyside.mp4."
   },
-  "post_return_validation": "Before scoring, check each returned file's embedded workflow metadata (if ComfyUI embedded it) and Rob's exported workflow JSON against this manifest -- confirm actual checkpoint, seed, length, and cache-bypass state match what was pre-registered here before treating any output as valid evidence. A mismatch is reported, not silently scored.",
-  "stop_rule": "If credits run out, stop in table order (1,2,3,4,5) and report what completed. No paid top-up.",
+  "post_return_validation": "Before scoring, check each returned file's embedded workflow metadata (if ComfyUI embedded it) and Rob's exported workflow JSON against this manifest -- confirm actual checkpoint, seed, generation_length, and cache-bypass state match what was pre-registered here before treating any output as valid evidence. A mismatch is reported, not silently scored. Then apply post_processing (trim) before scoring against the frozen Phase C contract.",
+  "stop_rule": "If credits run out (remote runs 1-4, if/when authorized), stop in table order (1,2,3,4,5) and report what completed. No paid top-up. For the authorized local run 5: exactly one submission, no retry regardless of outcome.",
   "cache_note": "The shipped WanAnimate2Cache stores activations as lossy int8 in the PoseBranchCache -- runs 1-4 use this shipped default as-is; only run 5 removes the node from the graph entirely."
 }
