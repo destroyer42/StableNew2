@@ -841,8 +841,22 @@ Recently landed under this posture:
   now gone, with zero new findings (total census findings 1,020 -> 1,010).
   Details: `docs/Subsystems/PromptPacks/PR-PACK-110_ADetailer_Stage_Enablement_Persistence_Repair.md`.
 
-The next evidence-backed candidate from the census is operator-facing triage
-of the 24 missing/ambiguous asset references it surfaced.
+- `PR-PACK-120 — Missing Asset Reference Triage & Explicit Reconciliation
+  Workflow` is **COMPLETE**, pending merge: new offline, read-only
+  `tools/missing_asset_reference_triage.py` re-opened all 24 real
+  `missing_file_backed_asset` sources and mapped each aggregated census
+  finding back to its exact raw JSON occurrence(s) -- 24 triage items across
+  16 PromptPacks, 134 total occurrences, 0 unmapped/stale, 4 literal
+  `"None"`-placeholder items -- with same-asset-kind-only deterministic
+  candidate evidence and Asset-120 family context attached, but no
+  reconciliation decision made. A fingerprint-guarded, all-or-nothing,
+  atomic-with-rollback dry-run/apply contract was implemented and tested
+  against disposable fixtures only; `apply` was never invoked against real
+  data. Details:
+  `docs/Subsystems/PromptPacks/PR-PACK-120_Missing_Asset_Reference_Triage.md`.
+  No PromptPack/preset/asset was modified; no automatic reconciliation
+  occurred. The next step is the owner's explicit reconciliation decision
+  for each of the 24 triage items (`leave_unresolved` by default).
 
 Deliberate real-model inference and platform/hardware changes remain
 serialized and separately owner-authorized regardless of which package is
