@@ -810,12 +810,35 @@ Recently landed under this posture:
   `docs/Subsystems/PromptPacks/WP-PACK-AUDIT-100_PromptPack_Saved_Settings_Quality_Census.md`.
   Headline evidence: the large majority of asset references resolve cleanly
   (481 `resolved_unique`); a systematic `pipeline.adetailer_enabled` vs
-  `adetailer.enabled` contradiction recurs identically across five real
-  packs; 24 references are genuinely missing their file-backed asset
+  `adetailer.enabled` contradiction recurred identically across five real
+  sources; 24 references are genuinely missing their file-backed asset
   (including one literal stringified `"None"` placeholder); and naming-hygiene
   debt (duplicate/mismatched pack names) is cosmetic, not correctness debt.
   No PromptPack, preset, or asset was modified; no recommendation or warning
   UX was added.
+- `PR-PACK-110 — ADetailer Stage-Enablement Persistence Repair` is
+  **COMPLETE / PARTIAL** for the confirmed canonical-PromptPack case: new
+  `synchronize_adetailer_enablement()` in `src/utils/config.py` makes
+  `pipeline.adetailer_enabled` the persisted stage-membership authority and
+  keeps `adetailer.enabled`/`adetailer.adetailer_enabled` synchronized with
+  it in `_merge_config_with_defaults()` and `save_pack_config()`, without
+  changing stage-sequencer OR-based runtime admission. Re-checking the five
+  sources WP-PACK-AUDIT-100 flagged found only one
+  (`SDXL_epic_structures_Fantasy`) is actually a canonical PromptPack; the
+  other four are standalone `presets/*.json` recipes, which this package's
+  own authorization did not cover — the owner prompt's premise that all five
+  were PromptPacks was incorrect. Only that one file was backed up
+  (byte-exact, with manifest) and reconciled, with a semantic-diff guard
+  proving the only change was `adetailer.enabled: false -> true`; a
+  full 59-file fingerprint confirmed every other PromptPack/preset was
+  untouched. Rerunning the unmodified census confirmed exactly the two
+  `saved_setting_stage_contradiction` findings for that one source were
+  removed (10 -> 8; total findings 1,020 -> 1,018) with no new finding.
+  Details: `docs/Subsystems/PromptPacks/PR-PACK-110_ADetailer_Stage_Enablement_Persistence_Repair.md`.
+  The four `presets/*.json` sources remain open, unaddressed findings
+  pending a separate owner decision on standalone-preset reconciliation.
+  The heterogeneous 24-missing-asset triage remains an independent
+  candidate next package either way.
 
 Evidence-backed next-package candidates from the census (choose one):
 
