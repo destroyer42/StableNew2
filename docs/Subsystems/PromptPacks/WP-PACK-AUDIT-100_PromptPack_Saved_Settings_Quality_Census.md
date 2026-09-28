@@ -104,10 +104,23 @@ than presented as an active failure.
 
 ## Real-machine census result
 
-Run against source SHA `cad09a06c43c905eb3de248f85e3d125430d7daa`: 39
-PromptPack files (canonical per-user directory) and 17 standalone presets
-(active `presets/` directory) examined, with full Asset Registry/WebUI
-coverage available. 1,020 total findings.
+Run twice against the same real sources: once on the initial implementation
+(source SHA `cad09a06c43c905eb3de248f85e3d125430d7daa`), and once more after a
+one-pass correctness repair (six confirmed defects: crash-prone scalar-value
+asset containers, an overbroad asset-coverage-available criterion, missed
+accepted top-level checkpoint/VAE/refiner and boolean-enablement aliases, a
+truthiness bug that let falsy non-object `preset_data` escape validation, and
+an undercounted standalone-preset examined total). Both runs examined 39
+PromptPack files (canonical per-user directory) and the active `presets/`
+directory, with full Asset Registry/WebUI coverage available, and both
+produced the byte-identical 1,020 findings below — this real dataset did not
+happen to contain any of the six previously-mishandled shapes, so the repair
+changed tool trustworthiness and coverage guarantees, not this run's totals.
+The one number that did change is standalone presets examined, 17 → **18**:
+the repair's fix for undercounting now correctly includes an already-detected
+malformed standalone preset file in the examined total, not just the
+successfully-parsed ones. Both runs confirmed zero source-file mutation via a
+size/mtime fingerprint taken before and after.
 
 | Finding class | Count |
 |---|---|
@@ -185,18 +198,22 @@ not something to act on without a separate product decision.
 
 - Execution class: Standard, Local/Desktop. Controller surface assessment:
   not applicable — no controller/coordinator changed.
-- Token-efficient validation: 34 focused fixture tests over temporary
+- Token-efficient validation: 47 focused fixture tests over temporary
   PromptPack/preset/WebUI roots cover every required behavior class:
   malformed/unversioned/non-object documents, slot index and normalization
-  risk, malformed LoRA/embedding entries, raw asset tokens in nominally pure
-  text, matrix structural defects, identity/duplication, every confirmed
-  alias/stage-contradiction group, a dangling default preset, the
-  `settings.json` glob collision, all five asset-resolution classes, all four
-  family-compatibility classes plus the no-explicit-base-context and
-  dormant-disabled-stage cases, deterministic output, and a proof that the
-  tool never mutates the PromptPack/preset files it reads. No real user
-  library is used as a test fixture.
-- The one real-machine run used the operator's actual per-user PromptPack
+  risk, malformed LoRA/embedding entries (including scalar-typed containers
+  that must not abort the census), raw asset tokens in nominally pure text,
+  matrix structural defects, identity/duplication, every confirmed
+  alias/stage-contradiction group at both the nested and accepted top-level
+  representation, a dangling default preset, the `settings.json` glob
+  collision, all five asset-resolution classes including unusable/nonexistent
+  WebUI-root coverage, all four family-compatibility classes plus the
+  no-explicit-base-context and dormant-disabled-stage cases, every
+  standalone-preset examined-count edge case, every falsy non-object
+  `preset_data` shape, deterministic output, and a proof that the tool never
+  mutates the PromptPack/preset files it reads. No real user library is used
+  as a test fixture.
+- The real-machine runs used the operator's actual per-user PromptPack
   directory, the repository's active `presets/` directory, and the
   configured local WebUI root, with an audit-owned Asset Registry cache — no
   network, A1111/Comfy connection, GPU, or model load occurred, and a

@@ -27,6 +27,7 @@ from typing import Any
 
 from src.assets import AssetKind, AssetRecord, AssetRegistry, CompatibilityStatus
 from src.learning.lora_variant import extract_lora_tokens
+from src.pipeline.config_normalizer import normalize_pipeline_config
 from src.pipeline.model_synchronizer import normalize_model_name
 from src.promptpacks.paths import resolve_prompt_pack_dir
 from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
@@ -157,7 +158,25 @@ def _census_slot_lora_entries(
 ) -> list[str]:
     names: list[str] = []
     seen: set[str] = set()
-    for entry in raw_slot.get("loras", []) or []:
+    raw_loras = raw_slot.get("loras", [])
+    if raw_loras is None:
+        raw_loras = []
+    if not isinstance(raw_loras, list):
+        findings.append(
+            Finding(
+                "malformed_lora_container",
+                "slot_normalization_risk",
+                "warning",
+                "high",
+                "promptpack",
+                pack_id,
+                slot_index=slot_index,
+                stage="loras",
+                detail=f"loras is {type(raw_loras).__name__}, expected a list",
+            )
+        )
+        return names
+    for entry in raw_loras:
         if not (isinstance(entry, (list, tuple)) and len(entry) == 2):
             findings.append(
                 Finding(
@@ -251,7 +270,24 @@ def _census_slot_embedding_entries(
     field_name: str,
     findings: list[Finding],
 ) -> list[str]:
-    raw_values = raw_slot.get(field_name, []) or []
+    raw_values = raw_slot.get(field_name, [])
+    if raw_values is None:
+        raw_values = []
+    if not isinstance(raw_values, list):
+        findings.append(
+            Finding(
+                "malformed_embedding_container",
+                "slot_normalization_risk",
+                "warning",
+                "high",
+                "promptpack",
+                pack_id,
+                slot_index=slot_index,
+                stage=field_name,
+                detail=f"{field_name} is {type(raw_values).__name__}, expected a list",
+            )
+        )
+        return []
     normalized = normalize_embedding_entries(raw_values)
     if len(normalized) < len([v for v in raw_values if v not in (None, "", [], {})]):
         findings.append(
@@ -720,7 +756,7 @@ def census_pack_file(path: Path, findings: list[Finding]) -> PackCensusResult:
         return PackCensusResult(pack_id, path, False, document)
 
     preset_data = document.get("preset_data", {})
-    if preset_data and not isinstance(preset_data, dict):
+    if not isinstance(preset_data, dict):
         findings.append(
             Finding(
                 "invalid_preset_data",
@@ -864,8 +900,13 @@ def census_saved_settings(
 
     for stage, groups in _STAGE_BOOL_ALIAS_GROUPS.items():
         stage_dict = _stage_dict(preset_data, stage)
+        # Production accepts these booleans at the top level too (e.g.
+        # hires_enabled/enable_hr, refiner_enabled/use_refiner) before
+        # merging into the stage section; a contradiction split across that
+        # boundary must still be visible.
+        merged = {**{k: v for k, v in preset_data.items() if k in {key for group in groups for key in group}}, **stage_dict}
         for group in groups:
-            conflict = _alias_conflict_values(stage_dict, group, as_bool=True)
+            conflict = _alias_conflict_values(merged, group, as_bool=True)
             if conflict:
                 findings.append(
                     Finding(
@@ -1321,11 +1362,19 @@ def census_pack_references(
 ) -> None:
     preset_data = document.get("preset_data")
     preset_data = preset_data if isinstance(preset_data, dict) else {}
-    txt2img = _stage_dict(preset_data, "txt2img")
-    checkpoint_name = _first_alias_value(txt2img, ("model", "model_name", "sd_model"))
-    vae_name = _first_alias_value(txt2img, ("vae", "vae_name", "sd_vae"))
-    refiner_name = _first_alias_value(txt2img, ("refiner_model_name", "refiner_checkpoint"))
-    refiner_enabled = bool(_first_bool_alias_value(txt2img, ("refiner_enabled", "use_refiner")))
+    # Reuse production's own precedence (including accepted top-level
+    # aliases merged in before the nested txt2img section, per
+    # src/pipeline/config_normalizer.py's _COMMON_TOP_LEVEL_KEYS) rather than
+    # maintaining a second, narrower alias implementation that only looked
+    # at the nested section.
+    normalized_pipeline = normalize_pipeline_config(preset_data)
+    normalized_txt2img = (
+        normalized_pipeline.get("txt2img", {}) if isinstance(normalized_pipeline, dict) else {}
+    )
+    checkpoint_name = _first_alias_value(normalized_txt2img, ("model",))
+    vae_name = _first_alias_value(normalized_txt2img, ("vae",))
+    refiner_name = _first_alias_value(normalized_txt2img, ("refiner_model_name",))
+    refiner_enabled = bool(_first_bool_alias_value(normalized_txt2img, ("refiner_enabled",)))
 
     lora_names: list[str] = []
     embedding_names: list[str] = []
@@ -1395,6 +1444,21 @@ class CensusReport:
         return dict(Counter(f.finding_class for f in self.findings))
 
 
+def _has_usable_supported_root(registry: AssetRegistry) -> bool:
+    """Coverage requires an actually-usable supported source root.
+
+    A nonempty configured webui_root is not sufficient: a nonexistent path,
+    or one with none of the supported model/LoRA/embedding/etc. directories
+    present, yields an empty registry that would otherwise make every real
+    reference look like a definite miss instead of unverifiable coverage.
+    Never creates a directory merely to test this.
+    """
+
+    if registry.webui_root is None:
+        return False
+    return any(root.is_dir() for _kind, root in registry.supported_roots())
+
+
 def run_census(
     *,
     packs_dir: Path,
@@ -1413,8 +1477,8 @@ def run_census(
     asset_coverage_available = False
     if webui_root:
         registry = AssetRegistry(webui_root, cache_path=asset_cache_path)
-        registry.refresh()
-        if registry.webui_root is not None:
+        if _has_usable_supported_root(registry):
+            registry.refresh()
             asset_index = build_asset_index(registry)
             asset_coverage_available = True
 
@@ -1425,10 +1489,17 @@ def run_census(
             if isinstance(preset_data, dict) and preset_data:
                 census_saved_settings("promptpack", result.pack_id, preset_data, findings)
 
-    standalone_presets: list[tuple[str, dict[str, Any]]] = []
+    standalone_presets_examined_count = 0
     if presets_dir is not None:
-        standalone_presets, _examined = census_standalone_presets(presets_dir, findings)
+        _standalone_presets, examined_preset_files = census_standalone_presets(presets_dir, findings)
         census_default_preset(presets_dir, findings)
+        # Coverage means every applicable file actually looked at, including
+        # malformed/non-object ones -- not just the ones that parsed cleanly.
+        # settings.json is excluded: it is flagged separately and was never a
+        # generation preset to begin with.
+        standalone_presets_examined_count = len(
+            [path for path in examined_preset_files if path.name != SETTINGS_JSON_NAME]
+        )
 
     return CensusReport(
         schema_version=REPORT_SCHEMA_VERSION,
@@ -1438,7 +1509,7 @@ def run_census(
         webui_root=webui_root,
         asset_coverage_available=asset_coverage_available,
         pack_files_examined=len(pack_files),
-        standalone_presets_examined=len(standalone_presets),
+        standalone_presets_examined=standalone_presets_examined_count,
         findings=findings,
     )
 

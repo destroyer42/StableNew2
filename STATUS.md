@@ -800,9 +800,13 @@ Recently landed under this posture:
 - `WP-PACK-AUDIT-100 — PromptPack & Saved-Settings Quality Census` is
   **COMPLETE**: a new offline, read-only `tools/promptpack_quality_census.py`
   examined the real per-user PromptPack directory (39 files) and the active
-  presets directory (17 standalone presets) against the real configured WebUI
+  presets directory (18 standalone presets) against the real configured WebUI
   root, producing 1,020 findings with zero source mutation (fingerprint-
-  verified before/after). Full results:
+  verified before/after across the initial run and a one-pass correctness
+  repair that fixed a crash-prone scalar-container case, an overbroad
+  asset-coverage criterion, missed top-level checkpoint/VAE/refiner and
+  boolean-enablement aliases, a falsy-`preset_data` validation gap, and the
+  standalone-preset examined undercount). Full results:
   `docs/Subsystems/PromptPacks/WP-PACK-AUDIT-100_PromptPack_Saved_Settings_Quality_Census.md`.
   Headline evidence: the large majority of asset references resolve cleanly
   (481 `resolved_unique`); a systematic `pipeline.adetailer_enabled` vs

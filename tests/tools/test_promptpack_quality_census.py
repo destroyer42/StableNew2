@@ -579,3 +579,165 @@ def test_presets_dir_omission_degrades_gracefully(tmp_path: Path, presets_dir_pr
         presets.mkdir()
     report = _run(packs, presets_dir=presets, tmp_path=tmp_path)
     assert report.standalone_presets_examined == 0
+
+
+# --- Finding 1: malformed slot asset containers must not abort the census ---------------------
+
+
+@pytest.mark.parametrize(
+    "bad_slot",
+    [
+        {"index": 0, "text": "a", "loras": 42},
+        {"index": 0, "text": "a", "positive_embeddings": 7},
+        {"index": 0, "text": "a", "negative_embeddings": "bad-value"},
+    ],
+)
+def test_scalar_malformed_asset_containers_do_not_abort_the_census(
+    tmp_path: Path, bad_slot: dict
+) -> None:
+    packs = tmp_path / "packs"
+    _write_json(packs / "scalarbad.json", _pack([bad_slot]))
+    _write_json(packs / "afterwards.json", _pack([{"index": 0, "text": "still audited"}]))
+
+    report = _run(packs, tmp_path=tmp_path)  # must not raise
+
+    assert report.pack_files_examined == 2
+    codes = _codes(report, "scalarbad")
+    assert codes & {"malformed_lora_container", "malformed_embedding_container"}
+    # the rest of the census still ran
+    assert any(f.source_id == "afterwards" for f in report.findings) or report.pack_files_examined == 2
+
+
+# --- Finding 2: configured but unusable WebUI root is unavailable coverage, not "missing" ------
+
+
+def test_nonexistent_webui_root_is_unavailable_coverage(tmp_path: Path) -> None:
+    packs = tmp_path / "packs"
+    _write_json(packs / "p.json", _pack([{"index": 0, "text": "a", "loras": [["anything", 0.8]]}]))
+    missing_root = tmp_path / "does_not_exist_webui"
+    report = _run(packs, webui_root=str(missing_root), tmp_path=tmp_path)
+    assert not report.asset_coverage_available
+    assert "offline_unverified" in _codes(report, "p")
+    assert "missing_file_backed_asset" not in _codes(report, "p")
+
+
+def test_existing_but_unusable_webui_root_is_unavailable_coverage(tmp_path: Path) -> None:
+    packs = tmp_path / "packs"
+    _write_json(packs / "p.json", _pack([{"index": 0, "text": "a", "loras": [["anything", 0.8]]}]))
+    unusable_root = tmp_path / "webui_no_supported_dirs"
+    unusable_root.mkdir()
+    (unusable_root / "readme.txt").write_text("nothing supported here", encoding="utf-8")
+    report = _run(packs, webui_root=str(unusable_root), tmp_path=tmp_path)
+    assert not report.asset_coverage_available
+    assert "offline_unverified" in _codes(report, "p")
+    assert "missing_file_backed_asset" not in _codes(report, "p")
+
+
+def test_valid_supported_root_still_gives_normal_coverage(tmp_path: Path) -> None:
+    webui = _webui_with_checkpoint_and_lora(tmp_path)
+    packs = tmp_path / "packs"
+    _write_json(
+        packs / "p.json",
+        _pack(
+            [{"index": 0, "text": "a", "loras": [["goodlora", 0.8]]}],
+            preset_data={"txt2img": {"model": "ckpt.safetensors"}},
+        ),
+    )
+    report = _run(packs, webui_root=str(webui), tmp_path=tmp_path)
+    assert report.asset_coverage_available
+    assert "resolved_unique" in _codes(report, "p")
+
+
+# --- Finding 3: accepted top-level checkpoint/VAE/refiner aliases are honored ------------------
+
+
+def test_top_level_checkpoint_vae_and_refiner_references_are_included(tmp_path: Path) -> None:
+    webui = tmp_path / "webui"
+    _safetensors(webui / "models" / "Stable-diffusion" / "topckpt.safetensors", payload=b"ckpt")
+    _safetensors(webui / "models" / "VAE" / "topvae.safetensors", payload=b"vae")
+    _safetensors(webui / "models" / "Stable-diffusion" / "toprefiner.safetensors", payload=b"refiner")
+    packs = tmp_path / "packs"
+    # No nested txt2img section at all -- these are top-level-only aliases.
+    _write_json(
+        packs / "toplevel.json",
+        _pack(
+            [{"index": 0, "text": "a"}],
+            preset_data={
+                "model": "topckpt.safetensors",
+                "vae": "topvae.safetensors",
+                "refiner_model_name": "toprefiner.safetensors",
+                "refiner_enabled": True,
+            },
+        ),
+    )
+    report = _run(packs, webui_root=str(webui), tmp_path=tmp_path)
+    resolved = [
+        f
+        for f in report.findings
+        if f.source_id == "toplevel" and f.finding_code == "resolved_unique"
+    ]
+    resolved_names = {f.reference_name for f in resolved}
+    assert {"topckpt.safetensors", "topvae.safetensors", "toprefiner.safetensors"} <= resolved_names
+
+
+# --- Finding 4: top-level boolean aliases participate in contradiction detection ---------------
+
+
+def test_top_level_hires_boolean_alias_contradiction_is_reported(tmp_path: Path) -> None:
+    packs = tmp_path / "packs"
+    _write_json(
+        packs / "tophires.json",
+        _pack(
+            [{"index": 0, "text": "a"}],
+            preset_data={"hires_enabled": True, "txt2img": {"enable_hr": False}},
+        ),
+    )
+    report = _run(packs, tmp_path=tmp_path)
+    assert "saved_setting_stage_contradiction" in _codes(report, "tophires")
+
+
+def test_top_level_refiner_boolean_alias_contradiction_is_reported(tmp_path: Path) -> None:
+    packs = tmp_path / "packs"
+    _write_json(
+        packs / "toprefinerbool.json",
+        _pack(
+            [{"index": 0, "text": "a"}],
+            preset_data={"use_refiner": True, "txt2img": {"refiner_enabled": False}},
+        ),
+    )
+    report = _run(packs, tmp_path=tmp_path)
+    assert "saved_setting_stage_contradiction" in _codes(report, "toprefinerbool")
+
+
+# --- Finding 5: every non-object preset_data is rejected, including falsy values ---------------
+
+
+@pytest.mark.parametrize("bad_preset_data", [[], "", 0])
+def test_falsy_non_object_preset_data_is_rejected(tmp_path: Path, bad_preset_data) -> None:
+    packs = tmp_path / "packs"
+    document = _pack([{"index": 0, "text": "a"}])
+    document["preset_data"] = bad_preset_data
+    _write_json(packs / "falsypreset.json", document)
+    report = _run(packs, tmp_path=tmp_path)
+    assert "invalid_preset_data" in _codes(report, "falsypreset")
+
+
+# --- Finding 6: every standalone preset file examined is counted, not just successful ones -----
+
+
+def test_standalone_presets_examined_counts_every_applicable_file(tmp_path: Path) -> None:
+    packs = tmp_path / "packs"
+    packs.mkdir()
+    presets = tmp_path / "presets"
+    _write_json(presets / "valid.json", {"txt2img": {}})
+    presets.mkdir(exist_ok=True)
+    (presets / "malformed.json").write_text("not json {{{", encoding="utf-8")
+    _write_json(presets / "nonobject.json", [1, 2, 3])
+    _write_json(presets / "settings.json", {"anything": "here"})
+
+    report = _run(packs, presets_dir=presets, tmp_path=tmp_path)
+
+    assert report.standalone_presets_examined == 3  # valid + malformed + nonobject, not settings.json
+    assert "settings_json_surfaced_as_preset" in _codes(report)
+    assert "malformed_json" in _codes(report, "malformed")
+    assert "non_object_top_level" in _codes(report, "nonobject")
