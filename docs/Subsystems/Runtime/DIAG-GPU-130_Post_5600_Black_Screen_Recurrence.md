@@ -2,10 +2,16 @@
 
 ## Status
 
-**CAPTURED - ISOLATION DECISION REQUIRED.** This evidence-only package establishes a new
-display/live-kernel incident while StableNew had just-completed and immediately preceding A1111
-`txt2img` work. It does not attribute the display failure to StableNew, A1111, NVIDIA, the GPU,
-power delivery, PCIe, RAM, or any other component.
+**XMP-OFF RECURRENCE - ACTIVE OBSERVATION / EXIT CRITERION NOT MET.** This evidence-only package
+records the 2026-09-23 recurrence with proven immediately preceding StableNew/A1111 `txt2img`
+work and a further 2026-09-26 post-XMP-OFF recurrence with WER `141`/`1B8` artifacts and an
+unexpected restart. The latter retains known immediately preceding PR-VID-184 Arm A
+Wan-Animate-2 GPU-loss workload context, about 20 minutes before the Kernel-Power 41/6008
+recovery boot, but no continuous survivor telemetry ties the exact `141`/`1B8` interval to that
+workload. It is therefore classified as the known display/live-kernel family without workload
+attribution. That temporal correlation neither causes the restart nor proves or falsifies
+failure-family equivalence. Nothing here attributes either failure to StableNew, A1111, NVIDIA,
+the GPU, power delivery, PCIe, RAM, or any other component.
 
 **Amended conclusion (2026-09-24, product-owner direction):** NVIDIA driver-package isolation is
 **deprioritized** by cross-version recurrence evidence - the failure family has recurred across
@@ -49,6 +55,58 @@ The defensible incident window is **2026-09-23 20:38:11-20:38:30 ET**
 The pre-reboot telemetry segment ends at 20:38:48 ET. It still records lifecycle events after the
 Event 6008 time while the GPU field is unavailable, so the display-loss instant cannot honestly be
 reduced below this window.
+
+## Post-XMP-OFF recurrence and current platform state
+
+Read-only observation on 2026-09-27 found both DIMMs still reporting `Speed=5600`,
+`ConfiguredClockSpeed=5600`, and `ConfiguredVoltage=1100 mV`, with the same Micron part and serials
+recorded above. Windows last booted at 06:23:33 ET on 2026-09-27. The installed NVIDIA display
+driver reports `32.0.16.1714`, which differs from the `32.0.16.1692` recorded before this package;
+the transition is not attributed here and means post-XMP-OFF exposure is not a clean held-driver
+comparison.
+
+The retained Windows evidence shows a second post-XMP-OFF failure boundary:
+
+| Evidence | Timestamp / finding | Meaning and limit |
+|---|---|---|
+| WER | `WATCHDOG-20260926-2150.dmp`, LiveKernel `141`; `WATCHDOG4400-20260926-2150.dmp`, LiveKernel `1B8` | Same broad display/live-kernel family; the named dumps are not readable in this pass. |
+| Event Log 6008 | 22:06:46 ET unexpected shutdown; Event 6008 recorded 22:07:33 ET | Restart boundary, not a component-failure timestamp. |
+| Kernel-Power 41 | 22:07:24 ET | Restart marker only, not a cause. |
+| Workload / survivor telemetry | Known immediately preceding PR-VID-184 Arm A Wan-Animate-2 GPU-loss workload context; its run was about 20 minutes before the 41/6008 recovery boot | No continuous survivor telemetry ties the exact `141`/`1B8` interval to that workload. GPU-active exposure and workload provenance for the interval are unknown; do not count this as a qualified exposure. |
+| Other reviewed events | No new `0x133` record in this incident window; no attribution event was found | Does not clear any component or establish a different family. |
+
+This recurrence means XMP-OFF has not produced a clean exit from the observed failure family. It
+also cannot be used to judge whether the failure occurred during GPU-active work. The PR-VID-184
+GPU-loss observation remains a separate, explicitly unmerged evidence class: its temporal
+proximity neither causes the restart nor proves or falsifies failure-family equivalence.
+
+## Restricted `0x133` dump attempt
+
+Normal read-only access was attempted for `C:\Windows\Minidump\090926-11984-01.dmp` and
+`C:\Windows\Minidump\091426-12875-01.dmp`; both returned **Access is denied**. `C:\Windows\MEMORY.DMP`
+is absent. No debugger executable was available on the normal PATH. No elevation, ACL change,
+ownership change, copy, or debugger run was performed, so no new `0x133` attribution exists.
+
+The minimal operator action for the next evidence window is to use the normal administrator-
+supported Windows evidence workflow to copy only those two named minidumps into the ignored local
+diagnostic evidence directory, preserving source path, size, timestamp, and SHA-256. Then run the
+already prescribed read-only pass once per copy with the installed Microsoft debugger:
+
+```text
+!analyze -v
+.bugcheck
+kv
+!dpcs
+lm t n
+!blackboxntfs
+!blackboxpnp
+!blackboxbsd
+!blackboxwinlogon
+lmvm nvlddmkm
+```
+
+Retain raw output outside Git. If the normal administrator-supported copy still fails, record the
+access denial and stop; do not bypass protection or alter ACLs.
 
 ## StableNew and runtime correlation
 
@@ -112,9 +170,10 @@ evidence, or a genuinely new failure class.
 
 ## DIAG-GPU-120 conclusion
 
-Windows currently reports both DIMMs at 5600 MT/s and 1250 mV; XMP remains operator-reported
-enabled. The established failure recurred under that post-DIAG-GPU-120 condition. The DDR5-5600
-transition was therefore insufficient to eliminate the fault and weakens a simple
+At the time of that earlier recurrence, Windows reported both DIMMs at 5600 MT/s and 1250 mV; XMP
+remained operator-reported enabled. The established failure recurred under that post-DIAG-GPU-120
+condition. This is distinct from the current post-XMP-OFF state, which reports 5600 MT/s and 1100
+mV. The DDR5-5600 transition was therefore insufficient to eliminate the fault and weakens a simple
 "DDR5-6000 alone" explanation. It does not rule out RAM, IMC, CPU, or platform stability because
 timings/controller behavior were not observed and component attribution remains unavailable.
 
@@ -160,9 +219,55 @@ deferred behind platform-baseline evidence. Continue ordinary-use observation an
 recurrence for monitoring; do not deliberately stress-test or combine this with another
 configuration or hardware action.
 
+## Operational GPU-active-exposure exit criterion
+
+This is an operational stop rule for active isolation, not statistical root-cause proof, hardware
+clearance, or a claim that XMP-OFF caused or prevented the failures. Move Lane B to dormant,
+event-driven observation only after all of the following are true under one recorded platform
+state:
+
+1. At least 10 ordinary-use GPU-active StableNew sessions are retained with job/backend/stage
+   identity and continuous survivor telemetry; the set contains at least 4 cumulative GPU-active
+   hours, including at least three sessions with 10 continuous minutes at or above 80% GPU
+   utilization when ordinary work naturally provides it.
+2. The sessions span at least 14 calendar days and three clean boots, with no deliberate stress,
+   replay, retry of ambiguous dispatches, or newly changed platform variable.
+3. No `141`, `1A8`, `1B8`, or `0x133` WER/BugCheck recurrence, Kernel-Power 41/6008 boundary, or
+   unexplained loss of GPU telemetry occurs during the qualified exposure set.
+4. The pre/post platform snapshot remains reproducible: memory state, driver version, HAGS and
+   power-plan observations, and the limits of what Windows cannot expose are recorded for the
+   qualifying period.
+
+The current count is **zero qualified post-XMP-OFF exposure sessions** in the retained evidence:
+the 2026-09-26 recurrence retains known immediately preceding PR-VID-184 Arm A context, but no
+continuous survivor telemetry ties the exact `141`/`1B8` incident interval to it; it cannot count
+as qualified clean GPU-active exposure. The criterion is consequently not met and the posture remains active observation. A
+future recurrence before the threshold resets the exposure count and triggers the protocol below.
+
+## Exact recurrence evidence-preservation protocol
+
+On any recurrence, stop deliberate GPU work and do not automatically replay or retry an ambiguous
+generation dispatch. Record, before cleanup or reboot when possible:
+
+- local incident time, timezone, visible symptom, and whether the machine rebooted;
+- survivor telemetry copied read-only, including the last valid GPU sample, first unavailable
+  sample, rotations, hashes, and coverage limits;
+- System, Application, WER-Diag, Kernel-Power, Event 6008, BugCheck, Display, `nvlddmkm`, and
+  WHEA events for the bounded pre/post window, preserving raw exports and source timestamps;
+- every named WER/LiveKernel/minidump path, file size/timestamp/hash when readable, and the exact
+  access-denied result when not; preserve `MEMORY.DMP` status;
+- StableNew job id, run id, NJR/source identity, backend/stage, dispatch/completion times, and
+  workload parameters if applicable, plus A1111/Comfy/native-SVD process-log copies;
+- platform/config snapshot: boot time, DIMM speed/clock/voltage, driver/VBIOS, GPU link/power/
+  temperature/utilization telemetry, HAGS/power-plan observations, and any owner-reported change.
+
+Do not change BIOS/XMP, driver, HAGS, power plan, clocks, pagefile, hardware, or process ownership
+as part of preservation. Escalate only with the preserved evidence and a separately approved
+single-variable decision.
+
 ## Additional GPU-loss observation (2026-09-26, PR-VID-184)
 
-During the single owner-authorized, isolated, non-StableNew Wan-Animate-2 sampling attempt (10th of 10 sampler steps)
+During the single owner-authorized, isolated, non-StableNew Wan-Animate-2 Arm A sampling attempt (10th of 10 sampler steps)
 recorded in `docs/Subsystems/Video/PR-VID-184_Wan_Animate_2_Reference_Target_Hardware_Integration_Feasibility.md`
 (Phase H), the GPU entered a lost-device state (`CUDA_ERROR_UNKNOWN`/sticky CUDA error; `nvidia-smi`
 reported the GPU lost and requested a reboot) while Windows system commit was approximately 95–98 %.
@@ -170,8 +275,11 @@ A read-only System-log query over the roughly 10 minutes around it found no WHEA
 unexpected-shutdown 6008 or display-driver-reset 4101 event. This event did not reproduce the
 DIAG-GPU-130 Windows-event signature in the inspected window. That is descriptive only: it does not
 prove a different cause, does not clear the hardware or the driver, does not prove commit exhaustion,
-and is not a stability PASS. It is not merged into this diagnosis's root-cause interpretation; the
-status above is unchanged.
+and is not a stability PASS. Kernel-Power 41 and 6008 occurred at the recovery boot about 20 minutes
+after Arm A, outside that inspected window. The retained evidence has no continuous survivor telemetry
+tying the exact `141`/`1B8` interval to Arm A; the temporal context neither causes the restart nor
+proves or falsifies failure-family equivalence. It is not merged into this diagnosis's root-cause
+interpretation; the status above is unchanged.
 
 ## Boundaries and validation
 

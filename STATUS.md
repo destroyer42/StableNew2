@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-09-25
+Updated: 2026-09-27
 
 ## Repository
 
@@ -8,10 +8,19 @@ Updated: 2026-09-25
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
 - Active diagnostic evidence: `DIAG-GPU-130 - Post-5600 Black-Screen Recurrence` - **XMP-OFF
-  ISOLATION IN PROGRESS / OBSERVATION ONLY**. The owner confirms the RAM XMP profile has now been
-  removed. After the 2026-09-25 07:06:20 ET boot, Windows reports both DIMMs at DDR5-5600,
-  configured 5600 MT/s and 1100 mV; Windows does not establish the firmware XMP toggle, Intel
-  Baseline/Default, timings, or controller state. This is not a PASS, fix, or root-cause verdict.
+  RECURRENCE / ACTIVE OBSERVATION; EXIT CRITERION NOT MET**. The owner confirms the RAM XMP profile
+  has now been removed. After the 2026-09-25 07:06:20 ET boot, Windows reports both DIMMs at
+  DDR5-5600, configured 5600 MT/s and 1100 mV; Windows does not establish the firmware XMP toggle,
+  Intel Baseline/Default, timings, or controller state. A further 2026-09-26 recurrence produced
+  WER LiveKernel `141` and `1B8` artifacts followed by unexpected shutdown at 22:06:46 ET and
+  reboot at 22:07:24 ET. Known immediately preceding context is the PR-VID-184 Arm A
+  Wan-Animate-2 GPU-loss workload, about 20 minutes before that recovery boot; however, no
+  continuous survivor telemetry ties the exact `141`/`1B8` interval to it. The interval therefore
+  remains the known display/live-kernel family without causal or workload attribution and does not
+  count as qualified GPU-active exposure. This temporal correlation neither causes the restart nor
+  proves or falsifies failure-family equivalence. The current NVIDIA driver reports `32.0.16.1714`,
+  differing from the earlier `32.0.16.1692`; this is an evidence confounder, not a driver
+  attribution. This is not a PASS, fix, hardware clearance, or root-cause verdict.
   The prior recurrence under reported DDR5-5600/XMP remains captured; subsequent ordinary-use
   observation must preserve survivor telemetry and Windows evidence. The current baseline has not
   been deliberately stress-tested. The earlier 5600/XMP recurrence remains documented with its
@@ -787,9 +796,10 @@ these are not long-lived divergent branches.
 2. **Lane B — Platform Stability & Forensics.** Continue the existing
    `DIAG-GPU-130` identity: preserve/analyze recoverable restricted `0x133`
    dumps with administrator support, reconcile XMP-off clean/high-load exposure,
-   define an operational GPU-active-exposure exit criterion (not root-cause
-   proof), and specify recurrence evidence/action. Then remain dormant and
-   event-driven. A new hardware/platform variable needs an owner decision;
+   apply the operational GPU-active-exposure exit criterion (not root-cause proof),
+   and follow the exact recurrence evidence protocol. The 2026-09-26 post-XMP-OFF
+   `141`/`1B8` recurrence means Lane B remains active observation; it is not yet
+   dormant/event-driven. A new hardware/platform variable needs an owner decision;
    PR-VID-184/184R/184S may inform, but cannot classify, the failure family
    without supporting evidence.
 3. **Lane C — Model Qualification & Capability Expansion.** `PR-VID-185 —
