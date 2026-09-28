@@ -243,7 +243,9 @@ def test_svd_cache_is_released_through_the_real_svdservice_and_can_repopulate_af
 
     SVDService._pipeline_cache = {("model-a", "cpu", None, None): object()}
     coordinator = RuntimeTransitionCoordinator(
-        webui_manager_getter=lambda: None, comfy_manager_getter=lambda: None
+        webui_manager_getter=lambda: None,
+        comfy_manager_getter=lambda: None,
+        webui_endpoint_present=lambda: False,
     )
     try:
         result = coordinator.prepare_for(RUNTIME_COMFY)
