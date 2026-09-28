@@ -22,6 +22,7 @@ mutation from `scan`, ever.
 from __future__ import annotations
 
 import argparse
+import copy
 import difflib
 import hashlib
 import json
@@ -381,9 +382,18 @@ def _load_source_document(
     if not path.is_file():
         return None, None
     try:
-        return json.loads(path.read_text(encoding="utf-8")), path
+        parsed = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         return None, path
+    if not isinstance(parsed, dict):
+        # Valid JSON but not an object (e.g. a list, string, number, null)
+        # can never be an actionable PromptPack/preset document. Treat it
+        # as the same stale/unavailable condition as a missing or corrupt
+        # source, rather than letting a `.get(...)` call crash the scan --
+        # and never coerce it to `{}`, which would erase the distinction
+        # from a genuinely empty object.
+        return None, path
+    return parsed, path
 
 
 def _base_checkpoint_context(
@@ -619,8 +629,12 @@ def validate_decision(
         return ValidationResult(triage_item_id, False, "source no longer exists or is unreadable")
 
     expected_sha = decision.get("expected_source_sha256")
+    if not isinstance(expected_sha, str) or not expected_sha.strip():
+        return ValidationResult(
+            triage_item_id, False, "expected_source_sha256 is required for any action other than leave_unresolved"
+        )
     current_sha = hashlib.sha256(path.read_bytes()).hexdigest()
-    if expected_sha and expected_sha != current_sha:
+    if expected_sha != current_sha:
         return ValidationResult(triage_item_id, False, "source SHA-256 has changed since triage; stale decision")
 
     expected_old_value = decision.get("expected_old_value")
@@ -712,12 +726,19 @@ def _flatten(obj: Any, prefix: str = "") -> dict[str, Any]:
 def _apply_one_decision(document: dict[str, Any], item: TriageItem, decision: Mapping[str, Any]) -> dict[str, Any]:
     """Return a new document with only this decision's authorized change applied."""
 
-    import copy
-
     new_doc = copy.deepcopy(document)
     action = decision["action"]
     occurrence_ids = set(decision.get("occurrence_ids") or [])
     target_occurrences = [o for o in item.occurrences if o.occurrence_id in occurrence_ids]
+
+    if action == "remove_reference":
+        # Highest list index first: removing a later entry never shifts an
+        # earlier one, so multiple selected removals from the same list
+        # (or from different lists mixed in one decision) are always safe
+        # in this order.
+        target_occurrences = sorted(
+            target_occurrences, key=lambda o: _list_removal_target(o)[1], reverse=True
+        )
 
     for occ in target_occurrences:
         path_parts = _pointer_to_parts(occ.pointer)
@@ -736,15 +757,15 @@ def _apply_one_decision(document: dict[str, Any], item: TriageItem, decision: Ma
 def _authorized_prefix(occ: ReferenceOccurrence, action: str) -> str:
     """The semantic-diff prefix this occurrence's decision authorizes.
 
-    Removing a LoRA [name, weight] entry also removes its sibling weight
-    key, which the bare name pointer (`...loras[j][0]`) does not cover;
-    authorize the whole entry in that case. Every other action only ever
-    touches exactly the pointer itself (or, for a dict-shaped embedding
-    entry, its own sub-keys, which already share that same prefix).
+    Only called for non-removal actions (`replace_reference`,
+    `clear_optional_reference`) -- `remove_reference` is verified separately
+    via the dedicated list-level check in `apply_batch`, since removing an
+    entry shifts every later entry's flattened index and a bare pointer
+    prefix cannot express that. Every non-removal action only ever touches
+    exactly its own pointer (or, for a dict-shaped embedding entry, its own
+    sub-keys, which already share that same prefix).
     """
 
-    if action == "remove_reference" and occ.asset_kind == "lora" and occ.pointer.endswith("]"):
-        return occ.pointer.rsplit("[", 1)[0]
     return occ.pointer
 
 
@@ -781,6 +802,39 @@ def _navigate(doc: Any, parts: list[str | int]) -> tuple[Any, str | int]:
     for part in parts[:-1]:
         node = node[part]
     return node, parts[-1]
+
+
+def _get_at_parts(doc: Any, parts: list[str | int]) -> Any:
+    node = doc
+    for part in parts:
+        node = node[part]
+    return node
+
+
+def _parts_to_prefix(parts: list[str | int]) -> str:
+    """Render `parts` in the same dotted/bracketed form `_flatten` uses, so
+    the result can be matched directly against flattened diff keys."""
+
+    out = ""
+    for part in parts:
+        if isinstance(part, int):
+            out += f"[{part}]"
+        else:
+            out += f".{part}" if out else str(part)
+    return out
+
+
+def _list_removal_target(occ: ReferenceOccurrence) -> tuple[list[str | int], int]:
+    """The list-level pointer parts and entry index a `remove_reference`
+    occurrence targets -- two levels up for a LoRA's `[name, weight]` entry,
+    one level up for an embedding entry."""
+
+    parts = _pointer_to_parts(occ.pointer)
+    entry_offset = 2 if occ.asset_kind == "lora" else 1
+    list_parts = parts[:-entry_offset]
+    entry_index = parts[-entry_offset]
+    assert isinstance(entry_index, int)
+    return list_parts, entry_index
 
 
 def _set_at_pointer(doc: dict[str, Any], parts: list[str | int], value: Any) -> None:
@@ -855,7 +909,11 @@ def apply_batch(
             return ApplyResult(dry_run, [], [ValidationResult(source_id, False, "source missing at apply time")], {})
         original_bytes = path.read_bytes()
         originals[path] = original_bytes
-        backup_path = backup_dir / path.name
+        # Namespace by source type (never by absolute path) so a PromptPack
+        # and a standalone preset that happen to share a basename can never
+        # collide and overwrite each other's backup.
+        backup_path = backup_dir / source_type / path.name
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
         backup_path.write_bytes(original_bytes)
         if hashlib.sha256(backup_path.read_bytes()).hexdigest() != hashlib.sha256(original_bytes).hexdigest():
             return ApplyResult(dry_run, [], [ValidationResult(source_id, False, "backup verification failed")], {})
@@ -870,20 +928,70 @@ def apply_batch(
             document, path = _load_source_document(source_type, source_id, packs_dir, presets_dir)
             assert document is not None and path is not None
             before_flat = _flatten(document)
+
+            # Non-removal decisions first (they never shift a list index),
+            # then removals ordered by descending target index, so a
+            # decision touching a lower index never runs before one
+            # touching a higher index in the same list.
+            def _sort_key(decision: dict[str, Any]) -> tuple[int, int]:
+                if decision.get("action") != "remove_reference":
+                    return (0, 0)
+                item = _find_item(report, decision["triage_item_id"])
+                assert item is not None
+                occ_ids = set(decision.get("occurrence_ids") or [])
+                indices = [
+                    _list_removal_target(occ)[1] for occ in item.occurrences if occ.occurrence_id in occ_ids
+                ]
+                return (1, -max(indices)) if indices else (1, 0)
+
+            ordered_decisions = sorted(source_decisions, key=_sort_key)
+
             new_doc = document
             authorized_pointer_prefixes: set[str] = set()
-            for decision in source_decisions:
+            removals_by_list: dict[tuple[str | int, ...], set[int]] = {}
+            pre_removal_doc: dict[str, Any] | None = None
+
+            for decision in ordered_decisions:
                 item = _find_item(report, decision["triage_item_id"])
                 assert item is not None
                 action = decision.get("action", "leave_unresolved")
+                if action == "remove_reference" and pre_removal_doc is None:
+                    pre_removal_doc = copy.deepcopy(new_doc)
                 for occ in item.occurrences:
-                    if occ.occurrence_id in set(decision.get("occurrence_ids") or []):
+                    if occ.occurrence_id not in set(decision.get("occurrence_ids") or []):
+                        continue
+                    if action == "remove_reference":
+                        list_parts, entry_index = _list_removal_target(occ)
+                        removals_by_list.setdefault(tuple(list_parts), set()).add(entry_index)
+                    else:
                         authorized_pointer_prefixes.add(_authorized_prefix(occ, action))
                 new_doc = _apply_one_decision(new_doc, item, decision)
 
             after_flat = _flatten(new_doc)
             all_keys = set(before_flat) | set(after_flat)
             changed = {k for k in all_keys if before_flat.get(k) != after_flat.get(k)}
+
+            # Removals shift every later entry's flattened index, which the
+            # generic before/after key comparison cannot express as
+            # "authorized". Verify each affected list at the structured
+            # level instead: the post-removal list must equal the
+            # pre-removal list with exactly the selected indexes excluded
+            # -- proving the right entries left, remaining order/content is
+            # untouched, and no sibling field changed -- then exclude only
+            # that list's own keys from the generic guard.
+            list_prefixes: set[str] = set()
+            for list_parts_tuple, removed_indices in removals_by_list.items():
+                list_parts = list(list_parts_tuple)
+                prefix = _parts_to_prefix(list_parts)
+                list_prefixes.add(prefix)
+                assert pre_removal_doc is not None
+                pre_list = _get_at_parts(pre_removal_doc, list_parts)
+                post_list = _get_at_parts(new_doc, list_parts)
+                expected_list = [v for i, v in enumerate(pre_list) if i not in removed_indices]
+                if post_list != expected_list:
+                    raise RuntimeError(f"semantic-diff guard: list removal mismatch at {prefix} in {source_id}")
+
+            changed = {k for k in changed if not any(k == p or k.startswith(p + "[") for p in list_prefixes)}
             unauthorized = {
                 k for k in changed if not any(k == p or k.startswith(p) for p in authorized_pointer_prefixes)
             }
@@ -912,6 +1020,18 @@ def apply_batch(
 # ---------------------------------------------------------------------------
 
 
+def _resolve_audit_asset_cache(asset_cache: str | None, anchor: Path) -> Path:
+    """An explicit `--asset-cache` is used as-is; otherwise derive an
+    audit-owned cache path beside `anchor` rather than falling back to
+    AssetRegistry's own default, which is StableNew's normal production
+    Asset Registry cache. This triage workflow must never read from or
+    write to that cache."""
+
+    if asset_cache:
+        return Path(asset_cache)
+    return anchor.resolve().parent / "asset_registry_triage_cache.json"
+
+
 def _cmd_scan(args: argparse.Namespace) -> int:
     census = json.loads(Path(args.census_report).read_text(encoding="utf-8"))
     packs_dir = Path(args.packs_dir)
@@ -919,7 +1039,8 @@ def _cmd_scan(args: argparse.Namespace) -> int:
 
     registry: AssetRegistry | None = None
     if args.webui_root:
-        registry = AssetRegistry(args.webui_root, cache_path=Path(args.asset_cache))
+        cache_path = _resolve_audit_asset_cache(args.asset_cache, Path(args.out))
+        registry = AssetRegistry(args.webui_root, cache_path=cache_path)
         if any(root.is_dir() for _kind, root in registry.supported_roots()):
             registry.refresh()
         else:
@@ -976,9 +1097,9 @@ def _cmd_apply(args: argparse.Namespace) -> int:
 
     registry: AssetRegistry | None = None
     if args.webui_root:
-        registry = AssetRegistry(args.webui_root, cache_path=Path(args.asset_cache)) if args.asset_cache else None
-        if registry is not None:
-            registry.refresh()
+        cache_path = _resolve_audit_asset_cache(args.asset_cache, Path(args.decisions))
+        registry = AssetRegistry(args.webui_root, cache_path=cache_path)
+        registry.refresh()
 
     result = apply_batch(
         decisions,

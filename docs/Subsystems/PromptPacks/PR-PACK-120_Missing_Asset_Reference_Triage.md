@@ -96,17 +96,51 @@ Supported actions: `leave_unresolved` (the template default), `replace_reference
 allowlist — a required base checkpoint can never be cleared this way).
 
 Before any real write: every decision in the batch is validated —
-source file still exists, its SHA-256 still matches the decision's
-`expected_source_sha256`, the expected old value is still present at every
-targeted occurrence, and (for `replace_reference`) the proposed replacement
-resolves to exactly one installed asset of the same kind. One invalid
-decision refuses the entire batch — no partial writes. All backups for a
-batch complete before the first write. Each write is atomic
-(temp-file-then-`os.replace`); a semantic-diff guard compares the full
-document before/after and refuses any change outside the explicitly
-authorized occurrence(s); any failure restores every file already changed
-in that operation from its byte-exact backup and re-verifies the restored
-SHA-256.
+source file still exists, and (for every action other than
+`leave_unresolved`) `expected_source_sha256` is required to be present, a
+non-empty string, and equal to the source file's current SHA-256 — a
+missing, `null`, blank, or stale digest refuses the decision outright, never
+falling back to an implicit or occurrence-time value. The expected old value
+must still be present at every targeted occurrence, and (for
+`replace_reference`) the proposed replacement must resolve to exactly one
+installed asset of the same kind. One invalid decision refuses the entire
+batch — no partial writes. All backups for a batch complete before the
+first write, one subdirectory per source type (`promptpack`/
+`standalone_preset`) beneath the backup root, so a PromptPack and a
+standalone preset that happen to share a basename can never collide and
+overwrite each other's backup. Each write is atomic
+(temp-file-then-`os.replace`).
+
+`remove_reference` on a structured LoRA/embedding list is verified at the
+list level rather than by a flattened key-prefix match: removing an entry
+shifts every later entry's index, so the guard instead asserts that the
+post-removal list equals the pre-removal list with exactly the selected
+index (or indexes — multiple selected removals from one list, within one
+decision or across several, are always applied highest-index-first so an
+earlier removal never invalidates a later one's recorded index) excluded,
+proving remaining order/content is untouched and no sibling entry was
+altered. Every other action's semantic-diff guard is unchanged: it compares
+the full document before/after and refuses any change outside the
+explicitly authorized occurrence(s). Any failure restores every file already
+changed in that operation from its byte-exact backup and re-verifies the
+restored SHA-256.
+
+A source file whose top-level JSON decodes but is not an object (a list,
+string, number, `null`, etc.) is treated as the same stale/unavailable
+condition as a missing or corrupt source — it becomes an explicit
+unmapped/stale triage item and scanning continues with the remaining
+sources, rather than crashing on the first unexpected shape. It is never
+coerced to `{}`, which would erase the distinction from a genuinely empty
+object.
+
+`scan`/`apply`'s `--asset-cache` is optional; when `--webui-root` is given
+without it, an audit-owned cache path is derived beside the requested output
+(`<out-dir>/asset_registry_triage_cache.json` for `scan`, similarly beside
+the decisions file for `apply`) rather than falling back to
+`AssetRegistry`'s own default, which is StableNew's normal production Asset
+Registry cache. This preserves the audit-isolation guarantee: the triage
+workflow never reads from or writes to the cache the running application
+itself uses.
 
 ## Real read-only triage result
 
@@ -137,9 +171,10 @@ census total: 1,010 findings; unchanged since `PR-PACK-110`):
   `WP-PACK-AUDIT-100`'s own independent resolution already reported for
   these same sources, confirming this triage's context matches the accepted
   census.
-- Source-mutation verification: a full 59-file fingerprint (all PromptPacks
-  + all standalone presets + `.default_preset`) was captured before and
-  after the run and confirmed byte-identical throughout.
+- Source-mutation verification: a full 60-file fingerprint (all PromptPacks
+  + all standalone presets) was captured before and after the apply-safety
+  repair's rerun and confirmed byte-identical throughout, reproducing the
+  same 24/24/16/20/4/134/4/0 counts above.
 
 ## Explicit non-scope
 
