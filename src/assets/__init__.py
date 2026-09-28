@@ -1,5 +1,31 @@
 """StableNew-owned local asset identity and discovery."""
 
-from .registry import AssetKind, AssetRegistry, AssetRegistrySnapshot, RefreshResult
+from .compatibility import (
+    CompatibilityProfile,
+    CompatibilityStatus,
+    EvidenceConfidence,
+    FamilyEvidence,
+    ModelFamily,
+)
+from .registry import (
+    AssetKind,
+    AssetLocation,
+    AssetRecord,
+    AssetRegistry,
+    AssetRegistrySnapshot,
+    RefreshResult,
+)
 
-__all__ = ["AssetKind", "AssetRegistry", "AssetRegistrySnapshot", "RefreshResult"]
+__all__ = [
+    "AssetKind",
+    "AssetLocation",
+    "AssetRecord",
+    "AssetRegistry",
+    "AssetRegistrySnapshot",
+    "CompatibilityProfile",
+    "CompatibilityStatus",
+    "EvidenceConfidence",
+    "FamilyEvidence",
+    "ModelFamily",
+    "RefreshResult",
+]

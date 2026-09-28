@@ -7,15 +7,24 @@ import json
 import os
 import struct
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.assets.compatibility import (
+    CompatibilityProfile,
+    embedded_metadata_evidence,
+    filename_hint_evidence,
+    resolve_compatibility_profile,
+    sidecar_metadata_evidence,
+)
 from src.state.workspace_paths import workspace_paths
 
 _EXTENSIONS = frozenset({".bin", ".ckpt", ".onnx", ".pt", ".pth", ".safetensors"})
 _CHUNK = 1024 * 1024
+_CACHE_VERSION = 2
+_SUPPORTED_CACHE_VERSIONS = (1, 2)
 
 
 class AssetKind(str, Enum):
@@ -38,6 +47,12 @@ class AssetLocation:
     root: Path
     display_name: str
     byte_size: int
+    # Location-scoped local sidecar evidence: sidecars enrich one file
+    # location, never the shared content identity (see AssetRecord).
+    sidecar_path: Path | None = None
+    sidecar_metadata: dict[str, Any] = field(default_factory=dict)
+    sidecar_provenance: str | None = None
+    sidecar_error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +61,8 @@ class AssetRecord:
     locations: tuple[AssetLocation, ...]
     embedded_metadata: dict[str, Any]
     metadata_provenance: str | None
+    embedded_metadata_error: str | None = None
+    compatibility: CompatibilityProfile | None = None
 
     @property
     def kinds(self) -> tuple[AssetKind, ...]:
@@ -84,6 +101,86 @@ def _safetensors_metadata(path: Path) -> tuple[dict[str, Any], str | None]:
         return (metadata if isinstance(metadata, dict) else {}), None
     except (OSError, UnicodeDecodeError, ValueError, struct.error) as exc:
         return {}, f"{type(exc).__name__}: {exc}"
+
+
+def _sidecar_candidates(path: Path) -> tuple[Path, Path]:
+    """Deterministic sidecar precedence, matching tools/asset_census.py."""
+
+    return (
+        path.with_suffix(path.suffix + ".civitai.info"),
+        path.with_name(f"{path.stem}.civitai.info"),
+    )
+
+
+def _sidecar_fingerprint(path: Path) -> dict[str, int] | None:
+    try:
+        stat = path.stat()
+    except OSError:
+        return None
+    return {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+
+
+def _read_sidecar_json(path: Path) -> tuple[dict[str, Any], str | None]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {}, f"{type(exc).__name__}: {exc}"
+    try:
+        parsed = json.loads(text)
+    except (ValueError, UnicodeDecodeError) as exc:
+        return {}, f"{type(exc).__name__}: {exc}"
+    if not isinstance(parsed, dict):
+        return {}, "sidecar JSON is not an object"
+    return parsed, None
+
+
+def _resolve_sidecar(path: Path, cached: dict[str, Any] | None) -> dict[str, Any]:
+    """Resolve this exact location's sidecar evidence.
+
+    Sidecar freshness is independent of model-byte freshness: this re-reads
+    only when the selected candidate or its fingerprint (size/mtime_ns)
+    differs from what is cached, so an unchanged sidecar never forces a
+    model rehash and never gets re-parsed on every refresh either.
+    """
+
+    selected: Path | None = None
+    fingerprint: dict[str, int] | None = None
+    for candidate in _sidecar_candidates(path):
+        candidate_fingerprint = _sidecar_fingerprint(candidate)
+        if candidate_fingerprint is not None:
+            selected, fingerprint = candidate, candidate_fingerprint
+            break
+
+    if selected is None:
+        return {
+            "sidecar_path": None,
+            "sidecar_metadata": {},
+            "sidecar_provenance": None,
+            "sidecar_error": None,
+            "sidecar_fingerprint": None,
+        }
+
+    if (
+        cached is not None
+        and cached.get("sidecar_path") == str(selected)
+        and cached.get("sidecar_fingerprint") == fingerprint
+    ):
+        return {
+            "sidecar_path": cached.get("sidecar_path"),
+            "sidecar_metadata": cached.get("sidecar_metadata") or {},
+            "sidecar_provenance": cached.get("sidecar_provenance"),
+            "sidecar_error": cached.get("sidecar_error"),
+            "sidecar_fingerprint": fingerprint,
+        }
+
+    metadata, error = _read_sidecar_json(selected)
+    return {
+        "sidecar_path": str(selected),
+        "sidecar_metadata": metadata,
+        "sidecar_provenance": "civitai_sidecar" if metadata else None,
+        "sidecar_error": error,
+        "sidecar_fingerprint": fingerprint,
+    }
 
 
 class AssetRegistry:
@@ -150,14 +247,17 @@ class AssetRegistry:
                 key = str(path.resolve())
                 stat = path.stat()
                 cached = self._entries.get(key)
-                valid = (
+                model_valid = bool(
                     cached
                     and cached.get("size") == stat.st_size
                     and cached.get("mtime_ns") == stat.st_mtime_ns
                     and cached.get("kind") == kind.value
                 )
-                if valid:
-                    next_entries[key] = cached
+                sidecar_fields = _resolve_sidecar(path, cached if model_valid else None)
+                if model_valid and cached is not None:
+                    entry = dict(cached)
+                    entry.update(sidecar_fields)
+                    next_entries[key] = entry
                     hits += 1
                     continue
                 digest = hashlib.sha256()
@@ -169,7 +269,7 @@ class AssetRegistry:
                     if path.suffix.lower() == ".safetensors"
                     else ({}, None)
                 )
-                next_entries[key] = {
+                entry = {
                     "path": key,
                     "root": str(root.resolve()),
                     "kind": kind.value,
@@ -181,6 +281,8 @@ class AssetRegistry:
                     "provenance": "safetensors_header" if metadata else None,
                     "metadata_error": error,
                 }
+                entry.update(sidecar_fields)
+                next_entries[key] = entry
                 computed += 1
         self._entries = next_entries
         self._snapshot = self._make_snapshot()
@@ -191,51 +293,90 @@ class AssetRegistry:
         if self._loaded:
             return
         self._loaded = True
+        entries: Any = {}
         try:
             data = json.loads(self.cache_path.read_text(encoding="utf-8"))
-            self._entries = data.get("entries", {}) if data.get("version") == 1 else {}
+            if data.get("version") in _SUPPORTED_CACHE_VERSIONS:
+                entries = data.get("entries", {})
         except (OSError, ValueError, TypeError):
-            self._entries = {}
+            entries = {}
+        self._entries = entries if isinstance(entries, dict) else {}
         self._snapshot = self._make_snapshot()
 
     def _save(self) -> None:
         self.cache_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.cache_path.with_suffix(".tmp")
         temporary.write_text(
-            json.dumps({"version": 1, "entries": self._entries}, sort_keys=True), encoding="utf-8"
+            json.dumps({"version": _CACHE_VERSION, "entries": self._entries}, sort_keys=True),
+            encoding="utf-8",
         )
         temporary.replace(self.cache_path)
 
     def _make_snapshot(self) -> AssetRegistrySnapshot:
         grouped: dict[str, list[AssetLocation]] = {}
-        metadata: dict[str, tuple[dict[str, Any], str | None]] = {}
+        content_metadata: dict[str, tuple[dict[str, Any], str | None, str | None]] = {}
         for entry in self._entries.values():
             try:
                 digest = str(entry["sha256"])
                 kind = AssetKind(entry["kind"])
+                sidecar_path_raw = entry.get("sidecar_path")
+                raw_sidecar_metadata = entry.get("sidecar_metadata")
+                sidecar_metadata = (
+                    raw_sidecar_metadata if isinstance(raw_sidecar_metadata, dict) else {}
+                )
                 location = AssetLocation(
                     kind,
                     Path(entry["path"]),
                     Path(entry["root"]),
                     str(entry["name"]),
                     int(entry["size"]),
+                    Path(sidecar_path_raw) if sidecar_path_raw else None,
+                    sidecar_metadata,
+                    entry.get("sidecar_provenance"),
+                    entry.get("sidecar_error"),
                 )
             except (KeyError, TypeError, ValueError):
                 continue
             grouped.setdefault(digest, []).append(location)
-            metadata.setdefault(
+            raw_metadata = entry.get("metadata")
+            content_metadata.setdefault(
                 digest,
                 (
-                    entry.get("metadata") if isinstance(entry.get("metadata"), dict) else {},
+                    raw_metadata if isinstance(raw_metadata, dict) else {},
                     entry.get("provenance"),
+                    entry.get("metadata_error"),
                 ),
             )
         records = tuple(
-            AssetRecord(
-                digest,
-                tuple(sorted(locations, key=lambda item: str(item.path).lower())),
-                *metadata[digest],
-            )
+            self._build_record(digest, locations, content_metadata[digest])
             for digest, locations in sorted(grouped.items())
         )
         return AssetRegistrySnapshot(records)
+
+    @staticmethod
+    def _build_record(
+        digest: str,
+        locations: list[AssetLocation],
+        content: tuple[dict[str, Any], str | None, str | None],
+    ) -> AssetRecord:
+        ordered = tuple(sorted(locations, key=lambda item: str(item.path).lower()))
+        metadata, provenance, metadata_error = content
+
+        evidence = []
+        content_evidence = embedded_metadata_evidence(metadata)
+        if content_evidence is not None:
+            evidence.append(content_evidence)
+        for location in ordered:
+            if location.sidecar_metadata:
+                sidecar_evidence = sidecar_metadata_evidence(
+                    location.sidecar_metadata, location=str(location.path)
+                )
+                if sidecar_evidence is not None:
+                    evidence.append(sidecar_evidence)
+        for location in ordered:
+            hint = filename_hint_evidence(location.display_name, location=str(location.path))
+            if hint is not None:
+                evidence.append(hint)
+
+        profile = resolve_compatibility_profile(tuple(evidence))
+        return AssetRecord(digest, ordered, metadata, provenance, metadata_error, profile)
