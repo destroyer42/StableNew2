@@ -440,6 +440,17 @@ an authority, and it never contacts A1111 or mutates an NJR. The independent
 `WebUIResourceService` remains the read-only projection of what a running
 A1111 exposes. Local existence and runtime availability must not be conflated.
 
+Safetensors-header metadata is content evidence and stays associated with
+SHA-256 identity. Local `.civitai.info` sidecars are location-scoped
+enrichment: a sidecar belongs to the one file location it was read from, not
+to the shared content identity, so identical bytes at two locations with
+disagreeing sidecars remain two distinct pieces of evidence rather than one
+collapsed value. `src.assets.compatibility` derives a conservative,
+observational `CompatibilityProfile` (a narrow model family plus its exact
+provenance, or an explicit `unknown`/`conflicting` state) from that embedded
+and sidecar evidence; it is factual evidence only, never a recommendation,
+ranking, or compatibility-enforcement authority.
+
 A backend-neutral image boundary does not create a new artifact or history
 authority. Backend results must normalize into the existing canonical artifact
 and execution-result contracts. Backend identity/model-family information may be
