@@ -177,7 +177,9 @@ def test_an_external_conflicting_runtime_blocks_dispatch_without_mutation_or_ret
 
     external_comfy = _FakeManager(running=True, owned=False, stop_name="stop")
     coordinator = RuntimeTransitionCoordinator(
-        webui_manager_getter=lambda: None, comfy_manager_getter=lambda: external_comfy
+        webui_manager_getter=lambda: None,
+        comfy_manager_getter=lambda: external_comfy,
+        webui_endpoint_present=lambda: False,
     )
     repository, queue, service = _build_stack(tmp_path, coordinator=coordinator)
 
@@ -242,7 +244,9 @@ def test_a_failed_owned_release_blocks_dispatch_and_never_falls_through_to_gener
 
     stubborn_webui = _StubbornManager(running=True, owned=True, stop_name="stop_webui")
     coordinator = RuntimeTransitionCoordinator(
-        webui_manager_getter=lambda: stubborn_webui, comfy_manager_getter=lambda: None
+        webui_manager_getter=lambda: stubborn_webui,
+        comfy_manager_getter=lambda: None,
+        comfy_endpoint_present=lambda: False,
     )
     repository, queue, service = _build_stack(tmp_path, coordinator=coordinator)
 
