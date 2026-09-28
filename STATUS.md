@@ -776,43 +776,55 @@ passed on the accepted source tree, including required Python 3.11 and 3.12.
 
 ## Current execution frontier
 
-The next phase uses three bounded, periodically reconverging lanes. Separate
-worktrees isolate source only. Actual PromptPacks, settings, SQLite, and
-configured endpoints require explicit isolation or authorization. Deliberate
-real-model inference and platform/hardware changes are serialized and separately
-owner-authorized. Lane A ordinarily needs neither real-state nor machine/GPU
-access. Landing/current packages reacquire `main` before updating this frontier;
-these are not long-lived divergent branches.
+Operational posture is **one active implementation package at a time**. The
+former Lane A/B/C concurrent-lane model is retired; those labels now describe
+backlog/topic categories only, not staffed parallel work. A single
+short-lived branch/workspace lands, validates, and merges before the next
+package starts.
 
-1. **Lane A — Product Quality & Deterministic Engineering.** Start
-   `PR-TEST-TRUTH-120 — Deterministic Test Truth Repair & Residual Census` to
-   repair platform-mutation and unintended configured-production-endpoint test
-   classes, record current local PR-gate/toolchain truth, and census residual
-   failures. Follow with `PR-ASSET-120 — Provenance-Rich Asset Metadata
-   Enrichment and Compatibility Profiles` (offline/observational) and
-   `WP-PACK-AUDIT-100 — PromptPack & Saved-Settings Quality Census`; structural
-   checks do not depend on Asset-120, while compatibility checks consume it once
-   available. FLUX/model qualification is not a Lane A activity.
-2. **Lane B — Platform Stability & Forensics.** Continue the existing
-   `DIAG-GPU-130` identity: preserve/analyze recoverable restricted `0x133`
-   dumps with administrator support, reconcile XMP-off clean/high-load exposure,
-   apply the operational GPU-active-exposure exit criterion (not root-cause proof),
-   and follow the exact recurrence evidence protocol. The 2026-09-26 post-XMP-OFF
-   `141`/`1B8` recurrence means Lane B remains active observation; it is not yet
-   dormant/event-driven. A new hardware/platform variable needs an owner decision;
-   PR-VID-184/184R/184S may inform, but cannot classify, the failure family
-   without supporting evidence.
-3. **Lane C — Model Qualification & Capability Expansion.** `PR-VID-185 —
-   Wan-Animate-2 Promotion Gate & Production-Readiness Adjudication` is complete
-   as a no-GPU/no-integration adjudication from accepted PR-VID-184S evidence:
-   the owner motion-value pass is reconciled with the frozen failing
-   motion-correlation metric as a non-blocking guardrail, and representative
-   resource/usability evidence is defined without repeating B1/A/B2 for N. Then consider separately
-   owner-authorized `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware
-   Qualification`. Production integration requires an explicitly selected,
-   evidence-backed capability and extends existing PR-RUNTIME-100 ownership only
-   when a runtime becomes production; extract qualification primitives only after
-   two genuinely common needs are demonstrated.
+Recently landed under this posture:
+
+- `PR-TEST-TRUTH-120` (test-truth repair) and its `PR-TEST-TRUTH-121`
+  follow-up are **COMPLETE / ACCEPTED / INTEGRATED**.
+- `DIAG-GPU-130` closeout is **COMPLETE / ACCEPTED / INTEGRATED** (current
+  platform-baseline truth remains under "Active diagnostic evidence" above;
+  the incident record is not restated here).
+- `PR-ASSET-120 — Provenance-Rich Asset Metadata Enrichment and Compatibility
+  Profiles` is **COMPLETE / ACCEPTED / INTEGRATED**: `src/assets/registry.py`
+  moved to a v2 cache with per-location `.civitai.info` sidecar evidence
+  (independent of model-byte freshness), and new `src/assets/compatibility.py`
+  derives a conservative, observational `CompatibilityProfile` (narrow
+  `sd1`/`sd2`/`sdxl`/`sd3`/`flux` family, or explicit `unknown`/`conflicting`)
+  from embedded and sidecar metadata. It adds no recommendation, GUI, or
+  live-A1111 behavior.
+- `WP-PACK-AUDIT-100 — PromptPack & Saved-Settings Quality Census` is
+  **COMPLETE**: a new offline, read-only `tools/promptpack_quality_census.py`
+  examined the real per-user PromptPack directory (39 files) and the active
+  presets directory (17 standalone presets) against the real configured WebUI
+  root, producing 1,020 findings with zero source mutation (fingerprint-
+  verified before/after). Full results:
+  `docs/Subsystems/PromptPacks/WP-PACK-AUDIT-100_PromptPack_Saved_Settings_Quality_Census.md`.
+  Headline evidence: the large majority of asset references resolve cleanly
+  (481 `resolved_unique`); a systematic `pipeline.adetailer_enabled` vs
+  `adetailer.enabled` contradiction recurs identically across five real
+  packs; 24 references are genuinely missing their file-backed asset
+  (including one literal stringified `"None"` placeholder); and naming-hygiene
+  debt (duplicate/mismatched pack names) is cosmetic, not correctness debt.
+  No PromptPack, preset, or asset was modified; no recommendation or warning
+  UX was added.
+
+Evidence-backed next-package candidates from the census (choose one):
+
+1. Repair the `pipeline.adetailer_enabled`/`adetailer.enabled` saved-setting
+   sync path and correct the five affected real packs.
+2. Operator-facing triage of the 24 missing/ambiguous asset references
+   surfaced by the census.
+
+Deliberate real-model inference and platform/hardware changes remain
+serialized and separately owner-authorized regardless of which package is
+active. FLUX/model qualification and any DIAG-GPU work beyond event-driven
+observation remain queued until deliberately selected as the one active
+package.
 
 PR-MVP-090 is **COMPLETE / ACCEPTED / INTEGRATED**. The final real-backend
 release proof completed without production source changes.
