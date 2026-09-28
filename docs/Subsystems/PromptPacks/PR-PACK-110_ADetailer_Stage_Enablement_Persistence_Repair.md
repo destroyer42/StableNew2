@@ -151,6 +151,19 @@ round trip, a `save_pack_config()` round trip proving unrelated `pack_data`
 and a `build_stage_execution_plan()` proof that ADetailer remains enabled
 after the persistence/load round trip.
 
+Review caught one real regression before merge: the synchronizer was
+originally wired in *after* `_merge_config_with_defaults()`'s deep merge, so
+a config that explicitly set only `adetailer.enabled=true` (no `pipeline`
+key at all) would see the default-filled `pipeline.adetailer_enabled=false`
+and mistake it for an explicit higher-precedence value, silently disabling
+what the caller had just turned on. Fixed by synchronizing the caller's raw
+input before it is merged with defaults, so the precedence decision only
+ever sees what was actually, explicitly supplied. A regression test
+(`test_section_only_config_is_not_downgraded_by_the_defaults_merge`) proves
+this exact case now stays enabled; the one real-file reconciliation in this
+package was unaffected, since it called the synchronizer directly on raw
+`preset_data`, never through the defaults merge.
+
 ## Explicit non-scope
 
 No change to `PipelineRunner`, executor, `JobService`, queue/repository, NJR,

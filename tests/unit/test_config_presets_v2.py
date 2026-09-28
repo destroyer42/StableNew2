@@ -72,6 +72,21 @@ def test_defaults_merge_synchronizes_adetailer_enablement(config_manager: Config
     assert config["adetailer"]["adetailer_enabled"] is True
 
 
+def test_section_only_config_is_not_downgraded_by_the_defaults_merge(
+    config_manager: ConfigManager,
+):
+    """Regression: a config that explicitly sets only adetailer.enabled=True,
+    with no "pipeline" key at all, must not be silently disabled because the
+    defaults merge fills in pipeline.adetailer_enabled=False before the
+    synchronizer runs. The synchronizer must see the caller's raw input, not
+    the default-filled result."""
+
+    config = config_manager._merge_config_with_defaults({"adetailer": {"enabled": True}})
+    assert config["pipeline"]["adetailer_enabled"] is True
+    assert config["adetailer"]["enabled"] is True
+    assert config["adetailer"]["adetailer_enabled"] is True
+
+
 def test_explicit_disabled_pipeline_intent_wins_over_stale_mirrors(config_manager: ConfigManager):
     """An explicit pipeline.adetailer_enabled=False must win over stale
     adetailer.enabled/adetailer_enabled=True mirrors, not merely the True case."""

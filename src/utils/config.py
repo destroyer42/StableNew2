@@ -959,9 +959,15 @@ class ConfigManager:
 
     def _merge_config_with_defaults(self, config: dict[str, Any] | None) -> dict[str, Any]:
         base = self.get_default_config()
-        merged = self._deep_merge_dicts(base, config or {})
+        # Synchronize the raw input BEFORE merging defaults. Once defaults are
+        # merged in, a caller-omitted pipeline.adetailer_enabled is
+        # indistinguishable from an explicit False, which would make the
+        # synchronizer mistake that default for a higher-precedence explicit
+        # value and silently disable a section-only "adetailer.enabled=True"
+        # config that previously worked via the stage sequencer's OR fallback.
+        synchronized_input = synchronize_adetailer_enablement(config or {})
+        merged = self._deep_merge_dicts(base, synchronized_input)
         self._ensure_refiner_hires_fields(merged)
-        merged = synchronize_adetailer_enablement(merged)
         return merged
 
     def _deep_merge_dicts(self, base: dict[str, Any], overrides: dict[str, Any]) -> dict[str, Any]:
