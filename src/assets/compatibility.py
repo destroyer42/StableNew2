@@ -93,10 +93,39 @@ EMBEDDED_BASE_MODEL_KEYS: tuple[str, ...] = (
 SIDECAR_BASE_MODEL_KEYS: tuple[str, ...] = ("baseModel", "base_model")
 
 
+def _is_boundary_char(char: str | None) -> bool:
+    """A token edge is valid at the string's edge or beside a non-alphanumeric char."""
+
+    return char is None or not char.isalnum()
+
+
+def _contains_token(lowered: str, needle: str) -> bool:
+    """Whether `needle` occurs in `lowered` as a whole token, not inside a longer word.
+
+    Plain substring containment would let unrelated text manufacture false
+    evidence, e.g. "reflux_style" containing "flux" or "sd10_style"
+    containing "sd1". A match only counts when the characters immediately
+    before and after the whole matched needle are not themselves
+    alphanumeric (or the needle sits at the very start/end of the string).
+    """
+
+    start = 0
+    while True:
+        idx = lowered.find(needle, start)
+        if idx == -1:
+            return False
+        end = idx + len(needle)
+        before = lowered[idx - 1] if idx > 0 else None
+        after = lowered[end] if end < len(lowered) else None
+        if _is_boundary_char(before) and _is_boundary_char(after):
+            return True
+        start = idx + 1
+
+
 def _normalize_token(raw: str) -> ModelFamily | None:
     lowered = raw.strip().lower()
     for needle, family in _FAMILY_TOKENS:
-        if needle in lowered:
+        if _contains_token(lowered, needle):
             return family
     return None
 
@@ -114,6 +143,23 @@ def _all_present(mapping: dict[str, Any], keys: tuple[str, ...]) -> tuple[tuple[
         if value is not None and str(value).strip():
             found.append((key, str(value).strip()))
     return tuple(found)
+
+
+def embedded_metadata_field_present(metadata: dict[str, Any]) -> bool:
+    """Whether any supported embedded base-model field is present, recognized or not.
+
+    A present-but-unrecognized value (e.g. a custom/derivative label) must
+    still block filename fallback -- it is real, if inconclusive, metadata
+    evidence, not an absence of evidence.
+    """
+
+    return bool(_all_present(metadata, EMBEDDED_BASE_MODEL_KEYS))
+
+
+def sidecar_metadata_field_present(metadata: dict[str, Any]) -> bool:
+    """Whether any supported sidecar base-model field is present, recognized or not."""
+
+    return bool(_all_present(metadata, SIDECAR_BASE_MODEL_KEYS))
 
 
 def embedded_metadata_evidence(metadata: dict[str, Any]) -> tuple[FamilyEvidence, ...]:
@@ -165,22 +211,37 @@ def filename_hint_evidence(filename: str, *, location: str) -> FamilyEvidence | 
     )
 
 
-def resolve_compatibility_profile(evidence: tuple[FamilyEvidence, ...]) -> CompatibilityProfile:
+def resolve_compatibility_profile(
+    evidence: tuple[FamilyEvidence, ...], *, metadata_field_present: bool = False
+) -> CompatibilityProfile:
     """Resolve one profile from all gathered evidence without discarding any of it.
 
     Metadata-tier evidence (embedded + sidecar) always outranks filename-hint
-    evidence; filename hints are only consulted when no metadata evidence
-    exists at all. Within whichever tier is consulted, more than one distinct
+    evidence. Within whichever tier is consulted, more than one distinct
     family is an explicit conflict, never a first-wins/last-wins pick.
+
+    Filename hints are consulted only when no supported embedded/sidecar
+    field was present at all. A supported field that was present but
+    unrecognized (``metadata_field_present=True`` with no metadata-tier
+    evidence) still blocks the filename fallback and keeps the profile
+    ``unknown`` -- real, if inconclusive, metadata must not be overridden by
+    the weakest evidence tier.
     """
 
     metadata_tier = tuple(item for item in evidence if item.confidence is EvidenceConfidence.METADATA)
-    tier = metadata_tier or tuple(
-        item for item in evidence if item.confidence is EvidenceConfidence.FILENAME_HINT
-    )
-    if not tier:
+    if metadata_tier:
+        families = {item.family for item in metadata_tier}
+        if len(families) > 1:
+            return CompatibilityProfile(CompatibilityStatus.CONFLICTING, None, evidence)
+        return CompatibilityProfile(CompatibilityStatus.RESOLVED, next(iter(families)), evidence)
+
+    if metadata_field_present:
         return CompatibilityProfile(CompatibilityStatus.UNKNOWN, None, evidence)
-    families = {item.family for item in tier}
+
+    filename_tier = tuple(item for item in evidence if item.confidence is EvidenceConfidence.FILENAME_HINT)
+    if not filename_tier:
+        return CompatibilityProfile(CompatibilityStatus.UNKNOWN, None, evidence)
+    families = {item.family for item in filename_tier}
     if len(families) > 1:
         return CompatibilityProfile(CompatibilityStatus.CONFLICTING, None, evidence)
     return CompatibilityProfile(CompatibilityStatus.RESOLVED, next(iter(families)), evidence)

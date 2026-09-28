@@ -16,9 +16,11 @@ from src.assets.compatibility import (
     CompatibilityProfile,
     FamilyEvidence,
     embedded_metadata_evidence,
+    embedded_metadata_field_present,
     filename_hint_evidence,
     resolve_compatibility_profile,
     sidecar_metadata_evidence,
+    sidecar_metadata_field_present,
 )
 from src.state.workspace_paths import workspace_paths
 
@@ -375,5 +377,14 @@ class AssetRegistry:
             if hint is not None:
                 evidence.append(hint)
 
-        profile = resolve_compatibility_profile(tuple(evidence))
+        # A supported field present but unrecognized (e.g. a derivative label)
+        # is still real metadata evidence: it must block filename fallback
+        # even though it produced no FamilyEvidence of its own.
+        metadata_field_present = embedded_metadata_field_present(metadata) or any(
+            sidecar_metadata_field_present(location.sidecar_metadata) for location in ordered
+        )
+
+        profile = resolve_compatibility_profile(
+            tuple(evidence), metadata_field_present=metadata_field_present
+        )
         return AssetRecord(digest, ordered, metadata, provenance, metadata_error, profile)

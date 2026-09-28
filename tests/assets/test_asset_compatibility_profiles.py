@@ -387,3 +387,69 @@ def test_filename_evidence_never_overrides_present_metadata_tier_evidence(tmp_pa
     assert record.compatibility.family is ModelFamily.SD1
     # The filename hint is still preserved as evidence, just never consulted.
     assert any(item.source == "filename" for item in record.compatibility.evidence)
+
+
+def test_unrecognized_sidecar_field_blocks_filename_fallback(tmp_path: Path) -> None:
+    webui = tmp_path / "webui"
+    cache = tmp_path / "state" / "assets.json"
+    # "Pony" is a real, supported baseModel value that this narrow taxonomy
+    # deliberately does not recognize; it must not let the filename resolve.
+    path = webui / "models" / "Lora" / "my_sdxl_style.safetensors"
+    _safetensors(path)
+    _sidecar(path, {"baseModel": "Pony"})
+
+    registry = AssetRegistry(webui, cache_path=cache)
+    record = registry.refresh().snapshot.records_for(AssetKind.LORA)[0]
+
+    assert record.compatibility.status is CompatibilityStatus.UNKNOWN
+    assert record.compatibility.family is None
+    assert not any(item.source == "sidecar_metadata" for item in record.compatibility.evidence)
+    assert any(item.source == "filename" for item in record.compatibility.evidence)
+
+
+def test_unrecognized_embedded_field_blocks_filename_fallback(tmp_path: Path) -> None:
+    webui = tmp_path / "webui"
+    cache = tmp_path / "state" / "assets.json"
+    path = webui / "models" / "Lora" / "my_flux_style.safetensors"
+    _safetensors(path, {"ss_base_model_version": "Illustrious"})
+
+    registry = AssetRegistry(webui, cache_path=cache)
+    record = registry.refresh().snapshot.records_for(AssetKind.LORA)[0]
+
+    assert record.compatibility.status is CompatibilityStatus.UNKNOWN
+    assert record.compatibility.family is None
+    assert not any(item.source == "embedded_metadata" for item in record.compatibility.evidence)
+
+
+def test_filename_tokens_require_word_boundaries(tmp_path: Path) -> None:
+    webui = tmp_path / "webui"
+    cache = tmp_path / "state" / "assets.json"
+    false_positive_cases = ("reflux_style.safetensors", "sd10_style.safetensors")
+    for filename in false_positive_cases:
+        path = webui / "models" / "Lora" / filename
+        _safetensors(path, payload=filename.encode())  # distinct bytes -> distinct SHA identity
+
+    registry = AssetRegistry(webui, cache_path=cache)
+    records = registry.refresh().snapshot.records_for(AssetKind.LORA)
+
+    for filename in false_positive_cases:
+        record = next(item for item in records if item.locations[0].path.name == filename)
+        assert record.compatibility.status is CompatibilityStatus.UNKNOWN
+        assert record.compatibility.family is None
+        assert record.compatibility.evidence == ()
+
+
+def test_legitimate_filename_hints_still_resolve_with_no_metadata(tmp_path: Path) -> None:
+    webui = tmp_path / "webui"
+    cache = tmp_path / "state" / "assets.json"
+    path = webui / "models" / "Lora" / "clean_sdxl_lora.safetensors"
+    _safetensors(path)  # no embedded metadata, no sidecar
+
+    registry = AssetRegistry(webui, cache_path=cache)
+    record = registry.refresh().snapshot.records_for(AssetKind.LORA)[0]
+
+    assert record.compatibility.status is CompatibilityStatus.RESOLVED
+    assert record.compatibility.family is ModelFamily.SDXL
+    filename_evidence = [item for item in record.compatibility.evidence if item.source == "filename"]
+    assert len(filename_evidence) == 1
+    assert filename_evidence[0].confidence.value == "filename_hint"

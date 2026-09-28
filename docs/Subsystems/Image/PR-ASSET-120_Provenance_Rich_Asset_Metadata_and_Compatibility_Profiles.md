@@ -117,3 +117,9 @@ loading, and no NJR/compiler/executor/backend-selection/controller change.
 Next candidate consumer: `WP-PACK-AUDIT-100 — PromptPack & Saved-Settings
 Quality Census`, whose compatibility checks may consume these profiles under
 a separately defined acceptance contract.
+
+## Known limitation (deferred, non-blocking)
+
+Distinct symlink aliases resolving to the same target are not currently
+modeled as separate `AssetRegistry` locations; supporting location-specific
+sidecars across such aliases requires a future cache-key/migration decision.
