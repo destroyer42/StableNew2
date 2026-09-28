@@ -430,13 +430,20 @@ separately owner-authorized regardless of which package is active.
 INTEGRATED**; see `STATUS.md` for their current-state summary and
 `docs/Subsystems/PromptPacks/WP-PACK-AUDIT-100_PromptPack_Saved_Settings_Quality_Census.md`
 for the census's full evidence and candidate follow-on packages.
+`PR-PACK-110` synchronized the `pipeline.adetailer_enabled`/`adetailer.enabled`
+persistence contradiction and reconciled all five sources
+`WP-PACK-AUDIT-100` originally flagged: one canonical PromptPack
+(`SDXL_epic_structures_Fantasy`) and four repository standalone presets
+(`Juggernaut_MedievalHeroes_RandomizerAligned_v1b`,
+`Photoreal_Character_Juggernaut_SDXL`, `Testing`, `default`), each
+byte-backed-up and corrected with a semantic-diff guard limiting the change
+to the ADetailer enablement mirrors. See
+`docs/Subsystems/PromptPacks/PR-PACK-110_ADetailer_Stage_Enablement_Persistence_Repair.md`.
 
 ### Product Quality & Deterministic Engineering (backlog category)
 
-1. Evidence-backed follow-on from `WP-PACK-AUDIT-100`: repair the
-   `pipeline.adetailer_enabled`/`adetailer.enabled` saved-setting
-   contradiction, or operator-facing triage of the census's missing/ambiguous
-   asset references. Choose one as the next active package, not both.
+1. Operator-facing triage of the census's 24 missing/ambiguous asset
+   references (`WP-PACK-AUDIT-100`).
 2. Later: compatibility/advisory UX and targeted Learning improvements
    justified by clean inputs and evidence.
 

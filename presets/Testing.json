@@ -71,7 +71,7 @@
     "face_restore_method": "CodeFormer"
   },
   "adetailer": {
-    "enabled": false,
+    "enabled": true,
     "adetailer_enabled": true,
     "adetailer_model": "mediapipe_face_full",
     "adetailer_confidence": 0.34,

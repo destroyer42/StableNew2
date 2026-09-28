@@ -43,6 +43,54 @@ def _normalize_scheduler_name(scheduler: str | None) -> str | None:
     return value
 
 
+def synchronize_adetailer_enablement(config: dict[str, Any]) -> dict[str, Any]:
+    """Persist one consistent ADetailer stage-enablement boolean.
+
+    `pipeline.adetailer_enabled` is the established stage-membership
+    authority (PromptPack job construction and stage-plan admission already
+    key off it). `adetailer.enabled` and the legacy `adetailer.adetailer_enabled`
+    mirror are compatibility representations that must agree with it on
+    persistence, per WP-PACK-AUDIT-100's confirmed `saved_setting_stage_contradiction`
+    finding (`pipeline.adetailer_enabled=true` alongside `adetailer.enabled=false`).
+
+    Precedence when more than one representation is explicitly present:
+    `pipeline.adetailer_enabled`, then `adetailer.enabled`, then the legacy
+    `adetailer.adetailer_enabled`. When none of the three is explicitly
+    present, no enablement intent is invented.
+
+    Returns a new dict; never mutates the caller's `config` (or its nested
+    `pipeline`/`adetailer` sections) in place, since callers may reuse the
+    object they passed in.
+    """
+
+    pipeline = config.get("pipeline")
+    adetailer = config.get("adetailer")
+    pipeline_dict = pipeline if isinstance(pipeline, dict) else None
+    adetailer_dict = adetailer if isinstance(adetailer, dict) else None
+
+    pipeline_val = pipeline_dict.get("adetailer_enabled") if pipeline_dict else None
+    section_val = adetailer_dict.get("enabled") if adetailer_dict else None
+    legacy_val = adetailer_dict.get("adetailer_enabled") if adetailer_dict else None
+
+    if pipeline_val is not None:
+        canonical = bool(pipeline_val)
+    elif section_val is not None:
+        canonical = bool(section_val)
+    elif legacy_val is not None:
+        canonical = bool(legacy_val)
+    else:
+        return config
+
+    result = dict(config)
+    result["pipeline"] = {**(pipeline_dict or {}), "adetailer_enabled": canonical}
+    result["adetailer"] = {
+        **(adetailer_dict or {}),
+        "enabled": canonical,
+        "adetailer_enabled": canonical,
+    }
+    return result
+
+
 def build_sampler_scheduler_payload(
     sampler_name: str | None,
     scheduler_name: str | None,
@@ -628,6 +676,11 @@ class ConfigManager:
             # Convert pack_name to config filename (heroes.txt -> heroes.json)
             config_path = self._pack_config_path(pack_name)
 
+            # Narrow persistence-boundary sync only -- not the full defaults
+            # merge, which would inject unrelated default fields into
+            # preset_data. Never mutates the caller's own config object.
+            config = synchronize_adetailer_enablement(config)
+
             # Debug: Log what we're about to save
             pipeline_section = config.get("pipeline", {})
             logger.info(
@@ -906,7 +959,14 @@ class ConfigManager:
 
     def _merge_config_with_defaults(self, config: dict[str, Any] | None) -> dict[str, Any]:
         base = self.get_default_config()
-        merged = self._deep_merge_dicts(base, config or {})
+        # Synchronize the raw input BEFORE merging defaults. Once defaults are
+        # merged in, a caller-omitted pipeline.adetailer_enabled is
+        # indistinguishable from an explicit False, which would make the
+        # synchronizer mistake that default for a higher-precedence explicit
+        # value and silently disable a section-only "adetailer.enabled=True"
+        # config that previously worked via the stage sequencer's OR fallback.
+        synchronized_input = synchronize_adetailer_enablement(config or {})
+        merged = self._deep_merge_dicts(base, synchronized_input)
         self._ensure_refiner_hires_fields(merged)
         return merged
 
