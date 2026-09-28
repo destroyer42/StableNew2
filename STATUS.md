@@ -817,35 +817,32 @@ Recently landed under this posture:
   No PromptPack, preset, or asset was modified; no recommendation or warning
   UX was added.
 - `PR-PACK-110 — ADetailer Stage-Enablement Persistence Repair` is
-  **COMPLETE / PARTIAL** for the confirmed canonical-PromptPack case: new
+  **COMPLETE / ACCEPTED**, pending merge: new
   `synchronize_adetailer_enablement()` in `src/utils/config.py` makes
   `pipeline.adetailer_enabled` the persisted stage-membership authority and
   keeps `adetailer.enabled`/`adetailer.adetailer_enabled` synchronized with
   it in `_merge_config_with_defaults()` and `save_pack_config()`, without
-  changing stage-sequencer OR-based runtime admission. Re-checking the five
-  sources WP-PACK-AUDIT-100 flagged found only one
-  (`SDXL_epic_structures_Fantasy`) is actually a canonical PromptPack; the
-  other four are standalone `presets/*.json` recipes, which this package's
-  own authorization did not cover — the owner prompt's premise that all five
-  were PromptPacks was incorrect. Only that one file was backed up
-  (byte-exact, with manifest) and reconciled, with a semantic-diff guard
-  proving the only change was `adetailer.enabled: false -> true`; a
-  full 59-file fingerprint confirmed every other PromptPack/preset was
-  untouched. Rerunning the unmodified census confirmed exactly the two
-  `saved_setting_stage_contradiction` findings for that one source were
-  removed (10 -> 8; total findings 1,020 -> 1,018) with no new finding.
+  changing stage-sequencer OR-based runtime admission. (Review caught one
+  real regression before merge — synchronizing after, rather than before,
+  the defaults merge could mistake a default-filled `false` for explicit
+  intent on a section-only config — fixed by synchronizing the caller's raw
+  input first.) Re-checking the five sources WP-PACK-AUDIT-100 flagged found
+  only one (`SDXL_epic_structures_Fantasy`) is a canonical PromptPack; the
+  other four (`Juggernaut_MedievalHeroes_RandomizerAligned_v1b`,
+  `Photoreal_Character_Juggernaut_SDXL`, `Testing`, `default`) are standalone
+  `presets/*.json` recipes carrying the identical saved-setting defect. The
+  owner subsequently authorized reconciling all five within this same
+  package. Each was backed up byte-exact (with manifest) and reconciled with
+  a semantic-diff guard proving the only change per file was
+  `adetailer.enabled: false -> true`; a full 59-file fingerprint confirmed
+  every other PromptPack/preset was untouched throughout. Rerunning the
+  unmodified census confirmed all ten original
+  `saved_setting_stage_contradiction` findings across all five sources are
+  now gone, with zero new findings (total census findings 1,020 -> 1,010).
   Details: `docs/Subsystems/PromptPacks/PR-PACK-110_ADetailer_Stage_Enablement_Persistence_Repair.md`.
-  The four `presets/*.json` sources remain open, unaddressed findings
-  pending a separate owner decision on standalone-preset reconciliation.
-  The heterogeneous 24-missing-asset triage remains an independent
-  candidate next package either way.
 
-Evidence-backed next-package candidates from the census (choose one):
-
-1. Repair the `pipeline.adetailer_enabled`/`adetailer.enabled` saved-setting
-   sync path and correct the five affected real packs.
-2. Operator-facing triage of the 24 missing/ambiguous asset references
-   surfaced by the census.
+The next evidence-backed candidate from the census is operator-facing triage
+of the 24 missing/ambiguous asset references it surfaced.
 
 Deliberate real-model inference and platform/hardware changes remain
 serialized and separately owner-authorized regardless of which package is

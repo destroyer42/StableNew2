@@ -1,9 +1,10 @@
 # PR-PACK-110 — ADetailer Stage-Enablement Persistence Repair
 
-Status: implemented for the confirmed canonical PromptPack case; the
-four-file real-data reconciliation originally scoped by this package's owner
-prompt was **not performed** because the census evidence contradicted the
-prompt's premise about those files' identity (see "Discrepancy found" below).
+Status: implemented and complete. The owner prompt's original premise that
+all five census-flagged sources were canonical PromptPacks was contradicted
+by the census's own evidence (see "Discrepancy found" below); the owner
+subsequently authorized reconciling all five — one canonical PromptPack and
+four repository standalone presets — within this same package.
 
 ## Census evidence and root cause
 
@@ -90,21 +91,25 @@ directly contradicts the premise for four of the five. This matches the
 package's own hard-stop condition ("the five real PromptPacks are not the
 exact files/source identities described by the census").
 
-Given this, only `SDXL_epic_structures_Fantasy` — the one source
+Initially, only `SDXL_epic_structures_Fantasy` — the one source
 unambiguously matching every stated criterion (canonical PromptPack
 directory, valid PromptPack structure, and the exact demonstrated
-contradiction) — was backed up and reconciled. The four `presets/*.json`
-files were left untouched pending a separate owner decision on whether
-standalone-preset reconciliation is authorized as its own follow-on package.
+contradiction) — was backed up and reconciled, and this document reported
+the four `presets/*.json` sources as untouched pending a separate owner
+decision. The owner subsequently reviewed the discrepancy and explicitly
+authorized reconciling those same four sources within this same package,
+since they carry the identical demonstrated defect. All five sources are
+now reconciled; see the next section.
 
-## Backup and reconciliation (one file)
+## Backup and reconciliation (all five sources)
 
-Backup: `C:\Users\rob\AppData\Local\StableNew\Backups\PR-PACK-110\run_20260928_113841\`
-(byte-exact copy plus a local manifest with filename, original SHA-256,
-original byte size, and backup path; not committed to Git).
+Backup directory (extended across two work sessions within this package):
+`C:\Users\rob\AppData\Local\StableNew\Backups\PR-PACK-110\run_20260928_113841\`
+(byte-exact copy of each original plus a local manifest with filename,
+original SHA-256, original byte size, and backup path per file; not
+committed to Git).
 
-Pre-repair evidence for `SDXL_epic_structures_Fantasy.json`
-(SHA-256 `835a7b3d...7b73e3`):
+Pre-repair evidence — all five sources showed the identical pattern:
 
 ```text
 pipeline.adetailer_enabled = true
@@ -112,32 +117,48 @@ adetailer.enabled           = false
 adetailer.adetailer_enabled = true
 ```
 
-Reconciliation used `synchronize_adetailer_enablement()` against the raw
-`preset_data`, with a semantic-diff guard comparing the full proposed
-document against the original before writing. The only path that actually
-changed was `preset_data.adetailer.enabled: false -> true`
-(`adetailer.adetailer_enabled` was already `true`, and `pipeline.adetailer_enabled`
-was already `true`, so neither needed to change). The write used atomic
-temp-file-then-`os.replace` semantics; after writing, the file was reloaded
-through `load_prompt_pack_document()` to prove it is still a valid
-PromptPack document, and all three ADetailer values were confirmed equal
-(`true`/`true`/`true`). New SHA-256: `637803b7...6dfe268`.
+| Source | Pre-repair SHA-256 | Post-repair SHA-256 |
+|---|---|---|
+| `SDXL_epic_structures_Fantasy.json` (PromptPack) | `835a7b3d...7b73e3` | `637803b7...dfe268` |
+| `presets/Juggernaut_MedievalHeroes_RandomizerAligned_v1b.json` | `9567b9fb...41b5cc` | `5b1a4f5d...ca077e` |
+| `presets/Photoreal_Character_Juggernaut_SDXL.json` | `8575b6f5...66a925` | `e2f8a714...254bc3` |
+| `presets/Testing.json` | `27e11a0f...5a3683` | `75b50c1a...5c0319` |
+| `presets/default.json` | `b9d2839e...aad41e` | `d94dd31a...ee5b67` |
+
+The PromptPack was reconciled via `synchronize_adetailer_enablement()`
+against the raw `preset_data`. The four standalone presets (which have no
+`preset_data` wrapper — their fields are direct top-level keys) were
+reconciled with the smallest possible textual edit (`"enabled": false` ->
+`"enabled": true` inside the `adetailer` object only, no re-serialization or
+reformatting) rather than a full JSON round trip, per the owner's explicit
+preference to avoid rewriting unrelated formatting. For every one of the
+five files, a semantic-diff guard comparing the full parsed document against
+its original confirmed the only path that changed was
+`adetailer.enabled: false -> true` (`adetailer.adetailer_enabled` and
+`pipeline.adetailer_enabled` were already `true` in all five, so neither
+needed to change). The PromptPack write used atomic temp-file-then-
+`os.replace` semantics and was reloaded through `load_prompt_pack_document()`
+to prove it is still valid; each standalone preset was reloaded and
+re-parsed as JSON to prove the same.
 
 A full fingerprint of all 39 PromptPack files and all 18 examined standalone
 presets (plus `.default_preset`) — 59 files total — was captured before and
-after this write: exactly one file's fingerprint changed
-(`SDXL_epic_structures_Fantasy.json`); all 58 others were confirmed
-byte-identical.
+after each write: across both reconciliation passes, exactly the five
+targeted files' fingerprints changed; all 54 others were confirmed
+byte-identical throughout.
 
 ## Before/after census verification
 
 Rerunning the unmodified `tools/promptpack_quality_census.py` against the
-same canonical sources with an audit-owned cache:
+same canonical sources with an audit-owned cache, across both passes:
 
-- `saved_setting_stage_contradiction`: 10 -> 8 (exactly the two findings for
-  `SDXL_epic_structures_Fantasy` removed by identity comparison; zero new
-  findings; every other finding for every other source unchanged)
-- total findings: 1,020 -> 1,018
+- pass 1 (PromptPack only): `saved_setting_stage_contradiction` 10 -> 8;
+  total findings 1,020 -> 1,018
+- pass 2 (four standalone presets): `saved_setting_stage_contradiction`
+  8 -> 0; total findings 1,018 -> 1,010
+- net result: **all ten original findings across all five sources are
+  gone**, with zero new findings introduced by either pass; every other
+  finding for every other source is unchanged
 
 ## Tests
 
@@ -170,10 +191,9 @@ No change to `PipelineRunner`, executor, `JobService`, queue/repository, NJR,
 compiler, stage ordering, A1111 process ownership, `build_stage_execution_plan()`
 OR semantics, PromptPack job-builder stage-selection semantics, GUI
 controllers, or the Asset Registry. No other stage's enablement
-representations were synchronized. No prompt, slot, matrix, or
-asset-reference data changed in the one reconciled file. The 24
-missing-asset findings, the naming-hygiene debt, the literal `"None"`
-refiner placeholder, and every other census finding class remain untouched
-observational debt. The four `presets/*.json` standalone-preset
-contradictions remain open, unaddressed findings pending a separate owner
-decision.
+representations were synchronized. No prompt, model, VAE, LoRA, embedding,
+dimension, sampler, scheduler, ADetailer detector/model/strength/confidence
+setting, other stage flag, or naming field changed in any of the five
+reconciled sources. The 24 missing-asset findings, the naming-hygiene debt,
+the literal `"None"` refiner placeholder, and every other census finding
+class remain untouched observational debt.

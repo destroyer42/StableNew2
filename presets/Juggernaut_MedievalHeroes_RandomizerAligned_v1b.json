@@ -60,7 +60,7 @@
     "codeformer_weight": 0.0
   },
   "adetailer": {
-    "enabled": false,
+    "enabled": true,
     "adetailer_enabled": true,
     "adetailer_model": "face_yolov8n.pt",
     "adetailer_confidence": 0.6916666666666667,
