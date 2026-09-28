@@ -53,29 +53,36 @@ class CompatibilityProfile:
     evidence: tuple[FamilyEvidence, ...]
 
 
-# Explicit, conservative tokens only, covering the two realistic conventions
+# Explicit, conservative tokens only, covering three realistic conventions
 # seen in repository evidence: kohya-style underscore versions (embedded
-# metadata, e.g. "sdxl_base_v1-0", "sd_v1.5") and CivitAI-style space-separated
-# labels (local sidecars, e.g. "SD 1.5", "SDXL 1.0"). SDXL/FLUX/SD3 tokens are
-# checked first so they are never shadowed by a shorter SD1/SD2 token.
+# metadata, e.g. "sdxl_base_v1-0", "sd_v1.5"), CivitAI-style space-separated
+# labels (local sidecars, e.g. "SD 1.5", "SDXL 1.0"), and canonical ModelSpec
+# architecture strings (embedded metadata, e.g. "stable-diffusion-xl-v1-base",
+# "stable-diffusion-v1"). SDXL/FLUX/SD3 tokens are checked first so they are
+# never shadowed by a shorter SD1/SD2 token.
 _FAMILY_TOKENS: tuple[tuple[str, ModelFamily], ...] = (
     ("sdxl", ModelFamily.SDXL),
     ("sd_xl", ModelFamily.SDXL),
     ("sd xl", ModelFamily.SDXL),
+    ("stable-diffusion-xl", ModelFamily.SDXL),
     ("flux", ModelFamily.FLUX),
     ("sd3", ModelFamily.SD3),
     ("sd_v3", ModelFamily.SD3),
     ("sd 3", ModelFamily.SD3),
+    ("stable-diffusion-v3", ModelFamily.SD3),
     ("sd2", ModelFamily.SD2),
     ("sd_v2", ModelFamily.SD2),
     ("sd 2", ModelFamily.SD2),
+    ("stable-diffusion-v2", ModelFamily.SD2),
     ("sd1", ModelFamily.SD1),
     ("sd_v1", ModelFamily.SD1),
     ("sd 1", ModelFamily.SD1),
+    ("stable-diffusion-v1", ModelFamily.SD1),
 )
 
 # Likely authoritative embedded-metadata evidence fields (repository evidence
-# from PR-ASSET-DISCOVERY-100), checked in this priority order.
+# from PR-ASSET-DISCOVERY-100). Every field present here is inspected; none
+# is skipped merely because an earlier field already produced evidence.
 EMBEDDED_BASE_MODEL_KEYS: tuple[str, ...] = (
     "ss_base_model_version",
     "modelspec.architecture",
@@ -94,40 +101,57 @@ def _normalize_token(raw: str) -> ModelFamily | None:
     return None
 
 
-def _first_present(mapping: dict[str, Any], keys: tuple[str, ...]) -> tuple[str, str] | None:
+def _all_present(mapping: dict[str, Any], keys: tuple[str, ...]) -> tuple[tuple[str, str], ...]:
+    """Every non-empty supported field, not just the first.
+
+    A field silently suppressing another would hide genuine conflicting
+    evidence, so every recognized field must contribute its own evidence.
+    """
+
+    found = []
     for key in keys:
         value = mapping.get(key)
         if value is not None and str(value).strip():
-            return key, str(value).strip()
-    return None
+            found.append((key, str(value).strip()))
+    return tuple(found)
 
 
-def embedded_metadata_evidence(metadata: dict[str, Any]) -> FamilyEvidence | None:
-    """Content-level evidence derived from safetensors-header metadata."""
+def embedded_metadata_evidence(metadata: dict[str, Any]) -> tuple[FamilyEvidence, ...]:
+    """Content-level evidence derived from safetensors-header metadata.
 
-    found = _first_present(metadata, EMBEDDED_BASE_MODEL_KEYS)
-    if found is None:
-        return None
-    _key, raw_value = found
-    family = _normalize_token(raw_value)
-    if family is None:
-        return None
-    return FamilyEvidence(family, "embedded_metadata", raw_value, EvidenceConfidence.METADATA)
+    Every supported field present with a recognized value becomes its own
+    evidence record; callers must not assume at most one exists.
+    """
+
+    evidence = []
+    for _key, raw_value in _all_present(metadata, EMBEDDED_BASE_MODEL_KEYS):
+        family = _normalize_token(raw_value)
+        if family is not None:
+            evidence.append(
+                FamilyEvidence(family, "embedded_metadata", raw_value, EvidenceConfidence.METADATA)
+            )
+    return tuple(evidence)
 
 
-def sidecar_metadata_evidence(metadata: dict[str, Any], *, location: str) -> FamilyEvidence | None:
-    """Location-scoped evidence derived from a local sidecar JSON file."""
+def sidecar_metadata_evidence(
+    metadata: dict[str, Any], *, location: str
+) -> tuple[FamilyEvidence, ...]:
+    """Location-scoped evidence derived from a local sidecar JSON file.
 
-    found = _first_present(metadata, SIDECAR_BASE_MODEL_KEYS)
-    if found is None:
-        return None
-    _key, raw_value = found
-    family = _normalize_token(raw_value)
-    if family is None:
-        return None
-    return FamilyEvidence(
-        family, "sidecar_metadata", raw_value, EvidenceConfidence.METADATA, location
-    )
+    Every supported field present with a recognized value becomes its own
+    evidence record; callers must not assume at most one exists.
+    """
+
+    evidence = []
+    for _key, raw_value in _all_present(metadata, SIDECAR_BASE_MODEL_KEYS):
+        family = _normalize_token(raw_value)
+        if family is not None:
+            evidence.append(
+                FamilyEvidence(
+                    family, "sidecar_metadata", raw_value, EvidenceConfidence.METADATA, location
+                )
+            )
+    return tuple(evidence)
 
 
 def filename_hint_evidence(filename: str, *, location: str) -> FamilyEvidence | None:

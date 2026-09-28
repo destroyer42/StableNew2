@@ -43,26 +43,34 @@ never fails refresh.
 
 ## Family resolution
 
-Evidence is gathered from three sources and never silently prioritized by
-source order:
+Evidence is gathered from three sources, and no supported field within a
+source silently suppresses another:
 
-1. **Embedded metadata** (content-level): `ss_base_model_version`,
-   `modelspec.architecture`, `modelspec.base_model_version`, in that order.
-2. **Sidecar metadata** (location-level): `baseModel`, `base_model`.
+1. **Embedded metadata** (content-level): every one of `ss_base_model_version`,
+   `modelspec.architecture`, `modelspec.base_model_version` that is present
+   and recognized contributes its own evidence record — not just the first
+   one found.
+2. **Sidecar metadata** (location-level): every one of `baseModel`,
+   `base_model` that is present and recognized contributes its own evidence
+   record, for the same reason.
 3. **Filename** (location-level, weakest tier): consulted only when no
    embedded or sidecar evidence exists at all.
 
 All three sources are matched against the same conservative, explicit token
-set (`sdxl`, `sd_xl`/`sd xl`, `flux`, `sd3`/`sd_v3`/`sd 3`,
-`sd2`/`sd_v2`/`sd 2`, `sd1`/`sd_v1`/`sd 1`). A generic `"xl"` substring never
-implies SDXL, and a derivative label such as `"Pony"` or `"Illustrious"` is
-never silently mapped onto SDXL — it stays unrecognized unless an explicit
-token is actually present.
+set: kohya-style underscore versions (`sdxl`, `sd_xl`, `sd_v1`/`sd_v2`/`sd_v3`),
+CivitAI-style space-separated labels (`sd xl`, `sd 1`/`sd 2`/`sd 3`), and
+canonical ModelSpec architecture strings (`stable-diffusion-xl`,
+`stable-diffusion-v1`/`v2`/`v3`), plus the bare `flux`/`sd1`/`sd2`/`sd3`/`sdxl`
+tokens. A generic `"xl"` substring never implies SDXL, and a derivative
+label such as `"Pony"` or `"Illustrious"` is never silently mapped onto
+SDXL — it stays unrecognized unless an explicit token is actually present.
 
-Embedded and sidecar evidence are peers: if they name different recognized
-families, the profile is `conflicting`, not a first-source-wins pick. The
-same rule applies across duplicate-content locations with disagreeing
-sidecars. Unknown/unrecognized metadata is a valid, expected `unknown`
+Embedded and sidecar evidence are peers: if any two recognized fields —
+whether both embedded, both sidecar, or one of each — name different
+families, the profile is `conflicting`, not a first-field-wins or
+first-source-wins pick. The same rule applies across duplicate-content
+locations with disagreeing sidecars. Unknown/unrecognized metadata is a
+valid, expected `unknown`
 result — conservative incomplete coverage over unsupported inference. All
 evidence gathered is preserved on the profile even when it did not
 ultimately decide the resolved family.

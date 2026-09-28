@@ -14,6 +14,7 @@ from typing import Any
 
 from src.assets.compatibility import (
     CompatibilityProfile,
+    FamilyEvidence,
     embedded_metadata_evidence,
     filename_hint_evidence,
     resolve_compatibility_profile,
@@ -362,17 +363,13 @@ class AssetRegistry:
         ordered = tuple(sorted(locations, key=lambda item: str(item.path).lower()))
         metadata, provenance, metadata_error = content
 
-        evidence = []
-        content_evidence = embedded_metadata_evidence(metadata)
-        if content_evidence is not None:
-            evidence.append(content_evidence)
+        evidence: list[FamilyEvidence] = []
+        evidence.extend(embedded_metadata_evidence(metadata))
         for location in ordered:
             if location.sidecar_metadata:
-                sidecar_evidence = sidecar_metadata_evidence(
-                    location.sidecar_metadata, location=str(location.path)
+                evidence.extend(
+                    sidecar_metadata_evidence(location.sidecar_metadata, location=str(location.path))
                 )
-                if sidecar_evidence is not None:
-                    evidence.append(sidecar_evidence)
         for location in ordered:
             hint = filename_hint_evidence(location.display_name, location=str(location.path))
             if hint is not None:

@@ -280,3 +280,110 @@ def test_legacy_scanner_projections_remain_functional_over_the_enriched_registry
         == "keep_working.safetensors"
     )
     assert EmbeddingScanner(str(webui), registry=registry).get_embedding_names() == ["still_here"]
+
+
+def test_canonical_modelspec_architecture_values_normalize_conservatively(tmp_path: Path) -> None:
+    webui = tmp_path / "webui"
+    cache = tmp_path / "state" / "assets.json"
+    cases = (
+        ("stable-diffusion-xl-v1-base", ModelFamily.SDXL),
+        ("stable-diffusion-v1", ModelFamily.SD1),
+        ("stable-diffusion-v2", ModelFamily.SD2),
+    )
+    for index, (raw_value, expected_family) in enumerate(cases):
+        path = webui / "models" / "Lora" / f"modelspec_{index}.safetensors"
+        _safetensors(path, {"modelspec.architecture": raw_value})
+
+        registry = AssetRegistry(webui, cache_path=cache)
+        records = registry.refresh(kinds={AssetKind.LORA}).snapshot.records_for(AssetKind.LORA)
+        record = next(item for item in records if item.locations[0].path.name == path.name)
+
+        assert record.compatibility.status is CompatibilityStatus.RESOLVED
+        assert record.compatibility.family is expected_family
+
+
+def test_disagreeing_embedded_fields_within_metadata_tier_are_an_explicit_conflict(
+    tmp_path: Path,
+) -> None:
+    webui = tmp_path / "webui"
+    cache = tmp_path / "state" / "assets.json"
+    path = webui / "models" / "Lora" / "embedded_conflict.safetensors"
+    _safetensors(
+        path,
+        {
+            "ss_base_model_version": "sd_v1.5",
+            "modelspec.architecture": "stable-diffusion-xl-v1-base",
+        },
+    )
+
+    registry = AssetRegistry(webui, cache_path=cache)
+    record = registry.refresh().snapshot.records_for(AssetKind.LORA)[0]
+
+    assert record.compatibility.status is CompatibilityStatus.CONFLICTING
+    assert record.compatibility.family is None
+    embedded_evidence = [
+        item for item in record.compatibility.evidence if item.source == "embedded_metadata"
+    ]
+    assert len(embedded_evidence) == 2
+    assert {item.family for item in embedded_evidence} == {ModelFamily.SD1, ModelFamily.SDXL}
+
+
+def test_agreeing_embedded_fields_preserve_every_evidence_record_and_resolve_once(
+    tmp_path: Path,
+) -> None:
+    webui = tmp_path / "webui"
+    cache = tmp_path / "state" / "assets.json"
+    path = webui / "models" / "Lora" / "embedded_agree.safetensors"
+    _safetensors(
+        path,
+        {
+            "ss_base_model_version": "sdxl_base_v1-0",
+            "modelspec.architecture": "stable-diffusion-xl-v1-base",
+        },
+    )
+
+    registry = AssetRegistry(webui, cache_path=cache)
+    record = registry.refresh().snapshot.records_for(AssetKind.LORA)[0]
+
+    assert record.compatibility.status is CompatibilityStatus.RESOLVED
+    assert record.compatibility.family is ModelFamily.SDXL
+    embedded_evidence = [
+        item for item in record.compatibility.evidence if item.source == "embedded_metadata"
+    ]
+    assert len(embedded_evidence) == 2  # neither field silently suppressed the other
+
+
+def test_disagreeing_sidecar_fields_within_one_location_are_an_explicit_conflict(
+    tmp_path: Path,
+) -> None:
+    webui = tmp_path / "webui"
+    cache = tmp_path / "state" / "assets.json"
+    path = webui / "models" / "Lora" / "sidecar_conflict.safetensors"
+    _safetensors(path)
+    _sidecar(path, {"baseModel": "SD 1.5", "base_model": "SDXL 1.0"})
+
+    registry = AssetRegistry(webui, cache_path=cache)
+    record = registry.refresh().snapshot.records_for(AssetKind.LORA)[0]
+
+    assert record.compatibility.status is CompatibilityStatus.CONFLICTING
+    sidecar_evidence = [
+        item for item in record.compatibility.evidence if item.source == "sidecar_metadata"
+    ]
+    assert len(sidecar_evidence) == 2
+    assert {item.family for item in sidecar_evidence} == {ModelFamily.SD1, ModelFamily.SDXL}
+
+
+def test_filename_evidence_never_overrides_present_metadata_tier_evidence(tmp_path: Path) -> None:
+    webui = tmp_path / "webui"
+    cache = tmp_path / "state" / "assets.json"
+    # Filename says "sdxl"; embedded metadata says SD1. Metadata must win outright.
+    path = webui / "models" / "Lora" / "sdxl_named_but_sd1_model.safetensors"
+    _safetensors(path, {"ss_base_model_version": "sd_v1.5"})
+
+    registry = AssetRegistry(webui, cache_path=cache)
+    record = registry.refresh().snapshot.records_for(AssetKind.LORA)[0]
+
+    assert record.compatibility.status is CompatibilityStatus.RESOLVED
+    assert record.compatibility.family is ModelFamily.SD1
+    # The filename hint is still preserved as evidence, just never consulted.
+    assert any(item.source == "filename" for item in record.compatibility.evidence)
