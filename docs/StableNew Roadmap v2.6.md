@@ -415,63 +415,50 @@ Neither COA C nor COA D is authorized inside PR-IMG-100.
 - per-stage image backend composition and ComfyUI image execution until their
   own post-v2.6 decisions/acceptance contracts are approved.
 
-## Current three-lane frontier
+## Current one-active-package frontier
 
-The lanes use bounded short-lived branches/PRs and periodically reconverge on
-current `main`; they are not long-lived divergent branches. Separate worktrees
-isolate source, not GPU/live runtimes/user data. Actual PromptPacks, settings,
-SQLite, and configured endpoints require explicit isolation or authorization;
-deliberate real-model inference and platform/hardware changes are serialized and
-separately owner-authorized. Lane A ordinarily needs neither lock. The
-landing/current package reacquires `main` before updating canonical frontier
-summaries.
+The former three concurrent lanes are retired as an execution model; Lane
+A/B/C labels below are backlog/topic categories only. Work proceeds as one
+active short-lived branch/workspace at a time, landing and merging before the
+next package starts. Actual PromptPacks, settings, SQLite, and configured
+endpoints still require explicit isolation or authorization; deliberate
+real-model inference and platform/hardware changes remain serialized and
+separately owner-authorized regardless of which package is active.
 
-### Lane A — Product Quality & Deterministic Engineering
+`PR-TEST-TRUTH-120`/`PR-TEST-TRUTH-121`, `DIAG-GPU-130` closeout,
+`PR-ASSET-120`, and `WP-PACK-AUDIT-100` are all **COMPLETE / ACCEPTED /
+INTEGRATED**; see `STATUS.md` for their current-state summary and
+`docs/Subsystems/PromptPacks/WP-PACK-AUDIT-100_PromptPack_Saved_Settings_Quality_Census.md`
+for the census's full evidence and candidate follow-on packages.
 
-Normal work uses disposable state and fake runtimes, without a real configured
-endpoint or GPU dependency.
+### Product Quality & Deterministic Engineering (backlog category)
 
-1. `PR-TEST-TRUTH-120 — Deterministic Test Truth Repair & Residual Census`:
-   repair known platform-mutation and unintended configured-production-endpoint
-   classes; then perform a residual census, including current local PR-gate and
-   toolchain truth rather than accepting repeated missing-`mypy` ambiguity.
-2. `PR-ASSET-120 — Provenance-Rich Asset Metadata Enrichment and Compatibility
-   Profiles`: offline/observational.
-3. `WP-PACK-AUDIT-100 — PromptPack & Saved-Settings Quality Census`: structural
-   checks are independent of Asset-120; compatibility checks consume Asset-120
-   when available.
-4. Later: compatibility/advisory UX and targeted Learning improvements justified
-   by clean inputs and evidence.
+1. Evidence-backed follow-on from `WP-PACK-AUDIT-100`: repair the
+   `pipeline.adetailer_enabled`/`adetailer.enabled` saved-setting
+   contradiction, or operator-facing triage of the census's missing/ambiguous
+   asset references. Choose one as the next active package, not both.
+2. Later: compatibility/advisory UX and targeted Learning improvements
+   justified by clean inputs and evidence.
 
-FLUX/model qualification does not live in Lane A.
+FLUX/model qualification does not live in this category.
 
-### Lane B — Platform Stability & Forensics
+### Platform Stability & Forensics (backlog category)
 
-Lane B remains `DIAG-GPU-130`; it does not create a new diagnostic identity.
-Its bounded continuation will attempt administrator-supported preservation and
-analysis of the two historically access-restricted `0x133` dumps if recoverable,
-reconcile the XMP-off clean/high-load exposure with available survivor and
-qualification telemetry, define a practical GPU-active-exposure operational exit
-criterion (explicitly not statistical root-cause proof), and identify the exact
-evidence bundle/action on recurrence. It then becomes dormant and event-driven.
-A new hardware/platform variable requires an owner decision. PR-VID-184/184R/184S
-may inform the diagnosis but cannot establish the same or a different failure
-family without supporting evidence.
+`DIAG-GPU-130` is closed/integrated; current platform-baseline truth lives in
+`STATUS.md`'s "Active diagnostic evidence" entry, not restated here. This
+category becomes active again only on a new hardware/platform variable or
+recurrence, which needs an owner decision; PR-VID-184/184R/184S may inform
+but cannot establish a failure family without supporting evidence.
 
-### Lane C — Model Qualification & Capability Expansion
+### Model Qualification & Capability Expansion (backlog category)
 
-Image and video qualification share real GPU/runtime state and qualification
-infrastructure, so both belong here.
+Image and video qualification share real GPU/runtime state and
+qualification infrastructure, so both belong here when selected.
 
-1. `PR-VID-185 — Wan-Animate-2 Promotion Gate & Production-Readiness
-   Adjudication`: no GPU run or integration. Start from accepted PR-VID-184S
-   evidence; reconcile `WAN_ANIMATE_2_OWNER_MOTION_VALUE_PASS` with the still
-   failing frozen motion-correlation metric, decide whether that metric is a
-   valid blocker/guardrail, and define representative resource/usability and
-   promotion evidence. Do not repeat B1/A/B2 merely to increase N.
-2. `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware Qualification` is separately
-   owner-authorized for model/download/GPU state.
-3. Production integration is only for an explicitly selected evidence-backed
+1. `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware Qualification` remains
+   separately owner-authorized for model/download/GPU state.
+2. Production integration is only for an explicitly selected evidence-backed
    capability, extending PR-RUNTIME-100 ownership/coexistence behavior when a
-   runtime actually becomes production. Extract reusable qualification primitives
-   only after at least two qualifications show genuinely common needs.
+   runtime actually becomes production. Extract reusable qualification
+   primitives only after at least two qualifications show genuinely common
+   needs.
