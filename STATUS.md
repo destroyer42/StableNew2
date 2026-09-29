@@ -817,7 +817,7 @@ Recently landed under this posture:
   No PromptPack, preset, or asset was modified; no recommendation or warning
   UX was added.
 - `PR-PACK-110 — ADetailer Stage-Enablement Persistence Repair` is
-  **COMPLETE / ACCEPTED**, pending merge: new
+  **COMPLETE / ACCEPTED / MERGED**: new
   `synchronize_adetailer_enablement()` in `src/utils/config.py` makes
   `pipeline.adetailer_enabled` the persisted stage-membership authority and
   keeps `adetailer.enabled`/`adetailer.adetailer_enabled` synchronized with
@@ -842,7 +842,7 @@ Recently landed under this posture:
   Details: `docs/Subsystems/PromptPacks/PR-PACK-110_ADetailer_Stage_Enablement_Persistence_Repair.md`.
 
 - `PR-PACK-120 — Missing Asset Reference Triage & Reconciliation-Decision
-  Preparation` is **COMPLETE**: new offline, read-only
+  Preparation` is **COMPLETE / ACCEPTED / MERGED**: new offline, read-only
   `tools/missing_asset_reference_triage.py` re-opened all 24 real
   `missing_file_backed_asset` sources and mapped each aggregated census
   finding back to its exact raw JSON occurrence(s) -- 24 triage items across
@@ -859,10 +859,38 @@ Recently landed under this posture:
   module writes a source. Details:
   `docs/Subsystems/PromptPacks/PR-PACK-120_Missing_Asset_Reference_Triage.md`.
   No PromptPack/preset/asset was modified; no automatic reconciliation
-  occurred. The next step is the owner's explicit reconciliation decision
-  for each of the 24 triage items (`leave_unresolved` by default), followed
-  by a bounded, separately authorized reconciliation package to execute the
-  selected actions.
+  occurred at merge time. The owner subsequently reviewed all 24 triage
+  items and authorized `PR-PACK-130` (below) to execute the 15 unambiguous
+  ones.
+
+- `PR-PACK-130 — Approved Missing-Reference Reconciliation` is
+  **COMPLETE / CLOSED**: a one-time, owner-authorized real-data
+  reconciliation, not a permanent product subsystem. A temporary,
+  purpose-built utility (not a rebuild of PR-PACK-120's removed generic
+  apply engine) executed the owner-approved subset of PR-PACK-120's 24
+  triage items against real PromptPack data -- removed 67 structured LoRA
+  entries (13 `BetterThanWords-merged-SDXL-LoRA-v3` + 54
+  `babesByStableYogiPony_xlV4`, both determined by the owner to be
+  checkpoint/model identities mistakenly recorded as separately-applied
+  LoRAs) and cleared 4 literal `"None"` refiner-checkpoint placeholders to
+  `""` (each verified refiner-disabled first), across 15 PromptPack
+  sources, with every write backed up byte-exact, guarded by a
+  semantic-diff proof, and atomically applied. All 9 `DreamyStyle_xl`
+  items (63 occurrences) were deliberately left untouched -- its
+  identity/original role is unknown and no automatic action was
+  authorized for it. A fresh post-write census/triage confirmed
+  `missing_file_backed_asset` **24 -> 9**, census total **1,010 -> 995**,
+  and the remaining missing-reference identity set is exactly
+  `{DreamyStyle_xl}`. No checkpoint/model/VAE selection, standalone preset,
+  legacy text pack, or asset was touched. Once the reconciliation was
+  verified, the temporary mutation utility and its tests were deliberately
+  removed from the repository -- no code path capable of writing a
+  PromptPack/preset source remains from this package; current
+  missing-reference state continues to be tracked read-only by
+  PR-PACK-120's `tools/missing_asset_reference_triage.py`. Details:
+  `docs/Subsystems/PromptPacks/PR-PACK-130_Approved_Missing_Reference_Reconciliation.md`.
+  No further missing-reference action is authorized unless the owner later
+  identifies the historical `DreamyStyle_xl` asset or decides to remove it.
 
 Deliberate real-model inference and platform/hardware changes remain
 serialized and separately owner-authorized regardless of which package is
