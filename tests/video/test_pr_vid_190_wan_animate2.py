@@ -364,6 +364,20 @@ def test_driving_video_is_staged_as_a_copy_and_recorded_in_provenance(tmp_path) 
     assert manager.stops == 1
 
 
+def test_changed_driving_video_is_refused_before_upload_or_queue(tmp_path) -> None:
+    clip = _driving_clip(tmp_path)
+    request = _request(tmp_path, WAN_ANIMATE2_DRIVE_ID, driving=clip)
+    clip.write_bytes(b"different driving clip")
+    manager = _ManagedFake()
+    client = _AnimateComfy(tmp_path)
+
+    with pytest.raises(ValueError, match="changed since queue admission"):
+        _backend(client, manager).execute(None, request)
+
+    assert client.uploaded == [] and client.queued == []
+    assert manager.stops == 1
+
+
 def test_compiled_driving_graph_binds_the_frozen_length_and_geometry(tmp_path) -> None:
     compiled = WorkflowCompiler().compile(
         _spec(WAN_ANIMATE2_DRIVE_ID),

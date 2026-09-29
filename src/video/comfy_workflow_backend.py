@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import uuid
@@ -825,6 +826,12 @@ class ComfyWorkflowVideoBackend:
             raise RuntimeError(
                 f"Workflow '{compiled.workflow_id}' compiled without a queueable Comfy prompt payload"
             )
+        stage_config = request.stage_config or {}
+        if stage_config.get("pose_video_path"):
+            self._verify_driving_video_source(
+                stage_config["pose_video_path"],
+                str(stage_config.get("pose_video_sha256") or ""),
+            )
         prompt_payload = self._normalize_prompt_payload_for_comfy(
             prompt_payload,
             client=client,
@@ -897,6 +904,20 @@ class ComfyWorkflowVideoBackend:
             }
 
         return prompt
+
+    @staticmethod
+    def _verify_driving_video_source(raw_value: Any, expected_sha256: str) -> None:
+        """Reject a queued driving clip changed since admission before uploading it."""
+
+        path = Path(str(raw_value or "")).expanduser()
+        if not expected_sha256 or not path.is_file():
+            raise ValueError("Driving video or its admission hash is missing at dispatch")
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != expected_sha256:
+            raise ValueError(f"Driving video changed since queue admission: {path}")
 
     @staticmethod
     def _is_comfy_link_value(value: Any) -> bool:

@@ -1,6 +1,7 @@
 # PR-VID-191 — Managed ComfyUI v0.37.0 Runtime & Experimental Wan-Animate-2
 
-Status: **implemented; real-hardware results below**. Part 2 of the owner-selected PR-VID-190 plan
+Status: **implemented; pending PR review/merge; real-hardware results below**. Part 2 of the
+owner-selected PR-VID-190 plan
 (stacked on PR-VID-190's owned-runtime release and frame-count contract). Experimental, explicit
 per-job opt-in; native SVD remains the default production video backend.
 
@@ -124,6 +125,14 @@ backend now accepts only `type: "output"` descriptors (regression test added). A
 of job C (`reports/vid191_animate2_drive_fix/`, PID 43176 released) recorded only the generated
 clip and no longer copied the driving clip into the run folder.
 
+**Post-run workstation events (2026-09-29 ET).** The final driving-video rerun finished at about
+08:33 with a generated 41-frame MP4, the owned Comfy process released, and the endpoint free.
+Windows later recorded display watchdog `LiveKernelEvent 141` and `1b8` reports at about 08:42,
+followed by an unexpected shutdown at 08:49; a separate `141` report occurred at 15:02. No
+StableNew/Comfy generation is evidenced at either event. These events do not turn the completed jobs
+into failures or establish a Comfy cause; they also do not establish workstation display stability.
+The desktop ComfyUI upgrade remains gated on the owner's stability decision.
+
 **Visual observations (agent, not the owner's verdict):**
 
 - **A (prompt, 41 f):** clean prompt-directed motion — she raises her right hand, waves and lowers
@@ -143,7 +152,8 @@ clip and no longer copied the driving clip into the run folder.
 
 ## Validation
 
-- `tests/video/test_pr_vid_190_wan_animate2.py` (22, incl. input previews never treated as artifacts): experimental specs with the accepted model set
+- `tests/video/test_pr_vid_190_wan_animate2.py` (23, including input previews never treated as
+  artifacts): experimental specs with the accepted model set
   and policies; opt-in required; qualified sampling settings; node-level parity with the real
   qualified flat graph (when present); 41-frame default and legal envelope; prompt mode takes no
   driving video and hides the field; driving mode declares the neutral pose-video control; other
@@ -151,8 +161,16 @@ clip and no longer copied the driving clip into the run folder.
   video frozen with its hash and never modified; invalid path/extension rejected before admission;
   prompt-only workflow refuses a driving video; missing `--disable-pinned-memory` refused before any
   start; unverifiable external runtime refused with nothing staged; prompt job releases the runtime
-  and records no driving video; driving video staged as a copy with provenance; compiled length and
-  geometry; three queued Animate-2 jobs through the real queue; declared generation waits.
+  and records no driving video; driving video staged as a copy with provenance; a source changed
+  after queue admission is refused before upload or dispatch; compiled length and geometry; three
+  queued Animate-2 jobs through the real queue; declared generation waits.
+- Focused PR review repair (no GPU): 60 tests passed across the Animate-2 and PR-VID-190 lifecycle
+  modules on Python 3.12.14; controller/registry checks had 10 passed and 8 GUI skips because local
+  Tcl is unavailable. Ruff on the changed Python files (`--no-cache`) and `git diff --check` passed.
+  The local PR gate reported the known tooling blocker: mypy and the Ruff executable are absent
+  from this environment; required Python 3.11/3.12 CI remains pending. The repair checks the
+  admission-frozen driving-video SHA-256 immediately before any Comfy upload and leaves the
+  qualified graph, runtime command, model paths, and existing hardware results unchanged.
 - GUI: Driving Video field shown/hidden per workflow, state round-trip.
 - Regression vs clean `origin/main`: no new failures in video/controller/services/queue and the video
   queue integration tests.
@@ -167,6 +185,22 @@ clip and no longer copied the driving clip into the run folder.
    runtime on it, keeping `--disable-pinned-memory` and the StableNew-owned runtime folders.
 4. The qualification install now doubles as the production runtime; it must not be deleted until
    step 3 replaces it.
+
+## Execution profile and validation plan
+
+**Execution Profile + Model/Reasoning Recommendation:** Standard, bounded video-backend and
+controller work with file provenance and managed-process boundaries. Use a frontier-capable coding
+model (GPT-6 Astra) at medium reasoning for implementation and focused verification; raise reasoning
+for security or architecture review if evidence exposes a boundary change. The extra review capacity
+reduces expected retries and costly hardware re-verification compared with selecting solely by
+nominal model cost.
+
+**Token-Efficient Validation Plan:** Check the exact stacked SHA and scoped diff; run the focused
+Animate-2, PR-VID-190 lifecycle, and GUI/controller tests after relevant source edits, then Ruff,
+mypy on changed modules, and `git diff --check`. Reuse the completed seven-clip v0.37.0 hardware
+evidence while the graph, runtime configuration, and model files remain unchanged. Required Python
+3.11/3.12 CI and the triggered security review remain PR gates; no additional GPU job is needed for
+the admission-hash repair.
 
 ## Architecture boundaries
 
