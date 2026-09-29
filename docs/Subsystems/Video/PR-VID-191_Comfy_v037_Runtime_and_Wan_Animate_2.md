@@ -188,12 +188,11 @@ The desktop ComfyUI upgrade remains gated on the owner's stability decision.
 
 ## Execution profile and validation plan
 
-**Execution Profile + Model/Reasoning Recommendation:** Standard, bounded video-backend and
-controller work with file provenance and managed-process boundaries. Use a frontier-capable coding
-model (GPT-6 Astra) at medium reasoning for implementation and focused verification; raise reasoning
-for security or architecture review if evidence exposes a boundary change. The extra review capacity
-reduces expected retries and costly hardware re-verification compared with selecting solely by
-nominal model cost.
+**Execution Profile + Model/Reasoning Recommendation:** Standard, cross-surface video-backend and
+controller work with file provenance and managed-process boundaries. Use a Sol-class model at medium
+reasoning for implementation and focused verification, with an independent Astra-class security
+review for the runtime and file-handling boundaries. The added review capacity reduces expected
+retries and costly hardware re-verification compared with selecting solely by nominal model cost.
 
 **Token-Efficient Validation Plan:** Check the exact stacked SHA and scoped diff; run the focused
 Animate-2, PR-VID-190 lifecycle, and GUI/controller tests after relevant source edits, then Ruff,
