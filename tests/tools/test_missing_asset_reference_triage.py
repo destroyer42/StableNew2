@@ -1,8 +1,11 @@
-"""Deterministic fixtures for PR-PACK-120's missing-asset-reference triage.
+"""Deterministic fixtures for PR-PACK-120's read-only missing-asset-reference
+triage and reconciliation-decision-template preparation.
 
 All fixtures use temporary PromptPack/preset/WebUI roots; none reads the
-operator's real files, and none performs network or runtime calls. No test
-here ever applies a decision against anything but a disposable temp fixture.
+operator's real files, and none performs network or runtime calls. The tool
+under test has no code path that writes a PromptPack/preset source, so no
+fixture here ever needs to assert a rollback or backup -- there is nothing
+to roll back.
 """
 
 from __future__ import annotations
@@ -406,10 +409,12 @@ def test_base_checkpoint_clear_is_rejected(tmp_path: Path) -> None:
     assert result.ok is False
 
 
-def test_optional_scalar_clear_dry_run_works(tmp_path: Path) -> None:
+def test_optional_scalar_clear_decision_validates_cleanly(tmp_path: Path) -> None:
     packs = tmp_path / "packs"
-    document = _pack([{"index": 0, "text": "a"}], preset_data={"txt2img": {"vae": "missing_vae.safetensors"}})
-    _write_json(packs / "p.json", document)
+    _write_json(
+        packs / "p.json",
+        _pack([{"index": 0, "text": "a"}], preset_data={"txt2img": {"vae": "missing_vae.safetensors"}}),
+    )
     report = _scan([_finding("p", "vae", "missing_vae.safetensors")], packs)
     item = report.triage_items[0]
     occ = item.occurrences[0]
@@ -420,81 +425,11 @@ def test_optional_scalar_clear_dry_run_works(tmp_path: Path) -> None:
         "expected_old_value": item.missing_reference_name,
         "expected_source_sha256": occ.source_file_sha256,
     }
-    result = triage.apply_batch(
-        [decision], report, packs_dir=packs, presets_dir=None, registry=None, backup_dir=tmp_path / "backup", dry_run=True
-    )
-    assert result.dry_run is True
-    assert not result.skipped
-    # Dry run must not touch the source file.
-    assert json.loads((packs / "p.json").read_text()) == document
+    result = triage.validate_decision(decision, report, packs_dir=packs, presets_dir=None, registry=None)
+    assert result.ok is True
 
 
-# --- 27/28/29. dry-run mutation scope -----------------------------------------------------------------
-
-
-def test_lora_removal_dry_run_changes_only_the_selected_occurrence(tmp_path: Path) -> None:
-    packs = tmp_path / "packs"
-    document = _pack([{"index": 0, "text": "a", "loras": [["keep", 1.0], ["missing_lora", 0.5]]}])
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "lora", "missing_lora")], packs)
-    item = report.triage_items[0]
-    occ = item.occurrences[0]
-    decision = {
-        "triage_item_id": item.triage_item_id,
-        "occurrence_ids": [occ.occurrence_id],
-        "action": "remove_reference",
-        "expected_old_value": item.missing_reference_name,
-        "expected_source_sha256": occ.source_file_sha256,
-    }
-    new_doc = triage._apply_one_decision(document, item, decision)
-    assert new_doc["pack_data"]["slots"][0]["loras"] == [["keep", 1.0]]
-
-
-def test_embedding_removal_dry_run_changes_only_the_selected_occurrence(tmp_path: Path) -> None:
-    packs = tmp_path / "packs"
-    document = _pack([{"index": 0, "text": "a", "positive_embeddings": ["keep", "missing_emb"]}])
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "embedding", "missing_emb")], packs)
-    item = report.triage_items[0]
-    occ = item.occurrences[0]
-    decision = {
-        "triage_item_id": item.triage_item_id,
-        "occurrence_ids": [occ.occurrence_id],
-        "action": "remove_reference",
-        "expected_old_value": item.missing_reference_name,
-        "expected_source_sha256": occ.source_file_sha256,
-    }
-    new_doc = triage._apply_one_decision(document, item, decision)
-    assert new_doc["pack_data"]["slots"][0]["positive_embeddings"] == ["keep"]
-
-
-def test_replacement_dry_run_changes_only_the_selected_json_pointer(tmp_path: Path) -> None:
-    packs = tmp_path / "packs"
-    document = _pack(
-        [{"index": 0, "text": "a", "loras": [["missing_lora", 0.5]]}],
-        preset_data={"txt2img": {"model": "keep_this.safetensors"}},
-    )
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "lora", "missing_lora")], packs)
-    item = report.triage_items[0]
-    occ = item.occurrences[0]
-    decision = {
-        "triage_item_id": item.triage_item_id,
-        "occurrence_ids": [occ.occurrence_id],
-        "action": "replace_reference",
-        "replacement": "replaced.safetensors",
-        "expected_old_value": item.missing_reference_name,
-        "expected_source_sha256": occ.source_file_sha256,
-    }
-    new_doc = triage._apply_one_decision(document, item, decision)
-    assert new_doc["pack_data"]["slots"][0]["loras"] == [["replaced.safetensors", 0.5]]
-    assert new_doc["preset_data"]["txt2img"]["model"] == "keep_this.safetensors"
-
-
-# --- 30/31/32/33. batch safety: all-or-nothing, backup, rollback, semantic-diff guard ------------------
-
-
-def test_all_decisions_validated_before_any_write(tmp_path: Path) -> None:
+def test_validate_batch_returns_one_result_per_decision_including_failures(tmp_path: Path) -> None:
     packs = tmp_path / "packs"
     doc_a = _pack([{"index": 0, "text": "a", "loras": [["missing_a", 0.5]]}])
     doc_b = _pack([{"index": 0, "text": "b", "loras": [["missing_b", 0.5]]}])
@@ -518,139 +453,18 @@ def test_all_decisions_validated_before_any_write(tmp_path: Path) -> None:
         "expected_old_value": "wrong value",
         "expected_source_sha256": item_b.occurrences[0].source_file_sha256,
     }
-    result = triage.apply_batch(
-        [good_decision, bad_decision],
-        report,
-        packs_dir=packs,
-        presets_dir=None,
-        registry=None,
-        backup_dir=tmp_path / "backup",
-        dry_run=False,
+    results = triage.validate_batch(
+        [good_decision, bad_decision], report, packs_dir=packs, presets_dir=None, registry=None
     )
-    assert result.skipped  # batch refused
-    assert json.loads((packs / "a.json").read_text()) == doc_a  # untouched despite being valid
+    assert len(results) == 2
+    assert results[0].ok is True
+    assert results[1].ok is False
+    # Validation alone never touches a source file.
+    assert json.loads((packs / "a.json").read_text()) == doc_a
+    assert json.loads((packs / "b.json").read_text()) == doc_b
 
 
-def test_backup_failure_means_zero_writes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    packs = tmp_path / "packs"
-    document = _pack([{"index": 0, "text": "a", "loras": [["missing_lora", 0.5]]}])
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "lora", "missing_lora")], packs)
-    item = report.triage_items[0]
-    occ = item.occurrences[0]
-    decision = {
-        "triage_item_id": item.triage_item_id,
-        "occurrence_ids": [occ.occurrence_id],
-        "action": "remove_reference",
-        "expected_old_value": item.missing_reference_name,
-        "expected_source_sha256": occ.source_file_sha256,
-    }
-
-    def _corrupt_write_bytes(self, data):  # pragma: no cover - test double
-        return len(data) + 1  # pretend to succeed without actually writing correctly
-
-    # Simulate a backup that silently fails verification by monkeypatching
-    # the post-backup hash check path: write garbage instead of the real
-    # bytes so the SHA-256 comparison inside apply_batch fails.
-    original_write_bytes = Path.write_bytes
-
-    def _flaky_write_bytes(self: Path, data: bytes):
-        if "backup" in self.parts:
-            return original_write_bytes(self, b"corrupted")
-        return original_write_bytes(self, data)
-
-    monkeypatch.setattr(Path, "write_bytes", _flaky_write_bytes)
-    result = triage.apply_batch(
-        [decision], report, packs_dir=packs, presets_dir=None, registry=None, backup_dir=tmp_path / "backup", dry_run=False
-    )
-    assert result.skipped
-    assert json.loads((packs / "p.json").read_text()) == document
-
-
-def test_simulated_mid_write_failure_restores_byte_exact_originals(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    packs = tmp_path / "packs"
-    document = _pack(
-        [
-            {"index": 0, "text": "a", "loras": [["missing_a", 0.5]]},
-            {"index": 1, "text": "b", "loras": [["missing_b", 0.5]]},
-        ]
-    )
-    _write_json(packs / "one.json", document)
-    doc_two = _pack([{"index": 0, "text": "c", "loras": [["missing_c", 0.5]]}])
-    _write_json(packs / "two.json", doc_two)
-    original_one = (packs / "one.json").read_bytes()
-    original_two = (packs / "two.json").read_bytes()
-
-    report = _scan(
-        [_finding("one", "lora", "missing_a"), _finding("two", "lora", "missing_c")], packs
-    )
-    item_one = next(i for i in report.triage_items if i.source_id == "one")
-    item_two = next(i for i in report.triage_items if i.source_id == "two")
-    decisions = [
-        {
-            "triage_item_id": item_one.triage_item_id,
-            "occurrence_ids": [item_one.occurrences[0].occurrence_id],
-            "action": "remove_reference",
-            "expected_old_value": item_one.missing_reference_name,
-            "expected_source_sha256": item_one.occurrences[0].source_file_sha256,
-        },
-        {
-            "triage_item_id": item_two.triage_item_id,
-            "occurrence_ids": [item_two.occurrences[0].occurrence_id],
-            "action": "remove_reference",
-            "expected_old_value": item_two.missing_reference_name,
-            "expected_source_sha256": item_two.occurrences[0].source_file_sha256,
-        },
-    ]
-
-    original_json_dump = json.dump
-    call_count = {"n": 0}
-
-    def _flaky_dump(*args, **kwargs):
-        call_count["n"] += 1
-        if call_count["n"] == 2:
-            raise RuntimeError("simulated mid-write failure")
-        return original_json_dump(*args, **kwargs)
-
-    monkeypatch.setattr(json, "dump", _flaky_dump)
-    result = triage.apply_batch(
-        decisions, report, packs_dir=packs, presets_dir=None, registry=None, backup_dir=tmp_path / "backup", dry_run=False
-    )
-    assert result.skipped
-    assert (packs / "one.json").read_bytes() == original_one
-    assert (packs / "two.json").read_bytes() == original_two
-
-
-def test_semantic_diff_guard_rejects_unrelated_changes(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    packs = tmp_path / "packs"
-    document = _pack([{"index": 0, "text": "a", "loras": [["missing_lora", 0.5]]}])
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "lora", "missing_lora")], packs)
-    item = report.triage_items[0]
-    occ = item.occurrences[0]
-    decision = {
-        "triage_item_id": item.triage_item_id,
-        "occurrence_ids": [occ.occurrence_id],
-        "action": "remove_reference",
-        "expected_old_value": item.missing_reference_name,
-        "expected_source_sha256": occ.source_file_sha256,
-    }
-
-    def _sneaky_apply(document, item, decision):
-        new_doc = json.loads(json.dumps(document))
-        new_doc["pack_data"]["slots"][0]["loras"] = []
-        new_doc["pack_data"]["name"] = "renamed-without-authorization"
-        return new_doc
-
-    monkeypatch.setattr(triage, "_apply_one_decision", _sneaky_apply)
-    result = triage.apply_batch(
-        [decision], report, packs_dir=packs, presets_dir=None, registry=None, backup_dir=tmp_path / "backup", dry_run=False
-    )
-    assert result.skipped
-    assert json.loads((packs / "p.json").read_text()) == document
-
-
-# --- 34/35. scan is fully read-only ---------------------------------------------------------------------
+# --- scan is fully read-only ---------------------------------------------------------------------
 
 
 def test_scan_performs_no_source_mutation(tmp_path: Path) -> None:
@@ -692,136 +506,10 @@ def test_output_is_deterministic_for_unchanged_inputs(tmp_path: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# PR-PACK-120 batched apply-safety repair
+# Read-only decision-validation coverage
 # ---------------------------------------------------------------------------
 
-# --- Finding 1: removal from non-final list positions ------------------------------------------
-
-
-def _remove_decision(item, occurrence_ids: list[str]) -> dict:
-    return {
-        "triage_item_id": item.triage_item_id,
-        "occurrence_ids": occurrence_ids,
-        "action": "remove_reference",
-        "expected_old_value": item.missing_reference_name,
-        "expected_source_sha256": item.occurrences[0].source_file_sha256,
-    }
-
-
-def test_remove_first_lora_from_two_entry_list(tmp_path: Path) -> None:
-    packs = tmp_path / "packs"
-    document = _pack([{"index": 0, "text": "a", "loras": [["missing_lora", 0.5], ["keep", 1.0]]}])
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "lora", "missing_lora")], packs)
-    item = report.triage_items[0]
-    decision = _remove_decision(item, [item.occurrences[0].occurrence_id])
-    result = triage.apply_batch(
-        [decision], report, packs_dir=packs, presets_dir=None, registry=None, backup_dir=tmp_path / "backup", dry_run=False
-    )
-    assert not result.skipped
-    saved = json.loads((packs / "p.json").read_text())
-    assert saved["pack_data"]["slots"][0]["loras"] == [["keep", 1.0]]
-
-
-def test_remove_middle_lora_from_three_entry_list(tmp_path: Path) -> None:
-    packs = tmp_path / "packs"
-    document = _pack(
-        [{"index": 0, "text": "a", "loras": [["keep_a", 1.0], ["missing_lora", 0.5], ["keep_b", 2.0]]}]
-    )
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "lora", "missing_lora")], packs)
-    item = report.triage_items[0]
-    decision = _remove_decision(item, [item.occurrences[0].occurrence_id])
-    result = triage.apply_batch(
-        [decision], report, packs_dir=packs, presets_dir=None, registry=None, backup_dir=tmp_path / "backup", dry_run=False
-    )
-    assert not result.skipped
-    saved = json.loads((packs / "p.json").read_text())
-    assert saved["pack_data"]["slots"][0]["loras"] == [["keep_a", 1.0], ["keep_b", 2.0]]
-
-
-def test_remove_first_embedding_preserves_later_entries(tmp_path: Path) -> None:
-    packs = tmp_path / "packs"
-    document = _pack([{"index": 0, "text": "a", "positive_embeddings": ["missing_emb", "keep1", "keep2"]}])
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "embedding", "missing_emb")], packs)
-    item = report.triage_items[0]
-    decision = _remove_decision(item, [item.occurrences[0].occurrence_id])
-    result = triage.apply_batch(
-        [decision], report, packs_dir=packs, presets_dir=None, registry=None, backup_dir=tmp_path / "backup", dry_run=False
-    )
-    assert not result.skipped
-    saved = json.loads((packs / "p.json").read_text())
-    assert saved["pack_data"]["slots"][0]["positive_embeddings"] == ["keep1", "keep2"]
-
-
-def test_multiple_selected_removals_from_one_list_in_a_single_decision(tmp_path: Path) -> None:
-    packs = tmp_path / "packs"
-    document = _pack(
-        [{"index": 0, "text": "a", "loras": [["dup_missing", 0.5], ["keep", 1.0], ["dup_missing", 0.9]]}]
-    )
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "lora", "dup_missing")], packs)
-    item = report.triage_items[0]
-    assert len(item.occurrences) == 2
-    decision = _remove_decision(item, [o.occurrence_id for o in item.occurrences])
-    result = triage.apply_batch(
-        [decision], report, packs_dir=packs, presets_dir=None, registry=None, backup_dir=tmp_path / "backup", dry_run=False
-    )
-    assert not result.skipped
-    saved = json.loads((packs / "p.json").read_text())
-    assert saved["pack_data"]["slots"][0]["loras"] == [["keep", 1.0]]
-
-
-def test_multiple_removals_from_one_list_across_separate_decisions(tmp_path: Path) -> None:
-    packs = tmp_path / "packs"
-    document = _pack(
-        [{"index": 0, "text": "a", "loras": [["missing_a", 0.5], ["keep", 1.0], ["missing_b", 0.7]]}]
-    )
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "lora", "missing_a"), _finding("p", "lora", "missing_b")], packs)
-    item_a = next(i for i in report.triage_items if i.missing_reference_name == "missing_a")
-    item_b = next(i for i in report.triage_items if i.missing_reference_name == "missing_b")
-    decisions = [
-        _remove_decision(item_a, [item_a.occurrences[0].occurrence_id]),
-        _remove_decision(item_b, [item_b.occurrences[0].occurrence_id]),
-    ]
-    result = triage.apply_batch(
-        decisions, report, packs_dir=packs, presets_dir=None, registry=None, backup_dir=tmp_path / "backup", dry_run=False
-    )
-    assert not result.skipped
-    saved = json.loads((packs / "p.json").read_text())
-    assert saved["pack_data"]["slots"][0]["loras"] == [["keep", 1.0]]
-
-
-def test_unauthorized_change_to_a_surviving_entry_is_still_rejected(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    packs = tmp_path / "packs"
-    document = _pack([{"index": 0, "text": "a", "loras": [["missing_lora", 0.5], ["keep", 1.0]]}])
-    _write_json(packs / "p.json", document)
-    report = _scan([_finding("p", "lora", "missing_lora")], packs)
-    item = report.triage_items[0]
-    decision = _remove_decision(item, [item.occurrences[0].occurrence_id])
-
-    def _sneaky_apply(document, item, decision):
-        new_doc = json.loads(json.dumps(document))
-        # Correctly removes the missing entry, but also tampers with the
-        # surviving entry's weight -- the dedicated list-level check must
-        # catch this even though the entry count and the generic flattened
-        # key set otherwise look plausible.
-        new_doc["pack_data"]["slots"][0]["loras"] = [["keep", 999.0]]
-        return new_doc
-
-    monkeypatch.setattr(triage, "_apply_one_decision", _sneaky_apply)
-    result = triage.apply_batch(
-        [decision], report, packs_dir=packs, presets_dir=None, registry=None, backup_dir=tmp_path / "backup", dry_run=False
-    )
-    assert result.skipped
-    assert json.loads((packs / "p.json").read_text()) == document
-
-
-# --- Finding 2: actionable decisions require a source fingerprint ------------------------------
+# --- actionable decisions require a source fingerprint ------------------------------------------
 
 
 def test_actionable_decision_missing_sha_key_is_rejected(tmp_path: Path) -> None:
@@ -911,7 +599,7 @@ def test_leave_unresolved_decision_without_sha_remains_valid(tmp_path: Path) -> 
     assert result.ok is True
 
 
-# --- Finding 3: --asset-cache optional CLI contract ---------------------------------------------
+# --- scan uses an audit-owned cache, never the production one -----------------------------------
 
 
 def test_scan_cli_derives_audit_owned_cache_when_asset_cache_omitted(tmp_path: Path) -> None:
@@ -944,7 +632,7 @@ def test_scan_cli_derives_audit_owned_cache_when_asset_cache_omitted(tmp_path: P
     assert saved["triage_items"][0]["candidates"]  # candidate lookup actually worked
 
 
-# --- Finding 4: non-object JSON is stale/unmapped evidence, never a crash -----------------------
+# --- non-object JSON is stale/unmapped evidence, never a crash ----------------------------------
 
 
 @pytest.mark.parametrize("bad_payload", [[], "a string", 0, None])
@@ -972,93 +660,35 @@ def test_non_object_json_source_does_not_block_other_sources_in_same_scan(tmp_pa
     assert len(good_item.occurrences) == 1
 
 
-# --- Finding 5: backups are collision-free by source identity -----------------------------------
+# --- decision template carries source fingerprint/old-value evidence ----------------------------
 
 
-def test_backups_for_same_basename_promptpack_and_preset_do_not_collide(tmp_path: Path) -> None:
+def test_decision_template_includes_source_fingerprint_and_old_value_evidence(tmp_path: Path) -> None:
     packs = tmp_path / "packs"
-    presets = tmp_path / "presets"
-    doc_pack = _pack([{"index": 0, "text": "a", "loras": [["missing_lora", 0.5]]}])
-    doc_preset = {"vae": "missing_vae.safetensors"}
-    _write_json(packs / "foo.json", doc_pack)
-    _write_json(presets / "foo.json", doc_preset)
-    findings = [
-        _finding("foo", "lora", "missing_lora", source_type="promptpack"),
-        _finding("foo", "vae", "missing_vae.safetensors", source_type="standalone_preset"),
-    ]
-    report = triage.build_triage_report(
-        findings, packs_dir=packs, presets_dir=presets, registry=None, source_sha="sha"
-    )
-    pack_item = next(i for i in report.triage_items if i.source_type == "promptpack")
-    preset_item = next(i for i in report.triage_items if i.source_type == "standalone_preset")
-    decisions = [
-        _remove_decision(pack_item, [pack_item.occurrences[0].occurrence_id]),
-        {
-            "triage_item_id": preset_item.triage_item_id,
-            "occurrence_ids": [preset_item.occurrences[0].occurrence_id],
-            "action": "clear_optional_reference",
-            "expected_old_value": preset_item.missing_reference_name,
-            "expected_source_sha256": preset_item.occurrences[0].source_file_sha256,
-        },
-    ]
-    backup_dir = tmp_path / "backup"
-    result = triage.apply_batch(
-        decisions, report, packs_dir=packs, presets_dir=presets, registry=None, backup_dir=backup_dir, dry_run=False
-    )
-    assert not result.skipped
-    pack_backup = Path(result.backups[str(packs / "foo.json")])
-    preset_backup = Path(result.backups[str(presets / "foo.json")])
-    assert pack_backup != preset_backup
-    assert json.loads(pack_backup.read_text()) == doc_pack
-    assert json.loads(preset_backup.read_text()) == doc_preset
+    _write_json(packs / "p.json", _pack([{"index": 0, "text": "a", "loras": [["missing_lora", 0.5]]}]))
+    report = _scan([_finding("p", "lora", "missing_lora")], packs)
+    template = triage.build_decisions_template(report, source_sha="sha", triage_report_sha256="abc")
+    decision = template["decisions"][0]
+    assert decision["expected_old_value"] == "missing_lora"
+    assert isinstance(decision["expected_source_sha256"], str) and len(decision["expected_source_sha256"]) == 64
+    assert decision["occurrence_ids"]
 
 
-def test_dual_source_same_basename_rollback_restores_both_originals_on_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    packs = tmp_path / "packs"
-    presets = tmp_path / "presets"
-    doc_pack = _pack([{"index": 0, "text": "a", "loras": [["missing_lora", 0.5]]}])
-    doc_preset = {"vae": "missing_vae.safetensors"}
-    _write_json(packs / "foo.json", doc_pack)
-    _write_json(presets / "foo.json", doc_preset)
-    original_pack_bytes = (packs / "foo.json").read_bytes()
-    original_preset_bytes = (presets / "foo.json").read_bytes()
+# --- the tool has no PromptPack/preset source-write pathway --------------------------------------
 
-    findings = [
-        _finding("foo", "lora", "missing_lora", source_type="promptpack"),
-        _finding("foo", "vae", "missing_vae.safetensors", source_type="standalone_preset"),
-    ]
-    report = triage.build_triage_report(
-        findings, packs_dir=packs, presets_dir=presets, registry=None, source_sha="sha"
-    )
-    pack_item = next(i for i in report.triage_items if i.source_type == "promptpack")
-    preset_item = next(i for i in report.triage_items if i.source_type == "standalone_preset")
-    decisions = [
-        _remove_decision(pack_item, [pack_item.occurrences[0].occurrence_id]),
-        {
-            "triage_item_id": preset_item.triage_item_id,
-            "occurrence_ids": [preset_item.occurrences[0].occurrence_id],
-            "action": "clear_optional_reference",
-            "expected_old_value": preset_item.missing_reference_name,
-            "expected_source_sha256": preset_item.occurrences[0].source_file_sha256,
-        },
-    ]
 
-    original_json_dump = json.dump
-    call_count = {"n": 0}
+def test_tool_has_no_source_write_pathway() -> None:
+    # The real-mutation engine (apply/backup/rollback) was deliberately
+    # removed: PR-PACK-120 is read-only triage + decision-template
+    # preparation only. Actual reconciliation is a later, separately
+    # authorized package.
+    assert not hasattr(triage, "apply_batch")
+    assert not hasattr(triage, "_apply_one_decision")
+    assert not hasattr(triage, "ApplyResult")
 
-    def _flaky_dump(*args, **kwargs):
-        call_count["n"] += 1
-        if call_count["n"] == 2:
-            raise RuntimeError("simulated mid-write failure")
-        return original_json_dump(*args, **kwargs)
-
-    monkeypatch.setattr(json, "dump", _flaky_dump)
-    result = triage.apply_batch(
-        decisions, report, packs_dir=packs, presets_dir=presets, registry=None,
-        backup_dir=tmp_path / "backup", dry_run=False,
-    )
-    assert result.skipped
-    assert (packs / "foo.json").read_bytes() == original_pack_bytes
-    assert (presets / "foo.json").read_bytes() == original_preset_bytes
+    parser = triage._build_arg_parser()
+    commands: set[str] = set()
+    for action in parser._subparsers._group_actions:  # type: ignore[union-attr]
+        if hasattr(action, "choices") and action.choices:
+            commands.update(action.choices.keys())
+    assert commands == {"scan"}

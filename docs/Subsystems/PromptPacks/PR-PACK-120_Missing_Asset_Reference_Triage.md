@@ -1,13 +1,18 @@
-# PR-PACK-120 — Missing Asset Reference Triage & Explicit Reconciliation Workflow
+# PR-PACK-120 — Missing Asset Reference Triage & Reconciliation-Decision Preparation
 
-Status: implemented; offline, read-only. This package performs no automatic
-source mutation and makes no reconciliation decision for the owner.
+Status: implemented; offline, read-only operator triage and
+reconciliation-decision preparation. This package performs no automatic
+source mutation and makes no reconciliation decision for the owner. Actual
+reconciliation (executing a replacement/removal/clear decision against a
+real PromptPack or preset) is explicitly deferred to a later, separately
+authorized package, once the owner has reviewed the 24-item decision set
+below.
 
 ## Outcome
 
-New `tools/missing_asset_reference_triage.py` turns WP-PACK-AUDIT-100's
-aggregated `missing_file_backed_asset` findings into precise, inspectable,
-safely actionable reconciliation evidence:
+`tools/missing_asset_reference_triage.py` turns WP-PACK-AUDIT-100's
+aggregated `missing_file_backed_asset` findings into precise, inspectable
+reconciliation-decision evidence:
 
 1. **`scan`** re-opens each source read-only and maps the aggregated finding
    back to every exact raw persisted JSON occurrence that actually carries
@@ -18,16 +23,28 @@ safely actionable reconciliation evidence:
    candidate evidence from `AssetRegistry`, Asset-120 `CompatibilityProfile`
    context, and a narrow literal-placeholder classification (`"None"`,
    `"(None)"`, `"null"`).
-3. It emits a decision template defaulting every item to
-   `leave_unresolved` — no candidate ever becomes a decision automatically.
-4. **`apply`** (dry-run by default; real writes require an explicit
-   `--apply` flag) validates an operator-approved decisions file
-   all-or-nothing before touching any file, backs up every file it will
-   touch first, applies changes atomically per file, and restores every
-   file in the batch from backup on any failure.
+3. It emits a `decisions.template.json` defaulting every item to
+   `leave_unresolved` — no candidate ever becomes a decision automatically,
+   and generating the template implies no authorization to act.
+4. `validate_decision`/`validate_batch` check only static, read-only
+   properties of an operator-filled-in decisions file — that the triage
+   item/occurrence still exists, the action is a known one, a proposed
+   replacement resolves to exactly one installed same-kind asset, and the
+   source fingerprint/expected old value are still current — so an operator
+   can sanity-check a draft decision. They never write, back up, or
+   transform a source file.
 
-`apply` was implemented and tested against disposable fixtures only. **It
-was never invoked against real user data in this package.**
+There is no code path in this module that writes to a PromptPack or preset
+source. Its only filesystem writes are its own explicit output artifacts
+(the triage report, its markdown summary, the decisions template) and an
+audit-owned Asset Registry cache — never the application's normal
+production cache. An earlier revision of this package carried a generic
+apply/backup/rollback mutation engine; it was removed before merge (see
+"Deferred: reconciliation execution" below) once review surfaced remaining
+edge cases in that engine that had no bearing on the accepted read-only
+scan evidence. The smallest coherent package is read-only triage; a
+mutation engine is unnecessary risk before the owner has selected any
+actual decisions.
 
 ## Why the census finding cannot be a write locator
 
@@ -54,9 +71,11 @@ than trusting the finding's own aggregated identity as a location.
   `negative_embeddings[j]`, supporting all three currently-normalized entry
   shapes (bare string, `{"name","weight"}`, `[name, weight]`) without
   re-serializing the entry during scan.
-- A finding whose value cannot be found verbatim in the raw document is
+- A finding whose value cannot be found verbatim in the raw document, or
+  whose source file is missing/corrupt/valid-JSON-but-not-an-object, is
   recorded as an explicit **unmapped/stale** item — the tool never guesses
-  a location.
+  a location, and scanning continues with the remaining sources rather than
+  crashing on the first unexpected shape.
 
 ## Candidate evidence
 
@@ -71,7 +90,7 @@ per item. Each candidate carries its own Asset-120 `resolved_family`/
 `candidate evidence` — never "correct"/"best"/"recommended"; nothing in this
 tool converts a similarity score into permission to act.
 
-## Decision schema and safety contract
+## Decision-template schema
 
 ```json
 {
@@ -90,57 +109,56 @@ tool converts a similarity score into permission to act.
 }
 ```
 
-Supported actions: `leave_unresolved` (the template default), `replace_reference`,
+Action vocabulary: `leave_unresolved` (the template default, and the only
+action this package can produce unattended), `replace_reference`,
 `remove_reference` (structured LoRA/embedding entries only), and
 `clear_optional_reference` (only fields in an explicit optional-field
-allowlist — a required base checkpoint can never be cleared this way).
+allowlist — a required base checkpoint could never be cleared this way).
+**PR-PACK-120 does not execute any of these actions.** They represent
+proposed owner decisions for a later, separately authorized reconciliation
+package; a generated template with a non-`leave_unresolved` action implies
+no authorization to act on it.
 
-Before any real write: every decision in the batch is validated —
-source file still exists, and (for every action other than
-`leave_unresolved`) `expected_source_sha256` is required to be present, a
-non-empty string, and equal to the source file's current SHA-256 — a
-missing, `null`, blank, or stale digest refuses the decision outright, never
-falling back to an implicit or occurrence-time value. The expected old value
-must still be present at every targeted occurrence, and (for
-`replace_reference`) the proposed replacement must resolve to exactly one
-installed asset of the same kind. One invalid decision refuses the entire
-batch — no partial writes. All backups for a batch complete before the
-first write, one subdirectory per source type (`promptpack`/
-`standalone_preset`) beneath the backup root, so a PromptPack and a
-standalone preset that happen to share a basename can never collide and
-overwrite each other's backup. Each write is atomic
-(temp-file-then-`os.replace`).
+`validate_decision` checks, read-only: the triage item and every referenced
+occurrence still exist; for any action other than `leave_unresolved`,
+`expected_source_sha256` is present, a non-empty string, and equal to the
+source file's *current* SHA-256 (missing/`null`/blank/stale all reject);
+the expected old value is still present at every targeted occurrence; for
+`replace_reference`, the proposed replacement resolves to exactly one
+installed asset of the same kind; for `clear_optional_reference`, the
+targeted field is in the optional-clearable allowlist. `validate_batch`
+runs this over every decision in a file and returns one result per
+decision. Neither function opens a source file for anything but reading,
+and neither ever writes, backs up, or transforms one.
 
-`remove_reference` on a structured LoRA/embedding list is verified at the
-list level rather than by a flattened key-prefix match: removing an entry
-shifts every later entry's index, so the guard instead asserts that the
-post-removal list equals the pre-removal list with exactly the selected
-index (or indexes — multiple selected removals from one list, within one
-decision or across several, are always applied highest-index-first so an
-earlier removal never invalidates a later one's recorded index) excluded,
-proving remaining order/content is untouched and no sibling entry was
-altered. Every other action's semantic-diff guard is unchanged: it compares
-the full document before/after and refuses any change outside the
-explicitly authorized occurrence(s). Any failure restores every file already
-changed in that operation from its byte-exact backup and re-verifies the
-restored SHA-256.
-
-A source file whose top-level JSON decodes but is not an object (a list,
-string, number, `null`, etc.) is treated as the same stale/unavailable
-condition as a missing or corrupt source — it becomes an explicit
-unmapped/stale triage item and scanning continues with the remaining
-sources, rather than crashing on the first unexpected shape. It is never
-coerced to `{}`, which would erase the distinction from a genuinely empty
-object.
-
-`scan`/`apply`'s `--asset-cache` is optional; when `--webui-root` is given
-without it, an audit-owned cache path is derived beside the requested output
-(`<out-dir>/asset_registry_triage_cache.json` for `scan`, similarly beside
-the decisions file for `apply`) rather than falling back to
+`scan`'s `--asset-cache` is optional; when `--webui-root` is given without
+it, an audit-owned cache path is derived beside the requested output
+(`<out-dir>/asset_registry_triage_cache.json`) rather than falling back to
 `AssetRegistry`'s own default, which is StableNew's normal production Asset
 Registry cache. This preserves the audit-isolation guarantee: the triage
 workflow never reads from or writes to the cache the running application
 itself uses.
+
+## Deferred: reconciliation execution
+
+An earlier revision of this tool included a generic `apply` command
+(fingerprint-guarded, all-or-nothing, atomic-write, backup/rollback
+mutation engine for the four actions above) and was validated against
+disposable test fixtures only — it was never invoked against real
+PromptPack/preset data. A second review pass identified four further
+credible issues in that engine (decisions-file triage-report fingerprint
+not enforced; certain complex interleaved-removal orderings could still
+target a shifted index; dry-run did not exercise the exact same
+transformation/semantic-diff path as a real write; source SHA was not
+rechecked immediately before backup/write, leaving a TOCTOU window). None
+of these affected the read-only scan evidence itself. Rather than carry
+that risk inside PR-PACK-120 before any actual reconciliation decision has
+been made, the owner scoped this package down to read-only triage: the
+mutation engine, its tests, and its CLI `apply` subcommand were removed in
+full. A future, separately authorized reconciliation package will
+revalidate the operator's selected decisions against the sources' then-current
+state before executing anything — it does not need to inherit today's
+draft engine, since no real data has ever been written by it.
 
 ## Real read-only triage result
 
@@ -172,9 +190,9 @@ census total: 1,010 findings; unchanged since `PR-PACK-110`):
   these same sources, confirming this triage's context matches the accepted
   census.
 - Source-mutation verification: a full 60-file fingerprint (all PromptPacks
-  + all standalone presets) was captured before and after the apply-safety
-  repair's rerun and confirmed byte-identical throughout, reproducing the
-  same 24/24/16/20/4/134/4/0 counts above.
+  + all standalone presets) was captured before and after the final
+  scope-reduction rerun and confirmed byte-identical throughout,
+  reproducing the same 24/24/16/20/4/134/4/0 counts above.
 
 ## Explicit non-scope
 
@@ -183,7 +201,8 @@ no model download, no CivitAI/network lookup, no asset rename/move/delete,
 no Asset Registry or compatibility-taxonomy change, no repair of
 `family_unknown`/`family_evidence_conflicting`, no naming-hygiene cleanup, no
 PromptPack prompt/matrix change, no ADetailer stage-sync touch, no GUI/warning
-UX, no recommendation engine. The three existing `resolved_duplicate_bytes`
+UX, no recommendation engine, **no reconciliation execution of any kind**
+(see "Deferred" above). The three existing `resolved_duplicate_bytes`
 findings and the four deferred census-tool robustness items from
 `WP-PACK-AUDIT-100` remain untouched.
 
@@ -194,18 +213,22 @@ filtering (excluding `resolved_duplicate_bytes`/`ambiguous_same_name`),
 checkpoint/VAE/refiner occurrence mapping at both nested and accepted
 top-level aliases, LoRA occurrence with weight preservation, positive/negative
 embedding occurrences, multi-slot multi-occurrence mapping, unmapped/stale
-recording (never guessing), placeholder classification (including that an
+recording for an unfindable value, a missing source, and a source whose
+top-level JSON decodes but is not an object (proving a co-scanned valid
+source is unaffected), placeholder classification (including that an
 ordinary unusual filename is never misclassified), same-kind-only
 deterministic candidate evidence with attached family context, the
-decision template's non-mutating default, every replacement guard
-(nonexistent/ambiguous/wrong-kind candidate), source-SHA and expected-old-value
-staleness guards, the base-checkpoint clear rejection, dry-run mutation scope
-for replace/remove/clear, all-or-nothing batch validation, a simulated backup
-failure and a simulated mid-write failure both resulting in zero/rolled-back
-writes, a semantic-diff guard catching an unauthorized change, scan's
-zero-mutation guarantee, absence of any network/runtime import, and
-deterministic output for unchanged inputs. All fixtures use temporary roots;
-no real user PromptPack is used as a test fixture.
+decision template's non-mutating default and its source-fingerprint/old-value
+evidence, every read-only validation guard (nonexistent/ambiguous/wrong-kind
+replacement candidate, source-SHA and expected-old-value staleness including
+a missing/`null`/blank/wrong/correct fingerprint, the base-checkpoint clear
+rejection, an optional-scalar clear passing validation, batch validation
+returning one result per decision), `scan` deriving an audit-owned Asset
+Registry cache instead of the production default, scan's zero-mutation
+guarantee, absence of any network/runtime import, that the module and its
+CLI expose no source-write pathway (no `apply` subcommand, no mutation
+functions), and deterministic output for unchanged inputs. All fixtures use
+temporary roots; no real user PromptPack is used as a test fixture.
 
 ## Controller Surface Assessment
 

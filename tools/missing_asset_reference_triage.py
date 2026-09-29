@@ -1,34 +1,43 @@
-"""Offline, read-only triage workflow for WP-PACK-AUDIT-100's missing
-file-backed asset findings (PR-PACK-120).
+"""Offline, read-only operator triage and reconciliation-decision
+preparation for WP-PACK-AUDIT-100's missing file-backed asset findings
+(PR-PACK-120).
 
 `scan` re-opens each source that produced a `missing_file_backed_asset`
 finding, read-only, and maps the aggregated census finding back to every
 exact raw persisted JSON occurrence that actually carries the missing value.
 It attaches deterministic, same-kind candidate evidence from the Asset
-Registry and Asset-120 compatibility context, and produces a decision
-template the operator can fill in -- this module never decides anything.
+Registry and Asset-120 compatibility context, and produces a decisions
+template the operator can fill in.
 
-`apply` executes an operator-approved decisions file, but only when given
-`--apply`; the default is a dry run. Every decision is validated (source
-still exists, SHA-256 unchanged, expected old value still present, and for
-`replace_reference` that the candidate resolves uniquely to the same asset
-kind) before any file is touched, all backups are taken before the first
-write, and any failure restores every file already changed in that batch.
+The decisions template's action vocabulary (`leave_unresolved`,
+`replace_reference`, `remove_reference`, `clear_optional_reference`)
+describes proposed owner decisions for a *later*, separately authorized
+reconciliation package -- this module does not execute them. Every item
+defaults to `leave_unresolved`; producing a template implies no
+authorization to act. `validate_decision`/`validate_batch` check only
+static, read-only properties of a filled-in decisions file (that the
+triage item/occurrence still exists, the action is known, a proposed
+replacement resolves to exactly one installed same-kind asset, and the
+source fingerprint/expected old value are still current) so an operator
+can sanity-check a draft before it is ever handed to a future mutation
+package; they never write, back up, or transform a source file.
 
-No network. No A1111/Comfy/GPU/model execution. No PromptPack/preset/asset
-mutation from `scan`, ever.
+There is no code path in this module that writes to a PromptPack or preset
+source. Its only filesystem writes are its own explicit output artifacts
+(the triage report, its markdown summary, the decisions template) and an
+audit-owned Asset Registry cache -- never the application's normal
+production cache.
+
+No network. No A1111/Comfy/GPU/model execution.
 """
 
 from __future__ import annotations
 
 import argparse
-import copy
 import difflib
 import hashlib
 import json
-import os
 import sys
-import tempfile
 from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -574,7 +583,9 @@ def build_decisions_template(report: TriageReport, *, source_sha: str, triage_re
 
 
 # ---------------------------------------------------------------------------
-# Decision validation and apply (never invoked against real data in this PR)
+# Read-only decision validation (static checks only -- never writes, backs
+# up, or transforms a source file; execution belongs to a later,
+# separately authorized reconciliation package)
 # ---------------------------------------------------------------------------
 
 
@@ -709,312 +720,6 @@ def validate_batch(
     ]
 
 
-def _flatten(obj: Any, prefix: str = "") -> dict[str, Any]:
-    if isinstance(obj, Mapping):
-        out: dict[str, Any] = {}
-        for k, v in obj.items():
-            out.update(_flatten(v, f"{prefix}.{k}" if prefix else str(k)))
-        return out
-    if isinstance(obj, list):
-        out = {}
-        for i, v in enumerate(obj):
-            out.update(_flatten(v, f"{prefix}[{i}]"))
-        return out
-    return {prefix: obj}
-
-
-def _apply_one_decision(document: dict[str, Any], item: TriageItem, decision: Mapping[str, Any]) -> dict[str, Any]:
-    """Return a new document with only this decision's authorized change applied."""
-
-    new_doc = copy.deepcopy(document)
-    action = decision["action"]
-    occurrence_ids = set(decision.get("occurrence_ids") or [])
-    target_occurrences = [o for o in item.occurrences if o.occurrence_id in occurrence_ids]
-
-    if action == "remove_reference":
-        # Highest list index first: removing a later entry never shifts an
-        # earlier one, so multiple selected removals from the same list
-        # (or from different lists mixed in one decision) are always safe
-        # in this order.
-        target_occurrences = sorted(
-            target_occurrences, key=lambda o: _list_removal_target(o)[1], reverse=True
-        )
-
-    for occ in target_occurrences:
-        path_parts = _pointer_to_parts(occ.pointer)
-        if action == "replace_reference":
-            if item.asset_kind == "embedding":
-                _set_at_pointer(new_doc, path_parts, _replace_embedding_name(occ.raw_value, decision["replacement"]))
-            else:
-                _set_at_pointer(new_doc, path_parts, decision["replacement"])
-        elif action == "clear_optional_reference":
-            _set_at_pointer(new_doc, path_parts, "")
-        elif action == "remove_reference":
-            _remove_entry_at_pointer(new_doc, path_parts, item.asset_kind)
-    return new_doc
-
-
-def _authorized_prefix(occ: ReferenceOccurrence, action: str) -> str:
-    """The semantic-diff prefix this occurrence's decision authorizes.
-
-    Only called for non-removal actions (`replace_reference`,
-    `clear_optional_reference`) -- `remove_reference` is verified separately
-    via the dedicated list-level check in `apply_batch`, since removing an
-    entry shifts every later entry's flattened index and a bare pointer
-    prefix cannot express that. Every non-removal action only ever touches
-    exactly its own pointer (or, for a dict-shaped embedding entry, its own
-    sub-keys, which already share that same prefix).
-    """
-
-    return occ.pointer
-
-
-def _replace_embedding_name(original_entry: Any, replacement: str) -> Any:
-    """Swap only the name component of an embedding entry, preserving its
-    original shape/weight rather than discarding them."""
-
-    if isinstance(original_entry, Mapping):
-        updated = dict(original_entry)
-        updated["name"] = replacement
-        return updated
-    if isinstance(original_entry, (list, tuple)) and len(original_entry) >= 2:
-        return [replacement, original_entry[1]]
-    return replacement
-
-
-def _pointer_to_parts(pointer: str) -> list[str | int]:
-    parts: list[str | int] = []
-    for chunk in pointer.replace("]", "").split("."):
-        while "[" in chunk:
-            name, _, rest = chunk.partition("[")
-            if name:
-                parts.append(name)
-            idx, _, chunk = rest.partition("[")
-            parts.append(int(idx))
-            chunk = "[" + chunk if chunk else ""
-        if chunk and not chunk.startswith("["):
-            parts.append(chunk)
-    return parts
-
-
-def _navigate(doc: Any, parts: list[str | int]) -> tuple[Any, str | int]:
-    node = doc
-    for part in parts[:-1]:
-        node = node[part]
-    return node, parts[-1]
-
-
-def _get_at_parts(doc: Any, parts: list[str | int]) -> Any:
-    node = doc
-    for part in parts:
-        node = node[part]
-    return node
-
-
-def _parts_to_prefix(parts: list[str | int]) -> str:
-    """Render `parts` in the same dotted/bracketed form `_flatten` uses, so
-    the result can be matched directly against flattened diff keys."""
-
-    out = ""
-    for part in parts:
-        if isinstance(part, int):
-            out += f"[{part}]"
-        else:
-            out += f".{part}" if out else str(part)
-    return out
-
-
-def _list_removal_target(occ: ReferenceOccurrence) -> tuple[list[str | int], int]:
-    """The list-level pointer parts and entry index a `remove_reference`
-    occurrence targets -- two levels up for a LoRA's `[name, weight]` entry,
-    one level up for an embedding entry."""
-
-    parts = _pointer_to_parts(occ.pointer)
-    entry_offset = 2 if occ.asset_kind == "lora" else 1
-    list_parts = parts[:-entry_offset]
-    entry_index = parts[-entry_offset]
-    assert isinstance(entry_index, int)
-    return list_parts, entry_index
-
-
-def _set_at_pointer(doc: dict[str, Any], parts: list[str | int], value: Any) -> None:
-    parent, last = _navigate(doc, parts)
-    parent[last] = value
-
-
-def _remove_entry_at_pointer(doc: dict[str, Any], parts: list[str | int], asset_kind: str) -> None:
-    """Remove the whole structured entry the pointer's name element belongs
-    to, never a partial/malformed entry.
-
-    A LoRA pointer targets the name sub-index within its [name, weight]
-    entry (e.g. `...loras[1][0]`), so the entry itself is two levels up.
-    An embedding pointer targets the entry directly (e.g.
-    `...positive_embeddings[1]`), so the entry is one level up.
-    """
-
-    entry_offset = 2 if asset_kind == "lora" else 1
-    list_parts = parts[:-entry_offset]
-    entry_index = parts[-entry_offset]
-    parent, list_key = _navigate(doc, list_parts)
-    target_list = parent[list_key]
-    if isinstance(target_list, list) and isinstance(entry_index, int) and 0 <= entry_index < len(target_list):
-        del target_list[entry_index]
-
-
-@dataclass(frozen=True)
-class ApplyResult:
-    dry_run: bool
-    applied_triage_item_ids: list[str]
-    skipped: list[ValidationResult]
-    backups: dict[str, str]
-
-
-def apply_batch(
-    decisions: list[dict[str, Any]],
-    report: TriageReport,
-    *,
-    packs_dir: Path,
-    presets_dir: Path | None,
-    registry: AssetRegistry | None,
-    backup_dir: Path,
-    dry_run: bool = True,
-) -> ApplyResult:
-    """All-or-nothing apply. Dry-run by default; real writes require dry_run=False."""
-
-    validations = validate_batch(decisions, report, packs_dir=packs_dir, presets_dir=presets_dir, registry=registry)
-    failures = [v for v in validations if not v.ok]
-    if failures:
-        return ApplyResult(dry_run, [], failures, {})
-
-    actionable = [
-        d for d in decisions if d.get("action", "leave_unresolved") != "leave_unresolved"
-    ]
-    if not actionable:
-        return ApplyResult(dry_run, [], [], {})
-
-    # Group decisions by source file so each file is touched exactly once.
-    by_source: dict[tuple[str, str], list[dict[str, Any]]] = {}
-    for decision in actionable:
-        item = _find_item(report, decision["triage_item_id"])
-        assert item is not None
-        by_source.setdefault((item.source_type, item.source_id), []).append(decision)
-
-    backups: dict[str, str] = {}
-    backup_dir.mkdir(parents=True, exist_ok=True)
-    originals: dict[Path, bytes] = {}
-
-    for source_type, source_id in by_source:
-        _document, path = _load_source_document(source_type, source_id, packs_dir, presets_dir)
-        if path is None:
-            return ApplyResult(dry_run, [], [ValidationResult(source_id, False, "source missing at apply time")], {})
-        original_bytes = path.read_bytes()
-        originals[path] = original_bytes
-        # Namespace by source type (never by absolute path) so a PromptPack
-        # and a standalone preset that happen to share a basename can never
-        # collide and overwrite each other's backup.
-        backup_path = backup_dir / source_type / path.name
-        backup_path.parent.mkdir(parents=True, exist_ok=True)
-        backup_path.write_bytes(original_bytes)
-        if hashlib.sha256(backup_path.read_bytes()).hexdigest() != hashlib.sha256(original_bytes).hexdigest():
-            return ApplyResult(dry_run, [], [ValidationResult(source_id, False, "backup verification failed")], {})
-        backups[str(path)] = str(backup_path)
-
-    if dry_run:
-        return ApplyResult(True, [d["triage_item_id"] for d in actionable], [], backups)
-
-    applied: list[str] = []
-    try:
-        for (source_type, source_id), source_decisions in by_source.items():
-            document, path = _load_source_document(source_type, source_id, packs_dir, presets_dir)
-            assert document is not None and path is not None
-            before_flat = _flatten(document)
-
-            # Non-removal decisions first (they never shift a list index),
-            # then removals ordered by descending target index, so a
-            # decision touching a lower index never runs before one
-            # touching a higher index in the same list.
-            def _sort_key(decision: dict[str, Any]) -> tuple[int, int]:
-                if decision.get("action") != "remove_reference":
-                    return (0, 0)
-                item = _find_item(report, decision["triage_item_id"])
-                assert item is not None
-                occ_ids = set(decision.get("occurrence_ids") or [])
-                indices = [
-                    _list_removal_target(occ)[1] for occ in item.occurrences if occ.occurrence_id in occ_ids
-                ]
-                return (1, -max(indices)) if indices else (1, 0)
-
-            ordered_decisions = sorted(source_decisions, key=_sort_key)
-
-            new_doc = document
-            authorized_pointer_prefixes: set[str] = set()
-            removals_by_list: dict[tuple[str | int, ...], set[int]] = {}
-            pre_removal_doc: dict[str, Any] | None = None
-
-            for decision in ordered_decisions:
-                item = _find_item(report, decision["triage_item_id"])
-                assert item is not None
-                action = decision.get("action", "leave_unresolved")
-                if action == "remove_reference" and pre_removal_doc is None:
-                    pre_removal_doc = copy.deepcopy(new_doc)
-                for occ in item.occurrences:
-                    if occ.occurrence_id not in set(decision.get("occurrence_ids") or []):
-                        continue
-                    if action == "remove_reference":
-                        list_parts, entry_index = _list_removal_target(occ)
-                        removals_by_list.setdefault(tuple(list_parts), set()).add(entry_index)
-                    else:
-                        authorized_pointer_prefixes.add(_authorized_prefix(occ, action))
-                new_doc = _apply_one_decision(new_doc, item, decision)
-
-            after_flat = _flatten(new_doc)
-            all_keys = set(before_flat) | set(after_flat)
-            changed = {k for k in all_keys if before_flat.get(k) != after_flat.get(k)}
-
-            # Removals shift every later entry's flattened index, which the
-            # generic before/after key comparison cannot express as
-            # "authorized". Verify each affected list at the structured
-            # level instead: the post-removal list must equal the
-            # pre-removal list with exactly the selected indexes excluded
-            # -- proving the right entries left, remaining order/content is
-            # untouched, and no sibling field changed -- then exclude only
-            # that list's own keys from the generic guard.
-            list_prefixes: set[str] = set()
-            for list_parts_tuple, removed_indices in removals_by_list.items():
-                list_parts = list(list_parts_tuple)
-                prefix = _parts_to_prefix(list_parts)
-                list_prefixes.add(prefix)
-                assert pre_removal_doc is not None
-                pre_list = _get_at_parts(pre_removal_doc, list_parts)
-                post_list = _get_at_parts(new_doc, list_parts)
-                expected_list = [v for i, v in enumerate(pre_list) if i not in removed_indices]
-                if post_list != expected_list:
-                    raise RuntimeError(f"semantic-diff guard: list removal mismatch at {prefix} in {source_id}")
-
-            changed = {k for k in changed if not any(k == p or k.startswith(p + "[") for p in list_prefixes)}
-            unauthorized = {
-                k for k in changed if not any(k == p or k.startswith(p) for p in authorized_pointer_prefixes)
-            }
-            if unauthorized:
-                raise RuntimeError(f"semantic-diff guard: unauthorized change(s) {unauthorized} in {source_id}")
-
-            tmp_fd, tmp_path = tempfile.mkstemp(dir=str(path.parent), prefix=f".{path.stem}.", suffix=".tmp")
-            with os.fdopen(tmp_fd, "w", encoding="utf-8") as handle:
-                json.dump(new_doc, handle, indent=2, ensure_ascii=False)
-            os.replace(tmp_path, path)
-            applied.extend(d["triage_item_id"] for d in source_decisions)
-    except Exception:
-        for path, original_bytes in originals.items():
-            path.write_bytes(original_bytes)
-            if hashlib.sha256(path.read_bytes()).hexdigest() != hashlib.sha256(original_bytes).hexdigest():
-                raise RuntimeError(f"rollback verification failed for {path}") from None
-        return ApplyResult(
-            dry_run, [], [ValidationResult("batch", False, "apply failed; all files restored from backup")], backups
-        )
-
-    return ApplyResult(dry_run, applied, [], backups)
-
-
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
@@ -1070,52 +775,6 @@ def _cmd_scan(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_apply(args: argparse.Namespace) -> int:
-    report_data = json.loads(Path(args.triage).read_text(encoding="utf-8"))
-    items = tuple(
-        TriageItem(
-            triage_item_id=d["triage_item_id"],
-            census_finding_identity=d["census_finding_identity"],
-            source_type=d["source_type"],
-            source_id=d["source_id"],
-            asset_kind=d["asset_kind"],
-            missing_reference_name=d["missing_reference_name"],
-            occurrences=tuple(
-                ReferenceOccurrence(**{k: v for k, v in o.items() if k in ReferenceOccurrence.__dataclass_fields__})
-                for o in d.get("occurrences", [])
-            ),
-            is_placeholder=d["is_placeholder"],
-            candidates=(),
-            unmapped=d.get("unmapped", False),
-        )
-        for d in report_data.get("triage_items", [])
-    )
-    report = TriageReport(
-        report_data["schema_version"], report_data.get("source_sha", ""), report_data["census_finding_count"], items
-    )
-    decisions = json.loads(Path(args.decisions).read_text(encoding="utf-8")).get("decisions", [])
-
-    registry: AssetRegistry | None = None
-    if args.webui_root:
-        cache_path = _resolve_audit_asset_cache(args.asset_cache, Path(args.decisions))
-        registry = AssetRegistry(args.webui_root, cache_path=cache_path)
-        registry.refresh()
-
-    result = apply_batch(
-        decisions,
-        report,
-        packs_dir=Path(args.packs_dir),
-        presets_dir=Path(args.presets_dir) if args.presets_dir else None,
-        registry=registry,
-        backup_dir=Path(args.backup_dir),
-        dry_run=not args.apply,
-    )
-    print(f"dry_run={result.dry_run} applied={result.applied_triage_item_ids} skipped={len(result.skipped)}")
-    for skip in result.skipped:
-        print(f"  REFUSED {skip.triage_item_id}: {skip.reason}")
-    return 0 if not result.skipped else 1
-
-
 def _build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -1130,17 +789,6 @@ def _build_arg_parser() -> argparse.ArgumentParser:
     scan.add_argument("--summary-out", default=None)
     scan.add_argument("--decisions-template", default=None)
     scan.set_defaults(func=_cmd_scan)
-
-    apply_cmd = sub.add_parser("apply")
-    apply_cmd.add_argument("--triage", required=True)
-    apply_cmd.add_argument("--decisions", required=True)
-    apply_cmd.add_argument("--packs-dir", required=True)
-    apply_cmd.add_argument("--presets-dir", default=None)
-    apply_cmd.add_argument("--webui-root", default=None)
-    apply_cmd.add_argument("--asset-cache", default=None)
-    apply_cmd.add_argument("--backup-dir", required=True)
-    apply_cmd.add_argument("--apply", action="store_true", help="Actually write changes (default: dry run).")
-    apply_cmd.set_defaults(func=_cmd_apply)
 
     return parser
 

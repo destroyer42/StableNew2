@@ -841,22 +841,28 @@ Recently landed under this posture:
   now gone, with zero new findings (total census findings 1,020 -> 1,010).
   Details: `docs/Subsystems/PromptPacks/PR-PACK-110_ADetailer_Stage_Enablement_Persistence_Repair.md`.
 
-- `PR-PACK-120 — Missing Asset Reference Triage & Explicit Reconciliation
-  Workflow` is **COMPLETE**, pending merge: new offline, read-only
+- `PR-PACK-120 — Missing Asset Reference Triage & Reconciliation-Decision
+  Preparation` is **COMPLETE**: new offline, read-only
   `tools/missing_asset_reference_triage.py` re-opened all 24 real
   `missing_file_backed_asset` sources and mapped each aggregated census
   finding back to its exact raw JSON occurrence(s) -- 24 triage items across
   16 PromptPacks, 134 total occurrences, 0 unmapped/stale, 4 literal
   `"None"`-placeholder items -- with same-asset-kind-only deterministic
-  candidate evidence and Asset-120 family context attached, but no
-  reconciliation decision made. A fingerprint-guarded, all-or-nothing,
-  atomic-with-rollback dry-run/apply contract was implemented and tested
-  against disposable fixtures only; `apply` was never invoked against real
-  data. Details:
+  candidate evidence and Asset-120 family context attached, and a
+  `decisions.template.json` defaulting every item to `leave_unresolved`, but
+  no reconciliation decision made. The package is deliberately scoped to
+  read-only triage: an earlier draft apply/backup/rollback mutation engine
+  was removed in full before merge (never invoked against real data; a
+  second review pass found further edge cases in it that had no bearing on
+  the accepted scan evidence). `validate_decision`/`validate_batch` remain as
+  a read-only sanity-check of a draft decisions file, but nothing in this
+  module writes a source. Details:
   `docs/Subsystems/PromptPacks/PR-PACK-120_Missing_Asset_Reference_Triage.md`.
   No PromptPack/preset/asset was modified; no automatic reconciliation
   occurred. The next step is the owner's explicit reconciliation decision
-  for each of the 24 triage items (`leave_unresolved` by default).
+  for each of the 24 triage items (`leave_unresolved` by default), followed
+  by a bounded, separately authorized reconciliation package to execute the
+  selected actions.
 
 Deliberate real-model inference and platform/hardware changes remain
 serialized and separately owner-authorized regardless of which package is
