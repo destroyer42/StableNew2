@@ -1,13 +1,20 @@
 # PR-PACK-130 — Approved Missing-Reference Reconciliation
 
-Status: implemented and executed against real user data, with explicit
-owner authorization for these exact actions. Merge not yet performed;
-stopped for owner review per the authorizing task.
+Status: **complete and closed**. This was a one-time, owner-authorized
+real-data maintenance reconciliation, not a permanent product subsystem.
+A temporary, purpose-built utility was written, tested, and run locally
+to perform and verify the approved operation exactly once; that utility
+was then deliberately **not retained** as a permanent repository
+mutation surface, since carrying a reusable source-write engine after the
+one-time job it existed for is complete adds risk without further product
+value. **No code path capable of writing a PromptPack or preset source
+remains from this package.** This document is the durable record of what
+was decided and what happened.
 
 ## Outcome
 
-`tools/pack130_approved_reference_reconciliation.py` executed the
-owner-approved subset of PR-PACK-120's 24 missing-reference triage items:
+A temporary local utility (since removed) executed the owner-approved
+subset of PR-PACK-120's 24 missing-reference triage items:
 
 | Missing reference | Owner determination | Action | Items | Occurrences |
 |---|---|---|---|---|
@@ -38,69 +45,56 @@ removal (not replacement) was the right call.
 
 ## Why checkpoint/model selection was not changed
 
-This package's policy surface has exactly three actions —
-`remove_lora`, `clear_optional_refiner`, and `leave_unresolved` — and no
-fourth "replace" action exists anywhere in it (`tools/
-pack130_approved_reference_reconciliation.py`'s `_POLICY` mapping is the
-entire decision surface). A structured LoRA-list removal or a scalar
-refiner-checkpoint clear can never touch `preset_data`'s (or nested
-`txt2img`'s) `model`/`model_name`/`sd_model`/`vae` fields — the semantic-diff
-guard proves this for every one of the 15 real writes, refusing the whole
-batch if any unauthorized key had changed.
+The temporary utility's policy surface had exactly three actions —
+remove a named structured LoRA entry, clear the literal `"None"` refiner
+placeholder, or leave a reference unresolved — and no "replace" action
+existed anywhere in it. A structured LoRA-list removal or a scalar
+refiner-checkpoint clear could never touch `preset_data`'s (or nested
+`txt2img`'s) `model`/`model_name`/`sd_model`/`vae` fields — a semantic-diff
+guard proved this for every one of the 15 real writes, and would have
+refused the whole batch had any unauthorized key changed.
 
-## Reconciliation contract
+## Reconciliation contract (as executed; the utility itself no longer exists)
 
-This is a **purpose-built, one-time tool**, not a rebuild of PR-PACK-120's
-removed generic apply engine. It recognizes exactly the four
-`(asset_kind, missing_reference_name)` keys in the table above; anything
-else (an unrecognized name, a non-`promptpack` source, an unmapped item, an
-unexpected occurrence shape, more than one refiner-clear target per source,
-a refiner value that isn't the exact literal `"None"`) makes the **entire
-batch** refuse — no fallback, no fuzzy matching, no partial action.
+The temporary utility was purpose-built and one-time — not a rebuild of
+PR-PACK-120's removed generic apply engine, and not carried forward as one
+either. It recognized exactly the four `(asset_kind, missing_reference_name)`
+keys in the table above; anything else (an unrecognized name, a
+non-`promptpack` source, an unmapped item, an unexpected occurrence shape,
+more than one refiner-clear target per source, a refiner value that wasn't
+the exact literal `"None"`) would have made the entire batch refuse — no
+fallback, no fuzzy matching, no partial action.
 
-Before any real write:
+Before the one real write, it:
 
-- `build_plan` re-validates the fresh triage evidence against the exact
-  owner-approved shape (24 items; 3/13, 8/54, 4/4, 9/63 items/occurrences
-  per name; 15 actionable sources; 71 total occurrence actions) and
-  refuses if the current data has drifted from what the owner reviewed.
-- `preflight_check` re-reads every actionable source, confirms its current
-  SHA-256 still matches the triage evidence, confirms the exact old value
-  is still present at every targeted pointer, and — for every refiner
-  clear — confirms the refiner is not explicitly enabled
+- re-validated the fresh triage evidence against the exact owner-approved
+  shape (24 items; 3/13, 8/54, 4/4, 9/63 items/occurrences per name; 15
+  actionable sources; 71 total occurrence actions), refusing if the data
+  had drifted from what the owner reviewed;
+- re-read every actionable source, confirmed its current SHA-256 still
+  matched the triage evidence, confirmed the exact old value was still
+  present at every targeted pointer, and — for every refiner clear —
+  confirmed the refiner was not explicitly enabled
   (`refiner_enabled`/`use_refiner`, the confirmed production alias
-  contract) at that source before permitting the clear.
-- Every actionable source is backed up (byte-exact, SHA-verified) before
-  the first write, into `C:\Users\rob\AppData\Local\StableNew\Backups\
-  PR-PACK-130\<run-id>\promptpack\` — outside PromptPack discovery, never
-  committed.
-- Immediately before writing, `preflight_check` runs again (TOCTOU
-  protection): if any source changed after its backup was taken, the batch
-  aborts before writing that source.
-- Each source's transformation is applied to an in-memory copy and proven,
-  via a full before/after semantic diff, to have changed *only* the
-  authorized LoRA-list removal(s) (verified at the structured list level:
-  the post-removal list must equal the pre-removal list with exactly the
-  approved indexes excluded, applied highest-index-first) and/or the one
-  authorized scalar clear — anything else aborts the whole batch.
-- Writes are atomic (temp-file + `os.replace`).
+  contract) at that source before permitting the clear;
+- backed up every actionable source byte-exact and SHA-verified before the
+  first write, into a local, non-repository backup directory (outside
+  PromptPack discovery, never committed);
+- re-checked freshness immediately before writing (TOCTOU protection);
+- applied each source's transformation to an in-memory copy and proved,
+  via a full before/after semantic diff, that only the authorized
+  LoRA-list removal(s) and/or the one authorized scalar clear had changed;
+- wrote atomically (temp-file + `os.replace`);
+- scoped rollback to only the sources it itself had successfully replaced
+  (re-verifying a source's bytes before restoring it, so a concurrent
+  external edit to an unwritten or already-written source would be
+  preserved rather than overwritten), and handled operator interruption
+  (Ctrl-C) the same way.
 
-**Rollback contract.** Rollback tracks only the sources this process
-itself successfully, atomically replaced — never a source that was merely
-backed up, loaded, or in the middle of being transformed. A source the
-tool never got as far as writing is left exactly as it was found (its own
-concurrent edit, if any, is not overwritten, and it is never "restored"
-from a backup it didn't need). Before restoring a successfully-replaced
-source, rollback re-reads its current bytes and confirms they still equal
-the bytes this run itself wrote; if something else has modified that
-source in the meantime, rollback refuses to overwrite that newer external
-edit, preserves it, and raises `RollbackConflict` (identifying the
-affected source, with the triggering failure chained as its cause) rather
-than silently claiming a clean rollback. The mutation loop catches
-`BaseException`, not just `Exception`, so an operator interruption
-(Ctrl-C / `KeyboardInterrupt`) after one or more successful writes still
-triggers this same scoped rollback — verifying every restored source's
-SHA-256 — before the original `KeyboardInterrupt` is re-raised unmodified.
+These properties were exercised by the utility's own test suite (see
+"Tests" below) before the one real run, and by the real run's own
+evidence (see "Real reconciliation result"). They describe what happened,
+not a capability still available in this repository.
 
 ## Real reconciliation result
 
@@ -159,25 +153,26 @@ No replacement of either removed LoRA reference with a checkpoint. No
 checkpoint/model/VAE selection change. No model download, asset
 move/rename, or CivitAI/network lookup. No inference or action of any kind
 on `DreamyStyle_xl`. No clearing of any non-`"None"` refiner value. No edit
-to any standalone preset or legacy text pack (this package's actionable
-scope is `source_type=promptpack` canonical JSON only). No generic
-mutation engine (PR-PACK-120's removed apply engine was not rebuilt; this
-tool recognizes only the four fixed policy keys above). No PR-PACK-120
-scan-behavior change. No image generation, A1111/Comfy process, or GPU
-use.
+to any standalone preset or legacy text pack (the actionable scope was
+`source_type=promptpack` canonical JSON only). No generic mutation engine
+was built or retained (PR-PACK-120's removed apply engine was not rebuilt,
+and this package's own temporary utility was itself removed once its
+one-time job was done). No PR-PACK-120 scan-behavior change. No image
+generation, A1111/Comfy process, or GPU use.
 
-## Tests
+## Tests (exercised before removal)
 
-`tests/tools/test_pack130_approved_reference_reconciliation.py` (41 tests,
-no real PromptPack used as a fixture) covers: exact removal of both
-approved LoRA names; unrelated LoRA and weight survival; the real-world
-`DreamyStyle_xl`-beside-`babesByStableYogiPony_xlV4` overlap pattern;
-first/middle/multi-slot/multi-occurrence removal with highest-index-first
-ordering; refusal for any unrecognized name, non-`promptpack` source type,
-unmapped item, or non-literal refiner value; the refiner-enabled safety
-stop; that `DreamyStyle_xl` is recognized as leave-only and that no
-`replace` action exists anywhere in the policy surface; that one source
-with multiple occurrences is grouped once, never duplicated; stale-SHA and
+Before the one real run, the temporary utility's own test suite (41 tests,
+no real PromptPack used as a fixture, since removed along with the utility)
+covered: exact removal of both approved LoRA names; unrelated LoRA and
+weight survival; the real-world `DreamyStyle_xl`-beside-
+`babesByStableYogiPony_xlV4` overlap pattern; first/middle/multi-slot/
+multi-occurrence removal with highest-index-first ordering; refusal for
+any unrecognized name, non-`promptpack` source type, unmapped item, or
+non-literal refiner value; the refiner-enabled safety stop; that
+`DreamyStyle_xl` was recognized as leave-only and that no `replace` action
+existed anywhere in the policy surface; that one source with multiple
+occurrences was grouped once, never duplicated; stale-SHA and
 missing-old-value preflight refusals; a simulated concurrent edit between
 backup and write causing refusal without touching either file (TOCTOU);
 backup-hash-mismatch causing zero writes; a simulated mid-write failure
@@ -187,18 +182,23 @@ setting tamper; unknown extension fields surviving; dry-run performing
 zero writes; a successful apply changing only the approved fields; a
 re-run against an already-reconciled fixture refusing safely; a full
 owner-approved-shape integration test (24 items, exact 3/13/8/54/4/4/9/63
-breakdown, 15 actionable sources, 71 actions) through `build_plan` →
-`preflight_check` → dry-run → real apply, plus that same shape refusing
-outright if any count drifts; and the rollback-scoping contract above: a
-three-source scenario where a concurrent edit lands on an as-yet-unwritten
-source and that source retains the edit exactly (never restored merely
-because it was backed up) while an already-written sibling is rolled back
-byte-exact; a failure before any successful write restoring nothing; a
-`KeyboardInterrupt` after one successful write rolling that one write back
-and re-raising the original interrupt unmodified; and a second,
-independent edit landing on an already-written source before rollback can
-run, which `RollbackConflict` (chaining the triggering failure) reports
-rather than silently overwriting.
+breakdown, 15 actionable sources, 71 actions) through plan-build →
+preflight → dry-run → real apply, plus that same shape refusing outright
+if any count drifted; and a rollback-scoping contract added in a follow-up
+repair pass: a three-source scenario where a concurrent edit landed on an
+as-yet-unwritten source and that source retained the edit exactly (never
+restored merely because it was backed up) while an already-written
+sibling rolled back byte-exact; a failure before any successful write
+restoring nothing; a `KeyboardInterrupt` after one successful write
+rolling that one write back and re-raising the original interrupt
+unmodified; and a second, independent edit landing on an already-written
+source before rollback could run, reported as a rollback conflict rather
+than silently overwritten.
+
+This evidence, together with the real run's own results below, is the
+basis for accepting the reconciliation as correctly performed. It is
+historical: the code that produced it is no longer part of this
+repository.
 
 ## Controller Surface Assessment
 

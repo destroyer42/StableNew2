@@ -78,8 +78,6 @@ desktop.ini
 /data/asset_census/
 /data/promptpack_quality_census/
 /data/missing_asset_triage/
-/data/pack130_reconciliation/
-/data/pack130_pre_fingerprint.json
 tools/last_change.diff
 scripts/snapshots/
 

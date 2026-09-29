@@ -453,7 +453,9 @@ checkpoint/model identities mistakenly recorded as LoRAs, and cleared 4
 literal `"None"` refiner placeholders, across 15 PromptPack sources.
 `DreamyStyle_xl` (9 items, 63 occurrences) was deliberately left
 unresolved. `missing_file_backed_asset` moved 24 -> 9; census total 1,010
--> 995. See
+-> 995. Once verified, the one-time tool and its tests were removed from
+the repository -- no source-write capability remains from this package.
+See
 `docs/Subsystems/PromptPacks/PR-PACK-130_Approved_Missing_Reference_Reconciliation.md`.
 
 ### Product Quality & Deterministic Engineering (backlog category)
