@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import time
@@ -69,7 +70,9 @@ JOBS = (
     ),
 )
 _ANIMATE2_SUBJECT = "A young woman in a navy athletic top, navy leggings and white sneakers"
-_DRIVING_CLIP = r"C:\Users\rob\qual\vid184\env\inputs\B_locomotion_driving_39f_candidate.mp4"
+# Machine-local driving clip for the driving-video job; when unset that job is refused at admission
+# ("needs a driving video").
+_DRIVING_CLIP = os.environ.get("STABLENEW_VID191_DRIVING_CLIP", "")
 # Per suite: (label, workflow_id, version, frames, seed, prompt, driving video or None).
 SUITES: dict[str, tuple[tuple[Any, ...], ...]] = {
     "ti2v": tuple(

@@ -355,17 +355,23 @@ Updated: 2026-09-29
   them back to back with no manual kill: three fresh owned Comfy PIDs, each released, RAM recovered
   to ~24.5 GB before the next job, all COMPLETED, 81 frames (3.375 s) at ~11.7 GB peak VRAM.
   Wan-Animate-2 experimental exposure on managed ComfyUI is the separately-sequenced next part.
-  `PR-VID-191 — Managed ComfyUI v0.37.0 Runtime & Experimental Wan-Animate-2` is **IMPLEMENTED,
-  pending PR review/merge** (`docs/Subsystems/Video/PR-VID-191_Comfy_v037_Runtime_and_Wan_Animate_2.md`). StableNew's
-  managed Comfy now launches the PR-VID-184R/S-qualified ComfyUI v0.37.0 install (the desktop app's
-  v0.3.65 cannot load Animate-2) with StableNew-owned runtime folders and `--disable-pinned-memory`;
+  `PR-VID-191 — Managed ComfyUI v0.37.0 Runtime & Experimental Wan-Animate-2` is **IMPLEMENTED
+  locally, pending stacked publication** (stacked on PR-VID-190; canonical GitHub CI pending because
+  Actions minutes are unavailable; local Python 3.11/3.12 CI-equivalent checks are green) (`docs/Subsystems/Video/PR-VID-191_Comfy_v037_Runtime_and_Wan_Animate_2.md`). The
+  acceptance runs used the PR-VID-184R/S-qualified ComfyUI v0.37.0 install (the desktop app's
+  v0.3.65 cannot load Animate-2) as a machine-local, uncommitted managed-Comfy configuration with
+  StableNew-owned runtime folders and `--disable-pinned-memory`; tracked `presets/settings.json` is
+  unchanged;
   TI2V-5B re-verified there (3 queued jobs, faster, no host-memory pressure). Two experimental
   Wan-Animate-2 workflows (prompt motion; driving-video motion) are registered from the qualified graph
   and exercised as three queued jobs (41/81/41 frames) with per-job runtime release. Prompt mode
-  produced clean motion; driving-video mode showed a duplicate-figure artifact in its one sample
-  (likely the dropped separate motion prompt). A `LoadVideo` input-preview artifact-selection defect
+  produced clean motion. Driving-video mode is `ANIMATE_2_DRIVING_VIDEO_EXECUTION_PASS /
+  PRODUCT_QUALITY_PARTIAL — DUPLICATE_SUBJECT_ARTIFACT OBSERVED`: the control path executes, but a
+  duplicate subject appeared in its one sample (likely the dropped separate motion prompt), so
+  driving-motion quality is not accepted. A `LoadVideo` input-preview artifact-selection defect
   was found and fixed. Review also added a dispatch-time check that the driving-video file still
-  matches its admission-frozen SHA-256 before any upload. The final v0.37.0 job finished at about
+  matches its admission-frozen SHA-256, so a clip changed after queue admission is rejected before
+  upload and dispatch. The final v0.37.0 job finished at about
   08:33 ET on 2026-09-29; display watchdog reports followed at about 08:42 and 15:02 with no
   evidenced active generation. They do not invalidate the completed clips or establish a Comfy
   cause. Workstation display stability remains unproven, so the desktop ComfyUI upgrade awaits the

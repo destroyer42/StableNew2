@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -41,7 +42,8 @@ from tests.integration.test_pr_vid_120_neutral_video_queue import _build_stack
 from tests.video.test_pr_vid_190_comfy_lifecycle_frame_count import _FakeManager, _no_transition
 from tests.video.test_wan22_experimental_workflow import _driver_probe, _FakeComfy, _stats
 
-QUALIFIED_GRAPH = Path(r"C:\Users\rob\qual\vid184\env\evidence\run5_flat_graph.json")
+# Optional machine-local PR-VID-184 evidence; the parity test skips when it is not provided.
+QUALIFIED_GRAPH = Path(os.environ.get("STABLENEW_VID184_QUALIFIED_GRAPH", "__unset__"))
 MANAGED_COMMAND = ["python.exe", "main.py", "--port", "8000", "--disable-pinned-memory"]
 
 
@@ -171,7 +173,7 @@ def test_graph_keeps_the_qualified_sampling_settings() -> None:
     )
 
 
-@pytest.mark.skipif(not QUALIFIED_GRAPH.is_file(), reason="PR-VID-184 evidence not on this machine")
+@pytest.mark.skipif(not QUALIFIED_GRAPH.is_file(), reason="set STABLENEW_VID184_QUALIFIED_GRAPH to the PR-VID-184 run5 flat graph")
 def test_graph_matches_the_qualified_flat_graph_node_settings() -> None:
     qualified = json.loads(QUALIFIED_GRAPH.read_text(encoding="utf-8"))
     qualified = qualified.get("prompt", qualified)

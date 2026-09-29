@@ -1,9 +1,14 @@
 # PR-VID-191 — Managed ComfyUI v0.37.0 Runtime & Experimental Wan-Animate-2
 
-Status: **implemented; pending PR review/merge; real-hardware results below**. Part 2 of the
-owner-selected PR-VID-190 plan
+Status: **implemented locally; pending stacked publication after PR-VID-190 merges; canonical
+GitHub CI pending (Actions minutes unavailable)**. Part 2 of the owner-selected PR-VID-190 plan
 (stacked on PR-VID-190's owned-runtime release and frame-count contract). Experimental, explicit
-per-job opt-in; native SVD remains the default production video backend.
+per-job opt-in; native SVD remains the default production video backend. Local clean-checkout
+CI-equivalent validation is green on Python 3.11 and 3.12 (see Validation); it is not a GitHub
+verdict.
+
+Driving-video result: `ANIMATE_2_DRIVING_VIDEO_EXECUTION_PASS / PRODUCT_QUALITY_PARTIAL —
+DUPLICATE_SUBJECT_ARTIFACT OBSERVED`. Driving-motion quality is **not** accepted.
 
 ## Why the runtime had to change
 
@@ -16,10 +21,17 @@ Animate), no int8 "convrot" quantized-weight loader for `wan_animate_2_distill_i
 environment. Owner decision: point StableNew's managed Comfy at the proven v0.37.0 install now, and
 upgrade the desktop app to the newest ComfyUI later, once this setup is stable.
 
-## Runtime switch (configuration, owner-authorized)
+## Runtime switch (machine-local configuration, owner-authorized, not committed)
 
-`presets/settings.json` `comfy_command` now launches the v0.37.0 install on the same endpoint
-(`127.0.0.1:8000`) through the unchanged `ComfyProcessManager`:
+The qualification ComfyUI v0.37.0 install is machine-local runtime infrastructure, not a repository
+default: this PR does **not** change `presets/settings.json` (zero diff against PR-VID-190). The
+acceptance runs below used a local, uncommitted `comfy_command` that launched the v0.37.0 install on
+the same endpoint (`127.0.0.1:8000`) through the unchanged `ComfyProcessManager`. To repeat them
+locally, apply an equivalent uncommitted configuration (a local edit of the Engine Settings command,
+or the existing `STABLENEW_COMFY_COMMAND` / `STABLENEW_COMFY_WORKDIR` / `STABLENEW_COMFY_BASE_URL` /
+`STABLENEW_COMFY_AUTOSTART` / `STABLENEW_COMFY_TIMEOUT` overrides read at app startup in
+`src/main.py`). Any such command must keep `--disable-pinned-memory`; the Animate-2 workflows refuse
+to run without it. The configuration used:
 
 - interpreter/entry: `qual\vid184\env\venv\Scripts\python.exe` `qual\vid184\env\comfyui_source\main.py`
 - `--input-directory/--output-directory/--temp-directory/--user-directory` under
@@ -32,7 +44,7 @@ upgrade the desktop app to the newest ComfyUI later, once this setup is stable.
   `clip_vision_h`) were verified byte-identical (sha256 `c3355d30…`, `64a7ef76…`).
 - `--disable-pinned-memory` — the PR-VID-184R/S preferred launch policy, now for every managed job.
 - `comfy_health_total_timeout_seconds` 30 → 90 (v0.37.0 took 22 s to become healthy; margin for
-  cold boots).
+  cold boots) — also local, not committed.
 
 Smoke test through `ComfyProcessManager`: healthy in 22.0 s; `Wan22ImageToVideoLatent` and
 `WanAnimate2ToVideo` present; all six TI2V-5B/Animate-2 files visible to their loaders. The venv
@@ -103,6 +115,19 @@ generation wait.
 
 ## Real Wan-Animate-2 acceptance
 
+### Evidence classification
+
+| Evidence set | Classification | What it proves | What it does not prove |
+| --- | --- | --- | --- |
+| Three TI2V-5B jobs on v0.37.0 | Technical execution PASS | Managed v0.37.0 runtime runs the existing TI2V workflow; per-job release; faster, no host-memory pressure | Anything about Animate-2 |
+| Two Animate-2 prompt-motion clips (A: 41 f, B: 81 f) | Technical execution PASS; visual observations below are agent-only | The prompt-motion spec queues, runs, releases and yields correctly shaped clips through the canonical path; 81 frames fit | Owner-accepted motion quality; the mode was not part of the PR-VID-184 qualification |
+| One Animate-2 driving-video clip (C, first run) | Execution PASS; artifact-selection defect found and fixed | The driving-video input reaches the model and produces a clip | See duplicate-subject result below |
+| Driving-video re-run (7th clip) | `ANIMATE_2_DRIVING_VIDEO_EXECUTION_PASS / PRODUCT_QUALITY_PARTIAL — DUPLICATE_SUBJECT_ARTIFACT OBSERVED` | The control path is technically functional and the artifact-selection fix works | Accepted reference-driven human-motion quality |
+| Windows display incidents (Post-run events) | Separate workstation evidence | Display stability is unresolved | Nothing about any specific generation |
+
+The seven completed clips (three TI2V, three Animate-2, one driving-video re-run) are execution
+evidence and remain valid. Animate-2 is neither declared failed nor declared fully accepted.
+
 Three jobs queued before the first dispatch through the canonical controller → NJR → JobService →
 SQLite → `run_njr` path on the managed v0.37.0 runtime, run back to back, **no manual kill**; same
 neutral full-body reference image; the driving clip is the exact qualified
@@ -131,7 +156,8 @@ Windows later recorded display watchdog `LiveKernelEvent 141` and `1b8` reports 
 followed by an unexpected shutdown at 08:49; a separate `141` report occurred at 15:02. No
 StableNew/Comfy generation is evidenced at either event. These events do not turn the completed jobs
 into failures or establish a Comfy cause; they also do not establish workstation display stability.
-The desktop ComfyUI upgrade remains gated on the owner's stability decision.
+They are recorded separately from the seven completed clips and are not attributed to any one
+generation. The desktop ComfyUI upgrade remains gated on the owner's stability decision.
 
 **Visual observations (agent, not the owner's verdict):**
 
@@ -140,15 +166,18 @@ The desktop ComfyUI upgrade remains gated on the owner's stability decision.
 - **B (prompt, 81 f):** a clear raise-and-lower of both arms during roughly the first 2 s, then
   mostly standing; the prompted turn-and-walk did not occur. No temporal collapse. Motion here is
   concentrated early rather than continuing through the longer clip.
-- **C (driving video, 41 f): duplicate-figure artifact.** A second, near-identical figure appears in
+- **C (driving video, 41 f): `DUPLICATE_SUBJECT_ARTIFACT OBSERVED`.** Execution completed and the
+  driving video demonstrably steered the model, but a second, near-identical figure appears in
   every frame: one performs the driving clip's high-knee drill while another stands beside it. The
   qualified PR-VID-184R/S runs had zero ghost frames. The most likely cause is a deviation from the
   qualified graph made in this package: the qualified graph fed `positive_pose` a separate
   motion-only description (node 612), whereas this spec leaves `positive_pose` unconnected so it
   defaults to the main (appearance/scene) prompt. Other differences are geometry (480×832 here versus
-  the qualified 480×848 derived from the driving clip) and seed. This is one sample; driving-video
-  mode is exposed as experimental with this known issue, and restoring the qualified separate
-  motion prompt is the recommended next step.
+  the qualified 480×848 derived from the driving clip) and seed. This is one sample. Owner
+  interpretation: execution works, product quality is PARTIAL, and reference-driven motion quality
+  is not accepted. Driving-video mode is exposed as experimental with this known limitation. No
+  tuning, duplicate detection, retry or correction is added in this PR; restoring the qualified
+  separate motion prompt is a recommended follow-up.
 
 ## Validation
 
@@ -171,6 +200,14 @@ The desktop ComfyUI upgrade remains gated on the owner's stability decision.
   from this environment; required Python 3.11/3.12 CI remains pending. The repair checks the
   admission-frozen driving-video SHA-256 immediately before any Comfy upload and leaves the
   qualified graph, runtime command, model paths, and existing hardware results unchanged.
+- **Stale driving-video protection.** The admission-frozen SHA-256 is rechecked immediately before
+  any Comfy upload; a clip whose bytes changed after queue admission fails before upload and before
+  `/prompt` dispatch (regression test: source changed after queue admission is refused).
+- **Local CI-equivalent (no GitHub):** the six required CI steps run on clean checkouts of the
+  stacked head on Python 3.11.9 and 3.12.14 — repository completeness, controller surface, Ruff
+  (0.14.9), mypy smoke, collection (3,974 tests) and required smoke (127 passed), clean checkout.
+  Changed tests: 100 passed / 1 skipped (3.11) and 99 passed / 2 skipped (3.12); skips are the local
+  Tk/Tcl installation. This is not the canonical GitHub verdict, which remains pending.
 - GUI: Driving Video field shown/hidden per workflow, state round-trip.
 - Regression vs clean `origin/main`: no new failures in video/controller/services/queue and the video
   queue integration tests.
@@ -178,8 +215,9 @@ The desktop ComfyUI upgrade remains gated on the owner's stability decision.
 ## Next steps (owner decisions)
 
 1. Owner real-world evaluation of both Animate-2 modes through the Video Workflow tab.
-2. Driving-video mode: restore the qualified separate motion prompt (`positive_pose`) and re-check
-   for the duplicate-figure artifact with one run.
+2. Driving-video mode (separate follow-up, not this PR): restore the qualified separate motion
+   prompt (`positive_pose`) and re-check for the duplicate-figure artifact with one run.
+   Documented, non-required hardening: chunked admission hashing; hashing the exact bytes uploaded.
 3. Once this runtime has proven stable in real use: upgrade the desktop ComfyUI app to the newest
    release (the owner does not use it outside StableNew), then re-point and re-verify the managed
    runtime on it, keeping `--disable-pinned-memory` and the StableNew-owned runtime folders.
