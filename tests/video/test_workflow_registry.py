@@ -37,9 +37,12 @@ def test_default_workflow_registry_retains_but_disables_unimplemented_ltx_contra
     )
     assert conditioned.pinned_revision == "catalog:ltx_multiframe_anchor_v1_conditioned@1.0.0"
     assert any(binding.binding_name == "depth_map" for binding in conditioned.input_bindings)
-    assert [spec.workflow_id for spec in registry.list_offerable_specs("comfy")] == [
-        "wan22_ti2v_5b_i2v_v1"
-    ]
+    # The qualified fixed-length revision stays registered for exact replay beside the
+    # PR-VID-190 variable-length revision.
+    assert [
+        (spec.workflow_id, spec.workflow_version)
+        for spec in registry.list_offerable_specs("comfy")
+    ] == [("wan22_ti2v_5b_i2v_v1", "1.0.0"), ("wan22_ti2v_5b_i2v_v1", "1.1.0")]
 
 
 def test_workflow_registry_rejects_duplicate_workflow_versions() -> None:

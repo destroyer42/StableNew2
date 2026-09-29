@@ -210,3 +210,65 @@ def test_video_workflow_tab_submit_serializes_conditioning_payload(tk_root, monk
     assert form_data["depth_input"]["mode"] == "auto"
     assert form_data["camera_intent"]["preset"] == "dolly_in"
     assert form_data["controlnet"]["guidance_end"] == "0.9"
+
+
+class _FrameCountControllerStub(_ControllerStub):
+    """A variable-length workflow (declares a frame-count projection) beside one without."""
+
+    def build_video_workflow_defaults(self) -> dict[str, object]:
+        return {**super().build_video_workflow_defaults(), "workflow_id": "variable_len"}
+
+    def get_video_workflow_specs(self) -> list[dict[str, object]]:
+        return [
+            {
+                "workflow_id": "variable_len",
+                "workflow_version": "1.1.0",
+                "backend_id": "comfy",
+                "display_name": "Variable length",
+                "form_visibility": {"frame_count": True, "seed": True},
+                "frame_count": {
+                    "default": 49,
+                    "fps": 24,
+                    "choices": [
+                        {"frames": 17, "seconds": 0.7},
+                        {"frames": 49, "seconds": 2.0},
+                        {"frames": 81, "seconds": 3.4},
+                    ],
+                },
+            },
+            {
+                "workflow_id": "fixed_len",
+                "workflow_version": "1.0.0",
+                "backend_id": "comfy",
+                "display_name": "Fixed length",
+                "form_visibility": {"frame_count": False, "seed": True},
+                "frame_count": None,
+            },
+        ]
+
+
+@pytest.mark.gui
+def test_frame_count_selector_follows_the_selected_workflows_declared_lengths(tk_root) -> None:
+    tab = VideoWorkflowTabFrameV2(
+        tk_root, app_controller=_FrameCountControllerStub(), app_state=SimpleNamespace()
+    )
+    tab.workflow_var.set("variable_len")
+
+    assert list(tab.frame_count_combo["values"]) == [
+        "17 frames (~0.7 s)",
+        "49 frames (~2.0 s)",
+        "81 frames (~3.4 s)",
+    ]
+    assert tab.frame_count_var.get() == "49 frames (~2.0 s)"  # declared default preselected
+    assert tab.get_video_workflow_state()["frame_count"] == 49
+    tab.frame_count_var.set("81 frames (~3.4 s)")
+    assert tab.get_video_workflow_state()["frame_count"] == 81
+    assert "length=81 frames (~3.4 s)" in tab.effective_settings_var.get()
+
+    tab.workflow_var.set("fixed_len")
+    assert "frame_count" not in tab.get_video_workflow_state()
+    assert tab.frame_count_var.get() == ""
+    assert not tab.frame_count_frame.winfo_ismapped()
+
+    tab.restore_video_workflow_state({"workflow_id": "variable_len", "frame_count": 17})
+    assert tab.get_video_workflow_state()["frame_count"] == 17

@@ -17,6 +17,7 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         _build_ltx_multiframe_anchor_v1(),
         _build_ltx_multiframe_anchor_v1_conditioned(),
         _build_wan22_ti2v_5b_i2v_v1(),
+        _build_wan22_ti2v_5b_i2v_v1_1(),
     )
 
 
@@ -407,10 +408,87 @@ WAN22_DEFAULT_NEGATIVE = (
 )
 
 
+# Frame-length envelope for the variable-length TI2V-5B revision.  Wan's VAE compresses time by
+# 4, so a legal length is 4n+1.  49 is the PR-VID-110 qualified length; the maximum is the
+# longest length accepted on the target workstation in PR-VID-190 real acceptance.  FPS stays
+# fixed at the qualified 24 and is not an operator knob.
+WAN22_FRAME_COUNT_POLICY = {
+    "default": 49,
+    "minimum": 17,
+    "maximum": 81,
+    "step": 4,
+    "offset": 1,
+    "fps": 24,
+}
+# Release the StableNew-owned Comfy after every job so the next queued job starts from a fresh
+# runtime instead of failing resource readiness against a resident one (PR-VID-190).  Only a
+# process StableNew launched and still owns is ever stopped, through ComfyProcessManager.stop().
+WAN22_RUNTIME_POLICY = {"release_owned_runtime_after_job": True}
+
+
 def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
+    """The PR-VID-110 qualified revision, unchanged: fixed 49 frames, runtime left resident.
+    Kept registered so existing jobs replay against their exact pinned graph."""
+
+    return _build_wan22_ti2v_5b_i2v(workflow_version="1.0.0")
+
+
+def _build_wan22_ti2v_5b_i2v_v1_1() -> WorkflowSpec:
+    """Same qualified graph and files; the latent length is the operator's frozen frame count
+    and the owned runtime is released after each job (PR-VID-190)."""
+
+    return _build_wan22_ti2v_5b_i2v(
+        workflow_version="1.1.0",
+        frame_count_policy=WAN22_FRAME_COUNT_POLICY,
+        runtime_policy=WAN22_RUNTIME_POLICY,
+    )
+
+
+def _build_wan22_ti2v_5b_i2v(
+    *,
+    workflow_version: str,
+    frame_count_policy: dict | None = None,
+    runtime_policy: dict | None = None,
+) -> WorkflowSpec:
+    variable_length = frame_count_policy is not None
+    frame_count_bindings = (
+        (
+            WorkflowInputBinding(
+                binding_name="frame_count",
+                source_field="stage_config.frame_count",
+                backend_key="frame_count",
+                description="Generated frame count, frozen at admission (a legal 4n+1 length).",
+            ),
+        )
+        if variable_length
+        else ()
+    )
+    fixed_settings: dict = {
+        "frames": 49,
+        "fps": 24,
+        "steps": 20,
+        "cfg": 5,
+        "sampler": "uni_pc",
+        "scheduler": "simple",
+        "geometry": "source-aware: portrait 480x832; landscape 832x480; square uses portrait",
+        "workflow_identity": "stock ComfyUI Wan2.2 TI2V-5B, catalog-pinned",
+    }
+    extra_defaults: dict = {}
+    governance_notes = (
+        "EXPERIMENTAL: runs only with an explicit per-job opt-in. Qualified in PR-VID-110 "
+        "(CONDITIONAL); qualification-derived resource readiness applies before dispatch."
+    )
+    if variable_length:
+        fixed_settings.pop("frames")
+        extra_defaults["frame_count_policy"] = dict(frame_count_policy)
+    if runtime_policy is not None:
+        extra_defaults["runtime_policy"] = dict(runtime_policy)
+        governance_notes += (
+            " The StableNew-owned ComfyUI is released after every job (PR-VID-190)."
+        )
     return WorkflowSpec(
         workflow_id="wan22_ti2v_5b_i2v_v1",
-        workflow_version="1.0.0",
+        workflow_version=workflow_version,
         backend_id="comfy",
         display_name="Wan2.2 TI2V-5B Prompt-Directed I2V (Experimental)",
         description=(
@@ -458,6 +536,7 @@ def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
                 backend_key="target_height",
                 description="Frozen source-aware target height selected before queue admission.",
             ),
+            *frame_count_bindings,
         ),
         output_bindings=(
             WorkflowOutputBinding(
@@ -494,12 +573,10 @@ def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
             ),
         ),
         governance_state="experimental",
-        pinned_revision="catalog:wan22_ti2v_5b_i2v_v1@1.0.0",
-        governance_notes=(
-            "EXPERIMENTAL: runs only with an explicit per-job opt-in. Qualified in PR-VID-110 "
-            "(CONDITIONAL); qualification-derived resource readiness applies before dispatch."
-        ),
+        pinned_revision=f"catalog:wan22_ti2v_5b_i2v_v1@{workflow_version}",
+        governance_notes=governance_notes,
         backend_defaults={
+            **extra_defaults,
             "workflow_family": "wan22",
             "transport": "local_comfy",
             "output_transport": "comfy_view",
@@ -523,18 +600,7 @@ def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
                 "landscape_target": {"width": 832, "height": 480},
                 "square_orientation": "portrait",
             },
-            "operator_projection": {
-                "fixed_settings": {
-                    "frames": 49,
-                    "fps": 24,
-                    "steps": 20,
-                    "cfg": 5,
-                    "sampler": "uni_pc",
-                    "scheduler": "simple",
-                    "geometry": "source-aware: portrait 480x832; landscape 832x480; square uses portrait",
-                    "workflow_identity": "stock ComfyUI Wan2.2 TI2V-5B, catalog-pinned",
-                }
-            },
+            "operator_projection": {"fixed_settings": fixed_settings},
             "prompt_template": {
                 "1": {
                     "class_type": "UNETLoader",
@@ -573,7 +639,7 @@ def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
                         "vae": ["3", 0],
                         "width": "{{input.target_width}}",
                         "height": "{{input.target_height}}",
-                        "length": 49,
+                        "length": "{{input.frame_count}}" if variable_length else 49,
                         "batch_size": 1,
                         "start_image": ["7", 0],
                     },

@@ -25,6 +25,12 @@ from src.video.video_workflow_intent import (
     mid_anchor_list,
     parse_seed_input,
 )
+from src.video.workflow_frame_count import (
+    approximate_seconds,
+    frame_count_policy,
+    frame_count_projection,
+    parse_frame_count,
+)
 from src.video.workflow_source_preparation import prepare_declared_workflow_source
 
 _DEFAULT_OUTPUT_ROUTES = (
@@ -58,8 +64,30 @@ class VideoWorkflowController:
         self._app_controller = app_controller
         self._workflow_registry = workflow_registry or DefaultWorkflowRegistryPort()
 
+    @staticmethod
+    def _version_key(version: str) -> tuple[Any, ...]:
+        parts = []
+        for part in str(version or "").split("."):
+            parts.append((0, int(part)) if part.isdigit() else (1, part))
+        return tuple(parts)
+
+    def _latest_per_workflow(self, specs: list[Any]) -> list[Any]:
+        """One selectable entry per workflow: its newest registered version.  Older versions stay
+        registered so existing jobs replay against their exact pinned revision."""
+
+        latest: dict[str, Any] = {}
+        for spec in specs:
+            current = latest.get(spec.workflow_id)
+            if current is None or self._version_key(spec.workflow_version) > self._version_key(
+                current.workflow_version
+            ):
+                latest[spec.workflow_id] = spec
+        return [latest[workflow_id] for workflow_id in sorted(latest)]
+
     def list_workflow_specs(self) -> list[dict[str, Any]]:
-        specs = self._workflow_registry.list_specs_for_backend("comfy")
+        specs = self._latest_per_workflow(
+            list(self._workflow_registry.list_specs_for_backend("comfy"))
+        )
         records: list[dict[str, Any]] = []
         for spec in specs:
             records.append(
@@ -79,6 +107,7 @@ class VideoWorkflowController:
                     "required_inputs": list(getattr(spec, "required_input_names", ())),
                     "accepted_controls": list(getattr(spec, "accepted_controls", ())),
                     "form_visibility": form_visibility(spec),
+                    "frame_count": frame_count_projection(spec),
                     "operator_projection": self._mapping_dict(
                         (getattr(spec, "backend_defaults", None) or {}).get("operator_projection")
                     ),
@@ -98,6 +127,7 @@ class VideoWorkflowController:
             "negative_prompt": "",
             "motion_profile": "gentle",
             "seed": "",
+            "frame_count": "",  # empty means the selected workflow's declared default
             "camera_intent": {
                 "preset": "none",
                 "strength": 0.35,
@@ -271,6 +301,8 @@ class VideoWorkflowController:
             depth_input = self._normalize_depth_input(form_data)
             if "seed" in spec.declared_input_names:
                 parse_seed_input(form_data.get("seed"))
+            if frame_count_policy(spec) is not None:
+                parse_frame_count(spec, form_data.get("frame_count"))
         except ValueError as exc:
             return False, str(exc)
 
@@ -404,6 +436,13 @@ class VideoWorkflowController:
             if frozen_seed is None:
                 frozen_seed = secrets.randbelow(2**31)
             workflow_config["seed"] = frozen_seed
+        frozen_frame_count: int | None = None
+        length_policy = frame_count_policy(spec)
+        if length_policy is not None:
+            # Frozen at admission so the queued job, its artifact and any replay agree on length.
+            frozen_frame_count = parse_frame_count(spec, form_data.get("frame_count"))
+            workflow_config["frame_count"] = frozen_frame_count
+            workflow_config["fps"] = length_policy["fps"]
         if continuity_link:
             config["metadata"] = {"continuity": dict(continuity_link)}
 
@@ -429,6 +468,12 @@ class VideoWorkflowController:
             extra_metadata["video_workflow"]["source_preparation"] = dict(source_preparation)
         if frozen_seed is not None:
             extra_metadata["video_workflow"]["seed"] = frozen_seed
+        if frozen_frame_count is not None and length_policy is not None:
+            extra_metadata["video_workflow"].update(
+                frame_count=frozen_frame_count,
+                fps=length_policy["fps"],
+                approximate_seconds=approximate_seconds(frozen_frame_count, length_policy["fps"]),
+            )
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
 
@@ -454,6 +499,7 @@ class VideoWorkflowController:
         form_data["_stable_new_submission_projection"] = {
             "job_id": job_ids[0],
             "seed": frozen_seed,
+            "frame_count": frozen_frame_count,
             "source_preparation": dict(source_preparation or {}),
         }
         return job_ids[0]

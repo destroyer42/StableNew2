@@ -43,8 +43,28 @@ from src.video.video_backend_types import (
     VideoExecutionResult,
 )
 from src.video.workflow_compiler import WorkflowCompiler
+from src.video.workflow_frame_count import frame_count_policy, parse_frame_count
 from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
+
+
+def _release_owned_runtime_after_job(spec: Any) -> bool:
+    policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
+    return isinstance(policy, Mapping) and policy.get("release_owned_runtime_after_job") is True
+
+
+def _length_provenance(spec: Any, stage_config: Mapping[str, Any]) -> dict[str, Any]:
+    """Frozen frame count and declared FPS for a variable-length workflow (else empty)."""
+
+    policy = frame_count_policy(spec)
+    if policy is None or stage_config.get("frame_count") in (None, ""):
+        return {}
+    frame_count = int(stage_config["frame_count"])
+    return {
+        "frame_count": frame_count,
+        "fps": policy["fps"],
+        "approximate_seconds": round(frame_count / policy["fps"], 1),
+    }
 
 
 def _format_missing_dependency_message(spec: Any, dependency_result: Any) -> str:
@@ -246,7 +266,37 @@ class ComfyWorkflowVideoBackend:
                 f"Workflow '{spec.workflow_id}' is registered for backend '{spec.backend_id}', "
                 f"not '{self.backend_id}'"
             )
+        # An illegal frozen length fails before any runtime is started or dispatched.
+        if frame_count_policy(spec) is not None:
+            parse_frame_count(spec, stage_config.get("frame_count"))
 
+        if not _release_owned_runtime_after_job(spec):
+            return self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
+
+        # Declared runtime policy: once this job has touched the managed runtime, release the
+        # process StableNew owns on every exit path (success, failure, or interruption) so the
+        # next queued job starts from a fresh runtime.  An external or unowned Comfy is never
+        # stopped.  BaseException, so an interrupt cannot leave a resident runtime behind; the
+        # original exception always propagates unchanged.
+        try:
+            result = self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
+        except BaseException:
+            self._release_owned_runtime()
+            raise
+        release = self._release_owned_runtime()
+        if result is not None:
+            result.backend_metadata["runtime_release"] = dict(release)
+            result.diagnostic_payload["runtime_release"] = dict(release)
+        return result
+
+    def _execute_on_runtime(
+        self,
+        pipeline: Any,
+        request: VideoExecutionRequest,
+        spec: Any,
+        stage_config: dict[str, Any],
+        workflow_id: str,
+    ) -> VideoExecutionResult | None:
         # Release conflicting StableNew-owned runtime residency (owned A1111, cached SVD state)
         # before Comfy starts/serves; never touches an external runtime.  See PR-RUNTIME-100.
         transition = self._transition.prepare_for(RUNTIME_COMFY)
@@ -347,6 +397,11 @@ class ComfyWorkflowVideoBackend:
                 f"Workflow '{workflow_id}' completed without discoverable output artifacts"
             )
 
+        length_provenance = _length_provenance(spec, stage_config)
+        runtime_policy = _mapping_dict(spec.backend_defaults.get("runtime_policy"))
+        provenance_extra: dict[str, Any] = dict(length_provenance)
+        if runtime_policy:
+            provenance_extra["runtime_policy"] = runtime_policy
         manifest_path = self._write_manifest(
             request=request,
             prompt_id=prompt_id,
@@ -357,6 +412,7 @@ class ComfyWorkflowVideoBackend:
             history_entry=history_entry,
             resolved_outputs=resolved_outputs,
             conditioning=conditioning,
+            provenance_extra=provenance_extra,
         )
         metadata_payload = {
             "stage": request.stage_name,
@@ -402,6 +458,7 @@ class ComfyWorkflowVideoBackend:
         source_preparation = _mapping_dict(stage_config.get("source_preparation"))
         if source_preparation:
             metadata_payload["source_preparation"] = source_preparation
+        metadata_payload.update(provenance_extra)
         if resolved_outputs.get("secondary_motion"):
             metadata_payload["secondary_motion"] = dict(resolved_outputs["secondary_motion"])
             metadata_payload["secondary_motion_summary"] = dict(
@@ -472,6 +529,7 @@ class ComfyWorkflowVideoBackend:
         }
         if source_preparation:
             raw_result["source_preparation"] = source_preparation
+        raw_result.update(provenance_extra)
         return VideoExecutionResult.from_stage_result(
             backend_id=self.backend_id,
             stage_name=request.stage_name,
@@ -484,6 +542,7 @@ class ComfyWorkflowVideoBackend:
                 "compiled_inputs": dict(compiled.compiled_inputs),
                 "compiled_outputs": dict(compiled.compiled_outputs),
                 "conditioning": dict(conditioning),
+                **provenance_extra,
             },
             diagnostic_payload={
                 "queue_response": dict(queue_response),
@@ -511,6 +570,7 @@ class ComfyWorkflowVideoBackend:
                 "secondary_motion_source_video_path": resolved_outputs.get(
                     "secondary_motion_source_video_path"
                 ),
+                **length_provenance,
             },
         )
 
@@ -604,12 +664,65 @@ class ComfyWorkflowVideoBackend:
         result.backend_metadata["carry_forward_policy"] = carry_forward_policy
         return result
 
-    def _ensure_runtime_ready(self) -> str:
-        manager = (
+    def _resolve_process_manager(self) -> ComfyProcessManager | None:
+        return (
             self._process_manager
             or self._managed_process_manager
             or get_global_comfy_process_manager()
         )
+
+    def _release_owned_runtime(self) -> dict[str, Any]:
+        """Stop the managed Comfy only when StableNew owns its process; report what happened.
+
+        ``ComfyProcessManager.stop()`` is the only release authority.  A manager that does not own
+        its process (an external or adopted-by-nobody runtime) is not even asked to stop.  Never
+        raises: a release problem is reported, not allowed to mask the job's own outcome.
+        """
+
+        manager = self._resolve_process_manager()
+        if manager is None:
+            return {"policy": "release_owned_runtime_after_job", "ownership": "none", "released": False}
+        try:
+            owned = bool(manager.owns_process)
+            pid = manager.pid
+        except Exception as exc:  # noqa: BLE001 - an unreadable owner is never stopped
+            return {
+                "policy": "release_owned_runtime_after_job",
+                "ownership": "unknown",
+                "released": False,
+                "error": f"{type(exc).__name__}: {exc}"[:300],
+            }
+        if not owned:
+            return {
+                "policy": "release_owned_runtime_after_job",
+                "ownership": "not_owned",
+                "released": False,
+            }
+        try:
+            manager.stop()
+            released = not bool(manager.is_running())
+        except Exception as exc:  # noqa: BLE001 - report; never escalate to other processes
+            return {
+                "policy": "release_owned_runtime_after_job",
+                "ownership": "owned",
+                "pid": pid,
+                "released": False,
+                "error": f"{type(exc).__name__}: {exc}"[:300],
+            }
+        return {
+            "policy": "release_owned_runtime_after_job",
+            "ownership": "owned",
+            "pid": pid,
+            "released": released,
+        }
+
+    def _ensure_runtime_ready(self) -> str:
+        manager = self._resolve_process_manager()
+        if manager is not None and self._process_manager is None:
+            # Keep one owner object across release/relaunch cycles: after a per-job release the
+            # same manager relaunches (and re-registers itself), so the app's exit cleanup and
+            # runtime transitions keep tracking the process StableNew owns.
+            self._managed_process_manager = manager
         if manager is None:
             if self._client is not None:
                 wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5)
@@ -916,6 +1029,7 @@ class ComfyWorkflowVideoBackend:
         history_entry: Mapping[str, Any],
         resolved_outputs: Mapping[str, Any],
         conditioning: Mapping[str, Any],
+        provenance_extra: Mapping[str, Any] | None = None,
     ) -> Path:
         output_dir = Path(request.output_dir)
         manifest_dir = output_dir / "manifests"
@@ -972,6 +1086,7 @@ class ComfyWorkflowVideoBackend:
             payload["secondary_motion_source_video_path"] = resolved_outputs.get(
                 "secondary_motion_source_video_path"
             )
+        payload.update(dict(provenance_extra or {}))
         manifest_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
         )

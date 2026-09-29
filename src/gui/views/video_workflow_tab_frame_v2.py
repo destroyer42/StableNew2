@@ -44,6 +44,12 @@ _CAMERA_PRESETS = (
 _DEPTH_INPUT_MODES = ("none", "auto", "upload")
 
 
+def _frame_count_label(choice: dict[str, Any]) -> str:
+    """Operator-facing label for one legal length, so nobody has to compute the duration."""
+
+    return f"{int(choice['frames'])} frames (~{float(choice['seconds']):.1f} s)"
+
+
 class VideoWorkflowTabFrameV2(ttk.Frame):
     """Dedicated queue-backed UI for workflow-driven video generation."""
 
@@ -76,6 +82,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             value=str(defaults.get("motion_profile") or "gentle")
         )
         self.seed_var = tk.StringVar(value=str(defaults.get("seed") or ""))
+        # Label of the selected legal length; the map turns it back into a frame count.  Empty
+        # when the selected workflow declares no frame-count policy.
+        self.frame_count_var = tk.StringVar(value="")
+        self._frame_count_labels: dict[str, int] = {}
         self.camera_preset_var = tk.StringVar(
             value=str(camera_intent_defaults.get("preset") or "none")
         )
@@ -142,6 +152,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.mid_anchors_var,
             self.motion_profile_var,
             self.seed_var,
+            self.frame_count_var,
             self.depth_mode_var,
             self.depth_path_var,
             self.camera_preset_var,
@@ -301,6 +312,26 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.seed_entry.grid(row=4, column=1, sticky="ew", pady=(0, 6))
         self._attach_setting_help(
             "seed", VIDEO_WORKFLOW_SETTING_HELP["seed"], self.seed_label, self.seed_entry
+        )
+        # Generation length, shown only for workflows that declare a frame-count policy.
+        self.frame_count_frame = ttk.Frame(body, style="Panel.TFrame")
+        self.frame_count_frame.grid(row=4, column=2, columnspan=2, sticky="w", padx=(6, 0))
+        frame_count_label = ttk.Label(self.frame_count_frame, text="Frames", style="Dark.TLabel")
+        frame_count_label.pack(side="left", padx=(0, 6))
+        self.frame_count_combo = ttk.Combobox(
+            self.frame_count_frame,
+            textvariable=self.frame_count_var,
+            values=[],
+            state="readonly",
+            style="Dark.TCombobox",
+            width=22,
+        )
+        self.frame_count_combo.pack(side="left")
+        self._attach_setting_help(
+            "frame_count",
+            VIDEO_WORKFLOW_SETTING_HELP["frame_count"],
+            frame_count_label,
+            self.frame_count_combo,
         )
         self._add_labeled_entry(
             body,
@@ -594,6 +625,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             state["motion_profile"] = self.motion_profile_var.get().strip()
         if supported("seed"):
             state["seed"] = self.seed_var.get().strip()
+        if self._frame_count_labels:
+            state["frame_count"] = self._frame_count_labels.get(self.frame_count_var.get())
         if for_submission:
             # The per-job authorization is only ever part of a submission, never saved state.
             state["experimental_opt_in"] = bool(
@@ -635,6 +668,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._source_bundle = None
         self.experimental_opt_in_var.set(False)  # authorization is per job, never restored
         self._refresh_workspace_summary()
+        self._select_frame_count(state.get("frame_count"))
 
     def _apply_workflow_capabilities(self, workflow_meta: dict[str, Any]) -> None:
         """Show/enable only the inputs the selected workflow declares, and the experimental
@@ -664,6 +698,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.seed_label.grid_remove()
             self.seed_entry.grid_remove()
             self.seed_var.set("")
+        self._apply_frame_count_choices(workflow_meta, enabled("frame_count"))
         conditioning_on = enabled("camera_intent") or enabled("depth_conditioning")
         for child in self.conditioning_frame.winfo_children():
             set_state(child, conditioning_on)
@@ -675,6 +710,30 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         else:
             self.experimental_opt_in_check.pack_forget()
             self.experimental_opt_in_var.set(False)
+
+    def _apply_frame_count_choices(self, workflow_meta: dict[str, Any], enabled: bool) -> None:
+        """Offer exactly the legal lengths the selected workflow declares (default selected)."""
+
+        projection = workflow_meta.get("frame_count")
+        choices = projection.get("choices") if isinstance(projection, dict) else None
+        if not enabled or not choices:
+            self._frame_count_labels = {}
+            self.frame_count_combo["values"] = []
+            self.frame_count_var.set("")
+            self.frame_count_frame.grid_remove()
+            return
+        self._frame_count_labels = {
+            _frame_count_label(choice): int(choice["frames"]) for choice in choices
+        }
+        self.frame_count_combo["values"] = list(self._frame_count_labels)
+        self.frame_count_frame.grid()
+        self._select_frame_count(projection.get("default"))
+
+    def _select_frame_count(self, frame_count: Any) -> None:
+        for label, count in self._frame_count_labels.items():
+            if str(count) == str(frame_count or "").strip():
+                self.frame_count_var.set(label)
+                return
 
     def _refresh_workspace_summary(self) -> None:
         workflow_meta = self._workflow_map.get(self.workflow_var.get(), {})
@@ -756,6 +815,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if not visible or visible.get("seed", False):
             seed_value = self.seed_var.get().strip() or "Random (frozen at admission)"
             effective_parts.append(f"seed={seed_value}")
+        if self._frame_count_labels and self.frame_count_var.get():
+            effective_parts.append(f"length={self.frame_count_var.get()}")
         if not visible or visible.get("camera_intent", False) or visible.get("depth_conditioning", False):
             effective_parts.extend((conditioning_depth, camera_summary, control_summary))
         fixed_settings = dict(workflow_meta.get("operator_projection") or {}).get("fixed_settings")

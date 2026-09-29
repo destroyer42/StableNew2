@@ -342,6 +342,19 @@ Updated: 2026-09-27
   resource/usability evidence is still required before a separate owner-authorized experimental
   integration decision. No GPU/model/runtime action or production source change occurred.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
+  `PR-VID-190 — Owned-Comfy Recycling After Each Job & Selectable Frame Count` is **COMPLETE,
+  pending merge** (`docs/Subsystems/Video/PR-VID-190_Comfy_Runtime_Recycling_and_Frame_Count.md`).
+  The owner-reviewed "useful prompt-directed motion" clips were produced by Wan2.2 TI2V-5B
+  (`wan22_ti2v_5b_i2v_v1@1.0.0`) on StableNew-managed ComfyUI, not by Wan-Animate-2, so that verdict
+  is not an Animate-2 result. The queue failure after each success was a missing per-job release: the
+  StableNew-owned Comfy stayed resident holding its models, and the unchanged 16 GB readiness floor
+  correctly failed the next job. `wan22_ti2v_5b_i2v_v1@1.1.0` declares a release-after-job runtime
+  policy (only an owned process, only via `ComfyProcessManager.stop()`) and a neutral, frozen-at-
+  admission frame count (legal `4n+1`, 17-81, default 49, fixed 24 fps); `@1.0.0` stays byte-identical
+  for replay. Real acceptance queued three jobs (49/81/49 frames) through the canonical queue and ran
+  them back to back with no manual kill: three fresh owned Comfy PIDs, each released, RAM recovered
+  to ~24.5 GB before the next job, all COMPLETED, 81 frames (3.375 s) at ~11.7 GB peak VRAM.
+  Wan-Animate-2 experimental exposure on managed ComfyUI is the separately-sequenced next part.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
