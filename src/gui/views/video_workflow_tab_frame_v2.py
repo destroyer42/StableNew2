@@ -42,6 +42,10 @@ _CAMERA_PRESETS = (
     "tilt_down",
 )
 _DEPTH_INPUT_MODES = ("none", "auto", "upload")
+_VIDEO_FILETYPES = [
+    ("Video files", "*.mp4 *.webm *.mov *.mkv"),
+    ("All files", "*.*"),
+]
 
 
 def _frame_count_label(choice: dict[str, Any]) -> str:
@@ -86,6 +90,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         # when the selected workflow declares no frame-count policy.
         self.frame_count_var = tk.StringVar(value="")
         self._frame_count_labels: dict[str, int] = {}
+        # Driving video for workflows that transfer a clip's motion (shown only for those).
+        self.pose_video_var = tk.StringVar(value="")
         self.camera_preset_var = tk.StringVar(
             value=str(camera_intent_defaults.get("preset") or "none")
         )
@@ -153,6 +159,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.motion_profile_var,
             self.seed_var,
             self.frame_count_var,
+            self.pose_video_var,
             self.depth_mode_var,
             self.depth_path_var,
             self.camera_preset_var,
@@ -305,6 +312,29 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             variable=self.motion_profile_var,
             values=_MOTION_PROFILES,
             help_key="motion",
+        )
+        # Driving video (only for workflows that accept one).
+        self.pose_video_frame = ttk.Frame(body, style="Panel.TFrame")
+        self.pose_video_frame.grid(row=3, column=2, columnspan=2, sticky="ew", padx=(6, 0))
+        pose_video_label = ttk.Label(
+            self.pose_video_frame, text="Driving Video", style="Dark.TLabel"
+        )
+        pose_video_label.pack(side="left", padx=(0, 6))
+        self.pose_video_entry = ttk.Entry(
+            self.pose_video_frame, textvariable=self.pose_video_var, style="Dark.TEntry", width=34
+        )
+        self.pose_video_entry.pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            self.pose_video_frame,
+            text="Browse...",
+            style="Dark.TButton",
+            command=self._on_browse_pose_video,
+        ).pack(side="left", padx=(6, 0))
+        self._attach_setting_help(
+            "pose_video",
+            VIDEO_WORKFLOW_SETTING_HELP["pose_video"],
+            pose_video_label,
+            self.pose_video_entry,
         )
         self.seed_label = ttk.Label(body, text="Seed", style="Dark.TLabel")
         self.seed_label.grid(row=4, column=0, sticky="w", padx=(0, 8), pady=(0, 6))
@@ -627,6 +657,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             state["seed"] = self.seed_var.get().strip()
         if self._frame_count_labels:
             state["frame_count"] = self._frame_count_labels.get(self.frame_count_var.get())
+        if bool(visible.get("pose_video", False)):
+            state["pose_video_path"] = self.pose_video_var.get().strip()
         if for_submission:
             # The per-job authorization is only ever part of a submission, never saved state.
             state["experimental_opt_in"] = bool(
@@ -669,6 +701,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.experimental_opt_in_var.set(False)  # authorization is per job, never restored
         self._refresh_workspace_summary()
         self._select_frame_count(state.get("frame_count"))
+        if self.pose_video_frame.winfo_manager():
+            self.pose_video_var.set(str(state.get("pose_video_path") or ""))
 
     def _apply_workflow_capabilities(self, workflow_meta: dict[str, Any]) -> None:
         """Show/enable only the inputs the selected workflow declares, and the experimental
@@ -699,6 +733,11 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.seed_entry.grid_remove()
             self.seed_var.set("")
         self._apply_frame_count_choices(workflow_meta, enabled("frame_count"))
+        if bool(visible.get("pose_video", False)):
+            self.pose_video_frame.grid()
+        else:
+            self.pose_video_frame.grid_remove()
+            self.pose_video_var.set("")
         conditioning_on = enabled("camera_intent") or enabled("depth_conditioning")
         for child in self.conditioning_frame.winfo_children():
             set_state(child, conditioning_on)
@@ -866,6 +905,16 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         if path:
             self._last_folder = str(Path(path).parent)
             self.source_image_var.set(path)
+
+    def _on_browse_pose_video(self) -> None:
+        path = filedialog.askopenfilename(
+            title="Select Driving Video",
+            filetypes=_VIDEO_FILETYPES,
+            initialdir=self._last_folder or None,
+        )
+        if path:
+            self._last_folder = str(Path(path).parent)
+            self.pose_video_var.set(path)
 
     def _on_browse_end_anchor(self) -> None:
         path = filedialog.askopenfilename(

@@ -20,6 +20,8 @@ def test_default_workflow_registry_retains_but_disables_unimplemented_ltx_contra
         "ltx_multiframe_anchor_v1",
         "ltx_multiframe_anchor_v1_conditioned",
         "wan22_ti2v_5b_i2v_v1",
+        "wan_animate2_drive_i2v_v1",
+        "wan_animate2_prompt_i2v_v1",
     ]
     spec = next(
         spec for spec in build_builtin_workflow_specs() if spec.workflow_id == "ltx_multiframe_anchor_v1"
@@ -42,7 +44,12 @@ def test_default_workflow_registry_retains_but_disables_unimplemented_ltx_contra
     assert [
         (spec.workflow_id, spec.workflow_version)
         for spec in registry.list_offerable_specs("comfy")
-    ] == [("wan22_ti2v_5b_i2v_v1", "1.0.0"), ("wan22_ti2v_5b_i2v_v1", "1.1.0")]
+    ] == [
+        ("wan22_ti2v_5b_i2v_v1", "1.0.0"),
+        ("wan22_ti2v_5b_i2v_v1", "1.1.0"),
+        ("wan_animate2_drive_i2v_v1", "1.0.0"),
+        ("wan_animate2_prompt_i2v_v1", "1.0.0"),
+    ]
 
 
 def test_workflow_registry_rejects_duplicate_workflow_versions() -> None:

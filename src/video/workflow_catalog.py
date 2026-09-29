@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.video.workflow_catalog_wan_animate2 import build_wan_animate2_specs
 from src.video.workflow_contracts import (
     WORKFLOW_CAP_CAMERA_INTENT,
     WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,
@@ -20,6 +21,7 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         _build_ltx_multiframe_anchor_v1_conditioned(),
         _build_wan22_ti2v_5b_i2v_v1(),
         _build_wan22_ti2v_5b_i2v_v1_1(),
+        *build_wan_animate2_specs(),
     )
 
 
@@ -485,6 +487,9 @@ def _build_wan22_ti2v_5b_i2v(
         extra_defaults["frame_count_policy"] = dict(frame_count_policy)
     if runtime_policy is not None:
         extra_defaults["runtime_policy"] = dict(runtime_policy)
+        # Longer frame counts take longer than the backend's default generation wait
+        # (81 frames used ~100 s of the 120 s default on the original runtime).
+        extra_defaults["history_timeout_seconds"] = 600
         governance_notes += (
             " The StableNew-owned ComfyUI is released after every job (PR-VID-190)."
         )

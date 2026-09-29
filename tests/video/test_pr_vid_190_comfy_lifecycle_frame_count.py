@@ -213,8 +213,8 @@ def test_frame_count_is_offered_only_by_declaring_workflows() -> None:
     assert form_visibility(_spec(V11))["frame_count"] is True
     assert form_visibility(_spec(V1))["frame_count"] is False
     for spec in build_builtin_workflow_specs():
-        if spec.workflow_id != WAN_ID:
-            assert form_visibility(spec)["frame_count"] is False
+        declares = "frame_count_policy" in spec.backend_defaults
+        assert form_visibility(spec)["frame_count"] is declares, spec.workflow_id
     with pytest.raises(ValueError, match="does not accept a frame count"):
         parse_frame_count(_spec(V1), 49)
 

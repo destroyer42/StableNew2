@@ -53,6 +53,33 @@ def _release_owned_runtime_after_job(spec: Any) -> bool:
     return isinstance(policy, Mapping) and policy.get("release_owned_runtime_after_job") is True
 
 
+def _is_generated_output(descriptor: Mapping[str, Any]) -> bool:
+    """Only files a workflow *produced* are artifacts.  Comfy also reports previews of inputs
+    (for example ``LoadVideo`` echoes its source clip as ``type: input``) and temp previews;
+    neither is a generated result."""
+
+    return str(descriptor.get("type") or "output") == "output"
+
+
+def _required_launch_flags(spec: Any) -> tuple[str, ...]:
+    policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
+    if not isinstance(policy, Mapping):
+        return ()
+    return tuple(str(flag) for flag in policy.get("required_launch_flags") or () if str(flag))
+
+
+# (node class, input) pairs whose value is a local file the Comfy server must hold in its input
+# directory.  The file is uploaded as a copy through the Comfy API; the source is never modified.
+_UPLOADED_FILE_INPUTS = {("LoadImage", "image"), ("LoadVideo", "file")}
+
+
+def _driving_video_provenance(stage_config: Mapping[str, Any]) -> dict[str, Any]:
+    path = str(stage_config.get("pose_video_path") or "").strip()
+    if not path:
+        return {}
+    return {"pose_video": {"path": path, "sha256": stage_config.get("pose_video_sha256")}}
+
+
 def _length_provenance(spec: Any, stage_config: Mapping[str, Any]) -> dict[str, Any]:
     """Frozen frame count and declared FPS for a variable-length workflow (else empty)."""
 
@@ -269,6 +296,9 @@ class ComfyWorkflowVideoBackend:
         # An illegal frozen length fails before any runtime is started or dispatched.
         if frame_count_policy(spec) is not None:
             parse_frame_count(spec, stage_config.get("frame_count"))
+        # A declared launch requirement (e.g. the qualified pinned-memory-off policy) must be
+        # provable from StableNew's own managed launch configuration before anything starts.
+        self._verify_required_launch_flags(spec)
 
         if not _release_owned_runtime_after_job(spec):
             return self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
@@ -340,7 +370,9 @@ class ComfyWorkflowVideoBackend:
         if not prompt_id:
             raise RuntimeError("Comfy queue response did not include prompt_id")
 
-        history_entry = self._wait_for_history_entry(client, prompt_id=prompt_id)
+        history_entry = self._wait_for_history_entry(
+            client, prompt_id=prompt_id, timeout=self._history_timeout_for(spec)
+        )
         if str(spec.backend_defaults.get("output_transport") or "") == "comfy_view":
             history_entry = self._localize_comfy_outputs(
                 client, history_entry, Path(request.output_dir)
@@ -399,7 +431,10 @@ class ComfyWorkflowVideoBackend:
 
         length_provenance = _length_provenance(spec, stage_config)
         runtime_policy = _mapping_dict(spec.backend_defaults.get("runtime_policy"))
-        provenance_extra: dict[str, Any] = dict(length_provenance)
+        provenance_extra: dict[str, Any] = {
+            **length_provenance,
+            **_driving_video_provenance(stage_config),
+        }
         if runtime_policy:
             provenance_extra["runtime_policy"] = runtime_policy
         manifest_path = self._write_manifest(
@@ -671,6 +706,37 @@ class ComfyWorkflowVideoBackend:
             or get_global_comfy_process_manager()
         )
 
+    def _verify_required_launch_flags(self, spec: Any) -> None:
+        """Refuse unless the StableNew-managed ComfyUI command carries every declared flag.
+
+        The command checked is the one StableNew launches (the resolved manager's, or the default
+        managed configuration's).  A runtime StableNew does not launch cannot have its flags
+        verified, so it is refused rather than assumed; nothing is started, stopped or changed.
+        """
+
+        required = _required_launch_flags(spec)
+        if not required:
+            return
+        manager = self._resolve_process_manager()
+        config = getattr(manager, "_config", None) if manager is not None else None
+        if config is None and manager is None:
+            config = build_default_comfy_process_config()
+        command = list(getattr(config, "command", None) or [])
+        if not command:
+            raise RuntimeError(
+                f"Workflow '{spec.workflow_id}' requires a StableNew-managed ComfyUI launched with "
+                f"{' '.join(required)}; no managed launch configuration is available and an "
+                "external runtime's launch flags cannot be verified. Configure comfy_command in "
+                "Engine Settings."
+            )
+        missing = [flag for flag in required if flag not in command]
+        if missing:
+            raise RuntimeError(
+                f"Workflow '{spec.workflow_id}' requires the managed ComfyUI to be launched with "
+                f"{' '.join(missing)}, which the configured comfy_command does not include. Add "
+                "it to comfy_command in Engine Settings; StableNew will not rewrite it for you."
+            )
+
     def _release_owned_runtime(self) -> dict[str, Any]:
         """Stop the managed Comfy only when StableNew owns its process; report what happened.
 
@@ -814,7 +880,7 @@ class ComfyWorkflowVideoBackend:
             for input_name, raw_value in inputs.items():
                 if self._is_comfy_link_value(raw_value):
                     continue
-                if class_type == "LoadImage" and input_name == "image":
+                if (class_type, input_name) in _UPLOADED_FILE_INPUTS:
                     normalized_inputs[input_name] = self._upload_image_for_load_image(
                         client,
                         raw_value,
@@ -885,13 +951,24 @@ class ComfyWorkflowVideoBackend:
         uploaded_cache[cache_key] = relative_name
         return relative_name
 
+    def _history_timeout_for(self, spec: Any) -> float:
+        """A workflow may declare a longer generation wait than the backend default (long
+        generations would otherwise be abandoned while Comfy is still producing them)."""
+
+        declared = (getattr(spec, "backend_defaults", None) or {}).get("history_timeout_seconds")
+        try:
+            return max(self._history_timeout, float(declared or 0))
+        except (TypeError, ValueError):
+            return self._history_timeout
+
     def _wait_for_history_entry(
         self,
         client: ComfyApiClient,
         *,
         prompt_id: str,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
-        deadline = time.time() + self._history_timeout
+        deadline = time.time() + (timeout if timeout is not None else self._history_timeout)
         last_payload: dict[str, Any] | None = None
         while time.time() < deadline:
             payload = client.get_history(prompt_id)
@@ -925,7 +1002,7 @@ class ComfyWorkflowVideoBackend:
                 for descriptor in descriptors:
                     if not isinstance(descriptor, dict) or not descriptor.get("filename"):
                         continue
-                    if str(descriptor.get("type") or "output") == "temp":
+                    if not _is_generated_output(descriptor):
                         continue
                     name = str(descriptor["filename"])
                     local = client.download_view(
@@ -957,7 +1034,9 @@ class ComfyWorkflowVideoBackend:
                     if not isinstance(descriptors, list):
                         continue
                     for descriptor in descriptors:
-                        if not isinstance(descriptor, Mapping):
+                        if not isinstance(descriptor, Mapping) or not _is_generated_output(
+                            descriptor
+                        ):
                             continue
                         resolved = self._resolve_descriptor_path(descriptor, output_dir)
                         if resolved:

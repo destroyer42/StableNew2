@@ -68,6 +68,48 @@ JOBS = (
         "a slow marching motion in place",
     ),
 )
+_ANIMATE2_SUBJECT = "A young woman in a navy athletic top, navy leggings and white sneakers"
+_DRIVING_CLIP = r"C:\Users\rob\qual\vid184\env\inputs\B_locomotion_driving_39f_candidate.mp4"
+# Per suite: (label, workflow_id, version, frames, seed, prompt, driving video or None).
+SUITES: dict[str, tuple[tuple[Any, ...], ...]] = {
+    "ti2v": tuple(
+        (label, WORKFLOW_ID, WORKFLOW_VERSION, frames, seed, prompt, None)
+        for label, frames, seed, prompt in JOBS
+    ),
+    "animate2": (
+        (
+            "A",
+            "wan_animate2_prompt_i2v_v1",
+            "1.0.0",
+            41,
+            19101,
+            f"{_ANIMATE2_SUBJECT} smiles, raises her right hand and waves at the camera, then "
+            "lowers it to her side.",
+            None,
+        ),
+        (
+            "B",
+            "wan_animate2_prompt_i2v_v1",
+            "1.0.0",
+            81,
+            19102,
+            f"{_ANIMATE2_SUBJECT} slowly raises both arms above her head, lowers them, then "
+            "turns to her left and walks two steps forward.",
+            None,
+        ),
+        (
+            "C",
+            "wan_animate2_drive_i2v_v1",
+            "1.0.0",
+            41,
+            19103,
+            f"{_ANIMATE2_SUBJECT} exercising in a bright studio.",
+            _DRIVING_CLIP,
+        ),
+    ),
+}
+# One driving-video job: re-verifies artifact selection after the input-preview fix.
+SUITES["animate2_drive"] = (SUITES["animate2"][2],)
 _DEVICE_LOSS_MARKERS = (
     "device lost",
     "device_lost",
@@ -236,19 +278,23 @@ def _find_key(payload: Any, key: str) -> Any:
     return None
 
 
-def _submit(stack: _Stack, source: Path, workspace: Path, frames: int, seed: int, prompt: str):
+def _submit(stack: _Stack, source: Path, workspace: Path, job: tuple) -> str:
     from src.controller.video_workflow_controller import VideoWorkflowController
 
+    _label, workflow_id, version, frames, seed, prompt, driving = job
     app = SimpleNamespace(job_service=stack.service, output_dir=str(workspace / "output"))
     form = {
-        "workflow_id": WORKFLOW_ID,
-        "workflow_version": WORKFLOW_VERSION,
+        "workflow_id": workflow_id,
+        "workflow_version": version,
         "prompt": prompt,
-        "negative_prompt": _NEGATIVE,
+        # TI2V keeps the harness negative; Animate-2 uses its qualified stock negative.
+        "negative_prompt": _NEGATIVE if workflow_id == WORKFLOW_ID else "",
         "seed": str(seed),
         "frame_count": frames,
         "experimental_opt_in": True,
     }
+    if driving:
+        form["pose_video_path"] = driving
     return VideoWorkflowController(app_controller=app).submit_video_workflow_job(
         source_image_path=source, form_data=form
     )
@@ -319,7 +365,7 @@ def _run_one(stack: _Stack, job_id: str, label: str, frames: int, comfy_url: str
             record["manifest_provenance"] = {
                 key: manifest.get(key)
                 for key in ("workflow_id", "workflow_version", "frame_count", "fps",
-                            "approximate_seconds", "runtime_policy")
+                            "approximate_seconds", "runtime_policy", "pose_video")
             }
     return record
 
@@ -378,18 +424,28 @@ def _run(stack: _Stack, args: argparse.Namespace, evidence: dict, workspace: Pat
     source = Path(args.source)
     comfy_url = evidence["preflight"]["comfy_base_url"]
     queued = []
-    for label, frames, seed, prompt in JOBS:
-        job_id = _submit(stack, source, workspace, frames, seed, prompt)
+    suite = SUITES[args.suite]
+    evidence["suite"] = args.suite
+    for job in suite:
+        label, frames = job[0], job[3]
+        job_id = _submit(stack, source, workspace, job)
         stage = stack.queue.get_job(job_id)._normalized_record.stage_chain[0].to_dict()["extra"]
         queued.append((label, frames, job_id))
         evidence.setdefault("admission", []).append(
             {
                 "label": label,
                 "job_id": job_id,
+                "workflow_id": stage.get("workflow_id"),
+                "workflow_version": stage.get("workflow_version"),
                 "frame_count": stage.get("frame_count"),
                 "fps": stage.get("fps"),
                 "seed": stage.get("seed"),
-                "workflow_version": stage.get("workflow_version"),
+                "pose_video": {
+                    "path": stage.get("pose_video_path"),
+                    "sha256": stage.get("pose_video_sha256"),
+                }
+                if stage.get("pose_video_path")
+                else None,
                 "experimental_opt_in": stage["video_execution"]["experimental_opt_in"],
             }
         )
@@ -408,8 +464,9 @@ def _run(stack: _Stack, args: argparse.Namespace, evidence: dict, workspace: Pat
         if label == "B" and _clean_resource_failure(record):
             retry_needed = True
     if retry_needed:
-        _label, _frames, seed, prompt = JOBS[1]
-        retry_id = _submit(stack, source, workspace, RETRY_FRAMES, seed, prompt)
+        base = suite[1]
+        retry_job = (f"{base[0]}_retry", base[1], base[2], RETRY_FRAMES, *base[4:])
+        retry_id = _submit(stack, source, workspace, retry_job)
         record = _run_one(stack, retry_id, "B_retry", RETRY_FRAMES, comfy_url)
         records.append(record)
         evidence["jobs"] = records
@@ -437,7 +494,6 @@ def _write_evidence(evidence: dict) -> None:
 def run_acceptance(args: argparse.Namespace, state: dict) -> int:
     workspace = REPORTS / "workspace"
     evidence: dict = {
-        "workflow": f"{WORKFLOW_ID}@{WORKFLOW_VERSION}",
         "source": str(args.source),
         "preflight": state,
     }
@@ -461,10 +517,16 @@ def run_acceptance(args: argparse.Namespace, state: dict) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    global REPORTS
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("source")
     parser.add_argument("--dry", action="store_true", help="preflight only; queue nothing")
+    parser.add_argument("--suite", choices=sorted(SUITES), default="ti2v")
+    parser.add_argument(
+        "--reports-dir", default=str(REPORTS), help="evidence directory (default reports/vid190)"
+    )
     args = parser.parse_args(argv)
+    REPORTS = Path(args.reports_dir)
 
     state = preflight()
     print(json.dumps(state, indent=2))

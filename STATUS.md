@@ -355,6 +355,16 @@ Updated: 2026-09-27
   them back to back with no manual kill: three fresh owned Comfy PIDs, each released, RAM recovered
   to ~24.5 GB before the next job, all COMPLETED, 81 frames (3.375 s) at ~11.7 GB peak VRAM.
   Wan-Animate-2 experimental exposure on managed ComfyUI is the separately-sequenced next part.
+  `PR-VID-191 — Managed ComfyUI v0.37.0 Runtime & Experimental Wan-Animate-2` is **COMPLETE, pending
+  merge** (`docs/Subsystems/Video/PR-VID-191_Comfy_v037_Runtime_and_Wan_Animate_2.md`). StableNew's
+  managed Comfy now launches the PR-VID-184R/S-qualified ComfyUI v0.37.0 install (the desktop app's
+  v0.3.65 cannot load Animate-2) with StableNew-owned runtime folders and `--disable-pinned-memory`;
+  TI2V-5B re-verified there (3 queued jobs, faster, no host-memory pressure). Two experimental
+  Wan-Animate-2 workflows (prompt motion; driving-video motion) are registered from the qualified graph
+  and real-accepted as three queued jobs (41/81/41 frames) with per-job runtime release. Prompt mode
+  produced clean motion; driving-video mode showed a duplicate-figure artifact in its one sample
+  (likely the dropped separate motion prompt). A `LoadVideo` input-preview artifact-selection defect
+  was found and fixed. The desktop ComfyUI upgrade to the newest release follows once this is stable.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
