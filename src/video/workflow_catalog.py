@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from typing import Any
+
 from src.video.workflow_contracts import (
     WORKFLOW_CAP_CAMERA_INTENT,
     WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,
@@ -447,8 +449,8 @@ def _build_wan22_ti2v_5b_i2v_v1_1() -> WorkflowSpec:
 def _build_wan22_ti2v_5b_i2v(
     *,
     workflow_version: str,
-    frame_count_policy: dict | None = None,
-    runtime_policy: dict | None = None,
+    frame_count_policy: dict[str, int] | None = None,
+    runtime_policy: dict[str, Any] | None = None,
 ) -> WorkflowSpec:
     variable_length = frame_count_policy is not None
     frame_count_bindings = (
@@ -463,7 +465,7 @@ def _build_wan22_ti2v_5b_i2v(
         if variable_length
         else ()
     )
-    fixed_settings: dict = {
+    fixed_settings: dict[str, Any] = {
         "frames": 49,
         "fps": 24,
         "steps": 20,
@@ -473,12 +475,12 @@ def _build_wan22_ti2v_5b_i2v(
         "geometry": "source-aware: portrait 480x832; landscape 832x480; square uses portrait",
         "workflow_identity": "stock ComfyUI Wan2.2 TI2V-5B, catalog-pinned",
     }
-    extra_defaults: dict = {}
+    extra_defaults: dict[str, Any] = {}
     governance_notes = (
         "EXPERIMENTAL: runs only with an explicit per-job opt-in. Qualified in PR-VID-110 "
         "(CONDITIONAL); qualification-derived resource readiness applies before dispatch."
     )
-    if variable_length:
+    if frame_count_policy is not None:
         fixed_settings.pop("frames")
         extra_defaults["frame_count_policy"] = dict(frame_count_policy)
     if runtime_policy is not None:
