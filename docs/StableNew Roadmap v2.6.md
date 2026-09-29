@@ -446,13 +446,23 @@ triage plus a decisions template; an earlier draft mutation engine was
 removed before merge rather than carried as unnecessary risk ahead of any
 actual owner decision. See
 `docs/Subsystems/PromptPacks/PR-PACK-120_Missing_Asset_Reference_Triage.md`.
+`PR-PACK-130` then executed the owner-approved subset of those 24 items
+with a purpose-built, one-time tool (not a rebuild of the removed generic
+engine): removed 67 structured LoRA entries determined to be
+checkpoint/model identities mistakenly recorded as LoRAs, and cleared 4
+literal `"None"` refiner placeholders, across 15 PromptPack sources.
+`DreamyStyle_xl` (9 items, 63 occurrences) was deliberately left
+unresolved. `missing_file_backed_asset` moved 24 -> 9; census total 1,010
+-> 995. See
+`docs/Subsystems/PromptPacks/PR-PACK-130_Approved_Missing_Reference_Reconciliation.md`.
 
 ### Product Quality & Deterministic Engineering (backlog category)
 
-1. Owner review/selection of each of the 24 `PR-PACK-120` triage items'
-   decisions (replace/remove/clear/leave-unresolved), using its occurrence
-   and candidate-evidence tables, followed by a bounded, separately
-   authorized reconciliation package to execute the selected actions.
+1. Owner decision for the remaining `DreamyStyle_xl` missing-reference set
+   (9 `PR-PACK-120`/`PR-PACK-130` items, 63 occurrences) -- identity and
+   original role are unknown; no automatic action is authorized until the
+   owner decides, followed by a bounded, separately authorized package to
+   execute that decision.
 2. Later: compatibility/advisory UX and targeted Learning improvements
    justified by clean inputs and evidence.
 
