@@ -439,11 +439,20 @@ persistence contradiction and reconciled all five sources
 byte-backed-up and corrected with a semantic-diff guard limiting the change
 to the ADetailer enablement mirrors. See
 `docs/Subsystems/PromptPacks/PR-PACK-110_ADetailer_Stage_Enablement_Persistence_Repair.md`.
+`PR-PACK-120` triaged the census's 24 `missing_file_backed_asset` findings
+into 24 exact, occurrence-mapped, candidate-enriched items read-only (no
+reconciliation performed) and is deliberately scoped to that read-only
+triage plus a decisions template; an earlier draft mutation engine was
+removed before merge rather than carried as unnecessary risk ahead of any
+actual owner decision. See
+`docs/Subsystems/PromptPacks/PR-PACK-120_Missing_Asset_Reference_Triage.md`.
 
 ### Product Quality & Deterministic Engineering (backlog category)
 
-1. Operator-facing triage of the census's 24 missing/ambiguous asset
-   references (`WP-PACK-AUDIT-100`).
+1. Owner review/selection of each of the 24 `PR-PACK-120` triage items'
+   decisions (replace/remove/clear/leave-unresolved), using its occurrence
+   and candidate-evidence tables, followed by a bounded, separately
+   authorized reconciliation package to execute the selected actions.
 2. Later: compatibility/advisory UX and targeted Learning improvements
    justified by clean inputs and evidence.
 
