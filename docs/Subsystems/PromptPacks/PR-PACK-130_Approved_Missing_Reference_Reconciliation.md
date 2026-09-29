@@ -76,8 +76,7 @@ Before any real write:
   committed.
 - Immediately before writing, `preflight_check` runs again (TOCTOU
   protection): if any source changed after its backup was taken, the batch
-  aborts before writing that source, and any source already written in
-  this run is restored from its byte-exact backup.
+  aborts before writing that source.
 - Each source's transformation is applied to an in-memory copy and proven,
   via a full before/after semantic diff, to have changed *only* the
   authorized LoRA-list removal(s) (verified at the structured list level:
@@ -85,8 +84,23 @@ Before any real write:
   approved indexes excluded, applied highest-index-first) and/or the one
   authorized scalar clear — anything else aborts the whole batch.
 - Writes are atomic (temp-file + `os.replace`).
-- Any failure at any stage restores every already-written source from its
-  byte-exact backup, re-verifying the restored SHA-256.
+
+**Rollback contract.** Rollback tracks only the sources this process
+itself successfully, atomically replaced — never a source that was merely
+backed up, loaded, or in the middle of being transformed. A source the
+tool never got as far as writing is left exactly as it was found (its own
+concurrent edit, if any, is not overwritten, and it is never "restored"
+from a backup it didn't need). Before restoring a successfully-replaced
+source, rollback re-reads its current bytes and confirms they still equal
+the bytes this run itself wrote; if something else has modified that
+source in the meantime, rollback refuses to overwrite that newer external
+edit, preserves it, and raises `RollbackConflict` (identifying the
+affected source, with the triggering failure chained as its cause) rather
+than silently claiming a clean rollback. The mutation loop catches
+`BaseException`, not just `Exception`, so an operator interruption
+(Ctrl-C / `KeyboardInterrupt`) after one or more successful writes still
+triggers this same scoped rollback — verifying every restored source's
+SHA-256 — before the original `KeyboardInterrupt` is re-raised unmodified.
 
 ## Real reconciliation result
 
@@ -154,7 +168,7 @@ use.
 
 ## Tests
 
-`tests/tools/test_pack130_approved_reference_reconciliation.py` (37 tests,
+`tests/tools/test_pack130_approved_reference_reconciliation.py` (41 tests,
 no real PromptPack used as a fixture) covers: exact removal of both
 approved LoRA names; unrelated LoRA and weight survival; the real-world
 `DreamyStyle_xl`-beside-`babesByStableYogiPony_xlV4` overlap pattern;
@@ -171,11 +185,20 @@ rolling back all prior sources to byte-identical originals; the
 semantic-diff guard catching both a prompt-text tamper and an unrelated
 setting tamper; unknown extension fields surviving; dry-run performing
 zero writes; a successful apply changing only the approved fields; a
-re-run against an already-reconciled fixture refusing safely; and a full
+re-run against an already-reconciled fixture refusing safely; a full
 owner-approved-shape integration test (24 items, exact 3/13/8/54/4/4/9/63
 breakdown, 15 actionable sources, 71 actions) through `build_plan` →
 `preflight_check` → dry-run → real apply, plus that same shape refusing
-outright if any count drifts.
+outright if any count drifts; and the rollback-scoping contract above: a
+three-source scenario where a concurrent edit lands on an as-yet-unwritten
+source and that source retains the edit exactly (never restored merely
+because it was backed up) while an already-written sibling is rolled back
+byte-exact; a failure before any successful write restoring nothing; a
+`KeyboardInterrupt` after one successful write rolling that one write back
+and re-raising the original interrupt unmodified; and a second,
+independent edit landing on an already-written source before rollback can
+run, which `RollbackConflict` (chaining the triggering failure) reports
+rather than silently overwriting.
 
 ## Controller Surface Assessment
 

@@ -85,6 +85,13 @@ class PolicyRefusal(RuntimeError):
     site is a deliberate hard stop, never a warning to work around."""
 
 
+class RollbackConflict(RuntimeError):
+    """Raised when a source this tool successfully wrote was modified by
+    something else before rollback could restore it. The external edit is
+    preserved -- never silently overwritten -- and this is always raised
+    with the triggering failure chained as its cause, never swallowing it."""
+
+
 # ---------------------------------------------------------------------------
 # Plan construction (read-only)
 # ---------------------------------------------------------------------------
@@ -505,6 +512,43 @@ def _atomic_write(path: Path, document: dict[str, Any]) -> None:
 
 
 @dataclass(frozen=True)
+class _ReplacedSource:
+    """A source this process has itself, successfully, atomically
+    replaced -- and only such a source. A source that was merely backed
+    up, loaded, transformed, or about to be written, but never reached a
+    completed `_atomic_write()`, must never appear here and must never be
+    touched by rollback."""
+
+    source_id: str
+    path: Path
+    original_bytes: bytes
+    written_bytes: bytes
+
+
+def _rollback_replaced(replaced: list[_ReplacedSource]) -> list[str]:
+    """Restore every successfully-replaced source to its byte-exact
+    original, unless something else has modified it since this tool wrote
+    it -- in which case that newer external edit is preserved rather than
+    overwritten, and its source_id is returned as a conflict. Never raises
+    itself; the caller decides how to surface conflicts."""
+
+    conflicts: list[str] = []
+    for replaced_source in replaced:
+        current_bytes = replaced_source.path.read_bytes()
+        if current_bytes != replaced_source.written_bytes:
+            # Someone else modified this source after we wrote it and
+            # before rollback ran; that edit is not ours to destroy.
+            conflicts.append(replaced_source.source_id)
+            continue
+        replaced_source.path.write_bytes(replaced_source.original_bytes)
+        restored_sha = hashlib.sha256(replaced_source.path.read_bytes()).hexdigest()
+        expected_sha = hashlib.sha256(replaced_source.original_bytes).hexdigest()
+        if restored_sha != expected_sha:
+            conflicts.append(replaced_source.source_id)
+    return conflicts
+
+
+@dataclass(frozen=True)
 class ReconciliationResult:
     dry_run: bool
     sources_changed: tuple[str, ...]
@@ -520,8 +564,12 @@ def reconcile(
 ) -> ReconciliationResult:
     """Validate, then (unless dry_run) back up every actionable source,
     re-check freshness immediately before writing, transform + guard +
-    atomically write each source, and roll every already-written source
-    back to its byte-exact backup on any failure. All-or-nothing."""
+    atomically write each source, and roll back on any failure -- covering
+    both ordinary exceptions and operator interruption (Ctrl-C). Rollback
+    only ever restores a source this process itself successfully replaced;
+    it never touches a source that was merely backed up but not yet (or
+    never) written, preserving any concurrent edit to that untouched file.
+    All-or-nothing for sources this tool actually wrote."""
 
     preflight_check(plan, packs_dir=packs_dir)
 
@@ -529,10 +577,10 @@ def reconcile(
         return ReconciliationResult(True, (), ())
 
     backups: list[BackupRecord] = []
-    originals: dict[Path, bytes] = {}
+    originals: dict[str, bytes] = {}
     for source in plan.sources:
         path = packs_dir / f"{source.source_id}.json"
-        originals[path] = path.read_bytes()
+        originals[source.source_id] = path.read_bytes()
         backups.append(_backup_source(path, backup_dir, source.source_id))
 
     # TOCTOU protection: re-check every source's fingerprint again,
@@ -541,20 +589,29 @@ def reconcile(
     preflight_check(plan, packs_dir=packs_dir)
 
     changed: list[str] = []
+    replaced: list[_ReplacedSource] = []
     try:
         for source in plan.sources:
             path = packs_dir / f"{source.source_id}.json"
             document = _load_document(path)
             document = _transform_source(document, source)
             _atomic_write(path, document)
+            written_bytes = path.read_bytes()
+            replaced.append(_ReplacedSource(source.source_id, path, originals[source.source_id], written_bytes))
             changed.append(source.source_id)
-    except Exception:
-        for path, original_bytes in originals.items():
-            path.write_bytes(original_bytes)
-            restored_sha = hashlib.sha256(path.read_bytes()).hexdigest()
-            expected_sha = hashlib.sha256(original_bytes).hexdigest()
-            if restored_sha != expected_sha:
-                raise RuntimeError(f"rollback verification failed for {path}") from None
+    except BaseException as exc:
+        # BaseException, not Exception: an operator Ctrl-C
+        # (KeyboardInterrupt) after one or more successful writes must
+        # still trigger rollback of exactly those writes, never leaving a
+        # partially-reconciled batch, and must never be swallowed --
+        # only sources actually replaced by this run are eligible.
+        conflicts = _rollback_replaced(replaced)
+        if conflicts:
+            raise RollbackConflict(
+                f"rollback could not fully restore the following source(s) because they were "
+                f"modified after this tool wrote them; their newer external bytes were preserved, "
+                f"not overwritten: {conflicts}"
+            ) from exc
         raise
 
     return ReconciliationResult(False, tuple(changed), tuple(backups))

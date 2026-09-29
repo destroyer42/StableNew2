@@ -539,6 +539,158 @@ def test_atomic_write_failure_rolls_back_all_prior_sources_byte_identical(tmp_pa
     assert hashlib.sha256(path_b.read_bytes()).hexdigest() == hashlib.sha256(original_b).hexdigest()
 
 
+# --- rollback-safety repair: rollback only restores sources this tool actually wrote --------------------
+
+
+def test_rollback_preserves_unwritten_source_with_concurrent_edit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path_a = tmp_path / "a.json"
+    path_b = tmp_path / "b.json"
+    path_c = tmp_path / "c.json"
+    _write_pack(path_a, [{"index": 0, "text": "a", "loras": [["BetterThanWords-merged-SDXL-LoRA-v3", 0.5]]}])
+    _write_pack(path_b, [{"index": 0, "text": "b", "loras": [["babesByStableYogiPony_xlV4", 0.5]]}])
+    _write_pack(path_c, [{"index": 0, "text": "c", "loras": [["BetterThanWords-merged-SDXL-LoRA-v3", 0.5]]}])
+    original_a = path_a.read_bytes()
+    original_c = path_c.read_bytes()
+    source_a = _source_plan("a", path_a, removals=(_removal("a", "pack_data.slots[0].loras[0][0]", "BetterThanWords-merged-SDXL-LoRA-v3"),))
+    source_b = _source_plan("b", path_b, removals=(_removal("b", "pack_data.slots[0].loras[0][0]", "babesByStableYogiPony_xlV4"),))
+    source_c = _source_plan("c", path_c, removals=(_removal("c", "pack_data.slots[0].loras[0][0]", "BetterThanWords-merged-SDXL-LoRA-v3"),))
+
+    original_load_document = pack130._load_document
+    b_load_count = {"n": 0}
+    tampered_b_bytes: dict[str, bytes] = {}
+
+    def _load_and_maybe_tamper(path: Path):
+        if path.name == "b.json":
+            b_load_count["n"] += 1
+            # The 3rd load of "b" is the mutation loop's own load (the
+            # first two are the pre-backup and post-backup/TOCTOU preflight
+            # passes) -- tamper only there, simulating a concurrent editor
+            # landing on "b" just before this tool would have processed it.
+            if b_load_count["n"] == 3:
+                path.write_text(
+                    path.read_text().replace("babesByStableYogiPony_xlV4", "somethingElse"), encoding="utf-8"
+                )
+                tampered_b_bytes["value"] = path.read_bytes()
+        return original_load_document(path)
+
+    monkeypatch.setattr(pack130, "_load_document", _load_and_maybe_tamper)
+
+    with pytest.raises(pack130.PolicyRefusal):
+        pack130.reconcile(
+            _plan((source_a, source_b, source_c)), packs_dir=tmp_path, backup_dir=tmp_path / "backup", dry_run=False
+        )
+
+    # "a" was successfully replaced by this tool, then rolled back byte-exact.
+    assert path_a.read_bytes() == original_a
+    # "b" was never successfully replaced by this tool -- it must retain
+    # the concurrent edit exactly, never restored from its pre-run backup
+    # merely because it existed among the sources this run backed up.
+    assert path_b.read_bytes() == tampered_b_bytes["value"]
+    # "c" was never reached at all.
+    assert path_c.read_bytes() == original_c
+
+
+def test_failure_before_first_successful_write_restores_nothing(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path_a = tmp_path / "a.json"
+    path_b = tmp_path / "b.json"
+    _write_pack(path_a, [{"index": 0, "text": "a", "loras": [["BetterThanWords-merged-SDXL-LoRA-v3", 0.5]]}])
+    _write_pack(path_b, [{"index": 0, "text": "b", "loras": [["babesByStableYogiPony_xlV4", 0.5]]}])
+    original_b = path_b.read_bytes()
+    source_a = _source_plan("a", path_a, removals=(_removal("a", "pack_data.slots[0].loras[0][0]", "BetterThanWords-merged-SDXL-LoRA-v3"),))
+    source_b = _source_plan("b", path_b, removals=(_removal("b", "pack_data.slots[0].loras[0][0]", "babesByStableYogiPony_xlV4"),))
+
+    original_load_document = pack130._load_document
+    a_load_count = {"n": 0}
+    tampered_a_bytes: dict[str, bytes] = {}
+
+    def _load_and_maybe_tamper(path: Path):
+        if path.name == "a.json":
+            a_load_count["n"] += 1
+            if a_load_count["n"] == 3:  # the mutation loop's own load, i.e. before any write at all
+                path.write_text(
+                    path.read_text().replace("BetterThanWords-merged-SDXL-LoRA-v3", "somethingElse"),
+                    encoding="utf-8",
+                )
+                tampered_a_bytes["value"] = path.read_bytes()
+        return original_load_document(path)
+
+    monkeypatch.setattr(pack130, "_load_document", _load_and_maybe_tamper)
+
+    with pytest.raises(pack130.PolicyRefusal):
+        pack130.reconcile(_plan((source_a, source_b)), packs_dir=tmp_path, backup_dir=tmp_path / "backup", dry_run=False)
+
+    # Zero sources were ever successfully written, so rollback had nothing
+    # to restore: "a" retains the concurrent edit, "b" is fully untouched.
+    assert path_a.read_bytes() == tampered_a_bytes["value"]
+    assert path_b.read_bytes() == original_b
+
+
+def test_keyboard_interrupt_after_one_success_rolls_back_and_reraises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    path_a = tmp_path / "a.json"
+    path_b = tmp_path / "b.json"
+    _write_pack(path_a, [{"index": 0, "text": "a", "loras": [["BetterThanWords-merged-SDXL-LoRA-v3", 0.5]]}])
+    _write_pack(path_b, [{"index": 0, "text": "b", "loras": [["babesByStableYogiPony_xlV4", 0.5]]}])
+    original_a = path_a.read_bytes()
+    original_b = path_b.read_bytes()
+    source_a = _source_plan("a", path_a, removals=(_removal("a", "pack_data.slots[0].loras[0][0]", "BetterThanWords-merged-SDXL-LoRA-v3"),))
+    source_b = _source_plan("b", path_b, removals=(_removal("b", "pack_data.slots[0].loras[0][0]", "babesByStableYogiPony_xlV4"),))
+
+    original_atomic_write = pack130._atomic_write
+
+    def _atomic_write_with_interrupt(path: Path, document):
+        if path.name == "b.json":
+            raise KeyboardInterrupt()
+        return original_atomic_write(path, document)
+
+    monkeypatch.setattr(pack130, "_atomic_write", _atomic_write_with_interrupt)
+
+    with pytest.raises(KeyboardInterrupt):
+        pack130.reconcile(_plan((source_a, source_b)), packs_dir=tmp_path, backup_dir=tmp_path / "backup", dry_run=False)
+
+    # "a" was written then rolled back byte-exact; "b" was never touched
+    # by this tool at all (the interrupt fired before its own write).
+    assert path_a.read_bytes() == original_a
+    assert path_b.read_bytes() == original_b
+
+
+def test_rollback_conflict_when_a_replaced_source_is_modified_before_rollback(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path_a = tmp_path / "a.json"
+    path_b = tmp_path / "b.json"
+    _write_pack(path_a, [{"index": 0, "text": "a", "loras": [["BetterThanWords-merged-SDXL-LoRA-v3", 0.5]]}])
+    _write_pack(path_b, [{"index": 0, "text": "b", "loras": [["babesByStableYogiPony_xlV4", 0.5]]}])
+    source_a = _source_plan("a", path_a, removals=(_removal("a", "pack_data.slots[0].loras[0][0]", "BetterThanWords-merged-SDXL-LoRA-v3"),))
+    source_b = _source_plan("b", path_b, removals=(_removal("b", "pack_data.slots[0].loras[0][0]", "babesByStableYogiPony_xlV4"),))
+
+    original_transform_source = pack130._transform_source
+    tampered_a_bytes: dict[str, bytes] = {}
+
+    def _transform_and_tamper(document, source):
+        if source.source_id == "b":
+            # A second, independent external edit lands on "a" -- a file
+            # this tool already successfully wrote -- before rollback gets
+            # a chance to run.
+            path_a.write_text(
+                path_a.read_text().replace('"text": "a"', '"text": "externally-edited-after-our-write"'),
+                encoding="utf-8",
+            )
+            tampered_a_bytes["value"] = path_a.read_bytes()
+            raise RuntimeError("simulated failure while processing b")
+        return original_transform_source(document, source)
+
+    monkeypatch.setattr(pack130, "_transform_source", _transform_and_tamper)
+
+    with pytest.raises(pack130.RollbackConflict) as excinfo:
+        pack130.reconcile(_plan((source_a, source_b)), packs_dir=tmp_path, backup_dir=tmp_path / "backup", dry_run=False)
+
+    assert "a" in str(excinfo.value)
+    assert isinstance(excinfo.value.__cause__, RuntimeError)  # original failure never swallowed
+    # Rollback must never overwrite the newer external edit to "a" -- it
+    # is preserved exactly as the concurrent edit left it.
+    assert path_a.read_bytes() == tampered_a_bytes["value"]
+
+
 # --- 27/28. semantic-diff guard rejects prompt/unrelated setting mutation ------------------------------
 
 
