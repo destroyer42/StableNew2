@@ -96,25 +96,16 @@ and repair protocol below).
 
 ### Task classes and model selection
 
-`Narrow / Standard / Architectural` classify the task. Model names are provider-specific and change
-over time: always use the current available model names, never a dated mapping as permanent
-authority. Every new work-package prompt states both a **Codex** model + effort and a **Claude Code**
-model + effort, and a **preferred host** only when one host materially fits better; otherwise the
-work stays in the current host and session to preserve context.
+`Narrow / Standard / Architectural` classify the task. **`docs/AI_MODEL_SELECTION.md` is the sole
+canonical authority for model and effort selection**: its dated table, selection logic, effort rules,
+empirical-calibration rules and review cadence are not duplicated here. Every new work-package prompt
+states a **Codex** model + effort and a **Claude Code** model + effort from that document (current
+model names, never a stale mapping), and a **preferred host** only when one materially fits better;
+otherwise the work stays in the current host and session to preserve context. Every completion
+report carries the `Model / usage` section that document defines.
 
-Owner default mapping as of 2026-09-29 (update when availability changes):
-
-| Work | Codex | Claude Code |
-|---|---|---|
-| Mechanical docs/status/focused validation | GPT-6 Luna, Medium | Claude Sonnet 5, Medium |
-| Substantial known-architecture implementation | GPT-6 Sol, Medium | Claude Sonnet 5, High |
-| Difficult bounded lifecycle / cross-file implementation | GPT-6 Sol, High | Claude Sonnet 5, High |
-| Genuine material architecture / ownership ambiguity | GPT-6 Astra, Medium/High | Claude Opus 5, High |
-
-Prefer staying in the current Claude Code or Codex session while it remains capable and quota
-permits; switch hosts or models only when capability, quota, or context conditions justify the
-transfer. When transferring, preserve the branch/worktree, exact SHA, acceptance contract, accepted
-evidence, unresolved findings, and authorization boundaries, and do not restart discovery.
+When transferring hosts or models, preserve the branch/worktree, exact SHA, acceptance contract,
+accepted evidence, unresolved findings and authorization boundaries, and do not restart discovery.
 
 ### Capability and permission model
 
@@ -211,14 +202,18 @@ name the integration action and target.
 Each authored PR or bounded work package records:
 
 - **Execution Profile + Model/Reasoning Recommendation** — execution class; the
-  currently available Codex model + effort and Claude Code model + effort; a
-  preferred host only when one materially fits better; and why this is the
+  Codex and Claude Code model + effort chosen per `docs/AI_MODEL_SELECTION.md`;
+  a preferred host only when one materially fits better; and why this is the
   lowest effective tier, including retry/failure cost where relevant;
 - **Controller Surface Assessment** — whether controller/coordinator product
   code is touched; orchestration-only Delivery does not count as product
   controller code;
 - **Token-Efficient Validation Plan** — the smallest focused checks, evidence
   reuse conditions, and any required full gate or CI follow-up.
+
+The completion report records actual model, effort and host-reported usage in a `Model / usage`
+section (`docs/AI_MODEL_SELECTION.md`); unavailable metrics are reported as unavailable, never
+estimated.
 
 ## Security/release triggers
 

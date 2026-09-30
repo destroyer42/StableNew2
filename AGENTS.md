@@ -57,9 +57,9 @@ shared external state.
 Classify work as Narrow, Standard, or Architectural. If discovery proves a
 higher class, stop and recommend escalation instead of silently broadening
 scope. Every authored PR or bounded work package records an
-**Execution Profile + Model/Reasoning Recommendation** (the currently available
-Codex and Claude Code model + effort, and a preferred host only when one
-materially fits better), a Controller Surface Assessment when
+**Execution Profile + Model/Reasoning Recommendation** (Codex and Claude Code
+model + effort per `docs/AI_MODEL_SELECTION.md`, and a preferred host only when
+one materially fits better), a Controller Surface Assessment when
 controller/coordinator code may be touched, and a Token-Efficient Validation
 Plan. Prefer the largest coherent package that shares one outcome, stays in
 understood architecture, and validates together.
@@ -128,7 +128,9 @@ to narrate a commit.
 `docs/AGENT_OPERATING_MODEL.md` defines the single-lane default workflow
 (one primary Claude Code or Codex session; specialists optional), local
 feature-branch lifecycle, worktree ownership, checkpoint/stop discipline,
-evidence reuse, security/release triggers, and PR-ready criteria. Provider bridges such as `CLAUDE.md` and
+evidence reuse, security/release triggers, and PR-ready criteria.
+`docs/AI_MODEL_SELECTION.md` owns current model/effort selection, the periodic
+review, and the `Model / usage` completion-report section. Provider bridges such as `CLAUDE.md` and
 `.github/copilot-instructions.md` may point to this root contract; they do not
 replace it. Provider-specific orchestration is an implementation detail, not a
 repository authority.

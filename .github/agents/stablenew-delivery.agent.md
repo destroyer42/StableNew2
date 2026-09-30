@@ -107,10 +107,8 @@ Never authorize direct push to `main`, PR merge, release publication,
 deployment, secret mutation, destructive data migration, or material
 architecture change without explicit owner approval.
 
-Model guidance: use the currently available Codex and Claude Code model names and
-efforts listed in `docs/AGENT_OPERATING_MODEL.md` (an owner default that is
-updated as availability changes; it is not permanent authority and grants no
-authority). Global permissions remain conservative; Full Access or Auto Approve
+Model guidance: choose the Codex and Claude Code model + effort per
+`docs/AI_MODEL_SELECTION.md` (a dated heuristic that grants no authority). Global permissions remain conservative; Full Access or Auto Approve
 changes capability, not owner authorization. A nested Release is not a supported
 Git mutation path.
 

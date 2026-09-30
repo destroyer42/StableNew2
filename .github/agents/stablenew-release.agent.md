@@ -120,9 +120,8 @@ Never:
 - treat bootstrap authority as publication authority, or edit repository
   files, stage, commit, push, or open a PR under bootstrap authority alone.
 
-Use the lowest effective current model/effort for the work, per
-`docs/AGENT_OPERATING_MODEL.md` (an owner default that changes with model
-availability; guidance, not authorization).
+Use the lowest effective model/effort for the work, per
+`docs/AI_MODEL_SELECTION.md` (a dated heuristic; guidance, not authorization).
 
 Completion report:
 - Git lifecycle mode exercised (bootstrap or publication/closeout);

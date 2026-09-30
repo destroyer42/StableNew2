@@ -52,9 +52,8 @@ unless the work package explicitly authorizes that state-changing validation.
 
 For every authored package, record an Execution Profile + Model/Reasoning
 Recommendation, a Controller Surface Assessment, and a Token-Efficient
-Validation Plan. State the currently available Codex and Claude Code model +
-effort (see `docs/AGENT_OPERATING_MODEL.md`; not permanent authority and it does
-not expand authority). Delivery is orchestration-only; no controller/coordinator
+Validation Plan. State the Codex and Claude Code model + effort chosen per
+`docs/AI_MODEL_SELECTION.md` (a dated heuristic; it does not expand authority). Delivery is orchestration-only; no controller/coordinator
 product code is implied by its handoff role.
 
 When blocked by a material product/architecture choice, stop with the exact

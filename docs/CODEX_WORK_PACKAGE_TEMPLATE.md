@@ -14,8 +14,8 @@ authorities and exact start state.
 
 - Execution class: Narrow / Standard / Architectural
 - Execution location: Local / Cloud
-- Codex model + effort (currently available):
-- Claude Code model + effort (currently available):
+- Codex model + effort (per `docs/AI_MODEL_SELECTION.md`):
+- Claude Code model + effort (per `docs/AI_MODEL_SELECTION.md`):
 - Preferred host (only if one materially fits better; otherwise stay in the current session):
 - Why this profile minimizes expected successful-work cost:
 
@@ -79,3 +79,6 @@ authorities and exact start state.
 - Main unchanged:
 - Working tree clean:
 - Ready for next phase: Yes / No
+- Model / usage (host, actual model, effort, phases, host-reported token/cost/time
+  deltas, compactions, repair passes, result, efficiency observation; report
+  `unavailable in current host` rather than estimating):
