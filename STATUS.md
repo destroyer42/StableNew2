@@ -384,9 +384,10 @@ Updated: 2026-09-29
   `positive_pose`, pose strength, the pose window and reference-image strength (defaults equal the node's own);
   prompt mode is described honestly as exploratory (no driving video, so the pose branch is skipped). `@1.0.0`
   stays byte-identical for replay. The stock negative prompt has no effect at CFG 1.0 and is unchanged. A small
-  qualification-only motion-source corpus and a one-variable experiment suite were added; the controlled GPU
-  experiment was NOT run because the owner's external A1111 occupied the GPU, so driving-motion quality remains
-  `EXECUTION_PASS / PRODUCT_QUALITY_PARTIAL`.
+  qualification-only motion-source corpus and a one-variable experiment suite were added. The four-arm GPU experiment
+  ran once the GPU was free: the separate motion prompt removed the duplicate subject (ghost persistence 28 to 0 of
+  39) but the driven locomotion disappeared with it, and pose strength 1.5 / reference strength 1.3 did not restore
+  it. Driving-motion quality therefore remains `EXECUTION_PASS / PRODUCT_QUALITY_PARTIAL` pending owner review.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

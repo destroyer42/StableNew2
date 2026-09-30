@@ -1,6 +1,6 @@
 # PR-VID-192 — Animate-2 Control Truth & Motion Experimentability
 
-Status: **implemented locally; controlled GPU experiment NOT run (blocked, see §8); pending publication and
+Status: **implemented locally; controlled four-arm GPU experiment run 2026-09-30 (results in §8); pending publication and
 required GitHub CI.** Stacked on PR-VID-191 (`bc10a66`, evidence-frozen and untouched). No new queue, runner,
 compiler, history, experiment or process authority; the canonical path
 (`Intent -> Compiler -> immutable NJR -> JobService -> SQLite Queue/Repository -> PipelineRunner.run_njr ->
@@ -125,31 +125,61 @@ moderate-speed walk. Excluded on purpose: `wan2.2-ti2v-5b_user_i2v_prompt.mp4` (
 individual), skeleton/pose-render clips (not RGB humans) and Animate-2 outputs (second generation). Filling the gaps needs
 owner-created or freshly generated footage; no third-party download was made.
 
-## 8. Controlled experiment (designed, harnessed, NOT run)
+## 8. Controlled experiment (run 2026-09-30)
 
-`tools/acceptance/vid190_queue_recycling_acceptance.py --suite animate2_controls` freezes one reference
-(`source_fullbody.png`), the frozen 39-frame driving clip, seed 19103, 41 frames and the PR-VID-191 appearance prompt,
-and changes one variable per arm: **A0** PR-VID-191 baseline (`@1.0.0`, `positive_pose` unconnected); **A1** + the
-qualified motion-only prompt at default strengths; **A2** = A1 + pose strength 1.5; **A3** = A1 + reference-image
-strength 1.3 (targets the duplicate-subject issue). Deterministic tests prove the arms differ by exactly one variable and
-are admissible.
+The frozen four-arm suite (`--suite animate2_controls`) ran once the owner freed the GPU. Preflight passed and was
+recorded first: exact branch/HEAD `1a6022b` with PR-VID-191 untouched, A1111 absent from port 7860, GPU idle (0 %,
+10.8 GB free), 23.1 GB host RAM, no Comfy listener, pinned ComfyUI v0.37.0 launched by StableNew with
+`--disable-pinned-memory` (temporary local settings only; the owner's `presets/settings.json` was restored
+byte-for-byte and is not in the package diff), and the frozen reference (`362c86cc...`) and driving clip (`d761eb58...`)
+hashes matched. Fixed for every arm: seed 19103, 41 frames at 24 fps, 480x832, the PR-VID-191 appearance prompt, sampler
+settings and model files. Each arm changed exactly one variable relative to its parent.
 
-**Why it was not run.** On 2026-09-30 the machine could not satisfy the qualified condition, and StableNew's own
-preflight independently refused: the owner's A1111 (`launch.py`, external) held the GPU (10.9 GB used, 1.05 GB free at
-100 % utilization; 3.7 GB free at the preflight moment), the endpoint guard reported it `occupied`, host RAM available was
-10.65 GB against the 16 GB floor, and the configured Comfy command lacked `--disable-pinned-memory`. StableNew never
-adopts or stops an external runtime, so nothing was started. To run it: close A1111, launch the qualification ComfyUI with
-`--disable-pinned-memory` via the local overrides, set `STABLENEW_VID191_DRIVING_CLIP`, then run the suite.
+| Arm | Change | Effective controls (frozen in the NJR) | Wall | VRAM peak | Min free RAM |
+|---|---|---|---:|---:|---:|
+| A0 | PR-VID-191 baseline (`@1.0.0`, `positive_pose` unconnected) | none | 185.5 s | 11,238 MiB | 17.0 GB |
+| A1 | + qualified motion-only prompt (`@1.1.0`) | pose 1.0, window 0-1, reference 1.0 | 169.5 s | 11,667 MiB | 16.9 GB |
+| A2 | A1 + pose strength 1.5 | pose 1.5 | 171.0 s | 11,622 MiB | 16.4 GB |
+| A3 | A1 + reference-image strength 1.3 | reference 1.3 | 171.2 s | 11,260 MiB | 16.1 GB |
 
-**CPU-only supporting evidence that was possible.** The frozen PR-VID-184S scorer on the existing PR-VID-191 baseline
-clip (driving mode, duplicate figure) reports `ghost_actor_persistence = 28` of 39 frames (pass <= 2),
-`motion_curve_correlation = 0.042`, `identity_hist_mean = 0.967`, `root_translation_fraction = 0.443` (direction
-matches). This objectively confirms the ghost artifact; it does not say which variable fixes it.
+All four completed with a per-job owned-runtime release, no retry, no device-loss signal and peak temperature 83-85 C.
 
-**Owner evidence still needed:** the four outputs and their ratings (motion amount, action adherence, identity, face,
-limbs/anatomy, temporal coherence, background stability, duplicate/ghost subject, overall usefulness), where owner visual
-judgment is authoritative and the frozen metrics are supporting. The duplicate-subject result stays
-`EXECUTION_PASS / PRODUCT_QUALITY_PARTIAL` until then.
+**Frozen CPU scorer (thresholds unchanged; supporting evidence):**
+
+| Arm | Ghost actor persistence (pass <= 2 of 39) | Motion-curve correlation (driving) | Root translation | Identity hist mean / min | Motion area |
+|---|---:|---:|---:|---:|---:|
+| A0 | **28** (fail) | 0.042 | 0.443 (pass) | 0.967 / 0.949 | 0.233 |
+| A1 | **0** (pass) | 0.253 | 0.012 (fail) | 0.979 / 0.956 | 0.068 |
+| A2 | **0** (pass) | 0.315 (pass) | 0.025 (fail) | 0.985 / 0.970 | 0.068 |
+| A3 | **0** (pass) | 0.167 | 0.006 (fail) | 0.905 / 0.885 | 0.036 |
+
+A0's ghost count reproduced the PR-VID-191 baseline exactly (28 of 39).
+
+**Agent visual reading of contact sheets (not the owner's verdict; owner judgment remains authoritative).**
+A0: two figures overlap in the early and middle frames and the high-knee drill is clearly performed. A1: a single clean
+figure, but no drill and no lateral travel; she mostly stands and raises one forearm to the chest. A2: nearly identical to
+A1 with a marginally larger gesture. A3: nearly static (head turn and hair only).
+
+**Factual effect relative to A0 (no winner declared).**
+- **A1** establishes that the separate `positive_pose` prompt materially changes the outcome: the duplicate subject
+  disappears (28 to 0), identity metrics do not degrade, and the motion curve correlates better with the driving clip. But
+  the driven locomotion also disappears (root translation 0.443 to 0.012, motion area 0.233 to 0.068). In this sample the
+  "ghost" carried the drill in A0, so removing it removed the motion rather than moving it onto the reference subject.
+- **A2** (pose strength 1.5) adds a small further gain in driving correlation (crosses the frozen 0.30 line) and the best
+  identity numbers, at no visible cost, but does not restore the drill or the travel; the visible gain is marginal.
+- **A3** (reference strength 1.3) tightens the reference binding as intended, but with less motion, the lowest identity
+  histogram scores of the corrected arms and the lowest correlation: it traded away motion, not the duplicate (already
+  gone in A1).
+
+**Result.** No arm delivers the driven locomotion on a single subject. The duplicate-subject problem is resolved by the
+separate motion prompt, but at the cost of the requested action in this one-seed, one-clip sample, so driving-motion
+quality stays `EXECUTION_PASS / PRODUCT_QUALITY_PARTIAL`. Per the package contract no fifth arm or tuning sweep followed.
+Open questions for a separate, owner-authorized package: whether a wider pose window/strength range, a different seed, or a
+motion prompt written for this clip's framing recovers the drill without the ghost. Evidence (git-ignored): the
+`reports/vid192/experiment/` acceptance JSON, per-arm telemetry, scorer outputs and contact sheets.
+
+**Owner evidence still needed:** the owner's own viewing of the four clips and ratings on motion amount, action adherence,
+identity, face, limbs/anatomy, temporal coherence, background stability, duplicate subject and usefulness.
 
 ## 9. Adjacent read-only findings (nothing installed or changed)
 
