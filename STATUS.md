@@ -50,6 +50,12 @@ Updated: 2026-09-27
   remains. Details: `docs/Subsystems/Video/PR-VID-120_Neutral_Video_Execution_Contract.md`.
   `PR-VID-130 — Wan2.2 Experimental Prompt-Directed I2V Vertical Slice` is COMPLETE / ACCEPTED / INTEGRATED
   (`docs/Subsystems/Video/PR-VID-130_Wan22_Experimental_Vertical_Slice.md`). Wan2.2 `wan22_ti2v_5b_i2v_v1` v1.0.0 is an EXPERIMENTAL Comfy workflow, never generally approved: each job needs durable explicit `video_execution.experimental_opt_in=true`; disabled workflows stay non-runnable; governance, dependency checks and an observe-only resource-readiness guard (10,000 MiB GPU memory available to Comfy, 16 GB host RAM; not a scheduler/lease) fail before Comfy queue dispatch; external A1111/Comfy are never adopted, terminated or restarted. Native SVD remains the default production video backend; VACE stays NO-GO and unregistered. `VideoWorkflowController` now emits neutral `video_execution` intent; the historical stage bridge remains for the SVD producer, AnimateDiff, prompt-pack/reprocess-built `video_workflow` stages and historical replay, and is retired only once every producer is neutral and replay normalization is proven. Real Wan2.2 acceptance on the RTX 4070 Ti 12 GB produced a valid 480x832/49-frame/24 fps MP4 in ~83.4 s (peak 11,630 MiB VRAM, min 1.45 GB free RAM, no GPU fault).
+  `PR-RUNTIME-110 — Comfy Video Runner Liveness / Watchdog Correctness` is **IMPLEMENTED locally,
+  pending publication and required CI** (`docs/Subsystems/Runtime/PR-RUNTIME-110_Comfy_Video_Runner_Liveness.md`).
+  Healthy long Comfy video jobs no longer trigger a false `queue_runner_stall` at ~90 s: while the
+  server confirms the queued prompt is running, the backend reports bounded, job-scoped liveness
+  through the existing runtime-status path (no invented progress; still bounded by the backend
+  execution timeout). Genuine stalls, native SVD and WebUI watchdog semantics are unchanged.
   `PR-RUNTIME-100 — Owned GPU Runtime Transition Policy` is **COMPLETE / ACCEPTED / INTEGRATED**.
   It coordinates release of conflicting StableNew-owned A1111,
   Comfy, or cached SVD residency before the already-selected backend prepares;
