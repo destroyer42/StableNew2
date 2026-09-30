@@ -11,148 +11,140 @@ material architecture or production decisions. Agents own normal technical
 discovery, implementation detail, testing, repair, documentation impact, and
 PR preparation inside an approved outcome.
 
-## Control plane
+## Default workflow: single lane
 
-The VS Code Agents window is the supported current orchestration
-implementation; it is not a universal or repository authority.
+`Owner outcome -> one primary Claude Code or Codex coding session -> focused validation ->
+optional risk-triggered independent review -> feature-branch PR / required CI -> owner-authorized
+integration`
 
-Use `StableNew Delivery` as the normal entry point. It delegates to specialist
-agents with isolated contexts and returns only the information needed to
-continue the task.
+One active editing session owns one coherent package and worktree. Neither the VS Code Agents
+window, `StableNew Delivery`, nor `StableNew Release` is required for ordinary implementation.
 
-Specialists:
+### Local feature-branch lifecycle
 
-- **StableNew Researcher** — product/repo/current-technology discovery.
-- **StableNew Architect** — architecture fit, execution class, boundaries,
-  implementation plan, validation plan.
-- **StableNew Builder** — implementation and repair in the assigned worktree.
-- **StableNew Verifier** — independent acceptance review and test evidence.
-- **StableNew Security Review** — triggered security review for sensitive
-  surfaces.
-- **StableNew Release** — pre-build feature-branch bootstrap, branch/PR/CI
-  closeout, and only explicitly authorized, verified integration.
+After verifying branch/SHA/worktree and the owner-authorized package scope, the active coding
+session may, as ordinary implementation actions and without a separate Release session:
+
+- create or switch to the authorized short-lived feature branch (never edit `main` or another
+  long-lived target);
+- edit the package;
+- run validation;
+- make local feature-branch commits.
+
+If the owner's initial authorization also explicitly includes feature-branch publication, the same
+session may commit, push that feature branch, and open/update its PR after final aggregate
+verification.
+
+Separate, explicit, current owner authorization naming the action and target/scope is still required
+for: integration or merge to `main` or another long-lived target; force-push or history rewrite;
+tag/release; deployment; destructive migration; secrets/credentials; and any other
+irreversible/shared/protected action. Auto Approve / Full Access changes available capability, not
+the scope of owner authorization.
+
+### Specialist agents are optional
+
+The `.github/agents` workflow remains available when it adds value; it is not a mandatory stage
+sequence. Use a specialist only when justified:
+
+- **StableNew Researcher** — meaningful current/external research, or uncertain code ownership that
+  would otherwise pollute implementation context.
+- **StableNew Architect** — genuine architecture/lifecycle/ownership ambiguity or a material design
+  decision.
+- **StableNew Builder** — implementation/repair delegated inside an orchestrated run.
+- **StableNew Verifier** — independent acceptance review when change risk warrants the extra context
+  cost.
+- **StableNew Security Review** — only when the security triggers below apply.
+- **StableNew Release** — optional Git lifecycle/closeout specialist when independent Git
+  verification is useful; never required merely to create a local feature branch.
+
+`StableNew Delivery` is an orchestration-only coordinator that has no Git-execution tools. If it is
+explicitly invoked while the workspace is on `main` or another long-lived target, it stops before
+Builder edits and emits a Branch Bootstrap Capsule (its agent definition lists the fields). That is a
+limitation of that agent's tool set, not a repository-wide requirement, and it does not apply to a
+primary Claude Code or Codex session.
+
+Native custom-agent handoff is unavailable in the current Codex Agent Host
+(`CODEX_AGENT_HOST_NATIVE_HANDOFF_UNAVAILABLE`); an orchestrated run that needs Release ends with a
+Release-ready capsule and an explicit operator transition to a top-level Release session.
+Top-level Release independently validates the capsule before mutation, reuses accepted evidence only
+while unchanged, and performs only explicitly authorized actions.
+
+### Package sizing: prefer larger coherent packages
+
+Optimize total successful-work cost, not PR count. Default to the largest coherent package that
+shares one product outcome and context, stays within understood architecture, can be validated
+together safely, and needs no new material owner decision. Keep adjacent authorized implementation,
+tests, and affected documentation together when safe.
+
+Do not create separate sessions or PRs solely for documentation closeout, branch choreography,
+mechanical Git steps, repeated context discovery, or artificial phases that share one acceptance
+contract. Stop and split when a genuinely different product objective begins, a new
+architecture/product decision is required, destructive/shared-state authority changes, ownership
+becomes ambiguous, more than two materially different failure classes emerge, or the combined
+package can no longer be safely reviewed and validated as one unit.
+
+### Reduce PR / CI / review churn
+
+Use one repository/context acquisition pass; one coherent implementation pass; focused tests while
+editing; at most one batched repair pass per failure class; one final aggregate diff/acceptance
+review; one full local PR gate near final verification when applicable; and required GitHub CI after
+the feature branch is substantially complete. Reuse green exact-SHA evidence while relevant source
+is unchanged. Do not repeatedly commit or push merely to solicit feedback on incomplete subphases
+unless remote evidence is genuinely required. Automated review findings are evidence, not
+authorization; batch confirmed blocking findings instead of one commit per finding (see the review
+and repair protocol below).
+
+### Task classes and model selection
+
+`Narrow / Standard / Architectural` classify the task. Model names are provider-specific and change
+over time: always use the current available model names, never a dated mapping as permanent
+authority. Every new work-package prompt states both a **Codex** model + effort and a **Claude Code**
+model + effort, and a **preferred host** only when one host materially fits better; otherwise the
+work stays in the current host and session to preserve context.
+
+Owner default mapping as of 2026-09-29 (update when availability changes):
+
+| Work | Codex | Claude Code |
+|---|---|---|
+| Mechanical docs/status/focused validation | GPT-6 Luna, Medium | Claude Sonnet 5, Medium |
+| Substantial known-architecture implementation | GPT-6 Sol, Medium | Claude Sonnet 5, High |
+| Difficult bounded lifecycle / cross-file implementation | GPT-6 Sol, High | Claude Sonnet 5, High |
+| Genuine material architecture / ownership ambiguity | GPT-6 Astra, Medium/High | Claude Opus 5, High |
+
+Prefer staying in the current Claude Code or Codex session while it remains capable and quota
+permits; switch hosts or models only when capability, quota, or context conditions justify the
+transfer. When transferring, preserve the branch/worktree, exact SHA, acceptance contract, accepted
+evidence, unresolved findings, and authorization boundaries, and do not restart discovery.
 
 ### Capability and permission model
 
-Luna, Terra, Sol, and Astra are provider-neutral capability classes. They are
-guidance for selecting the lowest effective available reasoning/model tier;
-they are not vendor names, model mappings, or authority grants. Use the lowest
-class that can reliably complete the assigned work and escalate only when
-discovery or validation shows that the current class is insufficient:
-
-- **Luna** — narrow documentation/configuration edits, straightforward
-  read-only inspection, and focused validation.
-- **Terra** — bounded implementation, repair, and deterministic test work
-  within an understood surface.
-- **Sol** — materially uncertain, cross-surface, or architecture-sensitive
-  work requiring deeper analysis and independent evidence.
-- **Astra** — high-risk security, release, or integration analysis where the
-  cost of an incorrect decision is substantial.
-
-Capability is separate from authorization. Global permissions remain
-conservative. Full Access is session-specific to top-level Release Git
-lifecycle operations: narrowly authorized feature-branch bootstrap and
-authorized publication/closeout; it changes available capability, not owner
-authorization. Git/publication operations that mutate `.git` are supported
-only in that top-level Release session using Full Access. A nested Release is
-not a supported Git mutation path. Bootstrap and publication/closeout are two
-distinct, mutually exclusive Git lifecycle modes; bootstrap authority never
-carries forward publication authority.
-
-There is no custom Git authority or tool, and no broad permission change. No
-agent is thereby authorized to merge or target `main`, publish a release,
-deploy, mutate secrets, or perform destructive actions. Those actions still
+Capability is separate from authorization. Global permissions remain conservative. Session Full
+Access or Auto Approve changes what a session can do, not what the owner has authorized. Git
+operations that mutate `.git` are supported in the active top-level coding session (or a top-level
+Release session); a nested Release is not a supported Git mutation path. There is no custom Git
+authority or tool, and no broad permission change. No agent is thereby authorized to merge or target
+`main`, publish a release, deploy, mutate secrets, or perform destructive actions; those still
 require explicit owner authorization naming the action and target/scope.
-
-## Normal delivery flow
-
-`End state -> Delivery startup check -> [not already on an appropriate
-short-lived branch? emit Branch Bootstrap Capsule -> explicit operator
-transition -> top-level Release + Full Access bootstrap -> explicit return to
-Delivery] -> Research (when needed) -> Architecture/plan -> Build -> Verify ->
-Security (when triggered) -> Release-ready capsule -> explicit operator
-transition -> top-level Release -> Full Access closeout -> owner merge/release`
-
-Not every task uses every stage.
-
-### Branch bootstrap
-
-Before delegating implementation, Delivery checks the current branch, HEAD,
-and worktree. If the workspace is already on an appropriate short-lived
-feature branch with state matching the supplied package, Delivery skips
-bootstrap and proceeds directly to normal routing — the fast path.
-
-If implementation is required and the current branch is `main` or another
-long-lived target, Delivery stops before Builder edits and emits a **Branch
-Bootstrap Capsule** rather than creating or switching branches itself,
-staging, committing, mutating `.git`, spawning/nesting Release, or sending
-Builder to edit `main`. The capsule contains:
-
-- workspace path, when known;
-- current branch;
-- current HEAD;
-- target/base ref, normally `origin/main`;
-- worktree and untracked-file state;
-- coherent package title/outcome;
-- proposed short-lived feature-branch name;
-- bootstrap authorization: create and/or switch to the approved short-lived
-  feature branch necessary for this package — nothing more;
-- prohibited actions: source/docs/config edits, staging, commit, push, PR
-  creation, merge, long-lived-target mutation, force-push, tag/release,
-  deployment, destructive migration, secrets/credentials.
-
-The operator starts or selects a top-level StableNew Release session with
-Full Access to independently verify the capsule and, within bootstrap
-authority only, create/switch to the authorized short-lived branch, verify
-the resulting HEAD/branch/worktree, report it, and stop. Release performs no
-source edits and no publication under bootstrap authority alone. The operator
-then explicitly returns to Delivery, which resumes under normal permissions
-and routes to Researcher/Architect/Builder as usual.
-
-Delivery is an orchestration-only coordinator. It routes work, preserves the
-handoff contract, and reports the compact delivery capsule; it does not edit
-code, docs, or configuration and does not become a Git or product authority.
-Delivery ends after accepted Builder -> Verifier evidence and Security Review
-evidence when triggered. It cannot commit, push, open a pull request, merge, or
-mutate `.git`.
-
-Native custom-agent handoff is unavailable in the current Codex Agent Host
-(`CODEX_AGENT_HOST_NATIVE_HANDOFF_UNAVAILABLE`). When publication was
-requested, Delivery must not nest, create, or spawn Release, switch workspace
-or branch, mutate Git, or claim native handoff support. Instead it ends with a
-compact Release-ready capsule and explicitly directs the operator to start or
-select a top-level StableNew Release session in the same verified workspace.
-The capsule contains the workspace path if known; branch; HEAD; `origin/main`;
-expected changed-file set; Verifier verdict; Security verdict when applicable;
-validation evidence; authorized publication actions; and prohibited actions.
-
-Top-level Release independently validates the capsule before mutation,
-reacquires current Git/ref/diff state, reuses accepted evidence only while
-unchanged, and performs only explicitly authorized publication actions. The
-operator selects session-specific Full Access for authorized closeout; it is a
-capability, not authorization. Explicit owner approval remains required for
-main integration, merge, tag/release, deployment, destructive migration,
-secrets, force-push, and protected actions. A nested Release path is not
-supported.
 
 ### Narrow change
 
-Skip research and architecture delegation when current code and acceptance are
-obvious. Builder implements and Verifier checks; insert Security Review when
-triggered. Delivery ends with accepted evidence and, when publication was
-requested, a Release-ready capsule plus explicit operator transition to a
-top-level Release session for authorized closeout.
+Skip research and architecture analysis when current code and acceptance are
+obvious. The primary session implements and runs focused validation; add an
+independent Verifier only when risk warrants it, and Security Review when
+triggered.
 
 ### Standard change
 
-Use Architect before Builder. Use Researcher only for uncertain code ownership,
-external semantics, or current upstream behavior.
+Establish the architecture fit and validation plan before editing, in the primary
+session. Use an Architect only for genuine ambiguity, and a Researcher only for
+uncertain code ownership, external semantics, or current upstream behavior.
 
 ### Architectural change
 
-Researcher and Architect both run. The Architect returns the decision that
-requires owner approval. Implementation does not begin until the architecture
-decision is approved and the appropriate repository authority is updated.
+Research and architecture analysis are both performed, by the primary session or
+by specialists. The analysis returns the decision that requires owner approval.
+Implementation does not begin until the architecture decision is approved and the
+appropriate repository authority is updated.
 
 ## Context policy
 
@@ -194,31 +186,34 @@ One worktree/session should normally own one coherent work package. Do not let
 multiple editing agents write into the same worktree concurrently.
 
 Read-only Researcher, Architect, Verifier, and Security Review may inspect the
-same worktree. Only one Builder owns edits at a time.
+same worktree. Only one editing session owns edits at a time.
 
-Preserve unrelated dirty work and user data. A Release agent may integrate or
-push a long-lived target only after explicit owner authorization; authorization
-must name the integration action and target.
+Preserve unrelated dirty work and user data. An agent may integrate or push a
+long-lived target only after explicit owner authorization; authorization must
+name the integration action and target.
 
 ## Token policy
 
 1. Prefer repository state over conversation recap.
-2. Delegate broad searches to an isolated Researcher and return a compact
-   evidence capsule.
-3. Do not send a builder the research transcript; send findings, constraints,
+2. Delegate broad searches to an isolated Researcher only when they would
+   otherwise pollute the implementation context; return a compact evidence
+   capsule.
+3. Do not hand an implementer a research transcript; send findings, constraints,
    paths, and acceptance criteria.
 4. Use deterministic scripts for Git state, lint, type, test, and diff checks.
 5. Do not rerun green expensive evidence when relevant source is unchanged.
-6. Start a new session at coherent task/PR boundaries.
-7. Use the lowest reasoning/model tier that reliably fits the execution class.
+6. Start a new session at coherent task/PR boundaries; otherwise stay in the
+   current session while it remains capable.
+7. Use the lowest current model/effort that reliably fits the execution class.
 8. Escalate only when discovery proves the current execution class is
    insufficient.
 
 Each authored PR or bounded work package records:
 
-- **Execution Profile + Model/Reasoning Recommendation** — execution class,
-  selected capability class, and why it is the lowest effective available
-  tier, including retry/failure cost where relevant;
+- **Execution Profile + Model/Reasoning Recommendation** — execution class; the
+  currently available Codex model + effort and Claude Code model + effort; a
+  preferred host only when one materially fits better; and why this is the
+  lowest effective tier, including retry/failure cost where relevant;
 - **Controller Surface Assessment** — whether controller/coordinator product
   code is touched; orchestration-only Delivery does not count as product
   controller code;
@@ -337,8 +332,8 @@ missing evidence, or
 ambiguity, stop and report. Do not force-push, rewrite history, choose an
 alternate ref, bypass CI, widen scope, or infer authority.
 
-Separately authorized feature-branch publication may create, commit, and push
-only after rechecking the exact current HEAD and aggregate diff against the
+Feature-branch publication (authorized in the initial package authorization or
+separately) may create, commit, and push only after rechecking the exact current HEAD and aggregate diff against the
 accepted task/outcome, explicit exclusions, any file constraints the owner
 actually supplied, and preservation of unrelated user work. An approved outcome
 authorizes its normal implementation file scope without an owner file list;

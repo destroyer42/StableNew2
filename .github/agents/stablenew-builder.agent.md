@@ -52,12 +52,10 @@ unless the work package explicitly authorizes that state-changing validation.
 
 For every authored package, record an Execution Profile + Model/Reasoning
 Recommendation, a Controller Surface Assessment, and a Token-Efficient
-Validation Plan. Use provider-neutral capability guidance: Luna for narrow
-docs/config work, Terra for bounded implementation, Sol for uncertain or
-cross-surface work, and Astra for high-risk security/release analysis. These
-classes are not vendor model mappings and do not expand authority. Delivery is
-orchestration-only; no controller/coordinator product code is implied by its
-handoff role.
+Validation Plan. State the currently available Codex and Claude Code model +
+effort (see `docs/AGENT_OPERATING_MODEL.md`; not permanent authority and it does
+not expand authority). Delivery is orchestration-only; no controller/coordinator
+product code is implied by its handoff role.
 
 When blocked by a material product/architecture choice, stop with the exact
 decision required.

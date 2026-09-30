@@ -14,7 +14,9 @@ authorities and exact start state.
 
 - Execution class: Narrow / Standard / Architectural
 - Execution location: Local / Cloud
-- Model and reasoning:
+- Codex model + effort (currently available):
+- Claude Code model + effort (currently available):
+- Preferred host (only if one materially fits better; otherwise stay in the current session):
 - Why this profile minimizes expected successful-work cost:
 
 ## Exact start state and authorities
