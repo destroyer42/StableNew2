@@ -18,6 +18,14 @@ needs workflow-specific logic:
 
 The qualified launch policy (``--disable-pinned-memory``) is a declared runtime requirement, and the
 StableNew-owned runtime is released after every job.
+
+Versions (PR-VID-192): ``1.0.0`` is the exact PR-VID-191 graph, kept registered unchanged so its
+jobs replay against the identical pinned graph.  ``1.1.0`` binds the controls the pinned ComfyUI
+v0.37.0 ``WanAnimate2ToVideo`` node actually honors (see ``docs/Subsystems/Video/
+PR-VID-192_Animate2_Control_Truth.md``): a distinct Motion Prompt wired to ``positive_pose``, pose
+strength, the pose window and reference-image strength, plus an honest description of prompt mode.
+Every control default equals the node's own default, and generic ``motion_profile`` is not declared
+by either version because no node input honors it.
 """
 
 from __future__ import annotations
@@ -32,6 +40,7 @@ from src.video.workflow_contracts import (
     WorkflowOutputBinding,
     WorkflowSpec,
 )
+from src.video.workflow_controls import OPERATOR_CONTROLS_KEY, ORDERED_PAIRS_KEY
 
 WAN_ANIMATE2_PROMPT_ID = "wan_animate2_prompt_i2v_v1"
 WAN_ANIMATE2_DRIVE_ID = "wan_animate2_drive_i2v_v1"
@@ -108,9 +117,80 @@ WAN_ANIMATE2_FRAME_COUNT_POLICY = {
     "fps": 24,
 }
 WAN_ANIMATE2_REQUIRED_LAUNCH_FLAGS = ("--disable-pinned-memory",)
+WAN_ANIMATE2_BASELINE_VERSION = "1.0.0"
+WAN_ANIMATE2_CONTROLS_VERSION = "1.1.0"
+
+# Operator controls bound to real ``WanAnimate2ToVideo`` inputs on the pinned ComfyUI v0.37.0.  Ranges
+# and defaults are the node's own (comfy_extras/nodes_wan.py, revision 73c9bad4); help paraphrases its
+# tooltips.  ``pose_prompt`` maps to ``positive_pose`` ("describes the motion rather than the
+# character; defaults to positive"), so an empty Motion Prompt is frozen as the appearance prompt --
+# exactly the node's own default, but now explicit in the immutable job.
+_REFERENCE_STRENGTH_CONTROL: dict[str, Any] = {
+    "name": "reference_image_strength",
+    "kind": "number",
+    "label": "Reference Image Strength",
+    "default": 1.0,
+    "minimum": 0.0,
+    "maximum": 10.0,
+    "step": 0.01,
+    "help": (
+        "How strongly generated frames attend to the reference image. 1.0 is the trained behavior; "
+        "below 1.0 loosens identity/appearance adherence, above tightens it against drift."
+    ),
+}
+_DRIVE_CONTROLS: tuple[dict[str, Any], ...] = (
+    {
+        "name": "pose_prompt",
+        "kind": "text",
+        "label": "Motion Prompt",
+        "fallback_field": "prompt",
+        "help": (
+            "Describes ONLY the motion to transfer (feeds the model's positive_pose branch). Leave "
+            "empty to reuse the appearance/background prompt, which is the runtime default."
+        ),
+    },
+    {
+        "name": "pose_strength",
+        "kind": "number",
+        "label": "Pose Strength",
+        "default": 1.0,
+        "minimum": 0.0,
+        "maximum": 10.0,
+        "step": 0.01,
+        "help": (
+            "Scales the driving video's influence on motion. 1.0 is the trained behavior; below "
+            "weakens adherence, above amplifies. 0.0 mutes it but does not fully remove it."
+        ),
+    },
+    {
+        "name": "pose_start_percent",
+        "kind": "number",
+        "label": "Pose Start %",
+        "default": 0.0,
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "step": 0.01,
+        "help": "Fraction of sampling at which the driving-video influence starts (0-1).",
+    },
+    {
+        "name": "pose_end_percent",
+        "kind": "number",
+        "label": "Pose End %",
+        "default": 1.0,
+        "minimum": 0.0,
+        "maximum": 1.0,
+        "step": 0.01,
+        "help": (
+            "Fraction of sampling at which the driving-video influence ends (0-1). Motion is mostly "
+            "established early, so e.g. 0.7 can loosen fine detail while keeping the choreography."
+        ),
+    },
+    _REFERENCE_STRENGTH_CONTROL,
+)
+_PROMPT_CONTROLS: tuple[dict[str, Any], ...] = (_REFERENCE_STRENGTH_CONTROL,)
 
 
-def _prompt_template(*, driving_video: bool) -> dict[str, Any]:
+def _prompt_template(*, driving_video: bool, controlled: bool = False) -> dict[str, Any]:
     animate_inputs: dict[str, Any] = {
         "positive": ["5", 0],
         "negative": ["6", 0],
@@ -217,10 +297,22 @@ def _prompt_template(*, driving_video: bool) -> dict[str, Any]:
         }
         animate_inputs["pose_video"] = ["20", 0]
         animate_inputs["clip_vision_output_pose"] = ["22", 0]
+    if controlled:
+        animate_inputs["reference_image_strength"] = "{{input.reference_image_strength}}"
+        if driving_video:
+            # A distinct motion-only prompt for the pose branch (the node otherwise reuses `positive`).
+            template["23"] = {
+                "class_type": "CLIPTextEncode",
+                "inputs": {"text": "{{input.pose_prompt}}", "clip": ["2", 0]},
+            }
+            animate_inputs["positive_pose"] = ["23", 0]
+            animate_inputs["pose_strength"] = "{{input.pose_strength}}"
+            animate_inputs["pose_start_percent"] = "{{input.pose_start_percent}}"
+            animate_inputs["pose_end_percent"] = "{{input.pose_end_percent}}"
     return template
 
 
-def _bindings(*, driving_video: bool) -> tuple[WorkflowInputBinding, ...]:
+def _bindings(*, driving_video: bool, controlled: bool = False) -> tuple[WorkflowInputBinding, ...]:
     bindings = [
         WorkflowInputBinding(
             binding_name="source_image",
@@ -232,7 +324,17 @@ def _bindings(*, driving_video: bool) -> tuple[WorkflowInputBinding, ...]:
             binding_name="prompt",
             source_field="prompt",
             backend_key="prompt",
-            description="Prompt describing the character and the motion (required).",
+            description=(
+                (
+                    "Appearance / background prompt: the character, background and viewpoint, not "
+                    "the action (required)."
+                    if driving_video
+                    else "Prompt describing the character and scene (required); with no driving "
+                    "video it can only weakly influence motion."
+                )
+                if controlled
+                else "Prompt describing the character and the motion (required)."
+            ),
         ),
         WorkflowInputBinding(
             binding_name="negative_prompt",
@@ -278,33 +380,64 @@ def _bindings(*, driving_video: bool) -> tuple[WorkflowInputBinding, ...]:
                 ),
             )
         )
+    if controlled:
+        for control in _DRIVE_CONTROLS if driving_video else _PROMPT_CONTROLS:
+            bindings.append(
+                WorkflowInputBinding(
+                    binding_name=control["name"],
+                    source_field=f"stage_config.{OPERATOR_CONTROLS_KEY}.{control['name']}",
+                    backend_key=control["name"],
+                    description=str(control["help"]),
+                )
+            )
     return tuple(bindings)
 
 
-def _build(*, workflow_id: str, driving_video: bool) -> WorkflowSpec:
+def _build(*, workflow_id: str, driving_video: bool, controlled: bool = False) -> WorkflowSpec:
     stock_nodes = WAN_ANIMATE2_BASE_NODES + (WAN_ANIMATE2_DRIVE_NODES if driving_video else ())
     capability_tags = (WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,) + (
         (WORKFLOW_CAP_POSE_VIDEO,) if driving_video else ()
     )
-    mode = "Driving Video Motion" if driving_video else "Prompt Motion"
-    how = (
-        "A driving video supplies the body motion (the PR-VID-184R/S qualified mode) and the "
-        "prompt describes the scene."
-        if driving_video
-        else "The prompt describes the motion; no driving video. This mode was not part of the "
-        "PR-VID-184 qualification and is exposed for real-world testing."
-    )
+    version = WAN_ANIMATE2_CONTROLS_VERSION if controlled else WAN_ANIMATE2_BASELINE_VERSION
+    if controlled:
+        mode = "Driving Video Motion" if driving_video else "Reference Image + Prompt"
+        display_name = (
+            f"Wan-Animate-2 {mode} (Experimental)"
+            if driving_video
+            else f"Wan-Animate-2 {mode} (Experimental, subtle motion)"
+        )
+        how = (
+            "A driving video supplies the body motion (the PR-VID-184R/S qualified mode). The "
+            "appearance/background prompt describes the character and scene; a separate Motion "
+            "Prompt describes only the motion. Pose strength, the pose window and reference-image "
+            "strength are real model inputs."
+            if driving_video
+            else "There is no driving video, so the model's pose branch is skipped: motion comes "
+            "only from the text prompt and is typically subtle. Wan-Animate-2 is built around a "
+            "driving video; this mode is exploratory, not directed animation. Use Driving Video "
+            "Motion for directed movement."
+        )
+    else:
+        mode = "Driving Video Motion" if driving_video else "Prompt Motion"
+        display_name = f"Wan-Animate-2 {mode} (Experimental)"
+        how = (
+            "A driving video supplies the body motion (the PR-VID-184R/S qualified mode) and the "
+            "prompt describes the scene."
+            if driving_video
+            else "The prompt describes the motion; no driving video. This mode was not part of the "
+            "PR-VID-184 qualification and is exposed for real-world testing."
+        )
     return WorkflowSpec(
         workflow_id=workflow_id,
-        workflow_version="1.0.0",
+        workflow_version=version,
         backend_id="comfy",
-        display_name=f"Wan-Animate-2 {mode} (Experimental)",
+        display_name=display_name,
         description=(
             "Experimental Wan-Animate-2 on the StableNew-managed ComfyUI (v0.37+). The reference "
             f"image sets the character's appearance. {how}"
         ),
         capability_tags=capability_tags,
-        input_bindings=_bindings(driving_video=driving_video),
+        input_bindings=_bindings(driving_video=driving_video, controlled=controlled),
         output_bindings=(
             WorkflowOutputBinding(
                 binding_name="output_dir",
@@ -337,7 +470,7 @@ def _build(*, workflow_id: str, driving_video: bool) -> WorkflowSpec:
             ),
         ),
         governance_state="experimental",
-        pinned_revision=f"catalog:{workflow_id}@1.0.0",
+        pinned_revision=f"catalog:{workflow_id}@{version}",
         governance_notes=(
             "EXPERIMENTAL: runs only with an explicit per-job opt-in, only on a StableNew-managed "
             "ComfyUI launched with --disable-pinned-memory; the owned runtime is released after "
@@ -356,7 +489,12 @@ def _build(*, workflow_id: str, driving_video: bool) -> WorkflowSpec:
                 "required_launch_flags": list(WAN_ANIMATE2_REQUIRED_LAUNCH_FLAGS),
             },
             "provenance": {
-                "qualification": "PR-VID-184R/PR-VID-184S (driving-video mode)",
+                "qualification": (
+                    "PR-VID-184R/PR-VID-184S graph; PR-VID-192 control bindings (defaults equal the "
+                    "pinned node defaults)"
+                    if controlled
+                    else "PR-VID-184R/PR-VID-184S (driving-video mode)"
+                ),
                 "qualified_graph_sha256": WAN_ANIMATE2_QUALIFIED_GRAPH_SHA256,
                 "comfyui_version": "0.37.0",
                 "comfyui_revision": "73c9bad4d21e7addbe1d13bc92eee0f1431b017d",
@@ -385,9 +523,37 @@ def _build(*, workflow_id: str, driving_video: bool) -> WorkflowSpec:
                     "shift": 5,
                     "geometry": "source-aware: portrait 480x832; landscape 832x480",
                     "workflow_identity": "Wan-Animate-2 distilled int8, PR-VID-184R/S graph",
-                }
+                    **(
+                        {"negative_prompt_effect": "none at cfg 1.0 (kept as qualified)"}
+                        if controlled
+                        else {}
+                    ),
+                },
+                **(
+                    {
+                        "prompt_label": (
+                            "Appearance / Background Prompt" if driving_video else "Prompt"
+                        )
+                    }
+                    if controlled
+                    else {}
+                ),
             },
-            "prompt_template": _prompt_template(driving_video=driving_video),
+            "prompt_template": _prompt_template(driving_video=driving_video, controlled=controlled),
+            **(
+                {
+                    OPERATOR_CONTROLS_KEY: [
+                        dict(control) for control in (_DRIVE_CONTROLS if driving_video else _PROMPT_CONTROLS)
+                    ],
+                    **(
+                        {ORDERED_PAIRS_KEY: [["pose_start_percent", "pose_end_percent"]]}
+                        if driving_video
+                        else {}
+                    ),
+                }
+                if controlled
+                else {}
+            ),
         },
     )
 
@@ -396,10 +562,14 @@ def build_wan_animate2_specs() -> tuple[WorkflowSpec, ...]:
     return (
         _build(workflow_id=WAN_ANIMATE2_PROMPT_ID, driving_video=False),
         _build(workflow_id=WAN_ANIMATE2_DRIVE_ID, driving_video=True),
+        _build(workflow_id=WAN_ANIMATE2_PROMPT_ID, driving_video=False, controlled=True),
+        _build(workflow_id=WAN_ANIMATE2_DRIVE_ID, driving_video=True, controlled=True),
     )
 
 
 __all__ = [
+    "WAN_ANIMATE2_BASELINE_VERSION",
+    "WAN_ANIMATE2_CONTROLS_VERSION",
     "WAN_ANIMATE2_DEFAULT_NEGATIVE",
     "WAN_ANIMATE2_DRIVE_ID",
     "WAN_ANIMATE2_FRAME_COUNT_POLICY",
