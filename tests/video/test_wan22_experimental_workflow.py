@@ -34,11 +34,14 @@ from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
 WAN_ID = "wan22_ti2v_5b_i2v_v1"
+# The PR-VID-110 qualified, fixed-length revision these tests pin; 1.1.0 (PR-VID-190) is
+# covered by tests/video/test_pr_vid_190_comfy_lifecycle_frame_count.py.
+WAN_V1 = "1.0.0"
 MIB = 1024 * 1024
 
 
 def _wan_spec() -> WorkflowSpec:
-    return build_default_workflow_registry().get(WAN_ID, allow_experimental=True)
+    return build_default_workflow_registry().get(WAN_ID, WAN_V1, allow_experimental=True)
 
 
 def _object_info(*, missing_node: str | None = None, files: dict[str, str] | None = None):
@@ -195,8 +198,8 @@ def test_wan_is_registered_as_experimental_with_exact_pins_and_no_extra_controls
 def test_experimental_needs_opt_in_and_disabled_never_runs() -> None:
     registry = build_default_workflow_registry()
     with pytest.raises(KeyError, match="explicit experimental opt-in"):
-        registry.get(WAN_ID)
-    assert registry.get(WAN_ID, allow_experimental=True).is_experimental
+        registry.get(WAN_ID, WAN_V1)
+    assert registry.get(WAN_ID, WAN_V1, allow_experimental=True).is_experimental
     assert WAN_ID not in [s.workflow_id for s in registry.list_specs_for_backend("comfy")]
     assert WAN_ID in [s.workflow_id for s in registry.list_offerable_specs("comfy")]
 

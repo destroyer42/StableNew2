@@ -23,6 +23,7 @@ from src.video.video_backend_types import (
     VIDEO_TASK_IMAGE_TO_VIDEO,
 )
 from src.video.video_execution_resolver import VIDEO_EXECUTION_KEY
+from src.video.workflow_frame_count import frame_count_policy
 
 EXPERIMENTAL_OPT_IN_FIELD = "experimental_opt_in"
 
@@ -138,6 +139,7 @@ def form_visibility(spec: Any) -> dict[str, bool]:
         "depth_conditioning": "depth_map" in declared,
         "motion_profile": "motion_profile" in declared,
         "seed": "seed" in declared,
+        "frame_count": frame_count_policy(spec) is not None,
         "negative_prompt": CONTROL_NEGATIVE_PROMPT in accepted and "negative_prompt" in declared,
         "experimental": bool(getattr(spec, "is_experimental", False)),
     }
