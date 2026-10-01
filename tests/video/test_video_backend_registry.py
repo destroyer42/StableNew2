@@ -8,6 +8,7 @@ import pytest
 
 from src.services.runtime_transition_service import (
     RUNTIME_A1111_WEBUI,
+    RUNTIME_COMFY,
     RuntimeTransitionError,
     RuntimeTransitionResult,
     RuntimeTransitionStatus,
@@ -296,12 +297,15 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
             "source_video_path": str(output_video),
         },
     )
+    transition = Mock()
+    transition.prepare_for.return_value = Mock(ready=True)
     backend = ComfyWorkflowVideoBackend(
         client=client,
         process_manager=_ready_process_manager(),
         workflow_registry=_backend_contract_registry(),
         history_poll_interval=0.01,
         history_timeout=1.0,
+        transition=transition,
     )
 
     result = backend.execute(
@@ -330,6 +334,7 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
 
     assert result is not None
     assert result.backend_id == "comfy"
+    transition.prepare_for.assert_called_once_with(RUNTIME_COMFY)
     assert result.primary_path == str(promoted_video)
     assert result.manifest_path is not None
     variant_payload = result.to_variant_payload()
