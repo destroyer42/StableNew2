@@ -7,6 +7,7 @@ import pytest
 
 from src.controller.webui_connection_controller import WebUIConnectionState
 from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
+from tests.helpers.optional_deps import requires_windows
 
 
 class DummyAdapter:
@@ -72,6 +73,7 @@ def test_base_generation_refresh_preserves_selection(tk_root):
     assert panel.model_var.get() == "keep"
 
 
+@requires_windows  # pixel geometry is calibrated to the supported Windows desktop's fonts
 def test_base_generation_dimensions_fit_representative_sidebar(tk_root):
     # X11 assigns no geometry to an unmapped (withdrawn) toplevel, so map it for layout.
     tk_root.deiconify()
