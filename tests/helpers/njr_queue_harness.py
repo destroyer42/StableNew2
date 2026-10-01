@@ -54,10 +54,17 @@ def _wait_for_job_completion(
                 return entry
         time.sleep(0.1)
 
-    # Final check in history store
     history_store = getattr(job_service, "history_store", None)
-    if history_store:
-        return history_store.get_job(job_id)
+    entry = history_store.get_job(job_id) if history_store else None
+    if entry is not None and entry.status in terminal_statuses:
+        return entry
+    # Not terminal: report where every thread is so a slow or stuck job is explainable
+    # from the failure output instead of surfacing as an opaque "running != completed".
+    import faulthandler
+    import sys
+
+    sys.stderr.write(f"[njr_queue_harness] job {job_id} not terminal after {timeout}s" + chr(10))
+    faulthandler.dump_traceback(file=sys.stderr, all_threads=True)
     return None
 
 
@@ -217,5 +224,7 @@ def run_njr_via_queue(
                 api_client._session.request = original_request
 
     if entry is None:
-        raise TimeoutError(f"Job {njr.job_id} did not reach a repository terminal state.")
+        raise TimeoutError(
+            f"Job {njr.job_id} did not reach a repository terminal state in {timeout_seconds}s."
+        )
     return entry
