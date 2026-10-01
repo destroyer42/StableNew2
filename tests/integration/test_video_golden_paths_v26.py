@@ -2,13 +2,15 @@ from __future__ import annotations
 
 import base64
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
 from src.controller.app_controller import AppController
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.controller.svd_controller import SVDController
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig, WorkloadKind
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.state.output_routing import OUTPUT_ROUTE_TESTING
 from src.utils import StructuredLogger
@@ -18,6 +20,7 @@ from src.video.video_backend_types import (
     VideoExecutionRequest,
     VideoExecutionResult,
 )
+from tests.helpers.njr_factory import make_pipeline_njr
 
 _TINY_PNG_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aRX0AAAAASUVORK5CYII="
@@ -40,6 +43,12 @@ class _RecordingJobService:
 @pytest.mark.gp6
 def test_gp6_svd_native_path_creates_video_artifact(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr("src.pipeline.pipeline_runner.write_run_metadata", lambda **_kwargs: None)
+    # SVD admission checks the host's torch/diffusers install; this test only
+    # exercises submission and runner artifact handling, so admit deterministically.
+    monkeypatch.setattr(
+        "src.controller.svd_controller.get_svd_preflight",
+        lambda config, **_kwargs: SimpleNamespace(available=True, blocking_reasons=()),
+    )
 
     source_path = tmp_path / "seed.png"
     source_path.write_bytes(base64.b64decode(_TINY_PNG_BASE64))
@@ -98,10 +107,14 @@ def test_gp6_svd_native_path_creates_video_artifact(tmp_path: Path, monkeypatch)
     )
 
     assert job_id == "job-video-golden-path"
-    assert job_service.request is not None
-    assert job_service.request.prompt_pack_id == "svd_native"
+    assert isinstance(job_service.policy, SubmissionPolicy)
 
+    # Authorized work is the immutable NJR; PromptPack identity exists only for
+    # PromptPack-sourced work, so the SVD submission carries none.
     njr = job_service.njrs[0]
+    assert njr.workload_kind is WorkloadKind.VIDEO
+    assert [stage.stage_type for stage in njr.stage_chain if stage.enabled] == ["svd_native"]
+    assert njr.prompt_pack_id == ""
     runner = PipelineRunner(
         Mock(),
         StructuredLogger(output_dir=tmp_path / "logs"),
@@ -210,19 +223,14 @@ def test_gp6_video_workflow_path_creates_video_artifact(tmp_path: Path, monkeypa
     )
     runner._pipeline = Mock()
 
-    record = NormalizedJobRecord(
+    record = make_pipeline_njr(
         job_id="gp6-video-workflow-001",
+        positive_prompt="cinematic tracking shot through a canyon",
+        negative_prompt="blurry",
         config={},
         path_output_dir="output",
         filename_template="{seed}",
         seed=42,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=0.0,
-        positive_prompt="cinematic tracking shot through a canyon",
-        negative_prompt="blurry",
         stage_chain=[
             StageConfig(
                 stage_type="video_workflow",

@@ -186,19 +186,42 @@ def test_gpu_telemetry_is_parsed_recorded_and_flushed_per_row(
     assert peaks["throttle_reasons_seen"] == "0x4"
 
 
-def test_qualification_never_registers_a_production_backend_or_workflow() -> None:
-    """The candidates must not appear anywhere in production source or catalogs."""
+def test_qualification_candidates_are_never_approved_production_workflows() -> None:
+    """Qualification candidates may exist in production only as opt-in experimental workflows.
+
+    PR-VID-130/190 deliberately registered the qualified Wan2.2 / Wan-Animate-2 graphs as
+    ``experimental`` (per-job opt-in, never default-runnable); the original "appears nowhere in
+    src" invariant is superseded by tests/video/test_wan22_experimental_workflow.py.  What must
+    still hold: the throwaway qualification harness is not imported by production code, and no
+    candidate is ever an approved (default-runnable) workflow or a registered backend.
+    """
+
+    from src.video.workflow_registry import build_default_workflow_registry
 
     pattern = re.compile(r"wan2[._]?2|wan_2\.1|\bvace\b|scail|wan-?animate|vid110", re.IGNORECASE)
-    offenders = [
+    harness_importers = [
         str(path.relative_to(REPO_ROOT))
-        for path in (REPO_ROOT / "src").rglob("*")
-        if path.suffix in {".py", ".json", ".yaml", ".yml"}
-        and "__pycache__" not in path.parts
-        and pattern.search(path.read_text(encoding="utf-8", errors="ignore"))
+        for path in (REPO_ROOT / "src").rglob("*.py")
+        if "__pycache__" not in path.parts
+        and ".mypy_cache" not in path.parts
+        and re.search(
+            r"^\s*(from|import)\s+tools\.qualification", path.read_text(encoding="utf-8"), re.M
+        )
     ]
-    assert offenders == []
-    for name in ("workflow_catalog.py", "workflow_registry.py", "video_backend_registry.py"):
+    assert harness_importers == []
+
+    registry = build_default_workflow_registry()
+    candidate_specs = [
+        registry.get_offerable(workflow_id, version)
+        for workflow_id in registry.list_workflow_ids()
+        if pattern.search(workflow_id)
+        for version in registry.list_versions(workflow_id)
+    ]
+    assert candidate_specs, "expected the experimental Wan workflows to be registered"
+    assert {spec.governance_state for spec in candidate_specs} == {"experimental"}
+    runnable_ids = {spec.workflow_id for spec in registry.list_specs_for_backend("comfy")}
+    assert not {spec.workflow_id for spec in candidate_specs} & runnable_ids
+    for name in ("workflow_registry.py", "video_backend_registry.py"):
         assert not pattern.search((REPO_ROOT / "src" / "video" / name).read_text(encoding="utf-8"))
 
 

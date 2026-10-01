@@ -1,7 +1,7 @@
-"""Shared Tkinter root factory for journey tests.
+"""Shared Tkinter root factory for Tk-backed tests.
 
 This centralizes the slightly-finicky Windows/Tcl initialization logic
-so we can skip journey tests cleanly when Tk cannot be brought up,
+so we can skip Tk-backed tests cleanly when Tk cannot be brought up,
 rather than hard-failing the entire test run.
 """
 
@@ -14,7 +14,7 @@ import pytest
 
 
 def create_root():
-    """Create a Tk root window suitable for headless journey tests.
+    """Create a Tk root window suitable for headless Tk-backed tests.
 
     On Windows, this function will attempt to infer and set the
     TCL_LIBRARY / TK_LIBRARY environment variables based on the
@@ -24,7 +24,7 @@ def create_root():
     try:
         import tkinter as tk  # Local import to avoid hard dependency at import time
     except Exception as exc:  # pragma: no cover - environment-specific
-        pytest.skip(f"Tkinter import failed for journey test: {exc}")
+        pytest.skip(f"Tkinter import failed for test: {exc}")
 
     if sys.platform.startswith("win"):
         tcl_library = os.environ.get("TCL_LIBRARY")
@@ -43,4 +43,4 @@ def create_root():
         root.withdraw()
         return root
     except Exception as exc:  # pragma: no cover - environment-specific
-        pytest.skip(f"Tkinter unavailable for journey test: {exc}")
+        pytest.skip(f"Tkinter unavailable for test: {exc}")

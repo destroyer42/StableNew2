@@ -5,33 +5,18 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
 from src.controller.pipeline_controller import PipelineController
-from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.queue.job_model import Job
+from src.controller.submission_policy_v26 import SubmissionPolicy
+from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceKind
+from tests.helpers.njr_factory import make_pipeline_njr
 
 # ---------------------------------------------------------------------------
 # Fake/Stub Classes (shared with integration tests)
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class FakeConfig:
-    """Minimal config for testing."""
-
-    model: str = "test_model"
-    prompt: str = "test prompt"
-    negative_prompt: str = ""
-    sampler: str = "Euler"
-    steps: int = 20
-    cfg_scale: float = 7.0
-    width: int = 512
-    height: int = 512
-    seed: int = 12345
 
 
 class FakePipelineState:
@@ -52,16 +37,22 @@ class FakeJobBuilder:
 
 
 class FakeJobService:
-    """Fake JobService that records submissions."""
+    """Fake JobService that records canonical NJR batch submissions."""
 
     def __init__(self) -> None:
-        self.submitted_jobs: list[tuple[Job, str]] = []
+        self.submissions: list[tuple[list[NormalizedJobRecord], SubmissionPolicy | None]] = []
 
-    def submit_job_with_run_mode(self, job: Job) -> None:
-        self.submitted_jobs.append((job, job.run_mode))
+    @property
+    def submitted_records(self) -> list[NormalizedJobRecord]:
+        return [record for batch, _policy in self.submissions for record in batch]
 
-    def submit_queued(self, job: Job) -> None:
-        self.submitted_jobs.append((job, "queue"))
+    def submit_njrs(
+        self,
+        records: list[NormalizedJobRecord],
+        policy: SubmissionPolicy | None = None,
+    ) -> list[str]:
+        self.submissions.append((list(records), policy))
+        return [record.job_id for record in records]
 
 
 class FakeWebUIConnection:
@@ -90,71 +81,13 @@ def _attach_pipeline_state(
 def _prepare_controller(
     fake_builder: FakeJobBuilder, fake_service: FakeJobService
 ) -> PipelineController:
-    controller = PipelineController(
-        job_builder=fake_builder,
-        config_assembler=FakeConfigAssembler(),
-    )
+    controller = PipelineController(job_builder=fake_builder)
+    # Typed GUI intent (prompt) drives the state-based preview build.
+    controller.gui_get_pipeline_overrides = lambda: {"prompt": "test prompt"}
     controller._job_service = fake_service
     controller._webui_connection = FakeWebUIConnection()
     _attach_pipeline_state(controller)
     return controller
-
-
-class FakeJobController:
-    """Fake job execution controller."""
-
-    def __init__(self) -> None:
-        self._queue = FakeQueue()
-        self._runner = FakeRunner()
-        self._history = FakeHistory()
-
-    def get_queue(self) -> Any:
-        return self._queue
-
-    def get_runner(self) -> Any:
-        return self._runner
-
-    def get_history_store(self) -> Any:
-        return self._history
-
-    def set_status_callback(self, name: str, callback: Any) -> None:
-        pass
-
-
-class FakeQueue:
-    """Fake job queue."""
-
-    def __init__(self) -> None:
-        self.jobs: list[Job] = []
-
-    def submit(self, job: Job) -> None:
-        self.jobs.append(job)
-
-    def list_jobs(self, status_filter: Any = None) -> list[Job]:
-        return list(self.jobs)
-
-
-class FakeRunner:
-    """Fake job runner."""
-
-    def __init__(self) -> None:
-        self._on_status_change = None
-
-    def is_running(self) -> bool:
-        return False
-
-
-class FakeHistory:
-    """Fake history store."""
-
-    pass
-
-
-class FakeConfigAssembler:
-    """Fake config assembler."""
-
-    def build_from_gui_input(self, **kwargs: Any) -> Any:
-        return FakeConfig()
 
 
 # ---------------------------------------------------------------------------
@@ -167,17 +100,10 @@ def make_normalized_job(
     seed: int = 12345,
 ) -> NormalizedJobRecord:
     """Create a NormalizedJobRecord for testing."""
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id=job_id,
-        config=FakeConfig(seed=seed),
-        path_output_dir="output",
-        filename_template="{seed}",
+        config={"model": "test_model", "prompt": "test prompt", "seed": seed},
         seed=seed,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=1000.0,
     )
 
 
@@ -191,70 +117,66 @@ def fake_job_service() -> FakeJobService:
 # ---------------------------------------------------------------------------
 
 
+def _start_capturing(controller: PipelineController, **kwargs: Any) -> tuple[bool, list[dict]]:
+    completions: list[dict] = []
+    started = _start_pipeline_with_pack(controller, on_complete=completions.append, **kwargs)
+    return started, completions
+
+
 class TestRunModeEnforcement:
-    """Test that run mode is correctly applied to jobs."""
+    """Fresh runtime execution is queue-only; legacy run modes are normalized."""
 
     def test_explicit_direct_mode_is_coerced_to_queue(self) -> None:
         """Explicit run_mode='direct' is normalized to queue."""
         record = make_normalized_job()
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
+        controller = _prepare_controller(FakeJobBuilder([record]), fake_service)
 
-        controller = _prepare_controller(fake_builder, fake_service)
-
-        result = _start_pipeline_with_pack(controller, run_mode="direct")
+        result, completions = _start_capturing(controller, run_mode="direct")
 
         assert result is True
-        job, mode = fake_service.submitted_jobs[0]
-        assert job.run_mode == "queue"
-        assert mode == "queue"
+        assert completions == [{"submitted_jobs": 1, "run_mode": "queue"}]
+        assert [r.job_id for r in fake_service.submitted_records] == [record.job_id]
 
     def test_explicit_queue_mode(self) -> None:
         """Explicit run_mode='queue' is respected."""
         record = make_normalized_job()
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
+        controller = _prepare_controller(FakeJobBuilder([record]), fake_service)
 
-        controller = _prepare_controller(fake_builder, fake_service)
-
-        result = _start_pipeline_with_pack(controller, run_mode="queue")
+        result, completions = _start_capturing(controller, run_mode="queue")
 
         assert result is True
-        job, mode = fake_service.submitted_jobs[0]
-        assert job.run_mode == "queue"
-        assert mode == "queue"
+        assert completions == [{"submitted_jobs": 1, "run_mode": "queue"}]
+        assert [r.job_id for r in fake_service.submitted_records] == [record.job_id]
 
     def test_default_uses_state_run_mode(self) -> None:
-        """When run_mode is None, state is normalized to queue."""
+        """When run_mode is None, a non-queue state run mode is normalized to queue."""
         record = make_normalized_job()
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
-
-        controller = _prepare_controller(fake_builder, fake_service)
+        controller = _prepare_controller(FakeJobBuilder([record]), fake_service)
         state = _attach_pipeline_state(controller)
         state.run_mode = "direct"
 
-        result = _start_pipeline_with_pack(controller)  # No explicit run_mode
+        result, completions = _start_capturing(controller)  # No explicit run_mode
 
         assert result is True
-        job, mode = fake_service.submitted_jobs[0]
-        assert job.run_mode == "queue"
+        assert completions[0]["run_mode"] == "queue"
         assert state.run_mode == "queue"
+        assert len(fake_service.submitted_records) == 1
 
     def test_default_queue_when_no_state(self) -> None:
         """Defaults to queue mode when pipeline_state is not available."""
         record = make_normalized_job()
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
-
-        controller = _prepare_controller(fake_builder, fake_service)
+        controller = _prepare_controller(FakeJobBuilder([record]), fake_service)
         controller.gui_get_pipeline_state = lambda: None
 
-        result = _start_pipeline_with_pack(controller)
+        result, completions = _start_capturing(controller)
 
         assert result is True
-        job, mode = fake_service.submitted_jobs[0]
-        assert job.run_mode == "queue"
+        assert completions[0]["run_mode"] == "queue"
+        assert len(fake_service.submitted_records) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -263,67 +185,40 @@ class TestRunModeEnforcement:
 
 
 class TestMultipleJobsSameRunMode:
-    """Test that all jobs in a batch get the same run mode."""
+    """A batch is submitted atomically through one canonical JobService call."""
 
     def test_all_jobs_get_queue_mode_when_direct_requested(self) -> None:
-        """All jobs are normalized to queue even when direct is requested."""
+        """All jobs are submitted as one queue batch even when direct is requested."""
         records = [
             make_normalized_job(job_id="j1"),
             make_normalized_job(job_id="j2"),
             make_normalized_job(job_id="j3"),
         ]
-        fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
+        controller = _prepare_controller(FakeJobBuilder(records), fake_service)
 
-        controller = _prepare_controller(fake_builder, fake_service)
+        result, completions = _start_capturing(controller, run_mode="direct")
 
-        _start_pipeline_with_pack(controller, run_mode="direct")
-
-        assert len(fake_service.submitted_jobs) == 3
-        for job, mode in fake_service.submitted_jobs:
-            assert job.run_mode == "queue"
-            assert mode == "queue"
+        assert result is True
+        assert completions == [{"submitted_jobs": 3, "run_mode": "queue"}]
+        assert len(fake_service.submissions) == 1
+        assert {r.job_id for r in fake_service.submitted_records} == {"j1", "j2", "j3"}
 
     def test_all_jobs_get_queue_mode(self) -> None:
-        """All jobs get queue mode when specified."""
+        """All jobs are submitted as one queue batch when queue is specified."""
         records = [
             make_normalized_job(job_id="q1"),
             make_normalized_job(job_id="q2"),
         ]
-        fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
+        controller = _prepare_controller(FakeJobBuilder(records), fake_service)
 
-        controller = _prepare_controller(fake_builder, fake_service)
+        result, completions = _start_capturing(controller, run_mode="queue")
 
-        _start_pipeline_with_pack(controller, run_mode="queue")
-
-        assert len(fake_service.submitted_jobs) == 2
-        for job, mode in fake_service.submitted_jobs:
-            assert job.run_mode == "queue"
-            assert mode == "queue"
-
-
-# ---------------------------------------------------------------------------
-# Test: Job Payload Attachment
-# ---------------------------------------------------------------------------
-
-
-class TestJobPayloadAttachment:
-    """Test that jobs have execution payloads attached."""
-
-    def test_job_has_payload(self) -> None:
-        """Submitted jobs have callable payload attached."""
-        record = make_normalized_job()
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
-        fake_service = FakeJobService()
-
-        controller = _prepare_controller(fake_builder, fake_service)
-
-        _start_pipeline_with_pack(controller)
-
-        job, _ = fake_service.submitted_jobs[0]
-        assert job.payload is not None
-        assert callable(job.payload)
+        assert result is True
+        assert completions == [{"submitted_jobs": 2, "run_mode": "queue"}]
+        assert len(fake_service.submissions) == 1
+        assert {r.job_id for r in fake_service.submitted_records} == {"q1", "q2"}
 
 
 # ---------------------------------------------------------------------------
@@ -332,28 +227,26 @@ class TestJobPayloadAttachment:
 
 
 class TestJobServiceIntegration:
-    """Test that JobService is used correctly."""
+    """Test that JobService.submit_njrs is the submission boundary."""
 
-    def test_submit_job_with_run_mode_called(self) -> None:
-        """submit_job_with_run_mode is called for each job."""
+    def test_submit_njrs_called_with_every_record(self) -> None:
+        """submit_njrs receives every NJR built for the run, with a SubmissionPolicy."""
         records = [
             make_normalized_job(job_id="srv1"),
             make_normalized_job(job_id="srv2"),
         ]
-        fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
-
-        controller = _prepare_controller(fake_builder, fake_service)
+        controller = _prepare_controller(FakeJobBuilder(records), fake_service)
 
         _start_pipeline_with_pack(controller)
 
-        # Verify correct number of submissions
-        assert len(fake_service.submitted_jobs) == 2
-
-        # Verify job IDs
-        job_ids = [job.job_id for job, _ in fake_service.submitted_jobs]
+        assert len(fake_service.submissions) == 1
+        submitted, policy = fake_service.submissions[0]
+        assert isinstance(policy, SubmissionPolicy)
+        job_ids = [record.job_id for record in submitted]
         assert "srv1" in job_ids
         assert "srv2" in job_ids
+        assert all(isinstance(record, NormalizedJobRecord) for record in submitted)
 
 
 class TestPromptPackRequirement:
@@ -363,17 +256,14 @@ class TestPromptPackRequirement:
         self, fake_job_service: FakeJobService
     ) -> None:
         record = make_normalized_job()
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
-        controller = _prepare_controller(fake_builder, fake_job_service)
+        controller = _prepare_controller(FakeJobBuilder([record]), fake_job_service)
 
-        result = controller.start_pipeline_v2(
-            run_mode="queue",
-        )
+        result = controller.start_pipeline_v2(run_mode="queue")
 
         assert result is True
-        job, mode = fake_job_service.submitted_jobs[0]
-        assert mode == "queue"
-        assert job.prompt_pack_id is None
+        (submitted,) = fake_job_service.submitted_records
+        assert submitted.source.kind is not SourceKind.PROMPT_PACK
+        assert not submitted.prompt_pack_id
 
 
 class TestCanonicalStartPipeline:
@@ -381,16 +271,15 @@ class TestCanonicalStartPipeline:
 
     def test_start_pipeline_submits_preview_jobs(self) -> None:
         record = make_normalized_job()
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
-
-        controller = _prepare_controller(fake_builder, fake_service)
+        controller = _prepare_controller(FakeJobBuilder([record]), fake_service)
+        completions: list[dict] = []
 
         result = controller.start_pipeline(
-            run_config={"run_mode": "direct", "prompt_source": "manual"}
+            run_config={"run_mode": "direct", "prompt_source": "manual"},
+            on_complete=completions.append,
         )
 
         assert result is True
-        job, mode = fake_service.submitted_jobs[0]
-        assert job.run_mode == "queue"
-        assert mode == "queue"
+        assert completions == [{"submitted_jobs": 1, "run_mode": "queue"}]
+        assert [r.job_id for r in fake_service.submitted_records] == [record.job_id]

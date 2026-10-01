@@ -67,12 +67,36 @@ def test_ruff_gate_is_version_pinned_and_raw_zero() -> None:
     assert not (ROOT / "tools/ci/ruff_baseline.json").exists()
 
 
-def test_journeys_require_explicit_real_backend_opt_in() -> None:
-    conftest = _read("tests/journeys/conftest.py")
+def test_legacy_journey_lane_is_retired_and_workflows_are_intentional() -> None:
+    workflows = {path.name for path in (ROOT / ".github/workflows").glob("*.yml")}
 
-    assert "STABLENEW_REAL_BACKEND_TESTS" in conftest
-    assert 'os.getenv("CI"' not in conftest
-    assert "if not real_backend_enabled():" in conftest
+    assert not (ROOT / "tests/journeys").exists()
+    assert "journey-tests.yml" not in workflows
+    assert "journeys_shutdown.yml" not in workflows
+    assert not (ROOT / "scripts/run_journey_tests.ps1").exists()
+
+    shutdown = _read(".github/workflows/shutdown_leak_manual.yml")
+    assert "workflow_dispatch" in shutdown
+    assert "schedule:" not in shutdown
+    assert "STABLENEW_RUN_SHUTDOWN_LEAK_TEST" in shutdown
+    assert "tests/system/test_shutdown_no_leaks.py" in shutdown
+
+
+def test_full_suite_lane_is_informational_and_not_fail_fast() -> None:
+    workflow = _read(".github/workflows/ci.yml")
+    full_suite = workflow[workflow.index("  full-suite:") :]
+
+    assert "continue-on-error: true" in full_suite
+    assert "--maxfail" not in full_suite
+    assert "pytest-timeout" in full_suite
+    assert "--timeout" in full_suite
+
+
+def test_shutdown_leak_process_test_is_explicit_opt_in() -> None:
+    source = _read("tests/system/test_shutdown_no_leaks.py")
+
+    assert "STABLENEW_RUN_SHUTDOWN_LEAK_TEST" in source
+    assert "skipif" in source
 
 
 def test_ci_docs_point_to_named_required_smoke_script() -> None:

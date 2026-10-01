@@ -33,7 +33,7 @@ from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
 from src.queue.job_model import JobStatus
 from tests.helpers.job_helpers import make_test_njr
 from tests.helpers.njr_factory import make_pipeline_njr
-from tests.journeys.journey_helpers_v2 import run_njr_journey
+from tests.helpers.njr_queue_harness import run_njr_via_queue
 
 # ============================================================================
 # Helper Functions
@@ -146,7 +146,7 @@ class TestGP1SingleSimpleRun:
             mock_response.raise_for_status = Mock()
             mock_request.return_value = mock_response
 
-            entry = run_njr_journey(njr, api_client, timeout_seconds=10.0)
+            entry = run_njr_via_queue(njr, api_client, timeout_seconds=10.0)
 
             # Step 3: Verify execution
             assert entry.status.value == "completed"
@@ -178,7 +178,7 @@ class TestGP1SingleSimpleRun:
             mock_response.raise_for_status = Mock()
             mock_request.return_value = mock_response
 
-            entry = run_njr_journey(njr, api_client)
+            entry = run_njr_via_queue(njr, api_client)
 
             # Verify history entry metadata
             assert entry.job_id == "gp1-test-003"
@@ -320,7 +320,7 @@ class TestGP3BatchExpansion:
 
             history_entries = []
             for njr in njr_list:
-                entry = run_njr_journey(njr, api_client, timeout_seconds=10.0)
+                entry = run_njr_via_queue(njr, api_client, timeout_seconds=10.0)
                 history_entries.append(entry)
 
             # Verify all 3 jobs completed
@@ -476,7 +476,7 @@ class TestGP6MultiStagePipeline:
             }
             mock_request.return_value = mock_response
 
-            entry = run_njr_journey(njr, api_client, timeout_seconds=10.0)
+            entry = run_njr_via_queue(njr, api_client, timeout_seconds=10.0)
 
             assert entry.status.value == "completed"
 
@@ -587,7 +587,7 @@ class TestGP6MultiStagePipeline:
             mock_response.raise_for_status = Mock()
             mock_request.return_value = mock_response
 
-            entry = run_njr_journey(
+            entry = run_njr_via_queue(
                 njr,
                 api_client,
                 timeout_seconds=10.0,

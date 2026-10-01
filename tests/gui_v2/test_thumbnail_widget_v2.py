@@ -4,8 +4,10 @@ import tkinter as tk
 from pathlib import Path
 
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
+from tests.helpers.optional_deps import requires_windows
 
 
+@requires_windows
 def test_thumbnail_widget_open_target_uses_default_viewer(
     monkeypatch, tk_root: tk.Tk, tmp_path: Path
 ) -> None:

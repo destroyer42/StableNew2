@@ -91,6 +91,12 @@ def test_base_generation_applies_minimum_column_width_rules(gui_app_factory) -> 
     secondary = int(base_generation.grid_columnconfigure(3)["minsize"])
     labels = int(base_generation.grid_columnconfigure(0)["minsize"])
 
+    # The base-generation panel uses the responsive two-pair form contract
+    # (PR-MVP-060 Phase 2C1): its primary column intentionally relaxes to 160px,
+    # below the shared PRIMARY_CONTROL_MIN_WIDTH, so the realized grid must match
+    # the panel's declared FORM_COLUMN_SPECS rather than the shared default.
+    specs = {int(spec["index"]): spec for spec in base_generation.FORM_COLUMN_SPECS}
     assert labels >= base_generation.LABEL_COLUMN_MIN_WIDTH
-    assert primary >= base_generation.PRIMARY_CONTROL_MIN_WIDTH
+    assert primary == int(specs[1]["minsize"]) == 160
+    assert primary <= base_generation.PRIMARY_CONTROL_MIN_WIDTH
     assert secondary >= base_generation.SECONDARY_CONTROL_MIN_WIDTH

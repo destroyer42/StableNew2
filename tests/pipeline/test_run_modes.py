@@ -15,6 +15,7 @@ from src.gui.app_state_v2 import AppStateV2
 from src.queue.job_model import Job, JobPriority
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
+from tests.helpers.njr_factory import make_queue_job
 
 
 class TestJobMetadataFields:
@@ -95,10 +96,9 @@ class TestRunModeEnforcement:
 
     def test_submit_queued_adds_to_queue(self, job_service, job_queue):
         """submit_queued should add job to queue without blocking."""
-        job = Job(
-            job_id=str(uuid.uuid4()),
-            run_mode="queue",
-        )
+        # Queue submission requires the canonical immutable NJR snapshot.
+        job = make_queue_job(str(uuid.uuid4()))
+        job.run_mode = "queue"
         job_service.submit_queued(job)
         # Job should be in queue
         jobs = job_queue.list_jobs()

@@ -449,7 +449,14 @@ def test_learning_tab_staged_curation_face_tier_and_submit_hooks(tmp_path) -> No
             ) as submit_mock:
                 tab._submit_staged_jobs("face_triage")  # noqa: SLF001
 
-            submit_mock.assert_called_once_with("disc-stage-tier", "face_triage")
+            # No staged suggestion was applied, so the submit hook forwards no
+            # candidate filter and no recommendation patch.
+            submit_mock.assert_called_once_with(
+                "disc-stage-tier",
+                "face_triage",
+                candidate_ids=None,
+                recommendation_patch=None,
+            )
             assert "Submitted 2 face triage job(s)" in tab._staged_job_status_var.get()  # noqa: SLF001
         finally:
             tab.destroy()

@@ -66,9 +66,8 @@ def test_on_add_job_to_queue_v2_noops_when_pipeline_controller_missing():
 def test_on_add_job_to_queue_v2_noop_without_handler():
     controller = _build_controller(pipeline_controller=None)
 
-    controller.on_add_job_to_queue_v2()
-
-    assert True
+    # No pipeline controller and no legacy handler: the call is a clean no-op.
+    assert controller.on_add_job_to_queue_v2() is None
 
 
 def test_on_add_job_to_queue_v2_prefers_pipeline_controller():

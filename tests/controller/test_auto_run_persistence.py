@@ -3,6 +3,7 @@
 from unittest.mock import MagicMock, Mock
 
 from src.controller.job_service import JobService
+from src.queue.job_queue import JobQueue
 
 
 def test_set_activity_hooks_does_not_override_auto_run():
@@ -12,9 +13,10 @@ def test_set_activity_hooks_does_not_override_auto_run():
     overriding the persisted user preference loaded from queue snapshot.
     """
     # Setup with mocks
-    job_queue = MagicMock()
+    # JobRepository (shared by queue and service) is the sole live history authority.
+    job_queue = JobQueue()
     runner = MagicMock()
-    history_store = MagicMock()
+    history_store = job_queue.repository
 
     job_service = JobService(
         job_queue=job_queue,
@@ -39,9 +41,10 @@ def test_set_activity_hooks_does_not_override_auto_run():
 
 def test_auto_run_can_be_set_externally():
     """Test that auto_run_enabled can be set externally (by app controller)."""
-    job_queue = MagicMock()
+    # JobRepository (shared by queue and service) is the sole live history authority.
+    job_queue = JobQueue()
     runner = MagicMock()
-    history_store = MagicMock()
+    history_store = job_queue.repository
 
     job_service = JobService(
         job_queue=job_queue,
@@ -60,9 +63,10 @@ def test_auto_run_can_be_set_externally():
 
 def test_auto_run_can_be_explicitly_disabled():
     """Test that auto_run can be disabled and stays disabled."""
-    job_queue = MagicMock()
+    # JobRepository (shared by queue and service) is the sole live history authority.
+    job_queue = JobQueue()
     runner = MagicMock()
-    history_store = MagicMock()
+    history_store = job_queue.repository
 
     job_service = JobService(
         job_queue=job_queue,

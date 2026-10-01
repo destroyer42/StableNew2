@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from src import cli
 from src.pipeline.cli_njr_builder import build_cli_njr
+from src.pipeline.job_models_v2 import SourceKind
 
 
 def _base_config() -> dict[str, object]:
@@ -46,8 +47,9 @@ def test_build_cli_njr_creates_canonical_stage_chain() -> None:
 
     assert record.job_id == "cli-run"
     assert record.images_per_prompt == 3
-    assert record.run_mode == "QUEUE"
-    assert record.queue_source == "RUN_NOW"
+    assert record.source.kind is SourceKind.CLI
+    assert record.intent_config["run_mode"] == "queue"
+    assert record.intent_config["source"] == "cli"
     assert [stage.stage_type for stage in record.stage_chain] == [
         "txt2img",
         "img2img",

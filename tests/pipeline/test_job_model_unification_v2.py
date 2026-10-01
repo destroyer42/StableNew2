@@ -63,14 +63,14 @@ def test_legacy_dto_names_not_in_controller_sources() -> None:
         Path("src/controller/job_service.py"),
         Path("src/controller/job_history_service.py"),
         Path("src/history/history_record.py"),
-        Path("src/history/job_history_store.py"),
+        Path("src/queue/job_history_store.py"),
         Path("src/pipeline/replay_engine.py"),
         Path("src/pipeline/run_plan.py"),
         Path("tests/controller/test_job_history_service.py"),
         Path("tests/history/test_history_replay_integration.py"),
-        Path("tests/history/test_history_store_recording_v2.py"),
     ]
     for path in paths:
-        text = path.read_text()
+        assert path.exists(), f"guarded path moved or removed; update this guard: {path}"
+        text = path.read_text(encoding="utf-8")
         for name in legacy_names:
             assert name not in text, f"{name} still present in {path}"

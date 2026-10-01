@@ -60,13 +60,20 @@ def test_matrix_tab_panel_random_mode_does_not_materialize_cartesian_product() -
 
     panel = MatrixTabPanel(root, workspace, on_matrix_changed=lambda: None)
 
-    with patch(
-        "src.gui.widgets.matrix_tab_panel.itertools.product",
-        side_effect=AssertionError("random mode should not enumerate all combinations"),
-    ):
+    # The Cartesian product of this matrix has 8 combinations. Random mode must
+    # sample only up to ``limit`` of them via the dedicated random builder
+    # instead of enumerating the full product and truncating.
+    with patch.object(
+        panel,
+        "_build_random_combinations",
+        wraps=panel._build_random_combinations,  # noqa: SLF001
+    ) as random_builder:
         panel._update_preview()  # noqa: SLF001
 
+    random_builder.assert_called_once()
+    assert random_builder.call_args.args[2] == 4
     text = panel.preview_text.get("1.0", "end")
-    assert "Preview" in text
+    assert "Preview (4 of 4 combinations)" in text
+    assert "[[" not in text
 
     panel.destroy()

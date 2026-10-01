@@ -111,10 +111,9 @@ def test_learning_tab_exposes_staged_queue_and_review_help(tk_root, tmp_path: Pa
         )
         try:
             assert isinstance(tab.discovered_help_panel, ActionExplainerPanel)
-            assert (
-                "discovered review inbox"
-                in tab.discovered_help_panel.summary_label.cget("text").lower()
-            )
+            discovered_help = tab.discovered_help_panel.summary_label.cget("text").lower()
+            assert "discovered outputs" in discovered_help
+            assert "experiment review" in discovered_help
             assert isinstance(tab.staged_queue_help_panel, ActionExplainerPanel)
             assert isinstance(tab.staged_review_help_panel, ActionExplainerPanel)
             assert (

@@ -20,9 +20,11 @@ from src.learning.discovered_review_models import DiscoveredReviewExperiment, Di
 from src.learning.discovered_review_store import DiscoveredReviewStore
 from src.learning.output_scanner import OutputScanner
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.promptpacks.storage import save_prompt_pack_document
 from src.queue.job_queue import JobQueue
 from src.queue.job_repository import JobRepository
 from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class NoopPipelineRunner:
@@ -138,21 +140,17 @@ class DummyWindow:
 
 
 def _make_job_record(job_id: str, prompt: str) -> NormalizedJobRecord:
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id=job_id,
         config={},
-        path_output_dir="output",
-        filename_template="{seed}",
-        seed=1234,
-        created_ts=1000.0,
         positive_prompt=prompt,
         negative_prompt="",
+        seed=1234,
         steps=20,
         cfg_scale=7.0,
         width=832,
         height=1216,
         sampler_name="Euler",
-        scheduler="normal",
         base_model="StableNew-XL",
     )
 
@@ -213,11 +211,16 @@ def test_prompt_workspace_state_exposes_visibility_aware_text() -> None:
     assert workspace.get_current_prompt_text_for_mode("nsfw") == "soft nude study"
 
 
+def _write_native_pack(path: Path, text: str) -> None:
+    """Write a versioned native JSON PromptPack (the only runtime PromptPack format)."""
+    save_prompt_pack_document(path, {"pack_data": {"slots": [{"index": 0, "text": text}]}})
+
+
 def test_app_controller_load_packs_filters_nsfw_packs_in_sfw_mode(tmp_path: Path) -> None:
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir(parents=True, exist_ok=True)
-    (packs_dir / "alpha.txt").write_text("sunlit mountains\n", encoding="utf-8")
-    (packs_dir / "beta.txt").write_text("nude portrait\n", encoding="utf-8")
+    _write_native_pack(packs_dir / "alpha.json", "sunlit mountains")
+    _write_native_pack(packs_dir / "beta.json", "nude portrait")
 
     window = DummyWindow()
     window.app_state.set_content_visibility_mode("sfw")
@@ -238,8 +241,8 @@ def test_app_controller_load_packs_filters_nsfw_packs_in_sfw_mode(tmp_path: Path
 def test_app_controller_reloads_visible_packs_when_mode_changes(tmp_path: Path) -> None:
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir(parents=True, exist_ok=True)
-    (packs_dir / "alpha.txt").write_text("sunlit mountains\n", encoding="utf-8")
-    (packs_dir / "beta.txt").write_text("nude portrait\n", encoding="utf-8")
+    _write_native_pack(packs_dir / "alpha.json", "sunlit mountains")
+    _write_native_pack(packs_dir / "beta.json", "nude portrait")
 
     window = DummyWindow()
     controller = AppController(

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.helpers.optional_deps import requires_cv2, requires_numpy
 from tools.qualification.vid160c.pose_asset import sample_indices
 from tools.qualification.vid170.graph import CharacterizationSpec, build_characterization_graph
 from tools.qualification.vid180 import run as vid180_run
@@ -73,8 +74,16 @@ def test_launcher_rejects_production_interpreter_before_doing_anything(
     with pytest.raises(RuntimeError, match="production-looking"):
         main(
             [
-                "--upstream", str(tmp_path), "--ckpt", str(tmp_path), "--video", "v.mp4",
-                "--refer", "r.png", "--out", str(tmp_path / "out"),
+                "--upstream",
+                str(tmp_path),
+                "--ckpt",
+                str(tmp_path),
+                "--video",
+                "v.mp4",
+                "--refer",
+                "r.png",
+                "--out",
+                str(tmp_path / "out"),
             ]
         )
     assert not (tmp_path / "out").exists()
@@ -88,15 +97,35 @@ def test_launcher_rejects_unpinned_upstream_checkout(
     repo = tmp_path / "upstream"
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
     subprocess.run(
-        ["git", "-C", str(repo), "-c", "user.name=t", "-c", "user.email=t@t",
-         "commit", "-q", "--allow-empty", "-m", "x"],
+        [
+            "git",
+            "-C",
+            str(repo),
+            "-c",
+            "user.name=t",
+            "-c",
+            "user.email=t@t",
+            "commit",
+            "-q",
+            "--allow-empty",
+            "-m",
+            "x",
+        ],
         check=True,
     )
     with pytest.raises(RuntimeError, match="!= pinned"):
         main(
             [
-                "--upstream", str(repo), "--ckpt", str(tmp_path), "--video", "v.mp4",
-                "--refer", "r.png", "--out", str(tmp_path / "out"),
+                "--upstream",
+                str(repo),
+                "--ckpt",
+                str(tmp_path),
+                "--video",
+                "v.mp4",
+                "--refer",
+                "r.png",
+                "--out",
+                str(tmp_path / "out"),
             ]
         )
 
@@ -126,6 +155,7 @@ def test_sha256_of_matches_known_digest(tmp_path: Path) -> None:
 # --- frame selection and final 480x832 / 13f / 8fps adaptation -----------------------------------
 
 
+@requires_numpy
 def test_select_indices_matches_the_accepted_pr_vid_160c_convention() -> None:
     assert prov.select_indices(49, 13) == sample_indices(49, 13)
     indices = prov.select_indices(200, 13)
@@ -145,6 +175,7 @@ def _write_video(path: Path, size: tuple[int, int], frames: int) -> None:
     writer.release()
 
 
+@requires_cv2
 def test_adaptation_at_frozen_geometry_is_lossless_selection_and_deterministic(
     tmp_path: Path,
 ) -> None:
@@ -165,6 +196,7 @@ def test_adaptation_at_frozen_geometry_is_lossless_selection_and_deterministic(
     capture.release()
 
 
+@requires_cv2
 def test_adaptation_of_other_geometry_letterboxes_without_stretching(tmp_path: Path) -> None:
     source = tmp_path / "landscape.mp4"
     _write_video(source, (832, 464), 20)
@@ -175,6 +207,7 @@ def test_adaptation_of_other_geometry_letterboxes_without_stretching(tmp_path: P
     assert new_w <= prov.WIDTH and new_h <= prov.HEIGHT
 
 
+@requires_cv2
 def test_adaptation_rejects_undecodable_source(tmp_path: Path) -> None:
     bad = tmp_path / "bad.mp4"
     bad.write_bytes(b"not a video")

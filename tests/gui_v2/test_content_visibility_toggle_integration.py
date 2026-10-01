@@ -22,6 +22,7 @@ from src.services.ui_state_store import UIStateStore
 from src.utils.config import ConfigManager
 from src.utils.image_metadata import ReadPayloadResult
 from tests.helpers.gui_harness_v2 import GuiV2Harness
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def _read_text(widget: tk.Text) -> str:
@@ -55,8 +56,10 @@ def _build_explicit_preview_job() -> NormalizedJobRecord:
         global_negative_applied=False,
         global_negative_terms="",
     )
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="job-visibility-1",
+        positive_prompt="nude portrait in studio light",
+        negative_prompt="bad hands",
         config={
             "model": "test-model",
             "prompt": "nude portrait in studio light",
@@ -74,8 +77,6 @@ def _build_explicit_preview_job() -> NormalizedJobRecord:
         variant_total=1,
         batch_index=0,
         batch_total=1,
-        created_ts=0.0,
-        randomizer_summary=None,
         txt2img_prompt_info=prompt_info,
     )
 

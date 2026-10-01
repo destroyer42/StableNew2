@@ -1,31 +1,20 @@
-"""JT-NJR — Modern NJR Journey Test Pattern (PR-TEST-003).
+"""Canonical NJR path with only the HTTP transport mocked.
 
-This test demonstrates the MODERN journey test pattern that uses the full
-canonical execution path while mocking only at the HTTP transport layer.
-
-Pattern:
-    PromptPack → Builder → NJR → Queue → Runner → History
-
-    Mock ONLY: requests.Session.request (HTTP transport)
-    Execute REAL: Builder logic, runner stages, executor, history recording
-
-This is the preferred pattern for new journey tests.
+NJR -> JobService.submit_njrs -> SQLite queue/repository -> PipelineRunner.run_njr
+-> executor -> /sdapi/v1/txt2img (mocked transport) -> repository history.
 """
 
 from __future__ import annotations
 
 from unittest.mock import Mock, patch
 
-import pytest
-
 from src.api.client import SDWebUIClient
 from tests.helpers.job_helpers import make_test_njr
-from tests.journeys.journey_helpers_v2 import run_njr_journey
+from tests.helpers.njr_queue_harness import run_njr_via_queue
 
 
-@pytest.mark.journey
-def test_njr_txt2img_canonical_path():
-    """Test txt2img execution through full NJR canonical path.
+def test_njr_txt2img_executes_via_queue_runner_and_hits_txt2img_endpoint():
+    """Execute a txt2img NJR through JobService -> SQLite -> run_njr with HTTP mocked.
 
     This test validates:
     - NJR → Runner executes all stages correctly
@@ -83,7 +72,7 @@ def test_njr_txt2img_canonical_path():
         mock_request.return_value = mock_response
 
         # Step 4: Execute through canonical runner path
-        entry = run_njr_journey(njr, api_client, timeout_seconds=10.0)
+        entry = run_njr_via_queue(njr, api_client, timeout_seconds=10.0)
 
         # Step 5: Verify execution
         assert entry is not None
@@ -97,22 +86,3 @@ def test_njr_txt2img_canonical_path():
         call_args = mock_request.call_args
         request_url = call_args[1].get("url") or call_args[0][1]
         assert "/sdapi/v1/txt2img" in request_url, f"Expected txt2img endpoint, got {request_url}"
-
-
-# NOTE: The remaining journey tests (test_jt01-jt06) should be refactored to use
-# the run_njr_journey() pattern demonstrated above. Key changes needed:
-#
-# 1. Replace `with patch("src.api.client.ApiClient.generate_images")`
-#    with `with patch.object(api_client._session, 'request')`
-#
-# 2. Use run_njr_journey(njr, api_client) instead of start_run_and_wait(controller)
-#
-# 3. Remove GUI/AppController dependencies where possible
-#
-# 4. Mock HTTP responses at transport layer, not API method layer
-#
-# See PR-TEST-003 documentation for full migration guide.
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])

@@ -22,9 +22,14 @@ from src.video import (
     VideoExecutionRequest,
     build_default_video_backend_registry,
 )
-from src.video.workflow_catalog import build_builtin_workflow_specs
-from src.video.workflow_contracts import WorkflowSpec
 from src.video.workflow_registry import WorkflowRegistry
+from tests.helpers.video_contract_registry import build_ltx_contract_registry
+
+
+def _ready_transition() -> object:
+    """Fake runtime-transition owner: the host's real A1111/Comfy endpoints are never observed."""
+
+    return SimpleNamespace(prepare_for=lambda _target: SimpleNamespace(ready=True))
 
 
 def _ready_process_manager(base_url: str = "http://127.0.0.1:8188") -> object:
@@ -35,13 +40,7 @@ def _ready_process_manager(base_url: str = "http://127.0.0.1:8188") -> object:
 
 
 def _backend_contract_registry() -> WorkflowRegistry:
-    registry = WorkflowRegistry()
-    for spec in build_builtin_workflow_specs():
-        values = {field: getattr(spec, field) for field in spec.__dataclass_fields__}
-        if spec.workflow_id.startswith("ltx_"):
-            values["governance_state"] = "approved"
-        registry.register(WorkflowSpec(**values))
-    return registry
+    return build_ltx_contract_registry()
 
 
 def test_default_video_backend_registry_registers_builtin_backends() -> None:
@@ -302,6 +301,7 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
     backend = ComfyWorkflowVideoBackend(
         client=client,
         process_manager=_ready_process_manager(),
+        transition=_ready_transition(),
         workflow_registry=_backend_contract_registry(),
         history_poll_interval=0.01,
         history_timeout=1.0,

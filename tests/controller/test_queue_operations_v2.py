@@ -13,8 +13,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from src.queue.job_model import Job, JobStatus
+from src.queue.job_model import JobStatus
 from src.queue.job_queue import JobQueue
+from tests.helpers.njr_factory import make_queue_job
 
 # -----------------------------------------------------------------------------
 # JobQueue Method Tests
@@ -27,9 +28,9 @@ class TestJobQueueMoveUp:
     def test_move_up_swaps_positions(self) -> None:
         """Moving a job up should swap it with the job above."""
         queue = JobQueue()
-        job1 = Job(job_id="j1", config_snapshot={"prompt": "first"})
-        job2 = Job(job_id="j2", config_snapshot={"prompt": "second"})
-        job3 = Job(job_id="j3", config_snapshot={"prompt": "third"})
+        job1 = make_queue_job("j1")
+        job2 = make_queue_job("j2")
+        job3 = make_queue_job("j3")
 
         queue.submit(job1)
         queue.submit(job2)
@@ -40,15 +41,14 @@ class TestJobQueueMoveUp:
         result = queue.move_up("j2")
         assert result is True
 
-        # Get next job should return j2 now (it moved up)
-        jobs = [j for j in queue.list_jobs() if j.status == JobStatus.QUEUED]
-        assert len(jobs) == 3
+        assert [j.job_id for j in queue.list_active_jobs_ordered()] == ["j2", "j1", "j3"]
+        assert queue.get_next_job().job_id == "j2"
 
     def test_move_up_at_top_returns_false(self) -> None:
         """Moving the top job up should return False."""
         queue = JobQueue()
-        job1 = Job(job_id="j1")
-        job2 = Job(job_id="j2")
+        job1 = make_queue_job("j1")
+        job2 = make_queue_job("j2")
 
         queue.submit(job1)
         queue.submit(job2)
@@ -70,8 +70,8 @@ class TestJobQueueMoveDown:
     def test_move_down_swaps_positions(self) -> None:
         """Moving a job down should swap it with the job below."""
         queue = JobQueue()
-        job1 = Job(job_id="j1")
-        job2 = Job(job_id="j2")
+        job1 = make_queue_job("j1")
+        job2 = make_queue_job("j2")
 
         queue.submit(job1)
         queue.submit(job2)
@@ -79,12 +79,13 @@ class TestJobQueueMoveDown:
         # Move j1 down
         result = queue.move_down("j1")
         assert result is True
+        assert [j.job_id for j in queue.list_active_jobs_ordered()] == ["j2", "j1"]
 
     def test_move_down_at_bottom_returns_false(self) -> None:
         """Moving the bottom job down should return False."""
         queue = JobQueue()
-        job1 = Job(job_id="j1")
-        job2 = Job(job_id="j2")
+        job1 = make_queue_job("j1")
+        job2 = make_queue_job("j2")
 
         queue.submit(job1)
         queue.submit(job2)
@@ -106,7 +107,7 @@ class TestJobQueueRemove:
     def test_remove_returns_job(self) -> None:
         """Removing a job should return the removed job."""
         queue = JobQueue()
-        job = Job(job_id="j1", config_snapshot={"test": True})
+        job = make_queue_job("j1")
         queue.submit(job)
 
         removed = queue.remove("j1")
@@ -116,8 +117,8 @@ class TestJobQueueRemove:
     def test_remove_deletes_from_queue(self) -> None:
         """Removed job should not appear in list_jobs."""
         queue = JobQueue()
-        job1 = Job(job_id="j1")
-        job2 = Job(job_id="j2")
+        job1 = make_queue_job("j1")
+        job2 = make_queue_job("j2")
 
         queue.submit(job1)
         queue.submit(job2)
@@ -142,7 +143,7 @@ class TestJobQueueClear:
         """Clear should remove all queued jobs."""
         queue = JobQueue()
         for i in range(5):
-            queue.submit(Job(job_id=f"j{i}"))
+            queue.submit(make_queue_job(f"j{i}"))
 
         count = queue.clear()
         assert count == 5
@@ -153,8 +154,8 @@ class TestJobQueueClear:
     def test_clear_returns_count(self) -> None:
         """Clear should return number of removed jobs."""
         queue = JobQueue()
-        queue.submit(Job(job_id="j1"))
-        queue.submit(Job(job_id="j2"))
+        queue.submit(make_queue_job("j1"))
+        queue.submit(make_queue_job("j2"))
 
         count = queue.clear()
         assert count == 2

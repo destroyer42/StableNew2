@@ -144,6 +144,9 @@ def test_promptpack_queue_run_artifact_history_replay_production_composition(
     expected_switches: list[str],
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    # PromptPacks resolve from the canonical per-user directory; point it at the
+    # test pack directory instead of the host's real packs.
+    monkeypatch.setenv("STABLENEW_PROMPTPACK_DIR", str(tmp_path / "packs"))
     pack_path = tmp_path / "packs" / "mvp-060-baseline.json"
     output_dir = tmp_path / "artifacts"
     _write_baseline_pack(pack_path, output_dir)
@@ -272,6 +275,9 @@ def test_phase2d_consolidated_selector_queue_send_and_replay(tmp_path: Path, mon
     """Compose the proven 060 boundaries through the production-shaped GUI path."""
 
     monkeypatch.chdir(tmp_path)
+    # PromptPacks resolve from the canonical per-user directory; point it at the
+    # test pack directory instead of the host's real packs.
+    monkeypatch.setenv("STABLENEW_PROMPTPACK_DIR", str(tmp_path / "packs"))
     pack_path = tmp_path / "packs" / "mvp-060-consolidated.json"
     output_dir = tmp_path / "artifacts"
     _write_baseline_pack(pack_path, output_dir)

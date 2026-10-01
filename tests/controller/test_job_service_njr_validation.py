@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 
 from src.controller.job_service import JobService
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.job_models_v2 import (
     NormalizedJobRecord,
     SourceDescriptor,
@@ -100,18 +101,7 @@ def test_job_from_njr_preserves_reprocess_source_and_prompt_source(service: JobS
             "reprocess": {"source": "review_tab"},
         },
     )
-    job = service._job_from_njr(
-        record,
-        run_request=type(
-            "Req",
-            (),
-            {
-                "run_mode": type("Mode", (), {"value": "queue"})(),
-                "source": type("Source", (), {"value": "add_to_queue"})(),
-                "prompt_pack_id": "reprocess_pack",
-            },
-        )(),
-    )
+    job = service._job_from_njr(record, policy=SubmissionPolicy())
 
     assert job.source == "review_tab"
     assert job.prompt_source == "reprocess"

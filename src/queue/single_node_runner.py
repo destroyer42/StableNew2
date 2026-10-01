@@ -298,6 +298,13 @@ class SingleNodeJobRunner:
         # BUGFIX: Pause state callback
         self._is_paused = is_paused
         self._continuous_dispatch_allowed = continuous_dispatch_allowed or (lambda: True)
+        # Worker lifecycle handoff state. All transitions happen under
+        # ``_lifecycle_lock`` so a thread's decision to retire and a concurrent
+        # request for continuous dispatch can never miss each other.
+        self._lifecycle_lock = threading.RLock()
+        self._worker_mode: str | None = None  # "once" | "continuous"
+        self._worker_retiring = False
+        self._continue_after_once = False
 
     def set_continuous_dispatch_allowed(self, callback: Callable[[], bool]) -> None:
         """Set the service-owned policy checked before each continuous claim."""
@@ -368,38 +375,79 @@ class SingleNodeJobRunner:
             _clear_timeout_tracking(job.job_id)
         return None
 
+    def _launch_worker(self, mode: str, job: Job | None = None) -> None:
+        """Start a worker thread of ``mode``; the caller holds ``_lifecycle_lock``."""
+        self._stop_event.clear()
+        self._worker_mode = mode
+        self._worker_retiring = False
+        self._continue_after_once = False
+        # PR-THREAD-001: non-daemon thread with proper tracking
+        self._worker = threading.Thread(
+            target=self._worker_main,
+            args=(mode, job),
+            daemon=False,
+            name="QueueWorker" if mode == "continuous" else "QueueWorkerOnce",
+        )
+        self._worker.start()
+
     def start(self) -> None:
-        """Start the worker thread if not already running.
+        """Ensure continuous dispatch is running.
+
+        A live continuous worker is left alone. A live one-shot worker is asked to
+        hand off to continuous draining when its job retires (same thread, no gap),
+        and a worker that has already decided to retire is replaced.
 
         PR-THREAD-001: Changed to non-daemon thread for clean shutdown.
         """
-        if self._worker and self._worker.is_alive():
-            return
-        self._stop_event.clear()
-        # PR-THREAD-001: Use non-daemon thread with proper tracking
-        self._worker = threading.Thread(
-            target=self._worker_loop,
-            daemon=False,  # Changed from True for clean shutdown
-            name="QueueWorker",
-        )
-        self._worker.start()
+        with self._lifecycle_lock:
+            worker = self._worker
+            if worker and worker.is_alive() and not self._worker_retiring:
+                if self._worker_mode == "once":
+                    self._continue_after_once = True
+                return
+            self._launch_worker("continuous")
+
+    def request_continuous_dispatch(self) -> None:
+        """Idempotent request used by JobService when auto-run is enabled."""
+        self.start()
 
     def run_next_once(self) -> bool:
         """Dispatch exactly the next queued job on a worker thread."""
-        if self.is_running() or self.job_queue.is_paused():
-            return False
-        job = self.job_queue.get_next_job()
-        if job is None:
-            return False
-        self._stop_event.clear()
-        self._worker = threading.Thread(
-            target=self.run_once,
-            args=(job,),
-            daemon=False,
-            name="QueueWorkerOnce",
-        )
-        self._worker.start()
-        return True
+        with self._lifecycle_lock:
+            if self.is_running() or self.job_queue.is_paused():
+                return False
+            job = self.job_queue.get_next_job()
+            if job is None:
+                return False
+            self._launch_worker("once", job)
+            return True
+
+    def _worker_main(self, mode: str, job: Job | None) -> None:
+        if mode == "once" and job is not None:
+            failure: Exception | None = None
+            try:
+                self.run_once(job)
+            except Exception as exc:  # noqa: BLE001 - run_once already recorded the failure
+                failure = exc
+            with self._lifecycle_lock:
+                handoff = (
+                    self._continue_after_once
+                    and not self._stop_event.is_set()
+                    and self._can_continue_dispatching()
+                )
+                if handoff:
+                    self._worker_mode = "continuous"
+                    threading.current_thread().name = "QueueWorker"
+                else:
+                    self._worker_retiring = True
+                self._continue_after_once = False
+            if not handoff:
+                if failure is not None:
+                    raise failure
+                return
+            # A failed one-shot job must not strand the remaining queue: it is already
+            # persisted FAILED, so keep draining and let the loop own later failures.
+        self._worker_loop()
 
     def stop(self) -> None:
         """Stop the worker thread gracefully.
@@ -418,9 +466,11 @@ class SingleNodeJobRunner:
             if self._is_paused and self._is_paused():
                 time.sleep(self.poll_interval)
                 continue
-            if not self._can_continue_dispatching():
-                logger.debug("SingleNodeJobRunner retiring because auto-run is disabled")
-                break
+            with self._lifecycle_lock:
+                if not self._can_continue_dispatching():
+                    self._worker_retiring = True
+                    logger.debug("SingleNodeJobRunner retiring because auto-run is disabled")
+                    break
             self._cancel_current.clear()
             self._cancel_return_to_queue = False
             job = self.job_queue.claim_next_job()
@@ -715,7 +765,9 @@ class SingleNodeJobRunner:
             self._current_cancel_token.cancel()
 
     def is_running(self) -> bool:
-        return self._worker is not None and self._worker.is_alive()
+        """True while a worker is alive and has not committed to retiring."""
+        worker = self._worker
+        return worker is not None and worker.is_alive() and not self._worker_retiring
 
     @property
     def current_job_id(self) -> str | None:

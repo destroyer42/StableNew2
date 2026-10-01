@@ -54,12 +54,12 @@ def test_simple_txt2img_snapshot_replay(snapshot_loader, pipeline_controller_wit
 @pytest.mark.snapshot_regression
 def test_multi_stage_snapshot_replay(snapshot_loader, pipeline_controller_with_stubs):
     controller = pipeline_controller_with_stubs
-    snapshot = snapshot_loader("job_snapshot_txt2img_refiner_hires")
+    snapshot = snapshot_loader("job_snapshot_txt2img_adetailer_upscale")
     jobs = controller.reconstruct_jobs_from_snapshot(snapshot)
     assert len(jobs) == 1
     job = jobs[0]
     stages = snapshot["stage_metadata"]["stages"]
-    assert stages == ["txt2img", "hires", "refiner"]
+    assert stages == ["txt2img", "adetailer", "upscale"]
     assert job.randomizer_summary == {"enabled": False}
     count = controller._submit_normalized_jobs(
         jobs,

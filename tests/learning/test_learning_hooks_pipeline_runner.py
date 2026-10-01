@@ -6,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.job_models_v2 import StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner
-from src.pipeline.stage_sequencer import StageConfig, StageMetadata
+from tests.helpers.njr_factory import make_pipeline_njr
 from tests.helpers.pipeline_fakes import FakePipeline
 
 
@@ -37,19 +37,26 @@ def _cancel_token():
     return SimpleNamespace(is_cancelled=lambda: False)
 
 
-def _make_learning_record(tmp_path):
+def _make_learning_record(tmp_path, *, extra_metadata=None):
     stage = StageConfig(
+        stage_type="txt2img",
         enabled=True,
-        payload={
-            "model": "Model-X",
-            "sampler_name": "Euler",
-            "steps": 30,
-            "cfg_scale": 7.0,
-        },
-        metadata=StageMetadata(),
+        model="Model-X",
+        sampler_name="Euler",
+        steps=30,
+        cfg_scale=7.0,
     )
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="learning-job",
+        positive_prompt="Test prompt",
+        base_model="Model-X",
+        sampler_name="Euler",
+        steps=30,
+        cfg_scale=7.0,
+        width=512,
+        height=512,
+        seed=101,
+        stage_chain=[stage],
         config={
             "prompt": "Test prompt",
             "model": "Model-X",
@@ -58,23 +65,8 @@ def _make_learning_record(tmp_path):
             ],
         },
         path_output_dir=str(tmp_path / "runs"),
-        filename_template="{seed}",
-        seed=101,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=0.0,
-        randomizer_summary=None,
-        stage_chain=[stage],
-        steps=30,
-        cfg_scale=7.0,
-        width=512,
-        height=512,
-        sampler_name="Euler",
         variant_mode="fanout",
-        base_model="Model-X",
-        positive_prompt="Test prompt",
+        extra_metadata=extra_metadata,
     )
 
 
@@ -226,11 +218,13 @@ def test_pipeline_runner_emits_opt_in_prompt_optimizer_learning_context(tmp_path
         learning_enabled=True,
     )
 
-    record = _make_learning_record(tmp_path)
-    record.metadata = {
-        "prompt_optimizer_learning_enabled": True,
-        "prompt_optimizer_learning_preset": "baseline_safe_v1",
-    }
+    record = _make_learning_record(
+        tmp_path,
+        extra_metadata={
+            "prompt_optimizer_learning_enabled": True,
+            "prompt_optimizer_learning_preset": "baseline_safe_v1",
+        },
+    )
     result = runner.run_njr(record, cancel_token=_cancel_token())
     result.metadata["prompt_optimizer_v3"] = {
         "schema": "stablenew.prompt-optimizer.v3",

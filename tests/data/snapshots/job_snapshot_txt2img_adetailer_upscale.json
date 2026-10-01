@@ -26,12 +26,12 @@
       "model": "sd-v1.5",
       "stages": [
         "txt2img",
-        "hires",
-        "refiner"
+        "adetailer",
+        "upscale"
       ],
-      "hires_enabled": true,
-      "hires_upscale_factor": 2,
-      "refiner_enabled": true
+      "adetailer_enabled": true,
+      "upscale_enabled": true,
+      "upscale_factor": 2
     }
   },
   "effective_prompts": {
@@ -48,16 +48,16 @@
   "stage_metadata": {
     "stages": [
       "txt2img",
-      "hires",
-      "refiner"
+      "adetailer",
+      "upscale"
     ],
     "flags": {
       "txt2img": true,
       "img2img": false,
-      "refiner": true,
-      "hires": true,
-      "upscale": false,
-      "adetailer": false
+      "refiner": false,
+      "hires": false,
+      "upscale": true,
+      "adetailer": true
     }
   },
   "randomizer_expansions": {

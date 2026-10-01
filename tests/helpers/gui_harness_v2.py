@@ -5,7 +5,7 @@ import tkinter as tk
 from src.controller.app_controller import AppController
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.main_window_v2 import MainWindowV2
-from tests.journeys.fakes.fake_pipeline_runner import FakePipelineRunner
+from tests.helpers.fake_pipeline_runner import FakePipelineRunner
 
 
 class GuiV2Harness:

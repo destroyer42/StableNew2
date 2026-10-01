@@ -13,6 +13,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from tests.helpers.optional_deps import requires_numpy
 from tools.qualification.vid160b import graph as backbone_graph
 from tools.qualification.vid160b.telemetry import HIGH_SWAP_PERCENT, LOW_RAM_CONSECUTIVE, LOW_RAM_GB
 from tools.qualification.vid160c import graph as pose_graph
@@ -75,8 +76,17 @@ def test_validate_graph_flags_pose_video_wired_to_the_wrong_node() -> None:
 def test_pose_probe_defaults_match_the_vid160b_backbone_probe_exactly() -> None:
     backbone = backbone_graph.ProbeSpec(reference_image="ref.png")
     pose = pose_graph.PoseProbeSpec(reference_image="ref.png", pose_video_file="pose.mp4")
-    for field in ("width", "height", "length", "steps", "cfg", "shift", "seed", "sampler",
-                  "scheduler"):
+    for field in (
+        "width",
+        "height",
+        "length",
+        "steps",
+        "cfg",
+        "shift",
+        "seed",
+        "sampler",
+        "scheduler",
+    ):
         assert getattr(backbone, field) == getattr(pose, field), field
 
 
@@ -104,6 +114,7 @@ def test_graph_rejects_an_invalid_length() -> None:
 # --- pose-asset determinism ----------------------------------------------------------------------
 
 
+@requires_numpy
 def test_sample_indices_are_deterministic_and_evenly_spaced() -> None:
     first = pose_asset.sample_indices(49, 13)
     second = pose_asset.sample_indices(49, 13)
@@ -113,12 +124,14 @@ def test_sample_indices_are_deterministic_and_evenly_spaced() -> None:
     assert first == sorted(first)
 
 
+@requires_numpy
 def test_sample_indices_never_exceeds_available_frames() -> None:
     indices = pose_asset.sample_indices(5, 13)
     assert len(indices) == 5
     assert max(indices) == 4
 
 
+@requires_numpy
 def test_sample_indices_rejects_non_positive_arguments() -> None:
     with pytest.raises(ValueError):
         pose_asset.sample_indices(0, 13)
@@ -126,6 +139,7 @@ def test_sample_indices_rejects_non_positive_arguments() -> None:
         pose_asset.sample_indices(49, 0)
 
 
+@requires_numpy
 def test_center_square_crop_produces_a_square_from_a_portrait_frame() -> None:
     import numpy as np
 

@@ -10,6 +10,8 @@ from src.controller.app_controller import AppController
 def test_runtime_status_updates_are_coalesced_before_ui_apply() -> None:
     controller = AppController(main_window=None, threaded=False)
     controller.app_state = Mock()
+    # Runtime status reaches AppState only through the projection sink bound to it.
+    controller._projection_sink.set_app_state(controller.app_state)
     controller._runtime_status_min_interval_ms = 250
     controller._last_runtime_status_flush_ts = time.monotonic()
 
@@ -36,6 +38,8 @@ def test_runtime_status_callback_preserves_previous_stage_and_started_at_for_par
 ):
     controller = AppController(main_window=None, threaded=False)
     controller.app_state = Mock()
+    # Runtime status reaches AppState only through the projection sink bound to it.
+    controller._projection_sink.set_app_state(controller.app_state)
 
     scheduled: list[object] = []
     controller._ui_dispatch_later = lambda delay, fn: scheduled.append(fn)

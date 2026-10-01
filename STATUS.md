@@ -50,8 +50,8 @@ Updated: 2026-10-01
   remains. Details: `docs/Subsystems/Video/PR-VID-120_Neutral_Video_Execution_Contract.md`.
   `PR-VID-130 — Wan2.2 Experimental Prompt-Directed I2V Vertical Slice` is COMPLETE / ACCEPTED / INTEGRATED
   (`docs/Subsystems/Video/PR-VID-130_Wan22_Experimental_Vertical_Slice.md`). Wan2.2 `wan22_ti2v_5b_i2v_v1` v1.0.0 is an EXPERIMENTAL Comfy workflow, never generally approved: each job needs durable explicit `video_execution.experimental_opt_in=true`; disabled workflows stay non-runnable; governance, dependency checks and an observe-only resource-readiness guard (10,000 MiB GPU memory available to Comfy, 16 GB host RAM; not a scheduler/lease) fail before Comfy queue dispatch; external A1111/Comfy are never adopted, terminated or restarted. Native SVD remains the default production video backend; VACE stays NO-GO and unregistered. `VideoWorkflowController` now emits neutral `video_execution` intent; the historical stage bridge remains for the SVD producer, AnimateDiff, prompt-pack/reprocess-built `video_workflow` stages and historical replay, and is retired only once every producer is neutral and replay normalization is proven. Real Wan2.2 acceptance on the RTX 4070 Ti 12 GB produced a valid 480x832/49-frame/24 fps MP4 in ~83.4 s (peak 11,630 MiB VRAM, min 1.45 GB free RAM, no GPU fault).
-  `PR-RUNTIME-110 — Comfy Video Runner Liveness / Watchdog Correctness` is implemented on PR #23;
-  integration is gated by required CI and review
+  `PR-RUNTIME-110 — Comfy Video Runner Liveness / Watchdog Correctness` is **COMPLETE / ACCEPTED /
+  INTEGRATED** (PR #23)
   (`docs/Subsystems/Runtime/PR-RUNTIME-110_Comfy_Video_Runner_Liveness.md`).
   Healthy long Comfy video jobs no longer trigger a false `queue_runner_stall` at ~90 s: while the
   server confirms the queued prompt is running, or history explicitly reports a nonterminal state,
@@ -59,6 +59,15 @@ Updated: 2026-10-01
   invented progress; still bounded by the workflow-declared backend execution timeout). Terminal
   failed history does not prolong liveness. Genuine stalls, native SVD and WebUI watchdog semantics
   are unchanged.
+  `PR-TEST-TRUTH-200 — Actionable CI & Consolidated Legacy Journeys` restores a truthful test
+  signal (`docs/Subsystems/Testing/PR-TEST-TRUTH-200_Actionable_CI.md`): the legacy `tests/journeys`
+  lane and its `Journey Tests` workflow are retired, stale NJR/queue/history fixtures are repaired
+  to the current contract, host-state leaks (owner's A1111/PromptPacks) are isolated, and the
+  informational full-suite lane now runs to completion with a per-test timeout. Required CI is
+  unchanged. Two production defects it exposed were fixed in the 200R pass:
+  `PipelineRunResult.randomizer_mode` now projects `njr.variant_mode`, and `SingleNodeJobRunner`
+  owns a locked one-shot -> continuous worker handoff so enabling auto-run at the retirement
+  boundary cannot stall queued jobs (single local Python 3.11 full suite: 0 failed).
   `PR-RUNTIME-100 — Owned GPU Runtime Transition Policy` is **COMPLETE / ACCEPTED / INTEGRATED**.
   It coordinates release of conflicting StableNew-owned A1111,
   Comfy, or cached SVD residency before the already-selected backend prepares;

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -13,8 +14,9 @@ class NoopPipelineRunner:
 
 
 class DummyConfigManager:
-    def __init__(self, initial: dict[str, Any]) -> None:
+    def __init__(self, initial: dict[str, Any], packs_dir: Path) -> None:
         self.initial = dict(initial)
+        self.packs_dir = packs_dir
         self.saved: dict[str, dict[str, Any]] = {}
 
     def load_pack_config(self, pack_id: str) -> dict[str, Any] | None:
@@ -27,8 +29,9 @@ class DummyConfigManager:
 
 def _make_controller(
     config: dict[str, Any],
+    packs_dir: Path,
 ) -> tuple[AppController, DummyConfigManager]:
-    config_manager = DummyConfigManager(config)
+    config_manager = DummyConfigManager(config, packs_dir)
     controller = AppController(
         None,
         pipeline_runner=NoopPipelineRunner(),
@@ -45,9 +48,9 @@ def _make_controller(
     return controller, config_manager
 
 
-def test_load_randomizer_settings_apply_to_panel() -> None:
+def test_load_randomizer_settings_apply_to_panel(tmp_path: Path) -> None:
     config = {"randomization_enabled": True, "max_variants": 5}
-    controller, _ = _make_controller(config)
+    controller, _ = _make_controller(config, tmp_path)
 
     controller.on_pipeline_pack_load_config("pack1")
 
@@ -57,7 +60,7 @@ def test_load_randomizer_settings_apply_to_panel() -> None:
     assert controller.state.current_config.max_variants == 5
 
 
-def test_load_pack_config_restores_global_prompt_toggle_state() -> None:
+def test_load_pack_config_restores_global_prompt_toggle_state(tmp_path: Path) -> None:
     config = {
         "pipeline": {
             "apply_global_positive_txt2img": True,
@@ -66,7 +69,7 @@ def test_load_pack_config_restores_global_prompt_toggle_state() -> None:
         "global_positive_prompt": "cinematic lighting",
         "global_negative_prompt": "watermark",
     }
-    controller, _ = _make_controller(config)
+    controller, _ = _make_controller(config, tmp_path)
 
     sidebar = SimpleNamespace(
         applied=None,
@@ -83,8 +86,8 @@ def test_load_pack_config_restores_global_prompt_toggle_state() -> None:
     assert sidebar.applied["global_negative_prompt"] == "watermark"
 
 
-def test_apply_config_writes_randomizer_settings_to_pack() -> None:
-    controller, config_manager = _make_controller({})
+def test_apply_config_writes_randomizer_settings_to_pack(tmp_path: Path) -> None:
+    controller, config_manager = _make_controller({}, tmp_path)
     controller.app_state.set_run_config({"randomization_enabled": True, "max_variants": 8})
 
     controller.on_pipeline_pack_apply_config(["pack-x"])
@@ -94,13 +97,11 @@ def test_apply_config_writes_randomizer_settings_to_pack() -> None:
     assert saved.get("max_variants") == 8
 
 
-def test_add_packs_to_job_snapshots_randomizer_settings() -> None:
-    controller, _ = _make_controller({})
+def test_add_packs_to_job_snapshots_randomizer_settings(tmp_path: Path) -> None:
+    controller, _ = _make_controller({}, tmp_path)
     controller.app_state.set_run_config({"randomization_enabled": True, "max_variants": 6})
 
     # Mock both the pack finder and pack reader
-    from pathlib import Path
-
     mock_pack = SimpleNamespace(name="pack-7", path=Path("fake/pack-7.json"))
     controller._find_pack_by_id = lambda pack_id: mock_pack
 

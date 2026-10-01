@@ -83,6 +83,40 @@ def _require_display() -> None:
         pytest.skip(f"Tk unavailable: {exc}")
 
 
+def _shim_dir(tmp_path: Path) -> Path:
+    """Sibling of ``tmp_path`` so it never appears among the evidence bundles inside it."""
+
+    return tmp_path.with_name(tmp_path.name + "_shims")
+
+
+def _journey_subprocess_env(shim_dir: Path) -> dict[str, str]:
+    """Production-configuration environment for a journey subprocess, hermetic to the host GPU.
+
+    The executor samples live GPU pressure through ``nvidia-smi`` and logs an ERROR when a
+    host GPU is near saturation, which the journey (correctly) reports as a captured error.
+    Only ``nvidia-smi`` is shadowed: ``shim_dir`` is prepended to the unchanged PATH and
+    holds a stub that exits non-zero with no output, which the best-effort sampler treats as
+    "no GPU data". Every other executable (notably ``git``, which the journey's
+    ``UserDataGuard`` needs) stays resolvable, even when it shares a directory with the real
+    ``nvidia-smi``.
+    """
+
+    shim_dir.mkdir(parents=True, exist_ok=True)
+    if os.name == "nt":
+        (shim_dir / "nvidia-smi.cmd").write_text("@exit /b 1" + chr(13) + chr(10), encoding="ascii")
+    else:
+        shim = shim_dir / "nvidia-smi"
+        shim.write_text("#!/bin/sh" + chr(10) + "exit 1" + chr(10), encoding="ascii")
+        shim.chmod(0o755)
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in {"PYTEST_CURRENT_TEST", "STABLENEW_TEST_MODE", "STABLENEW_NO_WEBUI"}
+    }
+    env["PATH"] = os.pathsep.join([str(shim_dir), env.get("PATH", "")])
+    return env
+
+
 def _run_cli(
     tmp_path: Path,
     *extra: str,
@@ -97,11 +131,7 @@ def _run_cli(
     """
 
     _require_display()
-    env = {
-        k: v
-        for k, v in os.environ.items()
-        if k not in {"PYTEST_CURRENT_TEST", "STABLENEW_TEST_MODE", "STABLENEW_NO_WEBUI"}
-    }
+    env = _journey_subprocess_env(_shim_dir(tmp_path))
     result = subprocess.run(
         [
             sys.executable,
@@ -171,11 +201,7 @@ def test_real_backend_code_path_against_a_loopback_backend(tmp_path: Path) -> No
     with FakeA1111(
         model="alpha-model", extra_models=("zeta-model",), active_model="zeta-model"
     ) as backend:
-        env = {
-            k: v
-            for k, v in os.environ.items()
-            if k not in {"PYTEST_CURRENT_TEST", "STABLENEW_TEST_MODE", "STABLENEW_NO_WEBUI"}
-        }
+        env = _journey_subprocess_env(_shim_dir(tmp_path))
         result = subprocess.run(
             [
                 sys.executable,
@@ -255,6 +281,14 @@ def test_full_fake_journey_including_review_and_ratings(tmp_path: Path) -> None:
     assert ratings == [3, 4, 5]
 
 
+@pytest.mark.skipif(
+    os.environ.get("CI", "").lower() == "true",
+    reason=(
+        "layout phase measures real widget geometry (artifact list < 60% of the workspace), "
+        "which depends on the display's size and fonts; semantic GUI operator journeys are "
+        "local/display-required, so this one is not asserted on virtual-display CI"
+    ),
+)
 def test_discovered_outputs_journey_passes_on_an_isolated_output_tree(tmp_path: Path) -> None:
     code, evidence = _run_cli(
         tmp_path, journey="discovered-outputs-review", backend_args=(), timeout=300
@@ -285,3 +319,47 @@ def test_discovered_outputs_journey_passes_on_an_isolated_output_tree(tmp_path: 
     assert evidence["isolation_violations"] == []
     assert evidence["captured_errors"] == {"gui": [], "threads": [], "logs": []}
     assert str(REPO_ROOT / "output") not in evidence["summary"]["scan_root"]
+
+
+def test_hermetic_journey_env_hides_only_nvidia_smi_and_keeps_git_guard_active(
+    tmp_path: Path, monkeypatch
+) -> None:
+    import shutil
+
+    from src.utils.process_inspector_v2 import collect_gpu_snapshot
+    from tools.operator_journey.workspace import UserDataGuard, repo_sha
+
+    env = _journey_subprocess_env(_shim_dir(tmp_path))
+    path = env["PATH"]
+    original = os.environ.get("PATH", "")
+    assert path.endswith(original)  # every original PATH entry is preserved
+
+    # nvidia-smi resolves to the shim and yields no telemetry; git still resolves.
+    smi = shutil.which("nvidia-smi", path=path)
+    assert smi is not None and Path(smi).parent == _shim_dir(tmp_path)
+    git = shutil.which("git", path=path)
+    assert git is not None
+    monkeypatch.setenv("PATH", path)
+    assert collect_gpu_snapshot() is None
+
+    # Git works for the journey's guard: a real SHA, a usable status, and mutation detected.
+    assert repo_sha() not in {"", "unknown"}
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    for args in (
+        ["init", "-q"],
+        ["config", "user.email", "t@example.invalid"],
+        ["config", "user.name", "t"],
+    ):
+        subprocess.run(["git", *args], cwd=repo, check=True, env=env)
+    tracked = repo / "tracked.txt"
+    tracked.write_text("one")
+    subprocess.run(["git", "add", "."], cwd=repo, check=True, env=env)
+    subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True, env=env)
+    assert repo_sha(repo) not in {"", "unknown"}
+    guard = UserDataGuard(repo_root=repo)
+    guard.capture()
+    assert not guard._before["git_status"].startswith("git-status-unavailable")
+    assert guard.violations() == []
+    tracked.write_text("two")
+    assert "git status changed during the journey" in guard.violations()

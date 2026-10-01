@@ -16,8 +16,9 @@ import pytest
 from src.controller.job_service import JobService
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
-from src.pipeline.job_models_v2 import LearningJobContext, NormalizedJobRecord
+from src.pipeline.job_models_v2 import LearningJobContext
 from src.queue.job_model import Job, JobStatus
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class TestPhase2JobCompletionIntegration:
@@ -54,9 +55,8 @@ class TestPhase2JobCompletionIntegration:
             variant_value=25,
         )
 
-        njr = NormalizedJobRecord(
+        njr = make_pipeline_njr(
             job_id="test_job_123",
-            config={},
             path_output_dir="output",
             filename_template="test_{index}",
             learning_context=ctx,

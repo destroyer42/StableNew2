@@ -8,6 +8,7 @@ from unittest.mock import Mock
 from src.controller.svd_controller import SVDController
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.state.output_routing import OUTPUT_ROUTE_TESTING
+from src.video import SVDNativeVideoBackend, VideoBackendRegistry
 
 
 class _RecordingJobService:
@@ -83,7 +84,19 @@ def test_svd_submission_round_trips_from_controller_into_pipeline_runner(
         == config.inference.motion_bucket_id
     )
 
-    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    # Fake runtime-transition owner: never observe the host's real A1111/Comfy endpoints.
+    video_backends = VideoBackendRegistry()
+    video_backends.register(
+        SVDNativeVideoBackend(
+            transition=SimpleNamespace(prepare_for=lambda _target: SimpleNamespace(ready=True))
+        )
+    )
+    runner = PipelineRunner(
+        Mock(),
+        Mock(),
+        runs_base_dir=str(tmp_path / "runs"),
+        video_backend_registry=video_backends,
+    )
     pipeline = Mock()
     pipeline.run_svd_native_stage.return_value = {
         "path": str(video_path),

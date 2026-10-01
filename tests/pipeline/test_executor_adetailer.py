@@ -4,7 +4,29 @@ import logging
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
+
 from src.pipeline.executor import Pipeline
+
+_HEALTHY_RUNTIME_ADMISSION = {
+    "schema": "stablenew.runtime-admission.v1",
+    "status": "healthy",
+    "reasons": [],
+    "cause_codes": [],
+}
+
+
+@pytest.fixture(autouse=True)
+def _healthy_runtime_admission(monkeypatch):
+    """Runtime admission samples live GPU pressure and the host process list.
+
+    These tests exercise ADetailer payload construction, not admission, so they must
+    not depend on whether the machine running them is busy.
+    """
+
+    monkeypatch.setattr(
+        Pipeline, "_ensure_runtime_admissible", lambda *_a, **_k: _HEALTHY_RUNTIME_ADMISSION
+    )
 
 
 def test_adetailer_metadata_apply_global_defined():
@@ -187,11 +209,23 @@ def test_adetailer_payload_uses_adaptive_refinement_overrides():
         assert face_args["ad_inpaint_height"] == 768
 
 
+def _install_switchable_checkpoint(client: Mock, ambient: str) -> None:
+    """Model a WebUI whose checkpoint actually changes when set_model succeeds."""
+    state = {"model": ambient}
+
+    def _set_model(name: str) -> bool:
+        state["model"] = name
+        return True
+
+    client.options_write_enabled = True
+    client.set_model = Mock(side_effect=_set_model)
+    client.get_current_model = Mock(side_effect=lambda: state["model"])
+
+
 def test_adetailer_payload_pins_requested_sd_checkpoint_and_manifest_prefers_it():
     """ADetailer should preserve the requested SD model in the manifest."""
     pipeline = Pipeline(Mock(), Mock())
-    pipeline.client.set_model = Mock()
-    pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
+    _install_switchable_checkpoint(pipeline.client, "ambient-webui-model.safetensors")
 
     with (
         patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
@@ -229,9 +263,8 @@ def test_adetailer_payload_pins_requested_sd_checkpoint_and_manifest_prefers_it(
 def test_adetailer_defaults_to_global_model_switch_without_request_override() -> None:
     """ADetailer should use the global WebUI switch path by default."""
     pipeline = Pipeline(Mock(), Mock())
-    pipeline.client.set_model = Mock()
+    _install_switchable_checkpoint(pipeline.client, "ambient-webui-model.safetensors")
     pipeline.client.set_vae = Mock()
-    pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
     pipeline.client.get_current_vae = Mock(return_value="ambient-vae.safetensors")
 
     with (

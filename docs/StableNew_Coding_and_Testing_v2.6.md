@@ -46,7 +46,15 @@ Tests are grouped by purpose:
 - headless GUI tests for view/controller wiring and thread boundaries;
 - system/safety tests for architecture, repository completeness, CI truth, and
   runtime-state hygiene;
-- opt-in real-backend journeys for WebUI, SVD, models, and hardware.
+- semantic GUI operator journeys (`tools/operator_journey`; local, display-required);
+- opt-in real-backend acceptance for WebUI, SVD, models, and hardware.
+
+There is no `tests/journeys` lane. Deterministic canonical-path coverage uses
+`tests/helpers/njr_queue_harness.py::run_njr_via_queue` (NJR -> `JobService` -> SQLite ->
+`PipelineRunner.run_njr`, HTTP transport mocked) from `tests/integration`. A test that calls
+controller submission directly is a controller/integration test, never a "journey". Process
+tests that inspect host process lists (`tests/system/test_shutdown_no_leaks.py`) are opt-in
+local checks (`STABLENEW_RUN_SHUTDOWN_LEAK_TEST=1`) and never run in CI.
 
 Every test must be deterministic for fixed inputs. Use temporary state,
 artifact, cache, and output roots. Do not use real networks, WebUI, models,
@@ -99,9 +107,13 @@ Use `docs/CODEX_WORK_PACKAGE_TEMPLATE.md` for the standard closeout shape.
 ## Integration verdict
 
 GitHub required CI runs the required gate on Python 3.11 and 3.12. Both jobs
-must pass before integration. The broader configured suite is informational
-while its bounded legacy debt remains; its failures are reported but do not
-automatically broaden an unrelated PR.
+must pass before integration. The broader configured suite is an informational
+lane: it runs to completion (no `--maxfail`) with `pytest-timeout`, and its failures are
+reported but do not block merges or broaden an unrelated PR. Because the stale-fixture debt
+was repaired in PR-TEST-TRUTH-200, a failure there is now a signal to investigate; promote
+the lane to required only after it is green on both Python versions. Tests must isolate host
+state: PromptPacks via `STABLENEW_PROMPTPACK_DIR`/injected `packs_dir`, runtime transitions via
+fake owner managers, and never read or write the owner's real data.
 
 ## Repository completeness
 

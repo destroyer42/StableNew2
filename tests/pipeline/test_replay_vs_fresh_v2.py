@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-from dataclasses import asdict
-
 from src.history.history_record import HistoryRecord
 from src.history.history_schema_v26 import HISTORY_SCHEMA_VERSION
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.replay_engine import ReplayEngine
 from src.pipeline.run_plan import build_run_plan_from_njr
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class RecordingRunner:
@@ -19,9 +18,18 @@ class RecordingRunner:
 
 
 def _njr() -> NormalizedJobRecord:
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="fresh-001",
-        config={"prompt": "mountain", "model": "sdxl"},
+        config={
+            "prompt": "mountain",
+            "model": "sdxl",
+            "sampler_name": "Euler a",
+            "scheduler": "ddim",
+            "steps": 30,
+            "cfg_scale": 7.0,
+            "width": 640,
+            "height": 640,
+        },
         path_output_dir="out",
         filename_template="{seed}",
         seed=77,
@@ -32,12 +40,6 @@ def _njr() -> NormalizedJobRecord:
                 stage_type="txt2img", enabled=True, steps=30, cfg_scale=7.0, sampler_name="Euler a"
             )
         ],
-        steps=30,
-        cfg_scale=7.0,
-        width=640,
-        height=640,
-        sampler_name="Euler a",
-        scheduler="ddim",
         base_model="sdxl",
         images_per_prompt=1,
     )
@@ -55,7 +57,7 @@ def test_replay_run_plan_matches_fresh_plan() -> None:
         status="completed",
         history_schema=HISTORY_SCHEMA_VERSION,
         njr_snapshot={
-            "normalized_job": asdict(njr),
+            "normalized_job": njr.to_dict(),
             "schema_version": HISTORY_SCHEMA_VERSION,
         },
         metadata={},

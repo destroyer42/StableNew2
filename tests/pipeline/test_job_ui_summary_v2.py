@@ -3,34 +3,28 @@
 from __future__ import annotations
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord
+from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
 
-def make_job_record(**kwargs):
-    base_config = {
-        "model": "base-model",
-        "prompt": "A prompt",
-        "negative_prompt": "bad, buggy, blurry",
-        "stages": ["txt2img", "upscale"],
-        "refiner_enabled": True,
-        "hires_enabled": True,
-        "upscale_enabled": True,
-    }
-    base_config.update(kwargs.get("config", {}))
-    return NormalizedJobRecord(
-        job_id=kwargs.get("job_id", "job-001"),
-        config=base_config,
-        path_output_dir=kwargs.get("path_output_dir", "output"),
-        filename_template=kwargs.get("filename_template", "{seed}"),
-        seed=kwargs.get("seed", 123),
-        variant_index=kwargs.get("variant_index", 0),
-        variant_total=kwargs.get("variant_total", 2),
-        batch_index=kwargs.get("batch_index", 0),
-        batch_total=kwargs.get("batch_total", 1),
-        randomizer_summary=kwargs.get("randomizer_summary"),
+def make_job_record(
+    *,
+    stages: tuple[str, ...] = ("txt2img", "upscale"),
+    seed: int = 123,
+    **overrides,
+) -> NormalizedJobRecord:
+    return make_pipeline_njr(
+        job_id=overrides.pop("job_id", "job-001"),
+        positive_prompt="A prompt",
+        negative_prompt="bad, buggy, blurry",
+        base_model="base-model",
+        seed=seed,
+        variant_total=2,
+        stage_chain=[make_stage_config(stage, model="base-model") for stage in stages],
+        **overrides,
     )
 
 
-def test_to_ui_summary_includes_negative_prompt_and_flags():
+def test_to_ui_summary_includes_negative_prompt_and_stages():
     job = make_job_record()
     summary = job.to_ui_summary()
 
@@ -48,7 +42,7 @@ def test_to_ui_summary_formats_label():
 
 
 def test_to_ui_summary_upscale_detected_from_stages():
-    job = make_job_record(config={"stages": ["txt2img", "upscale", "adetailer"]})
+    job = make_job_record(stages=("txt2img", "upscale", "adetailer"))
     summary = job.to_ui_summary()
 
     assert "upscale" in summary.stages_display.lower()

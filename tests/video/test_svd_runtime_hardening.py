@@ -7,12 +7,32 @@ import pytest
 from PIL import Image
 
 from src.controller.runtime_state import CancellationError, CancelToken
+from src.video import svd_service as svd_service_module
 from src.video.svd_config import SVDConfig, SVDInferenceConfig
 from src.video.svd_errors import SVDExportError, SVDOutOfMemoryError
 from src.video.svd_models import SVDPreprocessResult
 from src.video.svd_registry import build_svd_artifact_stem
 from src.video.svd_runner import SVDRunner
 from src.video.svd_service import SVDService
+
+
+@pytest.fixture(autouse=True)
+def _stub_portable_mp4_provenance(monkeypatch):
+    """Keep these runner tests hermetic (fake mp4 bytes); portable provenance has focused coverage
+    in test_svd_portable_provenance.py."""
+
+    monkeypatch.setattr(
+        SVDRunner,
+        "_embed_portable_svd_provenance",
+        lambda _self, **_kwargs: {
+            "schema": "stablenew.video-provenance.v2.6",
+            "encoding": "raw",
+            "payload_sha256": "a" * 64,
+            "source_image_sha256": "b" * 64,
+            "source_provenance_status": "missing",
+            "video_media_content_sha256": "c" * 64,
+        },
+    )
 
 
 def _prepared_image(tmp_path: Path) -> Path:
@@ -27,8 +47,9 @@ def _service_with_pipeline(monkeypatch, pipeline):
     monkeypatch.setattr(service, "_get_pipeline", lambda _config: pipeline)
     monkeypatch.setattr(service, "_release_runtime_memory", lambda: None)
     monkeypatch.setattr(
-        "src.video.svd_service.importlib.import_module",
-        lambda name: SimpleNamespace() if name == "torch" else None,
+        svd_service_module,
+        "importlib",
+        SimpleNamespace(import_module=lambda name: SimpleNamespace() if name == "torch" else None),
     )
     return service
 
@@ -126,8 +147,9 @@ def test_cuda_oom_is_typed_and_does_not_hide_effective_config(monkeypatch, tmp_p
     service = _service_with_pipeline(monkeypatch, FakePipeline())
     fake_torch = SimpleNamespace(cuda=SimpleNamespace(OutOfMemoryError=FakeOOM))
     monkeypatch.setattr(
-        "src.video.svd_service.importlib.import_module",
-        lambda name: fake_torch if name == "torch" else None,
+        svd_service_module,
+        "importlib",
+        SimpleNamespace(import_module=lambda name: fake_torch if name == "torch" else None),
     )
 
     with pytest.raises(SVDOutOfMemoryError, match="Native SVD exhausted GPU memory") as exc_info:
@@ -435,10 +457,12 @@ def test_container_metadata_failure_is_typed_and_cleans_manifest(
         lambda self, **kwargs: (kwargs["frames"], {"applied": []}),
     )
     stem = build_svd_artifact_stem(source_image_path=source_path, job_id="job-metadata")
-    output_path = tmp_path / f"{stem}.mp4"
+    # Container metadata is written only for GIF output; MP4 provenance is embedded as portable
+    # provenance (failure covered in test_svd_runner.py "portable provenance export failed").
+    output_path = tmp_path / f"{stem}.gif"
     manifest_path = tmp_path / "manifests" / f"{stem}.json"
     monkeypatch.setattr(
-        "src.video.svd_runner.export_video_mp4", lambda **_kwargs: _write_and_return(output_path)
+        "src.video.svd_runner.export_video_gif", lambda **_kwargs: _write_and_return(output_path)
     )
 
     def _write_manifest(**_kwargs):
@@ -466,7 +490,7 @@ def test_container_metadata_failure_is_typed_and_cleans_manifest(
     with pytest.raises(SVDExportError, match="metadata encoder failed"):
         SVDRunner(service=FakeService(), output_root=tmp_path).run(
             source_image_path=source_path,
-            config=SVDConfig(),
+            config=SVDConfig.from_dict({"output": {"output_format": "gif"}}),
             job_id="job-metadata",
         )
 
