@@ -45,12 +45,24 @@ def test_list_workflow_specs_offers_only_the_qualified_experimental_wan_workflow
 
     specs = controller.list_workflow_specs()
 
-    assert [spec["workflow_id"] for spec in specs] == [WAN_ID]
-    spec = specs[0]
+    # Only experimental workflows are offered: TI2V-5B plus the two Wan-Animate-2 modes.
+    assert [spec["workflow_id"] for spec in specs] == [
+        "wan22_ti2v_5b_i2v_v1",
+        "wan_animate2_drive_i2v_v1",
+        "wan_animate2_prompt_i2v_v1",
+    ]
+    assert all(spec["experimental"] for spec in specs)
+    spec = next(spec for spec in specs if spec["workflow_id"] == WAN_ID)
     assert spec["governance_state"] == "experimental"
     assert spec["form_visibility"]["seed"] is True
     assert spec["form_visibility"]["motion_profile"] is False
-    assert spec["operator_projection"]["fixed_settings"]["frames"] == 49
+    # Only the newest revision is offered; its length is a selectable, frozen-at-admission
+    # frame count that defaults to the qualified 49 frames at a fixed 24 fps.
+    assert spec["workflow_version"] == "1.1.0"
+    assert "frames" not in spec["operator_projection"]["fixed_settings"]
+    assert spec["form_visibility"]["frame_count"] is True
+    assert spec["frame_count"]["default"] == 49
+    assert spec["frame_count"]["fps"] == 24
 
 
 def test_disabled_ltx_catalog_entries_are_rejected_before_admission(tmp_path: Path) -> None:

@@ -126,8 +126,10 @@ VIDEO_WORKFLOW_SETTING_HELP = {
     "workflow": "Chooses the authored workflow recipe that will drive the video job. This is the main intent selector, so change it when the clip structure or supported capabilities need to change, not just when you want more or less motion.",
     "end_anchor": "Optional image that the sequence should move toward. Use it only for workflows designed to honor end-state guidance.",
     "mid_anchors": "Optional semicolon-separated guide images for intermediate beats. Add them when a workflow supports staged transitions and the sequence needs stronger structural guidance across time.",
-    "motion": "High-level motion intensity profile. Gentle preserves realism best, balanced is a safer default for general motion, and dynamic pushes stronger movement with more drift risk.",
+    "motion": "High-level motion intensity profile. Gentle preserves realism best, balanced is a safer default for general motion, and dynamic pushes stronger movement with more drift risk. Shown only for workflows that honor it; workflows without this control (for example Wan-Animate-2) are driven by their own real controls instead.",
     "seed": "Leave blank or enter Random to let StableNew choose one seed before the job is queued. Enter a non-negative integer to reproduce a specific run; the frozen seed is kept with the queued job and replay.",
+    "pose_video": "A short clip of a person moving. Its body motion is transferred to the character in the source image; the clip is not changed and no pose extraction is needed. Only workflows that transfer motion from a video show this field. If the clip is shorter than the chosen frame count, its last frame is held.",
+    "frame_count": "How many frames the workflow generates. Only lengths the workflow can actually produce are offered, each shown with its approximate duration; longer clips take longer, use more GPU memory and can drift more. The chosen length is frozen with the queued job and reused on replay.",
     "output_route": "Controls where the resulting workflow artifacts are routed for follow-up work. Choose the route that best matches whether the next step is review/reprocess or clip assembly.",
     "camera_preset": "Structured camera-intent preset passed into conditioned workflows. Leave it on none for unconditioned runs, or choose a preset when the workflow should bias movement toward a specific cinematic camera move.",
     "camera_strength": "How strongly the selected camera intent should influence the workflow. Lower values keep the original anchor structure more intact; higher values push the authored camera move harder and increase drift risk.",
@@ -138,7 +140,7 @@ VIDEO_WORKFLOW_SETTING_HELP = {
     "controlnet_guidance_start": "Fraction of the denoising schedule where ControlNet guidance begins. Use lower values for earlier and stronger structure influence, or delay it when early frames should stay looser.",
     "controlnet_guidance_end": "Fraction of the denoising schedule where ControlNet guidance ends. Keep it at 1.0 for full-run structure guidance, or lower it when later motion should break away from the conditioning map.",
     "prompt": "Positive text guidance for the workflow. Use it to reinforce subject, mood, or motion intent that the selected workflow should preserve across the sequence.",
-    "negative": "Negative guidance for workflow outputs. Add repeated failure modes here when you want the sequence to avoid artifacts, flicker traits, or unwanted motion cues.",
+    "negative": "Negative guidance for workflow outputs. Add repeated failure modes here when you want the sequence to avoid artifacts, flicker traits, or unwanted motion cues. Distilled workflows sampled at CFG 1.0 (Wan-Animate-2) do not use the negative prompt at all, so it has no effect there.",
 }
 
 MOVIE_CLIPS_SETTING_HELP = {
