@@ -271,6 +271,34 @@ def _history_ready(entry: Mapping[str, Any]) -> bool:
     return False
 
 
+def _history_failed(entry: Mapping[str, Any]) -> bool:
+    status = entry.get("status")
+    if not isinstance(status, Mapping):
+        return False
+    return str(status.get("status_str") or "").strip().lower() in {
+        "error",
+        "failed",
+        "failure",
+        "cancelled",
+        "canceled",
+        "interrupted",
+    }
+
+
+def _history_nonterminal(entry: Mapping[str, Any]) -> bool:
+    """Only an explicit in-progress status is evidence of execution liveness."""
+
+    status = entry.get("status")
+    if not isinstance(status, Mapping) or status.get("completed") is not False:
+        return False
+    return str(status.get("status_str") or "").strip().lower() in {
+        "running",
+        "pending",
+        "queued",
+        "executing",
+    }
+
+
 class ComfyWorkflowVideoBackend:
     backend_id = "comfy"
     capabilities = VideoBackendCapabilities(
@@ -1106,13 +1134,18 @@ class ComfyWorkflowVideoBackend:
             payload = client.get_history(prompt_id)
             last_payload = dict(payload or {})
             entry = _history_entry_from_payload(last_payload, prompt_id)
+            if entry is not None and _history_failed(entry):
+                raise RuntimeError(f"Comfy workflow failed for prompt_id '{prompt_id}'")
             if entry and _history_ready(entry):
                 return entry
             now = time.time()
             if (
                 report_liveness is not None
                 and (last_report is None or now - last_report >= _LIVENESS_REPORT_INTERVAL_S)
-                and (entry is not None or _prompt_is_live(client, prompt_id))
+                and (
+                    (entry is not None and _history_nonterminal(entry))
+                    or _prompt_is_live(client, prompt_id)
+                )
             ):
                 last_report = now
                 report_liveness(now - started)

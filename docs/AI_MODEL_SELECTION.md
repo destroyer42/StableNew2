@@ -1,7 +1,7 @@
 # StableNew AI Model Selection
 
-Last reviewed: 2026-09-29
-Routine review due: 2026-10-29
+Last reviewed: 2026-10-01
+Routine review due: 2026-10-31
 
 This is the single canonical authority for choosing a coding model and effort for StableNew work.
 Other authorities (`AGENTS.md`, `docs/AGENT_OPERATING_MODEL.md`, `docs/CODEX_WORK_PACKAGE_TEMPLATE.md`,
@@ -16,17 +16,25 @@ vendor promotional claims; use vendor sources for availability, pricing, context
 semantics and intended positioning. Over time StableNew's own successful-work evidence (see
 "Empirical calibration") should outweigh generic rankings.
 
-## Current models (baseline reviewed 2026-09-29)
+## Current models (reviewed 2026-10-01)
 
-**Codex / OpenAI:** GPT-6 Luna, GPT-6 Sol, GPT-6 Astra; GPT-5.6 Luna, Terra, Sol. GPT-6 has no Terra
-tier. GPT-6 Luna and Sol support none/low through medium, high, XHigh and Max; GPT-6 Astra supports
-low through Max; GPT-5.6 models support none/low/medium/high/XHigh/Max.
+**Codex / OpenAI:** GPT-6 Luna, GPT-6.1 Sol, GPT-6 Astra; GPT-6 Sol and GPT-5.6
+Luna/Terra/Sol remain available during rollout. GPT-6 has no Terra tier. GPT-6.1 Sol supports
+Low, Medium (default), High, XHigh and Max, but not None or Minimal. GPT-6 Luna and the older GPT-6
+Sol support None through Max; GPT-6 Astra supports Low through Max. Codex availability and the
+visible effort controls depend on plan, client, workspace settings and rollout. The
+[Codex model guide](https://learn.chatgpt.com/docs/models),
+[GPT-6.1 Sol model page](https://developers.openai.com/api/docs/models/gpt-6.1-sol), and
+[model-selection guide](https://developers.openai.com/api/docs/guides/model-selection) are the
+current official OpenAI sources for this review.
 
 **Claude Code / Anthropic:** Claude Haiku 4.5, Sonnet 5, Opus 5, Fable 5.1, Sonnet 5.5, Opus 5.5.
 "Extra High" and `xhigh` are the same effort level.
 
-Independent Artificial Analysis Coding Agent Index figures (recorded from the owner's 2026-09-29
-review; approximate, in each vendor's own harness; not re-measured by StableNew):
+Historical independent Artificial Analysis Coding Agent Index figures (recorded from the owner's
+2026-09-29 review; approximate, in each vendor's own harness; not re-measured by StableNew). No
+verified comparable GPT-6.1 Sol benchmark was available for this update; its benchmark calibration
+is pending. These rows are a dated baseline, not current comparative evidence for GPT-6.1 Sol:
 
 | Codex model / effort | Index | Cost/task | Time/task | Tokens/task |
 |---|---:|---:|---:|---:|
@@ -49,8 +57,10 @@ review; approximate, in each vendor's own harness; not re-measured by StableNew)
 
 What this means for StableNew:
 
-- **GPT-6 Sol** is the default substantial-coding Codex model: stronger and materially cheaper than
-  GPT-5.6 Sol at similar total tokens. GPT-5.6 Sol is a fallback, not a first choice.
+- **GPT-6.1 Sol** is the default substantial-coding Codex model when available. Official OpenAI
+  guidance recommends it for complex coding and agentic work where total cost and time matter;
+  compare it with Astra on StableNew tasks before making a measured success-rate or cost-per-task
+  claim. **GPT-6 Sol** is the available fallback during rollout or where GPT-6.1 Sol is unavailable.
 - **GPT-6 Astra** is not ruled out by its per-token price: on difficult coding work it uses far fewer
   tokens than Sol and succeeds more often, so it can lower total successful-work cost where rework
   is expensive.
@@ -76,14 +86,15 @@ What this means for StableNew:
 | StableNew work profile | Codex default | Claude Code default |
 |---|---|---|
 | Git/status/docs cleanup/mechanical validation | GPT-6 Luna Low/Medium | Haiku 4.5 High, or Sonnet 5.5 Low |
-| Narrow known-root-cause bug | GPT-6 Sol Medium | Sonnet 5.5 Medium/High |
-| Normal substantial known-architecture PR | GPT-6 Sol High | Sonnet 5.5 High |
-| Difficult bounded lifecycle/persistence/concurrency/cross-file PR | GPT-6 Sol XHigh | Sonnet 5.5 XHigh |
+| Narrow known-root-cause bug | GPT-6.1 Sol Medium | Sonnet 5.5 Medium/High |
+| Normal substantial known-architecture PR | GPT-6.1 Sol High | Sonnet 5.5 High |
+| Difficult bounded lifecycle/persistence/concurrency/cross-file PR | GPT-6.1 Sol High or XHigh | Sonnet 5.5 XHigh |
 | Material architecture/ownership ambiguity | GPT-6 Astra High/XHigh | Opus 5.5 High/XHigh |
 | Very large well-specified repo-wide autonomous implementation/refactor | GPT-6 Astra XHigh/Max | Fable 5.1 XHigh/Max |
 | Exceptional quality-first open-ended architecture + implementation | GPT-6 Astra Max | Opus 5.5 Max |
 | Intermediate Codex fallback between Luna and Sol | GPT-5.6 Terra Medium/High | N/A |
-| Routine independent verification | GPT-6 Sol Medium | Sonnet 5.5 Medium |
+| GPT-6.1 Sol unavailable for a substantial Codex package | GPT-6 Sol at the corresponding supported effort | N/A |
+| Routine independent verification | GPT-6.1 Sol Medium | Sonnet 5.5 Medium |
 | High-risk independent verification / security review | GPT-6 Astra High | Opus 5.5 High |
 
 Also weigh: task size; architecture ambiguity; number of interacting subsystems; cost of a wrong
@@ -144,7 +155,7 @@ acceptance; was the main cost model reasoning or repeated repo-context acquisiti
 
 ## Review cadence
 
-Review at least every 30 days while development is active (next: 2026-10-29), and sooner when: a new
+Review at least every 30 days while development is active (next: 2026-10-31), and sooner when: a new
 or materially improved model/family appears in Codex or Claude Code; pricing or quota behavior
 changes materially; effort semantics change; a major independent coding-agent benchmark refresh moves
 the cost/performance frontier; a recommended model is deprecated or unavailable; or several StableNew
