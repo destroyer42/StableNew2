@@ -11,8 +11,10 @@ from src.pipeline.job_models_v2 import (
 )
 from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult, normalize_run_result
 from src.refinement.subject_scale_policy_service import SubjectScalePolicyService
+from src.services.runtime_transition_service import RuntimeTransitionCoordinator
 from src.video import VideoBackendCapabilities, VideoBackendRegistry, VideoExecutionResult
 from src.video.assembly_models import AssembledVideoResult, ExportReadyOutputBundle
+from src.video.svd_native_backend import SVDNativeVideoBackend
 
 
 def _record_from_legacy_kwargs(**values: object) -> NormalizedJobRecord:
@@ -793,7 +795,23 @@ def test_run_njr_dispatches_animatediff_stage(tmp_path: Path) -> None:
 
 
 def test_run_njr_dispatches_svd_native_stage(tmp_path: Path) -> None:
-    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    # Hermetic runtime transition: no managed runtime and no live endpoint, so a developer's
+    # real local A1111/Comfy cannot influence dispatch (the default coordinator probes localhost).
+    free_transition = RuntimeTransitionCoordinator(
+        webui_manager_getter=lambda: None,
+        comfy_manager_getter=lambda: None,
+        svd_service_factory=lambda: Mock(),
+        webui_endpoint_present=lambda: False,
+        comfy_endpoint_present=lambda: False,
+    )
+    video_backends = VideoBackendRegistry()
+    video_backends.register(SVDNativeVideoBackend(transition=free_transition))
+    runner = PipelineRunner(
+        Mock(),
+        Mock(),
+        runs_base_dir=str(tmp_path / "runs"),
+        video_backend_registry=video_backends,
+    )
     input_path = tmp_path / "seed.png"
     input_path.write_bytes(b"seed")
     output_video = tmp_path / "svd.mp4"

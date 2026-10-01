@@ -108,9 +108,22 @@ def test_adetailer_manifest_carries_canonical_adaptive_refinement_block() -> Non
     ] == ["clear irises"]
 
 
+def _install_switchable_checkpoint(client: Mock, ambient: str) -> None:
+    """Model a WebUI whose checkpoint actually changes when set_model succeeds."""
+    state = {"model": ambient}
+
+    def _set_model(name: str) -> bool:
+        state["model"] = name
+        return True
+
+    client.options_write_enabled = True
+    client.set_model = Mock(side_effect=_set_model)
+    client.get_current_model = Mock(side_effect=lambda: state["model"])
+
+
 def test_adetailer_manifest_model_prefers_requested_stage_checkpoint() -> None:
     pipeline = Pipeline(Mock(), Mock())
-    pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
+    _install_switchable_checkpoint(pipeline.client, "ambient-webui-model.safetensors")
     pipeline.client.get_current_vae = Mock(return_value="vae.pt")
 
     with (

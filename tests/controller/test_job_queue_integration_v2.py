@@ -5,9 +5,11 @@ from typing import Any
 
 from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
-from src.gui.app_state_v2 import AppStateV2, PackJobEntry
-from src.pipeline.job_models_v2 import JobStatusV2, NormalizedJobRecord
+from src.gui.app_state_v2 import PackJobEntry
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job, JobStatus
+from src.queue.job_repository import JobRepository
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class FakeJobService:
@@ -27,7 +29,10 @@ class FakeJobService:
         self.cancel_return_calls = 0
         self.last_job = None
         self._jobs: list[Job] = []
+        self._paused = False
         self.queue = self
+        # Queue authority contract: every queue is backed by one JobRepository.
+        self.repository = JobRepository(":memory:")
 
     def register_callback(self, event: str, callback: callable) -> None:
         self._listeners.setdefault(event, []).append(callback)
@@ -49,9 +54,15 @@ class FakeJobService:
 
     def pause(self) -> None:
         self.pause_calls += 1
+        self._paused = True
 
     def resume(self) -> None:
         self.resume_calls += 1
+        self._paused = False
+
+    def is_paused(self) -> bool:
+        # The fake also stands in for the queue (persisted via JobExecutionController).
+        return self._paused
 
     def cancel_current(self, *, return_to_queue: bool = False) -> None:
         self.cancel_calls += 1
@@ -73,8 +84,8 @@ class FakeJobService:
 
 def _build_controller() -> tuple[AppController, FakeJobService]:
     fake_service = FakeJobService()
+    # Use the controller-owned AppState: the projection sink is bound to it at construction.
     controller = AppController(None, threaded=False, job_service=fake_service)
-    controller.app_state = AppStateV2()
     return controller, fake_service
 
 
@@ -89,41 +100,14 @@ def _attach_dummy_draft(controller: AppController) -> None:
 
 
 def _make_njr(job_id: str = "job-1") -> NormalizedJobRecord:
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id=job_id,
         config={"prompt": "portrait"},
-        path_output_dir="output",
-        filename_template="{seed}",
+        positive_prompt="portrait",
         seed=123,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=1.0,
         prompt_pack_id="pack-1",
         prompt_pack_name="Pack 1",
         prompt_pack_row_index=0,
-        positive_prompt="portrait",
-        negative_prompt="",
-        steps=20,
-        cfg_scale=7.0,
-        width=512,
-        height=512,
-        sampler_name="Euler a",
-        scheduler="ddim",
-        clip_skip=0,
-        base_model="sdxl",
-        stage_chain=[],
-        loop_type="pipeline",
-        loop_count=1,
-        images_per_prompt=1,
-        variant_mode="standard",
-        run_mode="QUEUE",
-        queue_source="ADD_TO_QUEUE",
-        randomization_enabled=False,
-        config_variant_label="base",
-        config_variant_index=0,
-        status=JobStatusV2.QUEUED,
     )
 
 

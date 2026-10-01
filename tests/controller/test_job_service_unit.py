@@ -7,6 +7,7 @@ import pytest
 
 from src.controller.job_service import JobService, QueueStatus
 from src.queue.job_model import Job, JobPriority, JobStatus, StageCheckpoint
+from src.queue.job_repository import JobRepository
 
 
 class FakeQueue:
@@ -15,6 +16,8 @@ class FakeQueue:
         self.running = []
         self._status_callbacks: list[Callable[[Job, JobStatus], None]] = []
         self.paused = False
+        # JobService projects history from the queue's one shared JobRepository.
+        self.repository = JobRepository(":memory:")
 
     def submit(self, job: Job) -> None:
         self.jobs.append(job)
@@ -110,10 +113,6 @@ class FakeRunner:
             self._callback(job, status)
 
 
-class FakeHistory:
-    pass
-
-
 def make_job(job_id: str = "job1") -> Job:
     return Job(job_id=job_id, priority=JobPriority.NORMAL)
 
@@ -122,8 +121,7 @@ def make_job(job_id: str = "job1") -> Job:
 def service() -> JobService:
     queue = FakeQueue()
     runner = FakeRunner()
-    history = FakeHistory()
-    return JobService(queue, runner, history)
+    return JobService(queue, runner, queue.repository)
 
 
 def test_enqueue_emits_queue_update(service: JobService) -> None:

@@ -77,6 +77,9 @@ def test_phase1b_repeats_preview_submission_and_manual_dispatch(
     tmp_path: Path, monkeypatch
 ) -> None:
     monkeypatch.chdir(tmp_path)
+    # PromptPacks resolve from the canonical per-user directory; point it at the
+    # test pack directory instead of the host's real packs.
+    monkeypatch.setenv("STABLENEW_PROMPTPACK_DIR", str(tmp_path / "packs"))
     pack_paths = [
         tmp_path / "packs" / "pack-a.json",
         tmp_path / "packs" / "pack-b.json",

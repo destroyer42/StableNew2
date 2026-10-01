@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import tkinter as tk
 from collections.abc import Iterable
 from pathlib import Path
@@ -8,6 +9,7 @@ import pytest
 
 from src.gui.prompt_pack_adapter_v2 import PromptPackAdapterV2
 from src.gui.sidebar_panel_v2 import PromptPackSummary, SidebarPanelV2
+from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
 
 
 class DummyPromptPackAdapter:
@@ -181,10 +183,22 @@ def test_pack_selector_no_longer_exposes_legacy_prompt_entry(tmp_path):
         root.destroy()
 
 
+def _write_native_pack(path: Path, text: str) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+                "pack_data": {"slots": [{"index": 0, "text": text, "negative": "bad"}]},
+                "preset_data": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 @pytest.mark.gui
 def test_refresh_prompt_packs_rediscovers_new_json_packs(tmp_path):
-    alpha = tmp_path / "alpha.txt"
-    alpha.write_text("first prompt", encoding="utf-8")
+    _write_native_pack(tmp_path / "alpha.json", "first prompt")
 
     try:
         root = tk.Tk()
@@ -196,11 +210,7 @@ def test_refresh_prompt_packs_rediscovers_new_json_packs(tmp_path):
         root.update_idletasks()
         assert panel._current_pack_names == ["alpha"]
 
-        beta = tmp_path / "beta.json"
-        beta.write_text(
-            '{"pack_data":{"slots":[{"index":0,"text":"json prompt","negative":"bad"}]}}',
-            encoding="utf-8",
-        )
+        _write_native_pack(tmp_path / "beta.json", "json prompt")
 
         panel.refresh_prompt_packs()
         root.update_idletasks()
@@ -212,12 +222,12 @@ def test_refresh_prompt_packs_rediscovers_new_json_packs(tmp_path):
 
 
 @pytest.mark.gui
-def test_refresh_prompt_packs_dedupes_companion_txt_and_json(tmp_path):
+def test_refresh_prompt_packs_lists_only_native_json_packs_and_ignores_txt(tmp_path):
+    # Native JSON is the sole PromptPack authority: a TXT file (including a
+    # companion export next to a native pack) must not create or duplicate an entry.
     (tmp_path / "alpha.txt").write_text("txt prompt", encoding="utf-8")
-    (tmp_path / "alpha.json").write_text(
-        '{"pack_data":{"slots":[{"index":0,"text":"json prompt","negative":"bad"}]}}',
-        encoding="utf-8",
-    )
+    _write_native_pack(tmp_path / "alpha.json", "json prompt")
+    (tmp_path / "legacy_only.txt").write_text("legacy txt prompt", encoding="utf-8")
 
     try:
         root = tk.Tk()
@@ -230,5 +240,6 @@ def test_refresh_prompt_packs_dedupes_companion_txt_and_json(tmp_path):
 
         assert panel._current_pack_names == ["alpha"]
         assert panel.pack_listbox.get(0, "end") == ("alpha",)
+        assert [summary.path.suffix for summary in panel._prompt_summaries] == [".json"]
     finally:
         root.destroy()

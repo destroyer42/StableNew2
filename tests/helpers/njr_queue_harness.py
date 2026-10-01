@@ -1,21 +1,9 @@
-"""Shared helpers for the V2 journey tests.
+"""Deterministic canonical-path harness: NJR -> JobService -> SQLite -> run_njr.
 
-This module provides the canonical helper API for journey tests, hiding
-controller/runner internals. All journey tests (JT03, JT04, JT05, JT06, etc.)
-should use these helpers exclusively.
-
-Public API:
-    start_run_and_wait(app, use_run_now=False, add_to_queue_only=False, timeout_seconds=30.0) -> JobHistoryEntry
-    run_njr_journey(njr, api_client, timeout_seconds=30.0) -> JobHistoryEntry
-    get_latest_job(app) -> JobHistoryEntry | None
-    get_stage_plan_for_job(app, job) -> StageExecutionPlan | None
-
-Modern Journey Test Pattern (PR-TEST-003):
-    Journey tests should use run_njr_journey() to execute the full canonical path:
-        PromptPack → Builder → NJR → Queue → Runner → History
-
-    Mock only at the HTTP transport layer (requests.Session.request) to avoid
-    bypassing pipeline logic while still avoiding real WebUI dependencies.
+Executes an immutable NormalizedJobRecord through the real JobService,
+SQLite-backed queue/repository, and PipelineRunner, mocking only the HTTP
+transport (``requests.Session.request``) so no WebUI is needed. This is a
+deterministic integration helper, not a GUI/operator journey.
 """
 
 from __future__ import annotations
@@ -23,14 +11,12 @@ from __future__ import annotations
 import base64
 import tempfile
 import time
-from collections.abc import Iterable
 from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, patch
 
-from src.controller.app_controller import AppController
 from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
 from src.controller.submission_policy_v26 import SubmissionPolicy
@@ -44,28 +30,8 @@ from src.queue.single_node_runner import SingleNodeJobRunner
 
 if TYPE_CHECKING:
     from src.api.client import SDWebUIClient
-    from src.pipeline.stage_sequencer import StageExecutionPlan
 
 _DEFAULT_TIMEOUT = 30.0
-
-
-def _snapshot_history_ids(history_store, limit: int = 20) -> set[str]:
-    """Snapshot current job IDs in history store for detecting new jobs."""
-    return {entry.job_id for entry in history_store.list_jobs(limit=limit)}
-
-
-def _wait_for_history_entry(
-    history_store, known_ids: Iterable[str], timeout: float = _DEFAULT_TIMEOUT
-) -> JobHistoryEntry:
-    """Wait for a new job entry to appear in history that wasn't in known_ids."""
-    deadline = time.time() + timeout
-    while time.time() < deadline:
-        entries = history_store.list_jobs(limit=10)
-        for entry in entries:
-            if entry.job_id not in known_ids:
-                return entry
-        time.sleep(0.1)
-    raise TimeoutError("No new repository-backed history entry appeared before timeout.")
 
 
 def _wait_for_job_completion(
@@ -95,56 +61,7 @@ def _wait_for_job_completion(
     return None
 
 
-def start_run_and_wait(
-    controller: AppController,
-    *,
-    use_run_now: bool = False,
-    add_to_queue_only: bool = False,
-    timeout_seconds: float = _DEFAULT_TIMEOUT,
-) -> JobHistoryEntry:
-    """Start a run via AppController's V2 methods and wait for job completion.
-
-    Args:
-        controller: The AppController instance.
-        use_run_now: If True, use on_run_job_now_v2() (queue-backed "Run Now").
-        add_to_queue_only: If True, use on_add_job_to_queue_v2() (add without running).
-        timeout_seconds: Maximum time to wait for job completion.
-
-    Returns:
-        JobHistoryEntry for the completed job.
-
-    Raises:
-        RuntimeError: If job history store is not available.
-        TimeoutError: If no job appears or job doesn't complete within timeout.
-    """
-    history_store = getattr(controller.job_service, "history_store", None)
-    if history_store is None:
-        raise RuntimeError("Job history store is not available for journey helper.")
-
-    known_ids = _snapshot_history_ids(history_store)
-
-    # Trigger the run using the appropriate V2 entrypoint
-    if add_to_queue_only:
-        controller.on_add_job_to_queue_v2()
-    elif use_run_now:
-        controller.on_run_job_now_v2()
-    else:
-        controller.start_run_v2()
-
-    # Wait for a new job to appear in repository-backed history.
-    entry = _wait_for_history_entry(history_store, known_ids, timeout=timeout_seconds)
-
-    # Wait for job completion
-    completed_entry = _wait_for_job_completion(
-        controller.job_service, entry.job_id, timeout=timeout_seconds
-    )
-    if completed_entry is None:
-        raise TimeoutError(f"Job {entry.job_id} did not complete within timeout.")
-
-    return completed_entry
-
-
-def run_njr_journey(
+def run_njr_via_queue(
     njr: NormalizedJobRecord,
     api_client: SDWebUIClient,
     *,
@@ -154,7 +71,7 @@ def run_njr_journey(
 ) -> JobHistoryEntry:
     """Execute NJR through the canonical runner path with mocked HTTP transport.
 
-    This is the MODERN journey test pattern (PR-TEST-003). It executes the full
+    Submit through ``JobService`` and the SQLite repository; the queue worker then executes the full
     pipeline stack (run_njr → executor → stages) while mocking only at the HTTP
     transport layer to avoid real WebUI dependencies.
 
@@ -302,89 +219,3 @@ def run_njr_journey(
     if entry is None:
         raise TimeoutError(f"Job {njr.job_id} did not reach a repository terminal state.")
     return entry
-
-
-def get_latest_job(controller: AppController) -> JobHistoryEntry | None:
-    """Get the most recent job from history store.
-
-    Args:
-        controller: The AppController instance.
-
-    Returns:
-        The most recent JobHistoryEntry, or None if no jobs exist.
-    """
-    history_store = getattr(controller.job_service, "history_store", None)
-    if history_store is None:
-        return None
-    entries = history_store.list_jobs(limit=1)
-    return entries[0] if entries else None
-
-
-def get_stage_plan_for_job(
-    controller: AppController, job: JobHistoryEntry
-) -> StageExecutionPlan | None:
-    """Get the StageExecutionPlan for a job.
-
-    Args:
-        controller: The AppController instance.
-        job: The JobHistoryEntry to get the plan for.
-
-    Returns:
-        StageExecutionPlan if available, None otherwise.
-
-    Note:
-        Currently returns the last plan built by PipelineController.
-        Future: may be extended to look up plan by job_id.
-    """
-    pipeline_ctrl = getattr(controller, "pipeline_controller", None)
-    if pipeline_ctrl is None:
-        return None
-
-    # Try the test accessor first
-    accessor = getattr(pipeline_ctrl, "get_last_stage_execution_plan_for_tests", None)
-    if callable(accessor):
-        return accessor()
-
-    return None
-
-
-# Backwards compatibility alias
-def get_stage_plan(controller: AppController) -> StageExecutionPlan | None:
-    """Legacy alias for get_stage_plan_for_job with no job argument.
-
-    Deprecated: Use get_stage_plan_for_job(controller, job) instead.
-    """
-    pipeline_ctrl = getattr(controller, "pipeline_controller", None)
-    if pipeline_ctrl is None:
-        return None
-    return getattr(pipeline_ctrl, "get_last_stage_execution_plan_for_tests", lambda: None)()
-
-
-# ========================================
-# CI Mode Detection Helpers
-# ========================================
-
-
-def is_ci_mode() -> bool:
-    """
-    Check if running in CI environment.
-
-    Returns:
-        True if CI environment variable is set (GitHub Actions, etc.)
-    """
-    import os
-
-    return os.getenv("CI", "").lower() in ("true", "1", "yes")
-
-
-def should_skip_real_webui_test() -> bool:
-    """
-    Determine if test should be skipped due to WebUI dependency.
-
-    Some tests require real WebUI (e.g., image quality validation).
-    These should skip in CI mode.
-
-    Returns:
-        True if test should skip (CI mode without real WebUI)
-    """
-    return is_ci_mode()

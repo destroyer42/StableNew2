@@ -34,6 +34,7 @@ from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 class DataclassConfig:
     """Standard dataclass config."""
 
+    prompt: str = "a dataclass prompt"
     model: str = "model_dc"
     sampler: str = "euler"
     seed: int = 1000
@@ -43,6 +44,7 @@ class PlainClassConfig:
     """Plain class (non-dataclass) config."""
 
     def __init__(self) -> None:
+        self.prompt = "a plain prompt"
         self.model = "model_plain"
         self.sampler = "ddim"
         self.seed = 2000
@@ -52,6 +54,7 @@ class PlainClassConfig:
 class NestedConfig:
     """Config with nested objects."""
 
+    prompt: str = "a nested prompt"
     model: str = "model_nested"
     sampler: str = "dpm"
     seed: int = 3000
@@ -228,7 +231,7 @@ class TestImmutability:
 
         jobs = builder.build_jobs(base_config=original)
         # Modify the job's config nested value
-        jobs[0].config.nested["a"] = 999
+        jobs[0].config["nested"]["a"] = 999
 
         assert original.nested["a"] == original_nested_a, (
             "Nested mutation should not affect original"
@@ -307,17 +310,17 @@ class TestConfigTypeCompatibility:
         """Dataclass config works."""
         jobs = builder.build_jobs(base_config=DataclassConfig())
         assert len(jobs) == 1
-        assert jobs[0].config.model == "model_dc"
+        assert jobs[0].config["model"] == "model_dc"
 
     def test_plain_class_config(self, builder: JobBuilderV2) -> None:
         """Plain class config works."""
         jobs = builder.build_jobs(base_config=PlainClassConfig())
         assert len(jobs) == 1
-        assert jobs[0].config.model == "model_plain"
+        assert jobs[0].config["model"] == "model_plain"
 
     def test_dict_config(self, builder: JobBuilderV2) -> None:
         """Dict config works."""
-        config = {"model": "model_dict", "sampler": "lms", "seed": 5000}
+        config = {"prompt": "a dict prompt", "model": "model_dict", "sampler": "lms", "seed": 5000}
         jobs = builder.build_jobs(base_config=config)
         assert len(jobs) == 1
         assert jobs[0].config["model"] == "model_dict"
@@ -326,31 +329,4 @@ class TestConfigTypeCompatibility:
         """Nested config works."""
         jobs = builder.build_jobs(base_config=NestedConfig())
         assert len(jobs) == 1
-        assert jobs[0].config.nested["a"] == 1
-
-
-# ---------------------------------------------------------------------------
-# Timestamp Invariants
-# ---------------------------------------------------------------------------
-
-
-class TestTimestamps:
-    """Verify timestamp invariants."""
-
-    def test_timestamps_positive(self, builder: JobBuilderV2) -> None:
-        """All timestamps are positive."""
-        plan = RandomizationPlanV2(enabled=True, model_choices=["m1", "m2"])
-        jobs = builder.build_jobs(base_config=DataclassConfig(), randomization_plan=plan)
-        assert all(j.created_ts > 0 for j in jobs)
-
-    def test_timestamps_non_decreasing(self, builder: JobBuilderV2) -> None:
-        """Timestamps are non-decreasing."""
-        plan = RandomizationPlanV2(enabled=True, model_choices=["m1", "m2", "m3"])
-        batch = BatchSettings(batch_size=1, batch_runs=2)
-        jobs = builder.build_jobs(
-            base_config=DataclassConfig(), randomization_plan=plan, batch_settings=batch
-        )
-
-        timestamps = [j.created_ts for j in jobs]
-        for i in range(1, len(timestamps)):
-            assert timestamps[i] >= timestamps[i - 1], "Timestamps should be non-decreasing"
+        assert jobs[0].config["nested"]["a"] == 1

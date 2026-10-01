@@ -112,11 +112,16 @@ def test_queued_cancel_is_durable_and_never_dispatches_cancelled_job(tmp_path) -
     service.enqueue(following)
 
     service.cancel_job(cancelled.job_id, reason="user_cancelled")
+    # Continuous dispatch is service-owned policy; the runner retires unless
+    # auto-run is explicitly enabled.
+    service.set_auto_run_enabled(True)
     runner.start()
-    _wait_until(
-        lambda: queue.repository.get_job_model(following.job_id).status == JobStatus.COMPLETED
-    )
-    runner.stop()
+    try:
+        _wait_until(
+            lambda: queue.repository.get_job_model(following.job_id).status == JobStatus.COMPLETED
+        )
+    finally:
+        runner.stop()
 
     stored = queue.repository.get_job_model(cancelled.job_id)
     assert stored is not None
@@ -174,13 +179,23 @@ def test_running_cancel_interrupts_once_late_success_loses_and_queue_continues(t
     second = make_queue_job("queued-b")
     service.enqueue(first)
     service.enqueue(second)
+    # Continuous dispatch is service-owned policy; the runner retires unless
+    # auto-run is explicitly enabled.
+    service.set_auto_run_enabled(True)
     runner.start()
-    assert generation_started.wait(2.0)
+    try:
+        assert generation_started.wait(2.0)
 
-    service.cancel_current()
-    _wait_until(lambda: queue.repository.get_job_model(first.job_id).status == JobStatus.CANCELLED)
-    _wait_until(lambda: queue.repository.get_job_model(second.job_id).status == JobStatus.COMPLETED)
-    runner.stop()
+        service.cancel_current()
+        _wait_until(
+            lambda: queue.repository.get_job_model(first.job_id).status == JobStatus.CANCELLED
+        )
+        _wait_until(
+            lambda: queue.repository.get_job_model(second.job_id).status == JobStatus.COMPLETED
+        )
+    finally:
+        client.interrupted.set()
+        runner.stop()
 
     cancelled = queue.repository.get_job_model(first.job_id)
     assert cancelled is not None

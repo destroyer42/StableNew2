@@ -6,8 +6,15 @@ from pathlib import Path
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.utils.prompt_txt_parser import parse_prompt_txt_to_components
 
+LORA_EMBED_TXT = """<embedding:BadDream> <embedding:UnrealisticDream>
+(masterpiece, best quality), a [[job]] in [[environment]], highly detailed
+<lora:add-detail-xl:0.65> <lora:style-enhance:0.8>
+neg: <embedding:bad-hands-5>
+neg: bad quality, blurry, watermark, signature
+"""
 
-def test_phase_d_integration():
+
+def test_phase_d_integration(tmp_path: Path):
     """Test complete workflow: parse TXT → load to model → save JSON → export TXT."""
 
     # Step 1: Parse test TXT file
@@ -15,10 +22,7 @@ def test_phase_d_integration():
     print("STEP 1: Parse test TXT file")
     print("=" * 60)
 
-    fixtures_dir = Path(__file__).resolve().parents[1] / "fixtures" / "lora_embed"
-    txt_path = fixtures_dir / "test_lora_embed_load.txt"
-    with open(txt_path, encoding="utf-8") as f:
-        txt_content = f.read()
+    txt_content = LORA_EMBED_TXT
 
     print(f"Input TXT:\n{txt_content}\n")
 
@@ -57,12 +61,12 @@ def test_phase_d_integration():
 
     # Step 3: Save to JSON
     print("=" * 60)
-    print("STEP 3: Save to JSON (in packs/ folder for auto-export)")
+    print("STEP 3: Save native JSON pack (temporary PromptPack directory)")
     print("=" * 60)
 
-    # Save to packs/ folder to trigger auto-export
-    packs_dir = Path("packs")
-    packs_dir.mkdir(exist_ok=True)
+    # Use an isolated PromptPack directory; never write into the repo or per-user packs.
+    packs_dir = tmp_path / "packs"
+    packs_dir.mkdir()
     json_path = packs_dir / "test_lora_embed_pack.json"
     pack.save_to_file(json_path)
 
@@ -75,12 +79,16 @@ def test_phase_d_integration():
 
     # Step 4: Verify TXT export
     print("=" * 60)
-    print("STEP 4: Verify TXT export")
+    print("STEP 4: Verify explicit TXT export")
     print("=" * 60)
 
-    txt_export_path = json_path.with_suffix(".txt")
+    # TXT is an explicit interchange export now, not an automatic save side effect.
+    assert not json_path.with_suffix(".txt").exists()
+    txt_export_path = pack.export_to_file(json_path.with_suffix(".txt"))
     with open(txt_export_path, encoding="utf-8") as f:
         exported_txt = f.read()
+    assert "<lora:add-detail-xl:0.65>" in exported_txt
+    assert "<embedding:BadDream>" in exported_txt
 
     print(f"Exported TXT:\n{exported_txt}\n")
 

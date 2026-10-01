@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from src.app_factory import build_v2_app
-from tests.journeys.utils.tk_root_factory import create_root
+from tests.helpers.tk_root_factory import create_root
 
 
 @dataclass

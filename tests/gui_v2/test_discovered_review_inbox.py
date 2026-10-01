@@ -13,6 +13,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from src.gui.app_state_v2 import AppStateV2
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningState
 from src.gui.views.discovered_review_inbox_panel import DiscoveredReviewInboxPanel
@@ -785,6 +786,7 @@ def test_controller_submit_staged_curation_advancement_enqueues_face_triage_job(
     job_service.submit_njrs = MagicMock(return_value=["job-queued-1"])
     pipeline_controller._job_service = job_service
     pipeline_controller._config_manager = None
+    pipeline_controller._app_state = AppStateV2()
     ctrl = LearningController(
         learning_state=LearningState(),
         pipeline_controller=pipeline_controller,
@@ -880,6 +882,7 @@ def test_controller_build_staged_curation_advancement_plan_preserves_source_deta
     job_service.submit_njrs = MagicMock(return_value=["job-queued-1"])
     pipeline_controller._job_service = job_service
     pipeline_controller._config_manager = None
+    pipeline_controller._app_state = AppStateV2()
     ctrl = LearningController(
         learning_state=LearningState(),
         pipeline_controller=pipeline_controller,
@@ -972,6 +975,7 @@ def test_controller_build_staged_curation_review_handoff_preserves_review_inputs
     job_service.submit_njrs = MagicMock(return_value=["job-queued-1"])
     pipeline_controller._job_service = job_service
     pipeline_controller._config_manager = None
+    pipeline_controller._app_state = AppStateV2()
     ctrl = LearningController(
         learning_state=LearningState(),
         pipeline_controller=pipeline_controller,
@@ -1067,6 +1071,7 @@ def test_controller_build_staged_curation_review_handoff_can_filter_single_candi
     job_service.submit_njrs = MagicMock(return_value=["job-queued-1"])
     pipeline_controller._job_service = job_service
     pipeline_controller._config_manager = None
+    pipeline_controller._app_state = AppStateV2()
     ctrl = LearningController(
         learning_state=LearningState(),
         pipeline_controller=pipeline_controller,
@@ -1182,6 +1187,7 @@ def test_controller_build_staged_curation_review_handoff_repairs_stale_absolute_
     job_service.submit_njrs = MagicMock(return_value=["job-queued-1"])
     pipeline_controller._job_service = job_service
     pipeline_controller._config_manager = None
+    pipeline_controller._app_state = AppStateV2()
     ctrl = LearningController(
         learning_state=LearningState(),
         pipeline_controller=pipeline_controller,

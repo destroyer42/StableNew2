@@ -46,6 +46,32 @@ def tk_pump(tk_root):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_process_global_runtime_state():
+    """Give each test a clean process-global thread registry and watchdog slot.
+
+    ``ThreadRegistry`` and ``SystemWatchdogV2`` keep process-wide state. A test that
+    builds an ``AppController`` without shutting it down leaves a registered thread
+    or a live single-flight watchdog, which then makes unrelated lifecycle tests
+    (shutdown counts, watchdog start/stall) fail only in a whole-suite run. This
+    forgets bookkeeping for threads leaked by earlier tests; it does not stop them.
+    """
+
+    try:
+        from src.services.watchdog_system_v2 import SystemWatchdogV2
+        from src.utils.thread_registry import get_thread_registry
+
+        registry = get_thread_registry()
+        with registry._registry_lock:
+            registry._threads.clear()
+            registry._shutdown_requested = False
+        with SystemWatchdogV2._ACTIVE_LOCK:
+            SystemWatchdogV2._ACTIVE_THREAD = None
+    except Exception:  # pragma: no cover - isolation must never break collection
+        pass
+    yield
+
+
+@pytest.fixture(autouse=True)
 def _mock_webui_discovery(monkeypatch, tmp_path: Path):
     """Prevent tests from launching or probing real WebUI services.
 

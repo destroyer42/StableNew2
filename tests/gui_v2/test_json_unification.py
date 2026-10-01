@@ -49,7 +49,9 @@ def test_unified_json_no_collision():
 
         # Step 2: Apply pipeline config to the same pack
         print("\nStep 2: Applying pipeline config to same pack...")
-        config_mgr = ConfigManager()
+        # Isolate both the PromptPack directory and the presets directory so the
+        # test never reads or writes the owner's per-user PromptPack storage.
+        config_mgr = ConfigManager(presets_dir=Path(tmpdir) / "presets", packs_dir=packs_dir)
         pipeline_config = {
             "pipeline": {
                 "txt2img_enabled": True,
@@ -69,16 +71,8 @@ def test_unified_json_no_collision():
             },
         }
 
-        # Temporarily change pack path for config manager
-        original_cwd = Path.cwd()
-        try:
-            import os
-
-            os.chdir(tmpdir)
-            success = config_mgr.save_pack_config("test_pack.txt", pipeline_config)
-            assert success, "Failed to save pipeline config"
-        finally:
-            os.chdir(original_cwd)
+        success = config_mgr.save_pack_config("test_pack.txt", pipeline_config)
+        assert success, "Failed to save pipeline config"
 
         # Step 3: Verify BOTH matrix and pipeline data exist
         print("\nStep 3: Verifying unified JSON structure...")
@@ -121,17 +115,11 @@ def test_unified_json_no_collision():
 
         # Step 5: Verify config manager can still read pipeline config
         print("\nStep 5: Verifying config manager can read pipeline config...")
-        import os
-
-        os.chdir(tmpdir)
-        try:
-            loaded_config = config_mgr.get_pack_config("test_pack.txt")
-            assert "pipeline" in loaded_config, "Pipeline section missing from loaded config"
-            assert loaded_config["pipeline"]["txt2img_enabled"] is True, "Pipeline config corrupted"
-            assert "txt2img" in loaded_config, "txt2img section missing from loaded config"
-            print(f"  ✓ Config manager loaded: {list(loaded_config.keys())}")
-        finally:
-            os.chdir(original_cwd)
+        loaded_config = config_mgr.get_pack_config("test_pack.txt")
+        assert "pipeline" in loaded_config, "Pipeline section missing from loaded config"
+        assert loaded_config["pipeline"]["txt2img_enabled"] is True, "Pipeline config corrupted"
+        assert "txt2img" in loaded_config, "txt2img section missing from loaded config"
+        print(f"  ✓ Config manager loaded: {list(loaded_config.keys())}")
 
         print("\n" + "=" * 60)
         print("✓ ALL TESTS PASSED!")

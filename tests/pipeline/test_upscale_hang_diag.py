@@ -3,9 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import Mock
 
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.utils.logger import StructuredLogger
+from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
 
 def _make_runner(tmp_path: Path) -> PipelineRunner:
@@ -52,14 +52,11 @@ def test_runner_processes_upscale_stage_serially_for_each_input_image(tmp_path: 
         _seed_image(tmp_path / "src" / "img_1.png"),
         _seed_image(tmp_path / "src" / "img_2.png"),
     ]
-    record = NormalizedJobRecord(
+    record = make_pipeline_njr(
         job_id="upscale-serial",
-        config={},
         path_output_dir=str(tmp_path / "runs"),
         filename_template="{seed}",
-        stage_chain=[
-            StageConfig(stage_type="upscale", enabled=True, extra={"upscaler": "nearest"})
-        ],
+        stage_chain=[make_stage_config("upscale", extra={"upscaler": "nearest"})],
         input_image_paths=inputs,
         start_stage="upscale",
     )
@@ -68,7 +65,7 @@ def test_runner_processes_upscale_stage_serially_for_each_input_image(tmp_path: 
 
     assert result.success is True
     assert calls == inputs
-    assert len(record.output_paths) == 3
+    assert len(result.output_paths) == 3
 
 
 def test_runner_skips_missing_upscale_outputs_without_failing_prior_inputs(tmp_path: Path) -> None:
@@ -105,14 +102,11 @@ def test_runner_skips_missing_upscale_outputs_without_failing_prior_inputs(tmp_p
         _seed_image(tmp_path / "src" / "img_1.png"),
         _seed_image(tmp_path / "src" / "img_2.png"),
     ]
-    record = NormalizedJobRecord(
+    record = make_pipeline_njr(
         job_id="upscale-partial",
-        config={},
         path_output_dir=str(tmp_path / "runs"),
         filename_template="{seed}",
-        stage_chain=[
-            StageConfig(stage_type="upscale", enabled=True, extra={"upscaler": "nearest"})
-        ],
+        stage_chain=[make_stage_config("upscale", extra={"upscaler": "nearest"})],
         input_image_paths=inputs,
         start_stage="upscale",
     )
@@ -121,4 +115,4 @@ def test_runner_skips_missing_upscale_outputs_without_failing_prior_inputs(tmp_p
 
     assert result.success is True
     assert calls == ["img_0.png", "img_1.png", "img_2.png"]
-    assert len(record.output_paths) == 2
+    assert len(result.output_paths) == 2

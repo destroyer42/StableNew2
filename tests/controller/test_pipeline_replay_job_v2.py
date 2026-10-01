@@ -3,18 +3,20 @@ from __future__ import annotations
 from datetime import datetime
 
 from src.controller.pipeline_controller import PipelineController
-from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceKind
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import Job, JobPriority, JobStatus
 from src.utils.snapshot_builder_v2 import build_job_snapshot
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class DummyJobService:
     def __init__(self) -> None:
-        self.submitted: list[Job] = []
+        self.submitted: list[NormalizedJobRecord] = []
 
-    def submit_job_with_run_mode(self, job: Job) -> None:
-        self.submitted.append(job)
+    def submit_njrs(self, records, policy=None) -> list[str]:
+        self.submitted.extend(records)
+        return [record.job_id for record in records]
 
 
 class DummyHistoryService:
@@ -62,11 +64,12 @@ def _make_snapshot_entry(record: NormalizedJobRecord) -> tuple[JobHistoryEntry, 
 
 
 def test_replay_job_from_history_submits_snapshot_job():
-    record = NormalizedJobRecord(
+    record = make_pipeline_njr(
         job_id="replay-job",
         config={"model": "md", "prompt": "s", "negative_prompt": "n"},
+        positive_prompt="s",
+        negative_prompt="n",
         path_output_dir="out",
-        filename_template="{seed}",
         seed=99,
     )
     entry, _ = _make_snapshot_entry(record)
@@ -83,6 +86,11 @@ def test_replay_job_from_history_submits_snapshot_job():
 
     assert queued == 1
     assert controller._app_state.preview_jobs
-    assert controller._app_state.preview_jobs[0].job_id == record.job_id
-    assert len(controller._job_service.submitted) == 1
-    assert controller._job_service.submitted[0].job_id == record.job_id
+    # Replay submits a NEW NJR identity with parent lineage back to the history record.
+    (replayed,) = controller._job_service.submitted
+    assert replayed.job_id != record.job_id
+    assert replayed.source.kind is SourceKind.HISTORY_REPLAY
+    assert replayed.source.parent_job_id == record.job_id
+    assert replayed.workload.config == record.workload.config
+    assert replayed.provenance.seed == 99
+    assert controller._app_state.preview_jobs == [replayed]

@@ -11,6 +11,7 @@ from src.queue.job_queue import JobQueue
 from src.utils.error_envelope_v2 import wrap_exception
 from src.utils.exceptions_v2 import WatchdogViolationError
 from src.utils.watchdog_v2 import WatchdogConfig
+from tests.helpers.njr_factory import make_queue_job
 
 
 class DummyRunner:
@@ -62,7 +63,7 @@ def test_watchdog_violation_triggers_cancel(monkeypatch) -> None:
     runner = DummyRunner()
     config = WatchdogConfig(enabled=True, interval_sec=0.1)
     service = JobService(job_queue, runner, watchdog_config=config)
-    job = Job(job_id="job-watchdog")
+    job = make_queue_job("job-watchdog")
     job_queue.submit(job)
 
     cancellation: list[tuple[str, str | None]] = []

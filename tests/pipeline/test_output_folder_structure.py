@@ -9,6 +9,50 @@ import pytest
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.state.output_routing import OUTPUT_ROUTE_ANIMATEDIFF, OUTPUT_ROUTE_PIPELINE
+from tests.helpers.njr_factory import make_pipeline_njr
+
+
+def _make_njr(
+    *,
+    job_id: str,
+    config: dict,
+    path_output_dir: str,
+    filename_template: str,
+    prompt_pack_name: str,
+    positive_prompt: str,
+    negative_prompt: str,
+    base_model: str,
+    sampler_name: str,
+    steps: int,
+    cfg_scale: float,
+    width: int,
+    height: int,
+    images_per_prompt: int,
+    stage_chain: list[StageConfig],
+) -> NormalizedJobRecord:
+    """Build a prompt-pack NJR through the shared factory (current NJR contract)."""
+    return make_pipeline_njr(
+        job_id=job_id,
+        config={
+            **config,
+            "model": base_model,
+            "prompt": positive_prompt,
+            "sampler_name": sampler_name,
+            "steps": steps,
+            "cfg_scale": cfg_scale,
+            "width": width,
+            "height": height,
+        },
+        path_output_dir=path_output_dir,
+        filename_template=filename_template,
+        prompt_pack_id=f"pack-{prompt_pack_name}" if prompt_pack_name else None,
+        prompt_pack_name=prompt_pack_name or None,
+        positive_prompt=positive_prompt,
+        negative_prompt=negative_prompt,
+        base_model=base_model,
+        images_per_prompt=images_per_prompt,
+        stage_chain=stage_chain,
+    )
 
 
 class TestOutputFolderStructure:
@@ -53,7 +97,7 @@ class TestOutputFolderStructure:
         """
         Test that output folder structure is: output/{YYYYMMDD_HHMMSS}/{pack_name}/
         """
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="test_job",
             config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
@@ -115,7 +159,7 @@ class TestOutputFolderStructure:
         Test that the run_dir structure allows for manifests/ subfolder.
         (Actual manifests creation happens in executor methods when real API is called)
         """
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="test_manifests",
             config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
@@ -177,7 +221,7 @@ class TestOutputFolderStructure:
         """
         Test that pack names with special characters are sanitized for filesystem.
         """
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="test_sanitize",
             config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
@@ -237,7 +281,7 @@ class TestOutputFolderStructure:
         """
         Test that job_id is used when prompt_pack_name is empty.
         """
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="my_unique_job_123",
             config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
@@ -292,7 +336,7 @@ class TestOutputFolderStructure:
         # Create 3 NJRs with the same pack name
         njrs = []
         for i in range(3):
-            njr = NormalizedJobRecord(
+            njr = _make_njr(
                 job_id=f"test_job_{i}",
                 config=dict(self.PIPELINE_CONFIG),
                 path_output_dir=str(temp_output_dir),
@@ -351,7 +395,7 @@ class TestOutputFolderStructure:
         Test that jobs from different packs get different folders.
         """
         # Create 2 NJRs with different pack names
-        njr1 = NormalizedJobRecord(
+        njr1 = _make_njr(
             job_id="test_job_1",
             config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
@@ -371,7 +415,7 @@ class TestOutputFolderStructure:
             ],
         )
 
-        njr2 = NormalizedJobRecord(
+        njr2 = _make_njr(
             job_id="test_job_2",
             config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
@@ -446,7 +490,7 @@ class TestOutputFolderStructure:
             runs_base_dir=str(temp_output_dir),
         )
 
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="restart_reuse",
             config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(temp_output_dir),
@@ -493,7 +537,7 @@ class TestOutputFolderStructure:
         )
         explicit_output_dir = tmp_path / "explicit_output"
 
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="explicit_dir_job",
             config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(explicit_output_dir),
@@ -539,7 +583,7 @@ class TestOutputFolderStructure:
             runs_base_dir=str(tmp_path / "default_output"),
         )
 
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="normalized_output_root_job",
             config=dict(self.PIPELINE_CONFIG),
             path_output_dir=str(misconfigured_output_root),

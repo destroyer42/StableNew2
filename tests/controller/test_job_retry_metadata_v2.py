@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from src.queue.job_model import Job
 from src.queue.single_node_runner import _ensure_job_envelope
+from tests.helpers.njr_factory import make_queue_job
 
 
 def test_job_service_retry_metadata_survives_envelope(job_service_with_stub_runner_factory):
     service, queue, _ = job_service_with_stub_runner_factory
-    job = Job(job_id="retry-metadata")
+    job = make_queue_job("retry-metadata")
     queue.submit(job)
 
     service.record_retry_attempt(job.job_id, "txt2img", 1, 3, "TimeoutError")

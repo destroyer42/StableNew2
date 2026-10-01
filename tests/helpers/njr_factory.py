@@ -160,6 +160,9 @@ def make_pipeline_njr(
             negative_embeddings=tuple(overrides.pop("negative_embeddings", ())),
             matrix_slot_values=overrides.pop("matrix_slot_values", {}),
             learning_context=overrides.pop("learning_context", None),
+            pack_usage=tuple(overrides.pop("pack_usage", ())),
+            txt2img_prompt_info=overrides.pop("txt2img_prompt_info", None),
+            img2img_prompt_info=overrides.pop("img2img_prompt_info", None),
             metadata={
                 **(extra_metadata or {}),
                 **({"test_overrides": sorted(overrides)} if overrides else {}),

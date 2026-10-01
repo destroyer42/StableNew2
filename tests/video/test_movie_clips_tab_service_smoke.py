@@ -1,10 +1,9 @@
-"""Journey test — Movie Clips MVP smoke.
+"""Movie Clips tab + service smoke tests.
 
 PR-TEST-VIDEO-003: End-to-end smoke for the tab + service flow.
 
 Tests are deterministic; FFmpeg is mocked so no real video encoding occurs.
-All tests are headless-safe (Tk is driven via withdraw/destroy pattern from
-the shared journeys conftest).
+Tk-backed tests skip when Tk cannot be initialized (withdraw/destroy pattern).
 """
 
 from __future__ import annotations
@@ -58,13 +57,12 @@ def _mocked_service(success: bool = True) -> MovieClipService:
 
 
 # ---------------------------------------------------------------------------
-# Journey: load source images
+# load source images
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.journey
-def test_jt_movie_clips_load_from_folder(tmp_path: Path):
-    """Journey: user opens tab, selects a folder, images load into list."""
+def test_movie_clips_load_from_folder(tmp_path: Path):
+    """user opens tab, selects a folder, images load into list."""
     root = _tk_root()
     try:
         _make_images(tmp_path / "run_output", 5)
@@ -82,9 +80,8 @@ def test_jt_movie_clips_load_from_folder(tmp_path: Path):
         root.destroy()
 
 
-@pytest.mark.journey
-def test_jt_movie_clips_manual_add_images(tmp_path: Path):
-    """Journey: user adds images manually and the list accumulates uniquely."""
+def test_movie_clips_manual_add_images(tmp_path: Path):
+    """user adds images manually and the list accumulates uniquely."""
     root = _tk_root()
     try:
         imgs = _make_images(tmp_path, 3)
@@ -105,13 +102,12 @@ def test_jt_movie_clips_manual_add_images(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Journey: build clip
+# build clip
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.journey
-def test_jt_movie_clips_build_clip_sequence_success(tmp_path: Path):
-    """Journey: user selects images, builds a sequence clip — success path."""
+def test_movie_clips_build_clip_sequence_success(tmp_path: Path):
+    """user selects images, builds a sequence clip — success path."""
     svc = _mocked_service(success=True)
     imgs = _make_images(tmp_path / "source", 4)
 
@@ -129,9 +125,8 @@ def test_jt_movie_clips_build_clip_sequence_success(tmp_path: Path):
     assert result.manifest_path is not None
 
 
-@pytest.mark.journey
-def test_jt_movie_clips_build_clip_slideshow_success(tmp_path: Path):
-    """Journey: user builds a slideshow clip — service delegates to slideshow method."""
+def test_movie_clips_build_clip_slideshow_success(tmp_path: Path):
+    """user builds a slideshow clip — service delegates to slideshow method."""
     svc = _mocked_service(success=True)
     imgs = _make_images(tmp_path / "source", 3)
 
@@ -145,9 +140,8 @@ def test_jt_movie_clips_build_clip_slideshow_success(tmp_path: Path):
     svc._creator.create_slideshow_video.assert_called_once()
 
 
-@pytest.mark.journey
-def test_jt_movie_clips_build_clip_failure_surfaces_error(tmp_path: Path):
-    """Journey: build failure returns success=False with a non-empty error."""
+def test_movie_clips_build_clip_failure_surfaces_error(tmp_path: Path):
+    """build failure returns success=False with a non-empty error."""
     svc = _mocked_service(success=False)
     imgs = _make_images(tmp_path / "source", 2)
 
@@ -158,13 +152,12 @@ def test_jt_movie_clips_build_clip_failure_surfaces_error(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Journey: verify output artifact
+# verify output artifact
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.journey
-def test_jt_movie_clips_verify_output_path(tmp_path: Path):
-    """Journey: output path matches the expected location after a successful build."""
+def test_movie_clips_verify_output_path(tmp_path: Path):
+    """output path matches the expected location after a successful build."""
     svc = _mocked_service(success=True)
     imgs = _make_images(tmp_path / "images", 2)
 
@@ -180,13 +173,12 @@ def test_jt_movie_clips_verify_output_path(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Journey: verify manifest
+# verify manifest
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.journey
-def test_jt_movie_clips_manifest_is_written(tmp_path: Path):
-    """Journey: manifest JSON exists after a successful build."""
+def test_movie_clips_manifest_is_written(tmp_path: Path):
+    """manifest JSON exists after a successful build."""
     svc = _mocked_service(success=True)
     imgs = _make_images(tmp_path / "img", 3)
     request = ClipRequest(
@@ -205,9 +197,8 @@ def test_jt_movie_clips_manifest_is_written(tmp_path: Path):
     assert data["settings"]["fps"] == 24
 
 
-@pytest.mark.journey
-def test_jt_movie_clips_manifest_is_deterministic(tmp_path: Path):
-    """Journey: two identical builds produce manifests with identical non-path fields."""
+def test_movie_clips_manifest_is_deterministic(tmp_path: Path):
+    """two identical builds produce manifests with identical non-path fields."""
 
     def _build(out_dir: Path) -> dict:
         svc = _mocked_service(success=True)
@@ -232,13 +223,12 @@ def test_jt_movie_clips_manifest_is_deterministic(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Journey: settings restore
+# settings restore
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.journey
-def test_jt_movie_clips_settings_restore_after_restart(tmp_path: Path):
-    """Journey: tab settings survive a simulated save/restore cycle."""
+def test_movie_clips_settings_restore_after_restart(tmp_path: Path):
+    """tab settings survive a simulated save/restore cycle."""
     root = _tk_root()
     try:
         tab = MovieClipsTabFrameV2(root)
@@ -274,13 +264,12 @@ def test_jt_movie_clips_settings_restore_after_restart(tmp_path: Path):
 
 
 # ---------------------------------------------------------------------------
-# Journey: no pipeline / no queue regression guard
+# no pipeline / no queue regression guard
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.journey
-def test_jt_movie_clips_does_not_touch_pipeline(tmp_path: Path):
-    """Journey: building a clip must not invoke any pipeline or queue methods."""
+def test_movie_clips_does_not_touch_pipeline(tmp_path: Path):
+    """building a clip must not invoke any pipeline or queue methods."""
     from unittest.mock import patch as _patch
 
     svc = _mocked_service(success=True)

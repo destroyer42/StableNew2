@@ -7,7 +7,6 @@ from typing import Any
 import pytest
 
 from src.controller.app_controller import AppController
-from src.gui.app_state_v2 import AppStateV2
 from src.queue.job_model import Job, JobStatus
 from src.utils.error_envelope_v2 import wrap_exception
 
@@ -29,7 +28,7 @@ class DummyJobService:
 def _build_controller() -> AppController:
     job_service = DummyJobService()
     controller = AppController(None, threaded=False, job_service=job_service)
-    controller.app_state = AppStateV2()
+    # Use the controller-owned AppState: the projection sink is bound to it at construction.
     return controller
 
 

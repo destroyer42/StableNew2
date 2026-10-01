@@ -17,6 +17,7 @@ from pathlib import Path
 from src.learning.learning_record import LearningRecord
 from src.learning.recommendation_engine import (
     EVIDENCE_TIER_REVIEW_ONLY,
+    EVIDENCE_TIER_SPARSE_PLUS_REVIEW,
     RecommendationEngine,
 )
 
@@ -32,7 +33,12 @@ def _write(path: Path, records: list[dict]) -> None:
 
 
 def _flat_record(sampler: str = "Euler a", rating: int = 4, stage: str = "txt2img") -> dict:
-    """Old-style flat-rating record (no subscores, no context)."""
+    """Old-style flat-rating record: no subscores, no context, no ``record_kind``.
+
+    Pre-experiment rows carry no record kind; the engine treats them as observational
+    ``legacy`` evidence (review-only tier).  A ``learning_experiment_rating`` row without a
+    frozen controlled baseline is deliberately non-evidentiary, so it is not a valid flat fixture.
+    """
     return {
         "timestamp": "2026-03-10T21:00:00",
         "primary_sampler": sampler,
@@ -41,7 +47,6 @@ def _flat_record(sampler: str = "Euler a", rating: int = 4, stage: str = "txt2im
         "primary_cfg_scale": 7.0,
         "base_config": {"prompt": "landscape", "stage": stage},
         "metadata": {
-            "record_kind": "learning_experiment_rating",
             "user_rating": rating,
             "stage": stage,
         },
@@ -55,7 +60,13 @@ def _detailed_exp_record(
     context_flags: dict | None = None,
     stage: str = "txt2img",
 ) -> dict:
-    """New-style learning_experiment_rating with subscores and context flags."""
+    """New-style controlled learning_experiment_rating with subscores and context flags.
+
+    Carries the frozen-experiment evidence the engine requires before a
+    ``learning_experiment_rating`` row may count (experiment id, variable under test, variant
+    value, frozen snapshot and executed config).
+    """
+    cfg = 7.0
     return {
         "timestamp": "2026-03-10T21:30:00",
         "primary_sampler": sampler,
@@ -65,6 +76,13 @@ def _detailed_exp_record(
         "base_config": {"prompt": "portrait, woman", "stage": stage},
         "metadata": {
             "record_kind": "learning_experiment_rating",
+            "experiment_id": "test-controlled-experiment",
+            "variable_under_test": "CFG Scale",
+            "variant_value": cfg,
+            "frozen_experiment": {
+                "snapshot": {"experiment_id": "test-controlled-experiment"},
+                "executed_config": {"txt2img": {"model": "test-model", "cfg_scale": cfg}},
+            },
             "user_rating": rating,
             "user_rating_raw": rating,
             "rating_schema_version": 2,
@@ -199,7 +217,10 @@ def test_flat_and_detailed_records_mixed(tmp_path: Path) -> None:
     engine = RecommendationEngine(path)
     result = engine.recommend("portrait, woman", "txt2img")
     assert result.recommendations
-    assert result.evidence_tier == EVIDENCE_TIER_REVIEW_ONLY
+    # Two legacy rows plus one (sparse) controlled experiment row: PR-044 sparse-plus-review tier,
+    # manual-only (never automation-eligible).
+    assert result.evidence_tier == EVIDENCE_TIER_SPARSE_PLUS_REVIEW
+    assert result.automation_eligible is False
 
 
 # ---------------------------------------------------------------------------

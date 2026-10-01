@@ -21,7 +21,9 @@ def _record(*, sampler: str, rating: int, policy_id: str, scale_band: str) -> di
         "primary_cfg_scale": 7.0,
         "base_config": {"prompt": "portrait woman", "stage": "txt2img"},
         "metadata": {
-            "record_kind": "learning_experiment_rating",
+            # Sampler suggestions come only from observational rows; a learning_experiment_rating
+            # row proves just its controlled variable and needs frozen-experiment evidence.
+            "record_kind": "review_tab_feedback",
             "user_rating": rating,
             "stage": "txt2img",
             "adaptive_refinement": {

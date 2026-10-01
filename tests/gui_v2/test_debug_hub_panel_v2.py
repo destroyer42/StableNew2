@@ -14,6 +14,7 @@ from src.pipeline.job_models_v2 import (
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
 from src.utils import InMemoryLogHandler
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class _StubController:
@@ -47,8 +48,10 @@ def _build_job() -> NormalizedJobRecord:
         global_negative_applied=True,
         global_negative_terms="GLOBAL_BAD",
     )
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="job-001",
+        positive_prompt="mystic castle at night",
+        negative_prompt="blurry, bad quality, GLOBAL_BAD",
         config={"model": "stable-diffusion-v1-5"},
         path_output_dir="output",
         filename_template="{seed}",

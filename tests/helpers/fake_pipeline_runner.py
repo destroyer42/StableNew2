@@ -1,4 +1,4 @@
-"""Queue/NJR-aware fake pipeline runner for journey tests."""
+"""Queue/NJR-aware fake pipeline runner for fake-runner tests."""
 
 from __future__ import annotations
 

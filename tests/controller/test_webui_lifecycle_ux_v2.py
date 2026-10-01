@@ -15,17 +15,8 @@ class DummyLogWidget:
         return None
 
 
-class DummyStatusBar:
-    def __init__(self):
-        self.states: list[str] = []
-
-    def update_webui_state(self, state: str):
-        self.states.append(state)
-
-
 class DummyWindow:
     def __init__(self):
-        self.status_bar_v2 = DummyStatusBar()
         self.bottom_zone = SimpleNamespace(log_text=DummyLogWidget(), status_label=None)
         self.controller = None
 
@@ -79,7 +70,8 @@ def test_on_launch_webui_updates_state():
     controller.on_launch_webui_clicked()
 
     assert fake_manager.ensure_calls == 1
-    assert window.status_bar_v2.states[-1] == "connected"
+    # Controller publishes WebUI state to AppState; GUI widgets render that projection.
+    assert window.app_state.webui_state == "connected"
 
 
 def test_on_launch_webui_handles_failure():
@@ -94,7 +86,7 @@ def test_on_launch_webui_handles_failure():
 
     controller.on_launch_webui_clicked()
 
-    assert window.status_bar_v2.states[-1] == "error"
+    assert window.app_state.webui_state == "error"
 
 
 def test_on_retry_webui_updates_state():
@@ -110,4 +102,5 @@ def test_on_retry_webui_updates_state():
     controller.on_retry_webui_clicked()
 
     assert fake_manager.health_calls == 1
-    assert window.status_bar_v2.states[-1] == "connected"
+    # Controller publishes WebUI state to AppState; GUI widgets render that projection.
+    assert window.app_state.webui_state == "connected"

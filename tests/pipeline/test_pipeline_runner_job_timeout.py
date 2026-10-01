@@ -88,30 +88,9 @@ class TestJobTimeoutInRunNjr(unittest.TestCase):
 
     def test_timeout_surfaces_as_error_not_exception(self) -> None:
         """PipelineJobTimeoutError must be caught by run_njr and set result.error (not re-raised)."""
-        from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+        from tests.helpers.njr_factory import make_pipeline_njr
 
-        record = NormalizedJobRecord(
-            job_id="timeout-test",
-            config={},
-            path_output_dir="output",
-            filename_template="{seed}",
-            seed=1,
-            variant_index=0,
-            variant_total=1,
-            batch_index=0,
-            batch_total=1,
-            created_ts=0.0,
-            randomizer_summary=None,
-            stage_chain=[
-                StageConfig(
-                    stage_type="txt2img",
-                    enabled=True,
-                    steps=20,
-                    cfg_scale=7.5,
-                    sampler_name="Euler a",
-                )
-            ],
-        )
+        record = make_pipeline_njr(job_id="timeout-test", seed=1)
 
         # Make the deadline fire immediately on first check
         with patch.object(
