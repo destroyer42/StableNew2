@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -43,8 +44,101 @@ from src.video.video_backend_types import (
     VideoExecutionResult,
 )
 from src.video.workflow_compiler import WorkflowCompiler
+from src.video.workflow_frame_count import frame_count_policy, parse_frame_count
 from src.video.workflow_readiness import WorkflowResourceReadiness
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
+
+
+def _release_owned_runtime_after_job(spec: Any) -> bool:
+    policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
+    return isinstance(policy, Mapping) and policy.get("release_owned_runtime_after_job") is True
+
+
+def _is_generated_output(descriptor: Mapping[str, Any]) -> bool:
+    """Only files a workflow *produced* are artifacts.  Comfy also reports previews of inputs
+    (for example ``LoadVideo`` echoes its source clip as ``type: input``) and temp previews;
+    neither is a generated result."""
+
+    return str(descriptor.get("type") or "output") == "output"
+
+
+def _required_launch_flags(spec: Any) -> tuple[str, ...]:
+    policy = (getattr(spec, "backend_defaults", None) or {}).get("runtime_policy")
+    if not isinstance(policy, Mapping):
+        return ()
+    return tuple(str(flag) for flag in policy.get("required_launch_flags") or () if str(flag))
+
+
+# (node class, input) pairs whose value is a local file the Comfy server must hold in its input
+# directory.  The file is uploaded as a copy through the Comfy API; the source is never modified.
+_UPLOADED_FILE_INPUTS = {("LoadImage", "image"), ("LoadVideo", "file")}
+
+
+def _driving_video_provenance(stage_config: Mapping[str, Any]) -> dict[str, Any]:
+    path = str(stage_config.get("pose_video_path") or "").strip()
+    if not path:
+        return {}
+    return {"pose_video": {"path": path, "sha256": stage_config.get("pose_video_sha256")}}
+
+
+def _file_sha256(path: Any) -> str | None:
+    try:
+        return hashlib.sha256(Path(str(path)).read_bytes()).hexdigest()
+    except (OSError, TypeError, ValueError):
+        return None
+
+
+def _control_provenance(
+    spec: Any, request: Any, stage_config: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Frozen workflow controls plus one self-contained record a later Learning package can read.
+
+    Emitted only for jobs that carry operator controls or a driving video (data-driven, not by
+    workflow name).  It restates what the immutable job already froze -- nothing is re-derived.
+    """
+
+    controls = stage_config.get("operator_controls")
+    driving = _driving_video_provenance(stage_config)
+    if not controls and not driving:
+        return {}
+    identity = _mapping_dict((getattr(spec, "backend_defaults", None) or {}).get("provenance"))
+    record: dict[str, Any] = {
+        "workflow": {
+            "workflow_id": spec.workflow_id,
+            "workflow_version": spec.workflow_version,
+            "pinned_revision": spec.pinned_revision,
+            "qualified_graph_sha256": identity.get("qualified_graph_sha256"),
+            "comfyui_version": identity.get("comfyui_version"),
+            "comfyui_revision": identity.get("comfyui_revision"),
+        },
+        "source_image": {
+            "path": str(request.input_image_path) if request.input_image_path else None,
+            "sha256": _file_sha256(request.input_image_path) if request.input_image_path else None,
+        },
+        "prompt": request.prompt,
+        "negative_prompt": request.negative_prompt,
+        "seed": stage_config.get("seed"),
+        "operator_controls": dict(controls) if isinstance(controls, Mapping) else {},
+        **driving,
+    }
+    result: dict[str, Any] = {"control_record": record}
+    if isinstance(controls, Mapping) and controls:
+        result["operator_controls"] = dict(controls)
+    return result
+
+
+def _length_provenance(spec: Any, stage_config: Mapping[str, Any]) -> dict[str, Any]:
+    """Frozen frame count and declared FPS for a variable-length workflow (else empty)."""
+
+    policy = frame_count_policy(spec)
+    if policy is None or stage_config.get("frame_count") in (None, ""):
+        return {}
+    frame_count = int(stage_config["frame_count"])
+    return {
+        "frame_count": frame_count,
+        "fps": policy["fps"],
+        "approximate_seconds": round(frame_count / policy["fps"], 1),
+    }
 
 
 def _format_missing_dependency_message(spec: Any, dependency_result: Any) -> str:
@@ -125,6 +219,33 @@ def _has_model_inventory(payload: Any) -> bool:
     return False
 
 
+# While a queued prompt is confirmed alive on the Comfy server, the backend reports bounded
+# execution liveness at most this often.  It must stay well below the runner-stall watchdog
+# interval (SystemWatchdogV2.RUNNER_STALL_S) and is only ever emitted inside the backend's own
+# execution wait (`history_timeout`), so it can never suppress a stall past that bound.
+_LIVENESS_REPORT_INTERVAL_S = 5.0
+
+
+def _prompt_is_live(client: Any, prompt_id: str) -> bool:
+    """True only when the Comfy server itself still lists the prompt as running or pending.
+
+    A merely responsive endpoint is not evidence of execution: a prompt that is in neither the
+    live queue nor the history is not alive, and an unreachable server raises or times out.
+    """
+
+    try:
+        queue = client.get_queue()
+    except Exception:
+        return False
+    if not isinstance(queue, Mapping):
+        return False
+    for key in ("queue_running", "queue_pending"):
+        for item in queue.get(key) or ():
+            if isinstance(item, (list, tuple)) and len(item) > 1 and str(item[1]) == prompt_id:
+                return True
+    return False
+
+
 def _history_entry_from_payload(
     payload: Mapping[str, Any], prompt_id: str
 ) -> dict[str, Any] | None:
@@ -148,6 +269,34 @@ def _history_ready(entry: Mapping[str, Any]) -> bool:
         if status_str in {"success", "completed", "done"}:
             return True
     return False
+
+
+def _history_failed(entry: Mapping[str, Any]) -> bool:
+    status = entry.get("status")
+    if not isinstance(status, Mapping):
+        return False
+    return str(status.get("status_str") or "").strip().lower() in {
+        "error",
+        "failed",
+        "failure",
+        "cancelled",
+        "canceled",
+        "interrupted",
+    }
+
+
+def _history_nonterminal(entry: Mapping[str, Any]) -> bool:
+    """Only an explicit in-progress status is evidence of execution liveness."""
+
+    status = entry.get("status")
+    if not isinstance(status, Mapping) or status.get("completed") is not False:
+        return False
+    return str(status.get("status_str") or "").strip().lower() in {
+        "running",
+        "pending",
+        "queued",
+        "executing",
+    }
 
 
 class ComfyWorkflowVideoBackend:
@@ -246,7 +395,40 @@ class ComfyWorkflowVideoBackend:
                 f"Workflow '{spec.workflow_id}' is registered for backend '{spec.backend_id}', "
                 f"not '{self.backend_id}'"
             )
+        # An illegal frozen length fails before any runtime is started or dispatched.
+        if frame_count_policy(spec) is not None:
+            parse_frame_count(spec, stage_config.get("frame_count"))
+        # A declared launch requirement (e.g. the qualified pinned-memory-off policy) must be
+        # provable from StableNew's own managed launch configuration before anything starts.
+        self._verify_required_launch_flags(spec)
 
+        if not _release_owned_runtime_after_job(spec):
+            return self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
+
+        # Declared runtime policy: once this job has touched the managed runtime, release the
+        # process StableNew owns on every exit path (success, failure, or interruption) so the
+        # next queued job starts from a fresh runtime.  An external or unowned Comfy is never
+        # stopped.  BaseException, so an interrupt cannot leave a resident runtime behind; the
+        # original exception always propagates unchanged.
+        try:
+            result = self._execute_on_runtime(pipeline, request, spec, stage_config, workflow_id)
+        except BaseException:
+            self._release_owned_runtime()
+            raise
+        release = self._release_owned_runtime()
+        if result is not None:
+            result.backend_metadata["runtime_release"] = dict(release)
+            result.diagnostic_payload["runtime_release"] = dict(release)
+        return result
+
+    def _execute_on_runtime(
+        self,
+        pipeline: Any,
+        request: VideoExecutionRequest,
+        spec: Any,
+        stage_config: dict[str, Any],
+        workflow_id: str,
+    ) -> VideoExecutionResult | None:
         # Release conflicting StableNew-owned runtime residency (owned A1111, cached SVD state)
         # before Comfy starts/serves; never touches an external runtime.  See PR-RUNTIME-100.
         transition = self._transition.prepare_for(RUNTIME_COMFY)
@@ -290,7 +472,12 @@ class ComfyWorkflowVideoBackend:
         if not prompt_id:
             raise RuntimeError("Comfy queue response did not include prompt_id")
 
-        history_entry = self._wait_for_history_entry(client, prompt_id=prompt_id)
+        history_entry = self._wait_for_history_entry(
+            client,
+            prompt_id=prompt_id,
+            report_liveness=self._liveness_reporter(pipeline, request),
+            timeout=self._history_timeout_for(spec),
+        )
         if str(spec.backend_defaults.get("output_transport") or "") == "comfy_view":
             history_entry = self._localize_comfy_outputs(
                 client, history_entry, Path(request.output_dir)
@@ -347,6 +534,15 @@ class ComfyWorkflowVideoBackend:
                 f"Workflow '{workflow_id}' completed without discoverable output artifacts"
             )
 
+        length_provenance = _length_provenance(spec, stage_config)
+        runtime_policy = _mapping_dict(spec.backend_defaults.get("runtime_policy"))
+        provenance_extra: dict[str, Any] = {
+            **length_provenance,
+            **_driving_video_provenance(stage_config),
+            **_control_provenance(spec, request, stage_config),
+        }
+        if runtime_policy:
+            provenance_extra["runtime_policy"] = runtime_policy
         manifest_path = self._write_manifest(
             request=request,
             prompt_id=prompt_id,
@@ -357,6 +553,7 @@ class ComfyWorkflowVideoBackend:
             history_entry=history_entry,
             resolved_outputs=resolved_outputs,
             conditioning=conditioning,
+            provenance_extra=provenance_extra,
         )
         metadata_payload = {
             "stage": request.stage_name,
@@ -402,6 +599,7 @@ class ComfyWorkflowVideoBackend:
         source_preparation = _mapping_dict(stage_config.get("source_preparation"))
         if source_preparation:
             metadata_payload["source_preparation"] = source_preparation
+        metadata_payload.update(provenance_extra)
         if resolved_outputs.get("secondary_motion"):
             metadata_payload["secondary_motion"] = dict(resolved_outputs["secondary_motion"])
             metadata_payload["secondary_motion_summary"] = dict(
@@ -472,6 +670,7 @@ class ComfyWorkflowVideoBackend:
         }
         if source_preparation:
             raw_result["source_preparation"] = source_preparation
+        raw_result.update(provenance_extra)
         return VideoExecutionResult.from_stage_result(
             backend_id=self.backend_id,
             stage_name=request.stage_name,
@@ -484,6 +683,7 @@ class ComfyWorkflowVideoBackend:
                 "compiled_inputs": dict(compiled.compiled_inputs),
                 "compiled_outputs": dict(compiled.compiled_outputs),
                 "conditioning": dict(conditioning),
+                **provenance_extra,
             },
             diagnostic_payload={
                 "queue_response": dict(queue_response),
@@ -511,6 +711,7 @@ class ComfyWorkflowVideoBackend:
                 "secondary_motion_source_video_path": resolved_outputs.get(
                     "secondary_motion_source_video_path"
                 ),
+                **length_provenance,
             },
         )
 
@@ -604,12 +805,96 @@ class ComfyWorkflowVideoBackend:
         result.backend_metadata["carry_forward_policy"] = carry_forward_policy
         return result
 
-    def _ensure_runtime_ready(self) -> str:
-        manager = (
+    def _resolve_process_manager(self) -> ComfyProcessManager | None:
+        return (
             self._process_manager
             or self._managed_process_manager
             or get_global_comfy_process_manager()
         )
+
+    def _verify_required_launch_flags(self, spec: Any) -> None:
+        """Refuse unless the StableNew-managed ComfyUI command carries every declared flag.
+
+        The command checked is the one StableNew launches (the resolved manager's, or the default
+        managed configuration's).  A runtime StableNew does not launch cannot have its flags
+        verified, so it is refused rather than assumed; nothing is started, stopped or changed.
+        """
+
+        required = _required_launch_flags(spec)
+        if not required:
+            return
+        manager = self._resolve_process_manager()
+        config = getattr(manager, "_config", None) if manager is not None else None
+        if config is None and manager is None:
+            config = build_default_comfy_process_config()
+        command = list(getattr(config, "command", None) or [])
+        if not command:
+            raise RuntimeError(
+                f"Workflow '{spec.workflow_id}' requires a StableNew-managed ComfyUI launched with "
+                f"{' '.join(required)}; no managed launch configuration is available and an "
+                "external runtime's launch flags cannot be verified. Configure comfy_command in "
+                "Engine Settings."
+            )
+        missing = [flag for flag in required if flag not in command]
+        if missing:
+            raise RuntimeError(
+                f"Workflow '{spec.workflow_id}' requires the managed ComfyUI to be launched with "
+                f"{' '.join(missing)}, which the configured comfy_command does not include. Add "
+                "it to comfy_command in Engine Settings; StableNew will not rewrite it for you."
+            )
+
+    def _release_owned_runtime(self) -> dict[str, Any]:
+        """Stop the managed Comfy only when StableNew owns its process; report what happened.
+
+        ``ComfyProcessManager.stop()`` is the only release authority.  A manager that does not own
+        its process (an external or adopted-by-nobody runtime) is not even asked to stop.  Never
+        raises: a release problem is reported, not allowed to mask the job's own outcome.
+        """
+
+        manager = self._resolve_process_manager()
+        if manager is None:
+            return {"policy": "release_owned_runtime_after_job", "ownership": "none", "released": False}
+        try:
+            owned = bool(manager.owns_process)
+            pid = manager.pid
+        except Exception as exc:  # noqa: BLE001 - an unreadable owner is never stopped
+            return {
+                "policy": "release_owned_runtime_after_job",
+                "ownership": "unknown",
+                "released": False,
+                "error": f"{type(exc).__name__}: {exc}"[:300],
+            }
+        if not owned:
+            return {
+                "policy": "release_owned_runtime_after_job",
+                "ownership": "not_owned",
+                "released": False,
+            }
+        try:
+            manager.stop()
+            released = not bool(manager.is_running())
+        except Exception as exc:  # noqa: BLE001 - report; never escalate to other processes
+            return {
+                "policy": "release_owned_runtime_after_job",
+                "ownership": "owned",
+                "pid": pid,
+                "released": False,
+                "error": f"{type(exc).__name__}: {exc}"[:300],
+            }
+        return {
+            "policy": "release_owned_runtime_after_job",
+            "ownership": "owned",
+            "pid": pid,
+            "released": released,
+        }
+
+    def _ensure_runtime_ready(self) -> str:
+        manager = self._resolve_process_manager()
+        if manager is not None and self._process_manager is None:
+            # Keep one owner object across release/relaunch cycles: after a per-job release the
+            # same manager relaunches (and re-registers itself), so the app's exit cleanup and
+            # runtime transitions keep tracking the process StableNew owns.
+            self._managed_process_manager = manager
         if manager is None:
             if self._client is not None:
                 wait_for_comfy_ready(self._base_url, timeout=15.0, poll_interval=0.5)
@@ -645,6 +930,12 @@ class ComfyWorkflowVideoBackend:
         if not isinstance(prompt_payload, Mapping) or not prompt_payload:
             raise RuntimeError(
                 f"Workflow '{compiled.workflow_id}' compiled without a queueable Comfy prompt payload"
+            )
+        stage_config = request.stage_config or {}
+        if stage_config.get("pose_video_path"):
+            self._verify_driving_video_source(
+                stage_config["pose_video_path"],
+                str(stage_config.get("pose_video_sha256") or ""),
             )
         prompt_payload = self._normalize_prompt_payload_for_comfy(
             prompt_payload,
@@ -701,7 +992,7 @@ class ComfyWorkflowVideoBackend:
             for input_name, raw_value in inputs.items():
                 if self._is_comfy_link_value(raw_value):
                     continue
-                if class_type == "LoadImage" and input_name == "image":
+                if (class_type, input_name) in _UPLOADED_FILE_INPUTS:
                     normalized_inputs[input_name] = self._upload_image_for_load_image(
                         client,
                         raw_value,
@@ -718,6 +1009,20 @@ class ComfyWorkflowVideoBackend:
             }
 
         return prompt
+
+    @staticmethod
+    def _verify_driving_video_source(raw_value: Any, expected_sha256: str) -> None:
+        """Reject a queued driving clip changed since admission before uploading it."""
+
+        path = Path(str(raw_value or "")).expanduser()
+        if not expected_sha256 or not path.is_file():
+            raise ValueError("Driving video or its admission hash is missing at dispatch")
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        if digest.hexdigest() != expected_sha256:
+            raise ValueError(f"Driving video changed since queue admission: {path}")
 
     @staticmethod
     def _is_comfy_link_value(value: Any) -> bool:
@@ -772,20 +1077,78 @@ class ComfyWorkflowVideoBackend:
         uploaded_cache[cache_key] = relative_name
         return relative_name
 
+    @staticmethod
+    def _liveness_reporter(
+        pipeline: Any, request: VideoExecutionRequest
+    ) -> Callable[[float], None] | None:
+        """Bind execution liveness to the runner-owned job through the existing runtime-status path.
+
+        This is *not* generation progress: no percentage or step count is invented (the status
+        merge keeps whatever was last real).  Only the elapsed time of a prompt the Comfy server
+        confirms is still running is reported, as a change in the job's ``stage_detail``.
+        """
+
+        emit = getattr(pipeline, "_emit_status_update", None)
+        job_id = str(getattr(request, "job_id", "") or "").strip()
+        if not callable(emit) or not job_id:
+            return None
+
+        def _report(elapsed_s: float) -> None:
+            # Best-effort observability: a failed status emit must never abort the generation wait.
+            try:
+                emit(
+                    {
+                        "job_id": job_id,
+                        "current_stage": request.stage_name,
+                        "stage_detail": f"comfy executing ({int(elapsed_s)}s)",
+                    }
+                )
+            except Exception:
+                pass
+
+        return _report
+
+    def _history_timeout_for(self, spec: Any) -> float:
+        """A workflow may declare a longer generation wait than the backend default (long
+        generations would otherwise be abandoned while Comfy is still producing them)."""
+
+        declared = (getattr(spec, "backend_defaults", None) or {}).get("history_timeout_seconds")
+        try:
+            return max(self._history_timeout, float(declared or 0))
+        except (TypeError, ValueError):
+            return self._history_timeout
+
     def _wait_for_history_entry(
         self,
         client: ComfyApiClient,
         *,
         prompt_id: str,
+        report_liveness: Callable[[float], None] | None = None,
+        timeout: float | None = None,
     ) -> dict[str, Any]:
-        deadline = time.time() + self._history_timeout
+        started = time.time()
+        deadline = started + (timeout if timeout is not None else self._history_timeout)
+        last_report: float | None = None
         last_payload: dict[str, Any] | None = None
         while time.time() < deadline:
             payload = client.get_history(prompt_id)
             last_payload = dict(payload or {})
             entry = _history_entry_from_payload(last_payload, prompt_id)
+            if entry is not None and _history_failed(entry):
+                raise RuntimeError(f"Comfy workflow failed for prompt_id '{prompt_id}'")
             if entry and _history_ready(entry):
                 return entry
+            now = time.time()
+            if (
+                report_liveness is not None
+                and (last_report is None or now - last_report >= _LIVENESS_REPORT_INTERVAL_S)
+                and (
+                    (entry is not None and _history_nonterminal(entry))
+                    or _prompt_is_live(client, prompt_id)
+                )
+            ):
+                last_report = now
+                report_liveness(now - started)
             time.sleep(self._history_poll_interval)
         raise TimeoutError(
             f"Timed out waiting for Comfy workflow history for prompt_id '{prompt_id}'"
@@ -812,7 +1175,7 @@ class ComfyWorkflowVideoBackend:
                 for descriptor in descriptors:
                     if not isinstance(descriptor, dict) or not descriptor.get("filename"):
                         continue
-                    if str(descriptor.get("type") or "output") == "temp":
+                    if not _is_generated_output(descriptor):
                         continue
                     name = str(descriptor["filename"])
                     local = client.download_view(
@@ -844,7 +1207,9 @@ class ComfyWorkflowVideoBackend:
                     if not isinstance(descriptors, list):
                         continue
                     for descriptor in descriptors:
-                        if not isinstance(descriptor, Mapping):
+                        if not isinstance(descriptor, Mapping) or not _is_generated_output(
+                            descriptor
+                        ):
                             continue
                         resolved = self._resolve_descriptor_path(descriptor, output_dir)
                         if resolved:
@@ -916,6 +1281,7 @@ class ComfyWorkflowVideoBackend:
         history_entry: Mapping[str, Any],
         resolved_outputs: Mapping[str, Any],
         conditioning: Mapping[str, Any],
+        provenance_extra: Mapping[str, Any] | None = None,
     ) -> Path:
         output_dir = Path(request.output_dir)
         manifest_dir = output_dir / "manifests"
@@ -972,6 +1338,7 @@ class ComfyWorkflowVideoBackend:
             payload["secondary_motion_source_video_path"] = resolved_outputs.get(
                 "secondary_motion_source_video_path"
             )
+        payload.update(dict(provenance_extra or {}))
         manifest_path.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False), encoding="utf-8"
         )

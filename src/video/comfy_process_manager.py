@@ -111,6 +111,11 @@ class ComfyProcessManager:
         self._process = process
         self._owns_process = True
         self._stopped = False
+        # stop() unregisters this manager; a relaunch must re-register it, or the owned process
+        # it just started would be invisible to runtime transitions (PR-RUNTIME-100) that look
+        # the Comfy owner up through get_global_comfy_process_manager().
+        global _GLOBAL_COMFY_PROCESS_MANAGER
+        _GLOBAL_COMFY_PROCESS_MANAGER = self
         self._stdout_thread = self._start_output_thread(process.stdout, self._stdout_tail)
         self._stderr_thread = self._start_output_thread(process.stderr, self._stderr_tail)
         return process

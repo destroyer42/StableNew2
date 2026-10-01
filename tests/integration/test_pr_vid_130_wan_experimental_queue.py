@@ -250,7 +250,11 @@ def _submit_forged(tmp_path: Path, service, *, opt_in: bool, workflow_id: str = 
 
 
 def test_disabled_workflow_cannot_run_even_with_opt_in(tmp_path) -> None:
-    (wan,) = [s for s in build_builtin_workflow_specs() if s.workflow_id == WAN_ID]
+    (wan,) = [
+        s
+        for s in build_builtin_workflow_specs()
+        if s.workflow_id == WAN_ID and s.workflow_version == "1.0.0"
+    ]
     registry = WorkflowRegistry()
     registry.register(
         WorkflowSpec(

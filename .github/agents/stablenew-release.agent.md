@@ -5,6 +5,12 @@ tools: ['read', 'search', 'execute', 'agent']
 ---
 Follow `AGENTS.md`.
 
+This agent is an optional Git lifecycle/closeout specialist, useful when
+independent Git verification adds value. It is never required merely to create a
+local feature branch: a primary Claude Code or Codex session may create/switch to
+the authorized short-lived feature branch, edit, validate, and commit locally
+(`docs/AGENT_OPERATING_MODEL.md`). The rules below apply when this agent is used.
+
 Release means "prepare and shepherd the reviewed feature branch" unless the
 owner explicitly authorizes a specific integration, production, or release
 action. No agent may integrate or push a long-lived target without that
@@ -114,11 +120,8 @@ Never:
 - treat bootstrap authority as publication authority, or edit repository
   files, stage, commit, push, or open a PR under bootstrap authority alone.
 
-Use the lowest effective provider-neutral capability class for the work:
-Luna for narrow read-only/configuration checks, Terra for bounded closeout
-preparation, Sol for uncertain cross-surface repair, and Astra for high-risk
-security/release analysis. These names are guidance, not vendor model
-mappings or authorization.
+Use the lowest effective model/effort for the work, per
+`docs/AI_MODEL_SELECTION.md` (a dated heuristic; guidance, not authorization).
 
 Completion report:
 - Git lifecycle mode exercised (bootstrap or publication/closeout);

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 from collections.abc import Mapping
 from pathlib import Path
@@ -25,8 +26,16 @@ from src.video.video_workflow_intent import (
     mid_anchor_list,
     parse_seed_input,
 )
+from src.video.workflow_controls import operator_controls_projection, resolve_operator_controls
+from src.video.workflow_frame_count import (
+    approximate_seconds,
+    frame_count_policy,
+    frame_count_projection,
+    parse_frame_count,
+)
 from src.video.workflow_source_preparation import prepare_declared_workflow_source
 
+_DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 _DEFAULT_OUTPUT_ROUTES = (
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_MOVIE_CLIPS,
@@ -58,8 +67,30 @@ class VideoWorkflowController:
         self._app_controller = app_controller
         self._workflow_registry = workflow_registry or DefaultWorkflowRegistryPort()
 
+    @staticmethod
+    def _version_key(version: str) -> tuple[Any, ...]:
+        parts = []
+        for part in str(version or "").split("."):
+            parts.append((0, int(part)) if part.isdigit() else (1, part))
+        return tuple(parts)
+
+    def _latest_per_workflow(self, specs: list[Any]) -> list[Any]:
+        """One selectable entry per workflow: its newest registered version.  Older versions stay
+        registered so existing jobs replay against their exact pinned revision."""
+
+        latest: dict[str, Any] = {}
+        for spec in specs:
+            current = latest.get(spec.workflow_id)
+            if current is None or self._version_key(spec.workflow_version) > self._version_key(
+                current.workflow_version
+            ):
+                latest[spec.workflow_id] = spec
+        return [latest[workflow_id] for workflow_id in sorted(latest)]
+
     def list_workflow_specs(self) -> list[dict[str, Any]]:
-        specs = self._workflow_registry.list_specs_for_backend("comfy")
+        specs = self._latest_per_workflow(
+            list(self._workflow_registry.list_specs_for_backend("comfy"))
+        )
         records: list[dict[str, Any]] = []
         for spec in specs:
             records.append(
@@ -79,6 +110,8 @@ class VideoWorkflowController:
                     "required_inputs": list(getattr(spec, "required_input_names", ())),
                     "accepted_controls": list(getattr(spec, "accepted_controls", ())),
                     "form_visibility": form_visibility(spec),
+                    "frame_count": frame_count_projection(spec),
+                    "operator_controls": operator_controls_projection(spec),
                     "operator_projection": self._mapping_dict(
                         (getattr(spec, "backend_defaults", None) or {}).get("operator_projection")
                     ),
@@ -94,10 +127,12 @@ class VideoWorkflowController:
             "workflow_version": str(default_workflow.get("workflow_version") or ""),
             "end_anchor_path": "",
             "mid_anchor_paths": [],
+            "pose_video_path": "",
             "prompt": "",
             "negative_prompt": "",
             "motion_profile": "gentle",
             "seed": "",
+            "frame_count": "",  # empty means the selected workflow's declared default
             "camera_intent": {
                 "preset": "none",
                 "strength": 0.35,
@@ -271,6 +306,9 @@ class VideoWorkflowController:
             depth_input = self._normalize_depth_input(form_data)
             if "seed" in spec.declared_input_names:
                 parse_seed_input(form_data.get("seed"))
+            if frame_count_policy(spec) is not None:
+                parse_frame_count(spec, form_data.get("frame_count"))
+            resolve_operator_controls(spec, form_data)
         except ValueError as exc:
             return False, str(exc)
 
@@ -287,6 +325,14 @@ class VideoWorkflowController:
             path = Path(candidate)
             if not path.exists() or not path.is_file():
                 return False, f"Mid anchor image does not exist: {path}"
+        driving_text = str(form_data.get("pose_video_path") or "").strip()
+        if driving_text:
+            driving = Path(driving_text).expanduser()
+            if not driving.exists() or not driving.is_file():
+                return False, f"Driving video does not exist: {driving}"
+            if driving.suffix.lower() not in _DRIVING_VIDEO_SUFFIXES:
+                allowed = ", ".join(sorted(_DRIVING_VIDEO_SUFFIXES))
+                return False, f"Driving video must be a video file ({allowed}): {driving}"
         input_bindings = getattr(spec, "input_bindings", ()) or ()
         requires_depth_input = any(
             getattr(binding, "source_field", None) == "stage_config.depth_input.resolved_path"
@@ -375,6 +421,18 @@ class VideoWorkflowController:
         if any(name in declared_inputs for name in ("depth_map", "controlnet_model")):
             workflow_config["controlnet"] = controlnet
             workflow_config["depth_input"] = depth_input
+        driving_provenance: dict[str, Any] | None = None
+        driving_text = str(form_data.get("pose_video_path") or "").strip()
+        if "pose_video" in declared_inputs and driving_text:
+            # Frozen by path and content hash: the source file is only ever read (staged by the
+            # backend as a copy), and provenance records exactly which clip drove the motion.
+            driving_path = Path(driving_text).expanduser().resolve()
+            driving_provenance = {
+                "path": str(driving_path),
+                "sha256": hashlib.sha256(driving_path.read_bytes()).hexdigest(),
+            }
+            workflow_config["pose_video_path"] = driving_provenance["path"]
+            workflow_config["pose_video_sha256"] = driving_provenance["sha256"]
 
         prepared_source_path = str(Path(source_image_path).expanduser())
         source_preparation: dict[str, Any] | None = None
@@ -404,6 +462,18 @@ class VideoWorkflowController:
             if frozen_seed is None:
                 frozen_seed = secrets.randbelow(2**31)
             workflow_config["seed"] = frozen_seed
+        frozen_frame_count: int | None = None
+        length_policy = frame_count_policy(spec)
+        if length_policy is not None:
+            # Frozen at admission so the queued job, its artifact and any replay agree on length.
+            frozen_frame_count = parse_frame_count(spec, form_data.get("frame_count"))
+            workflow_config["frame_count"] = frozen_frame_count
+            workflow_config["fps"] = length_policy["fps"]
+        # Declared workflow controls (e.g. Animate-2 motion prompt / pose strength) are frozen
+        # here, like seed and length; the compiler binds them to the exact graph inputs.
+        frozen_controls = resolve_operator_controls(spec, form_data)
+        if frozen_controls is not None:
+            workflow_config["operator_controls"] = frozen_controls
         if continuity_link:
             config["metadata"] = {"continuity": dict(continuity_link)}
 
@@ -429,6 +499,16 @@ class VideoWorkflowController:
             extra_metadata["video_workflow"]["source_preparation"] = dict(source_preparation)
         if frozen_seed is not None:
             extra_metadata["video_workflow"]["seed"] = frozen_seed
+        if frozen_controls is not None:
+            extra_metadata["video_workflow"]["operator_controls"] = dict(frozen_controls)
+        if driving_provenance is not None:
+            extra_metadata["video_workflow"]["pose_video"] = dict(driving_provenance)
+        if frozen_frame_count is not None and length_policy is not None:
+            extra_metadata["video_workflow"].update(
+                frame_count=frozen_frame_count,
+                fps=length_policy["fps"],
+                approximate_seconds=approximate_seconds(frozen_frame_count, length_policy["fps"]),
+            )
         if continuity_link:
             extra_metadata["continuity_link"] = dict(continuity_link)
 
@@ -454,6 +534,7 @@ class VideoWorkflowController:
         form_data["_stable_new_submission_projection"] = {
             "job_id": job_ids[0],
             "seed": frozen_seed,
+            "frame_count": frozen_frame_count,
             "source_preparation": dict(source_preparation or {}),
         }
         return job_ids[0]

@@ -18,11 +18,13 @@ from src.video.video_backend_types import (
     CONTROL_END_ANCHOR,
     CONTROL_MID_ANCHORS,
     CONTROL_NEGATIVE_PROMPT,
+    CONTROL_POSE_VIDEO,
     CONTROL_PROMPT_TEXT,
     CONTROL_SOURCE_IMAGE,
     VIDEO_TASK_IMAGE_TO_VIDEO,
 )
 from src.video.video_execution_resolver import VIDEO_EXECUTION_KEY
+from src.video.workflow_frame_count import frame_count_policy
 
 EXPERIMENTAL_OPT_IN_FIELD = "experimental_opt_in"
 
@@ -85,6 +87,8 @@ def requested_controls(spec: Any, form_data: Mapping[str, Any]) -> tuple[str, ..
     camera = form_data.get("camera_intent")
     if isinstance(camera, Mapping) and _text(camera.get("preset")).lower() not in {"", "none"}:
         controls.add(CONTROL_CAMERA_INTENT)
+    if _text(form_data.get("pose_video_path")):
+        controls.add(CONTROL_POSE_VIDEO)
     return tuple(sorted(controls))
 
 
@@ -103,6 +107,8 @@ def capability_errors(spec: Any, form_data: Mapping[str, Any]) -> list[str]:
         errors.append("Please choose an end anchor image for the video workflow.")
     if "prompt" in required and not _text(form_data.get("prompt")):
         errors.append(f"'{name}' needs a prompt describing the motion.")
+    if "pose_video" in required and not _text(form_data.get("pose_video_path")):
+        errors.append(f"'{name}' needs a driving video whose motion it transfers.")
     accepted = set(spec.accepted_controls)
     for control in requested_controls(spec, form_data):
         if control not in accepted:
@@ -138,6 +144,8 @@ def form_visibility(spec: Any) -> dict[str, bool]:
         "depth_conditioning": "depth_map" in declared,
         "motion_profile": "motion_profile" in declared,
         "seed": "seed" in declared,
+        "frame_count": frame_count_policy(spec) is not None,
+        "pose_video": CONTROL_POSE_VIDEO in accepted and "pose_video" in declared,
         "negative_prompt": CONTROL_NEGATIVE_PROMPT in accepted and "negative_prompt" in declared,
         "experimental": bool(getattr(spec, "is_experimental", False)),
     }

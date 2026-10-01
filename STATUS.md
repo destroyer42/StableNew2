@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-09-27
+Updated: 2026-10-01
 
 ## Repository
 
@@ -50,6 +50,15 @@ Updated: 2026-09-27
   remains. Details: `docs/Subsystems/Video/PR-VID-120_Neutral_Video_Execution_Contract.md`.
   `PR-VID-130 — Wan2.2 Experimental Prompt-Directed I2V Vertical Slice` is COMPLETE / ACCEPTED / INTEGRATED
   (`docs/Subsystems/Video/PR-VID-130_Wan22_Experimental_Vertical_Slice.md`). Wan2.2 `wan22_ti2v_5b_i2v_v1` v1.0.0 is an EXPERIMENTAL Comfy workflow, never generally approved: each job needs durable explicit `video_execution.experimental_opt_in=true`; disabled workflows stay non-runnable; governance, dependency checks and an observe-only resource-readiness guard (10,000 MiB GPU memory available to Comfy, 16 GB host RAM; not a scheduler/lease) fail before Comfy queue dispatch; external A1111/Comfy are never adopted, terminated or restarted. Native SVD remains the default production video backend; VACE stays NO-GO and unregistered. `VideoWorkflowController` now emits neutral `video_execution` intent; the historical stage bridge remains for the SVD producer, AnimateDiff, prompt-pack/reprocess-built `video_workflow` stages and historical replay, and is retired only once every producer is neutral and replay normalization is proven. Real Wan2.2 acceptance on the RTX 4070 Ti 12 GB produced a valid 480x832/49-frame/24 fps MP4 in ~83.4 s (peak 11,630 MiB VRAM, min 1.45 GB free RAM, no GPU fault).
+  `PR-RUNTIME-110 — Comfy Video Runner Liveness / Watchdog Correctness` is implemented on PR #23;
+  integration is gated by required CI and review
+  (`docs/Subsystems/Runtime/PR-RUNTIME-110_Comfy_Video_Runner_Liveness.md`).
+  Healthy long Comfy video jobs no longer trigger a false `queue_runner_stall` at ~90 s: while the
+  server confirms the queued prompt is running, or history explicitly reports a nonterminal state,
+  the backend reports bounded, job-scoped liveness through the existing runtime-status path (no
+  invented progress; still bounded by the workflow-declared backend execution timeout). Terminal
+  failed history does not prolong liveness. Genuine stalls, native SVD and WebUI watchdog semantics
+  are unchanged.
   `PR-RUNTIME-100 — Owned GPU Runtime Transition Policy` is **COMPLETE / ACCEPTED / INTEGRATED**.
   It coordinates release of conflicting StableNew-owned A1111,
   Comfy, or cached SVD residency before the already-selected backend prepares;
@@ -342,6 +351,53 @@ Updated: 2026-09-27
   resource/usability evidence is still required before a separate owner-authorized experimental
   integration decision. No GPU/model/runtime action or production source change occurred.
   DIAG-GPU-130 remains XMP-OFF isolation in progress / observation only.
+  `PR-VID-190 — Owned-Comfy Recycling After Each Job & Selectable Frame Count` is **COMPLETE /
+  ACCEPTED / INTEGRATED** (`docs/Subsystems/Video/PR-VID-190_Comfy_Runtime_Recycling_and_Frame_Count.md`).
+  The owner-reviewed "useful prompt-directed motion" clips were produced by Wan2.2 TI2V-5B
+  (`wan22_ti2v_5b_i2v_v1@1.0.0`) on StableNew-managed ComfyUI, not by Wan-Animate-2, so that verdict
+  is not an Animate-2 result. The queue failure after each success was a missing per-job release: the
+  StableNew-owned Comfy stayed resident holding its models, and the unchanged 16 GB readiness floor
+  correctly failed the next job. `wan22_ti2v_5b_i2v_v1@1.1.0` declares a release-after-job runtime
+  policy (only an owned process, only via `ComfyProcessManager.stop()`) and a neutral, frozen-at-
+  admission frame count (legal `4n+1`, 17-81, default 49, fixed 24 fps); `@1.0.0` stays byte-identical
+  for replay. Real acceptance queued three jobs (49/81/49 frames) through the canonical queue and ran
+  them back to back with no manual kill: three fresh owned Comfy PIDs, each released, RAM recovered
+  to ~24.5 GB before the next job, all COMPLETED, 81 frames (3.375 s) at ~11.7 GB peak VRAM.
+  Wan-Animate-2 experimental exposure on managed ComfyUI is the separately-sequenced next part.
+  `PR-VID-191 — Managed ComfyUI v0.37.0 Runtime & Experimental Wan-Animate-2` is **COMPLETE /
+  ACCEPTED / INTEGRATED** (PR #24; required Python 3.11/3.12 CI passed)
+  (`docs/Subsystems/Video/PR-VID-191_Comfy_v037_Runtime_and_Wan_Animate_2.md`). The
+  acceptance runs used the PR-VID-184R/S-qualified ComfyUI v0.37.0 install (the desktop app's
+  v0.3.65 cannot load Animate-2) as a machine-local, uncommitted managed-Comfy configuration with
+  StableNew-owned runtime folders and `--disable-pinned-memory`; tracked `presets/settings.json` is
+  unchanged;
+  TI2V-5B re-verified there (3 queued jobs, faster, no host-memory pressure). Two experimental
+  Wan-Animate-2 workflows (prompt motion; driving-video motion) are registered from the qualified graph
+  and exercised as three queued jobs (41/81/41 frames) with per-job runtime release. Prompt mode
+  produced clean motion. Driving-video mode is `ANIMATE_2_DRIVING_VIDEO_EXECUTION_PASS /
+  PRODUCT_QUALITY_PARTIAL — DUPLICATE_SUBJECT_ARTIFACT OBSERVED`: the control path executes, but a
+  duplicate subject appeared in its one sample (likely the dropped separate motion prompt), so
+  driving-motion quality is not accepted. A `LoadVideo` input-preview artifact-selection defect
+  was found and fixed. Review also added a dispatch-time check that the driving-video file still
+  matches its admission-frozen SHA-256, so a clip changed after queue admission is rejected before
+  upload and dispatch. The final v0.37.0 job finished at about
+  08:33 ET on 2026-09-29; display watchdog reports followed at about 08:42 and 15:02 with no
+  evidenced active generation. They do not invalidate the completed clips or establish a Comfy
+  cause. Workstation display stability remains unproven, so the desktop ComfyUI upgrade awaits the
+  owner's stability decision.
+  `PR-VID-192 — Animate-2 Control Truth & Motion Experimentability` is **COMPLETE / ACCEPTED /
+  INTEGRATED** (PR #25; required Python 3.11/3.12 CI passed)
+  (`docs/Subsystems/Video/PR-VID-192_Animate2_Control_Truth.md`). The generic Motion selector
+  (`gentle`) never reached Animate-2: neither workflow
+  declared `motion_profile`, so it is now hidden for workflows that do not honor it. New `@1.1.0` workflows
+  bind only controls the pinned ComfyUI v0.37.0 node actually honors: a distinct Motion Prompt wired to
+  `positive_pose`, pose strength, the pose window and reference-image strength (defaults equal the node's own);
+  prompt mode is described honestly as exploratory (no driving video, so the pose branch is skipped). `@1.0.0`
+  stays byte-identical for replay. The stock negative prompt has no effect at CFG 1.0 and is unchanged. A small
+  qualification-only motion-source corpus and a one-variable experiment suite were added. The four-arm GPU experiment
+  ran once the GPU was free: the separate motion prompt removed the duplicate subject (ghost persistence 28 to 0 of
+  39) but the driven locomotion disappeared with it, and pose strength 1.5 / reference strength 1.3 did not restore
+  it. Driving-motion quality therefore remains `EXECUTION_PASS / PRODUCT_QUALITY_PARTIAL` pending owner review.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

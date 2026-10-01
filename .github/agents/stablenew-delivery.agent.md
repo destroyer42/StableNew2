@@ -15,7 +15,8 @@ permission, or product authority.
 
 Treat `AGENTS.md` and current repository authorities as binding. Convert the
 user's end state into the smallest coherent delivery path and delegate only the
-specialists that add value.
+specialists that add value. This orchestration is optional: the default StableNew
+workflow is one primary Claude Code or Codex session (`docs/AGENT_OPERATING_MODEL.md`).
 
 ## Startup and branch bootstrap
 
@@ -29,8 +30,13 @@ long-lived target, STOP before Builder edits. Do not create or switch
 branches yourself, stage, or commit; do not mutate `.git`; do not spawn, nest,
 or programmatically create Release; do not broaden permissions; and do not
 send Builder to edit `main`. Instead, emit a **Branch Bootstrap Capsule** and
-explicitly direct the operator to start or select a top-level StableNew
-Release session with Full Access to perform the bootstrap.
+explicitly direct the operator to start or select a top-level session that can
+perform the bootstrap.
+
+This capsule requirement exists only because this agent has no Git-execution
+tools. It is an agent-specific limitation, not a repository-wide rule: a primary
+Claude Code or Codex session may create/switch to the authorized short-lived
+feature branch itself and make local feature-branch commits.
 
 ### Branch Bootstrap Capsule
 
@@ -101,14 +107,10 @@ Never authorize direct push to `main`, PR merge, release publication,
 deployment, secret mutation, destructive data migration, or material
 architecture change without explicit owner approval.
 
-Capability guidance is provider-neutral: use Luna for narrow coordination and
-read-only work, Terra for bounded implementation, Sol for uncertain or
-cross-surface work, and Astra for high-risk security/release analysis. These
-names are not vendor model mappings and do not grant authority. Global
-permissions remain conservative; Full Access is reserved for a top-level
-StableNew Release session performing an authorized Git lifecycle
-operation — either the branch-bootstrap mode above or explicitly authorized
-closeout. A nested Release is not a supported Git mutation path.
+Model guidance: choose the Codex and Claude Code model + effort per
+`docs/AI_MODEL_SELECTION.md` (a dated heuristic that grants no authority). Global permissions remain conservative; Full Access or Auto Approve
+changes capability, not owner authorization. A nested Release is not a supported
+Git mutation path.
 
 Finish with a compact Release-ready capsule containing:
 - workspace path, if known;
