@@ -63,19 +63,43 @@ Replaced rather than removed: all-disabled stage-chain test (now pins the NJR
 "at least one enabled stage" invariant), sweep-by-randomization placeholder skip
 (now a real test).
 
-## Open findings (not fixed here; tests left red on purpose)
+## Production defects found and fixed (PR-TEST-TRUTH-200R)
 
-1. `tests/pipeline/test_pipeline_io_contracts.py::...returns_result_and_learning_record`:
-   `PipelineRunner.run_njr` reads `getattr(njr, "randomizer_mode", "")` but the NJR
-   has no such field, so `result.randomizer_mode` is always empty for NJR runs.
-   Decision: source it from `randomizer_summary` or drop the result field.
-2. `tests/controller/test_auto_run_worker_lifecycle_v2.py::test_pause_resume_preserves_manual_or_auto_dispatch_policy`:
-   race — a finished manual one-shot `QueueWorkerOnce` thread is still alive, so
-   `_ensure_runner_started()` skips starting the continuous worker and queued jobs
-   stall with auto-run on. Fix belongs in `JobService`/`SingleNodeJobRunner`.
-   The same race makes `tests/integration/test_pr_mvp_060_phase1b.py::...manual_dispatch`
-   (a second `on_queue_send_job_v2()` right after a completed job) fail intermittently
-   in whole-suite runs; it passes in isolation and is left unmasked.
+1. **Runner randomizer projection.** `PipelineRunner.run_njr` projected
+   `getattr(njr, "randomizer_mode", "")`, a field the eight-part NJR no longer has, so
+   `PipelineRunResult.randomizer_mode` was always empty for NJR runs. It now uses the
+   typed authority `njr.variant_mode` (`WorkloadSpec.variant_mode`, default `"standard"`);
+   the learning record already read the same property. No NJR field was added; replay
+   keeps reading old results (`""` still deserializes). Regressions: non-standard mode
+   (`fanout`) and default (`standard`) in `tests/pipeline/test_pipeline_io_contracts.py`.
+2. **One-shot -> continuous worker race.** `QueueWorkerOnce` stayed alive after its job was
+   durably terminal, so `runner.is_running()` made `JobService` skip starting the
+   continuous worker when auto-run was enabled/resumed in that interval; the one-shot then
+   exited and queued jobs stalled. `SingleNodeJobRunner` (thread lifecycle authority) now
+   guards worker state with a lock, lets `start()` ask a live one-shot to hand off to
+   continuous draining on the same thread, and reports a worker that has committed to
+   retiring as not running; `JobService` (dispatch-policy authority) always requests
+   continuous dispatch when auto-run is on. No sleeps, no second runner. Boundary
+   regressions in `tests/controller/test_auto_run_worker_lifecycle_v2.py` hold the
+   `COMPLETED` status callback open (durable completion, thread alive) and prove drain for
+   auto-run enable and resume (they stall without the fix), plus exactly-once execution, a
+   manual one-shot with auto-run off, and re-enable after a continuous worker commits to
+   retire. `test_pr_mvp_060_phase1b` now waits for runner idle before the next manual
+   Send Job (durable COMPLETED precedes worker retirement by design).
+
+## Optional dependencies and host isolation
+
+- The 14 `tests/tools` failures were offline qualification tools that need NumPy/OpenCV,
+  declared only in the `svd` extra (`requirements-svd.txt`), not base `requirements.txt`.
+  They now skip with that reason (`tests/helpers/optional_deps.py`).
+- `tests/conftest.py` pins `STABLENEW_WEBUI_AUTOSTART=0`, `STABLENEW_COMFY_AUTOSTART=0` and
+  resets the cached WebUI autostart answer for every test; tests of autostart behavior
+  override it explicitly (`tests/system/test_test_runtime_isolation.py`). Production
+  defaults are unchanged.
+- Host sensitivities removed: ADetailer executor tests no longer sample live GPU pressure;
+  the operator-journey subprocess hides `nvidia-smi`; one real-time grace test uses a
+  generous grace (the boundary is pinned by the fake-clock test).
+- `tests/helpers/njr_queue_harness.py` dumps all thread stacks when a job is not terminal.
 
 ## Process-global isolation added to `tests/conftest.py`
 
@@ -89,21 +113,19 @@ them, and the leaking tests themselves are unaudited debt.
 
 ## Verification
 
-- Final single-process full suite (Python 3.11 local): 3940 passed, 64 skipped,
-  18 failed = 14 `numpy`/`cv2` environment + the two open findings above + two
-  1-second `post_started` waits in `test_pr_harden_009_r1a/r2` (raised to 10 s after
-  the run; they pass in isolation and in the `tests/integration tests/pipeline` run) +
-  the phase1b symptom of finding 2. Base census: about 300 failures plus a hang and a
-  stack-overflow crash. Collected tests 4033 -> 4020.
-- Required gate pieces pass locally: repository completeness, controller ratchet,
-  Ruff, collection gate, required smoke (129 passed), `git diff --check`.
-  `tools/ci/run_pr_gate.py` stops at the existing missing-`mypy` tooling blocker.
-- Python 3.12 and GitHub required CI were not run (no 3.12 test environment locally;
-  publication was not authorized).
+- Single-process full suite, Python 3.11 local, at the 200R head: **3951 passed, 78 skipped,
+  0 failed** (collected 4027). Skips: 15 golden-path `Implementation pending`, 14 optional
+  NumPy/OpenCV (+4 `cv2` importorskip), 16 PR-GUI-F1 "widget removed", 2 opt-in evidence
+  env vars, 1 opt-in shutdown-leak process test, 1 stage-ordering placeholder, Tk/Tcl when
+  unavailable. Base census: about 300 failures plus a hang and a stack-overflow crash.
+- Required gate pieces pass locally: repository completeness, controller ratchet
+  (`job_service.py` ceiling lowered 1246 -> 1245), Ruff, collection gate, required smoke
+  (129 passed), `git diff --check`. `tools/ci/run_pr_gate.py` stops at the missing-`mypy`
+  local tooling blocker.
+- Python 3.12 and GitHub CI are the canonical cross-version verdict.
 
 ## Known environment limits
 
-- 14 `tests/tools` tests need `numpy`/`cv2` (declared dependencies; CI installs them).
 - Optional/opt-in skips unchanged (cv2 importorskip, evidence env vars, Tk/Tcl
   intermittent init, `Implementation pending` golden-path placeholders, ~38
   PR-GUI-F1 "widget removed" skips left for one cleanup commit).

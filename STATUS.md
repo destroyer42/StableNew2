@@ -64,7 +64,10 @@ Updated: 2026-10-01
   lane and its `Journey Tests` workflow are retired, stale NJR/queue/history fixtures are repaired
   to the current contract, host-state leaks (owner's A1111/PromptPacks) are isolated, and the
   informational full-suite lane now runs to completion with a per-test timeout. Required CI is
-  unchanged. Two real production findings remain open for owner decision (see the report).
+  unchanged. Two production defects it exposed were fixed in the 200R pass:
+  `PipelineRunResult.randomizer_mode` now projects `njr.variant_mode`, and `SingleNodeJobRunner`
+  owns a locked one-shot -> continuous worker handoff so enabling auto-run at the retirement
+  boundary cannot stall queued jobs (single local Python 3.11 full suite: 0 failed).
   `PR-RUNTIME-100 — Owned GPU Runtime Transition Policy` is **COMPLETE / ACCEPTED / INTEGRATED**.
   It coordinates release of conflicting StableNew-owned A1111,
   Comfy, or cached SVD residency before the already-selected backend prepares;
