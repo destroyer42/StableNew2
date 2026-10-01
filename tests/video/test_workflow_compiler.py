@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.video import VideoExecutionRequest, WorkflowCompiler, build_default_workflow_registry
+from src.video import VideoExecutionRequest, WorkflowCompiler
+from tests.helpers.video_contract_registry import build_ltx_contract_registry
 
 
 def test_workflow_compiler_builds_deterministic_payload_for_builtin_ltx_workflow(
     tmp_path: Path,
 ) -> None:
-    registry = build_default_workflow_registry()
+    registry = build_ltx_contract_registry()
     compiler = WorkflowCompiler()
     request = VideoExecutionRequest(
         backend_id="comfy",
@@ -50,7 +51,7 @@ def test_workflow_compiler_builds_deterministic_payload_for_builtin_ltx_workflow
 
 
 def test_workflow_compiler_fails_fast_when_required_anchor_is_missing(tmp_path: Path) -> None:
-    registry = build_default_workflow_registry()
+    registry = build_ltx_contract_registry()
     compiler = WorkflowCompiler()
     request = VideoExecutionRequest(
         backend_id="comfy",
@@ -76,7 +77,7 @@ def test_workflow_compiler_fails_fast_when_required_anchor_is_missing(tmp_path: 
 def test_workflow_compiler_builds_conditioned_payload_from_nested_stage_config(
     tmp_path: Path,
 ) -> None:
-    registry = build_default_workflow_registry()
+    registry = build_ltx_contract_registry()
     compiler = WorkflowCompiler()
     request = VideoExecutionRequest(
         backend_id="comfy",

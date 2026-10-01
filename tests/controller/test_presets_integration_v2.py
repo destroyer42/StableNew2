@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -10,8 +11,9 @@ from src.gui.app_state_v2 import AppStateV2
 
 
 class DummyConfigManager:
-    def __init__(self, preset: dict[str, Any]) -> None:
+    def __init__(self, preset: dict[str, Any], packs_dir: Path) -> None:
         self.preset = preset
+        self.packs_dir = packs_dir
         self.listed = ["demo"]
 
     def list_presets(self) -> list[str]:
@@ -27,14 +29,14 @@ class DummyConfigManager:
 
 
 @pytest.fixture
-def controller():
+def controller(tmp_path: Path):
     preset = {
         "txt2img": {"steps": 25},
         "pipeline": {"txt2img_enabled": False, "upscale_enabled": True},
         "randomization_enabled": True,
         "max_variants": 4,
     }
-    cm = DummyConfigManager(preset)
+    cm = DummyConfigManager(preset, tmp_path / "packs")
     controller = AppController(None, threaded=False, config_manager=cm)
     controller.app_state = AppStateV2()
     controller.main_window = SimpleNamespace()

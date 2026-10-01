@@ -9,6 +9,7 @@ from src.gui.app_state_v2 import AppStateV2
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job, JobStatus
 from tests.helpers.job_service_di_test_helpers import make_stubbed_job_service
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class DummyPipelineController:
@@ -45,11 +46,9 @@ def _build_controller(**kwargs) -> AppController:
 
 
 def _make_preview_job(job_id: str = "preview-1") -> NormalizedJobRecord:
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id=job_id,
         config={"prompt": "p"},
-        path_output_dir="output",
-        filename_template="{seed}",
         positive_prompt="portrait",
         negative_prompt="",
     )
@@ -128,14 +127,7 @@ def test_refresh_preview_from_state_async_builds_off_thread_and_applies_latest_r
 
         def get_preview_jobs_for_request(self, _request):
             self.calls += 1
-            return [
-                NormalizedJobRecord(
-                    job_id="preview-1",
-                    config={"prompt": "p"},
-                    path_output_dir="output",
-                    filename_template="{seed}",
-                )
-            ]
+            return [_make_preview_job("preview-1")]
 
     dummy = DummyPreviewController()
     controller = _build_controller(pipeline_controller=dummy)
@@ -198,7 +190,8 @@ def test_start_run_v2_in_gui_mode_submits_queue_run_off_thread() -> None:
     assert controller._last_run_config is not None
     assert controller._last_run_config["run_mode"] == "queue"
     assert controller._last_run_config["source"] == "run"
-    assert dummy.queue_submit_calls[0]["source"] == "gui"
+    # The Run-button origin flows through unchanged (Run Now's source drives start-when-idle policy).
+    assert dummy.queue_submit_calls[0]["source"] == "run"
     assert dummy.queue_submit_calls[0]["run_config"]["source"] == "run"
     assert controller._run_submission_in_progress is False
     assert controller.current_operation_label is None

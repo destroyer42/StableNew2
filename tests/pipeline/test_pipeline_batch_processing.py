@@ -10,6 +10,51 @@ import pytest
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner
+from tests.helpers.njr_factory import make_pipeline_njr
+
+
+def _make_njr(
+    *,
+    job_id: str,
+    config: dict,
+    path_output_dir: str,
+    filename_template: str,
+    positive_prompt: str,
+    negative_prompt: str,
+    base_model: str,
+    sampler_name: str,
+    steps: int,
+    cfg_scale: float,
+    width: int,
+    height: int,
+    images_per_prompt: int,
+    stage_chain: list[StageConfig],
+    vae: str | None = None,
+) -> NormalizedJobRecord:
+    """Build an image NJR through the shared factory (current NJR contract)."""
+    njr_config = {
+        **config,
+        "model": base_model,
+        "prompt": positive_prompt,
+        "sampler_name": sampler_name,
+        "steps": steps,
+        "cfg_scale": cfg_scale,
+        "width": width,
+        "height": height,
+    }
+    if vae:
+        njr_config["vae"] = vae
+    return make_pipeline_njr(
+        job_id=job_id,
+        config=njr_config,
+        path_output_dir=path_output_dir,
+        filename_template=filename_template,
+        positive_prompt=positive_prompt,
+        negative_prompt=negative_prompt,
+        base_model=base_model,
+        images_per_prompt=images_per_prompt,
+        stage_chain=stage_chain,
+    )
 
 
 class TestPipelineBatchProcessing:
@@ -55,7 +100,7 @@ class TestPipelineBatchProcessing:
         Final result: 2 upscaled images
         """
         # Create NJR with batch_size=2 and all stages enabled
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="test_batch_2",
             config={},
             path_output_dir=str(temp_output_dir),
@@ -141,7 +186,7 @@ class TestPipelineBatchProcessing:
         """
         Test that batch_size=3 with only txt2img enabled produces 3 images.
         """
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="test_batch_3_txt2img_only",
             config={},
             path_output_dir=str(temp_output_dir),
@@ -198,7 +243,7 @@ class TestPipelineBatchProcessing:
         """
         Test that batch_size=4 with txt2img+adetailer processes all 4 images.
         """
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="test_batch_4_txt2img_adetailer",
             config={},
             path_output_dir=str(temp_output_dir),
@@ -268,7 +313,7 @@ class TestPipelineBatchProcessing:
         """
         Test that batch_size=1 (single image) still works correctly.
         """
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="test_single_image",
             config={},
             path_output_dir=str(temp_output_dir),
@@ -325,7 +370,7 @@ class TestPipelineBatchProcessing:
         self, pipeline_runner, temp_output_dir
     ):
         """Verify img2img/adetailer/upscale inherit the NJR base model by default."""
-        njr = NormalizedJobRecord(
+        njr = _make_njr(
             job_id="test_stage_model_pinning",
             config={},
             path_output_dir=str(temp_output_dir),
@@ -341,7 +386,14 @@ class TestPipelineBatchProcessing:
             height=768,
             images_per_prompt=1,
             stage_chain=[
-                StageConfig(stage_type="txt2img", enabled=True),
+                # The compiler stamps the base checkpoint/VAE on the txt2img stage; that is
+                # what NJR.base_model/vae resolve to, not later stages' stale model fields.
+                StageConfig(
+                    stage_type="txt2img",
+                    enabled=True,
+                    model="base-model.safetensors",
+                    vae="base-vae.safetensors",
+                ),
                 StageConfig(
                     stage_type="img2img",
                     enabled=True,

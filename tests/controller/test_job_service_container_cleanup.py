@@ -7,6 +7,7 @@ from src.controller.job_service import JobService
 from src.queue.job_model import Job, JobStatus
 from src.queue.job_queue import JobQueue
 from src.utils.process_container_v2 import ProcessContainerConfig
+from tests.helpers.njr_factory import make_queue_job
 
 
 class DummyRunner:
@@ -64,7 +65,7 @@ def test_job_service_containers_receive_pids_and_kill(monkeypatch) -> None:
         process_container_config=config,
         container_factory=lambda job_id, cfg: container,
     )
-    job = Job(job_id="job-container")
+    job = make_queue_job("job-container")
     job_queue.submit(job)
 
     monkeypatch.setattr(job_service_module, "JobWatchdog", DummyWatchdog)

@@ -1,6 +1,8 @@
-"""Shutdown journey test ensuring StableNew exits without stray processes.
+"""Opt-in local process test: StableNew exits without stray processes.
 
-The journey explicitly disables backend autostart. External A1111/ComfyUI
+Set ``STABLENEW_RUN_SHUTDOWN_LEAK_TEST=1`` to run it (scripts/run_shutdown_diag.ps1 does).
+It launches the real app several times and inspects host-wide process lists, so it is
+never part of required or informational CI. The launched app disables backend autostart. External A1111/ComfyUI
 processes are outside this test's ownership and are never inspected or touched.
 """
 
@@ -20,8 +22,11 @@ from tools.test_helpers.process_inspection import (
 )
 
 
-@pytest.mark.journey
 @pytest.mark.slow
+@pytest.mark.skipif(
+    os.environ.get("STABLENEW_RUN_SHUTDOWN_LEAK_TEST") != "1",
+    reason="opt-in local process test: set STABLENEW_RUN_SHUTDOWN_LEAK_TEST=1",
+)
 @pytest.mark.skipif(
     sys.platform != "win32" and sys.platform != "linux", reason="Platform-specific stability test"
 )

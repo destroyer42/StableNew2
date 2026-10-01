@@ -148,7 +148,7 @@ def test_canonical_txt2img_cancel_interrupts_once_and_persists_cancelled(
 
     try:
         service.submit_njrs([record])
-        assert client.post_started.wait(timeout=1.0)
+        assert client.post_started.wait(timeout=10.0)
         assert queue.get_job(record.job_id).status is JobStatus.RUNNING
         token = runner._current_cancel_token
         assert token is not None

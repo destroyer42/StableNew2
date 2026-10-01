@@ -3,7 +3,30 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
+
 from src.pipeline.executor import Pipeline
+
+_HEALTHY_RUNTIME_ADMISSION = {
+    "schema": "stablenew.runtime-admission.v1",
+    "status": "healthy",
+    "reasons": [],
+    "cause_codes": [],
+}
+
+
+@pytest.fixture(autouse=True)
+def _healthy_runtime_admission(monkeypatch):
+    """Runtime admission samples host GPU pressure and the process list (``/proc/stat``).
+
+    These tests exercise the ADetailer manifest, not admission, so they must not depend
+    on the machine (or CI container) that runs them.
+    """
+
+    monkeypatch.setattr(
+        Pipeline, "_ensure_runtime_admissible", lambda *_a, **_k: _HEALTHY_RUNTIME_ADMISSION
+    )
+
 
 _TINY_PNG_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z0ioAAAAASUVORK5CYII="
@@ -108,9 +131,22 @@ def test_adetailer_manifest_carries_canonical_adaptive_refinement_block() -> Non
     ] == ["clear irises"]
 
 
+def _install_switchable_checkpoint(client: Mock, ambient: str) -> None:
+    """Model a WebUI whose checkpoint actually changes when set_model succeeds."""
+    state = {"model": ambient}
+
+    def _set_model(name: str) -> bool:
+        state["model"] = name
+        return True
+
+    client.options_write_enabled = True
+    client.set_model = Mock(side_effect=_set_model)
+    client.get_current_model = Mock(side_effect=lambda: state["model"])
+
+
 def test_adetailer_manifest_model_prefers_requested_stage_checkpoint() -> None:
     pipeline = Pipeline(Mock(), Mock())
-    pipeline.client.get_current_model = Mock(return_value="ambient-webui-model.safetensors")
+    _install_switchable_checkpoint(pipeline.client, "ambient-webui-model.safetensors")
     pipeline.client.get_current_vae = Mock(return_value="vae.pt")
 
     with (

@@ -169,3 +169,177 @@ def test_pause_resume_preserves_manual_or_auto_dispatch_policy(tmp_path: Path) -
         runner.stop()
         service.stop()
         repository.close()
+
+
+def _make_boundary_service(tmp_path: Path, *, fail_first_job: bool = False):
+    """Service whose one-shot worker blocks *after* job A is durably COMPLETED.
+
+    The ``COMPLETED`` status callback runs on the QueueWorkerOnce thread after the
+    result is published, so holding it open reproduces the boundary where the job is
+    durably terminal but the one-shot thread has not retired yet.
+    """
+
+    repository = JobRepository(tmp_path / "jobs.sqlite3")
+    queue = JobQueue(repository=repository)
+    at_boundary = threading.Event()
+    proceed = threading.Event()
+    calls: list[str] = []
+
+    def execute(job):
+        calls.append(job.job_id)
+        if fail_first_job and job.job_id == "A":
+            raise RuntimeError("job A failed")
+        return {"success": True, "variants": []}
+
+    terminal = JobStatus.FAILED if fail_first_job else JobStatus.COMPLETED
+
+    def on_status(job, status):
+        if job.job_id == "A" and status is terminal:
+            at_boundary.set()
+            assert proceed.wait(timeout=5.0), "boundary was never released"
+
+    runner = SingleNodeJobRunner(queue, execute, poll_interval=0.005, on_status_change=on_status)
+    service = JobService(queue, runner=runner, require_normalized_records=True)
+    service.auto_run_enabled = False
+    for job_id in ("A", "B", "C"):
+        service.submit_queued(make_queue_job(job_id), emit_queue_updated=False)
+    return service, queue, runner, repository, at_boundary, proceed, calls
+
+
+def test_auto_run_enabled_after_durable_completion_before_one_shot_retires_drains_queue(
+    tmp_path: Path,
+) -> None:
+    service, queue, runner, repository, at_boundary, proceed, calls = _make_boundary_service(
+        tmp_path
+    )
+    try:
+        assert service.run_next_now() is True
+        assert at_boundary.wait(timeout=5.0)
+        # Boundary: A is durably terminal, but its one-shot thread is still alive.
+        assert repository.get_job_model("A").status is JobStatus.COMPLETED
+        assert runner._worker is not None and runner._worker.is_alive()
+        assert runner._worker.name == "QueueWorkerOnce"
+
+        service.set_auto_run_enabled(True, start_if_ready=True)
+        proceed.set()
+
+        _wait_until(
+            lambda: all(
+                repository.get_job_model(job_id).status is JobStatus.COMPLETED
+                for job_id in ("B", "C")
+            ),
+            timeout=5.0,
+        )
+        assert calls == ["A", "B", "C"]  # drained, each job claimed exactly once
+        assert queue.list_jobs(JobStatus.QUEUED) == []
+    finally:
+        proceed.set()
+        runner.stop()
+        service.stop()
+        repository.close()
+
+
+def test_resume_after_durable_completion_before_one_shot_retires_drains_queue(
+    tmp_path: Path,
+) -> None:
+    service, queue, runner, repository, at_boundary, proceed, calls = _make_boundary_service(
+        tmp_path
+    )
+    try:
+        assert service.run_next_now() is True
+        assert at_boundary.wait(timeout=5.0)
+        service.auto_run_enabled = True
+        service.resume()  # the path that previously skipped the continuous worker
+        proceed.set()
+
+        _wait_until(
+            lambda: all(
+                repository.get_job_model(job_id).status is JobStatus.COMPLETED
+                for job_id in ("B", "C")
+            ),
+            timeout=5.0,
+        )
+        assert calls == ["A", "B", "C"]
+    finally:
+        proceed.set()
+        runner.stop()
+        service.stop()
+        repository.close()
+
+
+def test_manual_one_shot_without_auto_run_still_executes_exactly_one_job(tmp_path: Path) -> None:
+    service, queue, runner, repository, at_boundary, proceed, calls = _make_boundary_service(
+        tmp_path
+    )
+    try:
+        assert service.run_next_now() is True
+        assert at_boundary.wait(timeout=5.0)
+        proceed.set()
+        _wait_until(lambda: not runner.is_running())
+
+        assert calls == ["A"]
+        assert [job.job_id for job in queue.list_jobs(JobStatus.QUEUED)] == ["B", "C"]
+    finally:
+        proceed.set()
+        runner.stop()
+        service.stop()
+        repository.close()
+
+
+def test_auto_run_reenabled_after_continuous_worker_commits_to_retire_restarts_drain(
+    tmp_path: Path,
+) -> None:
+    service, queue, runner, repository, started, release_a, calls = _make_service(tmp_path)
+    service.auto_run_enabled = True
+    try:
+        assert service.run_next_now() is True
+        assert started["A"].wait(timeout=2.0)
+        service.auto_run_enabled = False
+        release_a.set()
+        _wait_until(lambda: repository.get_job_model("A").status is JobStatus.COMPLETED)
+        # The worker has committed to retiring (it may still be unwinding).
+        _wait_until(lambda: runner._worker_retiring)
+
+        service.set_auto_run_enabled(True, start_if_ready=True)
+
+        _wait_until(
+            lambda: all(
+                repository.get_job_model(job_id).status is JobStatus.COMPLETED
+                for job_id in ("B", "C")
+            ),
+            timeout=5.0,
+        )
+        assert calls == ["A", "B", "C"]
+    finally:
+        release_a.set()
+        runner.stop()
+        service.stop()
+        repository.close()
+
+
+def test_failed_one_shot_job_still_hands_off_to_continuous_drain(tmp_path: Path) -> None:
+    service, queue, runner, repository, at_boundary, proceed, calls = _make_boundary_service(
+        tmp_path, fail_first_job=True
+    )
+    try:
+        assert service.run_next_now() is True
+        assert at_boundary.wait(timeout=5.0)
+        # Boundary: A is durably FAILED; run_once is about to re-raise on the one-shot thread.
+        assert repository.get_job_model("A").status is JobStatus.FAILED
+
+        service.set_auto_run_enabled(True, start_if_ready=True)
+        proceed.set()
+
+        _wait_until(
+            lambda: all(
+                repository.get_job_model(job_id).status is JobStatus.COMPLETED
+                for job_id in ("B", "C")
+            ),
+            timeout=5.0,
+        )
+        assert calls == ["A", "B", "C"]
+    finally:
+        proceed.set()
+        runner.stop()
+        service.stop()
+        repository.close()

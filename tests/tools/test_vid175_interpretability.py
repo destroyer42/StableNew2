@@ -14,6 +14,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from tests.helpers.optional_deps import requires_cv2, requires_numpy
 from tools.qualification.vid160c.pose_asset import sample_indices
 from tools.qualification.vid170.graph import CharacterizationSpec, build_characterization_graph
 from tools.qualification.vid175 import pose_asset_480x832
@@ -73,6 +74,7 @@ def test_graph_at_480x832_contains_pose_video_and_never_face_video() -> None:
 # --- temporal-index equivalence with VID-170 Case C ------------------------------------------------
 
 
+@requires_numpy
 def test_pose_asset_temporal_indices_equal_vid170_case_c() -> None:
     case_c_indices = sample_indices(49, 13)  # the exact call VID-170 Case C's adaptation used
     assert pose_asset_480x832.TARGET_FRAMES == 13
@@ -82,6 +84,7 @@ def test_pose_asset_temporal_indices_equal_vid170_case_c() -> None:
     assert reused_indices == case_c_indices
 
 
+@requires_cv2
 def test_pose_asset_480x832_preserves_native_resolution_no_crop(tmp_path: Path) -> None:
     target, indices, dims = pose_asset_480x832.adapt_pose_video_native(
         target=tmp_path / "pose_480x832.mp4"

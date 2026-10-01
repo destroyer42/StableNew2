@@ -14,6 +14,7 @@ from src.app.optional_dependency_probes import (
 from src.controller.app_controller import AppController
 from src.queue.job_history_store import JobHistoryEntry
 from src.queue.job_model import JobStatus
+from src.queue.job_repository import JobRepository
 from src.utils.error_envelope_v2 import wrap_exception
 from src.utils.exceptions_v2 import WatchdogViolationError
 
@@ -23,14 +24,10 @@ class DummyPipelineRunner:
         pass
 
 
-class DummyHistoryStore:
-    def list_jobs(self, limit: int | None = None) -> list[object]:
-        return []
-
-
 class DummyJobService:
     def __init__(self) -> None:
-        self.history_store = DummyHistoryStore()
+        # JobRepository is the sole live history authority.
+        self.history_store = JobRepository(":memory:")
         self._callbacks: dict[str, list[callable]] = {}
 
     def register_callback(self, event: str, callback: callable) -> None:

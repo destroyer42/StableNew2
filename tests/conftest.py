@@ -1,9 +1,43 @@
+import gc
 import os
+import threading
 import time
 import tkinter as tk
 from pathlib import Path
 
 import pytest
+
+# --- Garbage collection only on the main thread ---------------------------------------
+# GUI tests leave Tk interpreters/variables behind. If the cyclic collector (automatic,
+# or an explicit ``gc.collect()`` such as ``SDWebUIClient.free_vram``) finalizes one on a
+# worker thread, Tcl aborts the whole process ("Tcl_AsyncDelete: async handler deleted by
+# the wrong thread" -> ``Fatal Python error: Aborted``, seen in the CI full-suite job on
+# both Python versions). Disable automatic collection for the test session, make
+# ``gc.collect`` a no-op off the main thread, and collect on the main thread whenever the
+# test module changes so garbage is still reclaimed.
+_REAL_GC_COLLECT = gc.collect
+
+
+def _main_thread_only_collect(*args, **kwargs):
+    if threading.current_thread() is not threading.main_thread():
+        return 0
+    return _REAL_GC_COLLECT(*args, **kwargs)
+
+
+_GC_WAS_ENABLED = gc.isenabled()
+gc.disable()
+gc.collect = _main_thread_only_collect
+
+
+def pytest_runtest_teardown(item, nextitem):
+    if nextitem is None or nextitem.path != item.path:
+        _REAL_GC_COLLECT()
+
+
+def pytest_unconfigure(config):
+    gc.collect = _REAL_GC_COLLECT
+    if _GC_WAS_ENABLED:
+        gc.enable()
 
 
 @pytest.fixture
@@ -43,6 +77,71 @@ def tk_pump(tk_root):
 
 
 """Global test configuration and monkeypatches"""
+
+
+@pytest.fixture(autouse=True)
+def _isolate_process_global_runtime_state():
+    """Give each test a clean process-global thread registry and watchdog slot.
+
+    ``ThreadRegistry`` and ``SystemWatchdogV2`` keep process-wide state. A test that
+    builds an ``AppController`` without shutting it down leaves a registered thread
+    or a live single-flight watchdog, which then makes unrelated lifecycle tests
+    (shutdown counts, watchdog start/stall) fail only in a whole-suite run. This
+    forgets bookkeeping for threads leaked by earlier tests; it does not stop them.
+
+    ``AppController`` also chains ``sys.excepthook``/``threading.excepthook`` at
+    construction. Controllers that are never shut down stack those hooks, and a later
+    thread exception then recurses through every leaked controller (each building a
+    diagnostics bundle) until the interpreter overflows its stack. Restore both hooks
+    after every test.
+    """
+
+    import sys
+    import threading
+
+    original_sys_hook = sys.excepthook
+    original_thread_hook = threading.excepthook
+    try:
+        from src.services.watchdog_system_v2 import SystemWatchdogV2
+        from src.utils.thread_registry import get_thread_registry
+
+        registry = get_thread_registry()
+        with registry._registry_lock:
+            registry._threads.clear()
+            registry._shutdown_requested = False
+        with SystemWatchdogV2._ACTIVE_LOCK:
+            SystemWatchdogV2._ACTIVE_THREAD = None
+    except Exception:  # pragma: no cover - isolation must never break collection
+        pass
+    try:
+        yield
+    finally:
+        sys.excepthook = original_sys_hook
+        threading.excepthook = original_thread_hook
+
+
+@pytest.fixture(autouse=True)
+def _pin_host_runtime_autostart_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Deterministic pytest never launches, adopts, or probes the owner's A1111/Comfy.
+
+    Tracked ``presets/settings.json`` and WebUI detection carry machine-local values
+    (install paths, ``comfy_autostart_enabled``), and ``get_webui_autostart_enabled``
+    defaults to *enabled* whenever an install is detected and caches the answer
+    process-wide. A test that builds the real application would then try to start the
+    host's WebUI/Comfy. Pin both off through the same environment switches production
+    honors, and reset the cached WebUI answer. Tests that exercise autostart or
+    process-manager behavior override this with their own ``monkeypatch.setenv`` /
+    ``set_webui_autostart_enabled`` or injected fakes (they run after this fixture).
+    """
+
+    monkeypatch.setenv("STABLENEW_WEBUI_AUTOSTART", "0")
+    monkeypatch.setenv("STABLENEW_COMFY_AUTOSTART", "0")
+    try:
+        import src.config.app_config as app_config
+
+        monkeypatch.setattr(app_config, "_webui_autostart_enabled", None)
+    except Exception:  # pragma: no cover - isolation must never break collection
+        pass
 
 
 @pytest.fixture(autouse=True)

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
 from PIL import Image
 
 from src.controller.job_service import JobService
@@ -22,7 +23,7 @@ from src.video.svd_config import SVDConfig
 
 
 def test_svd_native_vertical_slice_queue_artifact_history_and_replay(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, request: pytest.FixtureRequest
 ) -> None:
     """Use the production queue/runner path while faking only expensive native inference."""
     source_path = tmp_path / "selected.png"
@@ -34,8 +35,17 @@ def test_svd_native_vertical_slice_queue_artifact_history_and_replay(
             self.output_root = Path(output_root)
             self.status_callback = status_callback
 
-        def run(self, *, source_image_path, config, job_id, cancel_token=None):
+        def run(
+            self,
+            *,
+            source_image_path,
+            config,
+            job_id,
+            cancel_token=None,
+            provenance_context=None,
+        ):
             assert Path(source_image_path) == source_path
+            assert provenance_context is not None
             assert config.inference.local_files_only is False
             assert self.status_callback is not None
             assert cancel_token is not None
@@ -104,6 +114,14 @@ def test_svd_native_vertical_slice_queue_artifact_history_and_replay(
         pipeline_runner=runner,
     )
     pipeline_ref["controller"] = pipeline_controller
+    # PipelineController construction applies AppState's auto-run default (True) to
+    # the service, so manual dispatch must be re-asserted afterwards; otherwise a
+    # QueueWorker races ``run_once`` for the same job.
+    service.auto_run_enabled = False
+    # SingleNodeJobRunner owns a non-daemon QueueWorker thread by design; always
+    # stop it (even when an assertion below fails) or pytest never exits.
+    request.addfinalizer(repository.close)
+    request.addfinalizer(service.runner.stop)
     service.runner.stop()
     app_surface = SimpleNamespace(output_dir=str(output_dir), job_service=service)
     svd_controller = SVDController(app_controller=app_surface)
@@ -176,7 +194,7 @@ def test_svd_admission_failure_creates_no_queue_artifact(tmp_path: Path, monkeyp
 
 
 def test_svd_runtime_cancellation_marks_canonical_job_cancelled(
-    tmp_path: Path, monkeypatch
+    tmp_path: Path, monkeypatch, request: pytest.FixtureRequest
 ) -> None:
     """A native SVD cancellation must flow through the normal queue terminal state."""
     source_path = tmp_path / "selected.png"
@@ -219,6 +237,14 @@ def test_svd_runtime_cancellation_marks_canonical_job_cancelled(
         pipeline_runner=runner,
     )
     pipeline_ref["controller"] = pipeline_controller
+    # PipelineController construction applies AppState's auto-run default (True) to
+    # the service, so manual dispatch must be re-asserted afterwards; otherwise a
+    # QueueWorker races ``run_once`` for the same job.
+    service.auto_run_enabled = False
+    # SingleNodeJobRunner owns a non-daemon QueueWorker thread by design; always
+    # stop it (even when an assertion below fails) or pytest never exits.
+    request.addfinalizer(repository.close)
+    request.addfinalizer(service.runner.stop)
     service.runner.stop()
     controller = SVDController(
         app_controller=SimpleNamespace(output_dir=str(output_dir), job_service=service)

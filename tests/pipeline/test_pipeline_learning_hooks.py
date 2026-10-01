@@ -8,7 +8,7 @@ import pytest
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import PipelineRunner
-from src.pipeline.stage_sequencer import StageConfig, StageMetadata
+from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 from tests.helpers.pipeline_fakes import FakePipeline
 
 
@@ -54,34 +54,17 @@ def _runner_with_defaults(tmp_path, learning_enabled: bool, writer: MemoryWriter
 
 
 def _make_record(tmp_path, *, prompt: str = "p") -> NormalizedJobRecord:
-    stage = StageConfig(
-        enabled=True,
-        payload={
-            "model": "m",
-            "sampler_name": "Euler",
-            "steps": 20,
-            "cfg_scale": 7.0,
-        },
-        metadata=StageMetadata(),
-    )
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="learning-job",
-        config={"prompt": prompt, "model": "m"},
+        config={"prompt": prompt, "model": "m", "width": 512, "height": 512},
         path_output_dir=str(tmp_path / "runs"),
         filename_template="{seed}",
         seed=42,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=0.0,
-        randomizer_summary=None,
-        stage_chain=[stage],
-        steps=20,
-        cfg_scale=7.0,
+        stage_chain=[
+            make_stage_config("txt2img", model="m", sampler_name="Euler", steps=20, cfg_scale=7.0)
+        ],
         width=512,
         height=512,
-        sampler_name="Euler",
         base_model="m",
         positive_prompt=prompt,
     )

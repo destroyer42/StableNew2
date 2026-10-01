@@ -3,9 +3,9 @@ from types import SimpleNamespace
 # Need WebUIConnectionState for stubbing the ensure_connected result
 from src.controller.pipeline_controller import PipelineController
 from src.controller.webui_connection_controller import WebUIConnectionState
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.pipeline_runner import PipelineRunResult
 from src.queue.job_model import JobStatus
+from tests.helpers.njr_factory import make_pipeline_njr, make_queue_job
 
 
 class FakeJobExecutionController:
@@ -24,8 +24,9 @@ class FakeJobService:
     def __init__(self) -> None:
         self.submitted = []
 
-    def submit_job_with_run_mode(self, job) -> None:
-        self.submitted.append(job)
+    def submit_njrs(self, records, policy=None) -> list[str]:
+        self.submitted.extend(records)
+        return [record.job_id for record in records]
 
 
 def _setup_controller(
@@ -45,22 +46,19 @@ def _setup_controller(
     controller._webui_connection.ensure_connected = (
         lambda autostart=True: WebUIConnectionState.READY
     )
-    preview_record = NormalizedJobRecord(
+    preview_record = make_pipeline_njr(
         job_id="preview-job",
         config={"prompt": "castle"},
-        path_output_dir="output",
-        filename_template="{seed}",
         seed=123,
         prompt_pack_id="test-pack",
         prompt_pack_name="Test Pack",
         positive_prompt="castle",
-        stage_chain=[StageConfig(stage_type="txt2img", enabled=True)],
     )
     controller.get_preview_jobs = lambda: [preview_record]  # type: ignore[method-assign]
     return controller, fake_job_ctrl
 
 
-def test_queue_mode_disabled_still_uses_job_controller(monkeypatch):
+def test_queue_mode_disabled_flag_still_submits_through_job_service(monkeypatch):
     controller, fake = _setup_controller(monkeypatch, queue_enabled=False)
     started = controller.start_pipeline()
     assert started is True
@@ -90,7 +88,7 @@ def test_stop_pipeline_delegates_to_job_controller(monkeypatch):
     assert fake.cancelled == ["job-42"]
 
 
-def test_job_execution_controller_replay_uses_pipeline_runner(monkeypatch):
+def test_queued_job_executes_njr_through_pipeline_runner_run_njr(monkeypatch):
     monkeypatch.setattr(
         "src.controller.pipeline_controller.is_queue_execution_enabled", lambda: True
     )
@@ -123,19 +121,17 @@ def test_job_execution_controller_replay_uses_pipeline_runner(monkeypatch):
 
     runner = FakeRunner()
     controller = PipelineController(pipeline_runner=runner)
-    record = NormalizedJobRecord(
-        job_id="queue-replay-njr",
-        config={"prompt": "castle"},
-        path_output_dir="output",
-        filename_template="{seed}",
-        seed=123,
+    job = make_queue_job(
+        "queue-replay-njr", config={"prompt": "castle"}, positive_prompt="castle", seed=123
     )
 
-    result = controller.get_job_execution_controller().run_njr(record)
+    # Queue worker callback: Job(NJR) -> ReplayEngine -> PipelineRunner.run_njr
+    result = controller.get_job_execution_controller()._run_job_callback(job)
 
-    assert runner.calls == [{"job_id": "queue-replay-njr", "checkpoint_callback": None}]
-    assert result.success is True
-    assert controller.get_last_run_result() is result
+    assert [call["job_id"] for call in runner.calls] == ["queue-replay-njr"]
+    assert callable(runner.calls[0]["checkpoint_callback"])
+    assert result["success"] is True
+    assert controller.get_last_run_result().run_id == "queue-replay-njr"
 
 
 def test_pipeline_controller_run_njr_passes_checkpoint_callback(monkeypatch):
@@ -166,11 +162,10 @@ def test_pipeline_controller_run_njr_passes_checkpoint_callback(monkeypatch):
 
     runner = FakeRunner()
     controller = PipelineController(pipeline_runner=runner)
-    record = NormalizedJobRecord(
+    record = make_pipeline_njr(
         job_id="queue-replay-njr",
         config={"prompt": "castle"},
-        path_output_dir="output",
-        filename_template="{seed}",
+        positive_prompt="castle",
         seed=123,
     )
 

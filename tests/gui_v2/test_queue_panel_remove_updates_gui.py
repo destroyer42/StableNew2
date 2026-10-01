@@ -1,4 +1,4 @@
-"""Test to reproduce the queue Remove button bug."""
+"""Queue panel Remove button must update the displayed job list."""
 
 import tkinter as tk
 from unittest.mock import Mock
@@ -7,11 +7,10 @@ from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.pipeline.job_models_v2 import UnifiedJobSummary
 
 
-def test_queue_remove_updates_gui():
-    """Reproduce the bug where Remove button doesn't update the GUI."""
+def test_queue_remove_updates_gui(tk_root: tk.Tk):
+    """Removing a job through the panel shrinks the listbox (no stale row)."""
 
-    # Create a root window
-    root = tk.Tk()
+    root = tk_root
 
     try:
         # Create mock app_state with subscribe capability
@@ -104,8 +103,4 @@ def test_queue_remove_updates_gui():
         print("✅ Test passed - Remove button works correctly!")
 
     finally:
-        root.destroy()
-
-
-if __name__ == "__main__":
-    test_queue_remove_updates_gui()
+        pass

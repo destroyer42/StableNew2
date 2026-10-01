@@ -12,8 +12,8 @@ from src.controller.job_service import JobService, SubmissionPolicy
 from src.queue.job_model import JobStatus
 from src.utils.config import ConfigManager
 from src.utils.thread_registry import get_thread_registry
+from tests.helpers.fake_pipeline_runner import FakePipelineRunner
 from tests.helpers.njr_factory import make_pipeline_njr
-from tests.journeys.fakes.fake_pipeline_runner import FakePipelineRunner
 
 
 class _BlockingFakePipelineRunner(FakePipelineRunner):
@@ -103,6 +103,9 @@ def test_pipeline_tab_pack_add_preview_and_queue_projection(
     monkeypatch.chdir(tmp_path)
     packs_dir = tmp_path / "packs"
     packs_dir.mkdir()
+    # Point the canonical PromptPack directory at the test pack; otherwise the app
+    # discovers the host's per-user packs instead of this fixture.
+    monkeypatch.setenv("STABLENEW_PROMPTPACK_DIR", str(packs_dir))
     (packs_dir / "native_one_row.json").write_text(
         json.dumps(
             {
@@ -143,7 +146,7 @@ def test_pipeline_tab_pack_add_preview_and_queue_projection(
             lambda: bool(controller.app_state.job_draft.packs)
             and bool(controller.app_state.preview_jobs),
         )
-        assert tab.preview_panel.add_to_queue_button.instate(["!disabled"])
+        _pump_until(tk_root, lambda: tab.preview_panel.add_to_queue_button.instate(["!disabled"]))
 
         # Production button callback; no direct state mutation or manual panel
         # refresh is used to deliver the queue projection.

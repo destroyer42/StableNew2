@@ -20,6 +20,7 @@ from src.queue.job_model import Job, JobPriority, JobStatus
 from src.queue.job_queue import JobQueue
 from src.queue.single_node_runner import SingleNodeJobRunner
 from src.queue.stub_runner import StubRunner
+from tests.helpers.njr_factory import make_queue_job
 
 # ---------------------------------------------------------------------------
 # Test: StubRunner DI
@@ -196,60 +197,38 @@ class TestLegacyAPICompatibility:
 
 
 class TestHistoryRecordingViaJobService:
-    """Test that JobService delegates history recording to history_service."""
+    """JobService history is a projection of the queue's single JobRepository."""
 
-    def test_job_service_records_completion_via_history_service(self) -> None:
-        """JobService._record_job_history calls history_service.record()."""
+    @staticmethod
+    def _service() -> tuple[JobService, JobQueue]:
         queue = JobQueue()
-        recorded_jobs = []
-
-        class TrackingHistoryService(NullHistoryService):
-            def record(self, job, *, result=None):
-                recorded_jobs.append((job.job_id, "completed", result))
-
-        history = TrackingHistoryService()
         service = JobService(
             job_queue=queue,
             runner_factory=lambda jq, rc: StubRunner(jq),
-            history_service=history,
         )
+        assert service.history_store is queue.repository
+        return service, queue
 
-        job = Job(
-            job_id="track-1",
-            priority=JobPriority.NORMAL,
-        )
-        job.result = {"images": ["test.png"]}
+    def test_job_service_history_reflects_queue_completion(self) -> None:
+        """Queue completion is recorded once in the shared repository (no separate history write)."""
+        service, queue = self._service()
+        queue.submit(make_queue_job("track-1"))
+        queue.mark_running("track-1")
+        queue.mark_completed("track-1", {"variants": [{"path": "test.png"}]})
 
-        service._record_job_history(job, JobStatus.COMPLETED)
+        entry = service.history_store.get_job("track-1")
+        assert entry is not None
+        assert entry.status == JobStatus.COMPLETED
+        assert service.history_store.get_artifact_references("track-1") == ["test.png"]
 
-        assert len(recorded_jobs) == 1
-        assert recorded_jobs[0][0] == "track-1"
-        assert recorded_jobs[0][1] == "completed"
+    def test_job_service_history_reflects_queue_failure(self) -> None:
+        """Queue failure is recorded once in the shared repository with its error message."""
+        service, queue = self._service()
+        queue.submit(make_queue_job("track-2"))
+        queue.mark_running("track-2")
+        queue.mark_failed("track-2", "test failure")
 
-    def test_job_service_records_failure_via_history_service(self) -> None:
-        """JobService._record_job_history calls history_service.record_failure()."""
-        queue = JobQueue()
-        recorded_failures = []
-
-        class TrackingHistoryService(NullHistoryService):
-            def record_failure(self, job, error=None):
-                recorded_failures.append((job.job_id, error))
-
-        history = TrackingHistoryService()
-        service = JobService(
-            job_queue=queue,
-            runner_factory=lambda jq, rc: StubRunner(jq),
-            history_service=history,
-        )
-
-        job = Job(
-            job_id="track-2",
-            priority=JobPriority.NORMAL,
-        )
-        job.error_message = "test failure"
-
-        service._record_job_history(job, JobStatus.FAILED)
-
-        assert len(recorded_failures) == 1
-        assert recorded_failures[0][0] == "track-2"
-        assert recorded_failures[0][1] == "test failure"
+        entry = service.history_store.get_job("track-2")
+        assert entry is not None
+        assert entry.status == JobStatus.FAILED
+        assert entry.error_message == "test failure"

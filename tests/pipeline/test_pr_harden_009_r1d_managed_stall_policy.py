@@ -198,6 +198,11 @@ def test_request_return_during_grace_does_not_escalate(monkeypatch) -> None:
     manager = _ProcessManager(client, managed=True)
     pipeline = _pipeline(client)
     _set_short_stall_policy(monkeypatch)
+    # The post-interrupt grace boundary itself is pinned deterministically by
+    # test_fake_clock_enforces_post_interrupt_grace. Here the client returns right
+    # after the interrupt, so use a generous real-time grace to keep the invariant
+    # ("returned inside grace => no escalation") independent of scheduler jitter.
+    monkeypatch.setattr("src.pipeline.executor.POST_INTERRUPT_STALL_GRACE_SEC", 5.0)
     monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: manager)
 
     result = pipeline._generate_images_with_progress(

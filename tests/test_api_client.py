@@ -6,6 +6,7 @@ import requests
 import requests_mock
 
 from src.api.client import SDWebUIClient
+from src.api.types import GenerateErrorCode
 
 API_BASE_URL = "http://127.0.0.1:7860"
 
@@ -279,7 +280,14 @@ class TestSDWebUIClient:
         )
 
 
-def test_generate_images_surfaces_crash_diagnostics_context():
+def test_generate_images_500_then_connection_loss_is_outcome_unknown_not_crash_recovery():
+    """A generation POST whose response is lost after dispatch is an unknown outcome.
+
+    PR-HARDEN-008 Phase 2B: it is never replayed and never classified as a WebUI crash, so the
+    runner's crash/connection recovery and queue-retry paths (which would replay the dispatched
+    job) are not triggered; the diagnostics context still identifies the request and session.
+    """
+
     client = SDWebUIClient()
     client.set_options_write_enabled(True)
     session_id = client._session_id
@@ -290,18 +298,22 @@ def test_generate_images_surfaces_crash_diagnostics_context():
             [
                 {"status_code": 500, "text": "server fatal error"},
                 {"exc": requests.exceptions.ConnectionError("Connection refused")},
+                {"status_code": 200, "json": {"images": ["must-never-be-requested"]}},
             ],
         )
 
         outcome = client.generate_images(stage="txt2img", payload={})
 
+        assert m.call_count == 2, "the lost-response POST must not be replayed"
+
     assert outcome.error is not None
+    assert outcome.error.code == GenerateErrorCode.OUTCOME_UNKNOWN
     diagnostics = outcome.error.details.get("diagnostics") if outcome.error.details else None
     assert diagnostics is not None
-    assert diagnostics.get("webui_unavailable") is True
-    assert diagnostics.get("crash_suspected") is True
+    assert diagnostics.get("webui_unavailable") is False
+    assert diagnostics.get("crash_suspected") is False
     request_summary = diagnostics.get("request_summary")
     assert request_summary is not None
     assert request_summary.get("endpoint") == "/sdapi/v1/txt2img"
+    assert request_summary.get("method") == "POST"
     assert request_summary.get("session_id") == session_id
-    assert diagnostics.get("previous_http_error") is not None

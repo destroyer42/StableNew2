@@ -17,6 +17,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from tests.helpers.optional_deps import requires_cv2
 from tools.qualification.vid170.graph import CharacterizationSpec, build_characterization_graph
 from tools.qualification.vid180 import native_pose
 from tools.qualification.vid180 import run as harness
@@ -95,10 +96,16 @@ def test_graph_at_480x832_contains_pose_video_and_never_face_video() -> None:
 
 def test_case_a_and_b_differ_only_by_pose_asset() -> None:
     a_spec = CharacterizationSpec(
-        reference_image="ref.png", pose_video_file="a.mp4", width=harness.WIDTH, height=harness.HEIGHT
+        reference_image="ref.png",
+        pose_video_file="a.mp4",
+        width=harness.WIDTH,
+        height=harness.HEIGHT,
     )
     b_spec = CharacterizationSpec(
-        reference_image="ref.png", pose_video_file="b.mp4", width=harness.WIDTH, height=harness.HEIGHT
+        reference_image="ref.png",
+        pose_video_file="b.mp4",
+        width=harness.WIDTH,
+        height=harness.HEIGHT,
     )
     a_graph = build_characterization_graph(a_spec)
     b_graph = build_characterization_graph(b_spec)
@@ -165,6 +172,7 @@ def test_native_pose_frame_count_and_fps_match_vid170() -> None:
 # --- deterministic native-resolution rendering ----------------------------------------------------
 
 
+@requires_cv2
 def test_render_arm_raise_native_is_deterministic_and_480x832(tmp_path: Path) -> None:
     first = native_pose.render_arm_raise_native(tmp_path / "a1.mp4")
     second = native_pose.render_arm_raise_native(tmp_path / "a2.mp4")
@@ -172,6 +180,7 @@ def test_render_arm_raise_native_is_deterministic_and_480x832(tmp_path: Path) ->
     assert first.exists() and first.stat().st_size > 0
 
 
+@requires_cv2
 def test_render_walk_forward_native_is_deterministic_and_480x832(tmp_path: Path) -> None:
     first = native_pose.render_walk_forward_native(tmp_path / "b1.mp4")
     second = native_pose.render_walk_forward_native(tmp_path / "b2.mp4")
@@ -232,7 +241,9 @@ def test_run_case_calls_the_stack_exactly_once_and_never_retries_a_failure(
     assert harness.run_case(args) == 1
     assert calls == ["attempt"]
 
-    data = json.loads((tmp_path / "reports" / "run_a" / "evidence.json").read_text(encoding="utf-8"))
+    data = json.loads(
+        (tmp_path / "reports" / "run_a" / "evidence.json").read_text(encoding="utf-8")
+    )
     assert data["status"] == "dependency_blocked"
 
 
@@ -259,7 +270,9 @@ def test_run_case_writes_partial_evidence_and_still_tears_down_on_exception(
         harness.run_case(args)
 
     assert teardown_calls == [1]
-    data = json.loads((tmp_path / "reports" / "run_b" / "evidence.json").read_text(encoding="utf-8"))
+    data = json.loads(
+        (tmp_path / "reports" / "run_b" / "evidence.json").read_text(encoding="utf-8")
+    )
     assert data["prompt_id"] == "in-flight"
     assert "GPU lost" in data["aborted"]
 
@@ -268,7 +281,9 @@ def test_run_case_rejects_unknown_case_without_submitting(tmp_path: Path) -> Non
     stack = harness._Stack()
     evidence: dict = {}
     with pytest.raises(ValueError, match="unknown case"):
-        harness._run_case(stack, argparse.Namespace(reference_image="ref.png", case="C"), evidence, tmp_path)
+        harness._run_case(
+            stack, argparse.Namespace(reference_image="ref.png", case="C"), evidence, tmp_path
+        )
 
 
 def test_teardown_stops_only_a_process_this_run_owns() -> None:

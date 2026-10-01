@@ -1,0 +1,36 @@
+name: Shutdown Leak Check (Manual, Self-Hosted)
+
+# Intentional status: manual-only, opt-in local process check. It launches the
+# real StableNew app (backend autostart disabled) several times on a self-hosted
+# Windows runner and inspects host process lists, so it is neither a required
+# check nor part of the informational full suite. Run it via workflow_dispatch.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  shutdown-leak:
+    runs-on: self-hosted
+    env:
+      STABLENEW_RUN_SHUTDOWN_LEAK_TEST: "1"
+      STABLENEW_SHUTDOWN_LEAK_ATTEMPTS: "3"
+      STABLENEW_AUTO_EXIT_SECONDS: "3"
+      STABLENEW_SHUTDOWN_LEAK_TIMEOUT_BUFFER: "5"
+      STABLENEW_DEBUG_SHUTDOWN: "1"
+    steps:
+      - name: Checkout StableNew
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install pytest
+
+      - name: Run shutdown leak test
+        run: python -m pytest tests/system/test_shutdown_no_leaks.py -q

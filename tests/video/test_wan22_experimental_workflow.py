@@ -133,6 +133,8 @@ def _backend(client, *, ram_gb: float = 24.0) -> ComfyWorkflowVideoBackend:
             ensure_running=lambda: True, _config=SimpleNamespace(base_url="http://x")
         ),
         readiness=_readiness(client.stats, ram_gb=ram_gb),
+        # Fake runtime-transition owner: never observe the host's real A1111/Comfy endpoints.
+        transition=SimpleNamespace(prepare_for=lambda _target: SimpleNamespace(ready=True)),
     )
 
 

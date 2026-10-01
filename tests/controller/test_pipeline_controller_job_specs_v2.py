@@ -101,7 +101,7 @@ class TestSingleJobRandomizerDisabled:
         )
 
         job_config = jobs[0].config
-        assert job_config.model == "my-special-model"
+        assert job_config["model"] == "my-special-model"
 
     def test_job_preserves_config_steps(self, job_builder: JobBuilderV2) -> None:
         """Job config preserves steps from base config."""
@@ -113,7 +113,7 @@ class TestSingleJobRandomizerDisabled:
         )
 
         job_config = jobs[0].config
-        assert job_config.steps == 42
+        assert job_config["steps"] == 42
 
     def test_job_preserves_config_cfg_scale(self, job_builder: JobBuilderV2) -> None:
         """Job config preserves cfg_scale from base config."""
@@ -125,7 +125,7 @@ class TestSingleJobRandomizerDisabled:
         )
 
         job_config = jobs[0].config
-        assert job_config.cfg_scale == 9.5
+        assert job_config["cfg_scale"] == 9.5
 
     def test_job_has_output_settings(self, job_builder: JobBuilderV2) -> None:
         """Job has correct output directory and hardcoded filename template."""
@@ -355,8 +355,8 @@ class TestBatchExpansionOnly:
         )
 
         for job in jobs:
-            assert job.config.model == "batch-model"
-            assert job.config.steps == 25
+            assert job.config["model"] == "batch-model"
+            assert job.config["steps"] == 25
 
 
 # ---------------------------------------------------------------------------
@@ -470,7 +470,7 @@ class TestToggleFlags:
             randomization_plan=make_randomizer_plan_disabled(),
         )
 
-        assert jobs[0].config.hires_enabled is True
+        assert jobs[0].config["hires_enabled"] is True
 
     def test_refiner_enabled_preserved(self, job_builder: JobBuilderV2) -> None:
         """refiner_enabled flag is preserved in job config."""
@@ -481,7 +481,7 @@ class TestToggleFlags:
             randomization_plan=make_randomizer_plan_disabled(),
         )
 
-        assert jobs[0].config.refiner_enabled is True
+        assert jobs[0].config["refiner_enabled"] is True
 
     def test_adetailer_enabled_preserved(self, job_builder: JobBuilderV2) -> None:
         """adetailer_enabled flag is preserved in job config."""
@@ -492,7 +492,7 @@ class TestToggleFlags:
             randomization_plan=make_randomizer_plan_disabled(),
         )
 
-        assert jobs[0].config.adetailer_enabled is True
+        assert jobs[0].config["adetailer_enabled"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -614,7 +614,7 @@ class TestEdgeCases:
 
     def test_dict_config_supported(self, job_builder: JobBuilderV2) -> None:
         """Dict configs are also supported."""
-        config = {"model": "dict-model", "steps": 15, "seed": 999}
+        config = {"model": "dict-model", "prompt": "dict prompt", "steps": 15, "seed": 999}
 
         jobs = job_builder.build_jobs(
             base_config=config,

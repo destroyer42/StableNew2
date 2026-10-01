@@ -125,7 +125,7 @@ Relevant tests include:
 
 - `tests/video/test_movie_clip_service.py`
 - `tests/gui_v2/test_movie_clips_tab_v2.py`
-- `tests/journeys/test_movie_clips_mvp.py`
+- `tests/video/test_movie_clips_tab_service_smoke.py`
 
 ## 7. Non-Goals
 

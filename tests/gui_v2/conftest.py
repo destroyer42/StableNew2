@@ -40,6 +40,74 @@ DEFAULT_UPSCALE_CFG = {
     "denoising_strength": 0.35,
 }
 
+
+@pytest.fixture(autouse=True)
+def _isolate_prompt_pack_dir(monkeypatch: pytest.MonkeyPatch, tmp_path_factory) -> None:
+    """Keep GUI tests off the owner's per-user PromptPack directory.
+
+    ``resolve_prompt_pack_dir`` falls back to ``%LOCALAPPDATA%/StableNew/PromptPacks``
+    when no explicit directory is injected, which leaks the host's real packs into
+    (and lets tests write into) the owner's storage. Tests that inject an explicit
+    ``packs_dir`` are unaffected because explicit injection wins.
+    """
+
+    monkeypatch.setenv(
+        "STABLENEW_PROMPTPACK_DIR", str(tmp_path_factory.mktemp("isolated_promptpacks"))
+    )
+
+
+@pytest.fixture(autouse=True)
+def _gui_tests_never_probe_a_live_webui(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GUI tests must not depend on whether a WebUI is reachable on the host.
+
+    ``WebUIConnectionController.ensure_connected`` probes the configured endpoint; with
+    nothing listening (CI) the controller enters ERROR and blocks Run, while on a machine
+    with A1111 running the same test passes. Report READY without touching the network.
+    Tests of the real connection workflow live in ``tests/controller`` and tests here that
+    need their own behavior patch the class themselves.
+    """
+
+    from src.controller import webui_connection_controller as connection
+
+    def _ready(self, autostart: bool = True):
+        self._set_state(connection.WebUIConnectionState.READY)
+        return connection.WebUIConnectionState.READY
+
+    monkeypatch.setattr(connection.WebUIConnectionController, "ensure_connected", _ready)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_gui_workspace_state(
+    monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
+) -> None:
+    """Redirect process-wide mutable GUI state away from the repository workspace.
+
+    Production defaults resolve UI/sidebar/preview state under ``<repo>/state``.
+    Without this, tests read state persisted by earlier tests (for example the
+    content-visibility mode or auto-run flag) and write into the operator's real
+    workspace when run from the owner's checkout, making results order- and
+    host-dependent. ``workspace_paths`` itself is deliberately left alone: moving
+    its root also moves the Asset Registry cache and forces a cold model scan in
+    every test.
+    """
+
+    import src.gui.preview_panel_v2 as preview_panel_v2
+    import src.gui.sidebar_panel_v2 as sidebar_panel_v2
+    import src.photo_optimize.store as photo_store
+    import src.services.ui_state_store as ui_state_store
+
+    root = tmp_path_factory.mktemp("gui_workspace")
+    monkeypatch.setattr(ui_state_store, "UI_STATE_PATH", root / "state" / "ui_state.json")
+    monkeypatch.setattr(ui_state_store, "_global_store", None)
+    monkeypatch.setattr(photo_store, "_global_store", None)
+    monkeypatch.setattr(
+        sidebar_panel_v2, "SIDEBAR_STATE_PATH", root / "state" / "sidebar_state.json"
+    )
+    monkeypatch.setattr(
+        preview_panel_v2, "PREVIEW_STATE_PATH", root / "state" / "preview_panel_state.json"
+    )
+
+
 simpledialog_stub = SimpleNamespace(
     askstring=lambda *args, **kwargs: None,
 )
@@ -173,9 +241,21 @@ def tk_root():
     except tk.TclError as exc:
         pytest.skip(f"Tkinter/Tcl not available: {exc}")
     root.withdraw()
+    # Masterless ``tk.BooleanVar()``/``tk.StringVar()`` bind to tkinter's default
+    # root. Other GUI tests keep a process-wide shared root alive, which then stays
+    # the default root, so such variables would live in a different Tcl interpreter
+    # than this test's widgets (checkbuttons then report the "alternate" state and
+    # ignore toggles). Make this test's root the default for the test's duration.
+    previous_default_root = getattr(tk, "_default_root", None)
+    tk._default_root = root  # noqa: SLF001
     yield root
     try:
         root.destroy()
+    except Exception:
+        pass
+    try:
+        if previous_default_root is not None and previous_default_root.winfo_exists():
+            tk._default_root = previous_default_root  # noqa: SLF001
     except Exception:
         pass
 

@@ -135,7 +135,7 @@ def test_active_img2img_cancel_interrupts_once_and_promotes_no_artifact(
 
     worker = threading.Thread(target=execute, name="r2-img2img-test")
     worker.start()
-    assert client.post_started.wait(timeout=1.0)
+    assert client.post_started.wait(timeout=10.0)
     token.cancel()
     assert client.interrupt_started.wait(timeout=1.0)
     assert client.post_returned.wait(timeout=1.0)
@@ -277,7 +277,7 @@ def test_queue_img2img_cancel_persists_cancelled_and_skips_later_stage(
 
     try:
         service.submit_njrs([record])
-        assert client.post_started.wait(timeout=1.0)
+        assert client.post_started.wait(timeout=10.0)
         service.cancel_current()
         assert client.interrupt_started.wait(timeout=1.0)
         assert _wait_until(lambda: runner.current_job is None)

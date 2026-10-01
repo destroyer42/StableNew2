@@ -9,6 +9,7 @@ import tkinter as tk
 
 from src.gui.preview_panel_v2 import PreviewPanelV2
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StagePromptInfo
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def _build_test_job() -> NormalizedJobRecord:
@@ -20,8 +21,10 @@ def _build_test_job() -> NormalizedJobRecord:
         global_negative_applied=True,
         global_negative_terms="GLOBAL_BAD",
     )
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id="job-123",
+        positive_prompt="pack prompt final",
+        negative_prompt="bad quality, GLOBAL_BAD",
         config={
             "model": "test-model",
             "prompt": "pack prompt final",
@@ -39,8 +42,6 @@ def _build_test_job() -> NormalizedJobRecord:
         variant_total=1,
         batch_index=0,
         batch_total=1,
-        created_ts=0.0,
-        randomizer_summary=None,
         txt2img_prompt_info=prompt_info,
     )
 

@@ -34,7 +34,7 @@ class FakeResourceService:
 
 
 @pytest.mark.gui
-def test_phase1_pipeline_journey_v2(tk_root: tk.Tk) -> None:
+def test_resources_populate_base_generation_panel_and_run_enqueues_one_job(tk_root: tk.Tk) -> None:
     job_service, job_queue, _ = make_stubbed_job_service_with_queue()
     controller = AppController(None, threaded=False, pipeline_runner=None, job_service=job_service)
     controller.resource_service = FakeResourceService()
@@ -44,7 +44,7 @@ def test_phase1_pipeline_journey_v2(tk_root: tk.Tk) -> None:
                 pack_id="learning_phase1_pack",
                 pack_name="learning_phase1_pack",
                 config_snapshot={
-                    "prompt": "phase1 journey prompt",
+                    "prompt": "phase1 prompt",
                     "model": "model_a",
                     "sampler": "Sampler A",
                     "steps": 20,
@@ -64,18 +64,17 @@ def test_phase1_pipeline_journey_v2(tk_root: tk.Tk) -> None:
     try:
         controller.refresh_resources_from_webui()
 
-        stage_cards = window.pipeline_tab.stage_cards_panel
-        txt_card = stage_cards.txt2img_card
-        sampler_values = tuple(txt_card.sampler_combo["values"])
-        assert "Sampler A" in sampler_values
-        assert "Model A" in tuple(txt_card.model_combo["values"])
-        assert "VAE A" in tuple(txt_card.vae_combo["values"])
-        assert "Scheduler A" in tuple(txt_card.scheduler_combo["values"])
+        # Shared generation controls live on the sidebar's base generation panel.
+        base_panel = window.pipeline_tab.sidebar.base_generation_panel
+        assert "Sampler A" in tuple(base_panel._sampler_combo["values"])
+        assert "Model A" in tuple(base_panel._model_combo["values"])
+        assert "VAE A" in tuple(base_panel._vae_combo["values"])
+        assert "Scheduler A" in tuple(base_panel._scheduler_combo["values"])
 
-        txt_card.model_var.set("Model A")
-        txt_card.vae_var.set("VAE A")
-        txt_card.sampler_var.set("Sampler A")
-        txt_card.scheduler_var.set("Scheduler A")
+        base_panel.model_var.set("Model A")
+        base_panel.vae_var.set("VAE A")
+        base_panel.sampler_var.set("Sampler A")
+        base_panel.scheduler_var.set("Scheduler A")
 
         controller.state.current_config.model_name = "model_a"
         controller.state.current_config.sampler_name = "Sampler A"

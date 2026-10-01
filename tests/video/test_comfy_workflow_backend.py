@@ -13,25 +13,12 @@ from src.video import (
     DepthResolutionResult,
     VideoExecutionRequest,
 )
-from src.video.workflow_catalog import build_builtin_workflow_specs
-from src.video.workflow_contracts import WorkflowSpec
 from src.video.workflow_registry import WorkflowRegistry
+from tests.helpers.video_contract_registry import build_ltx_contract_registry
 
 
 def _backend_contract_registry() -> WorkflowRegistry:
-    """Test-only registry for generic backend behavior of retained LTX metadata.
-
-    The production catalog keeps these entries disabled; this fixture never
-    reaches the production registry or an operator-facing surface.
-    """
-
-    registry = WorkflowRegistry()
-    for spec in build_builtin_workflow_specs():
-        values = {field: getattr(spec, field) for field in spec.__dataclass_fields__}
-        if spec.workflow_id.startswith("ltx_"):
-            values["governance_state"] = "approved"
-        registry.register(WorkflowSpec(**values))
-    return registry
+    return build_ltx_contract_registry()
 
 
 @pytest.fixture(autouse=True)
@@ -40,6 +27,12 @@ def _use_test_only_ltx_contract_registry(monkeypatch) -> None:
         "src.video.comfy_workflow_backend.build_default_workflow_registry",
         _backend_contract_registry,
     )
+
+
+def _ready_transition() -> object:
+    """Fake runtime-transition owner: the host's real A1111/Comfy endpoints are never observed."""
+
+    return SimpleNamespace(prepare_for=lambda _target: SimpleNamespace(ready=True))
 
 
 def _ready_process_manager(base_url: str = "http://127.0.0.1:8188") -> object:
@@ -159,6 +152,7 @@ def test_comfy_workflow_backend_executes_ltx_workflow_and_writes_manifest(
     backend = ComfyWorkflowVideoBackend(
         client=client,
         process_manager=_ready_process_manager(),
+        transition=_ready_transition(),
         history_poll_interval=0.01,
         history_timeout=1.0,
     )
@@ -343,6 +337,7 @@ def test_comfy_workflow_backend_execute_segment_stamps_provenance(
     backend = ComfyWorkflowVideoBackend(
         client=client,
         process_manager=_ready_process_manager(),
+        transition=_ready_transition(),
         history_poll_interval=0.01,
         history_timeout=1.0,
     )
@@ -510,6 +505,7 @@ def test_comfy_workflow_backend_executes_conditioned_ltx_workflow_with_resolved_
         client=client,
         depth_map_resolver=depth_resolver,
         process_manager=_ready_process_manager(),
+        transition=_ready_transition(),
         history_poll_interval=0.01,
         history_timeout=1.0,
     )
@@ -632,6 +628,7 @@ def test_comfy_workflow_backend_promotes_reencoded_secondary_motion_video(
     backend = ComfyWorkflowVideoBackend(
         client=client,
         process_manager=_ready_process_manager(),
+        transition=_ready_transition(),
         history_poll_interval=0.01,
         history_timeout=1.0,
     )
@@ -749,6 +746,7 @@ def test_comfy_workflow_backend_preserves_original_video_when_secondary_motion_u
     backend = ComfyWorkflowVideoBackend(
         client=client,
         process_manager=_ready_process_manager(),
+        transition=_ready_transition(),
         history_poll_interval=0.01,
         history_timeout=1.0,
     )

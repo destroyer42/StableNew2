@@ -118,9 +118,14 @@ class SequentialIdGenerator:
         return f"job-{self.counter}"
 
 
-def test_prompt_pack_job_builder_creates_normalized_jobs() -> None:
+def test_prompt_pack_job_builder_creates_normalized_jobs(tmp_path: Path) -> None:
+    packs_dir = tmp_path / "packs"
+    packs_dir.mkdir()
+    _write_native_pack(
+        packs_dir / "SDXL_angelic_warriors_Realistic.json", text="An angelic knight in armor"
+    )
     builder = PromptPackNormalizedJobBuilder(
-        config_manager=ConfigManager(),
+        config_manager=ConfigManager(presets_dir=tmp_path / "presets", packs_dir=packs_dir),
         job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
     )
 

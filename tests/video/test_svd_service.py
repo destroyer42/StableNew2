@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import pytest
 from PIL import Image
 
+from src.video import svd_service as svd_service_module
 from src.video.svd_config import SVDInferenceConfig
 from src.video.svd_errors import SVDInferenceError, SVDModelLoadError
 from src.video.svd_service import SVDService
@@ -16,7 +17,10 @@ def test_is_available_returns_actionable_message_for_missing_torch(monkeypatch) 
             raise ModuleNotFoundError("No module named 'torch'", name="torch")
         raise AssertionError(f"unexpected import: {name}")
 
-    monkeypatch.setattr("src.video.svd_service.importlib.import_module", _import_module)
+    # Module-local: patching importlib.import_module globally breaks later string-path monkeypatches.
+    monkeypatch.setattr(
+        svd_service_module, "importlib", SimpleNamespace(import_module=_import_module)
+    )
 
     available, reason = SVDService().is_available()
 
@@ -47,8 +51,13 @@ def test_clear_model_cache_releases_pipeline_hooks_and_cuda_cache(monkeypatch) -
         )
     )
     monkeypatch.setattr(
-        "src.video.svd_service.importlib.import_module",
-        lambda name: fake_torch if name == "torch" else (_ for _ in ()).throw(AssertionError(name)),
+        svd_service_module,
+        "importlib",
+        SimpleNamespace(
+            import_module=lambda name: fake_torch
+            if name == "torch"
+            else (_ for _ in ()).throw(AssertionError(name))
+        ),
     )
     SVDService._pipeline_cache = {
         ("model-a", "float16", "fp16", None): _FakePipeline(),
@@ -91,8 +100,13 @@ def test_generate_frames_releases_inference_images_and_cuda_cache(monkeypatch, t
     monkeypatch.setattr(service, "_get_pipeline", lambda _config: _FakePipeline())
     monkeypatch.setattr(service, "_release_runtime_memory", lambda: calls.append("release"))
     monkeypatch.setattr(
-        "src.video.svd_service.importlib.import_module",
-        lambda name: SimpleNamespace(Generator=lambda device: None) if name == "torch" else None,
+        svd_service_module,
+        "importlib",
+        SimpleNamespace(
+            import_module=lambda name: SimpleNamespace(Generator=lambda device: None)
+            if name == "torch"
+            else None
+        ),
     )
 
     frames = service.generate_frames(
@@ -123,8 +137,13 @@ def test_generate_frames_passes_prepared_geometry_to_diffusers(
     monkeypatch.setattr(service, "_get_pipeline", lambda _config: _FakePipeline())
     monkeypatch.setattr(service, "_release_runtime_memory", lambda: None)
     monkeypatch.setattr(
-        "src.video.svd_service.importlib.import_module",
-        lambda name: SimpleNamespace(Generator=lambda device: None) if name == "torch" else None,
+        svd_service_module,
+        "importlib",
+        SimpleNamespace(
+            import_module=lambda name: SimpleNamespace(Generator=lambda device: None)
+            if name == "torch"
+            else None
+        ),
     )
 
     service.generate_frames(
@@ -153,8 +172,13 @@ def test_generate_frames_rejects_mismatched_output_geometry_without_repair(
     monkeypatch.setattr(service, "_get_pipeline", lambda _config: _FakePipeline())
     monkeypatch.setattr(service, "_release_runtime_memory", lambda: None)
     monkeypatch.setattr(
-        "src.video.svd_service.importlib.import_module",
-        lambda name: SimpleNamespace(Generator=lambda device: None) if name == "torch" else None,
+        svd_service_module,
+        "importlib",
+        SimpleNamespace(
+            import_module=lambda name: SimpleNamespace(Generator=lambda device: None)
+            if name == "torch"
+            else None
+        ),
     )
 
     with pytest.raises(
@@ -188,8 +212,11 @@ def test_load_pipeline_prefers_cached_local_snapshot_before_network(monkeypatch,
     )
     fake_diffusers = SimpleNamespace(StableVideoDiffusionPipeline=_FakePipelineCls)
     monkeypatch.setattr(
-        "src.video.svd_service.importlib.import_module",
-        lambda name: fake_torch if name == "torch" else fake_diffusers,
+        svd_service_module,
+        "importlib",
+        SimpleNamespace(
+            import_module=lambda name: fake_torch if name == "torch" else fake_diffusers
+        ),
     )
     monkeypatch.setattr(
         "src.video.svd_service.resolve_svd_cache_dir",
@@ -230,8 +257,11 @@ def test_load_pipeline_permits_online_acquisition_when_local_only_is_disabled(
     )
     fake_diffusers = SimpleNamespace(StableVideoDiffusionPipeline=_FakePipelineCls)
     monkeypatch.setattr(
-        "src.video.svd_service.importlib.import_module",
-        lambda name: fake_torch if name == "torch" else fake_diffusers,
+        svd_service_module,
+        "importlib",
+        SimpleNamespace(
+            import_module=lambda name: fake_torch if name == "torch" else fake_diffusers
+        ),
     )
     monkeypatch.setattr(
         "src.video.svd_service.resolve_svd_cache_dir",
@@ -270,8 +300,11 @@ def test_load_pipeline_local_only_missing_snapshot_never_uses_remote(monkeypatch
     )
     fake_diffusers = SimpleNamespace(StableVideoDiffusionPipeline=_FakePipelineCls)
     monkeypatch.setattr(
-        "src.video.svd_service.importlib.import_module",
-        lambda name: fake_torch if name == "torch" else fake_diffusers,
+        svd_service_module,
+        "importlib",
+        SimpleNamespace(
+            import_module=lambda name: fake_torch if name == "torch" else fake_diffusers
+        ),
     )
     monkeypatch.setattr(
         "src.video.svd_service.resolve_svd_cache_dir",

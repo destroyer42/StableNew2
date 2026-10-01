@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from unittest.mock import Mock
 
 from PIL import Image
 
@@ -68,10 +67,22 @@ def test_svd_secondary_motion_integration_writes_manifest_and_container_summary(
         ),
     )
     monkeypatch.setattr("src.video.svd_runner.export_video_mp4", lambda **_kwargs: output_video)
-    write_container_metadata = Mock(return_value=True)
-    monkeypatch.setattr(
-        "src.video.svd_runner.write_video_container_metadata", write_container_metadata
-    )
+    # MP4 container metadata is now embedded by the portable-provenance step (the legacy
+    # write_video_container_metadata call is GIF-only); capture the public metadata it embeds.
+    embedded: list[dict[str, object]] = []
+
+    def _capture_embed(_self, *, public_metadata, **_kwargs):
+        embedded.append(dict(public_metadata))
+        return {
+            "schema": "stablenew.video-provenance.v2.6",
+            "encoding": "raw",
+            "payload_sha256": "a" * 64,
+            "source_image_sha256": "b" * 64,
+            "source_provenance_status": "missing",
+            "video_media_content_sha256": "c" * 64,
+        }
+
+    monkeypatch.setattr(SVDRunner, "_embed_portable_svd_provenance", _capture_embed)
 
     class _FakeService:
         def generate_frames(self, **_kwargs):
@@ -92,6 +103,7 @@ def test_svd_secondary_motion_integration_writes_manifest_and_container_summary(
         == "frame_directory_worker"
     )
 
-    container_payload = write_container_metadata.call_args.args[1]
+    assert len(embedded) == 1
+    container_payload = embedded[0]
     assert container_payload["secondary_motion_summary"]["status"] == "applied"
     assert container_payload["secondary_motion_summary"]["policy_id"] == "svd_secondary_motion_v1"

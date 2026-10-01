@@ -6,6 +6,7 @@ from src.controller import job_service as job_service_module
 from src.controller.job_service import JobService
 from src.queue.job_model import Job
 from src.queue.job_queue import JobQueue
+from tests.helpers.njr_factory import make_queue_job
 
 
 class DummyRunner:
@@ -33,7 +34,7 @@ def test_cleanup_external_processes_terminates_pids(monkeypatch) -> None:
     job_queue = JobQueue()
     runner = DummyRunner()
     service = JobService(job_queue, runner)
-    job = Job(job_id="job-123")
+    job = make_queue_job("job-123")
     job_queue.submit(job)
     service.register_external_process(job.job_id, 42)
 
@@ -84,7 +85,7 @@ def test_register_external_process_records_job_metadata() -> None:
     job_queue = JobQueue()
     runner = DummyRunner()
     service = JobService(job_queue, runner)
-    job = Job(job_id="job-meta")
+    job = make_queue_job("job-meta")
     job_queue.submit(job)
 
     service.register_external_process(job.job_id, 99)
@@ -96,7 +97,7 @@ def test_cancel_current_uses_queue_running_job(monkeypatch) -> None:
     job_queue = JobQueue()
     runner = DummyRunner()
     service = JobService(job_queue, runner)
-    job = Job(job_id="job-run")
+    job = make_queue_job("job-run")
     job_queue.submit(job)
     job_queue.mark_running(job.job_id)
     registered: list[tuple[str, str]] = []

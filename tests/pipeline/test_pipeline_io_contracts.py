@@ -58,7 +58,7 @@ def test_pipeline_runner_returns_result_and_learning_record(tmp_path):
             "preset_name": "preset-one",
             "metadata": {"run_label": "test"},
         },
-        randomizer_mode="fanout",
+        variant_mode="fanout",
         variant_total=len(variant_cfgs),
         stage_chain=[make_stage_config()],
         base_model="Base",
@@ -78,7 +78,21 @@ def test_pipeline_runner_returns_result_and_learning_record(tmp_path):
     assert result.run_id
     assert result.randomizer_plan_size == len(variant_cfgs)
     assert result.metadata.get("variant_configs") == variant_cfgs
-    assert result.randomizer_mode == "fanout"
+    assert result.randomizer_mode == "fanout"  # sourced from njr.variant_mode
     assert len(result.learning_records) == 1
+    assert result.learning_records[0].randomizer_mode == "fanout"
     assert result.learning_records[0] in writer.records
     assert callback_records[0] == result.learning_records[0]
+
+
+def test_default_variant_mode_projects_standard(tmp_path):
+    runner = PipelineRunner(DummyClient(), DummyLogger())
+    njr = make_pipeline_njr(
+        config={"prompt": "prompt", "model": "Base"}, stage_chain=[make_stage_config()]
+    )
+
+    result = runner.run_njr(njr, cancel_token=_cancel_token())
+
+    assert njr.variant_mode == "standard"
+    assert result.randomizer_mode == "standard"
+    assert result.to_dict()["randomizer_mode"] == "standard"

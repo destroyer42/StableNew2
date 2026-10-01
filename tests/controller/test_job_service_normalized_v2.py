@@ -1,57 +1,32 @@
 from __future__ import annotations
 
-import time
 import uuid
 from collections.abc import Mapping
 
 import pytest
 
 from src.controller.job_service import JobService
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.queue.job_model import Job
 from src.queue.job_queue import JobQueue
 from src.queue.stub_runner import StubRunner
 from src.utils.snapshot_builder_v2 import build_job_snapshot
+from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
 
 def _make_normalized_record() -> NormalizedJobRecord:
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id=str(uuid.uuid4()),
         config={"prompt": "test", "model": "sdxl", "steps": 20},
-        path_output_dir="output",
-        filename_template="{seed}",
-        seed=1234,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=time.time(),
-        prompt_pack_id="core-pack",
-        prompt_pack_name="Core Pack",
-        prompt_pack_row_index=0,
         positive_prompt="(<embedding:test>) test prompt",
         negative_prompt="neg: bad anatomy",
         positive_embeddings=["test"],
         negative_embeddings=["bad_anatomy"],
-        lora_tags=[],
-        matrix_slot_values={},
-        steps=20,
-        cfg_scale=7.5,
-        width=512,
-        height=512,
-        sampler_name="Euler a",
-        scheduler="ddim",
-        base_model="sdxl",
-        stage_chain=[
-            StageConfig(
-                stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.5, sampler_name="Euler a"
-            )
-        ],
-        loop_type="pipeline",
-        loop_count=1,
-        images_per_prompt=1,
-        run_mode="QUEUE",
-        queue_source="ADD_TO_QUEUE",
+        stage_chain=[make_stage_config("txt2img", steps=20, cfg_scale=7.5)],
+        prompt_pack_id="core-pack",
+        prompt_pack_name="Core Pack",
+        prompt_pack_row_index=0,
+        seed=1234,
     )
 
 

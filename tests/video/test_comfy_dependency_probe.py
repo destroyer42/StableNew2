@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from src.video import ComfyDependencyProbe, build_default_workflow_registry
+from src.video import ComfyDependencyProbe
+from tests.helpers.video_contract_registry import build_ltx_contract_registry
 
 
 def test_comfy_dependency_probe_marks_workflow_ready_when_dependencies_present() -> None:
-    registry = build_default_workflow_registry()
+    registry = build_ltx_contract_registry()
     spec = registry.get("ltx_multiframe_anchor_v1")
     probe = ComfyDependencyProbe()
 
@@ -23,7 +24,7 @@ def test_comfy_dependency_probe_marks_workflow_ready_when_dependencies_present()
 
 
 def test_comfy_dependency_probe_reports_missing_required_dependencies() -> None:
-    registry = build_default_workflow_registry()
+    registry = build_ltx_contract_registry()
     spec = registry.get("ltx_multiframe_anchor_v1")
     probe = ComfyDependencyProbe()
 
@@ -38,7 +39,7 @@ def test_comfy_dependency_probe_reports_missing_required_dependencies() -> None:
 
 
 def test_comfy_dependency_probe_allows_unverified_checkpoint_when_model_inventory_absent() -> None:
-    registry = build_default_workflow_registry()
+    registry = build_ltx_contract_registry()
     spec = registry.get("ltx_multiframe_anchor_v1")
     probe = ComfyDependencyProbe()
 

@@ -3,10 +3,12 @@ from copy import deepcopy
 from pathlib import Path
 from unittest.mock import MagicMock
 
-from src.controller.runtime_state import CancelToken
+import pytest
+
+from src.controller.runtime_state import CancellationError, CancelToken
 from src.pipeline.job_models_v2 import NormalizedJobRecord
 from src.pipeline.pipeline_runner import PipelineRunner
-from src.pipeline.stage_sequencer import StageConfig, StageMetadata
+from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 
 
 class FakeConfigManager:
@@ -18,6 +20,8 @@ class FakeConfigManager:
 
 
 class RecordingPipeline:
+    """Fake executor whose stage signatures mirror the real ``Pipeline`` stage entry points."""
+
     def __init__(self):
         self.cancel_tokens = []
         self.stage_events: list[dict] = []
@@ -29,47 +33,75 @@ class RecordingPipeline:
         return list(self.stage_events)
 
     def run_txt2img_stage(
-        self, prompt, negative_prompt, config, run_dir, image_name, cancel_token=None
+        self,
+        prompt,
+        negative_prompt,
+        config,
+        output_dir,
+        image_name,
+        cancel_token=None,
+        learning_sample_names=False,
     ):
         self.cancel_tokens.append(cancel_token)
         # Simulate stage metadata without touching the filesystem
-        return {"path": str(Path(run_dir) / f"{image_name}.png"), "stage": "txt2img"}
+        return {"path": str(Path(output_dir) / f"{image_name}.png"), "stage": "txt2img"}
 
     def run_img2img_stage(
-        self, input_image_path, prompt, config, run_dir, image_name, cancel_token=None
+        self, input_image_path, prompt, config, output_dir, image_name, cancel_token=None
     ):
         self.cancel_tokens.append(cancel_token)
-        return {"path": str(Path(run_dir) / f"{image_name}_i2i.png"), "stage": "img2img"}
+        return {"path": str(Path(output_dir) / f"{image_name}_i2i.png"), "stage": "img2img"}
 
-    def run_upscale_stage(self, input_image_path, config, run_dir, image_name, cancel_token=None):
+    def run_upscale_stage(
+        self, input_image_path, config, output_dir, image_name, cancel_token=None
+    ):
         self.cancel_tokens.append(cancel_token)
-        return {"path": str(Path(run_dir) / f"{image_name}_up.png"), "stage": "upscale"}
+        return {"path": str(Path(output_dir) / f"{image_name}_up.png"), "stage": "upscale"}
 
     def run_adetailer_stage(
-        self, input_image_path, config, run_dir, image_name, prompt=None, cancel_token=None
+        self,
+        input_image_path,
+        config,
+        output_dir,
+        image_name,
+        prompt=None,
+        negative_prompt=None,
+        cancel_token=None,
     ):
         self.cancel_tokens.append(cancel_token)
-        return {"path": str(Path(run_dir) / f"{image_name}_ad.png"), "stage": "adetailer"}
+        return {"path": str(Path(output_dir) / f"{image_name}_ad.png"), "stage": "adetailer"}
 
 
 class CancelAfterTxt2ImgPipeline(RecordingPipeline):
+    """Cancels during txt2img; later stages abort at stage start like the real executor."""
+
     def __init__(self):
         super().__init__()
-        self.upscale_called = False
+        self.upscale_saw_cancelled_token = False
 
     def run_txt2img_stage(
-        self, prompt, negative_prompt, config, run_dir, image_name, cancel_token=None
+        self,
+        prompt,
+        negative_prompt,
+        config,
+        output_dir,
+        image_name,
+        cancel_token=None,
+        learning_sample_names=False,
     ):
         self.cancel_tokens.append(cancel_token)
         if cancel_token:
             cancel_token.cancel()
-        return {"path": str(Path(run_dir) / f"{image_name}.png"), "stage": "txt2img"}
+        return {"path": str(Path(output_dir) / f"{image_name}.png"), "stage": "txt2img"}
 
-    def run_upscale_stage(self, input_image_path, config, run_dir, image_name, cancel_token=None):
-        self.upscale_called = True
-        self.cancel_tokens.append(cancel_token)
+    def run_upscale_stage(
+        self, input_image_path, config, output_dir, image_name, cancel_token=None
+    ):
+        self.upscale_saw_cancelled_token = bool(cancel_token and cancel_token.is_cancelled())
+        if self.upscale_saw_cancelled_token:
+            raise CancellationError("Cancelled during upscale stage start")
         return super().run_upscale_stage(
-            input_image_path, config, run_dir, image_name, cancel_token=cancel_token
+            input_image_path, config, output_dir, image_name, cancel_token=cancel_token
         )
 
 
@@ -108,36 +140,26 @@ def _minimal_config(enable_upscale: bool = False):
 def _build_record(
     tmp_path: Path, prompt: str, include_upscale: bool = False
 ) -> NormalizedJobRecord:
-    stage_payload = {
-        "model": "model-a",
-        "sampler_name": "Euler",
-        "steps": 20,
-        "cfg_scale": 7.0,
-    }
-    stage = StageConfig(enabled=True, payload=stage_payload, metadata=StageMetadata())
-    chain = [stage]
+    chain = [
+        make_stage_config("txt2img", model="model-a", sampler_name="Euler", steps=20, cfg_scale=7.0)
+    ]
     if include_upscale:
-        chain.append(
-            StageConfig(enabled=True, payload={"upscaler": "nearest"}, metadata=StageMetadata())
-        )
-    return NormalizedJobRecord(
+        chain.append(make_stage_config("upscale", extra={"upscaler": "nearest"}))
+    return make_pipeline_njr(
         job_id=str(uuid.uuid4()),
-        config={"prompt": prompt, "model": "model-a", "sampler": "Euler"},
+        config={
+            "prompt": prompt,
+            "model": "model-a",
+            "sampler_name": "Euler",
+            "steps": 20,
+            "cfg_scale": 7.0,
+            "width": 512,
+            "height": 512,
+        },
         path_output_dir=str(tmp_path / "runs"),
         filename_template="{seed}",
         seed=123,
-        variant_index=0,
-        variant_total=1,
-        batch_index=0,
-        batch_total=1,
-        created_ts=0.0,
-        randomizer_summary=None,
         stage_chain=chain,
-        steps=20,
-        cfg_scale=7.0,
-        width=512,
-        height=512,
-        sampler_name="Euler",
         base_model="model-a",
         positive_prompt=prompt,
     )
@@ -160,7 +182,11 @@ def test_pipeline_runner_passes_cancel_token_to_stages(monkeypatch, tmp_path):
     assert pipeline.cancel_tokens == [cancel_token]
 
 
-def test_pipeline_runner_honors_cancellation_between_stages(monkeypatch, tmp_path):
+def test_pipeline_runner_propagates_stage_cancellation_after_earlier_stage_cancels(
+    monkeypatch, tmp_path
+):
+    """Stage-level guards own cancellation: the runner hands the cancelled token to the next
+    stage and lets that stage's CancellationError propagate instead of recording a failure."""
     config_manager = FakeConfigManager(_minimal_config(enable_upscale=True))
     pipeline = CancelAfterTxt2ImgPipeline()
     runner = _build_runner(tmp_path, config_manager, pipeline)
@@ -171,9 +197,9 @@ def test_pipeline_runner_honors_cancellation_between_stages(monkeypatch, tmp_pat
     cancel_token = CancelToken()
     record = _build_record(tmp_path, "cancel me", include_upscale=True)
 
-    result = runner.run_njr(record, cancel_token)
+    with pytest.raises(CancellationError):
+        runner.run_njr(record, cancel_token)
 
-    assert pipeline.upscale_called is False
-    assert result.stage_events
-    assert result.stage_events[-1]["stage"] == "txt2img"
+    assert pipeline.upscale_saw_cancelled_token is True
     assert pipeline.cancel_tokens[0] is cancel_token
+    assert all(token is cancel_token for token in pipeline.cancel_tokens)

@@ -1,15 +1,16 @@
+from dataclasses import replace
 from datetime import datetime
 
 from src.pipeline.job_models_v2 import (
     JobStatusV2,
     LoRATag,
-    NormalizedJobRecord,
     PackUsageInfo,
     StageConfig,
     StagePromptInfo,
     UnifiedJobSummary,
 )
 from src.queue.job_model import Job
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 def _make_stage_info() -> StagePromptInfo:
@@ -24,21 +25,19 @@ def _make_stage_info() -> StagePromptInfo:
 
 
 def test_normalized_job_record_generates_summary() -> None:
-    record = NormalizedJobRecord(
+    record = make_pipeline_njr(
         job_id="job-123",
         config={
             "prompt": "manual prompt",
             "model": "juggernaut",
-            "stages": ["txt2img", "upscale"],
+            "sampler_name": "Euler a",
+            "steps": 34,
+            "cfg_scale": 6.1,
+            "width": 1216,
+            "height": 832,
         },
         path_output_dir="out",
         filename_template="{seed}",
-        created_ts=1700000000.0,
-        txt2img_prompt_info=_make_stage_info(),
-        pack_usage=[
-            PackUsageInfo(pack_name="pack-a"),
-            PackUsageInfo(pack_name="pack-b"),
-        ],
         prompt_pack_id="pack-angelic",
         prompt_pack_name="Angelic Warriors",
         positive_prompt="masterpiece prompt",
@@ -49,22 +48,33 @@ def test_normalized_job_record_generates_summary() -> None:
             "environment": "volcanic lair",
             "lighting": "hellish backlight",
         },
-        base_model="juggernautXL_ragnarokBy",
-        sampler_name="Euler a",
-        cfg_scale=6.1,
-        steps=34,
-        width=1216,
-        height=832,
+        randomizer_summary={"enabled": True},
         stage_chain=[
-            StageConfig(stage_type="txt2img", enabled=True, steps=34, cfg_scale=6.1),
+            StageConfig(
+                stage_type="txt2img",
+                enabled=True,
+                steps=34,
+                cfg_scale=6.1,
+                sampler_name="Euler a",
+                model="juggernautXL_ragnarokBy",
+            ),
             StageConfig(stage_type="upscale", enabled=True),
         ],
-        randomization_enabled=True,
-        matrix_mode="rotate",
         variant_index=2,
+        variant_total=3,
         batch_index=1,
+        batch_total=2,
         images_per_prompt=2,
         loop_count=1,
+    )
+    record = replace(
+        record,
+        provenance=replace(
+            record.provenance,
+            matrix_mode="rotate",
+            txt2img_prompt_info=_make_stage_info(),
+            pack_usage=(PackUsageInfo(pack_name="pack-a"), PackUsageInfo(pack_name="pack-b")),
+        ),
     )
 
     summary = record.to_unified_summary()

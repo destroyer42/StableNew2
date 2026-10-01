@@ -8,9 +8,10 @@ import pytest
 
 from src.controller.runtime_state import CancellationError
 from src.pipeline.executor import Pipeline
-from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
+from src.pipeline.job_models_v2 import StageConfig
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.utils.logger import StructuredLogger
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class ToggleToken:
@@ -96,7 +97,14 @@ def test_runner_honors_cancellation_between_stages(tmp_path):
             return {}
 
         def run_txt2img_stage(
-            self, prompt, negative_prompt, config, run_dir, image_name, cancel_token=None
+            self,
+            prompt,
+            negative_prompt,
+            config,
+            run_dir,
+            image_name,
+            cancel_token=None,
+            learning_sample_names=False,
         ):
             cancel_token.cancel()
             output_path = Path(run_dir) / f"{image_name}.png"
@@ -112,19 +120,22 @@ def test_runner_honors_cancellation_between_stages(tmp_path):
     fake_pipeline = _FakePipeline()
     runner._pipeline = fake_pipeline
 
-    record = NormalizedJobRecord(
+    record = make_pipeline_njr(
         job_id="cancelled-runner-job",
-        config={"steps": 20, "cfg_scale": 7.0, "width": 512, "height": 512},
+        config={
+            "model": "model-a",
+            "prompt": "cancel me",
+            "sampler_name": "Euler a",
+            "steps": 20,
+            "cfg_scale": 7.0,
+            "width": 512,
+            "height": 512,
+        },
         path_output_dir=str(tmp_path / "runs"),
         filename_template="{seed}",
         seed=123,
         positive_prompt="cancel me",
         negative_prompt="",
-        steps=20,
-        cfg_scale=7.0,
-        width=512,
-        height=512,
-        sampler_name="Euler a",
         base_model="model-a",
         stage_chain=[
             StageConfig(stage_type="txt2img", enabled=True, steps=20, cfg_scale=7.0),

@@ -4,41 +4,29 @@
 """Tests for PipelineController + JobBuilderV2 integration.
 
 These tests verify:
-1. PipelineController correctly uses JobBuilderV2 to construct jobs
-2. NormalizedJobRecord → Job conversion preserves metadata
-3. JobService receives correct jobs via submit_job_with_run_mode
-4. Direct vs queue mode is correctly applied
+1. PipelineController builds the base config from typed GUI intent and hands it to JobBuilderV2
+2. Built NormalizedJobRecords are submitted as one batch through JobService.submit_njrs
+3. JobService turns each NJR into a queued Job that preserves NJR metadata
+4. The NJR queue snapshot is the canonical nested, versioned envelope
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 import pytest
 
+from src.controller.job_service import JobService
 from src.controller.pipeline_controller import PipelineController
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.pipeline.job_models_v2 import NormalizedJobRecord
-from src.queue.job_model import Job
+from src.queue.job_queue import JobQueue
+from src.queue.stub_runner import StubRunner
+from tests.helpers.njr_factory import make_pipeline_njr
 
 # ---------------------------------------------------------------------------
 # Fake/Stub Classes
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class FakeConfig:
-    """Minimal config for testing."""
-
-    model: str = "test_model"
-    prompt: str = "test prompt"
-    negative_prompt: str = ""
-    sampler: str = "Euler"
-    steps: int = 20
-    cfg_scale: float = 7.0
-    width: int = 512
-    height: int = 512
-    seed: int = 12345
 
 
 class FakeJobBuilder:
@@ -74,14 +62,22 @@ class FakeJobBuilder:
 
 
 class FakeJobService:
-    """Fake JobService that records submissions."""
+    """Fake JobService that records canonical NJR batch submissions."""
 
     def __init__(self) -> None:
-        self.submitted_jobs: list[tuple[Job, str]] = []
+        self.submissions: list[tuple[list[NormalizedJobRecord], SubmissionPolicy | None]] = []
 
-    def submit_job_with_run_mode(self, job: Job) -> None:
-        """Record job submission."""
-        self.submitted_jobs.append((job, job.run_mode))
+    @property
+    def submitted_records(self) -> list[NormalizedJobRecord]:
+        return [record for batch, _policy in self.submissions for record in batch]
+
+    def submit_njrs(
+        self,
+        records: list[NormalizedJobRecord],
+        policy: SubmissionPolicy | None = None,
+    ) -> list[str]:
+        self.submissions.append((list(records), policy))
+        return [record.job_id for record in records]
 
 
 class FakeWebUIConnection:
@@ -100,89 +96,16 @@ def _start_pipeline_with_pack(controller: PipelineController, **kwargs: Any) -> 
 
 def _prepare_controller(
     fake_builder: FakeJobBuilder,
-    fake_service: FakeJobService,
-    config_assembler: FakeConfigAssembler | None = None,
+    fake_service: Any,
+    gui_overrides: dict[str, Any] | None = None,
 ) -> PipelineController:
-    controller = PipelineController(
-        job_builder=fake_builder,
-        config_assembler=config_assembler or FakeConfigAssembler(),
-    )
+    controller = PipelineController(job_builder=fake_builder)
+    # Typed GUI intent drives the state-based preview build.
+    overrides = gui_overrides if gui_overrides is not None else {"prompt": "test prompt"}
+    controller.gui_get_pipeline_overrides = lambda: dict(overrides)
     controller._job_service = fake_service
     controller._webui_connection = FakeWebUIConnection()
     return controller
-
-
-class FakeJobController:
-    """Fake job execution controller."""
-
-    def __init__(self) -> None:
-        self._queue = FakeQueue()
-        self._runner = FakeRunner()
-        self._history = FakeHistory()
-
-    def get_queue(self) -> Any:
-        return self._queue
-
-    def get_runner(self) -> Any:
-        return self._runner
-
-    def get_history_store(self) -> Any:
-        return self._history
-
-    def submit_pipeline_run(self, payload: Any) -> str:
-        return "fake-job-id"
-
-    def cancel_job(self, job_id: str) -> None:
-        pass
-
-    def set_status_callback(self, name: str, callback: Any) -> None:
-        pass
-
-
-class FakeQueue:
-    """Fake job queue."""
-
-    def __init__(self) -> None:
-        self.jobs: list[Job] = []
-
-    def submit(self, job: Job) -> None:
-        self.jobs.append(job)
-
-    def list_jobs(self, status_filter: Any = None) -> list[Job]:
-        return list(self.jobs)
-
-
-class FakeRunner:
-    """Fake job runner."""
-
-    def __init__(self) -> None:
-        self.started = False
-        self._on_status_change = None
-
-    def start(self) -> None:
-        self.started = True
-
-    def stop(self) -> None:
-        self.started = False
-
-    def is_running(self) -> bool:
-        return self.started
-
-
-class FakeHistory:
-    """Fake history store."""
-
-    pass
-
-
-class FakeConfigAssembler:
-    """Fake config assembler that returns predetermined config."""
-
-    def __init__(self, config: Any = None) -> None:
-        self._config = config or FakeConfig()
-
-    def build_from_gui_input(self, **kwargs: Any) -> Any:
-        return self._config
 
 
 # ---------------------------------------------------------------------------
@@ -197,19 +120,18 @@ def make_normalized_job(
     variant_total: int = 1,
     batch_index: int = 0,
     batch_total: int = 1,
+    **overrides: Any,
 ) -> NormalizedJobRecord:
     """Create a NormalizedJobRecord for testing."""
-    return NormalizedJobRecord(
+    return make_pipeline_njr(
         job_id=job_id,
-        config=FakeConfig(seed=seed),
-        path_output_dir="output",
-        filename_template="{seed}",
+        config={"model": "test_model", "prompt": "test prompt", "seed": seed},
         seed=seed,
         variant_index=variant_index,
         variant_total=variant_total,
         batch_index=batch_index,
         batch_total=batch_total,
-        created_ts=1000.0,
+        **overrides,
     )
 
 
@@ -227,45 +149,36 @@ class TestSingleJobQueueMode:
     """Test single job submission in queue mode."""
 
     def test_single_job_submitted_to_job_service(self) -> None:
-        """Single job from builder is submitted via JobService."""
-        # Arrange
+        """Single job from builder is submitted via JobService.submit_njrs."""
         record = make_normalized_job(job_id="test-job-1")
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
         fake_service = FakeJobService()
+        controller = _prepare_controller(FakeJobBuilder([record]), fake_service)
 
-        controller = _prepare_controller(fake_builder, fake_service)
-
-        # Act
         result = _start_pipeline_with_pack(controller, run_mode="queue")
 
-        # Assert
         assert result is True
-        assert len(fake_service.submitted_jobs) == 1
-        submitted_job, mode = fake_service.submitted_jobs[0]
-        assert mode == "queue"
-        assert submitted_job.job_id == "test-job-1"
+        assert len(fake_service.submissions) == 1
+        assert [r.job_id for r in fake_service.submitted_records] == ["test-job-1"]
 
     def test_builder_called_with_correct_config(self) -> None:
-        """JobBuilderV2 is called with the assembled config."""
-        # Arrange
-        record = make_normalized_job()
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
-        fake_config = FakeConfig(model="specific_model")
-        fake_service = FakeJobService()
-
+        """JobBuilderV2 is called with the config merged from typed GUI intent."""
+        fake_builder = FakeJobBuilder([make_normalized_job()])
         controller = _prepare_controller(
             fake_builder,
-            fake_service,
-            config_assembler=FakeConfigAssembler(config=fake_config),
+            FakeJobService(),
+            gui_overrides={
+                "prompt": "specific prompt",
+                "txt2img": {"model": "specific_model", "steps": 33},
+            },
         )
 
-        # Act
         _start_pipeline_with_pack(controller, run_mode="queue")
 
-        # Assert
         assert len(fake_builder.calls) == 1
-        call = fake_builder.calls[0]
-        assert call["base_config"].model == "specific_model"
+        base_config = fake_builder.calls[0]["base_config"]
+        assert base_config["txt2img"]["model"] == "specific_model"
+        assert base_config["txt2img"]["steps"] == 33
+        assert base_config["prompt"] == "specific prompt"
 
 
 # ---------------------------------------------------------------------------
@@ -277,76 +190,35 @@ class TestMultipleJobSubmission:
     """Test multiple job submission."""
 
     def test_multiple_jobs_all_submitted(self) -> None:
-        """Multiple jobs from builder are all submitted."""
-        # Arrange
+        """Multiple jobs from builder are all submitted in one batch, in order."""
         records = [
             make_normalized_job(job_id="job-1", variant_index=0, variant_total=3),
             make_normalized_job(job_id="job-2", variant_index=1, variant_total=3),
             make_normalized_job(job_id="job-3", variant_index=2, variant_total=3),
         ]
-        fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
+        controller = _prepare_controller(FakeJobBuilder(records), fake_service)
 
-        controller = _prepare_controller(fake_builder, fake_service)
-
-        # Act
         result = _start_pipeline_with_pack(controller, run_mode="queue")
 
-        # Assert
         assert result is True
-        assert len(fake_service.submitted_jobs) == 3
-        submitted_ids = [job.job_id for job, _ in fake_service.submitted_jobs]
-        assert submitted_ids == ["job-1", "job-2", "job-3"]
+        assert len(fake_service.submissions) == 1
+        assert [r.job_id for r in fake_service.submitted_records] == ["job-1", "job-2", "job-3"]
 
     def test_variant_metadata_preserved(self) -> None:
-        """Variant index and total are preserved in submitted jobs."""
-        # Arrange
+        """Variant index and total are preserved in submitted NJR provenance."""
         records = [
             make_normalized_job(job_id="v1", variant_index=0, variant_total=2),
             make_normalized_job(job_id="v2", variant_index=1, variant_total=2),
         ]
-        fake_builder = FakeJobBuilder(jobs_to_return=records)
         fake_service = FakeJobService()
+        controller = _prepare_controller(FakeJobBuilder(records), fake_service)
 
-        controller = _prepare_controller(fake_builder, fake_service)
-
-        # Act
         _start_pipeline_with_pack(controller, run_mode="queue")
 
-        # Assert
-        jobs = [job for job, _ in fake_service.submitted_jobs]
-        assert jobs[0].variant_index == 0
-        assert jobs[0].variant_total == 2
-        assert jobs[1].variant_index == 1
-        assert jobs[1].variant_total == 2
-
-
-# ---------------------------------------------------------------------------
-# Test: Direct Mode
-# ---------------------------------------------------------------------------
-
-
-class TestDirectMode:
-    """Test direct mode submission."""
-
-    def test_direct_mode_sets_run_mode(self) -> None:
-        """Direct mode requests are normalized to queue on submitted jobs."""
-        # Arrange
-        record = make_normalized_job()
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
-        fake_service = FakeJobService()
-
-        controller = _prepare_controller(fake_builder, fake_service)
-
-        # Act
-        result = _start_pipeline_with_pack(controller, run_mode="direct")
-
-        # Assert
-        assert result is True
-        assert len(fake_service.submitted_jobs) == 1
-        submitted_job, mode = fake_service.submitted_jobs[0]
-        assert mode == "queue"
-        assert submitted_job.run_mode == "queue"
+        submitted = fake_service.submitted_records
+        assert (submitted[0].variant_index, submitted[0].variant_total) == (0, 2)
+        assert (submitted[1].variant_index, submitted[1].variant_total) == (1, 2)
 
 
 # ---------------------------------------------------------------------------
@@ -359,92 +231,79 @@ class TestEmptyBuilderOutput:
 
     def test_empty_jobs_returns_false(self) -> None:
         """Returns False when builder produces no jobs."""
-        # Arrange
-        fake_builder = FakeJobBuilder(jobs_to_return=[])
+        fake_builder = FakeJobBuilder([])
         fake_service = FakeJobService()
-
         controller = _prepare_controller(fake_builder, fake_service)
 
-        # Act
         result = _start_pipeline_with_pack(controller)
 
-        # Assert
         assert result is False
-        assert len(fake_service.submitted_jobs) == 0
+        assert len(fake_builder.calls) == 1  # genuinely consulted, not skipped as incomplete
+        assert fake_service.submissions == []
 
     def test_no_crash_on_empty_output(self) -> None:
-        """No exception when builder returns empty list."""
-        # Arrange
-        fake_builder = FakeJobBuilder(jobs_to_return=[])
-
-        controller = PipelineController(
-            job_builder=fake_builder,
-            config_assembler=FakeConfigAssembler(),
-        )
+        """No exception when builder returns empty list and no job service is wired."""
+        fake_builder = FakeJobBuilder([])
+        controller = PipelineController(job_builder=fake_builder)
+        controller.gui_get_pipeline_overrides = lambda: {"prompt": "test prompt"}
         controller._webui_connection = FakeWebUIConnection()
 
-        # Act & Assert - no exception
         result = _start_pipeline_with_pack(controller)
+
         assert result is False
+        assert len(fake_builder.calls) == 1
 
 
 # ---------------------------------------------------------------------------
-# Test: Metadata Preservation
+# Test: Metadata Preservation (NJR -> queued Job via JobService.submit_njrs)
 # ---------------------------------------------------------------------------
 
 
 class TestMetadataPreservation:
-    """Test that job metadata is preserved through conversion."""
+    """Test that NJR metadata is preserved when JobService creates the queued Job."""
+
+    @staticmethod
+    def _real_job_service() -> tuple[JobService, JobQueue]:
+        queue = JobQueue()
+        service = JobService(queue, runner_factory=lambda jq, rc: StubRunner(jq))
+        return service, queue
 
     def test_config_snapshot_contains_job_fields(self) -> None:
-        """Config snapshot includes all expected fields."""
-        # Arrange
+        """The queued Job's snapshot embeds the submitted NJR's identity and provenance."""
         record = make_normalized_job(
             job_id="meta-test",
             seed=99999,
             variant_index=2,
             variant_total=5,
-        )
-        record.prompt_pack_id = "test-pack-123"
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
-        fake_service = FakeJobService()
-
-        controller = _prepare_controller(fake_builder, fake_service)
-
-        # Act
-        _start_pipeline_with_pack(controller)
-
-        # Assert
-        job, _ = fake_service.submitted_jobs[0]
-        snapshot = job.config_snapshot
-        assert snapshot["job_id"] == "meta-test"
-        assert snapshot["seed"] == 99999
-        assert snapshot["variant_index"] == 2
-        assert snapshot["variant_total"] == 5
-        assert snapshot["model"] == "test_model"
-        assert snapshot["prompt"] == "test prompt"
-        assert snapshot["prompt_pack_id"] == "test-pack-123"
-
-    def test_source_and_prompt_source_preserved(self) -> None:
-        """Source and prompt_source are set on job."""
-        # Arrange
-        record = make_normalized_job()
-        fake_builder = FakeJobBuilder(jobs_to_return=[record])
-        fake_service = FakeJobService()
-
-        controller = _prepare_controller(fake_builder, fake_service)
-
-        # Act
-        _start_pipeline_with_pack(
-            controller,
-            source="api",
-            prompt_source="pack",
             prompt_pack_id="test-pack-123",
         )
+        service, queue = self._real_job_service()
+        controller = _prepare_controller(FakeJobBuilder([record]), service)
 
-        # Assert
-        job, _ = fake_service.submitted_jobs[0]
-        assert job.source == "api"
+        assert _start_pipeline_with_pack(controller) is True
+
+        (job,) = queue.list_jobs()
+        njr_snapshot = job.snapshot["normalized_job"]
+        assert njr_snapshot["job_id"] == "meta-test"
+        assert njr_snapshot["provenance"]["seed"] == 99999
+        assert njr_snapshot["provenance"]["variant_index"] == 2
+        assert njr_snapshot["provenance"]["variant_total"] == 5
+        assert njr_snapshot["workload"]["config"]["model"] == "test_model"
+        assert njr_snapshot["workload"]["config"]["prompt"] == "test prompt"
+        assert njr_snapshot["source"]["id"] == "test-pack-123"
+        assert job.variant_index == 2
+        assert job.variant_total == 5
+
+    def test_source_and_prompt_source_preserved(self) -> None:
+        """Job source/prompt_source/pack identity derive from the NJR source descriptor."""
+        record = make_normalized_job(prompt_pack_id="test-pack-123")
+        service, queue = self._real_job_service()
+        controller = _prepare_controller(FakeJobBuilder([record]), service)
+
+        _start_pipeline_with_pack(controller, source="api", prompt_source="pack")
+
+        (job,) = queue.list_jobs()
+        assert job.run_mode == "queue"
         assert job.prompt_source == "pack"
         assert job.prompt_pack_id == "test-pack-123"
 
@@ -459,20 +318,14 @@ class TestCannotRunState:
 
     def test_cannot_run_returns_false(self) -> None:
         """Returns False when state_manager.can_run() is False."""
-        # Arrange
-        fake_builder = FakeJobBuilder(jobs_to_return=[make_normalized_job()])
         fake_service = FakeJobService()
-
-        controller = _prepare_controller(fake_builder, fake_service)
+        controller = _prepare_controller(FakeJobBuilder([make_normalized_job()]), fake_service)
         controller.state_manager.can_run = lambda: False
-        controller._job_service = fake_service
 
-        # Act
         result = _start_pipeline_with_pack(controller)
 
-        # Assert
         assert result is False
-        assert len(fake_service.submitted_jobs) == 0
+        assert fake_service.submissions == []
 
 
 # ---------------------------------------------------------------------------
@@ -481,61 +334,58 @@ class TestCannotRunState:
 
 
 class TestNormalizedJobRecordSnapshot:
-    """Test to_queue_snapshot method."""
+    """Test to_queue_snapshot: the canonical, versioned NJR envelope."""
 
     def test_snapshot_contains_all_fields(self) -> None:
-        """Snapshot includes all expected fields."""
-        record = NormalizedJobRecord(
+        """Snapshot carries identity, workload, output plan and provenance, and round-trips."""
+        record = make_pipeline_njr(
             job_id="snap-1",
-            config=FakeConfig(
-                model="snap_model",
-                prompt="snap prompt",
-                negative_prompt="bad things",
-                seed=11111,
-            ),
-            path_output_dir="/output/snap",
-            filename_template="{seed}_{steps}",
+            config={"model": "snap_model", "prompt": "snap prompt", "seed": 11111},
+            positive_prompt="snap prompt",
+            negative_prompt="bad things",
             seed=11111,
             variant_index=1,
             variant_total=3,
             batch_index=2,
             batch_total=4,
-            created_ts=2000.0,
             randomizer_summary={"mode": "FIXED"},
+            path_output_dir="/output/snap",
+            filename_template="{seed}_{steps}",
         )
 
         snapshot = record.to_queue_snapshot()
 
         assert snapshot["job_id"] == "snap-1"
-        assert snapshot["model"] == "snap_model"
-        assert snapshot["prompt"] == "snap prompt"
-        assert snapshot["negative_prompt"] == "bad things"
-        assert snapshot["seed"] == 11111
-        assert snapshot["output_dir"] == "/output/snap"
-        assert snapshot["filename_template"] == "{seed}_{steps}"
-        assert snapshot["variant_index"] == 1
-        assert snapshot["variant_total"] == 3
-        assert snapshot["batch_index"] == 2
-        assert snapshot["batch_total"] == 4
-        assert snapshot["created_ts"] == 2000.0
-        assert snapshot["randomizer_summary"] == {"mode": "FIXED"}
+        assert snapshot["workload"]["config"]["model"] == "snap_model"
+        assert snapshot["workload"]["positive_prompt"] == "snap prompt"
+        assert snapshot["workload"]["negative_prompt"] == "bad things"
+        assert snapshot["output_plan"]["base_output_dir"] == "/output/snap"
+        assert snapshot["output_plan"]["filename_template"] == "{seed}_{steps}"
+        provenance = snapshot["provenance"]
+        assert provenance["seed"] == 11111
+        assert provenance["variant_index"] == 1
+        assert provenance["variant_total"] == 3
+        assert provenance["batch_index"] == 2
+        assert provenance["batch_total"] == 4
+        assert provenance["randomizer_summary"] == {"mode": "FIXED"}
+        assert NormalizedJobRecord.from_dict(snapshot).to_queue_snapshot() == snapshot
 
     def test_snapshot_with_dict_config(self) -> None:
-        """Snapshot works with dict config."""
-        record = NormalizedJobRecord(
+        """Snapshot preserves a dict workload config verbatim."""
+        record = make_pipeline_njr(
             job_id="dict-1",
-            config={
-                "model": "dict_model",
-                "prompt": "dict prompt",
-                "seed": 22222,
-            },
-            path_output_dir="/dict/output",
-            filename_template="{seed}",
+            config={"model": "dict_model", "prompt": "dict prompt", "seed": 22222},
+            positive_prompt="dict prompt",
             seed=22222,
+            path_output_dir="/dict/output",
         )
 
         snapshot = record.to_queue_snapshot()
 
-        assert snapshot["model"] == "dict_model"
-        assert snapshot["prompt"] == "dict prompt"
-        assert snapshot["seed"] == 22222
+        assert snapshot["workload"]["config"] == {
+            "model": "dict_model",
+            "prompt": "dict prompt",
+            "seed": 22222,
+        }
+        assert snapshot["provenance"]["seed"] == 22222
+        assert snapshot["output_plan"]["base_output_dir"] == "/dict/output"

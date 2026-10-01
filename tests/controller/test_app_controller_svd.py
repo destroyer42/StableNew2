@@ -8,6 +8,9 @@ from unittest.mock import Mock
 import pytest
 
 from src.controller.app_controller import AppController
+from src.controller.app_controller_services.application_runtime_coordinator import (
+    ApplicationRuntimeCoordinator,
+)
 from src.queue.job_history_store import JobHistoryEntry, JobStatus
 from src.utils.error_envelope_v2 import UnifiedErrorEnvelope
 from src.video.svd_config import SVDConfig
@@ -172,10 +175,8 @@ def test_preview_svd_folder_batch_projects_counts_without_queue_submission() -> 
 def test_runtime_status_callback_preserves_stage_detail() -> None:
     captured = {}
     controller = AppController.__new__(AppController)
-    controller.app_state = SimpleNamespace(
-        set_runtime_status=lambda status: captured.setdefault("status", status)
-    )
-    controller._ui_dispatch = lambda fn: fn()
+    controller.app_state = SimpleNamespace(running_job=None)
+    controller._queue_runtime_status_update = lambda status: captured.setdefault("status", status)
 
     callback = controller._get_runtime_status_callback()
     callback(
@@ -192,6 +193,8 @@ def test_runtime_status_callback_preserves_stage_detail() -> None:
 
 
 def test_on_webui_ready_triggers_deferred_autostart() -> None:
+    """AppController.on_webui_ready hands off to the runtime coordinator that owns autostart."""
+
     class _JobController:
         def __init__(self) -> None:
             self.called = 0
@@ -199,19 +202,35 @@ def test_on_webui_ready_triggers_deferred_autostart() -> None:
         def trigger_deferred_autostart(self) -> None:
             self.called += 1
 
-    controller = AppController.__new__(AppController)
-    controller.pipeline_controller = type(
-        "PipelineControllerStub", (), {"_job_controller": _JobController()}
-    )()
-    controller._append_log = lambda *_args, **_kwargs: None
-    controller.current_operation_label = None
-    controller.last_ui_action = None
-    controller.refresh_resources_from_webui = lambda: None
-    controller._spawn_tracked_thread = lambda *, target, name, purpose: target()
+    class _WebUI:
+        ready = False
 
+        def is_webui_ready_strict(self) -> bool:
+            return self.ready
+
+    job_controller = _JobController()
+    webui = _WebUI()
+    controller = AppController.__new__(AppController)
+    controller._api_client = None
+    controller._append_log = lambda *_args, **_kwargs: None
+    controller.refresh_resources_from_webui = lambda: None
+    controller._runtime_projection_coordinator = SimpleNamespace(
+        publish_webui_state=lambda _state: 0
+    )
+    controller._background_tasks = SimpleNamespace(submit=lambda *_args, **_kwargs: None)
+    controller._application_runtime_coordinator = ApplicationRuntimeCoordinator(
+        job_controller=job_controller, webui_connection_controller=webui
+    )
+
+    # GUI becomes ready first while WebUI is still starting: autostart is deferred.
+    controller._application_runtime_coordinator.on_gui_ready()
+    assert job_controller.called == 0
+
+    webui.ready = True
     controller.on_webui_ready()
 
-    assert controller.pipeline_controller._job_controller.called == 1
+    assert job_controller.called == 1
+    assert controller.current_operation_label == "Refreshing WebUI resources"
 
 
 def test_send_history_job_image_to_svd_selects_svd_tab(tmp_path) -> None:
@@ -655,7 +674,8 @@ def test_show_structured_error_modal_uses_tk_root_parent(monkeypatch) -> None:
     controller.main_window = SimpleNamespace(root="tk-root")
     controller._error_modal = None
 
-    monkeypatch.setattr("src.controller.app_controller.ErrorModalV2", _FakeModal)
+    # AppController imports the modal lazily from its view module.
+    monkeypatch.setattr("src.gui.views.error_modal_v2.ErrorModalV2", _FakeModal)
 
     controller._show_structured_error_modal(
         UnifiedErrorEnvelope(

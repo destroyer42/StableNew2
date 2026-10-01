@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
+from src.controller.submission_policy_v26 import SubmissionPolicy
 from src.gui.controllers.learning_controller import LearningController
 from src.gui.learning_state import LearningExperiment, LearningState, LearningVariant
 from src.learning.execution_controller import LearningExecutionController
-from src.pipeline.job_models_v2 import NormalizedJobRecord
+from src.pipeline.job_models_v2 import NormalizedJobRecord, SourceKind
+from tests.helpers.njr_factory import make_pipeline_njr
 
 
 class _StubPipelineController:
@@ -78,22 +80,13 @@ def test_execution_controller_submits_learning_variant_via_submit_njrs() -> None
         job_service=job_service,
     )
     variant = LearningVariant(param_value=9.0, planned_images=1)
-    record = NormalizedJobRecord(
+    record = make_pipeline_njr(
         job_id="learning-job-1",
         config={"txt2img": {"cfg_scale": 9.0}},
-        path_output_dir="runs/learning",
-        filename_template="{seed}",
-        prompt_pack_id="learning_Test",
-        prompt_pack_name="Test",
         positive_prompt="portrait",
         base_model="model.safetensors",
-        vae="vae.safetensors",
-        sampler_name="Euler a",
-        scheduler="normal",
-        steps=20,
         cfg_scale=9.0,
-        width=512,
-        height=512,
+        source_kind=SourceKind.LEARNING.value,
         extra_metadata={"submission_source": "learning"},
     )
 
@@ -106,8 +99,9 @@ def test_execution_controller_submits_learning_variant_via_submit_njrs() -> None
 
     assert success is True
     assert len(submitted) == 1
-    records, run_request = submitted[0]
+    records, policy = submitted[0]
     assert records == [record]
-    assert run_request.prompt_pack_id == "learning_Test"
-    assert run_request.requested_job_label == "Learning: Test"
-    assert run_request.tags == ["learning", "txt2img"]
+    assert record.source.kind is SourceKind.LEARNING
+    # Learning variants go through the canonical queue boundary with default scheduling policy.
+    assert policy == SubmissionPolicy()
+    assert execution._job_to_variant["learning-job-1"] is variant

@@ -17,7 +17,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 class TestProcessAutoScannerRepoScoping:
     """Test A: Non-repo Python processes are not targeted for termination."""
 
-    def test_non_repo_python_process_is_ignored(self):
+    def test_non_repo_python_process_is_ignored(self, tmp_path):
         """Non-repo Python process should not be eligible for termination."""
         config = ProcessAutoScannerConfig(
             idle_threshold_sec=60.0,
@@ -38,7 +38,8 @@ class TestProcessAutoScannerRepoScoping:
         fake_proc = Mock()
         fake_proc.pid = 99999
         fake_proc.name.return_value = "python.exe"
-        fake_proc.cwd.return_value = r"C:\Users\rob\stable-diffusion-webui"  # Outside repo
+        # Absolute and outside the repo on every platform (a Windows drive path is relative on POSIX).
+        fake_proc.cwd.return_value = str(tmp_path / "stable-diffusion-webui")
         fake_proc.memory_info.return_value = Mock(rss=2000 * 1024 * 1024)  # 2000 MB
         fake_proc.create_time.return_value = (
             time.time() - 300.0

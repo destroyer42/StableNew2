@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 from src.controller.app_controller import AppController
@@ -13,8 +14,9 @@ class NoopPipelineRunner:
 
 
 class DummyConfigManager:
-    def __init__(self, initial: dict[str, Any]) -> None:
+    def __init__(self, initial: dict[str, Any], packs_dir: Path) -> None:
         self.initial = dict(initial)
+        self.packs_dir = packs_dir
         self.saved: dict[str, dict[str, Any]] = {}
 
     def load_pack_config(self, pack_id: str) -> dict[str, Any] | None:
@@ -25,8 +27,10 @@ class DummyConfigManager:
         return True
 
 
-def _make_controller(config: dict[str, any]) -> tuple[AppController, DummyConfigManager]:
-    config_manager = DummyConfigManager(config)
+def _make_controller(
+    config: dict[str, Any], packs_dir: Path
+) -> tuple[AppController, DummyConfigManager]:
+    config_manager = DummyConfigManager(config, packs_dir)
     controller = AppController(
         None,
         pipeline_runner=NoopPipelineRunner(),
@@ -53,9 +57,9 @@ def _make_controller(config: dict[str, any]) -> tuple[AppController, DummyConfig
     return controller, config_manager
 
 
-def test_load_lora_strengths_populates_app_state() -> None:
+def test_load_lora_strengths_populates_app_state(tmp_path: Path) -> None:
     config = {"lora_strengths": [{"name": "LoRA1", "strength": 0.7, "enabled": True}]}
-    controller, _ = _make_controller(config)
+    controller, _ = _make_controller(config, tmp_path)
 
     controller.on_pipeline_pack_load_config("pack1")
 
@@ -64,8 +68,8 @@ def test_load_lora_strengths_populates_app_state() -> None:
     assert controller.app_state.lora_strengths[0].strength == 0.7
 
 
-def test_apply_config_writes_lora_strengths_to_packs() -> None:
-    controller, config_manager = _make_controller({})
+def test_apply_config_writes_lora_strengths_to_packs(tmp_path: Path) -> None:
+    controller, config_manager = _make_controller({}, tmp_path)
     controller.app_state.set_lora_strengths(
         [LoraRuntimeConfig(name="LoRA-A", strength=1.2, enabled=False)]
     )
@@ -77,8 +81,8 @@ def test_apply_config_writes_lora_strengths_to_packs() -> None:
     assert saved["lora_strengths"][0]["name"] == "LoRA-A"
 
 
-def test_pipeline_payload_includes_lora_settings() -> None:
-    controller, _ = _make_controller({})
+def test_pipeline_payload_includes_lora_settings(tmp_path: Path) -> None:
+    controller, _ = _make_controller({}, tmp_path)
     controller.app_state.set_lora_strengths(
         [
             LoraRuntimeConfig(name="LoRA-A", strength=0.5, enabled=True),
@@ -92,8 +96,8 @@ def test_pipeline_payload_includes_lora_settings() -> None:
     assert payload.lora_settings["LoRA-B"]["enabled"] is False
 
 
-def test_test_mode_uses_isolated_temp_history_paths() -> None:
-    controller_one, _ = _make_controller({})
-    controller_two, _ = _make_controller({})
+def test_test_mode_uses_isolated_temp_history_paths(tmp_path: Path) -> None:
+    controller_one, _ = _make_controller({}, tmp_path)
+    controller_two, _ = _make_controller({}, tmp_path)
 
     assert controller_one._job_history_path != controller_two._job_history_path

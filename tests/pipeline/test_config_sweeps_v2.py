@@ -9,11 +9,24 @@ Tests validate:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 import pytest
 
 from src.pipeline.config_variant_plan_v2 import ConfigVariant, ConfigVariantPlanV2
 from src.pipeline.job_builder_v2 import JobBuilderV2
 from src.pipeline.job_models_v2 import BatchSettings
+from src.randomizer import RandomizationPlanV2
+
+
+@dataclass
+class _ObjectConfig:
+    prompt: str = "a test prompt"
+    model: str = "base-model"
+    cfg_scale: float = 7.0
+    steps: int = 20
+    seed: int = 42
+
 
 # ============================================================================
 # ConfigVariantPlanV2 Tests
@@ -139,7 +152,7 @@ class TestJobBuilderV2ConfigSweeps:
     def test_no_sweep_produces_single_job(self):
         """Test that no sweep plan produces single job with base config."""
         builder = JobBuilderV2()
-        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42}
+        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42, "prompt": "a test prompt"}
 
         jobs = builder.build_jobs(
             base_config=base_config,
@@ -154,7 +167,7 @@ class TestJobBuilderV2ConfigSweeps:
     def test_disabled_sweep_produces_single_job(self):
         """Test that disabled sweep plan produces single job."""
         builder = JobBuilderV2()
-        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42}
+        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42, "prompt": "a test prompt"}
         plan = ConfigVariantPlanV2(enabled=False, variants=[])
 
         jobs = builder.build_jobs(
@@ -168,7 +181,7 @@ class TestJobBuilderV2ConfigSweeps:
     def test_single_variant_sweep(self):
         """Test simple CFG sweep with 3 variants."""
         builder = JobBuilderV2()
-        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42}
+        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42, "prompt": "a test prompt"}
 
         plan = ConfigVariantPlanV2(
             enabled=True,
@@ -195,7 +208,7 @@ class TestJobBuilderV2ConfigSweeps:
     def test_multi_parameter_sweep(self):
         """Test sweep with multiple overrides per variant."""
         builder = JobBuilderV2()
-        base_config = {"cfg_scale": 7.0, "steps": 20, "sampler_name": "Euler a", "seed": 42}
+        base_config = {"cfg_scale": 7.0, "steps": 20, "sampler_name": "Euler a", "seed": 42, "prompt": "a test prompt"}
 
         plan = ConfigVariantPlanV2(
             enabled=True,
@@ -229,7 +242,7 @@ class TestJobBuilderV2ConfigSweeps:
     def test_sweep_with_batch_expansion(self):
         """Test config sweep × batch expansion = M×N jobs."""
         builder = JobBuilderV2()
-        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42}
+        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42, "prompt": "a test prompt"}
 
         plan = ConfigVariantPlanV2(
             enabled=True,
@@ -269,7 +282,7 @@ class TestJobBuilderV2ConfigSweeps:
     def test_config_overrides_recorded_in_metadata(self):
         """Test that config_variant_overrides field is populated."""
         builder = JobBuilderV2()
-        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42}
+        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42, "prompt": "a test prompt"}
 
         plan = ConfigVariantPlanV2(
             enabled=True,
@@ -293,7 +306,7 @@ class TestJobBuilderV2ConfigSweeps:
     def test_sweep_does_not_mutate_base_config(self):
         """Test that applying sweeps does not mutate original base_config."""
         builder = JobBuilderV2()
-        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42}
+        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42, "prompt": "a test prompt"}
         original_cfg = base_config["cfg_scale"]
 
         plan = ConfigVariantPlanV2(
@@ -318,6 +331,7 @@ class TestJobBuilderV2ConfigSweeps:
             "txt2img": {"cfg_scale": 7.0, "steps": 20},
             "img2img": {"denoising_strength": 0.5},
             "seed": 42,
+            "prompt": "a test prompt",
         }
 
         plan = ConfigVariantPlanV2(
@@ -350,10 +364,37 @@ class TestConfigSweepIntegration:
     """Integration tests combining sweeps with randomization and batches."""
 
     def test_sweep_with_randomization_plan(self):
-        """Test config sweep combined with matrix randomization (future)."""
-        # This test is a placeholder for when RandomizationPlanV2 is integrated
-        # Expected behavior: config_variants × matrix_variants × batches
-        pytest.skip("Requires RandomizationPlanV2 integration")
+        """Config sweep nests outside matrix variants: config_variants x matrix_variants."""
+        builder = JobBuilderV2()
+        # The randomizer applies overrides to attribute-bearing configs (not plain dicts).
+        base_config = _ObjectConfig()
+        sweep = ConfigVariantPlanV2(
+            enabled=True,
+            variants=[
+                ConfigVariant("cfg_low", {"cfg_scale": 4.5}, 0),
+                ConfigVariant("cfg_high", {"cfg_scale": 10.0}, 1),
+            ],
+        )
+        randomization = RandomizationPlanV2(
+            enabled=True,
+            model_choices=["m1", "m2"],
+            max_variants=2,
+        )
+
+        jobs = builder.build_jobs(
+            base_config=base_config,
+            config_variant_plan=sweep,
+            randomization_plan=randomization,
+        )
+
+        assert [(j.config_variant_label, j.variant_index) for j in jobs] == [
+            ("cfg_low", 0),
+            ("cfg_low", 1),
+            ("cfg_high", 0),
+            ("cfg_high", 1),
+        ]
+        assert [j.config["cfg_scale"] for j in jobs] == [4.5, 4.5, 10.0, 10.0]
+        assert {j.config["model"] for j in jobs} == {"m1", "m2"}
 
     def test_sweep_determinism(self):
         """Test that identical sweep plans produce identical job orders."""
@@ -362,7 +403,7 @@ class TestConfigSweepIntegration:
             id_fn=lambda: "test-job-id",
         )
 
-        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42}
+        base_config = {"cfg_scale": 7.0, "steps": 20, "seed": 42, "prompt": "a test prompt"}
 
         plan = ConfigVariantPlanV2(
             enabled=True,
