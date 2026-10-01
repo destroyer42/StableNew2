@@ -272,3 +272,43 @@ def test_frame_count_selector_follows_the_selected_workflows_declared_lengths(tk
 
     tab.restore_video_workflow_state({"workflow_id": "variable_len", "frame_count": 17})
     assert tab.get_video_workflow_state()["frame_count"] == 17
+
+
+class _DrivingVideoControllerStub(_ControllerStub):
+    def build_video_workflow_defaults(self) -> dict[str, object]:
+        return {**super().build_video_workflow_defaults(), "workflow_id": "drive"}
+
+    def get_video_workflow_specs(self) -> list[dict[str, object]]:
+        return [
+            {
+                "workflow_id": "drive",
+                "workflow_version": "1.0.0",
+                "display_name": "Driving video",
+                "form_visibility": {"pose_video": True, "frame_count": False},
+            },
+            {
+                "workflow_id": "prompt",
+                "workflow_version": "1.0.0",
+                "display_name": "Prompt only",
+                "form_visibility": {"pose_video": False, "frame_count": False},
+            },
+        ]
+
+
+@pytest.mark.gui
+def test_driving_video_field_is_shown_only_for_workflows_that_accept_one(tk_root) -> None:
+    tab = VideoWorkflowTabFrameV2(
+        tk_root, app_controller=_DrivingVideoControllerStub(), app_state=SimpleNamespace()
+    )
+    tab.workflow_var.set("drive")
+    tab.pose_video_var.set("C:/clips/drive.mp4")
+    assert tab.get_video_workflow_state()["pose_video_path"] == "C:/clips/drive.mp4"
+
+    tab.workflow_var.set("prompt")
+    assert "pose_video_path" not in tab.get_video_workflow_state()
+    assert tab.pose_video_var.get() == ""
+
+    tab.restore_video_workflow_state(
+        {"workflow_id": "drive", "pose_video_path": "C:/clips/other.mp4"}
+    )
+    assert tab.get_video_workflow_state()["pose_video_path"] == "C:/clips/other.mp4"

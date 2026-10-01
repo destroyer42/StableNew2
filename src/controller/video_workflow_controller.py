@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import secrets
 from collections.abc import Mapping
 from pathlib import Path
@@ -33,6 +34,7 @@ from src.video.workflow_frame_count import (
 )
 from src.video.workflow_source_preparation import prepare_declared_workflow_source
 
+_DRIVING_VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".mkv"}
 _DEFAULT_OUTPUT_ROUTES = (
     OUTPUT_ROUTE_REPROCESS,
     OUTPUT_ROUTE_MOVIE_CLIPS,
@@ -123,6 +125,7 @@ class VideoWorkflowController:
             "workflow_version": str(default_workflow.get("workflow_version") or ""),
             "end_anchor_path": "",
             "mid_anchor_paths": [],
+            "pose_video_path": "",
             "prompt": "",
             "negative_prompt": "",
             "motion_profile": "gentle",
@@ -319,6 +322,14 @@ class VideoWorkflowController:
             path = Path(candidate)
             if not path.exists() or not path.is_file():
                 return False, f"Mid anchor image does not exist: {path}"
+        driving_text = str(form_data.get("pose_video_path") or "").strip()
+        if driving_text:
+            driving = Path(driving_text).expanduser()
+            if not driving.exists() or not driving.is_file():
+                return False, f"Driving video does not exist: {driving}"
+            if driving.suffix.lower() not in _DRIVING_VIDEO_SUFFIXES:
+                allowed = ", ".join(sorted(_DRIVING_VIDEO_SUFFIXES))
+                return False, f"Driving video must be a video file ({allowed}): {driving}"
         input_bindings = getattr(spec, "input_bindings", ()) or ()
         requires_depth_input = any(
             getattr(binding, "source_field", None) == "stage_config.depth_input.resolved_path"
@@ -407,6 +418,18 @@ class VideoWorkflowController:
         if any(name in declared_inputs for name in ("depth_map", "controlnet_model")):
             workflow_config["controlnet"] = controlnet
             workflow_config["depth_input"] = depth_input
+        driving_provenance: dict[str, Any] | None = None
+        driving_text = str(form_data.get("pose_video_path") or "").strip()
+        if "pose_video" in declared_inputs and driving_text:
+            # Frozen by path and content hash: the source file is only ever read (staged by the
+            # backend as a copy), and provenance records exactly which clip drove the motion.
+            driving_path = Path(driving_text).expanduser().resolve()
+            driving_provenance = {
+                "path": str(driving_path),
+                "sha256": hashlib.sha256(driving_path.read_bytes()).hexdigest(),
+            }
+            workflow_config["pose_video_path"] = driving_provenance["path"]
+            workflow_config["pose_video_sha256"] = driving_provenance["sha256"]
 
         prepared_source_path = str(Path(source_image_path).expanduser())
         source_preparation: dict[str, Any] | None = None
@@ -468,6 +491,8 @@ class VideoWorkflowController:
             extra_metadata["video_workflow"]["source_preparation"] = dict(source_preparation)
         if frozen_seed is not None:
             extra_metadata["video_workflow"]["seed"] = frozen_seed
+        if driving_provenance is not None:
+            extra_metadata["video_workflow"]["pose_video"] = dict(driving_provenance)
         if frozen_frame_count is not None and length_policy is not None:
             extra_metadata["video_workflow"].update(
                 frame_count=frozen_frame_count,
