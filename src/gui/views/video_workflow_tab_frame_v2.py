@@ -15,6 +15,7 @@ from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
 )
+from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.state.output_routing import (
@@ -313,6 +314,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             values=_MOTION_PROFILES,
             help_key="motion",
         )
+        self.motion_label = self.motion_combo.master.grid_slaves(row=3, column=0)[0]
         # Driving video (only for workflows that accept one).
         self.pose_video_frame = ttk.Frame(body, style="Panel.TFrame")
         self.pose_video_frame.grid(row=3, column=2, columnspan=2, sticky="ew", padx=(6, 0))
@@ -464,6 +466,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.workflow_help_panel.grid(row=7, column=0, columnspan=4, sticky="ew", pady=(8, 6))
 
         prompt_label = ttk.Label(body, text="Prompt", style="Dark.TLabel")
+        self.prompt_label = prompt_label  # relabelled from the workflow's operator projection
         prompt_label.grid(row=8, column=0, sticky="nw", padx=(0, 8), pady=(8, 6))
         self.prompt_text = tk.Text(
             body,
@@ -495,8 +498,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.negative_prompt_text,
         )
 
+        # Controls the selected workflow declares (e.g. Animate-2 motion prompt / pose strength).
+        self.workflow_controls_panel = WorkflowControlsPanel(
+            body, on_change=self._refresh_workspace_summary
+        )
+        self.workflow_controls_panel.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.workflow_controls_panel.grid_remove()
+
         submit_frame = ttk.Frame(body, style="Panel.TFrame")
-        submit_frame.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+        submit_frame.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(10, 0))
         self.queue_workflow_button = ttk.Button(
             submit_frame,
             text="Queue Video Workflow",
@@ -659,6 +669,8 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             state["frame_count"] = self._frame_count_labels.get(self.frame_count_var.get())
         if bool(visible.get("pose_video", False)):
             state["pose_video_path"] = self.pose_video_var.get().strip()
+        if self.workflow_controls_panel.control_names:
+            state["operator_controls"] = self.workflow_controls_panel.get_values()
         if for_submission:
             # The per-job authorization is only ever part of a submission, never saved state.
             state["experimental_opt_in"] = bool(
@@ -703,6 +715,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self._select_frame_count(state.get("frame_count"))
         if self.pose_video_frame.winfo_manager():
             self.pose_video_var.set(str(state.get("pose_video_path") or ""))
+        self.workflow_controls_panel.set_values(state.get("operator_controls"))
 
     def _apply_workflow_capabilities(self, workflow_meta: dict[str, Any]) -> None:
         """Show/enable only the inputs the selected workflow declares, and the experimental
@@ -723,7 +736,18 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             set_state(widget, enabled("end_anchor"))
         for widget in (self.mid_anchors_entry, self.mid_anchors_browse):
             set_state(widget, enabled("mid_anchors"))
-        set_state(self.motion_combo, enabled("motion_profile"))
+        # A Motion selector the workflow does not honor is hidden, not shown disabled: nothing on
+        # this form may imply a setting affects generation when it does not (PR-VID-192).
+        if enabled("motion_profile"):
+            self.motion_label.grid()
+            self.motion_combo.grid()
+            set_state(self.motion_combo, True)
+        else:
+            self.motion_label.grid_remove()
+            self.motion_combo.grid_remove()
+        projection = dict(workflow_meta.get("operator_projection") or {})
+        self.prompt_label.configure(text=str(projection.get("prompt_label") or "Prompt"))
+        self.workflow_controls_panel.apply(workflow_meta.get("operator_controls"))
         if enabled("seed"):
             self.seed_label.grid()
             self.seed_entry.grid()
@@ -856,6 +880,7 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             effective_parts.append(f"seed={seed_value}")
         if self._frame_count_labels and self.frame_count_var.get():
             effective_parts.append(f"length={self.frame_count_var.get()}")
+        effective_parts.extend(self.workflow_controls_panel.summary_parts())
         if not visible or visible.get("camera_intent", False) or visible.get("depth_conditioning", False):
             effective_parts.extend((conditioning_depth, camera_summary, control_summary))
         fixed_settings = dict(workflow_meta.get("operator_projection") or {}).get("fixed_settings")

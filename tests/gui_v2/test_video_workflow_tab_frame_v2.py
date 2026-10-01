@@ -312,3 +312,79 @@ def test_driving_video_field_is_shown_only_for_workflows_that_accept_one(tk_root
         {"workflow_id": "drive", "pose_video_path": "C:/clips/other.mp4"}
     )
     assert tab.get_video_workflow_state()["pose_video_path"] == "C:/clips/other.mp4"
+
+
+
+class _RealProjectionControllerStub:
+    """Serves the real controller's workflow projection (what the operator actually sees)."""
+
+    def build_video_workflow_defaults(self) -> dict[str, object]:
+        return {"workflow_id": "wan_animate2_drive_i2v_v1", "motion_profile": "gentle"}
+
+    def get_video_workflow_specs(self) -> list[dict[str, object]]:
+        from src.controller.video_workflow_controller import VideoWorkflowController
+
+        return VideoWorkflowController(app_controller=SimpleNamespace()).list_workflow_specs()
+
+
+@pytest.mark.gui
+def test_animate2_shows_only_real_controls_and_hides_the_inert_motion_selector(tk_root) -> None:
+    tab = VideoWorkflowTabFrameV2(
+        tk_root, app_controller=_RealProjectionControllerStub(), app_state=SimpleNamespace()
+    )
+    tab.workflow_var.set("wan_animate2_drive_i2v_v1")
+    tab.update_idletasks()
+
+    # the generic Motion selector (gentle/balanced/dynamic) does nothing here: it is not shown
+    assert not tab.motion_combo.winfo_manager()
+    assert not tab.motion_label.winfo_manager()
+    assert "motion_profile" not in tab.get_video_workflow_state()
+    assert "motion=" not in tab.effective_settings_var.get()
+
+    assert tab.prompt_label.cget("text") == "Appearance / Background Prompt"
+    panel = tab.workflow_controls_panel
+    assert panel.winfo_manager()
+    assert panel.control_names == [
+        "pose_prompt",
+        "pose_strength",
+        "pose_start_percent",
+        "pose_end_percent",
+        "reference_image_strength",
+    ]
+    values = panel.get_values()
+    assert (values["pose_strength"], values["pose_start_percent"]) == ("1", "0")
+    assert (values["pose_end_percent"], values["reference_image_strength"]) == ("1", "1")
+    assert values["pose_prompt"] == ""
+
+    panel._texts["pose_prompt"].insert("1.0", "she waves")
+    panel._vars["pose_strength"].set("1.8")
+    state = tab.get_video_workflow_state(for_submission=True)
+    assert state["operator_controls"]["pose_prompt"] == "she waves"
+    assert state["operator_controls"]["pose_strength"] == "1.8"
+    assert "pose_strength=1.8 [changed]" in tab.effective_settings_var.get()
+    assert "pose_prompt=custom" in tab.effective_settings_var.get()
+
+    tab.restore_video_workflow_state(
+        {"workflow_id": "wan_animate2_drive_i2v_v1", "operator_controls": {"pose_strength": "0.5"}}
+    )
+    assert tab.get_video_workflow_state()["operator_controls"]["pose_strength"] == "0.5"
+
+
+@pytest.mark.gui
+def test_prompt_mode_shows_reference_strength_only_and_other_workflows_show_no_controls(
+    tk_root,
+) -> None:
+    tab = VideoWorkflowTabFrameV2(
+        tk_root, app_controller=_RealProjectionControllerStub(), app_state=SimpleNamespace()
+    )
+    tab.workflow_var.set("wan_animate2_prompt_i2v_v1")
+    tab.update_idletasks()
+    panel = tab.workflow_controls_panel
+    assert panel.control_names == ["reference_image_strength"]
+    assert tab.prompt_label.cget("text") == "Prompt"
+    assert not tab.motion_combo.winfo_manager()
+
+    tab.workflow_var.set("wan22_ti2v_5b_i2v_v1")
+    tab.update_idletasks()
+    assert panel.control_names == [] and not panel.winfo_manager()
+    assert "operator_controls" not in tab.get_video_workflow_state()

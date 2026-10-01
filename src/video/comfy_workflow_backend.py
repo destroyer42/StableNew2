@@ -81,6 +81,52 @@ def _driving_video_provenance(stage_config: Mapping[str, Any]) -> dict[str, Any]
     return {"pose_video": {"path": path, "sha256": stage_config.get("pose_video_sha256")}}
 
 
+def _file_sha256(path: Any) -> str | None:
+    try:
+        return hashlib.sha256(Path(str(path)).read_bytes()).hexdigest()
+    except (OSError, TypeError, ValueError):
+        return None
+
+
+def _control_provenance(
+    spec: Any, request: Any, stage_config: Mapping[str, Any]
+) -> dict[str, Any]:
+    """Frozen workflow controls plus one self-contained record a later Learning package can read.
+
+    Emitted only for jobs that carry operator controls or a driving video (data-driven, not by
+    workflow name).  It restates what the immutable job already froze -- nothing is re-derived.
+    """
+
+    controls = stage_config.get("operator_controls")
+    driving = _driving_video_provenance(stage_config)
+    if not controls and not driving:
+        return {}
+    identity = _mapping_dict((getattr(spec, "backend_defaults", None) or {}).get("provenance"))
+    record: dict[str, Any] = {
+        "workflow": {
+            "workflow_id": spec.workflow_id,
+            "workflow_version": spec.workflow_version,
+            "pinned_revision": spec.pinned_revision,
+            "qualified_graph_sha256": identity.get("qualified_graph_sha256"),
+            "comfyui_version": identity.get("comfyui_version"),
+            "comfyui_revision": identity.get("comfyui_revision"),
+        },
+        "source_image": {
+            "path": str(request.input_image_path) if request.input_image_path else None,
+            "sha256": _file_sha256(request.input_image_path) if request.input_image_path else None,
+        },
+        "prompt": request.prompt,
+        "negative_prompt": request.negative_prompt,
+        "seed": stage_config.get("seed"),
+        "operator_controls": dict(controls) if isinstance(controls, Mapping) else {},
+        **driving,
+    }
+    result: dict[str, Any] = {"control_record": record}
+    if isinstance(controls, Mapping) and controls:
+        result["operator_controls"] = dict(controls)
+    return result
+
+
 def _length_provenance(spec: Any, stage_config: Mapping[str, Any]) -> dict[str, Any]:
     """Frozen frame count and declared FPS for a variable-length workflow (else empty)."""
 
@@ -435,6 +481,7 @@ class ComfyWorkflowVideoBackend:
         provenance_extra: dict[str, Any] = {
             **length_provenance,
             **_driving_video_provenance(stage_config),
+            **_control_provenance(spec, request, stage_config),
         }
         if runtime_policy:
             provenance_extra["runtime_policy"] = runtime_policy

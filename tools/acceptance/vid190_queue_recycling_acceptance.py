@@ -73,7 +73,14 @@ _ANIMATE2_SUBJECT = "A young woman in a navy athletic top, navy leggings and whi
 # Machine-local driving clip for the driving-video job; when unset that job is refused at admission
 # ("needs a driving video").
 _DRIVING_CLIP = os.environ.get("STABLENEW_VID191_DRIVING_CLIP", "")
-# Per suite: (label, workflow_id, version, frames, seed, prompt, driving video or None).
+# The qualified PR-VID-184 motion-only prompt for the locomotion driving clip (flat-graph node 612).
+_MOTION_PROMPT_QUALIFIED = (
+    "A person performs a high-knee running drill that transitions into a full sprinting stride, "
+    "moving laterally from left to right across a static frame with continuous forward locomotion "
+    "and alternating arm-leg swing."
+)
+# Per suite: (label, workflow_id, version, frames, seed, prompt, driving video or None[, controls]).
+# The optional trailing element is the job's ``operator_controls`` form value (PR-VID-192).
 SUITES: dict[str, tuple[tuple[Any, ...], ...]] = {
     "ti2v": tuple(
         (label, WORKFLOW_ID, WORKFLOW_VERSION, frames, seed, prompt, None)
@@ -113,6 +120,26 @@ SUITES: dict[str, tuple[tuple[Any, ...], ...]] = {
 }
 # One driving-video job: re-verifies artifact selection after the input-preview fix.
 SUITES["animate2_drive"] = (SUITES["animate2"][2],)
+# PR-VID-192 controlled experiment: one frozen reference, driving clip, seed, length and appearance
+# prompt; ONE variable changes per arm relative to its parent.
+#   A0 baseline   PR-VID-191 graph (positive_pose unconnected: the node reuses the appearance prompt)
+#   A1 motion     + a distinct, accurate Motion Prompt (default pose/reference strengths)
+#   A2 pose       A1 + pose strength 1.5
+#   A3 reference  A1 + reference-image strength 1.3 (targets the duplicate-subject/identity issue)
+_EXPERIMENT_PROMPT = f"{_ANIMATE2_SUBJECT} exercising in a bright studio."
+SUITES["animate2_controls"] = tuple(
+    (label, "wan_animate2_drive_i2v_v1", version, 41, 19103, _EXPERIMENT_PROMPT, _DRIVING_CLIP, controls)
+    for label, version, controls in (
+        ("A0", "1.0.0", None),
+        ("A1", "1.1.0", {"pose_prompt": _MOTION_PROMPT_QUALIFIED}),
+        ("A2", "1.1.0", {"pose_prompt": _MOTION_PROMPT_QUALIFIED, "pose_strength": "1.5"}),
+        (
+            "A3",
+            "1.1.0",
+            {"pose_prompt": _MOTION_PROMPT_QUALIFIED, "reference_image_strength": "1.3"},
+        ),
+    )
+)
 _DEVICE_LOSS_MARKERS = (
     "device lost",
     "device_lost",
@@ -284,7 +311,8 @@ def _find_key(payload: Any, key: str) -> Any:
 def _submit(stack: _Stack, source: Path, workspace: Path, job: tuple) -> str:
     from src.controller.video_workflow_controller import VideoWorkflowController
 
-    _label, workflow_id, version, frames, seed, prompt, driving = job
+    _label, workflow_id, version, frames, seed, prompt, driving, *rest = job
+    controls = rest[0] if rest else None
     app = SimpleNamespace(job_service=stack.service, output_dir=str(workspace / "output"))
     form = {
         "workflow_id": workflow_id,
@@ -298,6 +326,8 @@ def _submit(stack: _Stack, source: Path, workspace: Path, job: tuple) -> str:
     }
     if driving:
         form["pose_video_path"] = driving
+    if controls:
+        form["operator_controls"] = dict(controls)
     return VideoWorkflowController(app_controller=app).submit_video_workflow_job(
         source_image_path=source, form_data=form
     )
@@ -449,6 +479,7 @@ def _run(stack: _Stack, args: argparse.Namespace, evidence: dict, workspace: Pat
                 }
                 if stage.get("pose_video_path")
                 else None,
+                "operator_controls": stage.get("operator_controls"),
                 "experimental_opt_in": stage["video_execution"]["experimental_opt_in"],
             }
         )

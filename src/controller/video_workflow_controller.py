@@ -26,6 +26,7 @@ from src.video.video_workflow_intent import (
     mid_anchor_list,
     parse_seed_input,
 )
+from src.video.workflow_controls import operator_controls_projection, resolve_operator_controls
 from src.video.workflow_frame_count import (
     approximate_seconds,
     frame_count_policy,
@@ -110,6 +111,7 @@ class VideoWorkflowController:
                     "accepted_controls": list(getattr(spec, "accepted_controls", ())),
                     "form_visibility": form_visibility(spec),
                     "frame_count": frame_count_projection(spec),
+                    "operator_controls": operator_controls_projection(spec),
                     "operator_projection": self._mapping_dict(
                         (getattr(spec, "backend_defaults", None) or {}).get("operator_projection")
                     ),
@@ -306,6 +308,7 @@ class VideoWorkflowController:
                 parse_seed_input(form_data.get("seed"))
             if frame_count_policy(spec) is not None:
                 parse_frame_count(spec, form_data.get("frame_count"))
+            resolve_operator_controls(spec, form_data)
         except ValueError as exc:
             return False, str(exc)
 
@@ -466,6 +469,11 @@ class VideoWorkflowController:
             frozen_frame_count = parse_frame_count(spec, form_data.get("frame_count"))
             workflow_config["frame_count"] = frozen_frame_count
             workflow_config["fps"] = length_policy["fps"]
+        # Declared workflow controls (e.g. Animate-2 motion prompt / pose strength) are frozen
+        # here, like seed and length; the compiler binds them to the exact graph inputs.
+        frozen_controls = resolve_operator_controls(spec, form_data)
+        if frozen_controls is not None:
+            workflow_config["operator_controls"] = frozen_controls
         if continuity_link:
             config["metadata"] = {"continuity": dict(continuity_link)}
 
@@ -491,6 +499,8 @@ class VideoWorkflowController:
             extra_metadata["video_workflow"]["source_preparation"] = dict(source_preparation)
         if frozen_seed is not None:
             extra_metadata["video_workflow"]["seed"] = frozen_seed
+        if frozen_controls is not None:
+            extra_metadata["video_workflow"]["operator_controls"] = dict(frozen_controls)
         if driving_provenance is not None:
             extra_metadata["video_workflow"]["pose_video"] = dict(driving_provenance)
         if frozen_frame_count is not None and length_policy is not None:

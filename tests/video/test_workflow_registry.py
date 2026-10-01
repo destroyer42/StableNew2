@@ -48,7 +48,9 @@ def test_default_workflow_registry_retains_but_disables_unimplemented_ltx_contra
         ("wan22_ti2v_5b_i2v_v1", "1.0.0"),
         ("wan22_ti2v_5b_i2v_v1", "1.1.0"),
         ("wan_animate2_drive_i2v_v1", "1.0.0"),
+        ("wan_animate2_drive_i2v_v1", "1.1.0"),
         ("wan_animate2_prompt_i2v_v1", "1.0.0"),
+        ("wan_animate2_prompt_i2v_v1", "1.1.0"),
     ]
 
 
