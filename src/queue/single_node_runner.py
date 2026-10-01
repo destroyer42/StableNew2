@@ -424,24 +424,29 @@ class SingleNodeJobRunner:
 
     def _worker_main(self, mode: str, job: Job | None) -> None:
         if mode == "once" and job is not None:
+            failure: Exception | None = None
             try:
                 self.run_once(job)
-            finally:
-                with self._lifecycle_lock:
-                    handoff = (
-                        self._continue_after_once
-                        and not self._stop_event.is_set()
-                        and self._can_continue_dispatching()
-                    )
-                    if handoff:
-                        self._worker_mode = "continuous"
-                        self._continue_after_once = False
-                        threading.current_thread().name = "QueueWorker"
-                    else:
-                        self._continue_after_once = False
-                        self._worker_retiring = True
+            except Exception as exc:  # noqa: BLE001 - run_once already recorded the failure
+                failure = exc
+            with self._lifecycle_lock:
+                handoff = (
+                    self._continue_after_once
+                    and not self._stop_event.is_set()
+                    and self._can_continue_dispatching()
+                )
+                if handoff:
+                    self._worker_mode = "continuous"
+                    threading.current_thread().name = "QueueWorker"
+                else:
+                    self._worker_retiring = True
+                self._continue_after_once = False
             if not handoff:
+                if failure is not None:
+                    raise failure
                 return
+            # A failed one-shot job must not strand the remaining queue: it is already
+            # persisted FAILED, so keep draining and let the loop own later failures.
         self._worker_loop()
 
     def stop(self) -> None:

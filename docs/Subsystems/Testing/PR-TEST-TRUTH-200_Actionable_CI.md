@@ -1,7 +1,9 @@
 # PR-TEST-TRUTH-200 — Restore Actionable CI & Consolidate Legacy Journeys
 
 Status: implemented on `feature/pr-test-truth-200-actionable-ci` (base `origin/main` 4acad71).
-No production (`src/`) change. Required CI behavior unchanged.
+Test and CI infrastructure, plus two bounded production fixes (three files) found by the work (PR-TEST-TRUTH-200R, below):
+`pipeline_runner.py` (randomizer projection), `single_node_runner.py` and `job_service.py`
+(one-shot -> continuous worker handoff). Required CI behavior unchanged.
 
 ## Why
 

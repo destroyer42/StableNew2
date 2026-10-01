@@ -171,7 +171,7 @@ def test_pause_resume_preserves_manual_or_auto_dispatch_policy(tmp_path: Path) -
         repository.close()
 
 
-def _make_boundary_service(tmp_path: Path):
+def _make_boundary_service(tmp_path: Path, *, fail_first_job: bool = False):
     """Service whose one-shot worker blocks *after* job A is durably COMPLETED.
 
     The ``COMPLETED`` status callback runs on the QueueWorkerOnce thread after the
@@ -187,10 +187,14 @@ def _make_boundary_service(tmp_path: Path):
 
     def execute(job):
         calls.append(job.job_id)
+        if fail_first_job and job.job_id == "A":
+            raise RuntimeError("job A failed")
         return {"success": True, "variants": []}
 
+    terminal = JobStatus.FAILED if fail_first_job else JobStatus.COMPLETED
+
     def on_status(job, status):
-        if job.job_id == "A" and status is JobStatus.COMPLETED:
+        if job.job_id == "A" and status is terminal:
             at_boundary.set()
             assert proceed.wait(timeout=5.0), "boundary was never released"
 
@@ -308,6 +312,34 @@ def test_auto_run_reenabled_after_continuous_worker_commits_to_retire_restarts_d
         assert calls == ["A", "B", "C"]
     finally:
         release_a.set()
+        runner.stop()
+        service.stop()
+        repository.close()
+
+
+def test_failed_one_shot_job_still_hands_off_to_continuous_drain(tmp_path: Path) -> None:
+    service, queue, runner, repository, at_boundary, proceed, calls = _make_boundary_service(
+        tmp_path, fail_first_job=True
+    )
+    try:
+        assert service.run_next_now() is True
+        assert at_boundary.wait(timeout=5.0)
+        # Boundary: A is durably FAILED; run_once is about to re-raise on the one-shot thread.
+        assert repository.get_job_model("A").status is JobStatus.FAILED
+
+        service.set_auto_run_enabled(True, start_if_ready=True)
+        proceed.set()
+
+        _wait_until(
+            lambda: all(
+                repository.get_job_model(job_id).status is JobStatus.COMPLETED
+                for job_id in ("B", "C")
+            ),
+            timeout=5.0,
+        )
+        assert calls == ["A", "B", "C"]
+    finally:
+        proceed.set()
         runner.stop()
         service.stop()
         repository.close()
