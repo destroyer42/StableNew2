@@ -65,12 +65,12 @@ class ReviewTabFrame(ttk.Frame):
         self.app_state = app_state
         self._workflow_adapter = ReviewWorkflowAdapter()
         self._vid193_qualification = None
-        if os.environ.get("STABLENEW_VID193_QUALIFICATION") == "1":
+        if os.environ.get("STABLENEW_VID193_QUALIFICATION") in {"1", "AD0", "AD1"}:
             from src.gui.controllers.vid193_qualification_adapter import (
-                Vid193Ad0QualificationAdapter,
+                Vid193QualificationAdapter,
             )
 
-            self._vid193_qualification = Vid193Ad0QualificationAdapter()
+            self._vid193_qualification = Vid193QualificationAdapter()
         self._default_workflow_hint = REVIEW_DEFAULT_WORKFLOW_HINT
 
         self.selected_images: list[Path] = []
@@ -557,13 +557,13 @@ class ReviewTabFrame(ttk.Frame):
         )
         self.reprocess_all_button.grid(row=6, column=0, sticky="ew")
         if self._vid193_qualification is not None:
-            self.vid193_ad0_button = ttk.Button(
+            self.vid193_qualification_button = ttk.Button(
                 run_box,
-                text="Queue PR-VID-193 AD0",
+                text=f"Queue PR-VID-193 {self._vid193_qualification.arm}",
                 style="Dark.TButton",
-                command=self._preview_vid193_ad0,
+                command=self._preview_vid193_qualification,
             )
-            self.vid193_ad0_button.grid(row=7, column=0, sticky="ew", pady=(6, 0))
+            self.vid193_qualification_button.grid(row=7, column=0, sticky="ew", pady=(6, 0))
         attach_tooltip(
             self.reprocess_selected_button,
             "Queue only the currently selected images for reprocessing with the checked stages and prompt edits shown in Review.",
@@ -1585,22 +1585,23 @@ class ReviewTabFrame(ttk.Frame):
         except Exception as exc:
             messagebox.showerror("Reprocess failed", str(exc))
 
-    def _preview_vid193_ad0(self) -> None:
+    def _preview_vid193_qualification(self) -> None:
         qualification = self._vid193_qualification
         if qualification is None:
             return
+        arm = qualification.arm
         job_service = getattr(self.app_controller, "job_service", None)
         if job_service is None:
-            messagebox.showerror("AD0 unavailable", "JobService is not connected.")
+            messagebox.showerror(f"{arm} unavailable", "JobService is not connected.")
             return
         try:
             njr, preview = qualification.prepare(self._get_selected_review_paths())
         except Exception as exc:
-            messagebox.showerror("AD0 preview unavailable", str(exc))
+            messagebox.showerror(f"{arm} preview unavailable", str(exc))
             return
 
         dialog = tk.Toplevel(self)
-        dialog.title("PR-VID-193 AD0 NJR preview")
+        dialog.title(f"PR-VID-193 {arm} NJR preview")
         dialog.transient(self.winfo_toplevel())
         dialog.geometry("820x690")
         apply_toplevel_theme(dialog)
@@ -1629,15 +1630,15 @@ class ReviewTabFrame(ttk.Frame):
                     self._get_selected_review_paths()
                 )
                 if refreshed_preview != preview or refreshed_njr.job_id != njr.job_id:
-                    raise RuntimeError("AD0 preview changed; reopen it before queueing")
+                    raise RuntimeError(f"{arm} preview changed; reopen it before queueing")
                 job_id = qualification.submit(refreshed_njr, job_service)
             except Exception as exc:
-                messagebox.showerror("AD0 submission failed", str(exc), parent=dialog)
+                messagebox.showerror(f"{arm} submission failed", str(exc), parent=dialog)
                 return
             dialog.destroy()
-            messagebox.showinfo("AD0 queued", f"StableNew Job ID: {job_id}")
+            messagebox.showinfo(f"{arm} queued", f"StableNew Job ID: {job_id}")
 
-        ttk.Button(actions, text="Queue AD0 once", command=confirm).pack(side="right", padx=(0, 8))
+        ttk.Button(actions, text=f"Queue {arm} once", command=confirm).pack(side="right", padx=(0, 8))
         dialog.grab_set()
 
     def _resolve_learning_controller(self) -> Any | None:
