@@ -54,8 +54,19 @@ def _isolate_process_global_runtime_state():
     or a live single-flight watchdog, which then makes unrelated lifecycle tests
     (shutdown counts, watchdog start/stall) fail only in a whole-suite run. This
     forgets bookkeeping for threads leaked by earlier tests; it does not stop them.
+
+    ``AppController`` also chains ``sys.excepthook``/``threading.excepthook`` at
+    construction. Controllers that are never shut down stack those hooks, and a later
+    thread exception then recurses through every leaked controller (each building a
+    diagnostics bundle) until the interpreter overflows its stack. Restore both hooks
+    after every test.
     """
 
+    import sys
+    import threading
+
+    original_sys_hook = sys.excepthook
+    original_thread_hook = threading.excepthook
     try:
         from src.services.watchdog_system_v2 import SystemWatchdogV2
         from src.utils.thread_registry import get_thread_registry
@@ -68,7 +79,11 @@ def _isolate_process_global_runtime_state():
             SystemWatchdogV2._ACTIVE_THREAD = None
     except Exception:  # pragma: no cover - isolation must never break collection
         pass
-    yield
+    try:
+        yield
+    finally:
+        sys.excepthook = original_sys_hook
+        threading.excepthook = original_thread_hook
 
 
 @pytest.fixture(autouse=True)

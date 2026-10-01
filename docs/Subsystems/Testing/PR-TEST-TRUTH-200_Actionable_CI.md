@@ -73,6 +73,33 @@ Replaced rather than removed: all-disabled stage-chain test (now pins the NJR
    race — a finished manual one-shot `QueueWorkerOnce` thread is still alive, so
    `_ensure_runner_started()` skips starting the continuous worker and queued jobs
    stall with auto-run on. Fix belongs in `JobService`/`SingleNodeJobRunner`.
+   The same race makes `tests/integration/test_pr_mvp_060_phase1b.py::...manual_dispatch`
+   (a second `on_queue_send_job_v2()` right after a completed job) fail intermittently
+   in whole-suite runs; it passes in isolation and is left unmasked.
+
+## Process-global isolation added to `tests/conftest.py`
+
+An autouse fixture clears `ThreadRegistry` bookkeeping, resets the `SystemWatchdogV2`
+single-flight slot, and restores `sys.excepthook`/`threading.excepthook` after each
+test. Without it, `AppController`s that tests never shut down stack their chained
+exception hooks until one thread exception recurses to a stack overflow (observed as a
+Windows fatal crash of the whole run) and leaked threads/watchdogs fail unrelated
+lifecycle tests only in a whole-suite run. It forgets leaked threads; it does not stop
+them, and the leaking tests themselves are unaudited debt.
+
+## Verification
+
+- Final single-process full suite (Python 3.11 local): 3940 passed, 64 skipped,
+  18 failed = 14 `numpy`/`cv2` environment + the two open findings above + two
+  1-second `post_started` waits in `test_pr_harden_009_r1a/r2` (raised to 10 s after
+  the run; they pass in isolation and in the `tests/integration tests/pipeline` run) +
+  the phase1b symptom of finding 2. Base census: about 300 failures plus a hang and a
+  stack-overflow crash. Collected tests 4033 -> 4020.
+- Required gate pieces pass locally: repository completeness, controller ratchet,
+  Ruff, collection gate, required smoke (129 passed), `git diff --check`.
+  `tools/ci/run_pr_gate.py` stops at the existing missing-`mypy` tooling blocker.
+- Python 3.12 and GitHub required CI were not run (no 3.12 test environment locally;
+  publication was not authorized).
 
 ## Known environment limits
 
