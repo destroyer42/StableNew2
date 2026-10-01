@@ -83,6 +83,31 @@ def _require_display() -> None:
         pytest.skip(f"Tk unavailable: {exc}")
 
 
+def _journey_subprocess_env() -> dict[str, str]:
+    """Production-configuration environment for a journey subprocess, hermetic to the host GPU.
+
+    The executor samples live GPU pressure through ``nvidia-smi`` and logs an ERROR when a
+    host GPU is near saturation, which the journey (correctly) reports as a captured error.
+    A fake-backend journey must not depend on what else is using this machine's GPU, so
+    PATH entries that provide ``nvidia-smi`` are removed (the sampler is best-effort and
+    reports no GPU data when the tool is absent).
+    """
+
+    env = {
+        k: v
+        for k, v in os.environ.items()
+        if k not in {"PYTEST_CURRENT_TEST", "STABLENEW_TEST_MODE", "STABLENEW_NO_WEBUI"}
+    }
+    kept = [
+        entry
+        for entry in env.get("PATH", "").split(os.pathsep)
+        if entry
+        and not any((Path(entry) / name).exists() for name in ("nvidia-smi", "nvidia-smi.exe"))
+    ]
+    env["PATH"] = os.pathsep.join(kept)
+    return env
+
+
 def _run_cli(
     tmp_path: Path,
     *extra: str,
@@ -97,11 +122,7 @@ def _run_cli(
     """
 
     _require_display()
-    env = {
-        k: v
-        for k, v in os.environ.items()
-        if k not in {"PYTEST_CURRENT_TEST", "STABLENEW_TEST_MODE", "STABLENEW_NO_WEBUI"}
-    }
+    env = _journey_subprocess_env()
     result = subprocess.run(
         [
             sys.executable,
@@ -171,11 +192,7 @@ def test_real_backend_code_path_against_a_loopback_backend(tmp_path: Path) -> No
     with FakeA1111(
         model="alpha-model", extra_models=("zeta-model",), active_model="zeta-model"
     ) as backend:
-        env = {
-            k: v
-            for k, v in os.environ.items()
-            if k not in {"PYTEST_CURRENT_TEST", "STABLENEW_TEST_MODE", "STABLENEW_NO_WEBUI"}
-        }
+        env = _journey_subprocess_env()
         result = subprocess.run(
             [
                 sys.executable,
