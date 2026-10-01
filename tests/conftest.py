@@ -1,9 +1,43 @@
+import gc
 import os
+import threading
 import time
 import tkinter as tk
 from pathlib import Path
 
 import pytest
+
+# --- Garbage collection only on the main thread ---------------------------------------
+# GUI tests leave Tk interpreters/variables behind. If the cyclic collector (automatic,
+# or an explicit ``gc.collect()`` such as ``SDWebUIClient.free_vram``) finalizes one on a
+# worker thread, Tcl aborts the whole process ("Tcl_AsyncDelete: async handler deleted by
+# the wrong thread" -> ``Fatal Python error: Aborted``, seen in the CI full-suite job on
+# both Python versions). Disable automatic collection for the test session, make
+# ``gc.collect`` a no-op off the main thread, and collect on the main thread whenever the
+# test module changes so garbage is still reclaimed.
+_REAL_GC_COLLECT = gc.collect
+
+
+def _main_thread_only_collect(*args, **kwargs):
+    if threading.current_thread() is not threading.main_thread():
+        return 0
+    return _REAL_GC_COLLECT(*args, **kwargs)
+
+
+_GC_WAS_ENABLED = gc.isenabled()
+gc.disable()
+gc.collect = _main_thread_only_collect
+
+
+def pytest_runtest_teardown(item, nextitem):
+    if nextitem is None or nextitem.path != item.path:
+        _REAL_GC_COLLECT()
+
+
+def pytest_unconfigure(config):
+    gc.collect = _REAL_GC_COLLECT
+    if _GC_WAS_ENABLED:
+        gc.enable()
 
 
 @pytest.fixture

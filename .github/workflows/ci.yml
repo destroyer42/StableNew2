@@ -105,7 +105,7 @@ jobs:
       uses: GabrielBB/xvfb-action@v1
       with:
         run: |
-          python -m pytest -q -rfE --tb=short --timeout=300
+          python -m pytest -v -rfE --tb=short --timeout=300
 
     - name: Upload full test results
       uses: actions/upload-artifact@v4
