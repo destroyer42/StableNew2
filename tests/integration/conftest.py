@@ -36,24 +36,3 @@ def _isolate_integration_host_state(
     monkeypatch.setenv(
         "STABLENEW_PROMPTPACK_DIR", str(tmp_path_factory.mktemp("isolated_promptpacks"))
     )
-    # WebUI autostart defaults to enabled when an install is detected on the host
-    # and is cached process-wide; pin it off so no test probes or launches it.
-    import src.config.app_config as app_config
-
-    monkeypatch.setenv("STABLENEW_WEBUI_AUTOSTART", "0")
-    monkeypatch.setattr(app_config, "_webui_autostart_enabled", False)
-
-
-@pytest.fixture(autouse=True)
-def _reset_process_thread_registry_shutdown_flag() -> None:
-    """Start every integration test with a live process-wide thread registry.
-
-    ``AppController`` shutdown marks the global ThreadRegistry as shutting down and
-    it then refuses new tracked threads. That process-global flag would otherwise
-    leak from one test into later threaded-controller tests (order-dependent
-    timeouts).
-    """
-
-    from src.utils.thread_registry import get_thread_registry
-
-    get_thread_registry()._shutdown_requested = False

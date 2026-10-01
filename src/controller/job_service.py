@@ -347,7 +347,9 @@ class JobService:
     def set_activity_hooks(self, *, on_queue_activity=None, on_runner_activity=None) -> None:
         self._on_queue_activity = on_queue_activity
         self._on_runner_activity = on_runner_activity
-        set_runner_activity(on_runner_activity) if callable(set_runner_activity := getattr(self.runner, "set_activity_callback", None)) else None
+        set_runner_activity(on_runner_activity) if callable(
+            set_runner_activity := getattr(self.runner, "set_activity_callback", None)
+        ) else None
 
     def set_auto_run_enabled(self, enabled: bool, *, start_if_ready: bool = False) -> None:
         job_service_auto_run.set_auto_run_enabled(self, enabled, start_if_ready=start_if_ready)
@@ -523,14 +525,8 @@ class JobService:
                     ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
                     extra_fields={"runner": type(self.runner).__name__},
                 )
-                self._ensure_runner_started()
-            else:
-                log_with_ctx(
-                    logger,
-                    logging.DEBUG,
-                    "Queue worker already running; job will be picked up by worker loop",
-                    ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
-                )
+            # A running worker may be a one-shot that must hand off to continuous draining.
+            self._ensure_runner_started()
         else:
             log_with_ctx(
                 logger,
@@ -541,8 +537,11 @@ class JobService:
 
     def _ensure_runner_started(self) -> None:
         with self._runner_lock:
-            runner_is_running = self.runner.is_running()
-            if runner_is_running:
+            if self.runner.is_running():
+                # The runner owns the one-shot -> continuous handoff (optional capability).
+                request = getattr(self.runner, "request_continuous_dispatch", None)
+                if callable(request):
+                    request()
                 self._worker_started = True
                 return
             self._worker_started = False

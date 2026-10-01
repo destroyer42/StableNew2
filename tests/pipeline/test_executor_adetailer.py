@@ -4,7 +4,29 @@ import logging
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
+
 from src.pipeline.executor import Pipeline
+
+_HEALTHY_RUNTIME_ADMISSION = {
+    "schema": "stablenew.runtime-admission.v1",
+    "status": "healthy",
+    "reasons": [],
+    "cause_codes": [],
+}
+
+
+@pytest.fixture(autouse=True)
+def _healthy_runtime_admission(monkeypatch):
+    """Runtime admission samples live GPU pressure and the host process list.
+
+    These tests exercise ADetailer payload construction, not admission, so they must
+    not depend on whether the machine running them is busy.
+    """
+
+    monkeypatch.setattr(
+        Pipeline, "_ensure_runtime_admissible", lambda *_a, **_k: _HEALTHY_RUNTIME_ADMISSION
+    )
 
 
 def test_adetailer_metadata_apply_global_defined():

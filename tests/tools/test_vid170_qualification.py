@@ -14,6 +14,7 @@ from unittest.mock import Mock
 
 import pytest
 
+from tests.helpers.optional_deps import requires_cv2
 from tools.qualification.vid170 import graph as graph_mod
 from tools.qualification.vid170 import run as harness
 from tools.qualification.vid170 import synthetic_pose
@@ -113,6 +114,7 @@ def test_validate_graph_flags_a_face_video_addition() -> None:
 # --- synthetic pose determinism (Cases A/B) -------------------------------------------------------
 
 
+@requires_cv2
 def test_synthetic_pose_renders_frozen_frame_count_and_geometry(tmp_path: Path) -> None:
     a = synthetic_pose.render_arm_raise(tmp_path / "a.mp4")
     b = synthetic_pose.render_walk_forward(tmp_path / "b.mp4")
@@ -120,6 +122,7 @@ def test_synthetic_pose_renders_frozen_frame_count_and_geometry(tmp_path: Path) 
     assert b.exists() and b.stat().st_size > 0
 
 
+@requires_cv2
 def test_synthetic_pose_rendering_is_deterministic(tmp_path: Path) -> None:
     import hashlib
 

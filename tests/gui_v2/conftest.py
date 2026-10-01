@@ -57,23 +57,6 @@ def _isolate_prompt_pack_dir(monkeypatch: pytest.MonkeyPatch, tmp_path_factory) 
 
 
 @pytest.fixture(autouse=True)
-def _disable_host_webui_autostart(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Never let a GUI test probe, autostart, or wait on the host's WebUI.
-
-    ``get_webui_autostart_enabled`` defaults to *enabled* whenever a WebUI install
-    is detected on the machine, and caches the answer process-wide. A test that
-    builds the real application would then spend ~50 s probing local ports and try
-    to launch the owner's ``webui-user.bat``, ending in a runtime ERROR state that
-    blocks Run. Pin autostart off (the cache is restored by ``monkeypatch``).
-    """
-
-    import src.config.app_config as app_config
-
-    monkeypatch.setenv("STABLENEW_WEBUI_AUTOSTART", "0")
-    monkeypatch.setattr(app_config, "_webui_autostart_enabled", False)
-
-
-@pytest.fixture(autouse=True)
 def _isolate_gui_workspace_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
 ) -> None:
@@ -103,21 +86,6 @@ def _isolate_gui_workspace_state(
     monkeypatch.setattr(
         preview_panel_v2, "PREVIEW_STATE_PATH", root / "state" / "preview_panel_state.json"
     )
-
-
-@pytest.fixture(autouse=True)
-def _reset_process_thread_registry_shutdown_flag() -> None:
-    """Start every GUI test with a live process-wide thread registry.
-
-    Application shutdown (``AppController.shutdown_app``) marks the global
-    ThreadRegistry as shutting down, after which it refuses new tracked threads.
-    Without a reset that process-global state leaks into later tests, which then
-    fail depending on test order rather than on their own behaviour.
-    """
-
-    from src.utils.thread_registry import get_thread_registry
-
-    get_thread_registry()._shutdown_requested = False
 
 
 simpledialog_stub = SimpleNamespace(

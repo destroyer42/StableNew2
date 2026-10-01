@@ -2059,7 +2059,7 @@ class PipelineRunner:
             error=error,
             variants=variants,
             learning_records=learning_records,
-            randomizer_mode=getattr(njr, "randomizer_mode", ""),
+            randomizer_mode=getattr(njr, "variant_mode", "standard"),
             randomizer_plan_size=getattr(njr, "variant_total", 1),
             metadata=metadata,
             stage_plan=plan,

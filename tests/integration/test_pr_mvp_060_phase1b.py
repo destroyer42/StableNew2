@@ -61,6 +61,14 @@ def _write_pack(path: Path, prompt: str) -> None:
     )
 
 
+def _wait_until_runner_idle(runner) -> None:
+    """Durable COMPLETED precedes worker retirement; manual dispatch needs an idle runner."""
+    deadline = time.monotonic() + 5.0
+    while runner.is_running() and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert not runner.is_running()
+
+
 def _wait_for_status(repository: JobRepository, job_id: str, status: JobStatus) -> None:
     deadline = time.monotonic() + 5.0
     while time.monotonic() < deadline:
@@ -146,6 +154,7 @@ def test_phase1b_repeats_preview_submission_and_manual_dispatch(
 
         assert controller.on_queue_send_job_v2() is True
         _wait_for_status(repository, submitted_ids[0], JobStatus.COMPLETED)
+        _wait_until_runner_idle(service.runner)
         assert executed == submitted_ids[:1]
         assert [job.job_id for job in queue.list_jobs(JobStatus.QUEUED)] == submitted_ids[1:]
         assert service.auto_run_enabled is False
@@ -165,6 +174,7 @@ def test_phase1b_repeats_preview_submission_and_manual_dispatch(
         for job_id in submitted_ids[1:]:
             assert controller.on_queue_send_job_v2() is True
             _wait_for_status(repository, job_id, JobStatus.COMPLETED)
+            _wait_until_runner_idle(service.runner)
 
         assert executed == submitted_ids
     finally:

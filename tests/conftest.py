@@ -87,6 +87,30 @@ def _isolate_process_global_runtime_state():
 
 
 @pytest.fixture(autouse=True)
+def _pin_host_runtime_autostart_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Deterministic pytest never launches, adopts, or probes the owner's A1111/Comfy.
+
+    Tracked ``presets/settings.json`` and WebUI detection carry machine-local values
+    (install paths, ``comfy_autostart_enabled``), and ``get_webui_autostart_enabled``
+    defaults to *enabled* whenever an install is detected and caches the answer
+    process-wide. A test that builds the real application would then try to start the
+    host's WebUI/Comfy. Pin both off through the same environment switches production
+    honors, and reset the cached WebUI answer. Tests that exercise autostart or
+    process-manager behavior override this with their own ``monkeypatch.setenv`` /
+    ``set_webui_autostart_enabled`` or injected fakes (they run after this fixture).
+    """
+
+    monkeypatch.setenv("STABLENEW_WEBUI_AUTOSTART", "0")
+    monkeypatch.setenv("STABLENEW_COMFY_AUTOSTART", "0")
+    try:
+        import src.config.app_config as app_config
+
+        monkeypatch.setattr(app_config, "_webui_autostart_enabled", None)
+    except Exception:  # pragma: no cover - isolation must never break collection
+        pass
+
+
+@pytest.fixture(autouse=True)
 def _mock_webui_discovery(monkeypatch, tmp_path: Path):
     """Prevent tests from launching or probing real WebUI services.
 
