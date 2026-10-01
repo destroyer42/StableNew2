@@ -83,6 +83,12 @@ def _require_display() -> None:
         pytest.skip(f"Tk unavailable: {exc}")
 
 
+def _shim_dir(tmp_path: Path) -> Path:
+    """Sibling of ``tmp_path`` so it never appears among the evidence bundles inside it."""
+
+    return tmp_path.with_name(tmp_path.name + "_shims")
+
+
 def _journey_subprocess_env(shim_dir: Path) -> dict[str, str]:
     """Production-configuration environment for a journey subprocess, hermetic to the host GPU.
 
@@ -125,7 +131,7 @@ def _run_cli(
     """
 
     _require_display()
-    env = _journey_subprocess_env(tmp_path / "_shims")
+    env = _journey_subprocess_env(_shim_dir(tmp_path))
     result = subprocess.run(
         [
             sys.executable,
@@ -195,7 +201,7 @@ def test_real_backend_code_path_against_a_loopback_backend(tmp_path: Path) -> No
     with FakeA1111(
         model="alpha-model", extra_models=("zeta-model",), active_model="zeta-model"
     ) as backend:
-        env = _journey_subprocess_env(tmp_path / "_shims")
+        env = _journey_subprocess_env(_shim_dir(tmp_path))
         result = subprocess.run(
             [
                 sys.executable,
@@ -323,14 +329,14 @@ def test_hermetic_journey_env_hides_only_nvidia_smi_and_keeps_git_guard_active(
     from src.utils.process_inspector_v2 import collect_gpu_snapshot
     from tools.operator_journey.workspace import UserDataGuard, repo_sha
 
-    env = _journey_subprocess_env(tmp_path / "_shims")
+    env = _journey_subprocess_env(_shim_dir(tmp_path))
     path = env["PATH"]
     original = os.environ.get("PATH", "")
     assert path.endswith(original)  # every original PATH entry is preserved
 
     # nvidia-smi resolves to the shim and yields no telemetry; git still resolves.
     smi = shutil.which("nvidia-smi", path=path)
-    assert smi is not None and Path(smi).parent == tmp_path / "_shims"
+    assert smi is not None and Path(smi).parent == _shim_dir(tmp_path)
     git = shutil.which("git", path=path)
     assert git is not None
     monkeypatch.setenv("PATH", path)
