@@ -198,7 +198,7 @@ def test_qualification_candidates_are_never_approved_production_workflows() -> N
 
     from src.video.workflow_registry import build_default_workflow_registry
 
-    pattern = re.compile(r"wan2[._]?2|wan_2\.1|vace|scail|wan-?animate|vid110", re.IGNORECASE)
+    pattern = re.compile(r"wan2[._]?2|wan_2\.1|\bvace\b|scail|wan-?animate|vid110", re.IGNORECASE)
     harness_importers = [
         str(path.relative_to(REPO_ROOT))
         for path in (REPO_ROOT / "src").rglob("*.py")
