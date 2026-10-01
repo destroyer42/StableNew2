@@ -1,96 +1,42 @@
-"""Test to reproduce stage flag corruption on load."""
+"""Stage-enable flags saved in a PromptPack's preset data survive ``load_pack_config``."""
+
+from __future__ import annotations
 
 import json
-import tempfile
 from pathlib import Path
 
+from src.promptpacks.storage import CURRENT_PROMPTPACK_SCHEMA_VERSION
 from src.utils.config import ConfigManager
 
 
-def test_stage_flags_preserved_on_load():
-    """Test that stage flags are preserved when loading pack config."""
-
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmpdir_path = Path(tmpdir)
-        presets_dir = tmpdir_path / "presets"
-        presets_dir.mkdir()
-
-        # Create a pack JSON with specific stage flags
-        pack_json = {
-            "pack_data": {
-                "name": "test_pack",
-                "slots": [],
-                "matrix": {"enabled": False, "mode": "fanout", "limit": 8, "slots": []},
+def test_stage_flags_preserved_on_load(tmp_path: Path) -> None:
+    packs_dir = tmp_path / "packs"
+    packs_dir.mkdir()
+    pack_document = {
+        "schema_version": CURRENT_PROMPTPACK_SCHEMA_VERSION,
+        "pack_data": {
+            "name": "test_pack",
+            "slots": [],
+            "matrix": {"enabled": False, "mode": "fanout", "limit": 8, "slots": []},
+        },
+        "preset_data": {
+            "txt2img": {"model": "test_model.safetensors", "steps": 20, "cfg_scale": 7.5},
+            "pipeline": {
+                "txt2img_enabled": True,
+                "img2img_enabled": False,
+                "adetailer_enabled": True,
+                "upscale_enabled": True,
             },
-            "preset_data": {
-                "txt2img": {
-                    "model": "test_model.safetensors",
-                    "steps": 20,
-                    "cfg_scale": 7.5,
-                },
-                "pipeline": {
-                    "txt2img_enabled": True,
-                    "img2img_enabled": False,
-                    "adetailer_enabled": True,  # ← ENABLED
-                    "upscale_enabled": True,
-                },
-            },
-        }
+        },
+    }
+    (packs_dir / "test_pack.json").write_text(json.dumps(pack_document), encoding="utf-8")
 
-        # Save to packs/test_pack.json
-        packs_dir = Path("packs")
-        packs_dir.mkdir(exist_ok=True)
-        pack_path = packs_dir / "test_pack.json"
-        with open(pack_path, "w", encoding="utf-8") as f:
-            json.dump(pack_json, f, indent=2)
+    manager = ConfigManager(presets_dir=tmp_path / "presets", packs_dir=packs_dir)
+    loaded = manager.load_pack_config("test_pack")
 
-        # Create ConfigManager
-        config_mgr = ConfigManager(presets_dir=presets_dir)
-
-        # Load the pack config
-        loaded_config = config_mgr.load_pack_config("test_pack.txt")
-
-        print("\n" + "=" * 60)
-        print("TEST: Stage Flag Preservation on Load")
-        print("=" * 60)
-
-        print("\nSaved flags:")
-        print("  txt2img_enabled: True")
-        print("  img2img_enabled: False")
-        print("  adetailer_enabled: True  <- ENABLED")
-        print("  upscale_enabled: True")
-
-        print("\nLoaded flags:")
-        pipeline_section = loaded_config.get("pipeline", {})
-        print(f"  txt2img_enabled: {pipeline_section.get('txt2img_enabled')}")
-        print(f"  img2img_enabled: {pipeline_section.get('img2img_enabled')}")
-        print(f"  adetailer_enabled: {pipeline_section.get('adetailer_enabled')}")
-        print(f"  upscale_enabled: {pipeline_section.get('upscale_enabled')}")
-
-        # Check for corruption
-        txt2img_ok = pipeline_section.get("txt2img_enabled")
-        img2img_ok = not pipeline_section.get("img2img_enabled")
-        adetailer_ok = pipeline_section.get("adetailer_enabled")
-        upscale_ok = pipeline_section.get("upscale_enabled")
-
-        if txt2img_ok and img2img_ok and adetailer_ok and upscale_ok:
-            print("\n[OK] TEST PASSED: All flags preserved correctly!")
-        else:
-            print("\n[FAIL] TEST FAILED: Flags were corrupted!")
-            if not txt2img_ok:
-                print(f"  - txt2img should be True, got {pipeline_section.get('txt2img_enabled')}")
-            if not img2img_ok:
-                print(f"  - img2img should be False, got {pipeline_section.get('img2img_enabled')}")
-            if not adetailer_ok:
-                print(
-                    f"  - adetailer should be True, got {pipeline_section.get('adetailer_enabled')}"
-                )
-            if not upscale_ok:
-                print(f"  - upscale should be True, got {pipeline_section.get('upscale_enabled')}")
-
-        # Cleanup
-        pack_path.unlink()
-
-
-if __name__ == "__main__":
-    test_stage_flags_preserved_on_load()
+    assert loaded is not None
+    pipeline = loaded["pipeline"]
+    assert pipeline["txt2img_enabled"] is True
+    assert pipeline["img2img_enabled"] is False
+    assert pipeline["adetailer_enabled"] is True
+    assert pipeline["upscale_enabled"] is True

@@ -3,7 +3,30 @@ from __future__ import annotations
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
+
 from src.pipeline.executor import Pipeline
+
+_HEALTHY_RUNTIME_ADMISSION = {
+    "schema": "stablenew.runtime-admission.v1",
+    "status": "healthy",
+    "reasons": [],
+    "cause_codes": [],
+}
+
+
+@pytest.fixture(autouse=True)
+def _healthy_runtime_admission(monkeypatch):
+    """Runtime admission samples host GPU pressure and the process list (``/proc/stat``).
+
+    These tests exercise the ADetailer manifest, not admission, so they must not depend
+    on the machine (or CI container) that runs them.
+    """
+
+    monkeypatch.setattr(
+        Pipeline, "_ensure_runtime_admissible", lambda *_a, **_k: _HEALTHY_RUNTIME_ADMISSION
+    )
+
 
 _TINY_PNG_BASE64 = (
     "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z0ioAAAAASUVORK5CYII="

@@ -14,6 +14,7 @@ from PIL import Image
 
 from src.pipeline import video
 from src.video.video_export import export_video_mp4
+from tests.helpers.optional_deps import requires_windows
 
 
 def test_resolve_ffmpeg_executable_uses_env_override(monkeypatch, tmp_path: Path):
@@ -28,6 +29,7 @@ def test_resolve_ffmpeg_executable_uses_env_override(monkeypatch, tmp_path: Path
     assert resolved == ffmpeg_path
 
 
+@requires_windows
 def test_resolve_ffmpeg_executable_uses_winget_links_when_path_missing(monkeypatch, tmp_path: Path):
     local_appdata = tmp_path / "localappdata"
     ffmpeg_path = local_appdata / "Microsoft" / "WinGet" / "Links" / "ffmpeg.exe"

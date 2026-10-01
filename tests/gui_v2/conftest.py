@@ -57,6 +57,26 @@ def _isolate_prompt_pack_dir(monkeypatch: pytest.MonkeyPatch, tmp_path_factory) 
 
 
 @pytest.fixture(autouse=True)
+def _gui_tests_never_probe_a_live_webui(monkeypatch: pytest.MonkeyPatch) -> None:
+    """GUI tests must not depend on whether a WebUI is reachable on the host.
+
+    ``WebUIConnectionController.ensure_connected`` probes the configured endpoint; with
+    nothing listening (CI) the controller enters ERROR and blocks Run, while on a machine
+    with A1111 running the same test passes. Report READY without touching the network.
+    Tests of the real connection workflow live in ``tests/controller`` and tests here that
+    need their own behavior patch the class themselves.
+    """
+
+    from src.controller import webui_connection_controller as connection
+
+    def _ready(self, autostart: bool = True):
+        self._set_state(connection.WebUIConnectionState.READY)
+        return connection.WebUIConnectionState.READY
+
+    monkeypatch.setattr(connection.WebUIConnectionController, "ensure_connected", _ready)
+
+
+@pytest.fixture(autouse=True)
 def _isolate_gui_workspace_state(
     monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory
 ) -> None:

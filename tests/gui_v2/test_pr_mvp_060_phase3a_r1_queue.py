@@ -146,7 +146,7 @@ def test_pipeline_tab_pack_add_preview_and_queue_projection(
             lambda: bool(controller.app_state.job_draft.packs)
             and bool(controller.app_state.preview_jobs),
         )
-        assert tab.preview_panel.add_to_queue_button.instate(["!disabled"])
+        _pump_until(tk_root, lambda: tab.preview_panel.add_to_queue_button.instate(["!disabled"]))
 
         # Production button callback; no direct state mutation or manual panel
         # refresh is used to deliver the queue projection.

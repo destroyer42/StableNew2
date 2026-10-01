@@ -272,6 +272,14 @@ def test_full_fake_journey_including_review_and_ratings(tmp_path: Path) -> None:
     assert ratings == [3, 4, 5]
 
 
+@pytest.mark.skipif(
+    os.environ.get("CI", "").lower() == "true",
+    reason=(
+        "layout phase measures real widget geometry (artifact list < 60% of the workspace), "
+        "which depends on the display's size and fonts; semantic GUI operator journeys are "
+        "local/display-required, so this one is not asserted on virtual-display CI"
+    ),
+)
 def test_discovered_outputs_journey_passes_on_an_isolated_output_tree(tmp_path: Path) -> None:
     code, evidence = _run_cli(
         tmp_path, journey="discovered-outputs-review", backend_args=(), timeout=300

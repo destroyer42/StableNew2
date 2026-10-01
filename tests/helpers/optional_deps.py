@@ -9,6 +9,7 @@ so those tests skip with an explicit reason when the capability is absent.
 from __future__ import annotations
 
 import importlib.util
+import os
 
 import pytest
 
@@ -19,4 +20,8 @@ requires_numpy = pytest.mark.skipif(
 requires_cv2 = pytest.mark.skipif(
     importlib.util.find_spec("cv2") is None,
     reason="opencv-python is optional (svd extra, requirements-svd.txt)",
+)
+requires_windows = pytest.mark.skipif(
+    os.name != "nt",
+    reason="exercises the Windows-only branch of the code under test",
 )
