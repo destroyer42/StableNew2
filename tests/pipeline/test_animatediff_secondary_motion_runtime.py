@@ -34,6 +34,7 @@ def test_run_animatediff_stage_records_unavailable_secondary_motion_and_uses_ori
     }
 
     pipeline = Pipeline(client, Mock())
+    pipeline._generate_images_with_progress = Mock(return_value=client.img2img.return_value)
     pipeline._ensure_webui_true_ready = lambda: None
     pipeline._check_webui_health_before_stage = lambda stage: None
     pipeline._load_image_base64 = lambda path: _TINY_PNG_BASE64

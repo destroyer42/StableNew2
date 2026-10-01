@@ -5613,11 +5613,13 @@ class Pipeline:
                 )
 
             payload = attach_animatediff_to_payload(payload, animatediff_cfg, capability)
-            response = (
-                self.client.img2img(payload)
-                if run_mode == "img2img"
-                else self.client.txt2img(payload)
+            response = self._generate_images_with_progress(
+                run_mode,
+                payload,
+                stage_label="animatediff",
+                cancel_token=cancel_token,
             )
+            self._ensure_not_cancelled(cancel_token, "animatediff post-call")
             normalized = normalize_animatediff_response(response)
             frame_images = normalized["frame_images"]
             expected_frame_count = max(2, animatediff_cfg.video_length)
@@ -5778,6 +5780,9 @@ class Pipeline:
             return metadata
         except CancellationError:
             self._record_stage_event("animatediff", "cancelled", 1, 1, True)
+            raise
+        except PipelineStageError:
+            logger.exception("animatediff generation failed with a typed WebUI error")
             raise
         except Exception as exc:
             logger.error("animatediff stage failed: %s", exc)

@@ -1,0 +1,41 @@
+{
+  "qualification_id": "PR-VID-193-AD0",
+  "source_image_path": "C:\\Users\\rob\\projects\\StableNew-main\\reports\\vid193\\inputs\\source_fullbody_512_letterbox.png",
+  "source_sha256": "52c415946d5d6a5479c58b63b1d294d2f4b204fc7433bee620d64b3c79943fba",
+  "prompt": "A single adult person shifts their weight, takes a small step to the side, raises one hand in a natural wave, and slightly turns their head. Natural body movement, stable camera.",
+  "negative_prompt": "bad anatomy, deformed hands, extra limbs, duplicate person, blurry face, unstable background",
+  "checkpoint": "cyberrealisticXL_v90-16fp.safetensors",
+  "required_a1111_options": {
+    "pad_cond_uncond": true,
+    "pad_cond_uncond_v0": false
+  },
+  "config": {
+    "pipeline": {
+      "output_dir": "C:\\Users\\rob\\projects\\StableNew-main\\output",
+      "output_route": "animatediff"
+    },
+    "animatediff": {
+      "enabled": true,
+      "motion_module": "mm_sdxl_hs.safetensors",
+      "model": "cyberrealisticXL_v90-16fp.safetensors",
+      "vae": "Automatic",
+      "seed": 1733123036,
+      "width": 512,
+      "height": 512,
+      "sampler_name": "Euler a",
+      "scheduler": "Karras",
+      "steps": 20,
+      "cfg_scale": 6.0,
+      "clip_skip": 2,
+      "denoising_strength": 0.3,
+      "fps": 8,
+      "video_length": 8,
+      "loop_number": 0,
+      "closed_loop": "N",
+      "batch_size": 8,
+      "stride": 1,
+      "overlap": -1,
+      "format": ["PNG", "Frame"]
+    }
+  }
+}

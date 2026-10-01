@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
@@ -63,6 +64,13 @@ class ReviewTabFrame(ttk.Frame):
         self.app_controller = app_controller
         self.app_state = app_state
         self._workflow_adapter = ReviewWorkflowAdapter()
+        self._vid193_qualification = None
+        if os.environ.get("STABLENEW_VID193_QUALIFICATION") == "1":
+            from src.gui.controllers.vid193_qualification_adapter import (
+                Vid193Ad0QualificationAdapter,
+            )
+
+            self._vid193_qualification = Vid193Ad0QualificationAdapter()
         self._default_workflow_hint = REVIEW_DEFAULT_WORKFLOW_HINT
 
         self.selected_images: list[Path] = []
@@ -548,6 +556,14 @@ class ReviewTabFrame(ttk.Frame):
             command=lambda: self._reprocess(batch_all=True),
         )
         self.reprocess_all_button.grid(row=6, column=0, sticky="ew")
+        if self._vid193_qualification is not None:
+            self.vid193_ad0_button = ttk.Button(
+                run_box,
+                text="Queue PR-VID-193 AD0",
+                style="Dark.TButton",
+                command=self._preview_vid193_ad0,
+            )
+            self.vid193_ad0_button.grid(row=7, column=0, sticky="ew", pady=(6, 0))
         attach_tooltip(
             self.reprocess_selected_button,
             "Queue only the currently selected images for reprocessing with the checked stages and prompt edits shown in Review.",
@@ -563,7 +579,12 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TLabelframe",
             padding=8,
         )
-        feedback_box.grid(row=7, column=0, sticky="ew", pady=(8, 0))
+        feedback_box.grid(
+            row=8 if self._vid193_qualification is not None else 7,
+            column=0,
+            sticky="ew",
+            pady=(8, 0),
+        )
         configure_grid_columns(feedback_box, get_single_pair_form_column_specs())
         ttk.Label(feedback_box, text="Rating", style="Dark.TLabel").grid(
             row=0, column=0, sticky="w", padx=(0, 6), pady=(0, 4)
@@ -1563,6 +1584,61 @@ class ReviewTabFrame(ttk.Frame):
             messagebox.showinfo("Submitted", f"Submitted {submitted} reprocess job(s).")
         except Exception as exc:
             messagebox.showerror("Reprocess failed", str(exc))
+
+    def _preview_vid193_ad0(self) -> None:
+        qualification = self._vid193_qualification
+        if qualification is None:
+            return
+        job_service = getattr(self.app_controller, "job_service", None)
+        if job_service is None:
+            messagebox.showerror("AD0 unavailable", "JobService is not connected.")
+            return
+        try:
+            njr, preview = qualification.prepare(self._get_selected_review_paths())
+        except Exception as exc:
+            messagebox.showerror("AD0 preview unavailable", str(exc))
+            return
+
+        dialog = tk.Toplevel(self)
+        dialog.title("PR-VID-193 AD0 NJR preview")
+        dialog.transient(self.winfo_toplevel())
+        dialog.geometry("820x690")
+        apply_toplevel_theme(dialog)
+        preview_frame = ttk.Frame(dialog)
+        preview_frame.pack(fill="both", expand=True, padx=8, pady=8)
+        scroll = ttk.Scrollbar(preview_frame, orient="vertical")
+        scroll.pack(side="right", fill="y")
+        text_box = tk.Text(
+            preview_frame,
+            wrap="word",
+            padx=12,
+            pady=12,
+            yscrollcommand=scroll.set,
+        )
+        text_box.pack(side="left", fill="both", expand=True)
+        scroll.configure(command=text_box.yview)
+        text_box.insert("1.0", preview)
+        text_box.configure(state="disabled")
+        actions = ttk.Frame(dialog)
+        actions.pack(fill="x", padx=8, pady=(0, 8))
+        ttk.Button(actions, text="Cancel", command=dialog.destroy).pack(side="right")
+
+        def confirm() -> None:
+            try:
+                refreshed_njr, refreshed_preview = qualification.prepare(
+                    self._get_selected_review_paths()
+                )
+                if refreshed_preview != preview or refreshed_njr.job_id != njr.job_id:
+                    raise RuntimeError("AD0 preview changed; reopen it before queueing")
+                job_id = qualification.submit(refreshed_njr, job_service)
+            except Exception as exc:
+                messagebox.showerror("AD0 submission failed", str(exc), parent=dialog)
+                return
+            dialog.destroy()
+            messagebox.showinfo("AD0 queued", f"StableNew Job ID: {job_id}")
+
+        ttk.Button(actions, text="Queue AD0 once", command=confirm).pack(side="right", padx=(0, 8))
+        dialog.grab_set()
 
     def _resolve_learning_controller(self) -> Any | None:
         app_ctrl = self.app_controller
