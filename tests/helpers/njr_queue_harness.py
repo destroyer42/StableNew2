@@ -9,12 +9,13 @@ deterministic integration helper, not a GUI/operator journey.
 from __future__ import annotations
 
 import base64
+import json
 import tempfile
 import time
 from contextlib import nullcontext
 from dataclasses import replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import Mock, patch
 
 from src.controller.job_service import JobService
@@ -32,6 +33,59 @@ if TYPE_CHECKING:
     from src.api.client import SDWebUIClient
 
 _DEFAULT_TIMEOUT = 30.0
+
+
+_GENERATION_PREFIX = "/sdapi/v1/"
+_NON_GENERATION = ("/progress", "/options", "/samplers", "/schedulers", "/sd-models", "/sd-vae")
+
+
+class _HarnessResponse:
+    """Successful ``requests.Response`` stand-in whose ``json()`` returns ``payload``."""
+
+    status_code = 200
+    ok = True
+    reason = "OK"
+
+    def __init__(self, payload: Any) -> None:
+        self._payload = payload
+        self.text = json.dumps(payload) if payload is not None else ""
+        self.content = self.text.encode("utf-8")
+        self.headers = {"content-type": "application/json"}
+
+    def json(self) -> Any:
+        return self._payload
+
+    def raise_for_status(self) -> None:
+        return None
+
+    def close(self) -> None:
+        return None
+
+    def __enter__(self) -> _HarnessResponse:
+        return self
+
+    def __exit__(self, *_exc: object) -> None:
+        self.close()
+
+
+def _method_and_url(args: tuple, kwargs: dict) -> tuple[str, str]:
+    method = str(args[0] if args else kwargs.get("method", "")).upper()
+    url = str(args[1] if len(args) > 1 else kwargs.get("url", ""))
+    return method, url
+
+
+def _payload_for(method: str, url: str, generation_payload: dict) -> Any:
+    """Generation POSTs get the chosen payload; everything else gets neutral success JSON."""
+
+    if method == "POST" and _GENERATION_PREFIX in url:
+        if not any(marker in url for marker in _NON_GENERATION) and any(
+            stage in url for stage in ("/txt2img", "/img2img", "/extra-")
+        ):
+            return generation_payload
+        return {}
+    if method == "GET" and url.endswith("/progress"):
+        return {"progress": 0.0, "eta_relative": 0.0, "state": {}}
+    return {}
 
 
 def _wait_for_job_completion(
@@ -75,6 +129,7 @@ def run_njr_via_queue(
     timeout_seconds: float = _DEFAULT_TIMEOUT,
     mock_http_response: dict | None = None,
     artifact_root: Path | None = None,
+    transport_log: list[tuple[str, str]] | None = None,
 ) -> JobHistoryEntry:
     """Execute NJR through the canonical runner path with mocked HTTP transport.
 
@@ -84,33 +139,32 @@ def run_njr_via_queue(
 
     Args:
         njr: The NormalizedJobRecord to execute.
-        api_client: The SDWebUIClient instance (will be mocked at HTTP layer).
+        api_client: The SDWebUIClient instance. This helper owns its HTTP transport:
+            ``api_client._session.request`` is replaced for the duration of the run and no
+            request ever reaches the network.
         timeout_seconds: Maximum time to wait for execution.
-        mock_http_response: Optional dict to use as mock HTTP response.
-                           If None, generates a minimal success response.
+        mock_http_response: JSON payload returned (the same object) for generation POSTs
+            under ``/sdapi/v1/``. When omitted, a minimal successful txt2img-style response
+            is generated. Other calls (progress, options, ...) get neutral successful JSON.
+        transport_log: Optional list that receives ``(METHOD, url)`` for every request.
+
+    A caller that has *already* patched ``api_client._session.request`` on the instance and
+    does not pass ``mock_http_response`` keeps ownership of its own responses (the helper
+    only normalizes them); that patch is never allowed to fall through to the network
+    either, because it replaces the real transport.
 
     Returns:
         JobHistoryEntry representing the completed execution.
 
     Example:
         ```python
-        njr = builder.build_jobs_from_pack(pack)[0]
-
-        with patch.object(api_client._session, 'request') as mock_request:
-            mock_response = Mock()
-            mock_response.status_code = 200
-            mock_response.json.return_value = {
-                "images": ["data:image/png;base64,fake"],
-                "parameters": {...}
-            }
-            mock_request.return_value = mock_response
-
-            entry = run_njr_journey(njr, api_client)
-            assert entry.status == JobStatus.COMPLETED
+        entry = run_njr_via_queue(njr, SDWebUIClient(base_url="http://127.0.0.1:7860"))
+        assert entry.status == JobStatus.COMPLETED
         ```
     """
     from src.utils import StructuredLogger
 
+    payload_supplied = mock_http_response is not None
     # Generate default mock response if not provided
     if mock_http_response is None:
         mock_http_response = {
@@ -160,9 +214,17 @@ def run_njr_via_queue(
         queue_runner.run_callable = pipeline_controller._run_job
         job_service.auto_run_enabled = True
 
-        original_request = getattr(api_client._session, "request", None)
+        session = api_client._session
+        caller_patched = "request" in vars(session)
+        original_request = vars(session).get("request")
+        owns_transport = payload_supplied or not caller_patched
 
         def _request_with_normalized_response(*args, **kwargs):
+            method, url = _method_and_url(args, kwargs)
+            if transport_log is not None:
+                transport_log.append((method, url))
+            if owns_transport:
+                return _HarnessResponse(_payload_for(method, url, mock_http_response))
             if not callable(original_request):
                 raise RuntimeError("Journey API client has no HTTP transport")
             response = original_request(*args, **kwargs)
@@ -198,8 +260,7 @@ def run_njr_via_queue(
             return response
 
         try:
-            if callable(original_request):
-                api_client._session.request = _request_with_normalized_response
+            session.request = _request_with_normalized_response
             from src.api.webui_api import WebUIAPI
 
             with (
@@ -220,8 +281,10 @@ def run_njr_via_queue(
         finally:
             job_service.stop()
             repository.close()
-            if callable(original_request):
-                api_client._session.request = original_request
+            if caller_patched:
+                session.request = original_request
+            else:
+                vars(session).pop("request", None)
 
     if entry is None:
         raise TimeoutError(
