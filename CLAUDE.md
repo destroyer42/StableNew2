@@ -28,4 +28,6 @@ needed for correctness, feature-branch commits, and PR preparation do not
 require repeated approval when already authorized by the user's end state.
 
 Keep completion reports concise: outcome, branch/SHA, evidence, architecture
-effect, unresolved risk, and next decision if one remains.
+effect, unresolved risk, and next decision if one remains, plus the `Model / usage`
+section from `docs/AI_MODEL_SELECTION.md` (report unavailable metrics as
+unavailable; never estimate them).

@@ -4,7 +4,7 @@ import hashlib
 import json
 import time
 import uuid
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from copy import deepcopy
 from pathlib import Path
 from typing import Any
@@ -219,6 +219,33 @@ def _has_model_inventory(payload: Any) -> bool:
     return False
 
 
+# While a queued prompt is confirmed alive on the Comfy server, the backend reports bounded
+# execution liveness at most this often.  It must stay well below the runner-stall watchdog
+# interval (SystemWatchdogV2.RUNNER_STALL_S) and is only ever emitted inside the backend's own
+# execution wait (`history_timeout`), so it can never suppress a stall past that bound.
+_LIVENESS_REPORT_INTERVAL_S = 5.0
+
+
+def _prompt_is_live(client: Any, prompt_id: str) -> bool:
+    """True only when the Comfy server itself still lists the prompt as running or pending.
+
+    A merely responsive endpoint is not evidence of execution: a prompt that is in neither the
+    live queue nor the history is not alive, and an unreachable server raises or times out.
+    """
+
+    try:
+        queue = client.get_queue()
+    except Exception:
+        return False
+    if not isinstance(queue, Mapping):
+        return False
+    for key in ("queue_running", "queue_pending"):
+        for item in queue.get(key) or ():
+            if isinstance(item, (list, tuple)) and len(item) > 1 and str(item[1]) == prompt_id:
+                return True
+    return False
+
+
 def _history_entry_from_payload(
     payload: Mapping[str, Any], prompt_id: str
 ) -> dict[str, Any] | None:
@@ -242,6 +269,34 @@ def _history_ready(entry: Mapping[str, Any]) -> bool:
         if status_str in {"success", "completed", "done"}:
             return True
     return False
+
+
+def _history_failed(entry: Mapping[str, Any]) -> bool:
+    status = entry.get("status")
+    if not isinstance(status, Mapping):
+        return False
+    return str(status.get("status_str") or "").strip().lower() in {
+        "error",
+        "failed",
+        "failure",
+        "cancelled",
+        "canceled",
+        "interrupted",
+    }
+
+
+def _history_nonterminal(entry: Mapping[str, Any]) -> bool:
+    """Only an explicit in-progress status is evidence of execution liveness."""
+
+    status = entry.get("status")
+    if not isinstance(status, Mapping) or status.get("completed") is not False:
+        return False
+    return str(status.get("status_str") or "").strip().lower() in {
+        "running",
+        "pending",
+        "queued",
+        "executing",
+    }
 
 
 class ComfyWorkflowVideoBackend:
@@ -418,7 +473,10 @@ class ComfyWorkflowVideoBackend:
             raise RuntimeError("Comfy queue response did not include prompt_id")
 
         history_entry = self._wait_for_history_entry(
-            client, prompt_id=prompt_id, timeout=self._history_timeout_for(spec)
+            client,
+            prompt_id=prompt_id,
+            report_liveness=self._liveness_reporter(pipeline, request),
+            timeout=self._history_timeout_for(spec),
         )
         if str(spec.backend_defaults.get("output_transport") or "") == "comfy_view":
             history_entry = self._localize_comfy_outputs(
@@ -1019,6 +1077,37 @@ class ComfyWorkflowVideoBackend:
         uploaded_cache[cache_key] = relative_name
         return relative_name
 
+    @staticmethod
+    def _liveness_reporter(
+        pipeline: Any, request: VideoExecutionRequest
+    ) -> Callable[[float], None] | None:
+        """Bind execution liveness to the runner-owned job through the existing runtime-status path.
+
+        This is *not* generation progress: no percentage or step count is invented (the status
+        merge keeps whatever was last real).  Only the elapsed time of a prompt the Comfy server
+        confirms is still running is reported, as a change in the job's ``stage_detail``.
+        """
+
+        emit = getattr(pipeline, "_emit_status_update", None)
+        job_id = str(getattr(request, "job_id", "") or "").strip()
+        if not callable(emit) or not job_id:
+            return None
+
+        def _report(elapsed_s: float) -> None:
+            # Best-effort observability: a failed status emit must never abort the generation wait.
+            try:
+                emit(
+                    {
+                        "job_id": job_id,
+                        "current_stage": request.stage_name,
+                        "stage_detail": f"comfy executing ({int(elapsed_s)}s)",
+                    }
+                )
+            except Exception:
+                pass
+
+        return _report
+
     def _history_timeout_for(self, spec: Any) -> float:
         """A workflow may declare a longer generation wait than the backend default (long
         generations would otherwise be abandoned while Comfy is still producing them)."""
@@ -1034,16 +1123,32 @@ class ComfyWorkflowVideoBackend:
         client: ComfyApiClient,
         *,
         prompt_id: str,
+        report_liveness: Callable[[float], None] | None = None,
         timeout: float | None = None,
     ) -> dict[str, Any]:
-        deadline = time.time() + (timeout if timeout is not None else self._history_timeout)
+        started = time.time()
+        deadline = started + (timeout if timeout is not None else self._history_timeout)
+        last_report: float | None = None
         last_payload: dict[str, Any] | None = None
         while time.time() < deadline:
             payload = client.get_history(prompt_id)
             last_payload = dict(payload or {})
             entry = _history_entry_from_payload(last_payload, prompt_id)
+            if entry is not None and _history_failed(entry):
+                raise RuntimeError(f"Comfy workflow failed for prompt_id '{prompt_id}'")
             if entry and _history_ready(entry):
                 return entry
+            now = time.time()
+            if (
+                report_liveness is not None
+                and (last_report is None or now - last_report >= _LIVENESS_REPORT_INTERVAL_S)
+                and (
+                    (entry is not None and _history_nonterminal(entry))
+                    or _prompt_is_live(client, prompt_id)
+                )
+            ):
+                last_report = now
+                report_liveness(now - started)
             time.sleep(self._history_poll_interval)
         raise TimeoutError(
             f"Timed out waiting for Comfy workflow history for prompt_id '{prompt_id}'"

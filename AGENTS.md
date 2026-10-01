@@ -57,9 +57,12 @@ shared external state.
 Classify work as Narrow, Standard, or Architectural. If discovery proves a
 higher class, stop and recommend escalation instead of silently broadening
 scope. Every authored PR or bounded work package records an
-**Execution Profile + Model/Reasoning Recommendation**, a Controller Surface
-Assessment when controller/coordinator code may be touched, and a
-Token-Efficient Validation Plan.
+**Execution Profile + Model/Reasoning Recommendation** (Codex and Claude Code
+model + effort per `docs/AI_MODEL_SELECTION.md`, and a preferred host only when
+one materially fits better), a Controller Surface Assessment when
+controller/coordinator code may be touched, and a Token-Efficient Validation
+Plan. Prefer the largest coherent package that shares one outcome, stays in
+understood architecture, and validates together.
 
 ## 4. Ownership, determinism, and runtime safety
 
@@ -81,10 +84,14 @@ architecture approval; lower the checked-in ceiling when a controller shrinks.
 ## 5. User-work and external-state protection
 
 Inspect Git state before changing files. Use a short-lived branch and one
-coherent work package; preserve unrelated user changes, PromptPacks, generated
+coherent work package; once branch/SHA/worktree and scope are verified, the
+active coding session may create/switch to the authorized feature branch, edit,
+validate, and commit locally without a separate Release session; preserve unrelated user changes, PromptPacks, generated
 outputs, and untracked user data. Never reset, overwrite, or delete them.
 Do not push, merge, rewrite history, delete remote state, publish, deploy, or
-mutate secrets without explicit owner authorization.
+mutate secrets without explicit owner authorization (feature-branch publication
+may be authorized in the initial package authorization). Auto Approve / Full
+Access changes capability, not the scope of authorization.
 
 StableNew may control lifecycle only for a process its appropriate process
 manager launched and owns. An external A1111/Comfy process may use supported
@@ -118,9 +125,12 @@ to narrate a commit.
 
 ## 7. Agent operating-model pointer
 
-`docs/AGENT_OPERATING_MODEL.md` defines delivery roles, worktree ownership,
-checkpoint/stop discipline, evidence reuse, security/release triggers, and
-PR-ready criteria. Provider bridges such as `CLAUDE.md` and
+`docs/AGENT_OPERATING_MODEL.md` defines the single-lane default workflow
+(one primary Claude Code or Codex session; specialists optional), local
+feature-branch lifecycle, worktree ownership, checkpoint/stop discipline,
+evidence reuse, security/release triggers, and PR-ready criteria.
+`docs/AI_MODEL_SELECTION.md` owns current model/effort selection, the periodic
+review, and the `Model / usage` completion-report section. Provider bridges such as `CLAUDE.md` and
 `.github/copilot-instructions.md` may point to this root contract; they do not
 replace it. Provider-specific orchestration is an implementation detail, not a
 repository authority.
