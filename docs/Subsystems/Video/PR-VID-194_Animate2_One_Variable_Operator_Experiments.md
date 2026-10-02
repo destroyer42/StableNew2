@@ -77,6 +77,20 @@ output route, because the runner already groups jobs carrying a `LearningJobCont
 id, so arms do not overwrite one another. A canceled preview leaves only the content-addressed prepared source image
 (the same file a normal submission creates).
 
+## 4a. Threading
+
+Build Preview (hash source and driving video, prepare the source image, build 2-4 NJRs, run the diff gate) and Queue
+Experiment (re-hash the frozen files, re-run the gate, one `submit_njrs`) never run on the Tk event thread. Each is three
+steps on `VideoExperimentSession`: `begin_*` on the Tk thread (claims the busy state and captures a plain deep-copied
+snapshot of the form, so a worker never sees a Tk variable or widget), `run_*` on a worker owned by the existing
+`ThreadRegistry` (touches no session or Tk state), and `finish_*` back on the Tk thread via `TkUiDispatcher`
+(`BackgroundWorkRunner` only wires spawn to dispatch; it is not a scheduler or queue). While a worker is outstanding
+Build Preview, Queue Experiment and Cancel Preview are disabled and a second click schedules nothing. Any edit while a
+preview builds (form, candidate, variable, toggle) bumps a token and the finished result is discarded rather than shown;
+the form is also re-compared at completion. A panel destroyed before completion ignores the result. Refreshing
+GUI-visible queue state (`sync_queue_state_after_direct_submission`) runs in the Tk-thread completion, not in the worker.
+`sha256_file` hashes in 1 MiB chunks, so a large driving video is never loaded whole.
+
 ## 5. Not done / follow-ups
 
 Durable Learning-Library review of video experiments is out of scope (the Learning models and review surfaces are

@@ -456,7 +456,8 @@ def test_admission_crosses_submit_njrs_exactly_once_with_every_njr(tmp_path):
         ("C", 1.4),
         ("D", 1.6),
     ]
-    assert result.experiment_id == plan.experiment_id and synced == [True]
+    # Queue-state refresh touches GUI-visible state, so it is the UI thread's job, not admission's.
+    assert result.experiment_id == plan.experiment_id and synced == []
 
 
 def test_experiment_arm_a_equals_the_normal_single_submission(tmp_path):
@@ -618,3 +619,46 @@ def test_experiment_jobs_run_through_the_real_queue_with_distinct_controls(tmp_p
     finally:
         service.runner.stop()
         repository.close()
+
+
+# ------------------------------------------------------------------ streaming hash
+
+
+def test_sha256_file_streams_in_bounded_chunks_with_the_standard_digest(tmp_path, monkeypatch):
+    from src.video.video_workflow_njr_builder import HASH_CHUNK_BYTES, sha256_file
+
+    payload = bytes(range(256)) * (HASH_CHUNK_BYTES // 256 * 2 + 3)  # > 2 chunks, uneven tail
+    path = tmp_path / "big.bin"
+    path.write_bytes(payload)
+    empty = tmp_path / "empty.bin"
+    empty.write_bytes(b"")
+
+    def forbidden(self):
+        raise AssertionError("whole-file read_bytes() is not allowed for hashing")
+
+    monkeypatch.setattr(Path, "read_bytes", forbidden)
+    assert sha256_file(path) == hashlib.sha256(payload).hexdigest()
+    assert sha256_file(empty) == hashlib.sha256(b"").hexdigest()
+
+    sizes: list[int] = []
+    real_open = Path.open
+
+    def spying_open(self, *args, **kwargs):
+        handle = real_open(self, *args, **kwargs)
+
+        class _Spy:
+            def read(self_inner, size=-1):
+                sizes.append(size)
+                return handle.read(size)
+
+            def __enter__(self_inner):
+                return self_inner
+
+            def __exit__(self_inner, *exc):
+                handle.close()
+
+        return _Spy()
+
+    monkeypatch.setattr(Path, "open", spying_open)
+    assert sha256_file(path) == hashlib.sha256(payload).hexdigest()
+    assert sizes and all(0 < size <= HASH_CHUNK_BYTES for size in sizes)

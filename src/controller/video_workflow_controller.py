@@ -185,10 +185,9 @@ class VideoWorkflowController:
         )
 
     def submit_experiment(self, plan: ExperimentPlan) -> ExperimentAdmissionResult:
-        """Admit a previewed experiment through ONE ``JobService.submit_njrs`` call."""
+        """Admit a previewed experiment through ONE ``JobService.submit_njrs`` call.
 
-        result = self._experiments.admit(plan, self._job_service())
-        sync = getattr(self._app_controller, "sync_queue_state_after_direct_submission", None)
-        if callable(sync):
-            sync()
-        return result
+        Safe to call from a worker thread: it only verifies frozen files and submits.  The caller
+        refreshes GUI-visible queue state afterwards, on the UI thread."""
+
+        return self._experiments.admit(plan, self._job_service())

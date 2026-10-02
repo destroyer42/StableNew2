@@ -952,6 +952,10 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             panel.invalidate_if_changed()
 
     def _on_experiment_queued(self, job_ids: list[str]) -> None:
+        # Admission ran on a worker; refreshing GUI-visible queue state happens here, on Tk.
+        sync = getattr(self.app_controller, "sync_queue_state_after_direct_submission", None)
+        if callable(sync):
+            sync()
         self.status_var.set(f"Queued {len(job_ids)} experiment jobs: " + ", ".join(job_ids))
 
     def _set_text_value(self, widget: tk.Text, value: str) -> None:

@@ -67,8 +67,17 @@ _VALID_CAMERA_PRESETS = {
 }
 
 
+HASH_CHUNK_BYTES = 1024 * 1024
+
+
 def sha256_file(path: str | Path) -> str:
-    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+    """Standard SHA-256 of a file, read in bounded chunks (a driving video can be large)."""
+
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as handle:
+        for chunk in iter(lambda: handle.read(HASH_CHUNK_BYTES), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -530,6 +539,7 @@ class VideoWorkflowNjrBuilder:
 
 
 __all__ = [
+    "HASH_CHUNK_BYTES",
     "FrozenVideoInputs",
     "VideoWorkflowBuild",
     "VideoWorkflowNjrBuilder",

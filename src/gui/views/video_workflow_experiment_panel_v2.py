@@ -1,6 +1,9 @@
 """Tk rendering of the Video Workflow "Compare one control" section (PR-VID-194).
 
-Presentation only: the state machine lives in ``VideoExperimentSession``.  The variable list is the
+Presentation only: the state machine lives in ``VideoExperimentSession``.  Build Preview and Queue
+Experiment hash files, prepare the source image and build NJRs, so they run on a worker owned by the
+existing ``ThreadRegistry``; every widget read happens before the worker starts and every widget
+update is marshalled back to the Tk thread through ``TkUiDispatcher``.  The variable list is the
 selected workflow's declared operator controls; a number control gets an entry and a text control a
 small text box, both rendered from the declaration.  This module builds no payload, calls no
 backend and branches on no workflow or model.
@@ -14,10 +17,16 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.theme_v2 import style_text_widget
+from src.gui.ui_dispatcher import TkUiDispatcher
 from src.gui.view_contracts.video_experiment_contract import (
     MAX_CANDIDATES,
+    BackgroundWorkRunner,
+    PreviewWork,
+    QueueWork,
     VideoExperimentSession,
+    WorkOutcome,
 )
+from src.utils.thread_registry import get_thread_registry
 
 
 class WorkflowExperimentPanel(ttk.LabelFrame):
@@ -30,8 +39,12 @@ class WorkflowExperimentPanel(ttk.LabelFrame):
         session: VideoExperimentSession,
         read_form: Callable[[], tuple[str, dict[str, Any]]],
         on_queued: Callable[[list[str]], None] | None = None,
+        runner: BackgroundWorkRunner | None = None,
     ) -> None:
         super().__init__(master, text="Compare one control", padding=8)
+        self._runner = runner
+        self._closed = False
+        self.bind("<Destroy>", self._on_destroy, add="+")
         self._session = session
         self._read_form = read_form
         self._on_queued = on_queued
@@ -131,13 +144,16 @@ class WorkflowExperimentPanel(ttk.LabelFrame):
             self.detail.grid()
         else:
             self.detail.grid_remove()
-        self.message_var.set(session.message)
+        busy = session.busy is not None
+        self.message_var.set(session.status_text)
         self.baseline_var.set(self._baseline_text() if show else "")
         self.add_button.configure(
             state="normal" if len(session.candidates) < MAX_CANDIDATES else "disabled"
         )
-        self.queue_button.configure(state="normal" if session.preview_valid else "disabled")
-        self.cancel_button.configure(state="normal" if session.preview_valid else "disabled")
+        self.preview_button.configure(state="disabled" if busy else "normal")
+        actionable = session.preview_valid and not busy
+        self.queue_button.configure(state="normal" if actionable else "disabled")
+        self.cancel_button.configure(state="normal" if actionable else "disabled")
         self._render_preview()
 
     def invalidate_if_changed(self) -> None:
@@ -236,9 +252,60 @@ class WorkflowExperimentPanel(ttk.LabelFrame):
         self._session.set_candidate(index, text.strip())
         self.refresh()
 
+    # ------------------------------------------------------------------ off-thread work
+
+    def _work_runner(self) -> BackgroundWorkRunner:
+        if self._runner is None:
+            dispatcher = TkUiDispatcher(self.winfo_toplevel())
+            self._runner = BackgroundWorkRunner(
+                spawn=lambda name, target: get_thread_registry().spawn(
+                    target=target,
+                    name=name,
+                    daemon=False,
+                    purpose="Hash, prepare and build a Video Workflow experiment without "
+                    "blocking Tk",
+                ),
+                dispatch=dispatcher.invoke,
+            )
+        return self._runner
+
+    def _deliver(self, finish: Callable[[], None]) -> None:
+        """Run ``finish`` on the Tk thread unless the panel was torn down meanwhile."""
+
+        if self._closed:
+            return
+        try:
+            if not self.winfo_exists():
+                return
+            finish()
+        except tk.TclError:
+            pass  # the widget tree is going away; there is nothing left to update
+
+    def _on_destroy(self, event: Any = None) -> None:
+        if event is None or event.widget is self:
+            self._closed = True
+
+    def _current_form(self) -> tuple[str, dict[str, Any]]:
+        try:
+            return self._read_form()
+        except Exception:
+            return "", {}  # cannot match the snapshot, so the result is treated as stale
+
     def _on_preview(self) -> None:
-        source, form = self._read_form()
-        self._session.build_preview(source, form)
+        source, form = self._read_form()  # Tk reads happen here, before the worker starts
+        work = self._session.begin_preview(source, form)
+        self.refresh()
+        if work is None:
+            return
+        self._work_runner().start(
+            f"VideoExperiment-Preview-{id(self)}",
+            lambda: self._session.run_preview(work),
+            lambda outcome: self._deliver(lambda: self._finish_preview(work, outcome)),
+        )
+
+    def _finish_preview(self, work: PreviewWork, outcome: WorkOutcome) -> None:
+        source, form = self._current_form()
+        self._session.finish_preview(work, outcome, source, form)
         self.refresh()
 
     def _on_cancel(self) -> None:
@@ -247,7 +314,18 @@ class WorkflowExperimentPanel(ttk.LabelFrame):
 
     def _on_queue(self) -> None:
         source, form = self._read_form()
-        job_ids = self._session.queue(source, form)
+        work = self._session.begin_queue(source, form)
+        self.refresh()
+        if work is None:
+            return
+        self._work_runner().start(
+            f"VideoExperiment-Queue-{id(self)}",
+            lambda: self._session.run_queue(work),
+            lambda outcome: self._deliver(lambda: self._finish_queue(work, outcome)),
+        )
+
+    def _finish_queue(self, work: QueueWork, outcome: WorkOutcome) -> None:
+        job_ids = self._session.finish_queue(work, outcome)
         self.refresh()
         if job_ids and self._on_queued is not None:
             self._on_queued(job_ids)
