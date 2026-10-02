@@ -100,8 +100,11 @@ started. An admission failure leaves none of the batch durable, runnable or anno
 Runner startup errors after admission are logged separately; admitted job identities
 are returned and their durable state is retained, without an automatic startup retry.
 `JobQueue` serializes each admission's durable commit and runnable projection together,
-so concurrent submissions retain the repository's FIFO order. Repository observers may
-read the queue during admission; the projection lock is held only for the projection step.
+so concurrent submissions retain the repository's FIFO order. Queue operations that
+rewrite the complete durable order (move up/down/front/back) use the same admission
+boundary, so an order is never derived from a projection that lags committed rows.
+Repository observers may read the queue during admission; the projection lock is held
+only for the projection step.
 
 ## 4. NormalizedJobRecord
 

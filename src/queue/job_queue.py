@@ -41,6 +41,8 @@ class JobQueue:
         self._jobs: dict[str, Job] = {}
         self._counter = 0
         self._lock = Lock()
+        # Serializes durable queue-order writers (admission and complete reorders) with the
+        # projection step that follows them.  Lock order: _admission_lock, then _lock.
         self._admission_lock = Lock()
         self._paused = False
         self._history_store = self._repository
@@ -341,6 +343,10 @@ class JobQueue:
     # ------------------------------------------------------------------
     # PR-GUI-F2: Queue Manipulation Methods
     # ------------------------------------------------------------------
+    # Each move derives a complete durable order from the projection, so it holds the
+    # admission lock to avoid ordering around rows an admission has committed but not yet
+    # projected.
+
 
     def move_up(self, job_id: str) -> bool:
         """Move a queued job up one position (higher priority).
@@ -352,7 +358,7 @@ class JobQueue:
             True if the job was moved, False if not found or already at top.
         """
         moved = False
-        with self._lock:
+        with self._admission_lock, self._lock:
             # Find queued jobs in order
             queued = self._get_ordered_queued_jobs()
             for i, (priority, counter, jid) in enumerate(queued):
@@ -383,7 +389,7 @@ class JobQueue:
             True if the job was moved, False if not found or already at bottom.
         """
         moved = False
-        with self._lock:
+        with self._admission_lock, self._lock:
             queued = self._get_ordered_queued_jobs()
             for i, (priority, counter, jid) in enumerate(queued):
                 if jid == job_id:
@@ -413,7 +419,7 @@ class JobQueue:
             True if the job was moved, False if not found or already at front.
         """
         moved = False
-        with self._lock:
+        with self._admission_lock, self._lock:
             queued = self._get_ordered_queued_jobs()
             if not queued:
                 return False
@@ -475,7 +481,7 @@ class JobQueue:
             True if the job was moved, False if not found or already at back.
         """
         moved = False
-        with self._lock:
+        with self._admission_lock, self._lock:
             queued = self._get_ordered_queued_jobs()
             if not queued:
                 return False

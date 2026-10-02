@@ -365,6 +365,139 @@ def test_concurrent_admissions_keep_projection_in_durable_fifo_order(
     assert stack.runner.start_snapshots == []
 
 
+# Each case names a queued job whose reorder really changes durable order, plus the full order
+# expected once the concurrently admitted jobs are part of the queue.
+_REORDER_CASES = {
+    'move_up': ('base-1', ['base-1', 'base-0', 'base-2', 'late-0', 'late-1']),
+    'move_down': ('base-1', ['base-0', 'base-2', 'base-1', 'late-0', 'late-1']),
+    'move_to_front': ('base-2', ['base-2', 'base-0', 'base-1', 'late-0', 'late-1']),
+    'move_to_back': ('base-0', ['base-1', 'base-2', 'late-0', 'late-1', 'base-0']),
+}
+
+
+def _projected_queue_order(queue: JobQueue) -> list[str]:
+    return [job.job_id for job in queue.list_active_jobs_ordered()]
+
+
+@pytest.mark.parametrize('operation', list(_REORDER_CASES))
+def test_queue_reorder_waits_for_in_flight_admission_before_rewriting_durable_order(
+    tmp_path, monkeypatch, operation,
+):
+    """A durable reorder must see every committed queued identity (PR-VID-194 review).
+
+    Admission has committed new rows to SQLite but is paused before projecting them.  The
+    reorder derives its complete ordering from the projection, so it has to wait for the queue's
+    admission boundary instead of submitting an order that omits the committed identities.
+    """
+
+    target, expected = _REORDER_CASES[operation]
+    stack = _stack(tmp_path, auto_run=False)
+    base_ids = stack.service.submit_njrs(_records(3, 'base'))
+    late_records = _records(2, 'late')
+    admission_committed = threading.Event()
+    reorder_at_boundary = threading.Event()
+    release_admission = threading.Event()
+    timeout = 10
+    original_commit = stack.repository.record_job_submissions
+    original_update_order = stack.repository.update_queue_order
+    order_writes: list[list[str]] = []
+
+    class ObservedAdmissionLock:
+        def __init__(self):
+            self.lock = threading.Lock()
+
+        def __enter__(self):
+            if threading.current_thread().name.startswith('reorder'):
+                reorder_at_boundary.set()  # reorder reached the boundary, then waits on it
+            self.lock.acquire()
+            return self
+
+        def __exit__(self, *args):
+            self.lock.release()
+
+    def commit(jobs):
+        original_commit(jobs)
+        if jobs[0].job_id.startswith('late'):
+            admission_committed.set()
+            assert release_admission.wait(timeout)
+
+    def update_order(ordered_job_ids):
+        # Without the admission boundary the reorder reaches the repository straight away.
+        if threading.current_thread().name.startswith('reorder'):
+            reorder_at_boundary.set()
+        order_writes.append(list(ordered_job_ids))
+        return original_update_order(ordered_job_ids)
+
+    monkeypatch.setattr(stack.queue, '_admission_lock', ObservedAdmissionLock(), raising=False)
+    monkeypatch.setattr(stack.repository, 'record_job_submissions', commit)
+    monkeypatch.setattr(stack.repository, 'update_queue_order', update_order)
+
+    with (
+        ThreadPoolExecutor(max_workers=1, thread_name_prefix='admission') as admission_pool,
+        ThreadPoolExecutor(max_workers=1, thread_name_prefix='reorder') as reorder_pool,
+    ):
+        admission = admission_pool.submit(stack.service.submit_njrs, late_records)
+        try:
+            assert admission_committed.wait(timeout)
+            # State under test: SQLite holds the late jobs, the projection does not yet.
+            assert _durable_ids(stack.db_path) == base_ids + [r.job_id for r in late_records]
+            assert _projected_queue_order(stack.queue) == base_ids
+            reorder = reorder_pool.submit(getattr(stack.queue, operation), target)
+            assert reorder_at_boundary.wait(timeout)
+            # Ordinary readers never need the admission mutex, so they stay live meanwhile.
+            with ThreadPoolExecutor(max_workers=1, thread_name_prefix='reader') as reader_pool:
+                reader = reader_pool.submit(
+                    lambda: (
+                        stack.queue.list_jobs(),
+                        _projected_queue_order(stack.queue),
+                        stack.queue.get_job(target),
+                        stack.queue.is_paused(),
+                    )
+                )
+                jobs_seen, projected_seen, job_seen, _paused = reader.result(timeout=timeout)
+            assert [job.job_id for job in jobs_seen] == base_ids
+            assert projected_seen == base_ids and job_seen is not None
+        finally:
+            release_admission.set()
+        late_ids = admission.result(timeout=timeout)
+        assert reorder.result(timeout=timeout) is True  # no JobRepositoryError
+
+    assert late_ids == [record.job_id for record in late_records]
+    assert order_writes == [expected]  # exactly one durable write, over the complete queue
+    assert len(set(expected)) == len(expected) == len(base_ids) + len(late_ids)
+    assert _durable_ids(stack.db_path) == expected
+    assert _projected_queue_order(stack.queue) == expected
+    assert [job.job_id for job in stack.queue.list_jobs(JobStatus.QUEUED)].count(target) == 1
+    stack.repository.close()
+    reopened = JobQueue(repository=JobRepository(stack.db_path))
+    assert [reopened.get_next_job().job_id for _ in expected] == expected
+    assert reopened.get_next_job() is None
+
+
+@pytest.mark.parametrize('operation', list(_REORDER_CASES))
+def test_queue_reorder_notifies_listeners_after_releasing_mutation_locks(tmp_path, operation):
+    stack = _stack(tmp_path, auto_run=False)
+    stack.service.submit_njrs(_records(3, 'base'))
+    target, _expected = _REORDER_CASES[operation]
+    stack.state_views.clear()
+    free_when_notified: list[tuple[bool, bool]] = []
+
+    def listener() -> None:
+        outcome = []
+        for lock in (stack.queue._admission_lock, stack.queue._lock):
+            acquired = lock.acquire(blocking=False)
+            if acquired:
+                lock.release()
+            outcome.append(acquired)
+        free_when_notified.append((outcome[0], outcome[1]))
+
+    stack.queue.register_state_listener(listener)
+
+    assert getattr(stack.queue, operation)(target) is True
+
+    assert free_when_notified == [(True, True)]  # listeners never run under queue locks
+
+
 @pytest.mark.parametrize('startup', ['auto', 'continuous', 'immediate'])
 def test_startup_failure_after_commit_returns_admitted_ids_and_reports_separately(
     tmp_path, monkeypatch, caplog, startup,
