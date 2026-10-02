@@ -8,6 +8,7 @@ replay the same geometry without asking a backend to reinterpret the source.
 from __future__ import annotations
 
 import hashlib
+import tempfile
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -88,9 +89,30 @@ def prepare_declared_workflow_source(
         f"{content_digest}_{target['width']}x{target['height']}_{_COVER_CENTER_CROP}.png"
     )
     if not prepared_path.exists():
-        temporary_path = prepared_path.with_suffix(".tmp.png")
-        prepared.save(temporary_path, format="PNG")
-        temporary_path.replace(prepared_path)
+        # Each caller owns its temp, including callers in other processes. Keep it
+        # beside the destination so replacement publishes a complete PNG atomically.
+        with tempfile.NamedTemporaryFile(
+            delete=False, dir=prepared_root, prefix=f"{prepared_path.stem}_", suffix=".tmp.png"
+        ) as temporary_file:
+            temporary_path = Path(temporary_file.name)
+        try:
+            prepared.save(temporary_path, format="PNG")
+            try:
+                temporary_path.replace(prepared_path)
+            except PermissionError:
+                # Windows may deny replacement while another caller reads the
+                # winner. Reuse only a byte-identical, fully published PNG.
+                try:
+                    same_content = prepared_path.read_bytes() == temporary_path.read_bytes()
+                except OSError:
+                    same_content = False
+                if not same_content:
+                    raise
+        finally:
+            try:
+                temporary_path.unlink(missing_ok=True)
+            except OSError:
+                pass  # Best effort; never mask the original preparation/publication failure.
 
     return PreparedWorkflowSource(
         original_source_path=str(source),
