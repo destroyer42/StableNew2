@@ -4,15 +4,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
-import pytest
-
-from src.services.runtime_transition_service import (
-    RUNTIME_A1111_WEBUI,
-    RUNTIME_COMFY,
-    RuntimeTransitionError,
-    RuntimeTransitionResult,
-    RuntimeTransitionStatus,
-)
 from src.video import (
     AnimateDiffVideoBackend,
     ComfyWorkflowVideoBackend,
@@ -74,9 +65,8 @@ def test_video_backend_registry_rejects_duplicate_stage_claims() -> None:
 
 
 def test_animatediff_backend_normalizes_executor_result(tmp_path: Path) -> None:
-    events: list[str] = []
     pipeline = Mock()
-    stage_result = {
+    pipeline.run_animatediff_stage.return_value = {
         "video_path": str(tmp_path / "clip.mp4"),
         "output_paths": [str(tmp_path / "clip.mp4")],
         "frame_paths": [str(tmp_path / "frame_0001.png")],
@@ -103,19 +93,7 @@ def test_animatediff_backend_normalizes_executor_result(tmp_path: Path) -> None:
             "input_image_path": str(tmp_path / "seed.png"),
         },
     }
-    transition = Mock()
-
-    def prepare_for(target: str) -> Mock:
-        events.append("transition")
-        return Mock(ready=True)
-
-    def run_animatediff_stage(**kwargs: object) -> dict[str, object]:
-        events.append("dispatch")
-        return stage_result
-
-    transition.prepare_for.side_effect = prepare_for
-    pipeline.run_animatediff_stage.side_effect = run_animatediff_stage
-    backend = AnimateDiffVideoBackend(transition=transition)
+    backend = AnimateDiffVideoBackend()
 
     result = backend.execute(
         pipeline,
@@ -133,9 +111,6 @@ def test_animatediff_backend_normalizes_executor_result(tmp_path: Path) -> None:
 
     assert result is not None
     assert result.backend_id == "animatediff"
-    transition.prepare_for.assert_called_once_with(RUNTIME_A1111_WEBUI)
-    pipeline.run_animatediff_stage.assert_called_once()
-    assert events == ["transition", "dispatch"]
     assert result.primary_path == str(tmp_path / "clip.mp4")
     assert result.output_paths == [str(tmp_path / "clip.mp4")]
     variant_payload = result.to_variant_payload()
@@ -144,40 +119,6 @@ def test_animatediff_backend_normalizes_executor_result(tmp_path: Path) -> None:
     assert (
         variant_payload["video_replay_manifest"]["secondary_motion_summary"]["status"] == "applied"
     )
-
-
-def test_animatediff_backend_blocks_dispatch_when_transition_is_not_ready(
-    tmp_path: Path,
-) -> None:
-    transition = Mock()
-    blocked_result = RuntimeTransitionResult(
-        target=RUNTIME_A1111_WEBUI,
-        conflicts_observed=("comfy",),
-        ownership_state={},
-        releases_attempted=(),
-        releases_completed=(),
-        status=RuntimeTransitionStatus.ACTION_REQUIRED,
-        blockers=("external Comfy runtime requires operator action",),
-    )
-    transition.prepare_for.return_value = blocked_result
-    pipeline = Mock()
-    backend = AnimateDiffVideoBackend(transition=transition)
-
-    with pytest.raises(RuntimeTransitionError) as exc_info:
-        backend.execute(
-            pipeline,
-            VideoExecutionRequest(
-                backend_id="animatediff",
-                stage_name="animatediff",
-                stage_config={"enabled": True},
-                output_dir=tmp_path,
-                input_image_path=tmp_path / "seed.png",
-            ),
-        )
-
-    assert exc_info.value.result is blocked_result
-    transition.prepare_for.assert_called_once_with(RUNTIME_A1111_WEBUI)
-    pipeline.run_animatediff_stage.assert_not_called()
 
 
 def test_svd_native_backend_normalizes_executor_result(tmp_path: Path) -> None:
@@ -296,8 +237,6 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
             "source_video_path": str(output_video),
         },
     )
-    transition = Mock()
-    transition.prepare_for.return_value = Mock(ready=True)
     backend = ComfyWorkflowVideoBackend(
         client=client,
         process_manager=_ready_process_manager(),
@@ -305,7 +244,6 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
         workflow_registry=_backend_contract_registry(),
         history_poll_interval=0.01,
         history_timeout=1.0,
-        transition=transition,
     )
 
     result = backend.execute(
@@ -334,7 +272,6 @@ def test_comfy_workflow_backend_normalizes_executor_result(tmp_path: Path, monke
 
     assert result is not None
     assert result.backend_id == "comfy"
-    transition.prepare_for.assert_called_once_with(RUNTIME_COMFY)
     assert result.primary_path == str(promoted_video)
     assert result.manifest_path is not None
     variant_payload = result.to_variant_payload()
