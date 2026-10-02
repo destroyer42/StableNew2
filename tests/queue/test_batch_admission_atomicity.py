@@ -6,6 +6,7 @@ deterministically at the repository insert seam.  No sleeps, GPU or network.
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -362,3 +363,36 @@ def test_concurrent_admissions_keep_projection_in_durable_fifo_order(
     assert [stack.queue.get_next_job().job_id for _ in expected] == expected
     assert len(callback_views) == len(expected)
     assert stack.runner.start_snapshots == []
+
+
+@pytest.mark.parametrize('startup', ['auto', 'continuous', 'immediate'])
+def test_startup_failure_after_commit_returns_admitted_ids_and_reports_separately(
+    tmp_path, monkeypatch, caplog, startup,
+):
+    stack = _stack(tmp_path, auto_run=startup != 'immediate')
+    records = _records(2, 'startup-failure')
+    attempts = []
+
+    def fail_start():
+        attempts.append(True)
+        raise OSError('injected runner startup failure')
+
+    if startup == 'auto':
+        monkeypatch.setattr(stack.runner, 'start', fail_start)
+    elif startup == 'continuous':
+        stack.runner.started = True
+        monkeypatch.setattr(stack.runner, 'request_continuous_dispatch', fail_start)
+    else:
+        monkeypatch.setattr(stack.service, 'run_next_now', fail_start)
+    with caplog.at_level(logging.ERROR, logger='src.controller.job_service'):
+        ids = stack.service.submit_njrs(
+            records, SubmissionPolicy(start_when_idle=startup == 'immediate'),
+        )
+    assert ids == [record.job_id for record in records]
+    assert _durable_ids(stack.db_path) == ids
+    assert [job.job_id for job in stack.queue.list_jobs()] == ids
+    assert all(stack.queue.get_job(job_id).status is JobStatus.QUEUED for job_id in ids)
+    assert stack.announced == ids
+    assert attempts == [True]  # no automatic retry of an ambiguous startup
+    assert 'admitted' in caplog.text and 'startup' in caplog.text
+    assert 'injected runner startup failure' in caplog.text

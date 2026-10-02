@@ -472,8 +472,8 @@ class JobService:
         policy: SubmissionPolicy | None = None,
     ) -> list[str]:
         """Validate, then admit a complete NJR batch all-or-none (one repository transaction).
-        On failure nothing is durable, runnable, announced or started; events and the runner
-        start once, after the whole batch is queued."""
+        Admission failures leave no jobs durable/runnable/announced. Post-admission
+        startup errors are logged separately; admitted job IDs are still returned."""
         submission_policy = policy or SubmissionPolicy()
         batch = tuple(records)
         if not batch:
@@ -494,16 +494,16 @@ class JobService:
         for job in jobs:
             self._notify_job_submitted(job)
         self._emit_queue_updated()
-        self._start_runner_after_admission(jobs[0].job_id)  # once, after the whole batch
-        if submission_policy.start_when_idle and not self.runner.is_running():
-            self.run_next_now()
+        try:
+            self._start_runner_after_admission(jobs[0].job_id)  # once, after the whole batch
+            if submission_policy.start_when_idle and not self.runner.is_running():
+                self.run_next_now()
+        except Exception:
+            logger.exception("NJR batch admitted; runner startup failed; admitted jobs retained: %s", job_ids)
         return job_ids
 
     def submit_queued(self, job: Job, *, emit_queue_updated: bool = True) -> None:
-        """Submit a job to the queue for background execution.
-
-        PR-106: Explicit API for queued execution path.
-        """
+        """Submit a job for background execution (PR-106 explicit queued path)."""
         log_with_ctx(
             logger,
             logging.INFO,

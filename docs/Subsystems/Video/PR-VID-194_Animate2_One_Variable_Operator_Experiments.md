@@ -56,11 +56,14 @@ zero jobs, with the first differing path in the message. The gate is re-run at a
 Admission (`submit_experiment`): re-hashes the source, prepared source and driving video (a changed byte refuses the
 experiment — "Build the preview again" — and submits zero jobs), re-verifies the gate and the per-job opt-in, then
 makes one `JobService.submit_njrs` call with all NJRs. That call is all-or-none at the canonical boundary (one SQLite
-transaction, then one runnable projection, then events and runner start), so a failure on any arm leaves no arm durable,
+transaction, then one runnable projection, then events and runner start), so an admission failure on any arm leaves no arm durable,
 runnable or running and "nothing was queued" is literally true; the experiment layer holds no transaction logic. The result reports experiment id, variable, arm labels/values and
 job ids.
 The existing queue serializes commit and projection across concurrent submissions, so an
 experiment admission overlapping a normal submission retains the repository's FIFO order.
+Runner startup errors after admission are logged separately and the admitted job IDs
+are returned; committed work is retained and is never reported as "nothing was queued".
+Startup is not automatically retried.
 
 Experimental opt-in stays off by default, per submission and never persisted. Preview requires it (it is part of the
 frozen baseline) so an experimental workflow cannot be previewed or queued without the explicit opt-in; the checkbox is
