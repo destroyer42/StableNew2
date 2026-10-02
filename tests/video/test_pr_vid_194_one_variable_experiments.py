@@ -662,3 +662,76 @@ def test_sha256_file_streams_in_bounded_chunks_with_the_standard_digest(tmp_path
     monkeypatch.setattr(Path, "open", spying_open)
     assert sha256_file(path) == hashlib.sha256(payload).hexdigest()
     assert sizes and all(0 < size <= HASH_CHUNK_BYTES for size in sizes)
+
+
+# ------------------------------------------------------------------ all-or-none canonical admission
+
+
+def test_a_repository_failure_on_a_later_arm_leaves_zero_arms_admitted_or_runnable(
+    tmp_path, monkeypatch
+):
+    import sqlite3
+
+    from src.gui.view_contracts.video_experiment_contract import VideoExperimentSession
+    from tests.integration.test_pr_vid_120_neutral_video_queue import _build_stack
+    from tests.video.test_pr_vid_190_wan_animate2 import _AnimateComfy, _backend, _ManagedFake
+
+    repository, queue, service, _ = _build_stack(
+        tmp_path, [_backend(_AnimateComfy(tmp_path), _ManagedFake())]
+    )
+    app = SimpleNamespace(job_service=service, output_dir=str(tmp_path / "output"))
+    controller = VideoWorkflowController(app_controller=app)
+    try:
+        service.auto_run_enabled = True  # a failed admission must not start anything either
+        plan = controller.preview_experiment(
+            source_image_path=_source(tmp_path),
+            form_data=_drive_form(tmp_path),
+            variable_name="pose_strength",
+            candidates=["1.5", "2", "2.5"],
+        )
+        original = repository._insert_job_submission
+        calls = {"n": 0}
+
+        def fail_on_third(connection, prepared, queue_order):
+            calls["n"] += 1
+            if calls["n"] == 3:
+                raise sqlite3.OperationalError("injected write failure")
+            return original(connection, prepared, queue_order)
+
+        monkeypatch.setattr(repository, "_insert_job_submission", fail_on_third)
+        started: list[bool] = []
+        monkeypatch.setattr(service, "_ensure_runner_started", lambda: started.append(True))
+
+        with pytest.raises(sqlite3.OperationalError):
+            controller.submit_experiment(plan)
+
+        assert calls["n"] == 3  # arms A and B were inserted inside the transaction, then undone
+        assert repository.list_recent_jobs() == []
+        assert queue.list_jobs() == [] and queue.get_next_job() is None
+        assert started == []
+
+        # The operator-facing "nothing was queued" is now literally true.
+        session = VideoExperimentSession(
+            resolve_baseline=controller.resolve_experiment_baseline,
+            build_preview=controller.preview_experiment,
+            submit_plan=controller.submit_experiment,
+        )
+        session.apply_controls(
+            next(
+                r
+                for r in controller.list_workflow_specs()
+                if r["workflow_id"] == WAN_ANIMATE2_DRIVE_ID
+            )["operator_controls"]
+        )
+        session.set_enabled(True)
+        session.select_variable("pose_strength")
+        session.set_candidate(0, "1.5")
+        form = _drive_form(tmp_path)
+        assert session.build_preview(str(_source(tmp_path)), form)
+        calls["n"] = 1  # a two-arm plan: arm A inserts (n=2), arm B fails (n=3)
+        assert session.queue(str(_source(tmp_path)), form) == []
+        assert "nothing was queued" in session.message
+        assert repository.list_recent_jobs() == [] and queue.list_jobs() == []
+    finally:
+        service.runner.stop()
+        repository.close()

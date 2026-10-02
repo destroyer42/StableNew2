@@ -65,12 +65,28 @@ class JobQueue:
         self._paused = bool(self._repository.get_setting("queue_paused", False))
 
     def submit(self, job: Job) -> None:
-        self._repository.record_job_submission(job)
-        job._persist_runtime_state = lambda current=job: self.persist_runtime_state(current)
+        self.submit_many([job])
+
+    def submit_many(self, jobs: Iterable[Job]) -> None:
+        """Admit a batch all-or-none: durable commit first, then ONE projection step.
+
+        The repository commits the whole batch in a single transaction.  If that raises, nothing
+        was added to the runnable projection and no state change is announced.  Only after the
+        commit are all new jobs made runnable together under the queue lock, so a worker can never
+        observe a partially projected batch.
+        """
+
+        batch = list(jobs)
+        if not batch:
+            return
+        self._repository.record_job_submissions(batch)
+        for job in batch:
+            job._persist_runtime_state = lambda current=job: self.persist_runtime_state(current)
         with self._lock:
-            self._counter += 1
-            self._jobs[job.job_id] = job
-            heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
+            for job in batch:
+                self._counter += 1
+                self._jobs[job.job_id] = job
+                heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
         self._notify_state_listeners()
 
     def get_next_job(self) -> Job | None:

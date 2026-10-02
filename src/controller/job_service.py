@@ -471,7 +471,9 @@ class JobService:
         records: list[NormalizedJobRecord] | tuple[NormalizedJobRecord, ...],
         policy: SubmissionPolicy | None = None,
     ) -> list[str]:
-        """Validate and enqueue a complete batch of immutable NJRs atomically."""
+        """Validate, then admit a complete NJR batch all-or-none (one repository transaction).
+        On failure nothing is durable, runnable, announced or started; events and the runner
+        start once, after the whole batch is queued."""
         submission_policy = policy or SubmissionPolicy()
         batch = tuple(records)
         if not batch:
@@ -486,17 +488,13 @@ class JobService:
             if not ok:
                 raise ValueError(details.get("message", "Invalid normalized job record"))
         jobs = [self._job_from_njr(record, policy=submission_policy) for record in batch]
-        queue = self.job_queue
-        coalesce = getattr(queue, "coalesce_state_notifications", None)
-        context = coalesce() if callable(coalesce) else None
-        if context is None or not hasattr(context, "__enter__"):
-            from contextlib import nullcontext
-
-            context = nullcontext()
-        with context:
-            for job in jobs:
-                self.submit_queued(job, emit_queue_updated=False)
+        self.job_queue.submit_many(jobs)  # raises => nothing admitted or announced
+        if hasattr(self, "_on_queue_activity") and self._on_queue_activity:
+            self._on_queue_activity()
+        for job in jobs:
+            self._notify_job_submitted(job)
         self._emit_queue_updated()
+        self._start_runner_after_admission(jobs[0].job_id)  # once, after the whole batch
         if submission_policy.start_when_idle and not self.runner.is_running():
             self.run_next_now()
         return job_ids
@@ -514,7 +512,9 @@ class JobService:
         )
         self.enqueue(job, emit_queue_updated=emit_queue_updated)
         self._notify_job_submitted(job)
+        self._start_runner_after_admission(job.job_id)
 
+    def _start_runner_after_admission(self, job_id: str) -> None:
         # Start runner if auto-run is enabled and runner isn't running
         if self.auto_run_enabled:
             if not self.runner.is_running():
@@ -522,7 +522,7 @@ class JobService:
                     logger,
                     logging.INFO,
                     "Queue worker starting (auto-run enabled)",
-                    ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+                    ctx=LogContext(job_id=job_id, subsystem="job_service"),
                     extra_fields={"runner": type(self.runner).__name__},
                 )
             # A running worker may be a one-shot that must hand off to continuous draining.
@@ -532,7 +532,7 @@ class JobService:
                 logger,
                 logging.INFO,
                 "Job queued but auto-run disabled; use Send Job or Resume to start",
-                ctx=LogContext(job_id=job.job_id, subsystem="job_service"),
+                ctx=LogContext(job_id=job_id, subsystem="job_service"),
             )
 
     def _ensure_runner_started(self) -> None:
