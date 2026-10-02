@@ -1,8 +1,9 @@
 # PR-VID-194 — One-Variable Operator Experiments (Video Workflow)
 
-Status: **implemented locally; deterministic CPU/fake-runtime validation only; no physical GPU run.** Ready for
-operator A/B qualification after owner review and a separate physical-run authorization. No promotion or readiness
-conclusion changes; Wan-Animate-2 stays EXPERIMENTAL and per-job opt-in, native SVD stays the default.
+Status: **implemented and verified; pending owner final PR review; not merged into `main`.** Validation remains
+CPU/fake-runtime only; no physical GPU run. Ready for operator A/B qualification after owner review and a separate
+physical-run authorization. No promotion or readiness conclusion changes; Wan-Animate-2 stays EXPERIMENTAL and per-job
+opt-in, native SVD stays the default.
 
 ## 1. What it is
 

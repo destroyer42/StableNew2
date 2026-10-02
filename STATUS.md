@@ -407,8 +407,8 @@ Updated: 2026-10-02
   ran once the GPU was free: the separate motion prompt removed the duplicate subject (ghost persistence 28 to 0 of
   39) but the driven locomotion disappeared with it, and pose strength 1.5 / reference strength 1.3 did not restore
   it. Driving-motion quality therefore remains `EXECUTION_PASS / PRODUCT_QUALITY_PARTIAL` pending owner review.
-  `PR-VID-194 — One-Variable Operator Experiments` is **IMPLEMENTED LOCALLY / PENDING OWNER REVIEW; READY FOR
-  OPERATOR A/B QUALIFICATION** (`docs/Subsystems/Video/PR-VID-194_Animate2_One_Variable_Operator_Experiments.md`).
+  `PR-VID-194 — One-Variable Operator Experiments` is **IMPLEMENTED / VERIFIED / READY FOR OWNER FINAL PR REVIEW;
+  NOT MERGED TO `main`** (`docs/Subsystems/Video/PR-VID-194_Animate2_One_Variable_Operator_Experiments.md`).
   Video Workflow gains a bounded "Compare one control" section: the current resolved value of one spec-declared
   operator control (Variant A) plus 1-3 candidates, one frozen baseline (one concrete seed, source and driving-video
   hashes), every arm built through the same extracted `VideoWorkflowNjrBuilder` as a normal submission with the
