@@ -7228,7 +7228,7 @@ class AppController:
         return capabilities
     def submit_svd_job(self, *, source_image_path: str | Path, form_data: dict[str, Any]) -> str:
         job_id = submit_single(self._get_svd_controller(), source_image_path, form_data)
-        self._sync_queue_state_after_direct_submission()
+        self.sync_queue_state_after_direct_submission()
         self._append_log(f"[svd] Queued SVD Img2Vid job {job_id} for {Path(source_image_path).name}")
         return job_id
     def preview_svd_folder_batch(self, *, folder_path: str | Path) -> dict[str, object]:
@@ -7243,10 +7243,10 @@ class AppController:
         job_ids = submit_folder_batch(
             self._get_svd_controller(), folder_path, form_data, match_source_aspect
         )
-        self._sync_queue_state_after_direct_submission()
+        self.sync_queue_state_after_direct_submission()
         self._append_log(f"[svd] Queued {len(job_ids)} SVD folder jobs from {Path(folder_path).name}")
         return job_ids
-    def _sync_queue_state_after_direct_submission(self) -> None:
+    def sync_queue_state_after_direct_submission(self) -> None:
         try:
             self._refresh_app_state_queue()
         except Exception as exc:
@@ -7301,7 +7301,7 @@ class AppController:
         self._append_log(f"[svd] Routed image to SVD tab: {path.name}")
         return str(path)
 
-    def _get_video_workflow_controller(self):
+    def get_video_workflow_controller(self):
         controller = getattr(self, "_video_workflow_controller", None)
         if controller is None:
             from src.controller.video_workflow_controller import VideoWorkflowController
@@ -7311,10 +7311,10 @@ class AppController:
         return controller
 
     def get_video_workflow_specs(self) -> list[dict[str, Any]]:
-        return self._get_video_workflow_controller().list_workflow_specs()
+        return self.get_video_workflow_controller().list_workflow_specs()
 
     def build_video_workflow_defaults(self) -> dict[str, Any]:
-        return self._get_video_workflow_controller().build_default_form_state()
+        return self.get_video_workflow_controller().build_default_form_state()
 
     def submit_video_workflow_job(
         self,
@@ -7322,12 +7322,12 @@ class AppController:
         source_image_path: str | Path,
         form_data: dict[str, Any],
     ) -> str:
-        controller = self._get_video_workflow_controller()
+        controller = self.get_video_workflow_controller()
         job_id = controller.submit_video_workflow_job(
             source_image_path=source_image_path,
             form_data=form_data,
         )
-        self._sync_queue_state_after_direct_submission()
+        self.sync_queue_state_after_direct_submission()
         self._append_log(
             f"[video_workflow] Queued workflow '{form_data.get('workflow_id', '')}' job {job_id} "
             f"for {Path(source_image_path).name}"
