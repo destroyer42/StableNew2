@@ -59,6 +59,8 @@ makes one `JobService.submit_njrs` call with all NJRs. That call is all-or-none 
 transaction, then one runnable projection, then events and runner start), so a failure on any arm leaves no arm durable,
 runnable or running and "nothing was queued" is literally true; the experiment layer holds no transaction logic. The result reports experiment id, variable, arm labels/values and
 job ids.
+The existing queue serializes commit and projection across concurrent submissions, so an
+experiment admission overlapping a normal submission retains the repository's FIFO order.
 
 Experimental opt-in stays off by default, per submission and never persisted. Preview requires it (it is part of the
 frozen baseline) so an experimental workflow cannot be previewed or queued without the explicit opt-in; the checkbox is

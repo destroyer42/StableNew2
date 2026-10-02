@@ -41,6 +41,7 @@ class JobQueue:
         self._jobs: dict[str, Job] = {}
         self._counter = 0
         self._lock = Lock()
+        self._admission_lock = Lock()
         self._paused = False
         self._history_store = self._repository
         # PR-MEMORY-001: Bounded finalized jobs (max 100) using deque for FIFO eviction
@@ -73,20 +74,23 @@ class JobQueue:
         The repository commits the whole batch in a single transaction.  If that raises, nothing
         was added to the runnable projection and no state change is announced.  Only after the
         commit are all new jobs made runnable together under the queue lock, so a worker can never
-        observe a partially projected batch.
+        observe a partially projected batch. Admissions serialize durable commit and projection
+        together, preserving repository FIFO order across concurrent callers.
         """
 
         batch = list(jobs)
         if not batch:
             return
-        self._repository.record_job_submissions(batch)
-        for job in batch:
-            job._persist_runtime_state = lambda current=job: self.persist_runtime_state(current)
-        with self._lock:
+        # Keep the projection lock free for repository observers that read the queue.
+        with self._admission_lock:
+            self._repository.record_job_submissions(batch)
             for job in batch:
-                self._counter += 1
-                self._jobs[job.job_id] = job
-                heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
+                job._persist_runtime_state = lambda current=job: self.persist_runtime_state(current)
+            with self._lock:
+                for job in batch:
+                    self._counter += 1
+                    self._jobs[job.job_id] = job
+                    heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
         self._notify_state_listeners()
 
     def get_next_job(self) -> Job | None:

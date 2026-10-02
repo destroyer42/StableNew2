@@ -7,6 +7,8 @@ deterministically at the repository insert seam.  No sleeps, GPU or network.
 from __future__ import annotations
 
 import sqlite3
+import threading
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import Any
 
@@ -290,3 +292,73 @@ def test_recovery_rebuilds_the_projection_from_the_committed_batch(tmp_path):
     stack.repository.close()
     reopened = JobQueue(repository=JobRepository(stack.db_path))
     assert [reopened.get_next_job().job_id for _ in ids] == ids
+
+
+@pytest.mark.parametrize('early_count,later_count', [(2, 1), (1, 2)])
+def test_concurrent_admissions_keep_projection_in_durable_fifo_order(
+    tmp_path, monkeypatch, early_count, later_count,
+):
+    stack = _stack(tmp_path, auto_run=False)
+    early_records = _records(early_count, 'early')
+    later_records = _records(later_count, 'later')
+    early_committed = threading.Event()
+    later_reached_boundary = threading.Event()
+    release_early = threading.Event()
+    timeout = 10
+    original_commit = stack.repository.record_job_submissions
+    original_notify = stack.queue._notify_state_listeners
+
+    class ObservedAdmissionLock:
+        def __init__(self):
+            self.lock = threading.Lock()
+
+        def __enter__(self):
+            if threading.current_thread().name.startswith('later'):
+                later_reached_boundary.set()
+            self.lock.acquire()
+            return self
+
+        def __exit__(self, *args):
+            self.lock.release()
+
+    # On repaired code, observe the later caller reaching the admission lock.
+    # Old code ignores this seam and instead signals after the later projection.
+    monkeypatch.setattr(stack.queue, '_admission_lock', ObservedAdmissionLock(), raising=False)
+
+    def commit(jobs):
+        original_commit(jobs)
+        if jobs[0].job_id.startswith('early'):
+            early_committed.set()
+            assert release_early.wait(timeout)
+
+    def notify():
+        original_notify()
+        if threading.current_thread().name.startswith('later'):
+            later_reached_boundary.set()
+
+    monkeypatch.setattr(stack.repository, 'record_job_submissions', commit)
+    monkeypatch.setattr(stack.queue, '_notify_state_listeners', notify)
+    # Repository observers can still read the queue: its projection lock must
+    # not be held around repository callbacks.
+    callback_views = []
+    stack.repository.register_callback(
+        lambda _entry: callback_views.append([job.job_id for job in stack.queue.list_jobs()])
+    )
+    with (
+        ThreadPoolExecutor(max_workers=1, thread_name_prefix='early') as early_pool,
+        ThreadPoolExecutor(max_workers=1, thread_name_prefix='later') as later_pool,
+    ):
+        early = early_pool.submit(stack.service.submit_njrs, early_records)
+        try:
+            assert early_committed.wait(timeout)
+            later = later_pool.submit(stack.service.submit_njrs, later_records)
+            assert later_reached_boundary.wait(timeout)
+        finally:
+            release_early.set()
+        early_ids = early.result(timeout=timeout)
+        later_ids = later.result(timeout=timeout)
+    expected = early_ids + later_ids
+    assert _durable_ids(stack.db_path) == expected
+    assert [stack.queue.get_next_job().job_id for _ in expected] == expected
+    assert len(callback_views) == len(expected)
+    assert stack.runner.start_snapshots == []

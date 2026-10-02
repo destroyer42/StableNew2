@@ -97,6 +97,9 @@ immediate-start preference). A multi-NJR call is admitted all-or-none:
 transaction, `JobQueue.submit_many` then projects every new job as runnable in one
 step, and only afterwards are submitted/queue-updated events emitted and the runner
 started. A failure leaves none of the batch durable, runnable or announced.
+`JobQueue` serializes each admission's durable commit and runnable projection together,
+so concurrent submissions retain the repository's FIFO order. Repository observers may
+read the queue during admission; the projection lock is held only for the projection step.
 
 ## 4. NormalizedJobRecord
 
