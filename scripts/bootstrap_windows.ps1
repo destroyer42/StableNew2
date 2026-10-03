@@ -198,6 +198,14 @@ if ($CheckOnly) {
             -FailureMessage "Could not create the venv at '$VenvPath'." | Out-Null
     }
 
+    # A reused venv keeps the interpreter it was created with, and the pinned packages also install
+    # on older Pythons, so the venv's own interpreter must be validated before anything is installed.
+    try {
+        Get-PythonVersion -Executable $VenvPython | Out-Null
+    } catch {
+        throw "The existing venv at '$VenvPath' is not a supported StableNew environment: $($_.Exception.Message)`nUse -Recreate (only for a dedicated venv path) or pass a different -VenvPath."
+    }
+
     $requirements = Join-Path $RepoRoot "requirements.txt"
     $svdRequirements = Join-Path $RepoRoot "requirements-svd.txt"
     $postprocessRequirements = Join-Path $RepoRoot "requirements-postprocess.txt"

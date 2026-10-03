@@ -351,6 +351,15 @@ def test_postprocess_stack_is_installed_only_on_request_and_core_never_installs_
     assert '$verifierArguments += "--with-postprocess"' in script
 
 
+def test_a_reused_venv_has_its_own_interpreter_validated_before_any_install() -> None:
+    script = _bootstrap()
+    reuse_guard = script.index("Get-PythonVersion -Executable $VenvPython | Out-Null")
+
+    # After the venv is reused or created, and before the first pip install.
+    assert script.index('"-m", "venv"') < reuse_guard < script.index('"-m", "pip", "install"')
+    assert "Use -Recreate" in script[reuse_guard : reuse_guard + 400]
+
+
 def test_unsupported_python_is_still_rejected_before_any_install() -> None:
     script = _bootstrap()
 
