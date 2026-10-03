@@ -20,6 +20,7 @@ from src.video.restoration.legacy_face_helper import (
     require_facelib_files,
 )
 from src.video.restoration.model_loader import load_image_model, select_device
+from src.video.restoration.runtime import WORKER_WARNING_PREFIX
 
 __all__ = ["REQUIRED_FACELIB_FILES", "CodeFormerRestorer", "require_facelib_files"]
 
@@ -89,7 +90,10 @@ class CodeFormerRestorer:
         except Exception as exc:
             # Pre-existing behaviour, kept so output does not change: a face that cannot be
             # restored is pasted back unrestored. It is reported instead of being silent.
-            sys.stderr.write(f"CodeFormer inference failed for one face; left unrestored: {exc}\n")
+            sys.stderr.write(
+                f"{WORKER_WARNING_PREFIX}CodeFormer inference failed for one face; "
+                f"left unrestored: {exc}\n"
+            )
             output = tensor
         return _tensor_to_bgr(output, np, cv2)
 

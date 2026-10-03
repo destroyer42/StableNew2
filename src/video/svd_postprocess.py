@@ -21,6 +21,7 @@ from src.video.motion.secondary_motion_provenance import build_secondary_motion_
 from src.video.restoration.runtime import (
     GFPGAN_UNSUPPORTED_ISSUE,
     POSTPROCESS_INSTALL_HINT,
+    WORKER_WARNING_PREFIX,
     missing_packages,
 )
 from src.video.svd_config import SVDConfig, SVDPostprocessConfig
@@ -198,6 +199,15 @@ class SVDPostprocessRunner:
     ) -> None:
         self._repo_root = Path(repo_root) if repo_root else Path(__file__).resolve().parents[2]
         self._status_callback = status_callback
+        self._stage_warnings: list[str] = []
+
+    def _record_stage_warnings(self, metadata: dict[str, Any], stage_name: str) -> None:
+        """Surface warnings a successful worker reported (e.g. a face left unrestored)."""
+
+        if self._stage_warnings:
+            entries = metadata.setdefault("warnings", [])
+            entries.extend({"stage": stage_name, "message": text} for text in self._stage_warnings)
+            self._stage_warnings = []
 
     def process_frames(
         self,
@@ -307,6 +317,7 @@ class SVDPostprocessRunner:
             )
             metadata["applied"].append("face_restore")
             metadata["face_restore"] = postprocess.face_restore.to_dict()
+            self._record_stage_warnings(metadata, "face_restore")
             self._emit_status(
                 stage_detail="postprocess: face_restore",
                 progress=len(metadata["applied"]) / total_enabled_stages,
@@ -369,6 +380,7 @@ class SVDPostprocessRunner:
             )
             metadata["applied"].append("upscale")
             metadata["upscale"] = postprocess.upscale.to_dict()
+            self._record_stage_warnings(metadata, "upscale")
             self._emit_status(
                 stage_detail="postprocess: upscale",
                 progress=len(metadata["applied"]) / total_enabled_stages,
@@ -496,6 +508,13 @@ class SVDPostprocessRunner:
                     completed.stderr.strip() or completed.stdout.strip() or "unknown worker error"
                 )
                 raise SVDPostprocessError(f"{stage_name} worker failed: {message}")
+            self._stage_warnings = [
+                line[len(WORKER_WARNING_PREFIX) :].strip()
+                for line in (getattr(completed, "stderr", "") or "").splitlines()
+                if line.startswith(WORKER_WARNING_PREFIX)
+            ]
+            for warning in self._stage_warnings:
+                logger.warning("[SVD][postprocess] stage=%s warning: %s", stage_name, warning)
             if expect_result:
                 stdout = completed.stdout.strip()
                 if stdout:

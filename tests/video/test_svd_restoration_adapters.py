@@ -17,6 +17,7 @@ from PIL import Image  # noqa: E402
 
 from src.video.restoration import codeformer as codeformer_module  # noqa: E402
 from src.video.restoration import model_loader, upscaler  # noqa: E402
+from src.video.restoration.runtime import WORKER_WARNING_PREFIX  # noqa: E402
 
 CPU = torch.device("cpu")
 
@@ -222,7 +223,10 @@ def test_a_face_that_cannot_be_restored_is_reported_and_left_unrestored(capsys) 
     result = _restorer(helper, model).restore(Image.new("RGB", (40, 24), "white"), fidelity=0.7)
 
     assert result.size == (40, 24)
-    assert "left unrestored" in capsys.readouterr().err  # not silent
+    stderr = capsys.readouterr().err
+    # Tagged so the runner can log it and record it in stage metadata (a successful worker exit
+    # would otherwise discard stderr).
+    assert stderr.startswith(WORKER_WARNING_PREFIX) and "left unrestored" in stderr
     restored, cropped = helper.restored[0]
     assert np.abs(restored.astype(int) - cropped).max() <= 1
 

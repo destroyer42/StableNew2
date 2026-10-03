@@ -8,7 +8,7 @@ from unittest.mock import Mock
 import pytest
 from PIL import Image
 
-from src.video.restoration.runtime import GFPGAN_UNSUPPORTED_ISSUE
+from src.video.restoration.runtime import GFPGAN_UNSUPPORTED_ISSUE, WORKER_WARNING_PREFIX
 from src.video.svd_config import SVDConfig
 from src.video.svd_errors import SVDPostprocessError
 from src.video.svd_postprocess import (
@@ -753,3 +753,74 @@ def test_process_frames_emits_stage_status_updates(tmp_path: Path, monkeypatch) 
             "eta_seconds": None,
         },
     ]
+
+
+def _face_restore_config(tmp_path: Path) -> SVDConfig:
+    codeformer_weight = tmp_path / "codeformer.pth"
+    facelib_root = tmp_path / "GFPGAN"
+    codeformer_weight.write_bytes(b"weights")
+    facelib_root.mkdir()
+    (facelib_root / "detection_Resnet50_Final.pth").write_bytes(b"det")
+    (facelib_root / "parsing_parsenet.pth").write_bytes(b"parse")
+    return SVDConfig.from_dict(
+        {
+            "postprocess": {
+                "face_restore": {
+                    "enabled": True,
+                    "method": "CodeFormer",
+                    "codeformer_weight_path": str(codeformer_weight),
+                    "facelib_model_root": str(facelib_root),
+                }
+            }
+        }
+    )
+
+
+def _run_face_restore_with_worker_stderr(tmp_path: Path, monkeypatch, stderr: str):
+    def _fake_run(cmd, cwd, capture_output, text, check):
+        output_dir = tmp_path / "face_restore_output"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (32, 32), "red").save(output_dir / "frame_001.png")
+        return SimpleNamespace(returncode=0, stdout="", stderr=stderr)
+
+    monkeypatch.setattr("src.video.svd_postprocess.subprocess.run", _fake_run)
+    monkeypatch.setattr(
+        SVDPostprocessRunner,
+        "_load_frame_sequence",
+        staticmethod(Mock(return_value=[Image.new("RGB", (32, 32), "red")])),
+    )
+    return SVDPostprocessRunner().process_frames(
+        frames=[Image.new("RGB", (32, 32), "white")],
+        config=_face_restore_config(tmp_path),
+        work_dir=tmp_path,
+    )
+
+
+def test_successful_worker_warnings_are_logged_and_recorded_in_stage_metadata(
+    tmp_path: Path, monkeypatch, caplog
+) -> None:
+    stderr = (
+        "FutureWarning: torch.jit.script is deprecated\n"
+        f"{WORKER_WARNING_PREFIX}CodeFormer inference failed for one face; left unrestored: boom\n"
+    )
+
+    with caplog.at_level(logging.WARNING, logger="src.video.svd_postprocess"):
+        _frames, metadata = _run_face_restore_with_worker_stderr(tmp_path, monkeypatch, stderr)
+
+    assert metadata is not None and metadata["applied"] == ["face_restore"]
+    assert metadata["warnings"] == [
+        {
+            "stage": "face_restore",
+            "message": "CodeFormer inference failed for one face; left unrestored: boom",
+        }
+    ]
+    assert "left unrestored: boom" in caplog.text
+    assert "torch.jit" not in caplog.text  # unrelated library noise stays out of the record
+
+
+def test_clean_worker_run_adds_no_warnings_key(tmp_path: Path, monkeypatch) -> None:
+    _frames, metadata = _run_face_restore_with_worker_stderr(
+        tmp_path, monkeypatch, "FutureWarning: noise only\n"
+    )
+
+    assert metadata is not None and "warnings" not in metadata

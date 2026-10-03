@@ -72,8 +72,10 @@ duration of construction. A guard test fails if any other production module impo
 - Spandrel's CodeFormer takes the fidelity as `weight=` (adain is built in). The legacy `w=` keyword
   would be swallowed by `**kwargs` and silently default to 0.5; a regression test pins the keyword.
 - Per-face CodeFormer inference failures keep the legacy behaviour (the face is pasted back
-  unrestored) but now write a warning to stderr. RealESRGAN failures, including per-tile failures,
-  propagate instead of producing partial output.
+  unrestored) but are now reported: the worker tags the warning (`WORKER_WARNING_PREFIX`) because a
+  successful worker's stderr is otherwise discarded, and `SVDPostprocessRunner` logs it and records
+  it under `warnings` in the postprocess metadata (absent when there are none). RealESRGAN
+  failures, including per-tile failures, propagate instead of producing partial output.
 
 ## Equivalence evidence (existing local weights, no new SVD generation)
 

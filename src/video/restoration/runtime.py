@@ -19,6 +19,10 @@ _FEATURE_PACKAGES: dict[str, tuple[tuple[str, str], ...]] = {
     ),
 }
 
+# A worker that succeeds can still report a degraded result (a face it could not restore). It
+# writes a line with this prefix to stderr; the runner logs it and records it in stage metadata.
+WORKER_WARNING_PREFIX = "STABLENEW-POSTPROCESS-WARNING: "
+
 POSTPROCESS_INSTALL_HINT = (
     "Install the optional postprocess runtime with scripts/bootstrap_windows.ps1 -WithPostprocess."
 )
