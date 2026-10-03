@@ -49,8 +49,13 @@ install root short on Windows (long paths break deep packages). The helper:
    anything (it never tracks a branch or pulls);
 3. creates the venv, installs exactly the pinned `pip`, then the CUDA Torch family from the PyTorch cu130
    index, then ComfyUI's own `requirements.txt` — every install under `-c` the constraints file;
-4. runs `pip check` and `verify_managed_comfy.py`, and writes a marker file so a later `-Recreate` may only
-   delete an install this tooling created.
+4. runs `pip check` and `verify_managed_comfy.py`.
+
+Ownership is claimed first: the moment the helper creates the install directory — before any clone, venv or
+`pip` step — it writes the `.stablenew-managed-comfy.json` marker (status `installing`, updated to `verified`
+only after the checks pass). A failed or interrupted build therefore always leaves a marked directory that
+`-Recreate` can rebuild. A directory that already exists **without** the marker is never modified, adopted or
+deleted, with or without `-Recreate`; move it aside or pick another `-InstallRoot`.
 
 It downloads no model, installs no custom node, and touches no A1111/Forge, no external Comfy, no
 StableNew application venv and no process. `-Recreate` rebuilds an install the tooling created;

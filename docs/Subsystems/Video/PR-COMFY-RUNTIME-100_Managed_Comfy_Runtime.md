@@ -34,7 +34,9 @@ files and their sha256 identities; workflow graphs and operator controls; the re
 The contract owns installation identity only; it contains no workflow fact. The bootstrap clones the exact tag,
 requires `HEAD` to equal the pinned commit before installing, constrains every `pip install`, runs `pip check`
 and the verifier, and refuses a drive-root/repository-root install, a non-3.13/free-threaded/JIT interpreter,
-a reused wrong-interpreter venv, and a `-Recreate` of anything it did not create. It downloads no model,
+a reused wrong-interpreter venv, and any pre-existing install directory without its ownership marker (never
+modified or deleted, with or without `-Recreate`); a directory it creates is marked before the first clone,
+venv or `pip` step, so a failed partial build can be rebuilt with `-Recreate`. It downloads no model,
 installs no custom node, and starts, stops and touches no process. The verifier additionally treats an
 installed-but-unpinned distribution as drift (this runtime carries exactly its constraints).
 

@@ -96,6 +96,41 @@ function Assert-OwnedInstallDir {
     }
 }
 
+function Write-InstallMarker {
+    # The ownership marker: written the moment this run creates the install directory (status
+    # "installing"), and updated to "verified" only after the finished runtime passes its checks.
+    param([string]$Status)
+    @{ release = $Release; revision = $Revision; python = $pythonMinor; constraints = (Split-Path -Leaf $ConstraintsPath); created_by = "bootstrap_managed_comfy_windows.ps1"; status = $Status } |
+        ConvertTo-Json | Set-Content -LiteralPath (Join-Path $InstallDir $MarkerName) -Encoding utf8
+}
+
+function Initialize-OwnedInstallDir {
+    # Leaves $InstallDir a StableNew-owned, marked directory, or throws. A directory that already
+    # exists is touched only if THIS tooling created it earlier (marker present): one without the
+    # marker is someone else's and is never modified or deleted, with or without -Recreate. A directory
+    # this run creates is marked before the first fallible step (clone, venv, pip), so a failed partial
+    # build can always be rebuilt with -Recreate.
+    $marker = Join-Path $InstallDir $MarkerName
+    if (Test-Path -LiteralPath $InstallDir) {
+        if (-not (Test-Path -LiteralPath $marker -PathType Leaf)) {
+            throw "'$InstallDir' already exists and was not created by this tooling (no $MarkerName); refusing to modify or delete it. Move it aside or choose another -InstallRoot."
+        }
+        if (-not $Recreate) {
+            if (-not (Test-Path -LiteralPath $VenvPython -PathType Leaf)) { throw "'$InstallDir' is an incomplete StableNew-managed install. Pass -Recreate to rebuild it." }
+            return
+        }
+        Remove-Item -LiteralPath $InstallDir -Recurse -Force
+    }
+    New-Item -ItemType Directory -Path $InstallDir | Out-Null   # no -Force: an existing directory must never be adopted here
+    try {
+        Write-InstallMarker -Status "installing"
+    } catch {
+        # The directory is empty and was created by this run; leave no markerless remnant behind.
+        Remove-Item -LiteralPath $InstallDir -Recurse -Force -ErrorAction SilentlyContinue
+        throw
+    }
+}
+
 function Get-ConstraintPin {
     param([string]$Name)
     $match = Select-String -LiteralPath $ConstraintsPath -Pattern ("^{0}==(\S+)\s*$" -f [regex]::Escape($Name)) | Select-Object -First 1
@@ -124,17 +159,7 @@ if ([string]::IsNullOrWhiteSpace($PythonPath)) { throw "-PythonPath is required 
 $PythonPath = (Resolve-Path -LiteralPath $PythonPath).Path
 Assert-SupportedPython -Executable $PythonPath
 
-if (Test-Path -LiteralPath $InstallDir) {
-    if (-not $Recreate) {
-        if (-not (Test-Path -LiteralPath $VenvPython -PathType Leaf)) { throw "'$InstallDir' exists but is incomplete. Pass -Recreate to rebuild this StableNew-managed install." }
-    } else {
-        if (-not (Test-Path -LiteralPath (Join-Path $InstallDir $MarkerName) -PathType Leaf)) {
-            throw "Refusing to delete '$InstallDir': it was not created by this tooling (no $MarkerName)."
-        }
-        Remove-Item -LiteralPath $InstallDir -Recurse -Force
-    }
-}
-New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+Initialize-OwnedInstallDir
 
 if (-not (Test-Path -LiteralPath (Join-Path $SourceDir "main.py") -PathType Leaf)) {
     Invoke-Checked -Executable "git" -Arguments @("clone", "--quiet", "--depth", "1", "--branch", $Release, $Manifest.upstream.repository, $SourceDir) -FailureMessage "Could not clone ComfyUI $Release." | Out-Null
@@ -160,9 +185,7 @@ Invoke-Checked -Executable $VenvPython -Arguments (@("-m", "pip", "install", "-c
 # Exactly what the pinned ComfyUI release declares, under the exact constraints.
 Invoke-Checked -Executable $VenvPython -Arguments @("-m", "pip", "install", "-c", $ConstraintsPath, "-r", (Join-Path $SourceDir "requirements.txt")) -FailureMessage "Could not install ComfyUI's declared requirements under '$ConstraintsPath'." | Out-Null
 
-@{ release = $Release; revision = $Revision; python = $pythonMinor; constraints = (Split-Path -Leaf $ConstraintsPath); created_by = "bootstrap_managed_comfy_windows.ps1" } |
-    ConvertTo-Json | Set-Content -LiteralPath (Join-Path $InstallDir $MarkerName) -Encoding utf8
-
 Invoke-Checked -Executable $VenvPython -Arguments @("-m", "pip", "check") -FailureMessage "pip check found inconsistent dependencies in '$VenvDir'." | Out-Null
 Invoke-Verifier
+Write-InstallMarker -Status "verified"
 Write-Host "Managed ComfyUI bootstrap verification passed: $InstallDir"

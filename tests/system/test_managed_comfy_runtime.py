@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 import re
+import shutil
 import subprocess
 import sys
 import types
@@ -314,9 +316,173 @@ def test_check_only_never_writes_and_destructive_actions_stay_inside_an_owned_in
 
     for write in ("clone", "Remove-Item", "New-Item", "pip", "Set-Content", '"-m", "venv"'):
         assert write not in check_only, write
-    assert "Refusing to delete" in code and "$MarkerName" in code  # only a tooling-created install
+    assert "was not created by this tooling" in code and "$MarkerName" in code  # only a tooling-created install
     assert "Refusing to use a drive root or the repository root" in code
     assert "outside -InstallRoot" in code
+
+
+# --- Ownership marker: claim a NEW install directory first, never touch a pre-existing unowned one ----
+
+
+def _function_block(script: str, name: str) -> str:
+    start = script.index(f"function {name} {{")
+    depth = 0
+    for position in range(script.index("{", start), len(script)):
+        depth += {"{": 1, "}": -1}.get(script[position], 0)
+        if depth == 0:
+            return script[start : position + 1]
+    raise AssertionError(f"unbalanced function {name}")
+
+
+def test_new_install_directory_is_marked_before_the_first_fallible_step() -> None:
+    code = _strip_comments(BOOTSTRAP.read_text(encoding="utf-8"))
+    init = _function_block(code, "Initialize-OwnedInstallDir")
+    main = code.replace(init, "")  # the call site, not the definition
+
+    # Ordering in the run: claim the directory, then clone, then create the venv, then any pip install.
+    claim = main.index("\nInitialize-OwnedInstallDir\n")
+    assert claim < main.index('"clone"') < main.index('"-m", "venv"') < main.index('"-m", "pip", "install"')
+    # Inside the claim: refuse an unmarked existing dir BEFORE any deletion; create the dir without
+    # -Force (an existing directory is never adopted); write the marker immediately after creating it.
+    assert init.index("was not created by this tooling") < init.index("Remove-Item")
+    assert "-Force -Path" not in init and "New-Item -ItemType Directory -Path $InstallDir" in init
+    assert init.index("New-Item") < init.index('Write-InstallMarker -Status "installing"')
+    # Every other place that could fail comes after the marker; nothing else creates the directory.
+    assert "New-Item" not in main
+    assert main.index('Write-InstallMarker -Status "verified"') > main.index("Invoke-Verifier")
+
+
+def test_destructive_removal_is_confined_to_the_claim_function_and_gated_by_the_marker() -> None:
+    code = _strip_comments(BOOTSTRAP.read_text(encoding="utf-8"))
+    init = _function_block(code, "Initialize-OwnedInstallDir")
+
+    assert code.count("Remove-Item") == init.count("Remove-Item") == 2  # the -Recreate rebuild + marker-failure cleanup
+    marker_gate = init.index("was not created by this tooling")
+    assert marker_gate < init.index("Remove-Item -LiteralPath $InstallDir -Recurse -Force\n")
+    assert code.index("Assert-OwnedInstallDir\n\nif ($CheckOnly)") < code.index("\nInitialize-OwnedInstallDir\n")
+    assert "Set-Content" in _function_block(code, "Write-InstallMarker") and code.count("Set-Content") == 1
+
+
+POWERSHELL = shutil.which("pwsh") or shutil.which("powershell")
+MARKER = ".stablenew-managed-comfy.json"
+
+
+def _run_claim(tmp_path: Path, *, recreate: bool, fail_marker: bool = False) -> subprocess.CompletedProcess[str]:
+    """Execute the real Initialize-OwnedInstallDir (extracted from the script) in PowerShell."""
+
+    script = _strip_comments(BOOTSTRAP.read_text(encoding="utf-8"))
+    marker_function = (
+        'function Write-InstallMarker { param([string]$Status) throw "simulated marker write failure" }'
+        if fail_marker
+        else _function_block(script, "Write-InstallMarker")
+    )
+    harness = "\n".join(
+        [
+            '$ErrorActionPreference = "Stop"',
+            f"$InstallDir = '{tmp_path / 'ManagedComfy' / 'v0.38.0-py313'}'",
+            f"$MarkerName = '{MARKER}'",
+            f"$Recreate = {'$true' if recreate else '$false'}",
+            "$VenvPython = Join-Path $InstallDir 'venv/Scripts/python.exe'",
+            "$Release = 'v0.38.0'; $Revision = ('a' * 40); $pythonMinor = '3.13'; $ConstraintsPath = 'c/constraints.txt'",
+            marker_function,
+            _function_block(script, "Initialize-OwnedInstallDir"),
+            "Initialize-OwnedInstallDir",
+        ]
+    )
+    path = tmp_path / "harness.ps1"
+    path.write_text(harness, encoding="utf-8")
+    command = [POWERSHELL, "-NoProfile", "-NonInteractive"]
+    if os.name == "nt":
+        command += ["-ExecutionPolicy", "Bypass"]
+    return subprocess.run([*command, "-File", str(path)], capture_output=True, text=True, check=False)
+
+
+def _install_dir(tmp_path: Path) -> Path:
+    return tmp_path / "ManagedComfy" / "v0.38.0-py313"
+
+
+def _says(stderr: str, phrase: str) -> bool:
+    """PowerShell wraps long error lines at an arbitrary column; compare without whitespace."""
+
+    return re.sub(r"\s+", "", phrase) in re.sub(r"\s+", "", stderr)
+
+
+needs_powershell = pytest.mark.skipif(POWERSHELL is None, reason="PowerShell is not available")
+
+
+@needs_powershell
+@pytest.mark.parametrize("recreate", [False, True])
+def test_a_new_install_directory_is_created_and_marked_immediately(tmp_path: Path, recreate: bool) -> None:
+    (tmp_path / "ManagedComfy").mkdir()
+
+    done = _run_claim(tmp_path, recreate=recreate)
+
+    assert done.returncode == 0, done.stderr
+    marker = json.loads((_install_dir(tmp_path) / MARKER).read_text(encoding="utf-8-sig"))
+    assert marker["status"] == "installing" and marker["release"] == "v0.38.0"
+    assert marker["created_by"] == "bootstrap_managed_comfy_windows.ps1"
+
+
+@needs_powershell
+@pytest.mark.parametrize("recreate", [False, True])
+@pytest.mark.parametrize("with_venv", [False, True])
+def test_a_preexisting_unmarked_directory_is_never_modified_adopted_or_deleted(
+    tmp_path: Path, recreate: bool, with_venv: bool
+) -> None:
+    install = _install_dir(tmp_path)
+    install.mkdir(parents=True)
+    (install / "keep.txt").write_text("someone else's file", encoding="utf-8")
+    if with_venv:  # even a directory that looks like a finished install is not ours without the marker
+        (install / "venv" / "Scripts").mkdir(parents=True)
+        (install / "venv" / "Scripts" / "python.exe").write_text("x", encoding="utf-8")
+
+    done = _run_claim(tmp_path, recreate=recreate)
+
+    assert done.returncode != 0 and _says(done.stderr, "was not created by this tooling")
+    assert (install / "keep.txt").read_text(encoding="utf-8") == "someone else's file"
+    assert not (install / MARKER).exists()  # not claimed either
+    assert sorted(p.name for p in install.iterdir()) == sorted(["keep.txt", "venv"] if with_venv else ["keep.txt"])
+
+
+@needs_powershell
+def test_a_failed_partial_owned_install_is_reported_incomplete_and_rebuilt_by_recreate(tmp_path: Path) -> None:
+    assert _run_claim(tmp_path, recreate=False).returncode == 0  # claimed: marker exists before any install
+    install = _install_dir(tmp_path)
+    (install / "source").mkdir()
+    (install / "source" / "half-cloned.txt").write_text("partial", encoding="utf-8")  # then clone/pip failed
+
+    plain = _run_claim(tmp_path, recreate=False)
+    assert plain.returncode != 0 and _says(plain.stderr, "incomplete StableNew-managed install")
+    assert (install / "source" / "half-cloned.txt").exists()  # a plain run changes nothing
+
+    rebuilt = _run_claim(tmp_path, recreate=True)
+    assert rebuilt.returncode == 0, rebuilt.stderr
+    assert sorted(p.name for p in install.iterdir()) == [MARKER]  # removed the remnant, freshly claimed
+    assert json.loads((install / MARKER).read_text(encoding="utf-8-sig"))["status"] == "installing"
+
+
+@needs_powershell
+def test_a_complete_owned_install_is_reused_untouched_without_recreate(tmp_path: Path) -> None:
+    assert _run_claim(tmp_path, recreate=False).returncode == 0
+    install = _install_dir(tmp_path)
+    (install / "venv" / "Scripts").mkdir(parents=True)
+    (install / "venv" / "Scripts" / "python.exe").write_text("x", encoding="utf-8")
+
+    done = _run_claim(tmp_path, recreate=False)
+
+    assert done.returncode == 0, done.stderr
+    assert (install / "venv" / "Scripts" / "python.exe").exists()
+
+
+@needs_powershell
+def test_a_marker_write_failure_leaves_no_markerless_directory_behind(tmp_path: Path) -> None:
+    (tmp_path / "ManagedComfy").mkdir()
+
+    done = _run_claim(tmp_path, recreate=False, fail_marker=True)
+
+    assert done.returncode != 0 and _says(done.stderr, "simulated marker write failure")
+    assert not _install_dir(tmp_path).exists()  # the empty directory this run created is removed
+    assert _run_claim(tmp_path, recreate=False).returncode == 0  # and a later run starts cleanly
 
 
 def test_bootstrap_rejects_other_pythons_free_threaded_builds_and_a_reused_wrong_venv() -> None:

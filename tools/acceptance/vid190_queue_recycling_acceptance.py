@@ -505,7 +505,9 @@ def _run(stack: _Stack, args: argparse.Namespace, evidence: dict, workspace: Pat
         if label == "B" and _clean_resource_failure(record):
             retry_needed = True
     if retry_needed:
-        base = suite[1]
+        # The bounded retry is derived from the selected B job by label: a filtered suite
+        # (``--only B``) holds one tuple, so a positional index would be wrong or out of range.
+        base = next(job for job in suite if job[0] == "B")
         retry_job = (f"{base[0]}_retry", base[1], base[2], RETRY_FRAMES, *base[4:])
         retry_id = _submit(stack, source, workspace, retry_job)
         record = _run_one(stack, retry_id, "B_retry", RETRY_FRAMES, comfy_url)
@@ -520,8 +522,17 @@ def _run(stack: _Stack, args: argparse.Namespace, evidence: dict, workspace: Pat
         evidence["replay"] = _replay_evidence(stack, first_completed["job_id"])
     evidence["final_gpu"] = _driver_gpu()
     evidence["final_endpoint_state"] = _endpoint_state(comfy_url)
-    main_three = [r for r in records if r["label"] in {"A", "B", "C"}]
-    return 0 if all(r["status"] == "completed" for r in main_three) else 1
+    # The verdict covers exactly the primary jobs this invocation queued (the whole suite, or the
+    # ``--only`` selection such as A0-A3) -- never a hard-coded label set, which would be empty for a
+    # filtered controls run and pass vacuously.  The bounded ``B_retry`` is not a primary job and
+    # never substitutes for a failed B.
+    primary_labels = [label for label, _frames, _job_id in queued]
+    evidence["primary_jobs"] = primary_labels
+    primary = [r for r in records if r["label"] in primary_labels]
+    complete = len(primary) == len(primary_labels) and all(
+        r["status"] == "completed" for r in primary
+    )
+    return 0 if complete else 1
 
 
 def _write_evidence(evidence: dict) -> None:
