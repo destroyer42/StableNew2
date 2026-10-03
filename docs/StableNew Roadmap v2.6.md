@@ -502,27 +502,42 @@ but cannot establish a failure family without supporting evidence.
 Image and video qualification share real GPU/runtime state and
 qualification infrastructure, so both belong here when selected.
 
-1. `PR-IMG-BACKEND-QUAL-100 — Modern Still-Image Backend Qualification`:
-   compare the accepted A1111 path with ComfyUI as the leading candidate for
-   primary modern still-image execution; Forge may be included as a low-cost
-   A1111-compatible transition candidate. Keep this qualification behind the
-   existing PR-IMG-100 one-backend-per-image-NJR contract. Compare keeper
-   quality, SDXL parity, modern-model and editing/control support, LoRA/
-   ControlNet/detail/upscale capability, cold/warm latency, VRAM/RAM,
+1. `PR-IMG-FORGE-100 — Forge Compatibility / A1111 Successor Qualification`:
+   qualify Forge as the direct successor to the current A1111/WebUI production
+   path before comparing architectural alternatives. Preserve the accepted
+   StableNew image intent/NJR contract and prove txt2img, img2img, ADetailer,
+   LoRA, ControlNet/detail/upscale behavior, model/VAE verification, seeds,
+   cancellation, ambiguous-dispatch handling, artifacts/history/replay, and
+   managed-versus-external process ownership. Forge receives its own durable
+   backend identity (for example `forge_webui`); do not silently reinterpret
+   historical `a1111_webui` NJRs as Forge even if both expose compatible APIs.
+   Share adapter implementation only where semantics are demonstrably common.
+2. If Forge qualification passes, `PR-IMG-FORGE-110 — Forge Production
+   Promotion` may make Forge the default A1111-family production backend while
+   retaining the existing A1111 backend as a compatibility/replay path until
+   explicit retirement criteria are met. Do not combine this promotion with
+   ComfyUI integration.
+3. `PR-IMG-BACKEND-QUAL-100 — Forge vs Comfy Modern Still-Image Qualification`:
+   compare the qualified Forge production path against ComfyUI as the competing
+   modern still-image execution architecture behind the existing PR-IMG-100
+   one-backend-per-image-NJR contract. Compare keeper quality, SDXL parity,
+   modern-model and editing/control support, LoRA/ControlNet/detail/upscale
+   capability, cold/warm latency, checkpoint/model-switch cost, VRAM/RAM,
    deterministic replay/provenance, cancellation and ambiguous outcomes,
-   artifact ownership, and operator complexity. Qualification alone does not
-   change the default backend.
-2. If that evidence supports promotion, `PR-IMG-COMFY-100` becomes the bounded
-   production still-image slice. ComfyUI must remain behind StableNew-owned
-   intent/compiler/NJR/JobService/SQLite/PipelineRunner/artifact-history
-   authority; raw Comfy workflows and Comfy's internal queue stay backend
-   private. Preserve A1111 compatibility until explicit retirement criteria
-   are defined and satisfied.
-3. `PR-IMG-130` capability-aware image backend/model UX/compiler work becomes
+   artifact ownership, operator complexity, workflow/versioning burden, and
+   suitability for future image/video runtime convergence. Qualification alone
+   does not change the default backend.
+4. If controlled evidence supports Comfy promotion, `PR-IMG-COMFY-100` becomes
+   the bounded production still-image slice. ComfyUI must remain behind
+   StableNew-owned intent/compiler/NJR/JobService/SQLite/PipelineRunner/
+   artifact-history authority; raw Comfy workflows and Comfy's internal queue
+   stay backend private. Preserve Forge/A1111 compatibility until deliberate
+   retirement criteria are defined and satisfied.
+5. `PR-IMG-130` capability-aware image backend/model UX/compiler work becomes
    actionable once a real second production backend exists.
-4. `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware Qualification` remains
+6. `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware Qualification` remains
    separately owner-authorized for model/download/GPU state.
-5. Production integration is only for an explicitly selected evidence-backed
+7. Production integration is only for an explicitly selected evidence-backed
    capability, extending PR-RUNTIME-100 ownership/coexistence behavior when a
    runtime actually becomes production. Extract reusable qualification
    primitives only after at least two qualifications show genuinely common
