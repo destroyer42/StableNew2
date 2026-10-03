@@ -5,7 +5,7 @@
   "purpose": "Evidence-oriented descriptor of the isolated Forge Neo qualification runtime. This is NOT a production runtime/bootstrap contract (that belongs to PR-IMG-FORGE-110 after qualification passes) and nothing in StableNew launches Forge from this file.",
   "backend_id": "forge_webui",
   "default_image_backend_id": "a1111_webui",
-  "qualification_status": "INSTALLED_UNQUALIFIED / QUALIFICATION_INFRASTRUCTURE_BLOCKED / ADMISSION_REPAIR_VALIDATED / NEW_PHYSICAL_ATTEMPT_PENDING_OWNER_APPROVAL",
+  "qualification_status": "INSTALLED_UNQUALIFIED / QUALIFICATION_INFRASTRUCTURE_BLOCKED / ADMISSION_REPAIR_VALIDATED / PROMPT_INTENT_BLOCKED / NEW_PHYSICAL_ATTEMPT_PENDING_OWNER_APPROVAL",
   "classification": "QUALIFICATION_INFRASTRUCTURE_BLOCKED",
   "physical_checkpoint": {
     "stable_sha": "f636f0e9702f0e1c4824353b780cceec05fc0214",
@@ -39,7 +39,28 @@
     "live_smoke": "PASS: actual managed A1111 raw WebUI PIDs2, tree1, normal risk, healthy admission, zero restarts/non-GETs/generation; owned tree stopped, no adoption.",
     "failed_job_preservation": "Original SQLite database/result byte hashes unchanged; one failed terminal row, no requeue/reuse/deletion.",
     "evidence": "Machine-local admission-repair-aa24dba/result.json; qualification document section17.",
-    "physical_generation": "NOT_RESUMED; HOLD for owner review"
+    "physical_generation": "Owner-authorized fresh cohort at 333bdbf passed owned A1111 admission but stopped before network generation dispatch for changed prompt intent; see resumed_physical_checkpoint."
+  },
+  "resumed_physical_checkpoint": {
+    "stable_sha": "333bdbf71113984ecb9a4c1fad9328d6b7a18459",
+    "cohort": "physical-333bdbf-pass2",
+    "operational_matrix_sha256": "d115bc2353d7b612aa2c40d9da89c69b49d28eb8f4a342b137708d35299f7796",
+    "lineage": "resumed physical cohort after admission infrastructure repair; not product replay",
+    "generation_intent": "All eight original cases/settings/assets unchanged; repaired source SHA, new cohort/lineage and explicit approval metadata only.",
+    "classification": "QUALIFICATION_INFRASTRUCTURE_BLOCKED",
+    "failed_job_id": "forge100-d115bc2353d7b612-A-a1111_webui",
+    "submitted_jobs": 1,
+    "failed_jobs": 1,
+    "not_submitted_cases": 7,
+    "generation_requests": 0,
+    "blocker": "Frozen prompt mismatch refused before HTTP dispatch: qualification compile_case omits canonical global-prompt pipeline flags; shared txt2img executor translation omits prompt_optimizer, enabling optimizer defaults. No repair or intent change in this physical pass.",
+    "admission": "Owned launcher35024 -> serving child20748: raw WebUI PIDs2, independent trees1/root35024, normal risk, zero owned restarts.",
+    "retry_evidence": "Zero network generation retries/replays or job resubmissions. Existing client made three local send attempts; the guard refused all before network dispatch. Two local retry attempts are preserved as evidence, not passing generation.",
+    "preservation": "All45 previous cohort files and eight protected A1111/VID-192 files have unchanged byte hashes; old terminal job and seven historical identities untouched.",
+    "final_queue": "One new terminal failed SQLite job; zero queued/running; integrity_check ok and no foreign-key violations; owned tree exited and ports released.",
+    "image_parity": "NOT_ASSESSABLE; no image artifacts/contact sheet. Forge was not launched this pass; no inference on either backend.",
+    "evidence": "Machine-local physical-333bdbf-pass2/hold-report.json, prompt-translation-evidence.json, evidence-inventory.json, frozen NJRs, normal SQLite failed lifecycle and survivor logs; qualification document section18.",
+    "next_decision": "Owner adjudication of bounded canonical prompt-policy/optimizer intent-preservation repair, then separate approval for a fresh physical cohort. Preserve both terminal failed jobs; never retry or requeue them."
   },
   "classification_allowed_values": [
     "QUALIFICATION_INFRASTRUCTURE_BLOCKED",

@@ -1,12 +1,12 @@
 # PR-IMG-FORGE-100 — Forge Neo Compatibility / A1111 Successor Qualification
 
-Status: **QUALIFICATION_INFRASTRUCTURE_BLOCKED — process-tree admission repair validated;
-new physical pass pending owner approval.**
+Status: **QUALIFICATION_INFRASTRUCTURE_BLOCKED — accepted admission repair passed during the
+resumed physical attempt; frozen prompt intent changed before dispatch. HOLD for adjudication.**
 Forge is an explicit, **non-default** backend identity (`forge_webui`). `a1111_webui` remains the
 default. Nothing here promotes Forge (that is `PR-IMG-FORGE-110`, a separate owner decision) and no
-image parity verdict has been reached. The frozen matrix cannot execute under current canonical
-runtime admission at the failed attempt's source checkpoint; this is not evidence of Forge image
-failure. The repair has passed no-generation admission smoke; see sections 16-17.
+image parity verdict has been reached. The first attempt failed admission (sections16-17); the resumed
+cohort passed that repaired surface but was refused for prompt mismatch before network generation
+dispatch (section18). Neither attempt is evidence of Forge image failure.
 
 Base: `origin/main` `715e352f28640cb0eb3225a5b1752fc5e192c778` (PR #35 / PR-TEST-TRUTH-210 merged).
 Initial implementation/evidence: Claude Code cloud session. Local/Desktop installation and GET-only
@@ -909,3 +909,95 @@ and zero-dispatch evidence. Scoped Ruff and `git diff --check` pass. The single 
 PR gate passes: completeness, controller ratchet, Ruff, mypy smoke, **4414 collected /184 smoke passed**.
 No expensive unrelated sweep was run. Recommendation is recorded above; actual model/effort and
 token/cost/elapsed usage metrics are unavailable in the host's reported metadata.
+
+## 18. Resumed physical cohort: prompt-intent infrastructure HOLD
+
+Owner-authorized execution used clean StableNew source
+`333bdbf71113984ecb9a4c1fad9328d6b7a18459`. Forge and ADetailer-Neo source pins and all six frozen
+asset SHA-256 values were unchanged. Installed Forge metadata matched the accepted package freeze,
+including absent MediaPipe and the unresolved Gradio4.40.0/Pillow12.3.0 packaging conflict. Accepted
+preflight/source gate evidence was reused, with short live readiness/resource/identity/ownership
+checks only. No broad preflight, old deterministic sweep or PR gate was repeated.
+
+Execution Profile: **Standard / LOCAL desktop**, recommended **GPT-6.1 Sol XHigh** (Codex) and
+**Sonnet5.5 XHigh** (Claude Code). Controller Surface Assessment: no production/controller source
+changed. The evidence wrapper reused unchanged qualification `execute_matrix`/`build_services`, real
+JobService, SQLite, PipelineRunner.run_njr and the selected adapter. Token-Efficient Validation Plan:
+exact-source/assets/package-freeze verification, lightweight survivor telemetry, passive dispatch
+guard, then JSON/hash/SQLite/evidence integrity and scoped diff checks. Preserve accepted gate evidence.
+
+The new cohort **physical-333bdbf-pass2** has matrix digest
+`d115bc2353d7b612aa2c40d9da89c69b49d28eb8f4a342b137708d35299f7796` and eight fresh compiled NJR IDs:
+`forge100-d115bc2353d7b612-{A,B,C,D}-{a1111_webui,forge_webui}`. Generation settings, prompts, assets
+and case structure match the original authoritative proposal exactly; only source/cohort/lineage and
+approval metadata changed. Evidence lineage is **resumed physical cohort after admission infrastructure
+repair**, without product replay or invented parent_job_id. Frozen tooling requires interleaved order,
+as permitted by the owner's ordering exception.
+
+Only **forge100-d115bc2353d7b612-A-a1111_webui** was submitted; it is now a normal terminal **failed**
+SQLite/history identity. The seven remaining frozen records were never submitted and have no lifecycle
+rows. Prior terminal **forge100-3434b4f36b1027ff-A-a1111_webui**, its database/result and all historical
+planned identities were untouched. All **45** previous-cohort files and **eight** protected A1111/VID-192
+files matched their captured before/after byte hashes.
+
+### Admission succeeded; exact prompts did not survive translation
+
+Actual managed A1111 tree: qualification owner31484 -> launcher**35024** -> serving Python**20748**.
+Read-only identity/resource checks passed: correct A1111 identity, exact checkpoint, LoRA, required
+upscaler and both YOLO detector names visible; port7860 belonged to the owned tree. Captured process
+risk was **normal**, raw WebUI PIDs**2**, independent runtime trees**1**, root35024. Runtime admission
+progressed to generation payload construction, without duplicate refusal or restart.
+
+The passive guard refused the first generation call before its underlying HTTP request because the
+product changed both prompts. Logs show positive chunks reordered and global negative terms appended
+before negative optimization. The frozen negative prompt was
+`lowres, blurry, deformed hands, extra fingers, text, watermark`; the would-be payload instead contained
+`lowres, deformed hands, malformed, extra fingers, blurry, text, bad quality, distorted, ugly, watermark, nsfw, nude, naked, explicit, sexual content, adult content, immodest`.
+
+Bounded read-only source/config analysis established two related intent-plumbing gaps:
+
+- Qualification `compile_case` writes top-level global enable booleans, blank global terms and
+  `global_prompt_policy_source=frozen_njr`, but does not use the canonical
+  `apply_global_prompt_policy` pipeline stage flags. `has_frozen_global_prompt_policy` therefore returns
+  false, and the executor consults legacy runtime defaults/terms. The immutable snapshot contains the
+  requested values; the qualification construction is not a complete canonical policy.
+- `WebUIFamilyImageBackend._txt2img_executor_config` does not forward the NJR's explicit
+  `prompt_optimizer={enabled:false}`. The executor receives no optimizer config and defaults to enabled.
+  Pure adapter/config evidence confirms this without Pipeline execution, HTTP or GPU work.
+
+No production or qualification execution code was repaired, and no prompts/settings were changed to
+rescue the pass. These findings require owner adjudication before another physical attempt.
+
+The existing client made **three local send attempts** after the guard's exception. All were refused
+before network dispatch: **zero generation POSTs**, **zero HTTP generation retries**, **zero ambiguous
+dispatches**, **zero job resubmissions**. The two local retry attempts are preserved explicitly; they
+must not be described as a clean absence of all retry behavior. No automatic runtime restart occurred.
+
+### Evidence and cleanup
+
+Pair A is infrastructure-blocked before A1111 inference; its Forge arm and pairs B/C/D are
+**NOT_SUBMITTED**. Requested seed424242 is frozen in every NJR; dispatched/actual seeds are absent.
+There are no generation-stage timings, output images, stage manifests, contact sheet or visual parity
+findings. Pair-A A1111 elapsed time including startup was **18.528s**; repository running duration
+**4.713s**. Cold runtime startup/pre-dispatch peak observed VRAM was **8008MiB**, not a generation peak.
+Five-second survivor samples recorded no GPU telemetry error, CUDA OOM or device-loss signal. No system
+Display4101 event was returned for the observation window, and no display loss was reported. This is
+not a generation stability test.
+
+The owned A1111 tree was stopped cleanly: neither PID survived; manager PID/ownership cleared,
+qualification ports released, no external process mutation. Forge was not started during this cohort.
+SQLite `integrity_check=ok`, no foreign-key violations, **one failed / zero queued / zero running**;
+normal failed run_metadata.json and the canonical snapshots/results are retained. No model/detector/
+package download or YOLO/MediaPipe inference occurred. Existing A1111 package debt remains non-blocking
+environment debt; no inference evidence adjudicates it. A1111 remains default and FORGE-110 is unstarted.
+
+Full machine-local evidence is retained in **physical-333bdbf-pass2/hold-report.json**,
+**prompt-translation-evidence.json**, **evidence-inventory.json**, **events.jsonl**, **session.log**,
+**run/jobs.sqlite3**, eight frozen NJRs and the terminal failed result. The report carries exact runtime
+profiles, package provenance, six asset paths/hashes, process trees, timing/telemetry and preservation
+checks. Large generated binaries were not committed; no images exist for this cohort.
+
+Final classification: **QUALIFICATION_INFRASTRUCTURE_BLOCKED**, not a Forge execution verdict.
+Next decision: authorize a bounded canonical prompt-policy/optimizer preservation repair, then accept
+its focused evidence before separately authorizing a fresh physical cohort. Preserve both failed job
+IDs and all unsent historical identities. No ninth cancellation case is warranted or authorized.
