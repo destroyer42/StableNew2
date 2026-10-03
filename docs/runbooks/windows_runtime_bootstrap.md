@@ -48,24 +48,34 @@ powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_windows.ps1 `
 The supported runtime is reproducible from repository-owned authority:
 
 - `requirements.txt` / `requirements-svd.txt` stay the human-readable direct
-  dependencies.
+  dependencies of the **core** profile (StableNew and native SVD).
+  `requirements-postprocess.txt` is the **optional** profile: local face
+  restoration and upscaling (Spandrel model loading, plus the `codeformer`
+  wheel that provides CodeFormer's face helper). Core SVD, including
+  postprocess-disabled jobs, never requires it.
 - `constraints/windows-py312-cu130.txt` is the single exact-version authority
   for the supported Windows / CPython 3.12 / CUDA 13.0 environment, including
-  the resolver itself (`pip`). Every install the helper performs is constrained
-  by it, so a rebuild resolves the same packages instead of whatever is newest.
-  It is Windows-specific; Linux/GitHub CI does not use it.
+  the resolver itself (`pip`). It has a core section and a
+  `# profile: postprocess` section. Every install the helper performs is
+  constrained by it, so a rebuild resolves the same packages instead of
+  whatever is newest. It is Windows-specific; Linux/GitHub CI does not use it.
 - Changing any pin is its own reviewed, qualified change. Do not regenerate the
   file with `pip freeze` from a developer environment.
 
 The helper installs exactly the pinned pip (never `--upgrade`), installs
-`torch` and `torchvision` (which facexlib/CodeFormer require) at their pinned
-`+cu130` builds from the official PyTorch CUDA index (default
-`https://download.pytorch.org/whl/cu130`; PyPI is an extra index only for their
-ordinary dependencies), and then installs `requirements.txt` followed by
-`requirements-svd.txt`. A CPU-only Torch cannot satisfy or replace the pinned
-CUDA build. It then runs `pip check` and `tools/runtime/verify_runtime_pins.py`
-(a stdlib comparison of installed distributions against the constraints, which
-ignores unpinned extras) in both bootstrap and `-CheckOnly` modes, and verifies
+`torch` and `torchvision` (the latter backs transformers' default image
+processor used by SVD conditioning) at their pinned `+cu130` builds from the
+official PyTorch CUDA index (default `https://download.pytorch.org/whl/cu130`;
+PyPI is an extra index only for their ordinary dependencies), and then installs
+`requirements.txt` followed by `requirements-svd.txt`. Pass `-WithPostprocess`
+to also install `requirements-postprocess.txt`. A CPU-only Torch cannot satisfy
+or replace the pinned CUDA build. It then runs `pip check` and
+`tools/runtime/verify_runtime_pins.py` (a stdlib comparison of installed
+distributions against the constraints, which ignores unpinned extras) in both
+bootstrap and `-CheckOnly` modes. The core profile is always required; the
+optional profile is required only with `-WithPostprocess` (or when its
+`spandrel` markers are installed), is reported as absent-by-design otherwise,
+and any installed pinned package that has drifted fails either way. It also verifies
 Python, CUDA-enabled Torch, the detected GPU, Diffusers and
 `StableVideoDiffusionPipeline`, Transformers, Accelerate, imageio-ffmpeg,
 and executable FFmpeg/ffprobe.

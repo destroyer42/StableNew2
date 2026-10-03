@@ -1,4 +1,4 @@
-"""Reproducible Windows runtime authority (PR-RUNTIME-DEPS-100).
+"""Reproducible Windows runtime authority (PR-RUNTIME-DEPS-100, profiles by PR-POSTPROC-100).
 
 Deterministic and GPU-free: it checks the repository-owned exact constraints, the drift
 verifier, and the bootstrap's install policy. The real clean-environment proof is runtime
@@ -34,8 +34,13 @@ def _requirement_lines(rel_path: str) -> list[str]:
 
 
 @pytest.fixture(scope="module")
-def pins() -> dict[str, str]:
-    return verifier.parse_constraints(CONSTRAINTS.read_text(encoding="utf-8"))
+def profiles() -> verifier.RuntimeProfiles:
+    return verifier.parse_profiles(CONSTRAINTS.read_text(encoding="utf-8"))
+
+
+@pytest.fixture(scope="module")
+def pins(profiles) -> dict[str, str]:
+    return profiles.all_pins
 
 
 # --- Constraints file -------------------------------------------------------------------------
@@ -62,29 +67,54 @@ def test_constraints_are_exact_unique_and_free_of_paths_urls_and_editables(pins)
             line.split("#", 1)[0] for line in text.splitlines()
         ), forbidden
     assert all(Version(version) for version in pins.values())  # parseable PEP 440 versions
-    assert list(pins) == sorted(pins)  # reviewable, stable ordering
+    for profile in (profiles_of(text).core, profiles_of(text).postprocess):
+        assert list(profile) == sorted(profile)  # reviewable, stable ordering per profile
 
 
-def test_constraints_pin_every_direct_dependency(pins) -> None:
-    for rel_path in ("requirements.txt", "requirements-svd.txt"):
+def profiles_of(text: str) -> verifier.RuntimeProfiles:
+    return verifier.parse_profiles(text)
+
+
+def test_constraints_pin_every_direct_dependency_in_its_own_profile(profiles) -> None:
+    expected = {
+        "requirements.txt": profiles.core,
+        "requirements-svd.txt": profiles.core,
+        "requirements-postprocess.txt": profiles.postprocess,
+    }
+    for rel_path, profile in expected.items():
         for line in _requirement_lines(rel_path):
             requirement = Requirement(line)
             name = verifier.normalize_name(requirement.name)
-            assert name in pins, f"{rel_path}: {name} is not pinned in the runtime constraints"
-            assert requirement.specifier.contains(pins[name], prereleases=True), (
-                f"{rel_path}: {line} contradicts the exact pin {name}=={pins[name]}"
+            assert name in profile, f"{rel_path}: {name} is not pinned in its runtime profile"
+            assert requirement.specifier.contains(profile[name], prereleases=True), (
+                f"{rel_path}: {line} contradicts the exact pin {name}=={profile[name]}"
             )
 
 
-def test_pyproject_svd_extra_matches_requirements_svd_without_contradiction() -> None:
-    extra = tomllib.loads(_read("pyproject.toml"))["project"]["optional-dependencies"]["svd"]
+def test_pyproject_extras_match_the_requirement_files() -> None:
+    extras = tomllib.loads(_read("pyproject.toml"))["project"]["optional-dependencies"]
 
-    assert sorted(extra) == sorted(_requirement_lines("requirements-svd.txt"))
+    assert sorted(extras["svd"]) == sorted(_requirement_lines("requirements-svd.txt"))
+    assert sorted(extras["postprocess"]) == sorted(_requirement_lines("requirements-postprocess.txt"))
 
 
-def test_torch_family_is_pinned_to_the_cuda_build_and_resolver_is_pinned(pins) -> None:
+def test_profiles_do_not_overlap_and_core_excludes_restoration_only_packages(profiles) -> None:
+    restoration_only = {"spandrel", "spandrel-extra-arches", "codeformer", "lpips", "einops"}
+    retired = {"basicsr", "gfpgan", "facexlib", "filterpy"}  # not in any supported profile
+
+    assert not set(profiles.core) & set(profiles.postprocess)
+    assert not restoration_only & set(profiles.core)  # core SVD never needs the restoration stack
+    assert restoration_only <= set(profiles.postprocess)
+    assert not retired & set(profiles.all_pins)  # the legacy stack is not in any profile
+    assert set(profiles.postprocess_markers) == {"spandrel", "spandrel-extra-arches"}
+    for line in _requirement_lines("requirements-svd.txt"):
+        assert Requirement(line).name.lower() not in restoration_only | retired
+
+
+def test_torch_family_is_pinned_to_the_cuda_build_and_resolver_is_pinned(profiles, pins) -> None:
     assert pins["torch"].endswith("+cu130")
-    assert pins["torchvision"].endswith("+cu130")  # facexlib/CodeFormer require torchvision
+    # torchvision is core: transformers' default CLIPImageProcessor backend (SVD conditioning).
+    assert profiles.core["torchvision"].endswith("+cu130")
     assert re.fullmatch(r"\d+\.\d+(\.\d+)?", pins["pip"])  # the resolver is part of the runtime
     assert pins["opencv-python"].startswith("5.")  # same-version headless swap is deferred
 
@@ -140,8 +170,8 @@ def test_cli_reports_drift_actionably_with_exit_status(tmp_path, monkeypatch, ca
     assert verifier.main(["--constraints", str(constraints)]) == 1
 
     err = capsys.readouterr().err
-    assert "RUNTIME DRIFT: 1 of 2" in err
-    assert "torch: installed 2.14.0, expected 2.14.0+cu130" in err
+    assert "RUNTIME DRIFT: 1 pinned package problem(s)" in err
+    assert "[core] torch: installed 2.14.0, expected 2.14.0+cu130" in err
     assert "bootstrap_windows.ps1" in err
 
 
@@ -161,6 +191,101 @@ def test_cli_distinguishes_an_unreadable_constraints_file(tmp_path, capsys) -> N
     assert "UNREADABLE" in capsys.readouterr().err
 
 
+# --- Profile semantics: core required, postprocess optional ------------------------------------
+
+_PROFILE_TEXT = """
+torch==2.14.0+cu130
+pillow==12.3.0
+# profile: postprocess
+# profile-marker: spandrel, spandrel-extra-arches
+spandrel==0.4.2
+facexlib==0.3.0
+"""
+
+
+def _evaluate(installed: dict[str, str], *, with_postprocess: bool = False):
+    return verifier.evaluate(
+        verifier.parse_profiles(_PROFILE_TEXT), installed, with_postprocess=with_postprocess
+    )
+
+
+_CORE_ONLY = {"torch": "2.14.0+cu130", "pillow": "12.3.0"}
+
+
+def test_profile_directives_split_pins_and_record_markers() -> None:
+    parsed = verifier.parse_profiles(_PROFILE_TEXT)
+
+    assert parsed.core == {"torch": "2.14.0+cu130", "pillow": "12.3.0"}
+    assert parsed.postprocess == {"spandrel": "0.4.2", "facexlib": "0.3.0"}
+    assert parsed.postprocess_markers == ("spandrel", "spandrel-extra-arches")
+    with pytest.raises(verifier.ConstraintsError, match="unknown profile"):
+        verifier.parse_profiles("# profile: gpu\n")
+
+
+def test_core_only_environment_is_valid_and_postprocess_is_absent_by_design() -> None:
+    assert _evaluate(_CORE_ONLY) == ([], "absent")
+
+
+def test_missing_core_package_still_fails_even_when_postprocess_is_absent() -> None:
+    problems, state = _evaluate({"torch": "2.14.0+cu130"})
+
+    assert problems == ["[core] pillow: missing (expected 12.3.0)"]
+    assert state == "absent"
+
+
+def test_requesting_postprocess_requires_the_whole_optional_profile() -> None:
+    problems, state = _evaluate(_CORE_ONLY, with_postprocess=True)
+
+    assert state == "incomplete"
+    assert problems == [
+        "[postprocess] facexlib: missing (expected 0.3.0)",
+        "[postprocess] spandrel: missing (expected 0.4.2)",
+    ]
+
+
+def test_installed_marker_package_makes_an_incomplete_optional_stack_an_error() -> None:
+    problems, state = _evaluate({**_CORE_ONLY, "spandrel": "0.4.2"})
+
+    assert state == "incomplete"
+    assert problems == ["[postprocess] facexlib: missing (expected 0.3.0)"]
+
+
+def test_complete_optional_profile_passes_and_is_reported_complete() -> None:
+    installed = {**_CORE_ONLY, "spandrel": "0.4.2", "facexlib": "0.3.0"}
+
+    assert _evaluate(installed) == ([], "complete")
+
+
+def test_drifted_optional_package_fails_even_when_the_profile_was_not_requested() -> None:
+    # facexlib alone does not make the profile "present" (it is shared with other installs),
+    # but if it is installed it must still match its pin.
+    problems, state = _evaluate({**_CORE_ONLY, "facexlib": "0.2.5"})
+
+    assert state == "absent"
+    assert problems == ["[postprocess] facexlib: installed 0.2.5, expected 0.3.0"]
+
+
+def test_unpinned_legacy_extras_never_fail_a_core_environment() -> None:
+    legacy = {**_CORE_ONLY, "codeformer": "0.0.11", "lpips": "0.1.4", "scipy": "1.18.1"}
+
+    assert _evaluate(legacy) == ([], "absent")
+
+
+def test_cli_reports_profile_state_and_requires_postprocess_on_request(
+    tmp_path, monkeypatch, capsys
+) -> None:
+    constraints = tmp_path / "pins.txt"
+    constraints.write_text(_PROFILE_TEXT, encoding="utf-8")
+    monkeypatch.setattr(verifier, "installed_versions", lambda: dict(_CORE_ONLY))
+
+    assert verifier.main(["--constraints", str(constraints)]) == 0
+    assert "postprocess profile absent (optional, not required)" in capsys.readouterr().out
+
+    assert verifier.main(["--constraints", str(constraints), "--with-postprocess"]) == 1
+    err = capsys.readouterr().err
+    assert "(postprocess profile: incomplete)" in err and "-WithPostprocess" in err
+
+
 # --- Bootstrap install policy ------------------------------------------------------------------
 
 
@@ -176,7 +301,8 @@ def test_every_bootstrap_install_after_pip_is_constrained() -> None:
     installs = _install_commands()
     resolving = [line for line in installs if '"pip==$pipVersion"' not in line]
 
-    assert len(resolving) == 3  # torch family, base requirements, SVD requirements
+    # torch family, base requirements, SVD requirements, and the optional postprocess requirements
+    assert len(resolving) == 4
     assert all('"-c", $ConstraintsFile' in line for line in resolving)
 
 
@@ -207,6 +333,22 @@ def test_check_only_mode_never_installs_and_still_verifies_runtime_drift() -> No
     # Both modes reach the drift verification after the mode-specific branch.
     assert script.index("Assert-RuntimePins\n") > script.index("} else {\n    $pythonExe")
     assert "pip\", \"check\"" in script and "verify_runtime_pins.py" in script
+
+
+def test_postprocess_stack_is_installed_only_on_request_and_core_never_installs_it() -> None:
+    script = _bootstrap()
+    postprocess_line = next(
+        line for line in _install_commands() if "$postprocessRequirements" in line
+    )
+    guard = script.index("if ($WithPostprocess) {\n        Invoke-CheckedProcess")
+
+    assert "[switch]$WithPostprocess" in script
+    assert guard < script.index(postprocess_line) < script.index("Assert-CudaTorch\n}")
+    # Torch family stays core (torchvision backs SVD image conditioning), never postprocess-gated.
+    torch_line = next(line for line in _install_commands() if '"torch", "torchvision"' in line)
+    assert "$WithPostprocess" not in torch_line
+    # The verifier requires the optional profile only when it was requested.
+    assert '$verifierArguments += "--with-postprocess"' in script
 
 
 def test_unsupported_python_is_still_rejected_before_any_install() -> None:

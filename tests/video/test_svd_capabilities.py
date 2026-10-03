@@ -22,15 +22,11 @@ def test_get_svd_postprocess_capabilities_marks_codeformer_ready_when_assets_exi
 ) -> None:
     codeformer_weight = tmp_path / "codeformer.pth"
     facelib_root = tmp_path / "GFPGAN"
-    package_root = tmp_path / "site-packages" / "codeformer"
     codeformer_weight.write_bytes(b"weights")
     facelib_root.mkdir()
-    package_root.mkdir(parents=True)
     (facelib_root / "detection_Resnet50_Final.pth").write_bytes(b"det")
     (facelib_root / "parsing_parsenet.pth").write_bytes(b"parse")
-    monkeypatch.setattr(
-        "src.video.svd_capabilities._find_site_package_dir", lambda _name: package_root
-    )
+    monkeypatch.setattr("src.video.restoration.runtime._module_available", lambda _name: True)
     config = SVDConfig.from_dict(
         {
             "postprocess": {
@@ -54,20 +50,16 @@ def test_apply_recommended_svd_defaults_enables_available_postprocess(
 ) -> None:
     codeformer_weight = tmp_path / "codeformer.pth"
     facelib_root = tmp_path / "GFPGAN"
-    package_root = tmp_path / "site-packages" / "codeformer"
     realesrgan_weight = tmp_path / "realesrgan.pth"
     rife_executable = tmp_path / "rife-ncnn-vulkan.exe"
     codeformer_weight.write_bytes(b"weights")
     realesrgan_weight.write_bytes(b"weights")
     rife_executable.write_bytes(b"exe")
     facelib_root.mkdir()
-    package_root.mkdir(parents=True)
     (facelib_root / "detection_Resnet50_Final.pth").write_bytes(b"det")
     (facelib_root / "parsing_parsenet.pth").write_bytes(b"parse")
 
-    monkeypatch.setattr(
-        "src.video.svd_capabilities._find_site_package_dir", lambda _name: package_root
-    )
+    monkeypatch.setattr("src.video.restoration.runtime._module_available", lambda _name: True)
     monkeypatch.setenv("STABLENEW_RIFE_EXE", str(rife_executable))
 
     config = SVDConfig.from_dict(
@@ -93,30 +85,16 @@ def test_apply_recommended_svd_defaults_enables_available_postprocess(
     assert result.postprocess.upscale.enabled is True
 
 
-def test_apply_recommended_svd_defaults_falls_back_to_gfpgan_when_codeformer_missing(
+def test_apply_recommended_svd_defaults_never_enables_unsupported_gfpgan(
     tmp_path: Path, monkeypatch
 ) -> None:
     facelib_root = tmp_path / "GFPGAN"
     gfpgan_weight = tmp_path / "GFPGANv1.4.pth"
-    package_root = tmp_path / "site-packages" / "gfpgan"
     facelib_root.mkdir()
-    package_root.mkdir(parents=True)
     gfpgan_weight.write_bytes(b"weights")
     (facelib_root / "detection_Resnet50_Final.pth").write_bytes(b"det")
     (facelib_root / "parsing_parsenet.pth").write_bytes(b"parse")
-
-    def _fake_find_site_package_dir(name: str):
-        if name == "gfpgan":
-            return package_root
-        return None
-
-    monkeypatch.setattr(
-        "src.video.svd_capabilities._find_site_package_dir", _fake_find_site_package_dir
-    )
-    monkeypatch.setattr(
-        "src.video.svd_postprocess.importlib.util.find_spec",
-        lambda name: object() if name == "gfpgan" else None,
-    )
+    monkeypatch.setattr("src.video.restoration.runtime._module_available", lambda _name: False)
 
     config = SVDConfig.from_dict(
         {
@@ -131,8 +109,8 @@ def test_apply_recommended_svd_defaults_falls_back_to_gfpgan_when_codeformer_mis
 
     result = apply_recommended_svd_defaults(config)
 
-    assert result.postprocess.face_restore.enabled is True
-    assert result.postprocess.face_restore.method == "GFPGAN"
+    assert result.postprocess.face_restore.enabled is False
+    assert result.postprocess.face_restore.method == "CodeFormer"
 
 
 def test_preflight_blocks_local_only_missing_model_without_mutating_cache(

@@ -5,7 +5,8 @@ param(
     [string]$CudaIndexUrl = "https://download.pytorch.org/whl/cu130",
     [string]$PackageIndexUrl = "https://pypi.org/simple",
     [switch]$CheckOnly,
-    [switch]$Recreate
+    [switch]$Recreate,
+    [switch]$WithPostprocess
 )
 
 Set-StrictMode -Version Latest
@@ -121,9 +122,16 @@ function Assert-RuntimePins {
         -Executable $VenvPython `
         -Arguments @("-m", "pip", "check") `
         -FailureMessage "pip check found inconsistent dependencies in '$VenvPath'." | Out-Null
+    # The core profile is always required. The optional postprocess profile is required only when
+    # requested (-WithPostprocess); an installed-but-incomplete or drifted optional profile still
+    # fails, and a fully absent one is reported as absent by design.
+    $verifierArguments = @($RuntimePinVerifier, "--constraints", $ConstraintsFile)
+    if ($WithPostprocess) {
+        $verifierArguments += "--with-postprocess"
+    }
     Invoke-CheckedProcess `
         -Executable $VenvPython `
-        -Arguments @($RuntimePinVerifier, "--constraints", $ConstraintsFile) `
+        -Arguments $verifierArguments `
         -FailureMessage "The environment in '$VenvPath' has drifted from the supported runtime constraints." | Out-Null
 }
 
@@ -175,7 +183,8 @@ if ($CheckOnly) {
 
     $requirements = Join-Path $RepoRoot "requirements.txt"
     $svdRequirements = Join-Path $RepoRoot "requirements-svd.txt"
-    foreach ($requirementsFile in @($requirements, $svdRequirements, $ConstraintsFile, $RuntimePinVerifier)) {
+    $postprocessRequirements = Join-Path $RepoRoot "requirements-postprocess.txt"
+    foreach ($requirementsFile in @($requirements, $svdRequirements, $postprocessRequirements, $ConstraintsFile, $RuntimePinVerifier)) {
         if (-not (Test-Path -LiteralPath $requirementsFile -PathType Leaf)) {
             throw "Required package authority file is missing: '$requirementsFile'."
         }
@@ -189,9 +198,10 @@ if ($CheckOnly) {
         -Arguments @("-m", "pip", "install", "pip==$pipVersion") `
         -FailureMessage "Could not install the pinned pip $pipVersion in '$VenvPath'." | Out-Null
 
-    # The Torch family (torch + torchvision, which facexlib/CodeFormer require) is the one
-    # deliberate package-level exception: install it from the official CUDA index before the
-    # repository requirement files. The exact "+cu130" pins mean a CPU-only build can neither
+    # The Torch family (torch + torchvision) is the one deliberate package-level exception:
+    # install it from the official CUDA index before the repository requirement files.
+    # torchvision is core: transformers' default CLIPImageProcessor backend (used by the SVD
+    # image conditioning) requires it. The exact "+cu130" pins mean a CPU-only build can neither
     # satisfy nor later replace it; PyPI is an extra index only because the CUDA index does not
     # carry the pinned versions of Torch's ordinary dependencies (numpy, pillow, ...).
     Invoke-CheckedProcess `
@@ -207,6 +217,12 @@ if ($CheckOnly) {
         -Executable $VenvPython `
         -Arguments @("-m", "pip", "install", "-c", $ConstraintsFile, "-r", $svdRequirements) `
         -FailureMessage "Could not install the SVD requirements from '$svdRequirements'." | Out-Null
+    if ($WithPostprocess) {
+        Invoke-CheckedProcess `
+            -Executable $VenvPython `
+            -Arguments @("-m", "pip", "install", "-c", $ConstraintsFile, "-r", $postprocessRequirements) `
+            -FailureMessage "Could not install the optional postprocess requirements from '$postprocessRequirements'." | Out-Null
+    }
 
     # Keep CUDA Torch installation first so requirements resolution cannot select
     # a CPU-only build, then probe after its declared runtime dependencies exist.

@@ -31,6 +31,7 @@ dev = [
 ]
 svd = [
     "torch>=2.4.0",
+    "torchvision>=0.19.0",
     "diffusers>=0.30.0",
     "transformers>=4.44.0",
     "accelerate>=0.34.0",
@@ -38,7 +39,10 @@ svd = [
     "imageio>=2.34.0",
     "imageio-ffmpeg>=0.5.1",
     "opencv-python>=4.10.0",
-    "facexlib>=0.3.0",
+]
+postprocess = [
+    "spandrel>=0.4.2",
+    "spandrel-extra-arches>=0.2.0",
     "codeformer>=0.0.11",
 ]
 

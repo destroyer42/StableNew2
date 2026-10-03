@@ -52,7 +52,8 @@ python -m venv .venv
 ```
 
 Image generation requires a configured Stable Diffusion WebUI. Native SVD XT
-video has additional dependencies in `requirements-svd.txt`. Missing external
+video has additional dependencies in `requirements-svd.txt`; optional local face
+restoration/upscaling uses `requirements-postprocess.txt`. Missing external
 dependencies should fail with an actionable message; they are not installed
 or downloaded at import time.
 
