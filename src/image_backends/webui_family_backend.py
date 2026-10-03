@@ -72,6 +72,7 @@ class WebUIFamilyImageBackend:
             "global_positive_prompt",
             "global_negative_prompt",
             "global_prompt_policy_source",
+            "prompt_optimizer",
         ):
             if key in execution:
                 config[key] = execution[key]
@@ -140,6 +141,7 @@ class WebUIFamilyImageBackend:
             "global_positive_prompt",
             "global_negative_prompt",
             "global_prompt_policy_source",
+            "prompt_optimizer",
         ):
             if key in execution:
                 config[key] = execution[key]

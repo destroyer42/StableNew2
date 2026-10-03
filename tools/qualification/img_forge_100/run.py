@@ -57,6 +57,7 @@ def validate_matrix(matrix: dict[str, Any]) -> None:
 
 def compile_case(matrix: dict[str, Any], case: dict[str, Any], root: Path) -> Any:
     """Create ordinary immutable NJRs; product stage translation remains in src/."""
+    from src.pipeline.global_prompt_policy import apply_global_prompt_policy
     from src.pipeline.njr_core_v26 import (
         CURRENT_NJR_SCHEMA_VERSION,
         ImageWorkloadSpec,
@@ -75,12 +76,14 @@ def compile_case(matrix: dict[str, Any], case: dict[str, Any], root: Path) -> An
         prompt += f" <lora:{s['lora_name']}:{s['lora_strength']}>"
     config = {**s, "model": s["checkpoint"], "prompt": prompt,
               "batch_size": 1, "n_iter": 1, "enable_hr": False,
-              "global_positive_prompt": "", "global_negative_prompt": "",
-              "global_prompt_policy_source": "frozen_njr",
-              "global_positive_enabled": False, "global_negative_enabled": False,
               "prompt_optimizer": {"enabled": False},
               "pipeline": {"adetailer_enabled": case["scenario"] == "D",
                            "upscale_enabled": case["scenario"] == "D"}}
+    config = apply_global_prompt_policy(
+        config, positive_enabled=False, negative_enabled=False,
+        positive_text=s.get("global_positive_prompt", ""),
+        negative_text=s.get("global_negative_prompt", ""),
+    )
     stages = []
     for name in case["stages"]:
         extra = dict(s.get(name, {}))

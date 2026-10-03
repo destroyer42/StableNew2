@@ -1,12 +1,13 @@
 # PR-IMG-FORGE-100 — Forge Neo Compatibility / A1111 Successor Qualification
 
-Status: **QUALIFICATION_INFRASTRUCTURE_BLOCKED — accepted admission repair passed during the
-resumed physical attempt; frozen prompt intent changed before dispatch. HOLD for adjudication.**
+Status: **QUALIFICATION_INFRASTRUCTURE_BLOCKED — attempt2 is preserved; prompt-intent repair
+passes deterministic validation. Physical cohort3 requires renewed owner authorization.**
 Forge is an explicit, **non-default** backend identity (`forge_webui`). `a1111_webui` remains the
 default. Nothing here promotes Forge (that is `PR-IMG-FORGE-110`, a separate owner decision) and no
 image parity verdict has been reached. The first attempt failed admission (sections16-17); the resumed
 cohort passed that repaired surface but was refused for prompt mismatch before network generation
 dispatch (section18). Neither attempt is evidence of Forge image failure.
+The bounded canonical intent-preservation repair and no-generation evidence are recorded in section19.
 
 Base: `origin/main` `715e352f28640cb0eb3225a5b1752fc5e192c778` (PR #35 / PR-TEST-TRUTH-210 merged).
 Initial implementation/evidence: Claude Code cloud session. Local/Desktop installation and GET-only
@@ -1001,3 +1002,81 @@ Final classification: **QUALIFICATION_INFRASTRUCTURE_BLOCKED**, not a Forge exec
 Next decision: authorize a bounded canonical prompt-policy/optimizer preservation repair, then accept
 its focused evidence before separately authorizing a fresh physical cohort. Preserve both failed job
 IDs and all unsent historical identities. No ninth cancellation case is warranted or authorized.
+
+## 19. Canonical prompt-intent preservation repair: no generation
+
+Attempt2 remains **QUALIFICATION_INFRASTRUCTURE_BLOCKED**, with zero generation requests reaching
+A1111 or Forge. Both terminal failed job identities and their preserved databases/results remain
+historical evidence. The process-tree admission repair is unchanged; its accepted evidence is reused.
+
+Execution Profile: **Standard / LOCAL desktop**, recommended **GPT-6.1 Sol XHigh** for Codex and
+**Sonnet5.5 XHigh** for Claude Code. The bounded repair shares one immutable-intent outcome and benefits
+from precise end-to-end verification instead of repeated physical attempts. Controller Surface
+Assessment: no controller/coordinator/executor or ratchet changes. Token-Efficient Validation Plan:
+focused global-policy/optimizer/shared-adapter tests, eight frozen-case pre-dispatch previews, Pair-A
+TEST-only JobService/SQLite integration, existing affected qualification/contract tests, scoped Ruff
+and whitespace, then one Python3.14 PR gate. No runtime launch, inference or old1683-test sweep.
+
+### Existing canonical seams repaired
+
+Qualification `compile_case` now calls `src.pipeline.global_prompt_policy.apply_global_prompt_policy`.
+The complete policy contains frozen recorded global text (blank in the current matrix),
+`global_prompt_policy_source=frozen_njr`, and all five stage flags explicitly false:
+`apply_global_positive_txt2img`, `apply_global_negative_txt2img`, `apply_global_negative_img2img`,
+`apply_global_negative_adetailer`, `apply_global_negative_upscale`. This replaces the incomplete manual
+policy; `has_frozen_global_prompt_policy` returns true and mutable runtime/global files are not used.
+No positive/negative prompt text, order, settings, asset, LoRA placement or generation intent changed.
+
+The shared `WebUIFamilyImageBackend` now forwards explicit `prompt_optimizer` alongside the existing
+global-policy fields in both `_txt2img_executor_config` and `_stage_executor_config`. That covers
+txt2img, img2img, ADetailer and upscale for both identities without Forge-specific policy. The
+qualification NJR already explicitly freezes `{enabled:false}`; it now reaches the executor.
+Omission is still omission and retains the enabled product default. Explicit enabled optimizer and
+global policy retain their ordinary behavior. No optimizer implementation/default, global-policy
+helper, immutable NJR semantics, executor generation guard or retry behavior was changed.
+
+### Exact intent evidence across all four pairs
+
+The checked-in frozen-intent fixture copies the authoritative proposal's **settings and eight cases
+exactly**, without machine-local asset paths. Test assets/state are temporary and transports are
+synthetic; actual frozen qualification assets remain untouched. All eight physical-intent previews
+construct NJRs without JobService submission. The real PipelineRunner request construction, shared
+adapter and executor build payloads intercepted before HTTP generation dispatch.
+
+| Pair | No-generation pre-dispatch proof, both backend identities |
+|---|---|
+| A | positive/negative prompts exactly equal frozen text; seed424242 |
+| B | same exact text, final `<lora:add-detail-xl:0.82>` token/order preserved; seed424242 |
+| C | exact img2img positive/negative text; seed424242; frozen480x832/denoise0.30 intent unchanged |
+| D | exact txt2img and outer ADetailer prompts/seed; exact face/hand prompt/negative dictionaries; correct YOLO names; upscale prompt/provenance exact, frozen1.5x unchanged |
+
+Each comparison asserts character equality and **UTF-8 byte equality**. Complete disabled global
+policy and optimizer intent reach stage configs. Runtime global files are deliberately changed after
+NJR creation in the tests; they cannot alter results. The original NJRs remain immutable. Separate
+tests include repeated chunks and Unicode to prove disabled optimizer performs no reordering/dedupe.
+
+Pair A additionally traverses the actual JobService/SQLite/PipelineRunner.run_njr path for A1111 and
+Forge, using distinct **TEST-only** identities and temporary repositories. Payloads are intercepted
+before even fake HTTP generation, while fake read-only API identity/options preserve normal adapter
+flow. These TEST jobs are deterministic regression fixtures, not a third physical cohort or reuse of
+terminal qualification identities. Enabled-policy controls prove frozen global terms still apply;
+existing optimizer regressions prove ordinary enabled/default behavior remains intact.
+
+The prior retry observation was inspected only at the existing client exception boundary: generic
+`RuntimeError` is handled by local retry logic; ambiguous generation transport errors are recognized
+separately and refuse POST replay. The prompt guard raised locally before network dispatch, so no
+backend request had an unknown outcome. No new retry-policy workstream or change was introduced.
+
+Focused validation: **152 passed**, including **24 new shared-adapter/optimizer cases** and **14 new
+qualification-intent cases** (all eight previews and both Pair-A canonical integrations). Updated
+descriptor checks also pass (**5**). Scoped Ruff and `git diff --check` passed. The single final
+Python**3.14.8** PR gate passes: completeness, controller ratchet, Ruff, mypy smoke,
+**4452 collected /184 smoke passed**. No expensive unrelated sweep was run. Machine-local
+**prompt-intent-repair-666b9ef/eight-njr-preview.json** records eight dry preview identities (never
+submitted), **12** stage translations, full flag/config evidence, exact prompt UTF-8 hashes and parity.
+The checked-in settings/cases match the authoritative proposal exactly; all six asset hashes,
+45 prior-cohort files,42 resumed-cohort inventory files and eight protected owner files are unchanged.
+Known Forge Gradio/Pillow conflict and existing A1111 package debt are unchanged.
+Zero physical generation, runtime launch, detector/package download, process mutation or cohort3
+submission. A1111 remains default; FORGE-110 remains out of scope. Next action requires owner acceptance
+of this source checkpoint and renewed physical-cohort authorization with fresh job identities.

@@ -1,0 +1,153 @@
+{
+  "authority": "Frozen PR-IMG-FORGE-100 generation intent; machine paths/assets replaced by temporary fixtures in tests only. Original qualification evidence is untouched.",
+  "settings": {
+    "adetailer": {
+      "ad_dilate_erode": 4,
+      "ad_hands_dilate_erode": 6,
+      "ad_hands_inpaint_height": 1216,
+      "ad_hands_inpaint_only_masked": true,
+      "ad_hands_inpaint_width": 832,
+      "ad_hands_mask_blur": 4,
+      "ad_hands_mask_filter_method": "Area",
+      "ad_hands_mask_k": 6,
+      "ad_hands_mask_max_ratio": 1.0,
+      "ad_hands_mask_merge_invert": "None",
+      "ad_hands_mask_min_ratio": 0.003,
+      "ad_hands_padding": 16,
+      "ad_hands_use_inpaint_width_height": false,
+      "ad_inpaint_height": 1216,
+      "ad_inpaint_only_masked": true,
+      "ad_inpaint_width": 832,
+      "ad_mask_blur": 6,
+      "ad_mask_filter_method": "Area",
+      "ad_mask_k_largest": 3,
+      "ad_mask_max_ratio": 1.0,
+      "ad_mask_merge_invert": "None",
+      "ad_mask_min_ratio": 0.01,
+      "ad_use_inpaint_width_height": false,
+      "adetailer_cfg": 5.5,
+      "adetailer_confidence": 0.35,
+      "adetailer_denoise": 0.32,
+      "adetailer_hands_cfg": 5.0,
+      "adetailer_hands_confidence": 0.3,
+      "adetailer_hands_denoise": 0.25,
+      "adetailer_hands_model": "hand_yolov8n.pt",
+      "adetailer_hands_negative_prompt": "lowres, blurry, deformed hands, extra fingers, text, watermark",
+      "adetailer_hands_prompt": "full body editorial photograph of an adult athlete wearing a navy shirt and leggings, standing outdoors, face and both hands visible, natural daylight, neutral background",
+      "adetailer_hands_sampler": "Euler a",
+      "adetailer_hands_scheduler": "Karras",
+      "adetailer_hands_steps": 12,
+      "adetailer_model": "face_yolov8n.pt",
+      "adetailer_negative_prompt": "lowres, blurry, deformed hands, extra fingers, text, watermark",
+      "adetailer_padding": 32,
+      "adetailer_prompt": "",
+      "adetailer_sampler": "Euler a",
+      "adetailer_scheduler": "Karras",
+      "adetailer_steps": 14,
+      "enable_face_pass": true,
+      "enable_hands_pass": true
+    },
+    "cfg_scale": 5.5,
+    "checkpoint": "cyberrealisticXL_v90-16fp.safetensors",
+    "clip_skip": 2,
+    "height": 1216,
+    "img2img": {},
+    "img2img_denoise": 0.3,
+    "lora_name": "add-detail-xl",
+    "lora_strength": 0.82,
+    "negative_prompt": "lowres, blurry, deformed hands, extra fingers, text, watermark",
+    "prompt": "full body editorial photograph of an adult athlete wearing a navy shirt and leggings, standing outdoors, face and both hands visible, natural daylight, neutral background",
+    "sampler_name": "Euler a",
+    "scheduler": "Karras",
+    "seed": 424242,
+    "steps": 24,
+    "upscale": {
+      "codeformer_visibility": 0.0,
+      "codeformer_weight": 0.5,
+      "gfpgan_visibility": 0.0,
+      "upscale_mode": "single",
+      "upscaler": "4xUltrasharp_4xUltrasharpV10",
+      "upscaling_resize": 1.5
+    },
+    "vae": "Automatic",
+    "width": 832
+  },
+  "cases": [
+    {
+      "backend": "a1111_webui",
+      "case_id": "A-a1111_webui",
+      "scenario": "A",
+      "stages": [
+        "txt2img"
+      ]
+    },
+    {
+      "backend": "forge_webui",
+      "case_id": "A-forge_webui",
+      "scenario": "A",
+      "stages": [
+        "txt2img"
+      ]
+    },
+    {
+      "backend": "a1111_webui",
+      "case_id": "B-a1111_webui",
+      "scenario": "B",
+      "stages": [
+        "txt2img"
+      ]
+    },
+    {
+      "backend": "forge_webui",
+      "case_id": "B-forge_webui",
+      "scenario": "B",
+      "stages": [
+        "txt2img"
+      ]
+    },
+    {
+      "backend": "a1111_webui",
+      "case_id": "C-a1111_webui",
+      "overrides": {
+        "height": 832,
+        "width": 480
+      },
+      "scenario": "C",
+      "stages": [
+        "img2img"
+      ]
+    },
+    {
+      "backend": "forge_webui",
+      "case_id": "C-forge_webui",
+      "overrides": {
+        "height": 832,
+        "width": 480
+      },
+      "scenario": "C",
+      "stages": [
+        "img2img"
+      ]
+    },
+    {
+      "backend": "a1111_webui",
+      "case_id": "D-a1111_webui",
+      "scenario": "D",
+      "stages": [
+        "txt2img",
+        "adetailer",
+        "upscale"
+      ]
+    },
+    {
+      "backend": "forge_webui",
+      "case_id": "D-forge_webui",
+      "scenario": "D",
+      "stages": [
+        "txt2img",
+        "adetailer",
+        "upscale"
+      ]
+    }
+  ]
+}

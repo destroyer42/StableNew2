@@ -5,7 +5,7 @@
   "purpose": "Evidence-oriented descriptor of the isolated Forge Neo qualification runtime. This is NOT a production runtime/bootstrap contract (that belongs to PR-IMG-FORGE-110 after qualification passes) and nothing in StableNew launches Forge from this file.",
   "backend_id": "forge_webui",
   "default_image_backend_id": "a1111_webui",
-  "qualification_status": "INSTALLED_UNQUALIFIED / QUALIFICATION_INFRASTRUCTURE_BLOCKED / ADMISSION_REPAIR_VALIDATED / PROMPT_INTENT_BLOCKED / NEW_PHYSICAL_ATTEMPT_PENDING_OWNER_APPROVAL",
+  "qualification_status": "INSTALLED_UNQUALIFIED / QUALIFICATION_INFRASTRUCTURE_BLOCKED / ADMISSION_REPAIR_VALIDATED / PROMPT_INTENT_REPAIR_VALIDATED / NEW_PHYSICAL_ATTEMPT_PENDING_OWNER_APPROVAL",
   "classification": "QUALIFICATION_INFRASTRUCTURE_BLOCKED",
   "physical_checkpoint": {
     "stable_sha": "f636f0e9702f0e1c4824353b780cceec05fc0214",
@@ -61,6 +61,23 @@
     "image_parity": "NOT_ASSESSABLE; no image artifacts/contact sheet. Forge was not launched this pass; no inference on either backend.",
     "evidence": "Machine-local physical-333bdbf-pass2/hold-report.json, prompt-translation-evidence.json, evidence-inventory.json, frozen NJRs, normal SQLite failed lifecycle and survivor logs; qualification document section18.",
     "next_decision": "Owner adjudication of bounded canonical prompt-policy/optimizer intent-preservation repair, then separate approval for a fresh physical cohort. Preserve both terminal failed jobs; never retry or requeue them."
+  },
+  "prompt_intent_repair": {
+    "qualification_construction": "compile_case uses canonical apply_global_prompt_policy; recorded global text is frozen and application explicitly disabled for every relevant stage. Matrix generation settings/assets are unchanged.",
+    "global_prompt_policy_source": "frozen_njr",
+    "stage_application_flags": {
+      "apply_global_positive_txt2img": false,
+      "apply_global_negative_txt2img": false,
+      "apply_global_negative_img2img": false,
+      "apply_global_negative_adetailer": false,
+      "apply_global_negative_upscale": false
+    },
+    "prompt_optimizer": {"enabled": false},
+    "shared_translation": "WebUIFamilyImageBackend forwards explicit prompt_optimizer in both txt2img and generic stage translation; identical A1111/Forge intent. Omission still uses established defaults; normal enabled optimizer/global-policy behavior remains intact.",
+    "deterministic_evidence": "Eight frozen-case pre-dispatch previews, including exact face/hand and upscale prompt provenance; Pair-A TEST records traverse JobService/SQLite/run_njr for both backends. Exact character and UTF-8 byte equality; hostile mutable global files do not affect frozen intent. No real HTTP/GPU/runtime.",
+    "retry_classification": "Prior generic RuntimeError triggered existing local retry handling, but all attempts stopped before network dispatch. It was not an ambiguous transport failure; existing generation-outcome-unknown refusal remains unchanged. No retry-policy change.",
+    "historical_evidence": "Both terminal infrastructure-failed jobs, physical-f636f0e-pass1 and physical-333bdbf-pass2 database/result/evidence bytes remain untouched.",
+    "next_decision": "Owner acceptance of repaired source/validation, then renewed authorization for physical cohort3 with fresh identities. No physical cohort3 started; Forge remains unqualified."
   },
   "classification_allowed_values": [
     "QUALIFICATION_INFRASTRUCTURE_BLOCKED",
