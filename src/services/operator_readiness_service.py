@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import sys
+import sysconfig
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
@@ -17,8 +18,8 @@ from src.video.svd_capabilities import SVDPreflight, get_svd_preflight
 from src.video.svd_config import SVDConfig
 from src.video.svd_models import get_default_svd_cache_dir
 
-# StableNew's application/native-SVD runtime is CPython 3.12.x only (PR-DEVEX-100).
-SUPPORTED_PYTHON_MINOR = (3, 12)
+# StableNew's application/native-SVD runtime is standard-GIL CPython 3.14.x only (PR-PY314-100).
+SUPPORTED_PYTHON_MINOR = (3, 14)
 
 
 class ProductSupportState(str, Enum):
@@ -177,6 +178,8 @@ class OperatorReadinessService:
         ffmpeg_resolver: Callable[[], Path | None] = resolve_ffmpeg_executable,
         path_probe: PathProbe | None = None,
         python_version_provider: Callable[[], tuple[int, int, int]] | None = None,
+        free_threaded_provider: Callable[[], bool] | None = None,
+        jit_enabled_provider: Callable[[], bool] | None = None,
     ) -> None:
         self._repository = repository
         self._webui_connection = webui_connection
@@ -187,6 +190,8 @@ class OperatorReadinessService:
         self._ffmpeg_resolver = ffmpeg_resolver
         self._path_probe = path_probe or _probe_directory
         self._python_version_provider = python_version_provider or _current_python_version
+        self._free_threaded_provider = free_threaded_provider or _is_free_threaded_build
+        self._jit_enabled_provider = jit_enabled_provider or _is_jit_enabled
 
     def collect(self, *, source_image_path: str | Path | None = None) -> OperatorReadinessSnapshot:
         """Collect a side-effect-free projection of existing authority state."""
@@ -228,12 +233,30 @@ class OperatorReadinessService:
         version = self._python_version_provider()
         major, minor, patch = (int(value) for value in version[:3])
         detected = f"Python {major}.{minor}.{patch}"
+        if (major, minor) == SUPPORTED_PYTHON_MINOR and self._free_threaded_provider():
+            return _action_record(
+                "python_runtime",
+                "Python runtime",
+                "StableNew requires the standard-GIL Python 3.14 build.",
+                (f"Detected {detected} free-threaded build; the free-threaded build is unsupported.",),
+                ("Launch StableNew with the standard (GIL) Python 3.14 build, then refresh readiness.",),
+                "sysconfig.Py_GIL_DISABLED",
+            )
+        if (major, minor) == SUPPORTED_PYTHON_MINOR and self._jit_enabled_provider():
+            return _action_record(
+                "python_runtime",
+                "Python runtime",
+                "StableNew does not support the experimental Python JIT.",
+                (f"Detected {detected} with the experimental JIT enabled (PYTHON_JIT).",),
+                ("Unset PYTHON_JIT (or set it to 0) and relaunch StableNew, then refresh readiness.",),
+                "sys._jit",
+            )
         if (major, minor) == SUPPORTED_PYTHON_MINOR:
             return OperatorReadinessRecord(
                 id="python_runtime",
                 display_name="Python runtime",
                 state=OperatorReadinessState.READY,
-                summary=f"{detected} is the supported Python 3.12 runtime.",
+                summary=f"{detected} is the supported Python 3.14 runtime.",
                 blocking_reasons=(),
                 operator_actions=(),
                 source="sys.version_info",
@@ -241,9 +264,9 @@ class OperatorReadinessService:
         return _action_record(
             "python_runtime",
             "Python runtime",
-            "StableNew requires Python 3.12.",
-            (f"Detected {detected}; required Python 3.12.x.",),
-            ("Launch StableNew with a Python 3.12 environment, then refresh readiness.",),
+            "StableNew requires Python 3.14.",
+            (f"Detected {detected}; required Python 3.14.x.",),
+            ("Launch StableNew with a Python 3.14 environment, then refresh readiness.",),
             "sys.version_info",
         )
 
@@ -486,6 +509,15 @@ def _accepted_svd_baseline_config() -> SVDConfig:
             "output": {"output_format": "mp4", "save_frames": False, "save_preview_image": True},
         }
     )
+
+
+def _is_free_threaded_build() -> bool:
+    return bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
+
+
+def _is_jit_enabled() -> bool:
+    jit = getattr(sys, "_jit", None)
+    return bool(jit is not None and jit.is_enabled())
 
 
 def _current_python_version() -> tuple[int, int, int]:

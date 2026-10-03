@@ -98,7 +98,9 @@ def _service(
     preflight: SVDPreflight | None = None,
     ffmpeg: Path | None | object = ...,
     path_probe=None,
-    python_version: tuple[int, int, int] = (3, 12, 0),
+    python_version: tuple[int, int, int] = (3, 14, 0),
+    free_threaded: bool = False,
+    jit_enabled: bool = False,
 ) -> OperatorReadinessService:
     packs = tmp_path / "packs"
     output = tmp_path / "output"
@@ -116,6 +118,8 @@ def _service(
         ffmpeg_resolver=lambda: resolved_ffmpeg,
         path_probe=path_probe,
         python_version_provider=lambda: python_version,
+        free_threaded_provider=lambda: free_threaded,
+        jit_enabled_provider=lambda: jit_enabled,
     )
 
 
@@ -145,21 +149,47 @@ def test_ready_webui_and_svd_runtime_are_truthful_when_source_is_not_selected(
     assert webui.probe_calls == 0
 
 
-def test_python_312_is_the_only_ready_runtime(tmp_path: Path) -> None:
-    runtime = _service(tmp_path, python_version=(3, 12, 14)).collect().record_for("python_runtime")
+def test_python_314_is_the_only_ready_runtime(tmp_path: Path) -> None:
+    runtime = _service(tmp_path, python_version=(3, 14, 8)).collect().record_for("python_runtime")
 
     assert runtime is not None
     assert runtime.state is OperatorReadinessState.READY
     assert runtime.blocking_reasons == ()
-    assert "3.12" in runtime.summary
+    assert "3.14" in runtime.summary
+
+
+def test_jit_enabled_python_314_is_not_a_supported_runtime(tmp_path: Path) -> None:
+    runtime = (
+        _service(tmp_path, python_version=(3, 14, 8), jit_enabled=True)
+        .collect()
+        .record_for("python_runtime")
+    )
+
+    assert runtime is not None
+    assert runtime.state is OperatorReadinessState.ACTION_REQUIRED
+    assert "JIT" in runtime.blocking_reasons[0]
+    assert "PYTHON_JIT" in runtime.operator_actions[0]
+
+
+def test_free_threaded_python_314_is_not_a_supported_runtime(tmp_path: Path) -> None:
+    runtime = (
+        _service(tmp_path, python_version=(3, 14, 8), free_threaded=True)
+        .collect()
+        .record_for("python_runtime")
+    )
+
+    assert runtime is not None
+    assert runtime.state is OperatorReadinessState.ACTION_REQUIRED
+    assert "free-threaded" in runtime.blocking_reasons[0]
+    assert "standard (GIL)" in runtime.operator_actions[0]
 
 
 @pytest.mark.parametrize(
     "version",
-    [(3, 10, 6), (3, 11, 9), (3, 13, 1), (3, 14, 0)],
-    ids=["3.10", "3.11", "3.13", "3.14"],
+    [(3, 10, 6), (3, 11, 9), (3, 12, 14), (3, 13, 1), (3, 15, 0)],
+    ids=["3.10", "3.11", "3.12", "3.13", "3.15"],
 )
-def test_unsupported_python_minors_are_action_required_with_a_3_12_action(
+def test_unsupported_python_minors_are_action_required_with_a_3_14_action(
     tmp_path: Path, version: tuple[int, int, int]
 ) -> None:
     runtime = _service(tmp_path, python_version=version).collect().record_for("python_runtime")
@@ -167,8 +197,8 @@ def test_unsupported_python_minors_are_action_required_with_a_3_12_action(
 
     assert runtime is not None
     assert runtime.state is OperatorReadinessState.ACTION_REQUIRED
-    assert runtime.blocking_reasons == (f"Detected Python {detected}; required Python 3.12.x.",)
-    assert "Python 3.12" in runtime.operator_actions[0]
+    assert runtime.blocking_reasons == (f"Detected Python {detected}; required Python 3.14.x.",)
+    assert "Python 3.14" in runtime.operator_actions[0]
 
 
 def test_unavailable_webui_projects_existing_connection_authority(tmp_path: Path) -> None:

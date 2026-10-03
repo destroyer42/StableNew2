@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Literal, TypeAlias
+from typing import Any, Literal
 
 CURRENT_NJR_SCHEMA_VERSION = "2.6"
 
@@ -13,8 +13,8 @@ _IMAGE_STAGE_TYPES = {"txt2img", "img2img", "adetailer", "upscale"}
 _VIDEO_STAGE_TYPES = {"animatediff", "svd_native", "video_workflow"}
 _TRAINING_STAGE_TYPES = {"train_lora"}
 
-JsonScalar: TypeAlias = str | int | float | bool | None
-FrozenJsonValue: TypeAlias = "JsonScalar | tuple[FrozenJsonValue, ...] | FrozenJsonMap"
+type JsonScalar = str | int | float | bool | None
+type FrozenJsonValue = JsonScalar | tuple[FrozenJsonValue, ...] | FrozenJsonMap
 
 
 class FrozenJsonMap(Mapping[str, FrozenJsonValue]):
@@ -368,7 +368,7 @@ class TrainingWorkloadSpec(WorkloadSpec):
         return self.common_dict()
 
 
-Workload: TypeAlias = ImageWorkloadSpec | VideoWorkloadSpec | TrainingWorkloadSpec
+type Workload = ImageWorkloadSpec | VideoWorkloadSpec | TrainingWorkloadSpec
 
 
 @dataclass(frozen=True)

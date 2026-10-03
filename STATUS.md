@@ -7,13 +7,15 @@ Updated: 2026-10-02
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Supported runtime/validation (PR-DEVEX-100): StableNew's application/native-SVD interpreter is
-  CPython 3.12.x only (3.11 and 3.13+ rejected by readiness/bootstrap). GitHub CI runs once per PR head
-  on Python 3.12 (one required gate, one informational full-suite job); the local `run_pr_gate.py`
+- Supported runtime/validation (PR-DEVEX-100, interpreter promoted by PR-PY314-100, under owner
+  review): StableNew's application/native-SVD interpreter is standard-GIL CPython 3.14.x only
+  (3.12, 3.13, 3.15+ and the free-threaded build are rejected by readiness/bootstrap; no JIT).
+  GitHub CI runs once per PR head
+  on Python 3.14 (one required gate, one informational full-suite job); the local `run_pr_gate.py`
   pytest gates are quiet on success and complete on failure. See
   `docs/StableNew_Coding_and_Testing_v2.6.md`.
-- Reproducible ML runtime (PR-RUNTIME-DEPS-100): the supported Windows/CPython 3.12/CUDA 13.0
-  environment is defined by `constraints/windows-py312-cu130.txt` (exact pins, including the
+- Reproducible ML runtime (PR-RUNTIME-DEPS-100): the supported Windows/CPython 3.14/CUDA 13.0
+  environment is defined by `constraints/windows-py314-cu130.txt` (exact pins, including the
   resolver `pip`) applied by `scripts/bootstrap_windows.ps1`; `tools/runtime/verify_runtime_pins.py`
   detects drift in bootstrap and `-CheckOnly`. Accepted direct stack: Torch/torchvision `+cu130`
   2.14.0/0.29.0, Diffusers 0.40.0, Transformers 5.17.0, Accelerate 1.15.0.

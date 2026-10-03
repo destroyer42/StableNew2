@@ -129,7 +129,7 @@ class LoraRuntimeConfig:
     enabled: bool = True
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "LoraRuntimeConfig":
+    def from_dict(cls, data: dict[str, Any]) -> LoraRuntimeConfig:
         return cls(
             name=str(data.get("name", "") or "").strip(),
             strength=float(data.get("strength", 1.0) or 1.0),

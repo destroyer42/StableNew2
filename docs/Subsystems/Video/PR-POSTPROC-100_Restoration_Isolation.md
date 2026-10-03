@@ -29,7 +29,7 @@ motion, untouched).
 - **Optional postprocess** (`requirements-postprocess.txt`, bootstrap `-WithPostprocess`):
   `spandrel`, `spandrel-extra-arches` (CodeFormer architecture), `codeformer` (provides the legacy
   `facelib` face helper). Exact pins live in the `# profile: postprocess` section of
-  `constraints/windows-py312-cu130.txt`; `tools/runtime/verify_runtime_pins.py` treats it as absent
+  `constraints/windows-py314-cu130.txt`; `tools/runtime/verify_runtime_pins.py` treats it as absent
   by design unless requested or a marker package is installed.
 
 A clean core-only environment contains 57 packages and none of the restoration stack (no

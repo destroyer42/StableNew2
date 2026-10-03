@@ -38,7 +38,7 @@ typed source, not a universal job identity.
 
 ## Install and run
 
-Use Python 3.12 in a virtual environment:
+Use standard (GIL) Python 3.14 in a virtual environment:
 
 For the canonical Windows native-SVD setup, use the
 [Windows runtime bootstrap runbook](docs/runbooks/windows_runtime_bootstrap.md)

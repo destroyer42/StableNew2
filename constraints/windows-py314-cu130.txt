@@ -1,11 +1,13 @@
 # StableNew supported runtime resolution (exact pins).
 #
-# Target:   Windows, CPython 3.12.x (sole supported interpreter), PyTorch CUDA 13.0 (cu130)
+# Target:   Windows, CPython 3.14.x standard-GIL build (sole supported interpreter), PyTorch CUDA 13.0 (cu130)
 # Qualified on: NVIDIA GeForce RTX 4070 Ti; Torch reports CUDA 13.0 and the GPU is visible.
-# Derived from: clean disposable environments built by scripts/bootstrap_windows.ps1 from
+# Derived from: clean disposable CPython 3.14.x environments built by scripts/bootstrap_windows.ps1 from
 #   requirements.txt + requirements-svd.txt (core) and, with -WithPostprocess, also
 #   requirements-postprocess.txt, verified with `pip check` and tools/runtime/verify_runtime_pins.py
 #   (not a freeze of a developer environment).
+#
+# The pins are the exact versions first qualified on CPython 3.12 and reproduced unchanged on 3.14.
 #
 # This is the ONLY exact-version authority for that runtime. requirements*.txt keep the
 # human-readable direct dependencies; bootstrap applies this file with `pip install -c`.

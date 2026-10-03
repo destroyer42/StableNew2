@@ -2,12 +2,14 @@
 
 This is the canonical setup procedure for a Windows StableNew environment
 that will run the native Stable Video Diffusion (SVD) XT backend. It supports
-official Python 3.12, an NVIDIA CUDA runtime, and FFmpeg/ffprobe.
+official standard-GIL Python 3.14, an NVIDIA CUDA runtime, and FFmpeg/ffprobe.
 
 ## Prerequisites
 
-Install an official 64-bit Python 3.12. A Python launcher that resolves
-`py -3.12` is preferred; an explicit executable can also be passed to the helper. The
+Install an official 64-bit standard-GIL Python 3.14 (not the free-threaded
+`3.14t` build; the experimental JIT stays off). A per-user, side-by-side
+installation is enough: no PATH or file-association change is required. A Python
+launcher that resolves `py -3.14` is preferred; an explicit executable can also be passed to the helper. The
 machine must have a working NVIDIA driver and an NVIDIA GPU suitable for the
 accepted SVD profile.
 
@@ -53,8 +55,8 @@ The supported runtime is reproducible from repository-owned authority:
   restoration and upscaling (Spandrel model loading, plus the `codeformer`
   wheel that provides CodeFormer's face helper). Core SVD, including
   postprocess-disabled jobs, never requires it.
-- `constraints/windows-py312-cu130.txt` is the single exact-version authority
-  for the supported Windows / CPython 3.12 / CUDA 13.0 environment, including
+- `constraints/windows-py314-cu130.txt` is the single exact-version authority
+  for the supported Windows / CPython 3.14 / CUDA 13.0 environment, including
   the resolver itself (`pip`). It has a core section and a
   `# profile: postprocess` section. Every install the helper performs is
   constrained by it, so a rebuild resolves the same packages instead of
@@ -91,10 +93,30 @@ Stable Diffusion WebUI/A1111 remains a separate externally managed runtime.
 Its environment is not replaced by StableNew's `.venv`, and this helper does
 not start, stop, adopt, or configure it.
 
+## Migrating an existing environment to Python 3.14
+
+An existing Python 3.12 `.venv` keeps working for the old interpreter but is no
+longer the supported runtime. Migrate without losing the rollback:
+
+1. Install the official standard (GIL) Python 3.14 per-user and side by side
+   (no PATH or file-association change needed).
+2. Keep the current environment as the rollback: rename `.venv` to
+   `.venv-py312` (do not delete it).
+3. Build the new environment from merged `main` with a short path if Windows
+   long paths are not enabled, for example
+   `.\scripts\bootstrap_windows.ps1 -PythonPath <Python314\python.exe>`
+   (add `-WithPostprocess` if local face restoration/upscaling is wanted).
+4. Verify with `.\scripts\bootstrap_windows.ps1 -CheckOnly` (pin verifier,
+   `pip check`, CUDA, SVD pipeline, cached model, FFmpeg).
+5. Only after the new environment passes, retire `.venv-py312`.
+
+A1111, Forge and ComfyUI keep their own interpreters and are not touched.
+
 ## Common failures
 
-- **Unsupported Python:** install official 3.12 (3.11 and 3.13+ are
-  rejected), or pass `-PythonPath` to a 3.12 executable.
+- **Unsupported Python:** install official 3.14 (3.12, 3.13, 3.15+ and the
+  free-threaded build are rejected), or pass `-PythonPath` to a standard
+  3.14 executable.
 - **Runtime drift reported:** a pinned package is missing or at a different
   version. Rebuild with the helper (`-Recreate` only on a dedicated venv path)
   rather than editing packages by hand.
