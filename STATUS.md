@@ -1,14 +1,14 @@
 # StableNew current state
 
-Updated: 2026-10-02
+Updated: 2026-10-03
 
 ## Repository
 
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
-- Supported runtime/validation (PR-DEVEX-100, interpreter promoted by PR-PY314-100, under owner
-  review): StableNew's application/native-SVD interpreter is standard-GIL CPython 3.14.x only
+- Supported runtime/validation (PR-DEVEX-100 and the interpreter promotion PR-PY314-100, both
+  COMPLETE / ACCEPTED / INTEGRATED; PR #33): StableNew's application/native-SVD interpreter is standard-GIL CPython 3.14.x only
   (3.12, 3.13, 3.15+ and the free-threaded build are rejected by readiness/bootstrap; no JIT).
   GitHub CI runs once per PR head
   on Python 3.14 (one required gate, one informational full-suite job); the local `run_pr_gate.py`
@@ -19,7 +19,7 @@ Updated: 2026-10-02
   resolver `pip`) applied by `scripts/bootstrap_windows.ps1`; `tools/runtime/verify_runtime_pins.py`
   detects drift in bootstrap and `-CheckOnly`. Accepted direct stack: Torch/torchvision `+cu130`
   2.14.0/0.29.0, Diffusers 0.40.0, Transformers 5.17.0, Accelerate 1.15.0.
-- Restoration isolation (PR-POSTPROC-100, under owner review): local face restoration/upscaling is an
+- Restoration isolation (PR-POSTPROC-100, COMPLETE / ACCEPTED / INTEGRATED; PR #32): local face restoration/upscaling is an
   optional `-WithPostprocess` profile (`requirements-postprocess.txt`, a `# profile: postprocess`
   section of the constraints) behind StableNew-owned adapters in `src/video/restoration/`. RealESRGAN
   and the CodeFormer network load through Spandrel with bit-identical output; the legacy face helper
@@ -27,6 +27,18 @@ Updated: 2026-10-02
   materially; GFPGAN stays a named method that fails closed. `opencv-python` stays core (Photo Optimize
   uses it; the retained helper requires it). See
   `docs/Subsystems/Video/PR-POSTPROC-100_Restoration_Isolation.md`.
+- Managed ComfyUI runtime (PR-COMFY-RUNTIME-100, current, under owner review; not merged to `main`): the
+  StableNew-managed Comfy is a reproducible, independently owned runtime separate from the application
+  environment: ComfyUI `v0.38.0` (`6b747c04…`) on official standard-GIL CPython 3.13.x, Torch `2.14.0+cu130`, no
+  custom nodes, identity in `config/managed_comfy_runtime.json`, the complete exact package set in
+  `constraints/comfy-windows-py313-cu130-v0.38.0.txt`, built by `scripts/bootstrap_managed_comfy_windows.ps1` and
+  drift-checked by `tools/runtime/verify_managed_comfy.py`; `ComfyProcessManager` stays the only lifecycle
+  authority and external Comfy/A1111/Forge are untouched. A two-candidate method (v0.37.0 on Python 3.13, then
+  v0.38.0) and three physical runs passed the output-equivalence (not bit-identical, visually equivalent) and
+  resource gates. New `@1.2.0` workflow versions (TI2V and Animate-2) carry the `@1.1.0` graph with v0.38.0
+  provenance; `@1.0.0`/`@1.1.0` are byte-identical. Workflows stay experimental. See
+  `docs/Subsystems/Video/PR-COMFY-RUNTIME-100_Managed_Comfy_Runtime.md` and
+  `docs/runbooks/managed_comfy_runtime.md`.
 - Active diagnostic evidence: `DIAG-GPU-130 - Post-5600 Black-Screen Recurrence` - **XMP-OFF
   RECURRENCE / ACTIVE OBSERVATION; EXIT CRITERION NOT MET**. The owner confirms the RAM XMP profile
   has now been removed. After the 2026-09-25 07:06:20 ET boot, Windows reports both DIMMs at

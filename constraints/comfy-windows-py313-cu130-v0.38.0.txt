@@ -1,0 +1,108 @@
+# Managed ComfyUI runtime: exact pins for ComfyUI v0.38.0 on Windows (exact-version authority).
+#
+# Target:   Windows, official standard-GIL CPython 3.13.x, PyTorch CUDA 13.0 (cu130), ComfyUI v0.38.0
+#           at revision 6b747c0428c343e1417219641db93a4fb7cb69ae (config/managed_comfy_runtime.json
+#           owns the release/revision identity).
+# Qualified on: NVIDIA GeForce RTX 4070 Ti; Torch reports CUDA 13.0 and the GPU is visible.
+# Derived from: a clean disposable CPython 3.13.x environment built by
+#   scripts/bootstrap_managed_comfy_windows.ps1 from the pinned ComfyUI v0.38.0 requirements.txt and
+#   verified with `pip check` and tools/runtime/verify_managed_comfy.py (not a freeze of a developer
+#   environment). It is the complete installed set (every distribution, including pip and the
+#   transitive comfyui-workflow-templates-* packages), so the verifier can reject drift in either
+#   direction.
+#
+# Versus the accepted ComfyUI v0.37.0 qualification runtime, only these differ: the three pins
+# v0.38.0 itself declares (comfy-kitchen, comfyui-frontend-package, comfyui-workflow-templates),
+# the workflow-templates sub-packages those pins pull in, and torchaudio, which v0.38.0 no longer
+# requires and which therefore is not installed. Torch stays 2.14.0+cu130.
+#
+# This is deliberately separate from constraints/windows-py314-cu130.txt (the StableNew application
+# on Python 3.14). Do not merge the two or "freeze" over this file; an upgrade of any pin is its own
+# reviewed change. The Torch family (+cu130) comes from the PyTorch CUDA index; everything else from
+# PyPI. `pip` is the resolver itself: bootstrap installs exactly this pip version.
+
+aiohappyeyeballs==2.7.1
+aiohttp==3.14.3
+aiosignal==1.4.0
+alembic==1.20.0
+annotated-doc==0.0.5
+annotated-types==0.8.0
+anyio==4.15.1
+attrs==26.1.0
+av==18.1.0
+blake3==1.0.9
+certifi==2026.7.22
+charset-normalizer==3.5.1
+click==8.5.0
+colorama==0.4.6
+comfy-aimdo==0.5.5
+comfy-angle==0.1.1
+comfy-kitchen==0.2.36
+comfyui-embedded-docs==0.5.12
+comfyui-frontend-package==1.53.6
+comfyui-workflow-templates==0.11.70
+comfyui-workflow-templates-core==0.3.361
+comfyui-workflow-templates-json==0.1.96
+comfyui-workflow-templates-media-api==0.3.84
+comfyui-workflow-templates-media-assets-01==0.1.48
+comfyui-workflow-templates-media-assets-02==0.1.6
+comfyui-workflow-templates-media-image==0.3.160
+comfyui-workflow-templates-media-other==0.3.229
+comfyui-workflow-templates-media-video==0.3.101
+einops==0.8.2
+filelock==3.32.3
+frozenlist==1.8.0
+fsspec==2026.7.0
+h11==0.16.0
+hf-xet==1.6.0
+httpcore==1.0.9
+httpx==0.28.1
+huggingface-hub==1.33.0
+idna==3.20
+jinja2==3.1.6
+kornia==0.8.3
+kornia-rs==0.2.0
+mako==1.4.3
+markdown-it-py==4.2.0
+markupsafe==3.0.3
+mdurl==0.1.2
+mpmath==1.3.0
+multidict==6.9.1
+networkx==3.6.1
+numpy==2.4.6
+packaging==26.3
+pillow==12.3.0
+pip==26.2.1
+propcache==0.5.4
+psutil==7.2.2
+pydantic==2.13.5
+pydantic-core==2.46.5
+pydantic-settings==2.15.0
+pygments==2.21.0
+pyopengl==3.1.10
+python-dotenv==1.2.3
+pyyaml==6.0.3
+regex==2026.9.10
+requests==2.34.2
+rich==15.0.0
+safetensors==0.8.0
+scipy==1.17.1
+sentencepiece==0.2.2
+setuptools==78.1.0
+shellingham==1.5.4
+simpleeval==1.0.8
+spandrel==0.4.2
+sqlalchemy==2.1.1
+sympy==1.14.0
+tokenizers==0.23.2
+torch==2.14.0+cu130
+torchsde==0.2.6
+torchvision==0.29.0+cu130
+tqdm==4.70.1
+trampoline==0.1.2
+transformers==5.17.0
+typer==0.27.2
+typing-extensions==4.16.0
+typing-inspection==0.4.4
+urllib3==2.8.0
+yarl==1.25.1

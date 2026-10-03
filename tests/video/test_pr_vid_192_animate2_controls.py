@@ -122,12 +122,13 @@ def test_baseline_versions_are_byte_identical_to_pr_vid_191() -> None:
 def test_both_versions_stay_registered_and_the_ui_offers_only_the_latest() -> None:
     registry = build_default_workflow_registry()
     for workflow_id in (WAN_ANIMATE2_PROMPT_ID, WAN_ANIMATE2_DRIVE_ID):
-        assert registry.list_versions(workflow_id) == ["1.0.0", "1.1.0"]
+        assert registry.list_versions(workflow_id) == ["1.0.0", "1.1.0", "1.2.0"]
     listed = {
         record["workflow_id"]: record["workflow_version"]
         for record in VideoWorkflowController(app_controller=SimpleNamespace()).list_workflow_specs()
     }
-    assert listed[WAN_ANIMATE2_PROMPT_ID] == listed[WAN_ANIMATE2_DRIVE_ID] == "1.1.0"
+    # PR-COMFY-RUNTIME-100: 1.2.0 is the 1.1.0 graph requalified on the managed v0.38.0 runtime.
+    assert listed[WAN_ANIMATE2_PROMPT_ID] == listed[WAN_ANIMATE2_DRIVE_ID] == "1.2.0"
 
 
 # ------------------------------------------------------------- `gentle` never affected Animate-2

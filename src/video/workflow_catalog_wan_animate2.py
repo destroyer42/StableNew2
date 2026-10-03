@@ -26,6 +26,11 @@ PR-VID-192_Animate2_Control_Truth.md``): a distinct Motion Prompt wired to ``pos
 strength, the pose window and reference-image strength, plus an honest description of prompt mode.
 Every control default equals the node's own default, and generic ``motion_profile`` is not declared
 by either version because no node input honors it.
+
+``1.2.0`` (PR-COMFY-RUNTIME-100) is the identical ``1.1.0`` graph, controls and model hashes,
+requalified on the repo-owned managed ComfyUI v0.38.0 runtime (Python 3.13, Torch 2.14.0+cu130); only
+its qualification provenance differs.  ``1.0.0`` and ``1.1.0`` stay registered, byte-identical, and
+keep their v0.37.0 provenance, so earlier jobs replay against the exact graph they froze.
 """
 
 from __future__ import annotations
@@ -119,6 +124,22 @@ WAN_ANIMATE2_FRAME_COUNT_POLICY = {
 WAN_ANIMATE2_REQUIRED_LAUNCH_FLAGS = ("--disable-pinned-memory",)
 WAN_ANIMATE2_BASELINE_VERSION = "1.0.0"
 WAN_ANIMATE2_CONTROLS_VERSION = "1.1.0"
+# PR-COMFY-RUNTIME-100: the identical 1.1.0 graph, controls and model hashes, requalified on the
+# repo-owned managed ComfyUI v0.38.0 runtime (Python 3.13, Torch 2.14.0+cu130).  Only the
+# qualification provenance differs from 1.1.0; config/managed_comfy_runtime.json owns the runtime.
+WAN_ANIMATE2_RUNTIME_VERSION = "1.2.0"
+WAN_ANIMATE2_RUNTIME_PROVENANCE: dict[str, Any] = {
+    "qualification": (
+        "PR-VID-184R/PR-VID-184S graph; PR-VID-192 control bindings; PR-COMFY-RUNTIME-100 managed "
+        "ComfyUI v0.38.0 runtime (Python 3.13, Torch 2.14.0+cu130)"
+    ),
+    "comfyui_version": "0.38.0",
+    "comfyui_revision": "6b747c0428c343e1417219641db93a4fb7cb69ae",
+}
+_V037_PROVENANCE: dict[str, Any] = {
+    "comfyui_version": "0.37.0",
+    "comfyui_revision": "73c9bad4d21e7addbe1d13bc92eee0f1431b017d",
+}
 
 # Operator controls bound to real ``WanAnimate2ToVideo`` inputs on the pinned ComfyUI v0.37.0.  Ranges
 # and defaults are the node's own (comfy_extras/nodes_wan.py, revision 73c9bad4); help paraphrases its
@@ -393,12 +414,22 @@ def _bindings(*, driving_video: bool, controlled: bool = False) -> tuple[Workflo
     return tuple(bindings)
 
 
-def _build(*, workflow_id: str, driving_video: bool, controlled: bool = False) -> WorkflowSpec:
+def _build(
+    *,
+    workflow_id: str,
+    driving_video: bool,
+    controlled: bool = False,
+    runtime_qualified: bool = False,
+) -> WorkflowSpec:
+    controlled = controlled or runtime_qualified  # 1.2.0 is the 1.1.0 graph, requalified
     stock_nodes = WAN_ANIMATE2_BASE_NODES + (WAN_ANIMATE2_DRIVE_NODES if driving_video else ())
     capability_tags = (WORKFLOW_CAP_LOCAL_PROCESS_REQUIRED,) + (
         (WORKFLOW_CAP_POSE_VIDEO,) if driving_video else ()
     )
-    version = WAN_ANIMATE2_CONTROLS_VERSION if controlled else WAN_ANIMATE2_BASELINE_VERSION
+    if runtime_qualified:
+        version = WAN_ANIMATE2_RUNTIME_VERSION
+    else:
+        version = WAN_ANIMATE2_CONTROLS_VERSION if controlled else WAN_ANIMATE2_BASELINE_VERSION
     if controlled:
         mode = "Driving Video Motion" if driving_video else "Reference Image + Prompt"
         display_name = (
@@ -496,9 +527,9 @@ def _build(*, workflow_id: str, driving_video: bool, controlled: bool = False) -
                     else "PR-VID-184R/PR-VID-184S (driving-video mode)"
                 ),
                 "qualified_graph_sha256": WAN_ANIMATE2_QUALIFIED_GRAPH_SHA256,
-                "comfyui_version": "0.37.0",
-                "comfyui_revision": "73c9bad4d21e7addbe1d13bc92eee0f1431b017d",
+                **_V037_PROVENANCE,
                 "files": {name: digest for _id, name, _hint, digest in WAN_ANIMATE2_MODEL_FILES},
+                **(WAN_ANIMATE2_RUNTIME_PROVENANCE if runtime_qualified else {}),
             },
             # PR-VID-184S pinned-OFF evidence: ~11.8 GB peak whole-GPU VRAM from a ~1.1 GB
             # baseline and a ~12-14 GB host-memory rise; the same floors as the TI2V workflow.
@@ -564,6 +595,8 @@ def build_wan_animate2_specs() -> tuple[WorkflowSpec, ...]:
         _build(workflow_id=WAN_ANIMATE2_DRIVE_ID, driving_video=True),
         _build(workflow_id=WAN_ANIMATE2_PROMPT_ID, driving_video=False, controlled=True),
         _build(workflow_id=WAN_ANIMATE2_DRIVE_ID, driving_video=True, controlled=True),
+        _build(workflow_id=WAN_ANIMATE2_PROMPT_ID, driving_video=False, runtime_qualified=True),
+        _build(workflow_id=WAN_ANIMATE2_DRIVE_ID, driving_video=True, runtime_qualified=True),
     )
 
 
@@ -576,5 +609,7 @@ __all__ = [
     "WAN_ANIMATE2_MODEL_FILES",
     "WAN_ANIMATE2_PROMPT_ID",
     "WAN_ANIMATE2_QUALIFIED_GRAPH_SHA256",
+    "WAN_ANIMATE2_RUNTIME_PROVENANCE",
+    "WAN_ANIMATE2_RUNTIME_VERSION",
     "build_wan_animate2_specs",
 ]

@@ -398,7 +398,8 @@ def _run_one(stack: _Stack, job_id: str, label: str, frames: int, comfy_url: str
             record["manifest_provenance"] = {
                 key: manifest.get(key)
                 for key in ("workflow_id", "workflow_version", "frame_count", "fps",
-                            "approximate_seconds", "runtime_policy", "pose_video")
+                            "approximate_seconds", "runtime_policy", "pose_video",
+                            "actual_runtime")
             }
     return record
 
@@ -457,7 +458,13 @@ def _run(stack: _Stack, args: argparse.Namespace, evidence: dict, workspace: Pat
     source = Path(args.source)
     comfy_url = evidence["preflight"]["comfy_base_url"]
     queued = []
-    suite = SUITES[args.suite]
+    # PR-COMFY-RUNTIME-100: a runtime comparison dispatches exactly one named job on an explicit
+    # workflow version (the same frozen case on another runtime), never the whole suite.
+    suite = tuple(job for job in SUITES[args.suite] if not args.only or job[0] in args.only)
+    if args.workflow_version:
+        suite = tuple((job[0], job[1], args.workflow_version, *job[3:]) for job in suite)
+    if not suite:
+        raise SystemExit(f"--only {args.only} matches no job in suite {args.suite!r}")
     evidence["suite"] = args.suite
     for job in suite:
         label, frames = job[0], job[3]
@@ -558,6 +565,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--suite", choices=sorted(SUITES), default="ti2v")
     parser.add_argument(
         "--reports-dir", default=str(REPORTS), help="evidence directory (default reports/vid190)"
+    )
+    parser.add_argument(
+        "--only",
+        type=lambda text: [part.strip() for part in text.split(",") if part.strip()],
+        default=[],
+        help="comma-separated job labels to run (default: the whole suite)",
+    )
+    parser.add_argument(
+        "--workflow-version",
+        default="",
+        help="run every selected job on this workflow version (default: the suite's own)",
     )
     args = parser.parse_args(argv)
     REPORTS = Path(args.reports_dir)

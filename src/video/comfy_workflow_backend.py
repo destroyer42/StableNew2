@@ -127,6 +127,25 @@ def _control_provenance(
     return result
 
 
+def _actual_runtime_identity(system_stats: Any) -> dict[str, str]:
+    """What the serving ComfyUI itself reports about its own runtime (observed, not declared).
+
+    Read from the ``/system_stats`` already fetched for resource readiness, so it costs no extra
+    request; absent fields (a stub or older server) are simply omitted.  Recorded beside the
+    workflow's declared qualification so a job's artifacts show which runtime actually produced them.
+    """
+
+    system = _mapping_dict(system_stats.get("system")) if isinstance(system_stats, Mapping) else {}
+    python_version = str(system.get("python_version") or "").split(" ", 1)[0]
+    fields = {
+        "comfyui_version": system.get("comfyui_version"),
+        "python_version": python_version,
+        "pytorch_version": system.get("pytorch_version"),
+        "frontend_version": system.get("required_frontend_version"),
+    }
+    return {name: str(value) for name, value in fields.items() if value}
+
+
 def _length_provenance(spec: Any, stage_config: Mapping[str, Any]) -> dict[str, Any]:
     """Frozen frame count and declared FPS for a variable-length workflow (else empty)."""
 
@@ -447,8 +466,11 @@ class ComfyWorkflowVideoBackend:
         # Bounded, observe-only resource readiness (workflows that declare a policy): a failing
         # check fails the job before anything is queued; nothing is stopped or restarted.
         readiness = None
+        actual_runtime: dict[str, str] = {}
         if self._readiness.policy_for(spec) is not None:
-            readiness = self._readiness.evaluate(spec, system_stats=client.get_system_stats())
+            system_stats = client.get_system_stats()
+            actual_runtime = _actual_runtime_identity(system_stats)
+            readiness = self._readiness.evaluate(spec, system_stats=system_stats)
             if not readiness.ready:
                 raise RuntimeError(
                     f"Workflow '{spec.workflow_id}' is not resource-ready: {readiness.message}"
@@ -543,6 +565,8 @@ class ComfyWorkflowVideoBackend:
         }
         if runtime_policy:
             provenance_extra["runtime_policy"] = runtime_policy
+        if actual_runtime:
+            provenance_extra["actual_runtime"] = actual_runtime
         manifest_path = self._write_manifest(
             request=request,
             prompt_id=prompt_id,
