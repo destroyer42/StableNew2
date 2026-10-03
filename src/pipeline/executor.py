@@ -1589,6 +1589,15 @@ class Pipeline:
             },
         )
 
+        # Independent runtime authorities need explicit ownership resolution;
+        # restarting our own runtime cannot safely resolve another tree.
+        if "duplicate_process" in self._runtime_cause_codes(runtime_state):
+            raise self._build_runtime_admission_error(
+                stage_name=stage_name,
+                runtime_state=runtime_state,
+                pressure_assessment=pressure_assessment,
+            )
+
         pressure_status = str((pressure_assessment or {}).get("status") or "normal")
         runtime_state, recovery_trace = self._attempt_runtime_soft_recovery(
             stage_name=stage_name,
@@ -1600,6 +1609,13 @@ class Pipeline:
         status = str(runtime_state.get("status") or "healthy")
         if status == "healthy":
             return runtime_state
+
+        if "duplicate_process" in self._runtime_cause_codes(runtime_state):
+            raise self._build_runtime_admission_error(
+                stage_name=stage_name,
+                runtime_state=runtime_state,
+                pressure_assessment=pressure_assessment,
+            )
 
         launch_profile = str(runtime_state.get("launch_profile") or "")
         guarded_active = app_config.is_guarded_webui_launch_profile(launch_profile)

@@ -1,10 +1,12 @@
 # PR-IMG-FORGE-100 — Forge Neo Compatibility / A1111 Successor Qualification
 
-Status: **FORGE_NO_GO — owner-authorized physical pass stopped at A1111 admission before generation.**
+Status: **QUALIFICATION_INFRASTRUCTURE_BLOCKED — process-tree admission repair validated;
+new physical pass pending owner approval.**
 Forge is an explicit, **non-default** backend identity (`forge_webui`). `a1111_webui` remains the
 default. Nothing here promotes Forge (that is `PR-IMG-FORGE-110`, a separate owner decision) and no
 image parity verdict has been reached. The frozen matrix cannot execute under current canonical
-runtime admission; this is not evidence of Forge image failure. See section 16.
+runtime admission at the failed attempt's source checkpoint; this is not evidence of Forge image
+failure. The repair has passed no-generation admission smoke; see sections 16-17.
 
 Base: `origin/main` `715e352f28640cb0eb3225a5b1752fc5e192c778` (PR #35 / PR-TEST-TRUTH-210 merged).
 Initial implementation/evidence: Claude Code cloud session. Local/Desktop installation and GET-only
@@ -681,7 +683,8 @@ actual model/effort and token/cost/elapsed usage metrics are unavailable in this
 
 ## 16. Owner-authorized physical pass: admission HOLD (2026-10-03)
 
-**FORGE_NO_GO** for execution of the frozen matrix at StableNew
+Original classification **FORGE_NO_GO**, superseded by the owner's
+**QUALIFICATION_INFRASTRUCTURE_BLOCKED** adjudication in section 17, for the attempt at StableNew
 `f636f0e9702f0e1c4824353b780cceec05fc0214`. Exactly one ordinary NJR was submitted through
 JobService, SQLite and PipelineRunner.run_njr; it failed before generation. Seven remaining cases
 were not submitted. No Forge generation or technical/product image parity verdict is available.
@@ -802,3 +805,107 @@ existing A1111 package debt; authorize any bounded repair separately, then autho
 pass with new identities. No repair or retry during this stopped pass. A ninth cancellation generation
 is not warranted by the available evidence and was not executed. Forge remains unqualified; product
 visual parity and production promotion remain undecided.
+
+## 17. Process-tree admission repair and owner reclassification (2026-10-03)
+
+The owner reclassified section 16's stopped attempt as **QUALIFICATION_INFRASTRUCTURE_BLOCKED**,
+not FORGE_NO_GO: no generation request reached either backend. The underlying defect was StableNew
+runtime admission counting a legitimate owned Windows venv launcher and serving child as two
+independent WebUI authorities. The failed job remains terminal evidence, not a Forge inference failure.
+Original reports, logs, failed result, immutable NJR and SQLite database are retained without rewriting.
+
+Execution Profile: **Standard / LOCAL desktop**, recommended **GPT-6.1 Sol XHigh** for Codex and
+**Sonnet 5.5 XHigh** for Claude Code. A bounded ownership/recovery repair benefits from sustained
+reasoning and avoiding retries rather than the lowest nominal model cost. Controller Surface
+Assessment: no controller/coordinator/process-manager source or ratchet changes. Changes are in the
+existing process inspector and executor admission, preserving one WebUIProcessManager. Token-Efficient
+Validation Plan: deterministic ancestry/recovery fixtures, existing manager ownership/stop tests,
+qualification tooling/descriptor tests, scoped Ruff/whitespace, one real owned A1111 no-generation
+smoke, then one Python3.14 canonical PR gate. No old 1683-test sweep, GPU inference or dependency work.
+
+### Grouping and recovery contract
+
+`_independent_process_tree_roots(candidates, processes)` walks each candidate's parent PID through
+the observed Python process map, including non-matching intermediates. A candidate is a root only
+when it has no matching candidate ancestor. Root PIDs are sorted for stable diagnostics. Missing
+ancestors do not prove a relationship; cycles cannot justify merging candidates. Neither shared
+executable, directory, port, model nor installation path establishes a component.
+
+WebUI and significant StableNew-main duplicate severity now use independent matching tree counts.
+One launcher/child chain has one authority; two independent chains remain critical. Individual
+matching members receive duplicate reasons only when their matching class has multiple independent
+trees. The significant-main RSS threshold is retained; unrelated high-RSS/stale-pytest warning
+behavior is unchanged. Raw process counts remain intact:
+
+| Diagnostic | Meaning |
+|---|---|
+| `webui_process_count`, `main_process_count`, `significant_main_process_count` | raw matching PIDs |
+| `webui_runtime_tree_count`, `webui_runtime_tree_roots` | independent matching WebUI ancestry roots |
+| `significant_main_tree_count`, `significant_main_tree_roots` | independent significant-main ancestry roots |
+
+Executor `_ensure_runtime_admissible` rejects `duplicate_process` before soft recovery, preserving
+evidence without interrupt/orphan cleanup or restart. If a recovery re-probe finds a duplicate, it
+also refuses before the restart decision, including under high/unsafe pressure. An owned restart
+cannot resolve another independent/external authority. Existing managed connection-failure recovery,
+stale-progress recovery and guarded-profile behavior retain their established paths. No manager
+ownership policy changed; no FORGE-100 special case or admission bypass was introduced.
+
+Deterministic coverage includes one PID, parent/child, non-matching bridge, two roots with/without
+children, main launcher/child and independent main trees, unknown/cyclic ancestry, retained suspicious
+process warnings, actual inspector-to-executor risk translation, duplicate refusal without manager
+restart, re-probe duplicates, and continued managed connection-dead restart. The old duplicate-main
+fixture incorrectly modeled parent/child; it now models independent roots, with separate regression
+coverage for benign ancestry. Descriptor coverage now asserts the owner-adjudicated infrastructure
+classification, zero dispatches, preserved terminal identity and pending new-attempt approval.
+
+### Real owned A1111 smoke: no generation
+
+The same manager-owned Windows venv/launch.py path was used with existing A1111 packages and
+baseline xformers, explicit port7860, skip-prepare-environment, ad-no-huggingface, offline HF/YOLO
+environment and fresh qualification settings/UI copies. The headless service harness held the real
+application singleton lock. All HTTP mutations were forbidden before dispatch; runtime admission and
+process enumeration were real. No JobService generation submission or direct inference occurred.
+
+Observed tree: qualification owner16732 -> WebUI launcher**21640** -> serving Python child**26568**.
+Readiness took **10.815s**. Real inspector evidence: raw WebUI PID count**2**, runtime-tree count**1**,
+root21640, risk**normal**, no suspicious members. Actual executor admission was **healthy**, with no
+duplicate cause or recovery trace; manager restart calls**0**, discovery calls**0**. All **8** recorded
+HTTP requests were GETs. No-generation true-duplicate behavior is proven by deterministic fixtures;
+no second real external runtime was launched.
+
+The manager owned its launcher/tree throughout and stopped both PIDs; no survivors or listeners on
+7860/7871/8189, singleton lock released, final manager PID/ownership cleared. Windows owned termination
+recorded exit1 as in prior smokes, not a spontaneous runtime failure. Source/config hashes in existing
+A1111 and the failed qualification database/result are unchanged. External runtimes and protected
+VID-192 owner files were untouched. Zero generation, detector/model/package download or package change.
+Forge was not launched in this repair pass; its accepted preflight/packaging evidence remains applicable.
+
+The MediaPipe/protobuf and OpenCV-contrib/NumPy findings in existing A1111 are **current non-blocking
+environment debt**, not the admission cause. They were not repaired; inference impact remains untested.
+Forge Gradio4.40.0/Pillow12.3.0 packaging inconsistency remains separate and unresolved. A1111 remains
+default; Forge/MediaPipe modes are not promoted or physically qualified; FORGE-110 was not started.
+
+Machine-local evidence: **admission-repair-aa24dba/result.json**, exact launch profile, actual observed
+Python ancestry/risk, runtime admission, GET inventory, logs and before/after ownership/hash evidence.
+The prior **physical-f636f0e-pass1** evidence is untouched; an additive owner-adjudication record
+references it. Validation results and the resulting local commit are recorded at this HOLD.
+
+### Next physical attempt
+
+After owner acceptance and separate authorization, freeze the accepted repaired StableNew source SHA
+and provenance while preserving every generation setting/asset in the original eight-case matrix.
+Never requeue/reuse/delete `forge100-3434b4f36b1027ff-A-a1111_webui`. Create a new Pair-A A1111 identity
+and preserve qualification lineage referencing that failed infrastructure attempt. A fresh matrix
+source digest naturally gives new compiled identities and avoids the old terminal ID; annotate the
+qualification evidence with the failed attempt, without inventing replay semantics. Submit any new
+jobs through the unchanged JobService/SQLite/run_njr path. The seven unsubmitted old identities have
+no lifecycle rows and require no state mutation. No physical matrix was resumed during this repair.
+
+Final validation: **43 process-inspector/admission tests passed**, **68 manager/qualification-tooling
+tests passed** (including23 qualification-tool tests), and **5 updated descriptor tests passed**.
+One stale descriptor assertion from the prior physical checkpoint initially expected NOT_AUTHORIZED;
+it was updated to the explicit owner adjudication and now asserts the preserved terminal identity
+and zero-dispatch evidence. Scoped Ruff and `git diff --check` pass. The single final Python**3.14.8**
+PR gate passes: completeness, controller ratchet, Ruff, mypy smoke, **4414 collected /184 smoke passed**.
+No expensive unrelated sweep was run. Recommendation is recorded above; actual model/effort and
+token/cost/elapsed usage metrics are unavailable in the host's reported metadata.

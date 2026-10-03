@@ -5,8 +5,8 @@
   "purpose": "Evidence-oriented descriptor of the isolated Forge Neo qualification runtime. This is NOT a production runtime/bootstrap contract (that belongs to PR-IMG-FORGE-110 after qualification passes) and nothing in StableNew launches Forge from this file.",
   "backend_id": "forge_webui",
   "default_image_backend_id": "a1111_webui",
-  "qualification_status": "INSTALLED_UNQUALIFIED / PREFLIGHT_PASS_WITH_KNOWN_PACKAGING_CONFLICT / OWNER_AUTHORIZED_PHYSICAL_PASS_STOPPED_BEFORE_GENERATION",
-  "classification": "FORGE_NO_GO",
+  "qualification_status": "INSTALLED_UNQUALIFIED / QUALIFICATION_INFRASTRUCTURE_BLOCKED / ADMISSION_REPAIR_VALIDATED / NEW_PHYSICAL_ATTEMPT_PENDING_OWNER_APPROVAL",
+  "classification": "QUALIFICATION_INFRASTRUCTURE_BLOCKED",
   "physical_checkpoint": {
     "stable_sha": "f636f0e9702f0e1c4824353b780cceec05fc0214",
     "original_matrix_sha256": "cc37bc5067a20a2e972ebe9c6eca3906d2609a2792265582345008c0b9b53cca",
@@ -14,19 +14,35 @@
     "matrix_change": "Only the sole owner-approval execution blocker was cleared; all eight cases/settings/assets unchanged.",
     "submitted_jobs": 1,
     "failed_jobs": 1,
+    "failed_job_id": "forge100-3434b4f36b1027ff-A-a1111_webui",
     "not_submitted_cases": 7,
     "generation_requests": 0,
-    "blocker": "A-a1111_webui canonical runtime admission poisoned with duplicate_process before txt2img dispatch. Captured owned Windows venv launcher/serving child both match the PID-counting WebUI predicate; owned-tree grouping needs owner adjudication.",
+    "blocker": "Owner-adjudicated StableNew infrastructure defect: matching PIDs in one owned Windows venv launcher/serving-child tree were counted as independent runtimes; zero generation dispatches. No Forge image verdict.",
     "automatic_owned_runtime_restarts": 1,
     "generation_retries_or_replays": 0,
     "external_process_mutation": false,
     "final_queue": "One failed SQLite job; zero queued/running; integrity_check ok; qualification ports released.",
     "image_parity": "NOT_ASSESSABLE; no image artifacts or contact sheet",
-    "a1111_baseline_packaging_debt": "Existing environment unchanged: mediapipe0.10.14 requires protobuf>=4.25.3,<5 but has3.20.0; opencv-contrib-python4.12.0.88 requires numpy>=2,<2.3 but has1.26.2. No repair or package mutation.",
+    "a1111_baseline_packaging_debt": "Current non-blocking environment debt; not the admission cause. Existing mediapipe0.10.14 requires protobuf>=4.25.3,<5 but has3.20.0; opencv-contrib-python4.12.0.88 requires numpy>=2,<2.3 but has1.26.2. No repair or package mutation; inference impact untested.",
     "evidence": "Machine-local physical-f636f0e-pass1/hold-report.json, evidence-inventory.json, JobService/SQLite result, launch trees and survivor telemetry; qualification document section16.",
-    "next_decision": "Owner adjudication of admission blocker and existing A1111 package debt; separate authorization of any bounded repair and a new frozen pass. No retry in this pass."
+    "next_decision": "Owner acceptance of process-tree admission repair, then authorization of a new physical pass at its accepted source SHA. Preserve terminal failed identity; replacement Pair-A A1111 needs a new job ID and qualification lineage referencing that failure. Generation intent unchanged."
+  },
+  "admission_repair": {
+    "risk_unit": "Independent matching process trees proven by PID/parent-PID ancestry through observed Python intermediates; raw counts preserved. Missing/cyclic ancestry cannot justify collapsing candidates.",
+    "diagnostics_added": [
+      "webui_runtime_tree_count",
+      "webui_runtime_tree_roots",
+      "significant_main_tree_count",
+      "significant_main_tree_roots"
+    ],
+    "recovery": "duplicate_process fails closed before soft recovery or owned restart; re-probe duplicates also block restart. Other established recovery behavior unchanged.",
+    "live_smoke": "PASS: actual managed A1111 raw WebUI PIDs2, tree1, normal risk, healthy admission, zero restarts/non-GETs/generation; owned tree stopped, no adoption.",
+    "failed_job_preservation": "Original SQLite database/result byte hashes unchanged; one failed terminal row, no requeue/reuse/deletion.",
+    "evidence": "Machine-local admission-repair-aa24dba/result.json; qualification document section17.",
+    "physical_generation": "NOT_RESUMED; HOLD for owner review"
   },
   "classification_allowed_values": [
+    "QUALIFICATION_INFRASTRUCTURE_BLOCKED",
     "FORGE_TECHNICAL_PASS / PRODUCT_PARITY_PASS",
     "FORGE_TECHNICAL_PASS / PRODUCT_PARITY_PENDING",
     "FORGE_CONDITIONAL",

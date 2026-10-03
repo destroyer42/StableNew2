@@ -7,6 +7,76 @@ import pytest
 from src.utils import process_inspector_v2
 
 
+def _tree_process(pid, parent_pid, kind="webui", rss_mb=100.0, create_time=None):
+    commands = {"webui": ("python", "launch.py"), "main": ("python", "-m", "src.main"),
+                "bridge": ("python", "helper.py"), "pytest": ("python", "-m", "pytest")}
+    return process_inspector_v2.ProcessInfo(
+        pid=pid, parent_pid=parent_pid, name="python.exe", cmdline=commands[kind],
+        cwd=str(process_inspector_v2.REPO_ROOT), create_time=create_time,
+        rss_mb=rss_mb, env_markers=(),
+    )
+
+
+@pytest.mark.parametrize(
+    "kind,shape,roots",
+    [
+        ("webui", [(10, None, "webui")], [10]),
+        ("webui", [(10, None, "webui"), (11, 10, "webui")], [10]),
+        ("webui", [(10, None, "webui"), (11, 10, "bridge"), (12, 11, "webui")], [10]),
+        ("webui", [(10, None, "webui"), (20, None, "webui")], [10, 20]),
+        ("webui", [(10, None, "webui"), (11, 10, "webui"),
+                   (20, None, "webui"), (21, 20, "webui")], [10, 20]),
+        ("main", [(10, None, "main"), (11, 10, "main")], [10]),
+        ("main", [(10, None, "main"), (11, 10, "bridge"), (12, 11, "main")], [10]),
+        ("main", [(10, None, "main"), (20, None, "main")], [10, 20]),
+        ("main", [(10, None, "main"), (11, 10, "main"),
+                  (20, None, "main"), (21, 20, "main")], [10, 20]),
+        # Shared executable/cwd or an unknown parent cannot establish matching ancestry.
+        ("webui", [(10, 99, "webui"), (20, 99, "webui")], [10, 20]),
+        ("webui", [(10, 20, "webui"), (20, 10, "webui")], [10, 20]),
+        ("webui", [(10, 10, "webui"), (20, None, "webui")], [10, 20]),
+    ],
+)
+def test_process_risk_counts_independent_matching_trees(monkeypatch, kind, shape, roots):
+    # Child-first ordering proves grouping does not depend on scan order.
+    processes = [_tree_process(*item) for item in reversed(shape)]
+    monkeypatch.setattr(process_inspector_v2, "iter_stablenew_like_processes",
+                        lambda: iter(processes))
+    risk = process_inspector_v2.collect_process_risk_snapshot()
+    raw_key = "webui_process_count" if kind == "webui" else "significant_main_process_count"
+    prefix = "webui_runtime_tree" if kind == "webui" else "significant_main_tree"
+    raw = sum(item[2] == kind for item in shape)
+    assert risk[raw_key] == raw
+    if kind == "main":
+        assert risk["main_process_count"] == raw
+    assert risk[prefix + "_count"] == len(roots)
+    assert risk[prefix + "_roots"] == roots
+    duplicate_reason = "duplicate_webui_process" if kind == "webui" else "duplicate_stablenew_main"
+    members = {p["pid"] for p in risk["suspicious_processes"]
+               if duplicate_reason in p["reasons"]}
+    if len(roots) > 1:
+        assert risk["status"] == "critical"
+        assert members == {pid for pid, _, candidate_kind in shape if candidate_kind == kind}
+    else:
+        assert risk["status"] == "normal"
+        assert members == set()
+
+
+def test_tree_grouping_preserves_unrelated_high_rss_and_stale_pytest(monkeypatch):
+    processes = [_tree_process(10, None), _tree_process(11, 10),
+                 _tree_process(20, None, "pytest", rss_mb=600, create_time=100)]
+    monkeypatch.setattr(process_inspector_v2, "iter_stablenew_like_processes",
+                        lambda: iter(processes))
+    monkeypatch.setattr(process_inspector_v2.time, "time", lambda: 1000)
+    risk = process_inspector_v2.collect_process_risk_snapshot()
+    assert risk["webui_process_count"] == 2
+    assert risk["webui_runtime_tree_count"] == 1
+    assert risk["status"] == "warning"
+    assert [(p["pid"], p["reasons"]) for p in risk["suspicious_processes"]] == [
+        (20, ["high_rss_512mb_plus", "stale_pytest_process"])
+    ]
+
+
 class _DummyProcess:
     def __init__(self, info: dict[str, object]) -> None:
         self.info = info
@@ -247,7 +317,7 @@ def test_collect_process_risk_snapshot_marks_duplicate_main_processes_critical(m
     )
     main_b = process_inspector_v2.ProcessInfo(
         pid=2,
-        parent_pid=1,
+        parent_pid=None,
         name="python.exe",
         cmdline=("python", "-m", "src.main"),
         cwd=str(process_inspector_v2.REPO_ROOT),
@@ -266,6 +336,7 @@ def test_collect_process_risk_snapshot_marks_duplicate_main_processes_critical(m
 
     assert result["status"] == "critical"
     assert result["main_process_count"] == 2
+    assert result["significant_main_tree_count"] == 2
     assert len(result["suspicious_processes"]) == 2
 
 

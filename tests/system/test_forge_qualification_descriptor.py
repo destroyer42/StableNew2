@@ -51,10 +51,16 @@ def test_launch_contract_is_the_three_frozen_flags_on_a_non_discoverable_port() 
     assert "--ad-no-huggingface" not in flags
 
 
-def test_descriptor_records_no_verdict_before_the_authorized_physical_run() -> None:
+def test_descriptor_records_infrastructure_blocker_without_an_image_verdict() -> None:
     data = _load()
-    assert data["classification"] is None
-    assert "NOT_AUTHORIZED" in data["qualification_status"]
+    assert data["classification"] == "QUALIFICATION_INFRASTRUCTURE_BLOCKED"
+    assert data["classification"] in data["classification_allowed_values"]
+    checkpoint = data["physical_checkpoint"]
+    assert checkpoint["generation_requests"] == 0
+    assert checkpoint["failed_job_id"] == "forge100-3434b4f36b1027ff-A-a1111_webui"
+    assert checkpoint["failed_jobs"] == 1 and checkpoint["not_submitted_cases"] == 7
+    assert "NEW_PHYSICAL_ATTEMPT_PENDING_OWNER_APPROVAL" in data["qualification_status"]
+    assert "NOT_ASSESSABLE" in checkpoint["image_parity"]
     assert data["isolation"]["a1111_installation_mutation"] == "forbidden"
     assert data["dependency_install"]["model_downloads"].startswith("NOT authorized")
 
