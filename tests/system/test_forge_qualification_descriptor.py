@@ -42,8 +42,9 @@ def test_launch_contract_is_the_three_frozen_flags_on_a_non_discoverable_port() 
     assert not set(flags) & set(launch["forbidden_tuning_flags"])
     # StableNew's WebUI discovery scans 7860-7869; the qualification endpoint must sit outside.
     assert not 7860 <= launch["qualification_port"] <= 7869
-    # The deviation needed to keep the run download-free is explicit and awaiting approval.
-    assert launch["extension_safety_flags_pending_owner_approval"] == ["--ad-no-huggingface"]
+    # The owner approved the download-free deviation for isolated install/read-only preflight.
+    assert launch["extension_safety_flags_pending_owner_approval"] == []
+    assert launch["extension_safety_flags_owner_approved"] == ["--ad-no-huggingface"]
     assert "--ad-no-huggingface" not in flags
 
 

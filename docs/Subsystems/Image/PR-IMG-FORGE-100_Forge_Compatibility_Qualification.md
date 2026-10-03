@@ -330,7 +330,7 @@ paired layouts; comparison reports missing evidence and leaves visual parity to 
 Forge remains explicit/non-default and unqualified. ControlNet is source-reviewed only; a runtime capability
 verdict remains **FORGE_CONTROLNET_RUNTIME_CAPABILITY_NOT_OBSERVED** until a physical endpoint is authorized.
 
-## 12. Pre-install StableNew blocker closure
+## 12. Pre-install StableNew blocker closure (historical checkpoint)
 
 Execution Profile + Model/Reasoning Recommendation: Standard bounded repair/verification within the
 accepted architecture; Local/Desktop, GPT-6.1 Sol XHigh or Sonnet 5.5 XHigh. Retaining the session context
@@ -395,3 +395,63 @@ Sources: [Neo uv hook](https://github.com/Haoming02/sd-webui-forge-classic/blob/
 [Neo launcher](https://github.com/Haoming02/sd-webui-forge-classic/blob/d70373ebcf1a96d210b78cd6f77196459e783e2a/launch.py),
 [uv environment/constraints](https://docs.astral.sh/uv/reference/environment/),
 [uv consistency checks](https://docs.astral.sh/uv/pip/inspection/).
+
+## 13. Authorized isolated installation — PREFLIGHT_BLOCKED
+
+Execution Profile + Model/Reasoning Recommendation: Standard bounded local runtime qualification;
+Local/Desktop, GPT-6.1 Sol XHigh or Sonnet 5.5 XHigh, preserving the accepted context and evidence.
+Controller Surface Assessment: no controller/coordinator or production source changes; the single
+WebUIProcessManager design remains unchanged. Token-Efficient Validation Plan: reuse accepted Python
+3.14 source/gate evidence, capture actual upstream install/package state, and run only focused descriptor
+checks for this documentation/evidence update. No old sweep, mutation campaign or PR-gate rerun.
+
+The owner authorized frozen Forge/ADetailer source and isolated package installation plus non-generation
+runtime preflight. The exact prior machine-local protocol was executed with its approval guard enabled.
+The earlier current-Neo-tip guard was superseded by the owner's explicit instruction to keep d70373eb
+independently of branch advancement; exact checkout verification was retained. Forge and ADetailer
+checkouts match the frozen commits and remain clean. No source, dependency pin or installer was patched.
+
+Neo's supported `--uv --exit --skip-torch-cuda-test` installation completed with exit code **0**.
+Actual isolated runtime metadata: Python **3.13.16 Windows AMD64**, Torch **2.13.0+cu130**,
+torchvision **0.28.0+cu130**, Torch CUDA build metadata **13.0**, uv **0.12.22**. This is installed
+metadata, not a CUDA readiness or generation result. ADetailer's reviewed direct pins were installed:
+ultralytics **8.3.253**, mediapipe **0.10.31**, rich **14.3.4**. Neo's builtin extension installers also
+ran as part of that upstream process. Complete installed freeze and installer stdout/stderr are retained.
+
+Both **`uv pip check` and ordinary `pip check` exited 1** and reported two incompatibilities:
+
+- Known: Gradio **4.40.0** requires Pillow **>=8,<11**, while **12.3.0** is installed. This conflict
+  remains unresolved; installer completion is not a clean packaging pass.
+- Additional: MediaPipe **0.10.31** is unsupported on this platform. Its installed WHEEL declares
+  **`cp39-cp39-linux_x86_64`**, incompatible with Windows CPython 3.13, and its RECORD lists
+  `mediapipe/tasks/c/libmediapipe_c_lib.cpython-39-x86_64-linux-gnu.so`. The installer log names
+  `mediapipe-0.10.31-py3-none-win_amd64.whl`. This is contradictory artifact/platform evidence;
+  no import/inference test was used to bypass it. The prior package-index/filename metadata feasibility
+  finding was insufficient to establish the compatibility of installed contents.
+
+Owner classification rule C therefore requires **STOP before startup**. Final state:
+**PREFLIGHT_BLOCKED**, with an additional installed dependency/platform incompatibility. No replacement
+version, wheel metadata edit, package removal, `--no-deps`, Gradio/Pillow change or Forge patch was tried.
+The observed install also has protobuf **7.36.2**, despite Neo's requirements listing **4.25.9**:
+upstream extension installation can alter packages and its final `requirements_met` check only rejects
+versions below a pin. This is recorded drift, not a third package-manager incompatibility or a repair.
+
+Runtime/API identity, checkpoint/VAE/LoRA visibility, ADetailer detector discovery, upscale/ControlNet
+capability and the physical managed-runtime smoke are **NOT EXECUTED** because the install prerequisite
+failed. No Forge server PID or runtime ownership was established; installation subprocesses exited.
+The no-download flag/config/offline cache environment was applied to installation, but actual detector
+discovery remains unproven. The isolated HF cache is empty and Forge model directories contain only
+source placeholder text files; no model/detector weights were downloaded. Existing A1111/Comfy and the
+protected dirty worktree were untouched. No generation endpoint was called; no physical jobs ran.
+
+The exact eight-job A/B/C/D structure, assets, hashes, prompts and settings are unchanged. Installed
+package evidence cannot yet authorize execution. Owner adjudication of the additional MediaPipe
+artifact/platform issue is required before a further bounded installation action or runtime start;
+physical qualification still requires separate approval after successful preflight and frozen provenance.
+Forge remains unqualified/non-default, A1111 remains default, and FORGE-110 was not started.
+
+Machine-local evidence: installer exit/log, installed freeze and package metadata, both consistency
+checks, MediaPipe WHEEL/RECORD platform evidence, passive runtime capture and complete HOLD report.
+An initial `pip inspect` console capture failed on cp1252 encoding of a package-description emoji;
+the read-only capture was repeated with `-X utf8` successfully, retaining the original partial output.
+This did not mutate packages or change the installer/consistency verdict.

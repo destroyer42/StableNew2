@@ -5,7 +5,7 @@
   "purpose": "Evidence-oriented descriptor of the isolated Forge Neo qualification runtime. This is NOT a production runtime/bootstrap contract (that belongs to PR-IMG-FORGE-110 after qualification passes) and nothing in StableNew launches Forge from this file.",
   "backend_id": "forge_webui",
   "default_image_backend_id": "a1111_webui",
-  "qualification_status": "SOURCE_REVIEWED / PHYSICAL_QUALIFICATION_NOT_AUTHORIZED",
+  "qualification_status": "INSTALLED_UNQUALIFIED / PREFLIGHT_BLOCKED / PHYSICAL_QUALIFICATION_NOT_AUTHORIZED",
   "classification": null,
   "classification_allowed_values": [
     "FORGE_TECHNICAL_PASS / PRODUCT_PARITY_PASS",
@@ -31,7 +31,7 @@
     },
     "license": "AGPL-3.0",
     "lineage_reference_only": "https://github.com/lllyasviel/stable-diffusion-webui-forge",
-    "note": "Re-fetch neo and compare against this commit before installation; if it moved, re-review the API matrix instead of silently advancing the pin."
+    "note": "Owner froze this exact qualification candidate independently of current neo. Verify checkout SHA; never silently advance the pin."
   },
   "python": {
     "requirement": "CPython 3.13.x (upstream tested with 3.13.12)",
@@ -68,8 +68,9 @@
     ],
     "qualification_port": 7871,
     "port_rationale": "StableNew's WebUI discovery scans 7860-7869; a distinct port outside that range keeps the Forge qualification endpoint from being auto-discovered as a default A1111.",
-    "extension_safety_flags_pending_owner_approval": ["--ad-no-huggingface"],
-    "extension_safety_flags_rationale": "The ADetailer extension otherwise downloads its default YOLO detectors from HuggingFace at startup. Model downloads are not authorized, so the no-download flag is required for a fail-closed run; it is listed separately from the frozen launch flags because it deviates from the three-flag launch contract and needs explicit owner approval.",
+    "extension_safety_flags_pending_owner_approval": [],
+    "extension_safety_flags_owner_approved": ["--ad-no-huggingface"],
+    "extension_safety_flags_rationale": "Owner approved the no-download flag and existing-detector routing for the isolated install/preflight phase. Physical inference remains unauthorized. The extension flag remains explicit and separate from the three core launch flags.",
     "forbidden_tuning_flags": [
       "--xformers",
       "--sage",
@@ -84,10 +85,26 @@
     "neo_requirements_file": "requirements.txt at the pinned commit (exact pins, includes diffusers 0.37.1, transformers 4.57.6, numpy 2.3.5, fastapi 0.127.1)",
     "model_downloads": "NOT authorized (checkpoints, VAEs, LoRAs, ControlNet models, detectors)",
     "adetailer_proposed_pins": ["ultralytics==8.3.253", "mediapipe==0.10.31", "rich==14.3.4"],
-    "adetailer_metadata_feasibility": "Windows CPython 3.13.16: the proposed ADetailer closure has 45 package versions with compatible wheel metadata and no requirement conflicts against shared Forge direct pins. Ultralytics 8.3.253 accepts numpy 2.3.5; MediaPipe 0.10.31 has a non-yanked py3-none-win_amd64 wheel. Rich reuses Forge's pin. This is metadata feasibility for the ADetailer closure, not a complete Forge bootstrap lock or an installed/imported runtime verdict.",
-    "install_plan_status": "ISOLATED_UV_PROTOCOL_PREPARED / UPSTREAM_METADATA_INCONSISTENCY / NOT_AUTHORIZED",
-    "install_plan_blocker": "Neo's unchanged launcher requests gradio==4.40.0 (Pillow>=8.0,<11.0), while its requirements.txt pins Pillow==12.3.0. The separately authorized installation will follow upstream --uv, capture resolution/versions and package-manager consistency, and retain this discrepancy as runtime/package qualification evidence. Installer success or inconsistency alone is neither a technical pass nor a runtime failure. No pin override, candidate substitution or installation has been performed.",
-    "install_protocol": "Qualification document section 12; machine-local exact-command proposal in reports/img_forge_100/forge-install-protocol.md. Installation-only --exit and --skip-torch-cuda-test are distinct from subsequent physical runtime flags."
+    "adetailer_metadata_feasibility": "Historical index/filename-only feasibility: a 45-package closure had no declared requirement conflicts against shared Forge direct pins, and MediaPipe 0.10.31 was advertised as py3-none-win_amd64. Actual installed contents now contradict that platform claim (Linux WHEEL tag and .so); installed compatibility is BLOCKED. The historical snapshot is not a full Forge lock or an imported runtime verdict.",
+    "install_plan_status": "ISOLATED_UV_INSTALLER_EXIT_0 / PACKAGING_CONFLICTS / PREFLIGHT_BLOCKED",
+    "install_plan_blocker": "The authorized frozen --uv installer completed, but uv pip check and pip check both report the known Gradio 4.40.0/Pillow 12.3.0 conflict AND an unexpected MediaPipe 0.10.31 platform incompatibility. Installed MediaPipe WHEEL declares cp39-cp39-linux_x86_64 and RECORD contains a Linux .so despite the installer naming a py3-none-win_amd64 wheel. Owner rule C requires STOP before runtime startup. No package/pin/source repair was attempted; this is not an inference compatibility verdict.",
+    "installation_observation": {
+      "installer_exit": 0,
+      "python": "3.13.16 Windows AMD64",
+      "torch": "2.13.0+cu130",
+      "torchvision": "0.28.0+cu130",
+      "torch_cuda_metadata": "13.0",
+      "gradio": "4.40.0",
+      "pillow": "12.3.0",
+      "mediapipe": "0.10.31",
+      "uv_check_exit": 1,
+      "pip_check_exit": 1,
+      "additional_conflict": "MediaPipe installed wheel platform tag mismatch",
+      "runtime_started": false,
+      "generation_dispatched": false,
+      "evidence": "Machine-local evidence-install-d70373eb; qualification document section 13"
+    },
+    "install_protocol": "Qualification document section 12 records the original protocol; section 13 records its authorized execution and blocking result. Machine-local exact-command proposal in reports/img_forge_100/forge-install-protocol.md. Installation-only --exit and --skip-torch-cuda-test are distinct from subsequent runtime flags."
   },
   "model_reference": {
     "mechanism": "--forge-ref-a1111-home <A1111 root> (modules/launch_utils.py::configure_a1111_reference)",
@@ -108,7 +125,7 @@
     "consequence": "ADetailer detector models are not made visible by the model reference; see adetailer.detector_resolution."
   },
   "adetailer": {
-    "decision": "CANDIDATE_SELECTED_SOURCE_REVIEWED / NOT_INSTALLED / NOT_QUALIFIED",
+    "decision": "FROZEN_CANDIDATE_INSTALLED / PREFLIGHT_BLOCKED / NOT_QUALIFIED",
     "repository": "https://github.com/Bing-su/adetailer",
     "commit": "3a599f5d4607d8f9d8b9fc5a15526197418dae1a",
     "version": "26.2.0",
