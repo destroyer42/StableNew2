@@ -744,10 +744,12 @@ class TestGP11MixedQueue:
             randomization_plan=RandomizationPlanV2(
                 enabled=True, model_choices=["m1", "m2"], max_variants=2
             ),
+            rng_seed=7,
         )
         plain = builder.build_jobs(base_config=base)
 
-        assert [job.config["model"] for job in randomized] == ["m1", "m2"]
+        # Variant order is a seeded shuffle; assert the set, not a particular order.
+        assert sorted(job.config["model"] for job in randomized) == ["m1", "m2"]
         assert [job.variant_total for job in randomized] == [2, 2]
         assert len(plain) == 1
         assert plain[0].config["model"] == "base-model"
