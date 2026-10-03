@@ -1,10 +1,17 @@
 name: StableNew CI
 
+# One workflow per pull-request head: every PR base is covered (including stacked PRs that
+# target another feature branch), so ordinary branch pushes do not start a duplicate run.
+# Use workflow_dispatch for an explicit rerun or recovery.
 on:
-  push:
-    branches: [ "**" ]
   pull_request:
     branches: [ "**" ]
+  workflow_dispatch:
+
+# A newer head for the same PR (or manual ref) supersedes the run still in flight.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   # Required gate: repository truth + lint/types + isolated deterministic tests.
@@ -12,18 +19,14 @@ jobs:
   required:
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        python-version: [ "3.11", "3.12" ]
-
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.12
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.12"
 
     - name: Install pip tools
       run: |
@@ -64,31 +67,28 @@ jobs:
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: required-test-results-${{ matrix.python-version }}
+        name: required-test-results
         path: |
           .pytest_cache/
 
   # Informational gate: the broader configured suite (headless-safe GUI v2,
   # fake-backend integration, tools, video). It runs to completion (no
   # --maxfail) with a per-test timeout so one hang cannot mask the census, and
-  # failures are reported without blocking merges. Promote it to required only
-  # after it is proven green on both Python versions.
+  # failures are reported without blocking merges. Success output is a concise
+  # summary; failures and errors keep their diagnostics. Promote it to required
+  # only after it is proven green.
   full-suite:
     runs-on: ubuntu-latest
     continue-on-error: true
-
-    strategy:
-      matrix:
-        python-version: [ "3.11", "3.12" ]
 
     steps:
     - name: Checkout repository
       uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Set up Python 3.12
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
+        python-version: "3.12"
 
     - name: Install system deps for Tk (required for GUI tests)
       run: |
@@ -105,12 +105,12 @@ jobs:
       uses: GabrielBB/xvfb-action@v1
       with:
         run: |
-          python -m pytest -v -rfE --tb=short --timeout=300
+          python -m pytest -q -rfE --tb=short --timeout=300
 
     - name: Upload full test results
       uses: actions/upload-artifact@v4
       if: always()
       with:
-        name: full-test-results-${{ matrix.python-version }}
+        name: full-test-results
         path: |
           .pytest_cache/

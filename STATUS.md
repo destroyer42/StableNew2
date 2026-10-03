@@ -7,6 +7,11 @@ Updated: 2026-10-02
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
+- Supported runtime/validation (PR-DEVEX-100): StableNew's application/native-SVD interpreter is
+  CPython 3.12.x only (3.11 and 3.13+ rejected by readiness/bootstrap). GitHub CI runs once per PR head
+  on Python 3.12 (one required gate, one informational full-suite job); the local `run_pr_gate.py`
+  pytest gates are quiet on success and complete on failure. See
+  `docs/StableNew_Coding_and_Testing_v2.6.md`.
 - Active diagnostic evidence: `DIAG-GPU-130 - Post-5600 Black-Screen Recurrence` - **XMP-OFF
   RECURRENCE / ACTIVE OBSERVATION; EXIT CRITERION NOT MET**. The owner confirms the RAM XMP profile
   has now been removed. After the 2026-09-25 07:06:20 ET boot, Windows reports both DIMMs at

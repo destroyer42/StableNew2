@@ -2,12 +2,12 @@
 
 This is the canonical setup procedure for a Windows StableNew environment
 that will run the native Stable Video Diffusion (SVD) XT backend. It supports
-official Python 3.11 or 3.12, an NVIDIA CUDA runtime, and FFmpeg/ffprobe.
+official Python 3.12, an NVIDIA CUDA runtime, and FFmpeg/ffprobe.
 
 ## Prerequisites
 
-Install an official 64-bit Python 3.11 or 3.12. A supported Python launcher
-is preferred; an explicit executable can also be passed to the helper. The
+Install an official 64-bit Python 3.12. A Python launcher that resolves
+`py -3.12` is preferred; an explicit executable can also be passed to the helper. The
 machine must have a working NVIDIA driver and an NVIDIA GPU suitable for the
 accepted SVD profile.
 
@@ -67,8 +67,8 @@ not start, stop, adopt, or configure it.
 
 ## Common failures
 
-- **Unsupported Python:** install official 3.11 or 3.12, or pass
-  `-PythonPath` to that executable.
+- **Unsupported Python:** install official 3.12 (3.11 and 3.13+ are
+  rejected), or pass `-PythonPath` to a 3.12 executable.
 - **CPU-only Torch or CUDA unavailable:** rerun with the official CUDA index
   using `-CudaIndexUrl` if the validated index has changed; do not accept a
   CPU-only environment for native SVD.

@@ -107,8 +107,8 @@ the approved work package explicitly authorizes that action.
 regression coverage when practical; use temporary state/artifact roots and no
 real network, WebUI, model, GPU, or GUI display unless explicitly opt-in.
 Start with focused validation, run `python tools/ci/run_pr_gate.py` when the
-repository policy requires it, and treat required GitHub Python 3.11/3.12 CI as
-the compatibility verdict. Never weaken tests, skip failures, or change
+repository policy requires it, and treat the required GitHub Python 3.12 CI job
+as the integration verdict. Never weaken tests, skip failures, or change
 acceptance to obtain green results. Informational failures and unrelated debt
 do not broaden the work package.
 

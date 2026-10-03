@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -90,6 +91,98 @@ def test_full_suite_lane_is_informational_and_not_fail_fast() -> None:
     assert "--maxfail" not in full_suite
     assert "pytest-timeout" in full_suite
     assert "--timeout" in full_suite
+
+
+def _ci_section(start: str, end: str | None = None) -> str:
+    workflow = _read(".github/workflows/ci.yml")
+    begin = workflow.index(start)
+    return workflow[begin : workflow.index(end, begin) if end else None]
+
+
+def test_ci_is_python_312_only_with_no_version_matrix() -> None:
+    workflow = _read(".github/workflows/ci.yml")
+
+    assert "matrix" not in workflow
+    assert "strategy:" not in workflow
+    assert "3.11" not in workflow
+    assert workflow.count('python-version: "3.12"') == 2  # required + full-suite
+
+
+def test_ci_runs_once_per_pull_request_head_including_stacked_prs() -> None:
+    triggers = _ci_section("\non:", "\nconcurrency:")
+
+    assert "pull_request:" in triggers
+    assert 'branches: [ "**" ]' in triggers  # stacked PRs may target a feature branch
+    assert "workflow_dispatch:" in triggers
+    assert "push:" not in triggers  # a branch push plus its PR would duplicate every run
+
+
+def test_superseded_ci_runs_are_cancelled_per_pull_request() -> None:
+    concurrency = _ci_section("\nconcurrency:", "\njobs:")
+
+    assert "cancel-in-progress: true" in concurrency
+    assert "github.event.pull_request.number" in concurrency
+
+
+def test_ci_census_is_one_required_job_and_one_full_suite_job() -> None:
+    jobs = _ci_section("\njobs:")
+
+    assert re.findall(r"^  ([a-z][a-z-]*):\s*$", jobs, flags=re.MULTILINE) == [
+        "required",
+        "full-suite",
+    ]
+    required = _ci_section("  required:", "  full-suite:")
+    assert "continue-on-error" not in required  # the required gate is never masked
+
+
+def test_full_suite_reports_a_quiet_summary_with_failure_diagnostics() -> None:
+    full_suite = _ci_section("  full-suite:")
+    command = next(line for line in full_suite.splitlines() if "python -m pytest" in line)
+    flags = command.split()
+
+    assert "-q" in flags  # concise green result
+    assert not {"-v", "-vv", "-vvv", "--verbose"} & set(flags)  # no per-test success logging
+    assert "-rfE" in flags  # failures and errors stay summarized
+    assert "--tb=short" in flags
+    assert "--timeout=300" in flags
+    assert "|" not in command and "/dev/null" not in command  # no hidden diagnostics
+
+
+def test_pytest_gates_share_one_quiet_runner_authority() -> None:
+    collection = _read("tools/ci/run_collection_gate.py")
+    smoke = _read("tools/ci/run_required_smoke.py")
+
+    assert "capture_output=True" in collection
+    assert "from run_collection_gate import" in smoke and "run_pytest_gate" in smoke
+    assert "subprocess" not in smoke  # smoke must not grow a second pytest runner
+
+
+def test_python_312_is_the_sole_runtime_contract_across_current_authorities() -> None:
+    pyproject = _read("pyproject.toml")
+    pre_commit = _read(".pre-commit-config.yaml")
+    bootstrap = _read("scripts/bootstrap_windows.ps1")
+    readiness = _read("src/services/operator_readiness_service.py")
+
+    assert 'requires-python = ">=3.12,<3.13"' in pyproject
+    assert 'python_version = "3.12"' in pyproject
+    assert 'target-version = "py312"' in pyproject
+    assert "py311" not in pyproject
+    assert "python3.11" not in pre_commit and "3.11" not in pre_commit
+    assert "'^3\\.12\\.'" in bootstrap  # rejects every other minor, including 3.11 and 3.13+
+    assert 'foreach ($requested in @("3.12"))' in bootstrap
+    assert "3.11" not in bootstrap
+    assert "SUPPORTED_PYTHON_MINOR = (3, 12)" in readiness
+    for workflow in (ROOT / ".github/workflows").glob("*.yml"):
+        assert "3.11" not in workflow.read_text(encoding="utf-8"), workflow.name
+
+
+def test_testing_authority_defines_the_three_validation_levels() -> None:
+    coding = _read("docs/StableNew_Coding_and_Testing_v2.6.md")
+
+    for heading in ("Level 1", "Level 2", "Level 3"):
+        assert heading in coding
+    assert "Python 3.12" in coding
+    assert "Python 3.11" not in coding
 
 
 def test_shutdown_leak_process_test_is_explicit_opt_in() -> None:

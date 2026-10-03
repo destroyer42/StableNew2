@@ -51,8 +51,8 @@ function Get-PythonVersion {
         throw "Python at '$Executable' returned no version."
     }
     $version = (($output | Select-Object -Last 1).ToString()).Trim()
-    if ($version -notmatch '^3\.(11|12)\.') {
-        throw "Python 3.11 or 3.12 is required; '$Executable' reports '$version'. Install a supported official Python or pass -PythonPath."
+    if ($version -notmatch '^3\.12\.') {
+        throw "Python 3.12 is required; '$Executable' reports '$version'. Install official Python 3.12 or pass -PythonPath."
     }
     return $version
 }
@@ -68,7 +68,7 @@ function Resolve-SupportedPython {
 
     $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
     if ($null -ne $launcher) {
-        foreach ($requested in @("3.12", "3.11")) {
+        foreach ($requested in @("3.12")) {
             try {
                 $probe = & $launcher.Source "-$requested" "-c" "import sys; print(sys.executable)" 2>$null
                 if (($LASTEXITCODE -eq 0) -and ($null -ne $probe)) {
@@ -78,7 +78,7 @@ function Resolve-SupportedPython {
                     }
                 }
             } catch {
-                # Try the next supported launcher target.
+                # Fall through to the python.exe check, which still enforces Python 3.12.
             }
         }
     }
@@ -87,7 +87,7 @@ function Resolve-SupportedPython {
     if ($null -ne $pythonCommand) {
         return $pythonCommand.Source
     }
-    throw "No Python executable was found. Install official Python 3.11 or 3.12, or pass -PythonPath."
+    throw "No Python executable was found. Install official Python 3.12, or pass -PythonPath."
 }
 
 function Assert-SafeVenvPath {

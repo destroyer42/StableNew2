@@ -7,6 +7,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -128,10 +129,24 @@ def repository_test_target(target: str) -> str:
     return f"{resolved}::{node}" if separator else resolved
 
 
+def _summary_line(output: str) -> str:
+    """Last non-empty pytest line, e.g. ``129 passed in 17.08s`` or ``4110 tests collected``."""
+
+    for line in reversed(output.splitlines()):
+        if line.strip():
+            return line.strip().strip("=").strip()
+    return "pytest produced no output"
+
+
 def run_pytest_gate(pytest_args: Sequence[str]) -> int:
-    """Run pytest away from the repo and fail on any observed content change."""
+    """Run pytest away from the repo and fail on any observed content change.
+
+    Output is quiet on success (one compact line) and complete on failure: pytest's captured
+    stdout/stderr is printed whenever pytest fails or the run changed the repository.
+    """
 
     before = snapshot_repository()
+    started = time.monotonic()
     with tempfile.TemporaryDirectory(prefix="stablenew-pytest-") as temp_dir:
         temp_root = Path(temp_dir)
         environment = os.environ.copy()
@@ -169,17 +184,32 @@ def run_pytest_gate(pytest_args: Sequence[str]) -> int:
             cwd=temp_root,
             env=environment,
             check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
         )
 
     after = snapshot_repository()
     changed = _changed_paths(before.files, after.files)
     guarded_changed = _changed_paths(before.guarded, after.guarded)
-    if changed or guarded_changed:
+    polluted = sorted(set(changed) | set(guarded_changed))
+    if completed.returncode or polluted:
+        sys.stdout.write(completed.stdout)
+        sys.stderr.write(completed.stderr)
+    if polluted:
         print("pytest changed repository contents:", file=sys.stderr)
-        for path in sorted(set(changed) | set(guarded_changed)):
+        for path in polluted:
             print(f"  {path}", file=sys.stderr)
         return 1
-    return completed.returncode
+    if completed.returncode:
+        print(f"pytest gate FAILED (exit {completed.returncode})", file=sys.stderr)
+        return completed.returncode
+    print(
+        f"pytest gate OK: {_summary_line(completed.stdout)} "
+        f"(repository unchanged, {time.monotonic() - started:.1f}s)"
+    )
+    return 0
 
 
 def main() -> int:
