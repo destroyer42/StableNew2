@@ -100,6 +100,7 @@ def _service(
     path_probe=None,
     python_version: tuple[int, int, int] = (3, 14, 0),
     free_threaded: bool = False,
+    jit_enabled: bool = False,
 ) -> OperatorReadinessService:
     packs = tmp_path / "packs"
     output = tmp_path / "output"
@@ -118,6 +119,7 @@ def _service(
         path_probe=path_probe,
         python_version_provider=lambda: python_version,
         free_threaded_provider=lambda: free_threaded,
+        jit_enabled_provider=lambda: jit_enabled,
     )
 
 
@@ -154,6 +156,19 @@ def test_python_314_is_the_only_ready_runtime(tmp_path: Path) -> None:
     assert runtime.state is OperatorReadinessState.READY
     assert runtime.blocking_reasons == ()
     assert "3.14" in runtime.summary
+
+
+def test_jit_enabled_python_314_is_not_a_supported_runtime(tmp_path: Path) -> None:
+    runtime = (
+        _service(tmp_path, python_version=(3, 14, 8), jit_enabled=True)
+        .collect()
+        .record_for("python_runtime")
+    )
+
+    assert runtime is not None
+    assert runtime.state is OperatorReadinessState.ACTION_REQUIRED
+    assert "JIT" in runtime.blocking_reasons[0]
+    assert "PYTHON_JIT" in runtime.operator_actions[0]
 
 
 def test_free_threaded_python_314_is_not_a_supported_runtime(tmp_path: Path) -> None:

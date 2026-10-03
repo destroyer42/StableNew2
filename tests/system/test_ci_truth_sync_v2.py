@@ -173,6 +173,7 @@ def test_python_314_is_the_sole_runtime_contract_across_current_authorities() ->
     assert "'^3\\.14\\.'" in bootstrap  # rejects every other minor, including 3.11 and 3.13+
     assert 'foreach ($requested in @("3.14"))' in bootstrap
     assert "Py_GIL_DISABLED" in bootstrap  # the free-threaded build is rejected
+    assert "_jit" in bootstrap and "PYTHON_JIT" in bootstrap  # an enabled JIT is rejected
     assert "3.11" not in bootstrap and "3.12" not in bootstrap
     assert "SUPPORTED_PYTHON_MINOR = (3, 14)" in readiness
     for workflow in (ROOT / ".github/workflows").glob("*.yml"):

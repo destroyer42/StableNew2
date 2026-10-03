@@ -64,6 +64,15 @@ function Get-PythonVersion {
     if ((($freeThreaded | Select-Object -Last 1).ToString()).Trim() -ne "0") {
         throw "'$Executable' is a free-threaded Python 3.14 build, which StableNew does not support. Install the standard (GIL) build of Python 3.14 or pass -PythonPath."
     }
+    # The experimental JIT is never enabled. It is a runtime switch (PYTHON_JIT), so this checks the
+    # interpreter as launched from this shell.
+    $jit = Invoke-CheckedProcess `
+        -Executable $Executable `
+        -Arguments @("-c", "import sys; jit = getattr(sys, '_jit', None); print(int(bool(jit is not None and jit.is_enabled())))") `
+        -FailureMessage "Unable to inspect the Python JIT state at '$Executable'."
+    if ((($jit | Select-Object -Last 1).ToString()).Trim() -ne "0") {
+        throw "'$Executable' has the experimental JIT enabled (PYTHON_JIT), which StableNew does not support. Unset PYTHON_JIT and retry."
+    }
     return $version
 }
 

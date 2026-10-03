@@ -179,6 +179,7 @@ class OperatorReadinessService:
         path_probe: PathProbe | None = None,
         python_version_provider: Callable[[], tuple[int, int, int]] | None = None,
         free_threaded_provider: Callable[[], bool] | None = None,
+        jit_enabled_provider: Callable[[], bool] | None = None,
     ) -> None:
         self._repository = repository
         self._webui_connection = webui_connection
@@ -190,6 +191,7 @@ class OperatorReadinessService:
         self._path_probe = path_probe or _probe_directory
         self._python_version_provider = python_version_provider or _current_python_version
         self._free_threaded_provider = free_threaded_provider or _is_free_threaded_build
+        self._jit_enabled_provider = jit_enabled_provider or _is_jit_enabled
 
     def collect(self, *, source_image_path: str | Path | None = None) -> OperatorReadinessSnapshot:
         """Collect a side-effect-free projection of existing authority state."""
@@ -239,6 +241,15 @@ class OperatorReadinessService:
                 (f"Detected {detected} free-threaded build; the free-threaded build is unsupported.",),
                 ("Launch StableNew with the standard (GIL) Python 3.14 build, then refresh readiness.",),
                 "sysconfig.Py_GIL_DISABLED",
+            )
+        if (major, minor) == SUPPORTED_PYTHON_MINOR and self._jit_enabled_provider():
+            return _action_record(
+                "python_runtime",
+                "Python runtime",
+                "StableNew does not support the experimental Python JIT.",
+                (f"Detected {detected} with the experimental JIT enabled (PYTHON_JIT).",),
+                ("Unset PYTHON_JIT (or set it to 0) and relaunch StableNew, then refresh readiness.",),
+                "sys._jit",
             )
         if (major, minor) == SUPPORTED_PYTHON_MINOR:
             return OperatorReadinessRecord(
@@ -502,6 +513,11 @@ def _accepted_svd_baseline_config() -> SVDConfig:
 
 def _is_free_threaded_build() -> bool:
     return bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
+
+
+def _is_jit_enabled() -> bool:
+    jit = getattr(sys, "_jit", None)
+    return bool(jit is not None and jit.is_enabled())
 
 
 def _current_python_version() -> tuple[int, int, int]:
