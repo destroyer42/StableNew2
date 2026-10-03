@@ -107,7 +107,7 @@ def test_forge_vae_is_selected_through_sd_modules_and_forge_additional_modules()
 
     assert entry.status is JobStatus.COMPLETED, entry.error_message
     assert "/sdapi/v1/sd-modules" in transport.paths("GET")
-    assert "/sdapi/v1/sd-vae" not in transport.paths()
+    assert "/sdapi/v1/sd-vae" in transport.paths("GET")  # conflict check during identity probe
     option_writes = [b for v, p, b in transport.calls if v == "POST" and p == "/sdapi/v1/options"]
     assert {"forge_additional_modules": ["sdxl_vae.safetensors"]} in option_writes
     assert not any("sd_vae" in (body or {}) for body in option_writes)
@@ -161,6 +161,10 @@ def test_adetailer_canonical_seed_reaches_both_backends_and_metadata(seed, backe
     assert entry.status is JobStatus.COMPLETED, entry.error_message
     payload = transport.payloads["/sdapi/v1/img2img"][0]
     assert payload["seed"] == seed  # Immutable NJR provenance wins over stale stage extras.
+    face, hand = payload["alwayson_scripts"]["ADetailer"]["args"][2:]
+    for args, k in ((face, 3), (hand, 6)):
+        assert "ad_mask_only_top_k_largest" not in args
+        assert args["ad_mask_filter_method"] == "Area" and args["ad_mask_k"] == k
     variants = entry.result["variants"]
     assert variants
     for manifest in variants:
@@ -223,3 +227,24 @@ def test_generation_paths_constant_covers_the_endpoints_the_forge_backend_may_us
         "/sdapi/v1/img2img",
         "/sdapi/v1/extra-single-image",
     }
+
+
+@pytest.mark.parametrize("backend", ["forge_webui", "a1111_webui", None])
+def test_cmd_flags_500_preserves_positive_identity_and_historical_guard(backend):
+    from tests.helpers.fake_webui_transport import FakeResponse
+
+    class BrokenFlags(FakeWebUITransport):
+        def _get(self, path):
+            if path == "/sdapi/v1/cmd-flags":
+                return FakeResponse({"detail": "upstream response validation"}, 500)
+            return super()._get(path)
+
+    transport = BrokenFlags(flavor="forge", modules=[VAE])
+    entry = _run(_njr(backend, job_id=f"cmd500-{backend}"), transport)
+    if backend == "forge_webui":
+        assert entry.status is JobStatus.COMPLETED, entry.error_message
+        assert len(transport.generation_calls) == 1  # mocked only
+    else:
+        assert entry.status is JobStatus.FAILED
+        assert not transport.generation_calls
+        assert not [c for c in transport.calls if c[0] == "POST"]

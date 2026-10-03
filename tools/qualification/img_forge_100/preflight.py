@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
@@ -15,6 +15,7 @@ READ_PATHS = (
     "/openapi.json", "/sdapi/v1/cmd-flags", "/sdapi/v1/sd-models", "/sdapi/v1/sd-modules",
     "/sdapi/v1/sd-vae", "/sdapi/v1/options", "/sdapi/v1/scripts", "/sdapi/v1/script-info",
     "/sdapi/v1/loras", "/sdapi/v1/upscalers", "/adetailer/v1/ad_model",
+    "/adetailer/v1/schema",
 )
 REQUIRED_ROUTES = {
     "/sdapi/v1/txt2img": "post", "/sdapi/v1/img2img": "post",
@@ -57,6 +58,7 @@ def fetch_json(base_url: str, path: str) -> Any:
 def inspect_endpoint(
     base_url: str, backend: str, *, selected: dict[str, str],
     fetch: Callable[[str, str], Any] = fetch_json, ownership: str = "external",
+    launch_command: Sequence[str] | None = None,
 ) -> dict[str, Any]:
     from src.api.webui_runtime_identity import probe_runtime_identity
 
@@ -68,7 +70,7 @@ def inspect_endpoint(
     routes = (data["/openapi.json"] or {}).get("paths", {})
     for path, method in REQUIRED_ROUTES.items():
         checks[f"route:{path}"] = method in routes.get(path, {})
-    for path in ("/sdapi/v1/cmd-flags", "/sdapi/v1/options", "/sdapi/v1/scripts"):
+    for path in ("/sdapi/v1/options", "/sdapi/v1/scripts"):
         checks[f"available:{path}"] = isinstance(data[path], dict)
     for path in ("/sdapi/v1/sd-models", "/sdapi/v1/script-info", "/sdapi/v1/upscalers"):
         checks[f"available:{path}"] = isinstance(data[path], list)
@@ -90,9 +92,15 @@ def inspect_endpoint(
     checks["upscaler_visible"] = any(selected["upscaler"] == m.get("name")
                                      for m in (data["/sdapi/v1/upscalers"] or []))
     if backend == "forge_webui":
-        checks["downloads_disabled"] = (data["/sdapi/v1/cmd-flags"] or {}).get("ad_no_huggingface") is True
+        # Neo's cmd-flags endpoint can fail response validation. Only a recorded
+        # qualification-owned launch may supply independent flag evidence.
+        flags = data["/sdapi/v1/cmd-flags"]
+        checks["downloads_disabled"] = (
+            isinstance(flags, dict) and flags.get("ad_no_huggingface") is True
+        ) or (ownership == "owned" and "--ad-no-huggingface" in (launch_command or ()))
     return {"endpoint": endpoint, "backend": backend, "observed_identity": observed.identity,
             "ownership": ownership, "checks": checks, "ready": all(checks.values()),
+            "cmd_flags_available": isinstance(data["/sdapi/v1/cmd-flags"], dict),
             "controlnet": ("FORGE_CONTROLNET_RUNTIME_CAPABILITY_PRESENT"
                            if backend == "forge_webui" and "controlnet" in names
                            else "FORGE_CONTROLNET_RUNTIME_CAPABILITY_NOT_OBSERVED"), "responses": data}

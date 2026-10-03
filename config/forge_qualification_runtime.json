@@ -5,7 +5,7 @@
   "purpose": "Evidence-oriented descriptor of the isolated Forge Neo qualification runtime. This is NOT a production runtime/bootstrap contract (that belongs to PR-IMG-FORGE-110 after qualification passes) and nothing in StableNew launches Forge from this file.",
   "backend_id": "forge_webui",
   "default_image_backend_id": "a1111_webui",
-  "qualification_status": "INSTALLED_UNQUALIFIED / PREFLIGHT_BLOCKED / PHYSICAL_QUALIFICATION_NOT_AUTHORIZED",
+  "qualification_status": "INSTALLED_UNQUALIFIED / PREFLIGHT_PASS_WITH_KNOWN_PACKAGING_CONFLICT / PHYSICAL_QUALIFICATION_NOT_AUTHORIZED",
   "classification": null,
   "classification_allowed_values": [
     "FORGE_TECHNICAL_PASS / PRODUCT_PARITY_PASS",
@@ -24,7 +24,9 @@
     "bounded_review": {
       "parent": "97b26fb404314a11dad7cdde2706da57ea53f4f2",
       "commit_message": "bump",
-      "changed_files": ["requirements.txt"],
+      "changed_files": [
+        "requirements.txt"
+      ],
       "exact_change": "comfy-kitchen==0.2.36 -> comfy-kitchen==0.2.37",
       "classification": "NON_MATERIAL_FOR_FROZEN_FP16_SDXL_MATRIX",
       "reason": "Forge API, launcher, Python/Torch/CUDA, model/VAE/reference and ControlNet source are unchanged. Kitchen changes affect quantized kernels; the selected checkpoint has only F16 tensors and no quantization keys, and Comfy-Kitchen attention is opt-in and not enabled by the frozen flags. This is source/metadata evidence, not physical parity evidence."
@@ -69,8 +71,13 @@
     "qualification_port": 7871,
     "port_rationale": "StableNew's WebUI discovery scans 7860-7869; a distinct port outside that range keeps the Forge qualification endpoint from being auto-discovered as a default A1111.",
     "extension_safety_flags_pending_owner_approval": [],
-    "extension_safety_flags_owner_approved": ["--ad-no-huggingface"],
-    "qualification_runtime_flags_owner_approved": ["--uv", "--skip-install"],
+    "extension_safety_flags_owner_approved": [
+      "--ad-no-huggingface"
+    ],
+    "qualification_runtime_flags_owner_approved": [
+      "--uv",
+      "--skip-install"
+    ],
     "skip_install_scope": "Qualification only: dependencies were prepared separately; disable extension installers to prevent reinstalling the owner-excluded broken MediaPipe artifact. Not a FORGE-110 production policy.",
     "extension_safety_flags_rationale": "Owner approved the no-download flag and existing-detector routing for the isolated install/preflight phase. Physical inference remains unauthorized. The extension flag remains explicit and separate from the three core launch flags.",
     "forbidden_tuning_flags": [
@@ -86,10 +93,15 @@
     "neo_default_torch": "torch==2.13.0+cu130 torchvision==0.28.0+cu130 (modules/launch_utils.py default install command)",
     "neo_requirements_file": "requirements.txt at the pinned commit (exact pins, includes diffusers 0.37.1, transformers 4.57.6, numpy 2.3.5, fastapi 0.127.1)",
     "model_downloads": "NOT authorized (checkpoints, VAEs, LoRAs, ControlNet models, detectors)",
-    "adetailer_proposed_pins": ["ultralytics==8.3.253", "mediapipe==0.10.31", "rich==14.3.4"],
+    "historical_bing_su_adetailer_proposed_pins": [
+      "ultralytics==8.3.253",
+      "mediapipe==0.10.31",
+      "rich==14.3.4"
+    ],
+    "current_yolo_dependency_profile": "Reuse installed ultralytics==8.3.253; MediaPipe absent by owner decision; ADetailer-Neo installer disabled. No package changes this pass.",
     "adetailer_metadata_feasibility": "Historical advertised MediaPipe wheel metadata was contradicted by installed Linux contents. Owner adjudicated MediaPipe outside the accepted YOLO face/hand contract and authorized uninstall without replacement. No formal installed-distribution dependency is missing afterward; both checks report only the known Gradio/Pillow conflict. This does not prove extension registration or inference.",
-    "install_plan_status": "FORGE_INSTALL_WITH_KNOWN_METADATA_CONFLICT / PREFLIGHT_BLOCKED_RUNTIME_CONTRACT",
-    "install_plan_blocker": "After authorized MediaPipe removal, Gradio 4.40.0/Pillow 12.3.0 is the sole package inconsistency. Runtime preflight is blocked separately: cmd-flags returns HTTP500 response validation errors for port and forge_ref_a1111_home; ADetailer Script construction fails because shared.cmd_opts.use_cpu is absent. Owner hard gates 2 and 6 stopped further preflight. No source/extension/dependency repair was attempted.",
+    "install_plan_status": "FORGE_INSTALL_WITH_KNOWN_METADATA_CONFLICT / NON_GENERATION_PREFLIGHT_PASS",
+    "install_plan_blocker": "No remaining non-generation runtime blocker. Gradio/Pillow packaging conflict remains. Physical qualification requires owner approval. Historical failed candidates/results are retained below.",
     "installation_observation": {
       "snapshot_stage": "HISTORICAL_BEFORE_OWNER_AUTHORIZED_MEDIAPIPE_REMOVAL",
       "installer_exit": 0,
@@ -123,7 +135,25 @@
       "generation_requests": 0,
       "evidence": "Machine-local evidence-install-d70373eb/yolo-adjudication; qualification document section 14"
     },
-    "install_protocol": "Qualification document section 12 records the original protocol; section 13 records its authorized execution and blocking result. Machine-local exact-command proposal in reports/img_forge_100/forge-install-protocol.md. Installation-only --exit and --skip-torch-cuda-test are distinct from subsequent runtime flags."
+    "install_protocol": "Qualification document section 12 records the original protocol; section 13 records its authorized execution and blocking result. Machine-local exact-command proposal in reports/img_forge_100/forge-install-protocol.md. Installation-only --exit and --skip-torch-cuda-test are distinct from subsequent runtime flags.",
+    "neo_profile_observation": {
+      "adetailer_sha": "af228eba7a3f3691a25bcd1fc94aa95e600dd3e6",
+      "extension_installer_executed": false,
+      "mediapipe": "ABSENT / NO_REPLACEMENT / NO_RESIDUAL_FILES",
+      "ultralytics": "8.3.253",
+      "uv_check_exit": 1,
+      "pip_check_exit": 1,
+      "sole_package_conflict": "Gradio 4.40.0 requires Pillow>=8,<11; installed Pillow12.3.0",
+      "package_freeze_unchanged": true,
+      "runtime_identity": "forge_webui from options and sd-modules; cmd-flags HTTP500 remains upstream",
+      "adetailer_registration": "ADetailer / Neo; frozen/live schema agreement",
+      "detectors": "Existing face_yolov8n.pt and hand_yolov8n.pt discovered offline; no downloads",
+      "controlnet": "FORGE_CONTROLNET_RUNTIME_CAPABILITY_PRESENT",
+      "managed_runtime_smoke": "PASS (GUI admission mocked; actual launch, health, identity, ownership, stop)",
+      "qualification_owned_runtime_stopped": true,
+      "generation_requests": 0,
+      "evidence": "Machine-local evidence-install-d70373eb/neo-adetailer-preflight-complete; qualification document section 15"
+    }
   },
   "model_reference": {
     "mechanism": "--forge-ref-a1111-home <A1111 root> (modules/launch_utils.py::configure_a1111_reference)",
@@ -144,16 +174,22 @@
     "consequence": "ADetailer detector models are not made visible by the model reference; see adetailer.detector_resolution."
   },
   "adetailer": {
-    "decision": "FROZEN_CANDIDATE_INSTALLED / PREFLIGHT_BLOCKED / NOT_QUALIFIED",
-    "repository": "https://github.com/Bing-su/adetailer",
-    "commit": "3a599f5d4607d8f9d8b9fc5a15526197418dae1a",
-    "version": "26.2.0",
-    "commit_date": "2026-02-05T22:43:40+09:00",
-    "install_py_dependencies": ["ultralytics>=8.3.75", "mediapipe>=0.10.13", "rich>=13.0.0"],
-    "required_detectors": ["face_yolov8n.pt", "hand_yolov8n.pt"],
+    "decision": "OWNER_FROZEN_NEO_CANDIDATE_INSTALLED / NON_GENERATION_PREFLIGHT_PASS / NOT_PHYSICALLY_QUALIFIED",
+    "repository": "https://github.com/Haoming02/ADetailer-Neo",
+    "commit": "af228eba7a3f3691a25bcd1fc94aa95e600dd3e6",
+    "version": "Neo",
+    "commit_date": "2026-09-30T21:04:12+08:00",
+    "install_py_dependencies": [
+      "ultralytics==8.3.253",
+      "mediapipe==0.10.35"
+    ],
+    "required_detectors": [
+      "face_yolov8n.pt",
+      "hand_yolov8n.pt"
+    ],
     "qualification_profile": {
-      "yolo_face": "REQUIRED / QUALIFY (registration currently blocked)",
-      "yolo_hands": "REQUIRED / QUALIFY (registration currently blocked)",
+      "yolo_face": "REQUIRED / QUALIFY (offline API discovery passed; inference not authorized)",
+      "yolo_hands": "REQUIRED / QUALIFY (offline API discovery passed; inference not authorized)",
       "mediapipe_face": "NOT QUALIFIED",
       "mediapipe_mesh": "NOT QUALIFIED",
       "mediapipe_eyes": "NOT QUALIFIED",
@@ -161,22 +197,30 @@
     },
     "mediapipe_substitution": "forbidden (StableNew's accepted contract is the REST payload with YOLO detectors)",
     "detector_resolution": {
-      "default_source": "huggingface_hub.hf_hub_download into the HuggingFace cache (network)",
-      "offline_flag": "--ad-no-huggingface (cmd_opts.ad_no_huggingface): local-files-only lookup; absent detectors resolve INVALID and are dropped",
-      "local_directory_option": "ad_extra_models_dir (extension option scanned for *.pt)",
+      "default_source": "torch.hub.download_url_to_file for ten defaults if no_huggingface is false",
+      "offline_flag": "--ad-no-huggingface skips the entire default-download branch, including MediaPipe/Ultralytics URLs",
+      "local_directory_option": "ad_extra_models_dir: pipe-separated directories recursively scanned for .pt/.tflite/.task",
       "hard_gate": "If face_yolov8n.pt or hand_yolov8n.pt cannot be resolved from an existing local directory, STOP before downloading anything and return the evidence."
     },
     "forge_neo_compatibility_review": {
-      "static_imports": "every modules.* symbol the extension imports exists in Neo at the pinned commit (processing.StableDiffusionProcessing, create_binary_mask, devices.NansException, sd_samplers.all_samplers, sd_schedulers.schedulers, ui_components.InputAccordion, safe.unsafe_torch_load, paths.extensions_dir/extensions_builtin_dir/models_path, img2img, images, script_callbacks, scripts, shared, sd_models, extensions)",
-      "forge_support_in_extension": "controlnet_ext_forge.py present (ControlNet via Forge)",
-      "not_proven": "Static symbol presence is not behavioral evidence. Ecosystem reports of Forge Neo + ADetailer incompatibilities were not verified from the cloud session; only a physical run proves the REST contract.",
-      "if_incompatible": "STOP. Do not cycle through community forks silently; return the incompatibility and candidate evidence for owner adjudication."
+      "scope": "Frozen source only; no history review, installer or inference",
+      "device": "YOLO uses shared.device; no use_cpu dependency",
+      "mediapipe": "Imports only inside MediaPipe predictors; absent and NOT QUALIFIED",
+      "seed": "get_seed uses p.all_seeds/p.seed; each tab inherits seed or seed+tab index according to existing ad_same_seed_for_each_tab option",
+      "vae": "Forge-aware checkpoint/module overrides; inherited embedded VAE remains representable",
+      "payload": "All active face/hand fields are SAME. Invalid ad_mask_only_top_k_largest is mechanically represented by existing ad_mask_filter_method + ad_mask_k; removed from shared payload. Both frozen schemas forbid that extra key.",
+      "schema_evidence": "tests/data/contracts/adetailer_neo_af228eba_schema.json"
+    },
+    "rejected_candidate": {
+      "repository": "https://github.com/Bing-su/adetailer",
+      "commit": "3a599f5d4607d8f9d8b9fc5a15526197418dae1a",
+      "reason": "Runtime constructor requires shared.cmd_opts.use_cpu absent in frozen Forge Neo; owner rejected without patching."
     }
   },
   "controlnet": {
     "stage": "none (StableNew has no ControlNet image stage; none is added by this package)",
     "forge_capability": "built-in extension extensions-builtin/sd_forge_controlnet (script title \"ControlNet\")",
-    "qualification": "read-only: confirm the script is listed by /sdapi/v1/scripts, confirm referenced ControlNet model directories are visible, mutate/download nothing"
+    "qualification": "read-only: script/script-info and referenced model/module lists observed; FORGE_CONTROLNET_RUNTIME_CAPABILITY_PRESENT. Version route unavailable. No inference, download or StableNew image stage."
   },
   "api_surface_reviewed": {
     "source_file": "modules/api/api.py",
@@ -203,7 +247,7 @@
       "vae_selection": "the sd_vae option is a non-interactive 'Automatic' placeholder; the effective VAE is the forge_additional_modules option (written by module name, read back as file paths); unknown module names are silently dropped",
       "per_request_vae": "override_settings.sd_vae is handled specially in modules/processing.py (_vae_override); behavior requires physical confirmation"
     },
-    "identity_evidence": "/sdapi/v1/cmd-flags contains forge_ref_a1111_home AND /sdapi/v1/sd-modules returns a list"
+    "identity_evidence": "/sdapi/v1/options mapping contains explicit Forge-only options AND /sdapi/v1/sd-modules list, without conflicting sd-vae signature. cmd-flags is optional corroboration."
   },
   "backend_policy": {
     "durable_identity": "forge_webui",

@@ -31,6 +31,9 @@ def test_source_and_extension_are_frozen_to_exact_commits() -> None:
     assert data["source"]["branch"] == "neo"
     assert SHA40.match(data["source"]["commit"])
     assert SHA40.match(data["adetailer"]["commit"])
+    assert data["adetailer"]["repository"].endswith("/Haoming02/ADetailer-Neo")
+    assert data["adetailer"]["commit"] == "af228eba7a3f3691a25bcd1fc94aa95e600dd3e6"
+    assert data["adetailer"]["rejected_candidate"]["commit"] == "3a599f5d4607d8f9d8b9fc5a15526197418dae1a"
     assert data["adetailer"]["required_detectors"] == ["face_yolov8n.pt", "hand_yolov8n.pt"]
     assert data["adetailer"]["mediapipe_substitution"].startswith("forbidden")
 

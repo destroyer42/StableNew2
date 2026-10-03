@@ -26,6 +26,8 @@ from src.api.webui_runtime_identity import (
 )
 
 FORGE_FLAGS = {"api": True, "forge_ref_a1111_home": None, "port": 7861}
+FORGE_OPTIONS = {"forge_additional_modules": [], "forge_preset": "sdxl",
+                 "forge_unet_storage_dtype": "Automatic"}
 A1111_FLAGS = {"api": True, "port": 7860, "xformers": False}
 MODULE_LIST = [{"model_name": "sdxl_vae.safetensors", "filename": "/m/VAE/sdxl_vae.safetensors"}]
 
@@ -39,13 +41,14 @@ def _fetcher(routes: dict[str, Any], calls: list[str] | None = None):
     return fetch
 
 
-def test_forge_positively_identified_from_cmd_flags_and_sd_modules() -> None:
-    observed = classify_runtime_identity(FORGE_FLAGS, MODULE_LIST, None)
+@pytest.mark.parametrize("flags", [FORGE_FLAGS, None, "upstream HTTP 500"])
+def test_forge_positively_identified_from_options_and_sd_modules(flags) -> None:
+    observed = classify_runtime_identity(flags, MODULE_LIST, None, options=FORGE_OPTIONS)
     assert observed.identity == FORGE_WEBUI_IDENTITY and observed.is_forge
 
 
 def test_a1111_positively_identified_from_vae_route_without_forge_signature() -> None:
-    observed = classify_runtime_identity(A1111_FLAGS, None, [])
+    observed = classify_runtime_identity(A1111_FLAGS, None, [], options={})
     assert observed.identity == A1111_WEBUI_IDENTITY and observed.is_a1111
 
 
@@ -64,23 +67,52 @@ def test_ambiguous_evidence_is_unknown(flags: Any, modules: Any, vae: Any) -> No
     assert classify_runtime_identity(flags, modules, vae).identity == UNKNOWN_WEBUI_IDENTITY
 
 
+@pytest.mark.parametrize("options,modules,vae,flags", [
+    ({}, [], None, FORGE_FLAGS),  # flags and modules alone are insufficient
+    (FORGE_OPTIONS, None, None, None),
+    (FORGE_OPTIONS, {}, None, None),
+    ([], [], None, None),
+    ("<html>", [], None, None),
+    ({"forge_unrecognized": True}, [], None, None),
+    (FORGE_OPTIONS, [], [], FORGE_FLAGS),  # contradictory route signatures
+    (FORGE_OPTIONS, [], {}, FORGE_FLAGS),  # malformed opposing route
+    ({}, None, [], FORGE_FLAGS),  # contradictory flags/options
+    ({}, {}, [], A1111_FLAGS),  # malformed module route cannot establish A1111
+])
+def test_weak_malformed_or_conflicting_options_evidence_is_unknown(options, modules, vae, flags):
+    assert classify_runtime_identity(flags, modules, vae, options=options).identity == "unknown"
+
+
+def test_optional_cmd_flags_failure_does_not_suppress_independent_forge_evidence():
+    def fetch(path):
+        if path.endswith("cmd-flags"):
+            raise RuntimeError("HTTP 500 response validation error")
+        return {"/sdapi/v1/options": FORGE_OPTIONS, "/sdapi/v1/sd-modules": []}.get(path)
+    observed = probe_runtime_identity(fetch)
+    assert observed.is_forge and not observed.evidence["cmd_flags_readable"]
+
+
 def test_probe_uses_only_read_only_gets_and_stays_deterministic() -> None:
     forge_calls: list[str] = []
     forge = probe_runtime_identity(
         _fetcher(
-            {"/sdapi/v1/cmd-flags": FORGE_FLAGS, "/sdapi/v1/sd-modules": MODULE_LIST}, forge_calls
+            {"/sdapi/v1/cmd-flags": FORGE_FLAGS, "/sdapi/v1/sd-modules": MODULE_LIST,
+             "/sdapi/v1/options": FORGE_OPTIONS}, forge_calls
         )
     )
     assert forge.is_forge
-    assert forge_calls == ["/sdapi/v1/cmd-flags", "/sdapi/v1/sd-modules"]
+    assert forge_calls == ["/sdapi/v1/cmd-flags", "/sdapi/v1/options",
+                           "/sdapi/v1/sd-modules", "/sdapi/v1/sd-vae"]
 
     a1111_calls: list[str] = []
     a1111 = probe_runtime_identity(
-        _fetcher({"/sdapi/v1/cmd-flags": A1111_FLAGS, "/sdapi/v1/sd-vae": []}, a1111_calls)
+        _fetcher({"/sdapi/v1/cmd-flags": A1111_FLAGS, "/sdapi/v1/sd-vae": [],
+                  "/sdapi/v1/options": {}}, a1111_calls)
     )
     assert a1111.is_a1111
     assert set(a1111_calls) <= {
         "/sdapi/v1/cmd-flags",
+        "/sdapi/v1/options",
         "/sdapi/v1/sd-modules",
         "/sdapi/v1/sd-vae",
     }
@@ -100,6 +132,7 @@ def test_endpoint_probe_is_read_only_get_only_and_unreachable_is_unknown() -> No
         seen.append((url, timeout))
         payloads = {
             "http://127.0.0.1:7861/sdapi/v1/cmd-flags": FORGE_FLAGS,
+            "http://127.0.0.1:7861/sdapi/v1/options": FORGE_OPTIONS,
             "http://127.0.0.1:7861/sdapi/v1/sd-modules": MODULE_LIST,
         }
         return SimpleNamespace(status_code=200, json=lambda: payloads[url])
@@ -156,6 +189,7 @@ def test_client_probe_is_read_only_and_classifies_through_the_session() -> None:
     client = SDWebUIClient(base_url="http://127.0.0.1:7861", options_write_enabled=False)
     payloads = {
         "/sdapi/v1/cmd-flags": FORGE_FLAGS,
+        "/sdapi/v1/options": FORGE_OPTIONS,
         "/sdapi/v1/sd-modules": MODULE_LIST,
     }
     methods: list[str] = []

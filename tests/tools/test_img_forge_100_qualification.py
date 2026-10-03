@@ -86,10 +86,12 @@ def _api(flavor="forge") -> dict:
         "/sdapi/v1/sd-modules": [{"model_name": "sdxl_vae.safetensors"}] if flavor == "forge" else None,
         "/sdapi/v1/sd-vae": [] if flavor == "a1111" else None,
         "/sdapi/v1/sd-models": [{"model_name": "sdxl", "filename": "/models/sdxl.safetensors"}],
-        "/sdapi/v1/options": {}, "/sdapi/v1/scripts": {"txt2img": ["ADetailer", "ControlNet"], "img2img": []},
+        "/sdapi/v1/options": {"forge_additional_modules": []} if flavor == "forge" else {},
+        "/sdapi/v1/scripts": {"txt2img": ["ADetailer", "ControlNet"], "img2img": []},
         "/sdapi/v1/script-info": [], "/sdapi/v1/loras": [{"name": "add-detail-xl"}],
         "/sdapi/v1/upscalers": [{"name": "R-ESRGAN 4x+"}],
         "/adetailer/v1/ad_model": {"ad_model": ["face_yolov8n.pt", "hand_yolov8n.pt"]},
+        "/adetailer/v1/schema": {},
     }
 
 
@@ -109,6 +111,25 @@ def test_preflight_is_read_only_explicit_and_rejects_identity_mismatch() -> None
     result = preflight.inspect_endpoint("http://127.0.0.1:7871", "forge_webui", selected=selected,
                                        fetch=lambda endpoint, path: _api("a1111").get(path))
     assert not result["ready"] and not result["checks"]["runtime_identity"]
+
+
+@pytest.mark.parametrize("ownership,command,ready", [
+    ("owned", ["launch.py", "--ad-no-huggingface", "--skip-install"], True),
+    ("owned", ["launch.py"], False),
+    ("external", ["launch.py", "--ad-no-huggingface"], False),
+])
+def test_cmd_flags_is_optional_but_download_policy_still_requires_evidence(ownership, command, ready):
+    responses = _api()
+    responses["/sdapi/v1/cmd-flags"] = None
+    result = preflight.inspect_endpoint(
+        "http://127.0.0.1:7871", "forge_webui",
+        selected={"checkpoint": "sdxl.safetensors", "vae": "Automatic",
+                  "lora": "add-detail-xl", "upscaler": "R-ESRGAN 4x+"},
+        fetch=lambda endpoint, path: responses[path], ownership=ownership, launch_command=command,
+    )
+    assert result["checks"]["runtime_identity"]
+    assert not result["cmd_flags_available"]
+    assert result["ready"] is ready
 
 
 @pytest.mark.parametrize("change", ["extra_case", "duplicate", "controlnet", "random_seed", "same_endpoint"])

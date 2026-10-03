@@ -7,10 +7,11 @@ small seam that answers "which identity is the connected endpoint?" from **endpo
 
 Evidence (all read-only ``GET``s, no generation, no options writes):
 
-* Forge: ``/sdapi/v1/cmd-flags`` carries Forge's own ``forge_ref_*`` launch-flag keys **and**
-  ``/sdapi/v1/sd-modules`` (Forge's VAE/text-encoder listing) returns a list.
-* A1111: ``/sdapi/v1/cmd-flags`` carries no ``forge_*`` keys **and** ``/sdapi/v1/sd-vae`` returns a
-  list while ``/sdapi/v1/sd-modules`` does not.
+* Forge: ``/sdapi/v1/options`` contains explicit Forge-only options **and**
+  ``/sdapi/v1/sd-modules`` returns a list, without a conflicting A1111 VAE signature.
+* A1111: readable options carry no ``forge_*`` keys, ``/sdapi/v1/sd-vae`` returns a list,
+  and ``/sdapi/v1/sd-modules`` is unavailable.
+* ``/sdapi/v1/cmd-flags`` is optional corroboration: Neo can return HTTP 500 for real flags.
 * Anything else (unreachable, malformed, a fork with neither signature) is ``unknown``.
 
 Policy (:func:`assert_runtime_matches_backend`): a ``forge_webui`` backend requires a *positively
@@ -33,10 +34,14 @@ UNKNOWN_WEBUI_IDENTITY = "unknown"
 WEBUI_FAMILY_IDENTITIES = frozenset({A1111_WEBUI_IDENTITY, FORGE_WEBUI_IDENTITY})
 
 CMD_FLAGS_PATH = "/sdapi/v1/cmd-flags"
+OPTIONS_PATH = "/sdapi/v1/options"
 SD_MODULES_PATH = "/sdapi/v1/sd-modules"
 SD_VAE_PATH = "/sdapi/v1/sd-vae"
 
 _FORGE_FLAG_KEY = "forge_ref_a1111_home"
+_FORGE_OPTION_KEYS = frozenset({
+    "forge_additional_modules", "forge_preset", "forge_unet_storage_dtype",
+})
 
 #: ``fetch(path)`` returns the parsed JSON body, or ``None`` for any failure / non-200 response.
 JsonFetch = Callable[[str], Any]
@@ -129,23 +134,30 @@ def resolve_configured_webui_runtime_identity(settings: Any = None) -> str:
         return A1111_WEBUI_IDENTITY
 
 
-def classify_runtime_identity(cmd_flags: Any, sd_modules: Any, sd_vae: Any) -> WebUIRuntimeIdentity:
+def classify_runtime_identity(
+    cmd_flags: Any, sd_modules: Any, sd_vae: Any, *, options: Any = None,
+) -> WebUIRuntimeIdentity:
     """Pure classification of already-fetched read-only responses."""
 
     flags_ok = isinstance(cmd_flags, Mapping)
     forge_flag = flags_ok and _FORGE_FLAG_KEY in cmd_flags
     any_forge_key = flags_ok and any(str(key).startswith("forge_") for key in cmd_flags)
+    options_ok = isinstance(options, Mapping)
+    forge_options = sorted(_FORGE_OPTION_KEYS.intersection(options)) if options_ok else []
+    any_forge_option = options_ok and any(str(key).startswith("forge_") for key in options)
     modules_ok = isinstance(sd_modules, list)
     vae_ok = isinstance(sd_vae, list)
     evidence = {
         "cmd_flags_readable": flags_ok,
         "forge_flag_present": bool(forge_flag),
+        "options_readable": options_ok,
+        "forge_option_keys": forge_options,
         "sd_modules_list": modules_ok,
         "sd_vae_list": vae_ok,
     }
-    if forge_flag and modules_ok:
+    if options_ok and forge_options and modules_ok and sd_vae is None:
         return WebUIRuntimeIdentity(FORGE_WEBUI_IDENTITY, evidence)
-    if flags_ok and not any_forge_key and vae_ok and not modules_ok:
+    if options_ok and not any_forge_option and not any_forge_key and vae_ok and sd_modules is None:
         return WebUIRuntimeIdentity(A1111_WEBUI_IDENTITY, evidence)
     return WebUIRuntimeIdentity(UNKNOWN_WEBUI_IDENTITY, evidence)
 
@@ -153,21 +165,22 @@ def classify_runtime_identity(cmd_flags: Any, sd_modules: Any, sd_vae: Any) -> W
 def probe_runtime_identity(fetch: JsonFetch) -> WebUIRuntimeIdentity:
     """Classify an endpoint through ``fetch`` using only read-only GETs.
 
-    Never raises: any fetch failure degrades to ``unknown``.
+    Never raises. Each failed probe is unavailable evidence; optional flags cannot
+    prevent independent positive options/module evidence from being evaluated.
     """
 
-    sd_modules: Any = None
-    sd_vae: Any = None
-    try:
-        cmd_flags = fetch(CMD_FLAGS_PATH)
-        if isinstance(cmd_flags, Mapping):
-            sd_modules = fetch(SD_MODULES_PATH)
-            if _FORGE_FLAG_KEY not in cmd_flags:
-                # A1111 evidence: its VAE route answers and Forge's module route does not.
-                sd_vae = fetch(SD_VAE_PATH)
-    except Exception:  # noqa: BLE001 - classification is best-effort and read-only
+    responses = {}
+    for path in (CMD_FLAGS_PATH, OPTIONS_PATH, SD_MODULES_PATH, SD_VAE_PATH):
+        try:
+            responses[path] = fetch(path)
+        except Exception:  # noqa: BLE001 - each probe is best-effort and read-only
+            responses[path] = None
+    if all(value is None for value in responses.values()):
         return UNKNOWN_RUNTIME_IDENTITY
-    return classify_runtime_identity(cmd_flags, sd_modules, sd_vae)
+    return classify_runtime_identity(
+        responses[CMD_FLAGS_PATH], responses[SD_MODULES_PATH], responses[SD_VAE_PATH],
+        options=responses[OPTIONS_PATH],
+    )
 
 
 def probe_endpoint_runtime_identity(

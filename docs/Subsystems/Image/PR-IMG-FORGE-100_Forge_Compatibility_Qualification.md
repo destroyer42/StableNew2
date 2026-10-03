@@ -1,13 +1,13 @@
 # PR-IMG-FORGE-100 — Forge Neo Compatibility / A1111 Successor Qualification
 
-Status: **CHECKPOINT 1 — deterministic implementation complete; physical qualification NOT started.**
+Status: **PREFLIGHT_PASS_WITH_KNOWN_PACKAGING_CONFLICT — physical qualification NOT started.**
 Forge is an explicit, **non-default** backend identity (`forge_webui`). `a1111_webui` remains the
 default. Nothing here promotes Forge (that is `PR-IMG-FORGE-110`, a separate owner decision) and no
 final classification has been reached.
 
 Base: `origin/main` `715e352f28640cb0eb3225a5b1752fc5e192c778` (PR #35 / PR-TEST-TRUTH-210 merged).
-Execution host so far: Claude Code cloud session (source review, deterministic implementation, mocked
-tests). Everything that touches the real machine continues in a Local/Desktop session.
+Initial implementation/evidence: Claude Code cloud session. Local/Desktop installation and GET-only
+runtime qualification now pass with the known Gradio/Pillow conflict; see section 15. No image parity verdict.
 
 ## 1. Qualification target and lineage
 
@@ -37,7 +37,7 @@ route exists with the contract StableNew's existing client already uses.
 | progress | `GET /sdapi/v1/progress` | same |
 | cancellation | `POST /sdapi/v1/interrupt` | same |
 | options read/write | `GET`/`POST /sdapi/v1/options` | same; `sd_model_checkpoint` is routed through `checkpoint_change` and an unknown model raises |
-| runtime flags | `GET /sdapi/v1/cmd-flags` | same (`vars(cmd_opts)`); also the Forge identity evidence |
+| runtime flags | `GET /sdapi/v1/cmd-flags` | upstream HTTP 500 response-model defect; optional corroboration only |
 | model/sampler/scheduler/upscaler lists | `GET /sdapi/v1/sd-models`, `samplers`, `schedulers`, `upscalers` | same |
 | scripts | `GET /sdapi/v1/scripts`, `/script-info` | same |
 | best-effort VRAM cleanup | `POST /sdapi/v1/unload-checkpoint`, `/refresh-checkpoints` | same |
@@ -58,7 +58,7 @@ authority. No `ForgeProcessManager`. No GUI backend selector. No per-stage backe
 |---|---|
 | Durable identity | `FORGE_IMAGE_BACKEND_ID = "forge_webui"`; `DEFAULT_IMAGE_BACKEND_ID` stays `a1111_webui`; historical NJRs without an image backend still resolve to `a1111_webui` and can never silently run as Forge |
 | One runtime slot, two identities | `WebUIProcessConfig.runtime_identity` / `WebUIProcessManager.runtime_identity` declare which identity the single existing manager launches (setting `webui_runtime_identity`, default `a1111_webui`). The manager remains the sole lifecycle authority |
-| Read-only identity seam | `src/api/webui_runtime_identity.py`: classifies the connected endpoint from evidence only (Forge = `forge_ref_a1111_home` in `/cmd-flags` **and** `/sd-modules` list; A1111 = no `forge_*` flags **and** `/sd-vae` list and no `/sd-modules`; else `unknown`). `SDWebUIClient.probe_runtime_identity()` uses bare GETs |
+| Read-only identity seam | `src/api/webui_runtime_identity.py`: Forge requires mapping `/options` with explicit known Forge-only keys **and** `/sd-modules` list, with no conflicting `/sd-vae` signature. A1111 requires readable options without Forge keys, `/sd-vae` list and unavailable `/sd-modules`, without contradictory Forge flags. Weak/malformed/conflicting evidence is `unknown`. `/cmd-flags` is optional. Probes remain GET-only |
 | Guard before dispatch | `forge_webui` requires a positively identified Forge; `a1111_webui` rejects a positively identified Forge but tolerates an unclassifiable endpoint (existing A1111-family compatibility); runs after the runtime transition and before any stage call |
 | Transport | `ForgeWebUIClient(SDWebUIClient)` overrides only the VAE contract: `get_vae_models` -> `/sd-modules` normalized to the existing `{model_name, filename}` resource shape; `set_vae` resolves against the listing, writes `forge_additional_modules` and **verifies by reading it back**; `get_current_vae` maps module paths to names. Everything else is inherited |
 | Backend | `ForgeWebUIImageBackend` shares the A1111 stage translation. The A1111 translation was **extracted unchanged** into `WebUIFamilyImageBackend` (mechanically identical logic, pinned by the existing A1111 parity tests, all still green); the two backends differ only in identity, transition target and the guard. Capabilities: `txt2img`, `img2img`, `adetailer`, `upscale`. No `controlnet` stage |
@@ -76,9 +76,9 @@ setting), `src/controller/ports/default_runtime_ports.py` (client selection), `s
 `a1111_webui_backend.py` reduced to its identity; registry/types/exports), `config/forge_qualification_runtime.json`
 (new descriptor).
 
-## 4. ADetailer extension decision (source-reviewed, NOT installed, NOT qualified)
+## 4. Historical ADetailer source-review decision (superseded by section 15)
 
-- Selected candidate: **`Bing-su/adetailer` @ `3a599f5d4607d8f9d8b9fc5a15526197418dae1a` (v26.2.0)**, the
+- Initial candidate: **`Bing-su/adetailer` @ `3a599f5d4607d8f9d8b9fc5a15526197418dae1a` (v26.2.0)**, the
   maintained upstream. It ships a Forge ControlNet bridge, and every `modules.*` symbol it imports exists in
   Neo at the frozen commit. That is static evidence only.
 - **Detector acquisition is the hard gate.** The extension resolves `face_yolov8n.pt`/`hand_yolov8n.pt` through
@@ -102,7 +102,9 @@ StableNew has no ControlNet image stage and none is added. Forge's built-in Cont
 (`extensions-builtin/sd_forge_controlnet`, script title "ControlNet") is to be confirmed read-only on the
 running endpoint: listed by `/sdapi/v1/scripts`, and referenced ControlNet model directories visible
 (`--forge-ref-a1111-home` maps `ControlNet` and `ControlNetPreprocessor`). Nothing is mutated or downloaded.
-**Not yet run.**
+Read-only capability is now observed: script, script-info, model-list and module-list API evidence.
+**FORGE_CONTROLNET_RUNTIME_CAPABILITY_PRESENT**. `/controlnet/version` is unavailable; no inference,
+download or StableNew ControlNet stage was added.
 
 ## 6. Deterministic validation (mocks only; no real HTTP/GPU/model/user data)
 
@@ -147,7 +149,7 @@ tests red, confirming they bite.
   of 4341 tests, required smoke 184 passed). `git diff --check`: clean.
 - The informational full suite and exact-head GitHub CI have **not** been run for this package yet.
 
-## 7. Frozen matrix returned to the owner (physical run NOT authorized)
+## 7. Initial matrix proposal (structure retained; current provenance in section 15)
 
 Source/runtime/extension (proposed): Forge Neo `d70373eb…` on CPython 3.13.x in a dedicated venv; Neo's default
 install resolves `torch 2.13.0+cu130` / `torchvision 0.28.0+cu130` and its `requirements.txt` pins; launch flags
@@ -520,3 +522,158 @@ The eight-job structure/assets/settings are unchanged; no physical jobs ran. Fin
 the two frozen upstream runtime-contract failures is required before further runtime work. No StableNew,
 Forge or ADetailer production repair, alternate extension, dependency substitution or architecture change
 was attempted. A1111 remains default; FORGE-110 was not started.
+
+## 15. Owner-adjudicated identity repair and ADetailer-Neo preflight
+
+Execution Profile + Model/Reasoning Recommendation: Standard bounded repair and Local/Desktop runtime
+qualification; GPT-6.1 Sol XHigh or Sonnet 5.5 XHigh. Reuse accepted exact-source evidence; the cost of
+losing the installed-runtime context outweighs a nominally cheaper model. Controller Surface Assessment:
+no controller/coordinator change or ratchet increase; one existing WebUIProcessManager remains owner.
+Token-Efficient Validation Plan: focused identity/guards, shared ADetailer payload, descriptor/tooling,
+GET-only direct and managed smoke, scoped Ruff/diff check, and one final Python 3.14 PR gate. No 1683-test
+sweep, old mutation campaign, image inference or optimization experiment.
+
+### Identity repair
+
+The prior classifier made `/cmd-flags` mandatory. The frozen Forge response model cannot validate its
+integer port and WindowsPath reference-home values, so HTTP 500 erased otherwise sufficient endpoint
+evidence. Forge source remains unpatched. The repaired classifier independently probes options,
+modules, VAE and optional flags. Positive Forge requires an options mapping containing at least one
+explicit known key (`forge_additional_modules`, `forge_preset`, `forge_unet_storage_dtype`) together
+with a module list and unavailable A1111 VAE route. Unknown Forge-like keys alone are insufficient.
+Malformed/contradictory opposite-route evidence remains unknown. A1111 requires readable non-Forge
+options, a VAE list, unavailable modules, and no contradictory Forge flags. An unavailable optional
+flag probe cannot defeat independent positive evidence. No process/install/model-name inference.
+
+The guard, immutable NJR semantics, default identity and process architecture are unchanged. Tests
+include cmd-flags HTTP500 with Forge acceptance, explicit/historical A1111 rejection before any mocked
+POST, weak/malformed/conflicting evidence, unknown Forge rejection and unchanged A1111 compatibility.
+Qualification preflight likewise treats cmd-flags as optional; offline-flag evidence must still come
+from that endpoint or the recorded command of a qualification-owned process. External command claims
+cannot substitute for readable flag evidence.
+
+### Frozen ADetailer-Neo and payload gate
+
+The owner rejected Bing-su/adetailer `3a599f5d…` for the missing `shared.cmd_opts.use_cpu` constructor
+dependency, without patching it. The isolated runtime disables that extension; A1111 is untouched.
+New frozen candidate: **Haoming02/ADetailer-Neo `af228eba7a3f3691a25bcd1fc94aa95e600dd3e6`**.
+Bounded inspection confirmed Forge-specific `shared.device` YOLO execution, no `use_cpu` dependency,
+lazy MediaPipe predictor imports, inherited fixed seeds/tab policy, Forge-aware checkpoint/modules/VAE
+handling and the existing `ADetailer` script name. No history review or source patch.
+
+Its installer requests ultralytics 8.3.253 and MediaPipe 0.10.35, but **was not run**. Existing ultralytics
+8.3.253 satisfies the YOLO requirement. MediaPipe remains absent, with no replacement, distribution,
+import spec or residual package files. MediaPipe face/mesh/eyes remain **NOT QUALIFIED**.
+
+The exact frozen standalone Pydantic parser accepted both proposed face and hand dictionaries before
+launch. Its generated schema is pinned in `tests/data/contracts/adetailer_neo_af228eba_schema.json` and
+matches the live `/adetailer/v1/schema` response exactly. Field compatibility for both dictionaries:
+
+| StableNew field | Classification |
+|---|---|
+| positional enable / skip-img2img booleans (`True`, `False`) | SAME |
+| two face/hand pass dictionaries | SAME |
+| `ad_model` | SAME |
+| `ad_tab_enable` | SAME |
+| `ad_prompt` | SAME |
+| `ad_negative_prompt` | SAME |
+| `ad_confidence` | SAME |
+| `ad_mask_filter_method` | SAME |
+| `ad_mask_k` | SAME |
+| `ad_mask_min_ratio` | SAME |
+| `ad_mask_max_ratio` | SAME |
+| `ad_dilate_erode` | SAME |
+| `ad_mask_blur` | SAME |
+| `ad_mask_merge_invert` | SAME |
+| `ad_x_offset` | SAME |
+| `ad_y_offset` | SAME |
+| `ad_inpaint_only_masked` | SAME |
+| `ad_inpaint_only_masked_padding` | SAME |
+| `ad_use_inpaint_width_height` | SAME |
+| `ad_inpaint_width` | SAME |
+| `ad_inpaint_height` | SAME |
+| `ad_use_steps` | SAME |
+| `ad_steps` | SAME |
+| `ad_use_cfg_scale` | SAME |
+| `ad_cfg_scale` | SAME |
+| `ad_denoising_strength` | SAME |
+| `ad_use_sampler` | SAME |
+| `ad_sampler` | SAME |
+| `ad_scheduler` | SAME |
+| `ad_mask_only_top_k_largest` | RENAMED / TRANSLATABLE to existing filter-method + k controls |
+
+The last key was not a field in **either** frozen extension schema; both forbid extra keys. StableNew
+sent a redundant invalid key. The smallest neutral repair removes it from both dictionaries; existing
+`ad_mask_filter_method="Area"` and `ad_mask_k` still implement largest-mask selection. Neo's
+`filter_k_by` explicitly routes Area to `filter_k_largest`. No required behavior is dropped, no new
+backend policy or seed authority is introduced. Deterministic tests cover custom top-k, face/hand enable,
+sampler/scheduler and fixed/zero/random NJR seeds on both backend translations. Actual inference and
+broader extension value ranges remain physical/product qualification questions, not preflight verdicts.
+
+### Installed/runtime evidence
+
+Runtime remains frozen Forge **d70373eb…**, Python **3.13.16**, Torch **2.13.0+cu130**, torchvision
+**0.28.0+cu130**, CUDA build metadata **13.0**. Command: isolated venv Python `launch.py --uv --api
+--port 7871 --forge-ref-a1111-home <existing A1111 root> --ad-no-huggingface --skip-install`.
+Existing offline HF/YOLO cache environment and detector snapshot routing are retained. No tuning flags.
+All **147 installed distributions are unchanged** before/after startup. Both final consistency checks
+exit **1** with exactly the known Gradio **4.40.0** requirement Pillow **>=8,<11** against installed
+**12.3.0**; no additional conflict or missing MediaPipe dependency. This is not a clean packaging pass.
+
+An initial harness capture was premature (core routes preceded app-started extension callbacks), and
+the harness incorrectly expected a wrapped schema response. It was preserved and corrected without a
+product/runtime workaround. Complete capture waits for the ADetailer model endpoint; the live schema
+is the direct schema mapping. No generation or hidden job retry occurred.
+
+| Read-only surface | Complete result |
+|---|---|
+| core health, options, model/module lists, scripts/script-info, samplers/schedulers/upscalers, extensions, memory/progress | HTTP 200 |
+| `/cmd-flags` | HTTP 500; same upstream response-validation defect, retained evidence |
+| `/sd-vae` | HTTP 404; expected Forge absence |
+| repaired identity / backend guards | positive forge_webui; Forge accepted, A1111 rejected |
+| checkpoint | cyberrealisticXL_v90-16fp.safetensors visible at referenced A1111 path |
+| VAE | ten modules normalized; `sd_vae=Automatic`, additional modules empty, client reports Automatic |
+| LoRA | add-detail-xl visible |
+| ADetailer | Neo registered as ADetailer; version/schema/model APIs HTTP 200 |
+| detectors | face_yolov8n.pt and hand_yolov8n.pt visible from existing snapshot |
+| upscale | 4xUltrasharp_4xUltrasharpV10 visible; extras route advertised, never dispatched |
+| ControlNet | script/script-info plus model/module APIs HTTP 200; version route HTTP 404 |
+| explicit endpoint | 127.0.0.1:7871; no discovery invoked |
+
+No reference model was selected by an options POST; the ambient UI checkpoint was a different 32fp
+model. Visibility and Automatic representation are proven, not loading/inference/parity of the proposed
+16fp checkpoint. The later physical NJR must explicitly select the frozen candidate.
+
+Neo's `--ad-no-huggingface` skips its **entire** default download branch (HF, Ultralytics and MediaPipe
+URLs); it scans the existing `ad_extra_models_dir` afterward. Both accepted detector hashes are retained.
+The API enumerates five already-existing YOLO files, including the two required detectors. The isolated
+ADetailer model directory has no .pt files and the isolated HF cache is empty. No detector/model download.
+
+Complete direct launch: launcher PID **40372**, serving child **8892**, ready in **14.19 seconds**.
+Managed launch: WebUIProcessManager PID **30488**, serving child **26272**, ready in **14.16 seconds**.
+Parent chains and every worker PID/command are preserved in machine-local evidence. GUI lock admission
+was mocked in the headless smoke; actual manager launch, PID ownership, explicit-port health, classifier
+and owned stop were real. No second manager or adoption. Both trees stopped; manager clears owns/pid,
+port 7871 is free. Manager-initiated Windows termination recorded exit 1, not a spontaneous startup crash.
+All **55 recorded HTTP requests were GETs**; the harness rejected non-GETs before dispatch. Zero
+generation, ADetailer or upscale inference requests. Existing A1111/Comfy and protected dirty VID-192
+checkout remained untouched. **FORGE_CONTROLNET_RUNTIME_CAPABILITY_PRESENT**.
+
+The eight-job A/B/C/D structure, prompts, seed 424242, Euler a/Karras, 24 steps/CFG5.5, asset hashes,
+Automatic VAE, add-detail-xl 0.82, athlete input/denoise0.30, face/hand settings and 1.5x upscale remain
+unchanged. Provenance changes are the owner-approved extension SHA, repaired StableNew source SHA and
+the truthful preflight status; no physical execution. Remaining decision: owner approval of this installed
+profile/known packaging conflict and the freshly frozen eight-job physical matrix.
+
+Final runtime classification: **PREFLIGHT_PASS_WITH_KNOWN_PACKAGING_CONFLICT**. Forge remains
+unqualified/non-default; no technical/product image parity classification; no push, merge or FORGE-110.
+Machine-local evidence is under `evidence-install-d70373eb/neo-adetailer-preflight-complete`, including
+runtime/package freeze, process trees, GET responses, logs, schema/payload comparison and shutdown.
+
+Validation: **166 focused tests passed**, including identity, Forge client/backend guards, canonical
+SQLite/JobService ADetailer seed translation, executor/schema, tooling/descriptor, runtime ports,
+transition ownership and process-manager surfaces. Tooling contributes **23 passed**. Scoped Ruff
+and `git diff --check` pass. The single final Python **3.14.8** PR gate passes: completeness, controller
+ratchet, Ruff, mypy smoke, **4392 collected**, **184 smoke passed**. No old full affected sweep was repeated.
+Exact-head remote CI is not asserted; commits remain local. Recommendation is recorded above;
+actual model/effort and token/cost/elapsed usage metrics are unavailable in this host's reported metadata.

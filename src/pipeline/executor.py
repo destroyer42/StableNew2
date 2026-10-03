@@ -3606,7 +3606,6 @@ class Pipeline:
             "ad_inpaint_height": _coerce_dimension(config.get("ad_inpaint_height"), payload_height),
             "ad_x_offset": 0,  # Disable x tiling
             "ad_y_offset": 0,  # Disable y tiling
-            "ad_mask_only_top_k_largest": True,  # Process only largest detection
             "ad_use_steps": True,
             "ad_steps": get_with_fallback_warning(
                 config, "adetailer_steps", 14, source="run_adetailer"
@@ -3661,7 +3660,6 @@ class Pipeline:
             ),
             "ad_x_offset": 0,  # Disable x tiling
             "ad_y_offset": 0,  # Disable y tiling
-            "ad_mask_only_top_k_largest": True,  # Process only largest detection
             "ad_use_steps": True,
             "ad_steps": config.get("adetailer_hands_steps", 12),
             "ad_use_cfg_scale": True,

@@ -1,0 +1,289 @@
+{
+  "source_sha": "af228eba7a3f3691a25bcd1fc94aa95e600dd3e6",
+  "schema": {
+    "additionalProperties": false,
+    "properties": {
+      "ad_model": {
+        "default": "None",
+        "title": "Ad Model",
+        "type": "string"
+      },
+      "ad_model_classes": {
+        "default": "",
+        "title": "Ad Model Classes",
+        "type": "string"
+      },
+      "ad_tab_enable": {
+        "default": true,
+        "title": "Ad Tab Enable",
+        "type": "boolean"
+      },
+      "ad_prompt": {
+        "default": "",
+        "title": "Ad Prompt",
+        "type": "string"
+      },
+      "ad_negative_prompt": {
+        "default": "",
+        "title": "Ad Negative Prompt",
+        "type": "string"
+      },
+      "ad_confidence": {
+        "default": 0.3,
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "title": "Ad Confidence",
+        "type": "number"
+      },
+      "ad_mask_filter_method": {
+        "default": "Area",
+        "enum": [
+          "Area",
+          "Confidence"
+        ],
+        "title": "Ad Mask Filter Method",
+        "type": "string"
+      },
+      "ad_mask_k": {
+        "default": 0,
+        "minimum": 0,
+        "title": "Ad Mask K",
+        "type": "integer"
+      },
+      "ad_mask_min_ratio": {
+        "default": 0.0,
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "title": "Ad Mask Min Ratio",
+        "type": "number"
+      },
+      "ad_mask_max_ratio": {
+        "default": 1.0,
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "title": "Ad Mask Max Ratio",
+        "type": "number"
+      },
+      "ad_dilate_erode": {
+        "default": 4,
+        "title": "Ad Dilate Erode",
+        "type": "integer"
+      },
+      "ad_x_offset": {
+        "default": 0,
+        "title": "Ad X Offset",
+        "type": "integer"
+      },
+      "ad_y_offset": {
+        "default": 0,
+        "title": "Ad Y Offset",
+        "type": "integer"
+      },
+      "ad_mask_merge_invert": {
+        "default": "None",
+        "enum": [
+          "None",
+          "Merge",
+          "Merge and Invert"
+        ],
+        "title": "Ad Mask Merge Invert",
+        "type": "string"
+      },
+      "ad_mask_blur": {
+        "default": 4,
+        "minimum": 0,
+        "title": "Ad Mask Blur",
+        "type": "integer"
+      },
+      "ad_denoising_strength": {
+        "default": 0.4,
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "title": "Ad Denoising Strength",
+        "type": "number"
+      },
+      "ad_inpaint_only_masked": {
+        "default": true,
+        "title": "Ad Inpaint Only Masked",
+        "type": "boolean"
+      },
+      "ad_inpaint_only_masked_padding": {
+        "default": 32,
+        "minimum": 0,
+        "title": "Ad Inpaint Only Masked Padding",
+        "type": "integer"
+      },
+      "ad_use_inpaint_width_height": {
+        "default": false,
+        "title": "Ad Use Inpaint Width Height",
+        "type": "boolean"
+      },
+      "ad_inpaint_width": {
+        "default": 512,
+        "exclusiveMinimum": 0,
+        "title": "Ad Inpaint Width",
+        "type": "integer"
+      },
+      "ad_inpaint_height": {
+        "default": 512,
+        "exclusiveMinimum": 0,
+        "title": "Ad Inpaint Height",
+        "type": "integer"
+      },
+      "ad_use_steps": {
+        "default": false,
+        "title": "Ad Use Steps",
+        "type": "boolean"
+      },
+      "ad_steps": {
+        "default": 20,
+        "exclusiveMinimum": 0,
+        "maximum": 150,
+        "minimum": 1,
+        "title": "Ad Steps",
+        "type": "integer"
+      },
+      "ad_use_cfg_scale": {
+        "default": false,
+        "title": "Ad Use Cfg Scale",
+        "type": "boolean"
+      },
+      "ad_cfg_scale": {
+        "default": 4.0,
+        "exclusiveMinimum": 0.0,
+        "maximum": 24.0,
+        "minimum": 1.0,
+        "title": "Ad Cfg Scale",
+        "type": "number"
+      },
+      "ad_use_checkpoint": {
+        "default": false,
+        "title": "Ad Use Checkpoint",
+        "type": "boolean"
+      },
+      "ad_checkpoint": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Ad Checkpoint"
+      },
+      "ad_use_vae": {
+        "default": false,
+        "title": "Ad Use Vae",
+        "type": "boolean"
+      },
+      "ad_vae": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Ad Vae"
+      },
+      "ad_use_modules": {
+        "default": false,
+        "title": "Ad Use Modules",
+        "type": "boolean"
+      },
+      "ad_modules": {
+        "anyOf": [
+          {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "default": null,
+        "title": "Ad Modules"
+      },
+      "ad_use_sampler": {
+        "default": false,
+        "title": "Ad Use Sampler",
+        "type": "boolean"
+      },
+      "ad_sampler": {
+        "default": "Use same sampler",
+        "title": "Ad Sampler",
+        "type": "string"
+      },
+      "ad_scheduler": {
+        "default": "Use same scheduler",
+        "title": "Ad Scheduler",
+        "type": "string"
+      },
+      "ad_use_noise_multiplier": {
+        "default": false,
+        "title": "Ad Use Noise Multiplier",
+        "type": "boolean"
+      },
+      "ad_noise_multiplier": {
+        "default": 1.0,
+        "maximum": 1.5,
+        "minimum": 0.5,
+        "title": "Ad Noise Multiplier",
+        "type": "number"
+      },
+      "ad_restore_face": {
+        "default": false,
+        "title": "Ad Restore Face",
+        "type": "boolean"
+      },
+      "ad_controlnet_model": {
+        "default": "None",
+        "title": "Ad Controlnet Model",
+        "type": "string"
+      },
+      "ad_controlnet_module": {
+        "default": "None",
+        "title": "Ad Controlnet Module",
+        "type": "string"
+      },
+      "ad_controlnet_weight": {
+        "default": 1.0,
+        "maximum": 1.0,
+        "minimum": 0.0,
+        "title": "Ad Controlnet Weight",
+        "type": "number"
+      },
+      "ad_controlnet_guidance_start_end": {
+        "default": [
+          0.0,
+          1.0
+        ],
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
+          {
+            "type": "number"
+          },
+          {
+            "type": "number"
+          }
+        ],
+        "title": "Ad Controlnet Guidance Start End",
+        "type": "array"
+      },
+      "is_api": {
+        "default": true,
+        "title": "Is Api",
+        "type": "boolean"
+      }
+    },
+    "title": "ADetailerArgs",
+    "type": "object"
+  }
+}

@@ -58,6 +58,35 @@ def test_adetailer_dispatch_and_metadata_use_the_same_requested_seed(requested, 
     assert config == original_config
 
 
+def test_face_and_hand_payload_keys_match_frozen_neo_schema_and_keep_top_k(tmp_path):
+    pipeline = Pipeline(Mock(), Mock())
+    config = {"seed": 424242, "adetailer_enabled": True,
+              "enable_face_pass": True, "enable_hands_pass": True,
+              "ad_mask_k_largest": 2, "ad_hands_mask_k": 4,
+              "adetailer_sampler": "Euler a", "adetailer_scheduler": "Karras",
+              "adetailer_hands_sampler": "Euler a", "adetailer_hands_scheduler": "Karras"}
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(pipeline, "_generate_images", return_value={"images": ["result_b64"]}) as generate,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=True),
+        patch("builtins.open", MagicMock()),
+    ):
+        pipeline.run_adetailer(tmp_path / "input.png", "prompt", "negative", config,
+                               tmp_path / "output", "schema-contract")
+    contract = json.loads((Path(__file__).parents[1] / "data/contracts/adetailer_neo_af228eba_schema.json")
+                          .read_text(encoding="utf-8"))
+    assert contract["source_sha"] == "af228eba7a3f3691a25bcd1fc94aa95e600dd3e6"
+    schema = contract["schema"]
+    assert schema["additionalProperties"] is False
+    args = generate.call_args.args[1]["alwayson_scripts"]["ADetailer"]["args"]
+    assert args[:2] == [True, False]
+    for payload, model, k in zip(args[2:], ("face_yolov8n.pt", "hand_yolov8n.pt"), (2, 4), strict=True):
+        assert set(payload) <= set(schema["properties"])
+        assert payload["ad_model"] == model and payload["ad_tab_enable"] is True
+        assert payload["ad_mask_filter_method"] == "Area" and payload["ad_mask_k"] == k
+        assert payload["ad_sampler"] == "Euler a" and payload["ad_scheduler"] == "Karras"
+
+
 def test_adetailer_metadata_apply_global_defined():
     """Ensure apply_global is defined and False in ADetailer metadata."""
     pipeline = Pipeline(Mock(), Mock())
