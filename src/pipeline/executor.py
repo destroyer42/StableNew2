@@ -3701,6 +3701,7 @@ class Pipeline:
             "denoising_strength": config.get("adetailer_denoise", 0.4),
             "width": payload_width,
             "height": payload_height,
+            "seed": config.get("seed", -1),
             "alwayson_scripts": {
                 "ADetailer": {
                     "args": [
@@ -3911,7 +3912,7 @@ class Pipeline:
             # Accumulated stage history from input image
             "stage_history": stage_history,
             # Legacy fields for backward compatibility
-            "requested_seed": config.get("seed", -1),
+            "requested_seed": payload.get("seed", -1),
             "actual_seed": gen_info.get("seed"),
             "actual_subseed": gen_info.get("subseed"),
         }

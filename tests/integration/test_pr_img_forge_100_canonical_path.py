@@ -8,13 +8,15 @@ physical acceptance run.
 
 from __future__ import annotations
 
+import base64
+
 import pytest
 import requests
 
 from src.api.client import SDWebUIClient
 from src.api.forge_client import ForgeWebUIClient
 from src.queue.job_model import JobStatus
-from tests.helpers.fake_webui_transport import GENERATION_PATHS, FakeWebUITransport
+from tests.helpers.fake_webui_transport import GENERATION_PATHS, TINY_PNG_B64, FakeWebUITransport
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
 from tests.helpers.njr_queue_harness import run_njr_via_queue
 
@@ -54,7 +56,7 @@ def _njr(backend_id: str | None, **overrides):
         cfg_scale=5.5,
         width=832,
         height=1216,
-        seed=424242,
+        seed=overrides.pop("seed", 424242),
         config={
             "model": "sdxl.safetensors",
             "vae": "sdxl_vae.safetensors",
@@ -141,6 +143,30 @@ def test_forge_txt2img_adetailer_upscale_chain_uses_the_current_stage_contracts(
         isinstance(arg, dict) and arg.get("ad_model") == "face_yolov8n.pt" for arg in script["args"]
     )
     assert (entry.result or {}).get("metadata", {}).get("image_backend_id") == "forge_webui"
+
+
+@pytest.mark.parametrize("seed", [424242, 0, -1])
+@pytest.mark.parametrize("backend,client_type", [("a1111_webui", SDWebUIClient),
+                                               ("forge_webui", ForgeWebUIClient)])
+def test_adetailer_canonical_seed_reaches_both_backends_and_metadata(seed, backend, client_type, tmp_path):
+    image = tmp_path / "input.png"
+    image.write_bytes(base64.b64decode(TINY_PNG_B64))
+    record = _njr(backend, seed=seed, start_stage="adetailer", input_image_paths=[str(image)],
+                  stage_chain=(make_stage_config("adetailer", model="sdxl.safetensors",
+                                                 extra={"seed": 999999}),))
+    before = record.to_dict()
+    transport = FakeWebUITransport(flavor="forge" if backend == "forge_webui" else "a1111",
+                                   modules=[VAE], seed=987654)
+    entry = run_njr_via_queue(record, _client(client_type, transport), artifact_root=tmp_path / "run")
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    payload = transport.payloads["/sdapi/v1/img2img"][0]
+    assert payload["seed"] == seed  # Immutable NJR provenance wins over stale stage extras.
+    variants = entry.result["variants"]
+    assert variants
+    for manifest in variants:
+        assert manifest["requested_seed"] == manifest["seeds"]["original_seed"] == payload["seed"]
+        assert manifest["actual_seed"] == manifest["seeds"]["final_seed"] == 987654
+    assert record.to_dict() == before
 
 
 @pytest.mark.parametrize(

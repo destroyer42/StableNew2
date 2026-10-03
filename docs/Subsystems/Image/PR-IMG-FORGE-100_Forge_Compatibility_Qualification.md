@@ -12,9 +12,10 @@ tests). Everything that touches the real machine continues in a Local/Desktop se
 ## 1. Qualification target and lineage
 
 - Target: Forge Neo — `https://github.com/Haoming02/sd-webui-forge-classic`, branch `neo`.
-- Reviewed and frozen commit: **`97b26fb404314a11dad7cdde2706da57ea53f4f2`** (2026-10-02). `neo` was
-  re-fetched on 2026-10-03 and equals the discovery-time reviewed SHA: **no drift**. Re-fetch and compare
-  again before any installation; if `neo` moved, re-review the API matrix instead of advancing the pin.
+- Discovery-reviewed commit: `97b26fb404314a11dad7cdde2706da57ea53f4f2` (2026-10-02).
+  The owner authorized a bounded review of its direct child; the qualification pin is now
+  **`d70373ebcf1a96d210b78cd6f77196459e783e2a`** (2026-10-03). See the local review below.
+  Re-check the pinned source before installation; do not silently advance it again.
 - Why Neo: it is the actively maintained continuation of the newer Forge line, keeps the A1111-compatible
   `/sdapi/v1` surface, targets CPython 3.13 (upstream tested 3.13.12), supports `--api`, and supports
   `--forge-ref-a1111-home` for read-only model-directory reuse. Original `lllyasviel` Forge is lineage and
@@ -148,7 +149,7 @@ tests red, confirming they bite.
 
 ## 7. Frozen matrix returned to the owner (physical run NOT authorized)
 
-Source/runtime/extension (frozen): Forge Neo `97b26fb4…` on CPython 3.13.x in a dedicated venv; Neo's default
+Source/runtime/extension (proposed): Forge Neo `d70373eb…` on CPython 3.13.x in a dedicated venv; Neo's default
 install resolves `torch 2.13.0+cu130` / `torchvision 0.28.0+cu130` and its `requirements.txt` pins; launch flags
 `--api --port 7871 --forge-ref-a1111-home <A1111 root>` (port outside StableNew's 7860-7869 discovery range);
 ADetailer `Bing-su/adetailer` `3a599f5d…`. Machine facts (Python/Torch/CUDA actually installed, driver, model
@@ -188,8 +189,7 @@ Forge is registered for explicit selection only, never default, with no GUI sele
 ## 9. Remaining work (for the Local/Desktop session)
 
 Qualification tooling under `tools/qualification/img_forge_100/` (`provenance.py`, `preflight.py`,
-`runtime_capture.py`, `run.py`, `compare.py`, `contact_sheet.py`) is intentionally **not written yet**: it must be
-validated against the actual machine state. Product matrix jobs must enter through NJR -> JobService -> SQLite ->
+`runtime_capture.py`, `run.py`, `compare.py`, `contact_sheet.py`) has been added locally. Product matrix jobs enter through NJR -> JobService -> SQLite ->
 `PipelineRunner.run_njr` -> the Forge backend (never direct `/txt2img`). Final closeout updates only affected
 `STATUS.md`, `docs/CODEX_MAP.md`, `docs/StableNew Roadmap v2.6.md` (and `docs/ARCHITECTURE_v2.6.md` only if durable
 architecture changed) and must not describe Forge as default or promoted.
@@ -203,3 +203,195 @@ validation, A1111 model-reference validation, ADetailer qualification or generat
 worktree, re-fetch `neo` and compare with the frozen commit, and obtain the owner decisions in section 7. The
 `WebUIProcessManager`, runtime-transition and configuration changes made in the cloud are deterministic and mocked;
 they have **not** been validated against the actual machine state and are the first thing to validate locally.
+
+## 11. Local continuation: bounded source and metadata review
+
+### Execution Profile + Model/Reasoning Recommendation
+
+Standard, bounded qualification tooling and read-only workstation evidence. Preferred host: Local/Desktop.
+Codex: GPT-6.1 Sol XHigh; Claude Code: Sonnet 5.5 XHigh. The canonical admission, immutable evidence,
+endpoint isolation and fail-closed execution checks justify XHigh to reduce total retry/rework cost.
+No architecture redesign or production source repair is part of this continuation.
+
+Controller Surface Assessment: the tooling calls the existing runtime-port factory and the existing
+PipelineController queue-to-runner bridge. No controller or coordinator source or ratchet ceiling changes.
+Each arm has its own fixed client/Pipeline; no client is swapped under a Pipeline. Runtime transitions
+receive explicit endpoint observers and no process manager handles, so they cannot adopt or stop a PID.
+
+Token-Efficient Validation Plan: reuse the accepted a8971ebf production evidence; run only the new tooling
+tests and affected descriptor tests, inspect the scoped diff and run `git diff --check`. Run the PR gate
+once near the settled local source checkpoint. Missing local tooling is a blocker, not authorization to
+install packages or change the supported interpreter. Required compatibility evidence remains Python 3.14.
+
+### One-commit Forge adjudication
+
+GitHub commit metadata confirms that `d70373eb` has the single parent `97b26fb4`, message `bump`, and
+one changed file (`requirements.txt`, one addition/one deletion). The complete change is:
+
+```diff
+-comfy-kitchen==0.2.36
++comfy-kitchen==0.2.37
+```
+
+Classification: **NON-MATERIAL FOR THE PROPOSED FP16 SDXL MATRIX**, based on source review. Forge's API
+routes (including cmd-flags, sd-models, sd-modules, options, generation, extras, progress and interrupt),
+Python requirement, Torch/CUDA pins, model/VAE/loading code, A1111-reference code and ControlNet code are
+byte-for-byte unchanged in this commit. The dependency release changes CUDA/HIP quantized kernels and
+Ascend paths. It is not a universal runtime-equivalence claim: quantized checkpoint/LoRA offload behavior
+is outside this matrix. The candidate checkpoint header has 2515 F16 tensors, embedded VAE weights and
+no quantization keys. `--use-ck-attention` is opt-in and absent from the frozen launch flags.
+
+Sources: [Forge commit](https://github.com/Haoming02/sd-webui-forge-classic/commit/d70373ebcf1a96d210b78cd6f77196459e783e2a),
+[Kitchen release comparison](https://github.com/Comfy-Org/comfy-kitchen/compare/v0.2.36...v0.2.37),
+[Forge attention selection](https://github.com/Haoming02/sd-webui-forge-classic/blob/d70373ebcf1a96d210b78cd6f77196459e783e2a/backend/memory_management.py).
+
+### ADetailer: existing detectors and Python 3.13 metadata
+
+Both required detector files already exist in the local Hugging Face snapshot. Their exact paths/hashes
+belong in machine-local evidence, not this portable document. Point the isolated Forge `config.json`
+`ad_extra_models_dir` at that existing snapshot directory, and add **`--ad-no-huggingface`** after owner
+approval. For Forge, use an empty isolated `HF_HUB_CACHE` so cached default lookups cannot take precedence
+over the explicitly selected snapshot directory. No copy, symlink, A1111 edit or detector download is needed.
+The flag is required even with an
+extra directory: `get_models()` first attempts its default detector list, then merges directory results.
+With the flag it uses `hf_hub_download(..., local_files_only=True)`; missing cached defaults are removed,
+and existing `.pt` files in the extra directory are then available by filename. Preflight requires both
+selected names to be present in `/adetailer/v1/ad_model` and the no-download flag to be true.
+
+The extension pins a source revision, but its installer declares lower bounds, not exact dependency pins:
+`ultralytics>=8.3.75`, `mediapipe>=0.10.13`, `rich>=13.0.0`. Proposed versions are **Ultralytics 8.3.253,
+MediaPipe 0.10.31, Rich 14.3.4**. Metadata provides a universal Ultralytics wheel and a non-yanked
+`mediapipe-0.10.31-py3-none-win_amd64.whl`. MediaPipe declares numpy without an upper bound and no protobuf
+constraint. Ultralytics 8.3.75's `numpy<=2.1.1` conflicts with Forge's `numpy==2.3.5`; 8.3.253 removes that
+upper bound. Rich is already a Forge pin. No package bytes were downloaded or installed.
+
+MediaPipe is an installer dependency, not operationally required by the accepted YOLO face/hand path:
+the extension imports MediaPipe inside MediaPipe predictor functions, while selected `.pt` models use
+`ultralytics_predict`. This does not qualify MediaPipe predictors or replace the YOLO contract. Direct
+metadata feasibility is established. The machine-local metadata artifact closes 45 package versions
+against Windows CPython 3.13.16 wheel tags and the shared Forge direct pins, with no remaining requirement
+conflict in that ADetailer closure. It does not close the complete Forge bootstrap or prove compiled-wheel
+imports/runtime behavior. Neither install success nor YOLO runtime behavior is asserted.
+
+Sources: [ADetailer installer](https://github.com/Bing-su/adetailer/blob/3a599f5d4607d8f9d8b9fc5a15526197418dae1a/install.py),
+[detector resolver](https://github.com/Bing-su/adetailer/blob/3a599f5d4607d8f9d8b9fc5a15526197418dae1a/adetailer/common.py),
+[predictor routing](https://github.com/Bing-su/adetailer/blob/3a599f5d4607d8f9d8b9fc5a15526197418dae1a/scripts/!adetailer.py),
+[MediaPipe metadata](https://pypi.org/pypi/mediapipe/0.10.31/json),
+[Ultralytics metadata](https://pypi.org/pypi/ultralytics/8.3.253/json).
+
+### Previous HOLD: install-plan blocker and local validation status
+
+The unchanged Neo launcher requests **Gradio 4.40.0**, whose declared requirement is
+`Pillow>=8.0,<11.0`; Neo's requirements pin **Pillow 12.3.0**. This is an unresolved bootstrap dependency
+conflict, present before the one-commit Kitchen drift. The isolated installation proposal is therefore
+**BLOCKED**, not a consistent package lock. No source/pin substitution, package download or installation
+was attempted. Return this conflict for adjudication before bootstrap work.
+
+Sources: [Neo bootstrap](https://github.com/Haoming02/sd-webui-forge-classic/blob/d70373ebcf1a96d210b78cd6f77196459e783e2a/modules/launch_utils.py),
+[Neo requirements](https://github.com/Haoming02/sd-webui-forge-classic/blob/d70373ebcf1a96d210b78cd6f77196459e783e2a/requirements.txt),
+[Gradio metadata](https://pypi.org/pypi/gradio/4.40.0/json).
+
+The available StableNew test venv uses Python 3.12.14; the project requires Python 3.14. Its diagnostic
+tooling run produced **19 passed, 1 failed**. The canonical queue test is blocked on import of the unchanged
+`LoraRuntimeConfig` self annotation under 3.12, before queue execution. No test was skipped or weakened.
+The installed base Python 3.14.8 lacks pytest and mypy. The single PR-gate invocation stopped at that
+tooling preflight, before gate checks ran. Scoped Ruff validation passed using the existing venv.
+Tooling is implemented but remains
+unvalidated on the supported interpreter; it is not an accepted physical-execution checkpoint.
+
+Source inspection also shows that the current ADetailer executor's img2img payload omits `seed`.
+An immutable NJR seed alone therefore cannot establish matched ADetailer seeds for scenario D.
+The proposed matrix records this unresolved qualification blocker; production code is unchanged.
+Do not claim seed agreement or dispatch this proposal until that gap and the validation/install blockers
+are closed. The content digest freezes the proposal only; clean final StableNew SHA, installed runtime
+provenance and owner approval must be frozen again before any physical execution.
+
+### Explicit endpoint and tooling boundary
+
+The runtime-port factory accepts `base_url` and an explicit `forge_webui` identity; the client stores that
+URL and the identity guard probes that exact URL. The qualification observer injection uses that client's
+identity, without creating a WebUIProcessManager or calling generic discovery. Thus **7871 can be targeted
+explicitly without expanding discovery**. Existing manager discovery fallback is not invoked by this path.
+The A1111 arm has a separate client at its explicit endpoint. No physical endpoint behavior is claimed yet.
+
+The explicit Comfy observer uses the inventoried endpoint supplied by the matrix, rather than stale
+settings in another checkout. It receives no manager handle and can only observe/block an external runtime.
+
+The CLI previews only (`python -m tools.qualification.img_forge_100.run <matrix.json>`). Physical execution
+is the explicit `execute_matrix` operator API, requiring the exact owner-approved matrix digest, matching
+content-addressed provenance, passing preflights, and a new evidence directory. It admits one NJR at a time
+only after all proposal execution blockers are removed. The current machine proposal is blocked.
+When admitted, work proceeds
+through JobService and preserves SQLite snapshots, each NJR, every terminal result and all pipeline artifacts.
+Any failure stops later submission; a timeout records ambiguous state and forbids replay. No ninth case,
+hidden retry, runtime launcher, process adoption or raw generation API is included. Contact sheets are CPU-only
+paired layouts; comparison reports missing evidence and leaves visual parity to the owner.
+
+Forge remains explicit/non-default and unqualified. ControlNet is source-reviewed only; a runtime capability
+verdict remains **FORGE_CONTROLNET_RUNTIME_CAPABILITY_NOT_OBSERVED** until a physical endpoint is authorized.
+
+## 12. Pre-install StableNew blocker closure
+
+Execution Profile + Model/Reasoning Recommendation: Standard bounded repair/verification within the
+accepted architecture; Local/Desktop, GPT-6.1 Sol XHigh or Sonnet 5.5 XHigh. Retaining the session context
+and checking the canonical boundary minimizes successful-work cost. Controller Surface Assessment:
+no controller/coordinator or ratchet changes; no new submission, queue, history, runner or process authority.
+Token-Efficient Validation Plan: reuse unaffected a8971ebf evidence, run focused ADetailer/shared backend,
+canonical Forge and tooling tests under supported Python 3.14, then one final PR gate. The old 1683-test
+sweep and mutation campaign are not repeated.
+
+### Canonical ADetailer seed repair
+
+`PipelineRunner` already derives `ImageExecutionRequest.seed` from immutable NJR provenance. The shared
+non-txt2img translation omitted that field, and `run_adetailer()` omitted seed from its outer img2img
+payload while reporting `config.seed` as requested. The bounded repair forwards `request.seed` when it
+is not `None`, includes `config.get("seed", -1)` in that payload using the existing img2img convention,
+and reads `requested_seed` from the payload. There is no extension-specific or backend-specific authority.
+Zero and -1 are retained exactly; a missing seed retains the existing -1 default. `actual_seed` still
+comes only from generation response info. NJR/compiler semantics and normalization are unchanged.
+
+Ten new regressions failed before the repair because payload seed was absent, then passed after repair.
+Four executor cases cover fixed, zero, -1 and missing seed, including serialized manifest metadata;
+six canonical SQLite/JobService cases cover both A1111 and Forge with fixed/zero/-1 seeds, conflicting
+stage extras, response-derived actual seed, durable result metadata and immutable NJR preservation.
+The previously Python-3.12-blocked canonical queue test passes on Python 3.14.8. The isolated test venv
+uses repository requirements/dev extras and Windows constraints, with no ML runtime extras installed.
+Focused ADetailer/config/backend/Forge/descriptor/tooling/cancellation validation: **102 passed**;
+the tooling file contributes **20 passed**. Scoped Ruff and test-environment `pip check` pass.
+The single supported-interpreter PR gate passed: repository completeness, controller ratchet, Ruff,
+mypy smoke, isolated collection (**4371 collected**) and required smoke (**184 passed**).
+
+### Unexecuted upstream installation protocol
+
+The Gradio 4.40.0 / Pillow 12.3.0 published-constraint inconsistency remains unchanged. It is an upstream
+runtime/package qualification finding, not a StableNew dependency repair. The owner-directed next protocol
+uses the exact d70373eb source, an isolated Python 3.13.16 venv and Neo's supported **`--uv`** hook.
+No Gradio/Pillow downgrade/upgrade, Forge patch/fork, `--no-deps`, constraint override or alternate source.
+
+The machine-local `reports/img_forge_100/forge-install-protocol.md` contains exact PowerShell commands,
+paths and evidence filenames. Its sequence is: clone/verify pinned Forge and ADetailer; create only the
+isolated Forge venv; bootstrap uv there and capture its version; write the reviewed detector config and
+explicit proposed ADetailer direct constraints; invoke upstream `launch.py --uv --exit
+--skip-torch-cuda-test` with the proposed runtime arguments and offline model environment; capture installer
+exit/log, all installed distributions, `uv pip check`, `pip check`, and source hashes even on failure.
+`--exit` returns after preparation before the server/model runtime starts. Skipping the installer CUDA
+availability test is installation-only; later physical readiness must establish CUDA separately.
+
+Record whether upstream fails resolution, installs an inconsistent environment, or uses upstream-supported
+handling. A successful install with failed consistency is not silently called a pass or a runtime failure;
+retain both facts and require separately authorized runtime/API preflight. The three ADetailer direct
+constraints freeze the proposed reviewed extension dependencies only; they do not override Forge's
+Gradio/Pillow constraints or apply the earlier 45-package metadata closure as a full Forge lock.
+
+Future process-only environment isolates uv/HF/YOLO caches, suppresses model downloads and YOLO
+autoinstall, and targets the existing exact detector snapshot through `ad_extra_models_dir` plus
+`--ad-no-huggingface`. Nothing is written into A1111 or Comfy. Port 7871 and the exact eight A/B/C/D
+pair structure are retained. All selected asset hashes/prompts/settings remain in machine-local matrix
+evidence; only final StableNew SHA and blocker/provenance status are refrozen after the local commit.
+Forge installation, extension installation, package downloads into Forge, runtime start and physical
+generation remain **NOT AUTHORIZED / NOT PERFORMED**. A1111 remains default; FORGE-110 is not started.
+
+Sources: [Neo uv hook](https://github.com/Haoming02/sd-webui-forge-classic/blob/d70373ebcf1a96d210b78cd6f77196459e783e2a/modules_forge/uv_hook.py),
+[Neo launcher](https://github.com/Haoming02/sd-webui-forge-classic/blob/d70373ebcf1a96d210b78cd6f77196459e783e2a/launch.py),
+[uv environment/constraints](https://docs.astral.sh/uv/reference/environment/),
+[uv consistency checks](https://docs.astral.sh/uv/pip/inspection/).

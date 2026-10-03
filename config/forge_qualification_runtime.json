@@ -16,11 +16,19 @@
   "source": {
     "repository": "https://github.com/Haoming02/sd-webui-forge-classic",
     "branch": "neo",
-    "commit": "97b26fb404314a11dad7cdde2706da57ea53f4f2",
-    "commit_date": "2026-10-02T18:08:06+08:00",
+    "commit": "d70373ebcf1a96d210b78cd6f77196459e783e2a",
+    "commit_date": "2026-10-03T14:34:50Z",
     "discovery_reviewed_commit": "97b26fb404314a11dad7cdde2706da57ea53f4f2",
     "refetched_on": "2026-10-03",
-    "drift_since_discovery": false,
+    "drift_since_discovery": true,
+    "bounded_review": {
+      "parent": "97b26fb404314a11dad7cdde2706da57ea53f4f2",
+      "commit_message": "bump",
+      "changed_files": ["requirements.txt"],
+      "exact_change": "comfy-kitchen==0.2.36 -> comfy-kitchen==0.2.37",
+      "classification": "NON_MATERIAL_FOR_FROZEN_FP16_SDXL_MATRIX",
+      "reason": "Forge API, launcher, Python/Torch/CUDA, model/VAE/reference and ControlNet source are unchanged. Kitchen changes affect quantized kernels; the selected checkpoint has only F16 tensors and no quantization keys, and Comfy-Kitchen attention is opt-in and not enabled by the frozen flags. This is source/metadata evidence, not physical parity evidence."
+    },
     "license": "AGPL-3.0",
     "lineage_reference_only": "https://github.com/lllyasviel/stable-diffusion-webui-forge",
     "note": "Re-fetch neo and compare against this commit before installation; if it moved, re-review the API matrix instead of silently advancing the pin."
@@ -74,7 +82,12 @@
     "authorization_required": "owner (package downloads into the isolated venv only)",
     "neo_default_torch": "torch==2.13.0+cu130 torchvision==0.28.0+cu130 (modules/launch_utils.py default install command)",
     "neo_requirements_file": "requirements.txt at the pinned commit (exact pins, includes diffusers 0.37.1, transformers 4.57.6, numpy 2.3.5, fastapi 0.127.1)",
-    "model_downloads": "NOT authorized (checkpoints, VAEs, LoRAs, ControlNet models, detectors)"
+    "model_downloads": "NOT authorized (checkpoints, VAEs, LoRAs, ControlNet models, detectors)",
+    "adetailer_proposed_pins": ["ultralytics==8.3.253", "mediapipe==0.10.31", "rich==14.3.4"],
+    "adetailer_metadata_feasibility": "Windows CPython 3.13.16: the proposed ADetailer closure has 45 package versions with compatible wheel metadata and no requirement conflicts against shared Forge direct pins. Ultralytics 8.3.253 accepts numpy 2.3.5; MediaPipe 0.10.31 has a non-yanked py3-none-win_amd64 wheel. Rich reuses Forge's pin. This is metadata feasibility for the ADetailer closure, not a complete Forge bootstrap lock or an installed/imported runtime verdict.",
+    "install_plan_status": "ISOLATED_UV_PROTOCOL_PREPARED / UPSTREAM_METADATA_INCONSISTENCY / NOT_AUTHORIZED",
+    "install_plan_blocker": "Neo's unchanged launcher requests gradio==4.40.0 (Pillow>=8.0,<11.0), while its requirements.txt pins Pillow==12.3.0. The separately authorized installation will follow upstream --uv, capture resolution/versions and package-manager consistency, and retain this discrepancy as runtime/package qualification evidence. Installer success or inconsistency alone is neither a technical pass nor a runtime failure. No pin override, candidate substitution or installation has been performed.",
+    "install_protocol": "Qualification document section 12; machine-local exact-command proposal in reports/img_forge_100/forge-install-protocol.md. Installation-only --exit and --skip-torch-cuda-test are distinct from subsequent physical runtime flags."
   },
   "model_reference": {
     "mechanism": "--forge-ref-a1111-home <A1111 root> (modules/launch_utils.py::configure_a1111_reference)",

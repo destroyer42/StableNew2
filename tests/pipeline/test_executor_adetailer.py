@@ -1,5 +1,6 @@
 """Test ADetailer metadata generation and apply_global handling."""
 
+import json
 import logging
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -27,6 +28,34 @@ def _healthy_runtime_admission(monkeypatch):
     monkeypatch.setattr(
         Pipeline, "_ensure_runtime_admissible", lambda *_a, **_k: _HEALTHY_RUNTIME_ADMISSION
     )
+
+
+@pytest.mark.parametrize("requested", [424242, 0, -1, None])
+def test_adetailer_dispatch_and_metadata_use_the_same_requested_seed(requested):
+    pipeline = Pipeline(Mock(), Mock())
+    config = {"adetailer_enabled": True}
+    if requested is not None:
+        config["seed"] = requested
+    original_config = dict(config)
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(pipeline, "_generate_images", return_value={
+            "images": ["result_b64"], "info": json.dumps({"seed": 987654}),
+        }) as generate,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=True),
+        patch("src.pipeline.executor.json.dump") as write_manifest,
+        patch("builtins.open", MagicMock()),
+    ):
+        result = pipeline.run_adetailer(Path("input.png"), "prompt", "negative", config,
+                                       Path("output"), "seed-contract")
+    payload = generate.call_args.args[1]
+    assert payload["seed"] == (-1 if requested is None else requested)
+    assert result["requested_seed"] == result["seeds"]["original_seed"] == payload["seed"]
+    assert result["actual_seed"] == result["seeds"]["final_seed"] == 987654
+    manifest = next(call.args[0] for call in write_manifest.call_args_list
+                    if call.args[0].get("stage") == "adetailer")
+    assert manifest["requested_seed"] == payload["seed"] and manifest["actual_seed"] == 987654
+    assert config == original_config
 
 
 def test_adetailer_metadata_apply_global_defined():

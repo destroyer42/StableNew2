@@ -64,6 +64,8 @@ class WebUIFamilyImageBackend:
             config["steps"] = request.steps
         if request.cfg_scale is not None:
             config["cfg_scale"] = request.cfg_scale
+        if request.seed is not None:
+            config["seed"] = request.seed
         if "pipeline" in execution:
             config["pipeline"] = execution["pipeline"]
         for key in (
