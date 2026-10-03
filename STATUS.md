@@ -16,8 +16,15 @@ Updated: 2026-10-02
   environment is defined by `constraints/windows-py312-cu130.txt` (exact pins, including the
   resolver `pip`) applied by `scripts/bootstrap_windows.ps1`; `tools/runtime/verify_runtime_pins.py`
   detects drift in bootstrap and `-CheckOnly`. Accepted direct stack: Torch/torchvision `+cu130`
-  2.14.0/0.29.0, Diffusers 0.40.0, Transformers 5.17.0, Accelerate 1.15.0. `opencv-python` is
-  retained because facexlib/CodeFormer require it; restoration isolation is `PR-POSTPROC-100`.
+  2.14.0/0.29.0, Diffusers 0.40.0, Transformers 5.17.0, Accelerate 1.15.0.
+- Restoration isolation (PR-POSTPROC-100, under owner review): local face restoration/upscaling is an
+  optional `-WithPostprocess` profile (`requirements-postprocess.txt`, a `# profile: postprocess`
+  section of the constraints) behind StableNew-owned adapters in `src/video/restoration/`. RealESRGAN
+  and the CodeFormer network load through Spandrel with bit-identical output; the legacy face helper
+  (`facelib` from the `codeformer` wheel) is retained and isolated because `facexlib` changes output
+  materially; GFPGAN stays a named method that fails closed. `opencv-python` stays core (Photo Optimize
+  uses it; the retained helper requires it). See
+  `docs/Subsystems/Video/PR-POSTPROC-100_Restoration_Isolation.md`.
 - Active diagnostic evidence: `DIAG-GPU-130 - Post-5600 Black-Screen Recurrence` - **XMP-OFF
   RECURRENCE / ACTIVE OBSERVATION; EXIT CRITERION NOT MET**. The owner confirms the RAM XMP profile
   has now been removed. After the 2026-09-25 07:06:20 ET boot, Windows reports both DIMMs at

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import gc
-import importlib.util
 import json
 import logging
 import math
@@ -19,6 +18,11 @@ from PIL import Image
 
 from src.video.motion.secondary_motion_engine import SECONDARY_MOTION_APPLY_SCHEMA_V1
 from src.video.motion.secondary_motion_provenance import build_secondary_motion_manifest_block
+from src.video.restoration.runtime import (
+    GFPGAN_UNSUPPORTED_ISSUE,
+    POSTPROCESS_INSTALL_HINT,
+    missing_packages,
+)
 from src.video.svd_config import SVDConfig, SVDPostprocessConfig
 from src.video.svd_errors import SVDPostprocessError
 from src.video.video_export import save_video_frames
@@ -64,7 +68,7 @@ def get_effective_svd_export_fps(
 
 
 def get_codeformer_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str]:
-    issues: list[str] = []
+    issues: list[str] = list(missing_packages("codeformer"))
     weight_path = postprocess.face_restore.codeformer_weight_path
     if not weight_path or not Path(weight_path).exists():
         issues.append("CodeFormer weight")
@@ -82,7 +86,7 @@ def get_codeformer_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str
 
 
 def get_realesrgan_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str]:
-    issues: list[str] = []
+    issues: list[str] = list(missing_packages("upscale"))
     model_path = postprocess.upscale.model_path
     if not model_path or not Path(model_path).exists():
         issues.append("RealESRGAN weight")
@@ -90,9 +94,7 @@ def get_realesrgan_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str
 
 
 def get_gfpgan_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str]:
-    issues: list[str] = []
-    if importlib.util.find_spec("gfpgan") is None:
-        issues.append("gfpgan package")
+    issues: list[str] = [GFPGAN_UNSUPPORTED_ISSUE]
 
     weight_path = postprocess.face_restore.gfpgan_weight_path
     if not weight_path or not Path(weight_path).exists():
@@ -110,6 +112,12 @@ def get_gfpgan_runtime_issues(postprocess: SVDPostprocessConfig) -> list[str]:
     return issues
 
 
+def _install_hint(issues: list[str]) -> str:
+    """Point at the optional-profile install only when a package (not just an asset) is missing."""
+
+    return " " + POSTPROCESS_INSTALL_HINT if any(i.endswith(" package") for i in issues) else ""
+
+
 def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None]:
     postprocess = config.postprocess
     if postprocess.face_restore.enabled:
@@ -120,7 +128,8 @@ def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None
                 return (
                     False,
                     "CodeFormer is enabled but required runtime assets are missing: "
-                    + ", ".join(issues),
+                    + ", ".join(issues)
+                    + _install_hint(issues),
                 )
         elif method == "GFPGAN":
             issues = get_gfpgan_runtime_issues(postprocess)
@@ -136,7 +145,8 @@ def validate_svd_postprocess_config(config: SVDConfig) -> tuple[bool, str | None
             return (
                 False,
                 "RealESRGAN is enabled but required runtime assets are missing: "
-                + ", ".join(issues),
+                + ", ".join(issues)
+                + _install_hint(issues),
             )
     if postprocess.interpolation.enabled:
         multiplier_error = get_rife_multiplier_validation_error(

@@ -6,10 +6,10 @@ import importlib
 import importlib.util
 import os
 import shutil
-import site
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from src.video.restoration.runtime import POSTPROCESS_INSTALL_HINT
 from src.video.svd_config import SVDConfig
 from src.video.svd_models import is_svd_model_cached, resolve_svd_cache_dir, resolve_svd_model_spec
 from src.video.svd_postprocess import (
@@ -220,67 +220,54 @@ def apply_recommended_svd_defaults(config: SVDConfig | None = None) -> SVDConfig
 
 
 def _detect_codeformer(config: SVDConfig) -> SVDCapability:
-    package_root = _find_site_package_dir("codeformer")
-    missing: list[str] = []
-    if package_root is None:
-        missing.append("codeformer package")
-    missing.extend(get_codeformer_runtime_issues(config.postprocess))
+    missing = get_codeformer_runtime_issues(config.postprocess)
     if missing:
         return SVDCapability(
             name="CodeFormer",
             status="missing",
             available=False,
-            detail="Missing: " + ", ".join(missing),
+            detail=_missing_detail(missing),
         )
     return SVDCapability(
         name="CodeFormer",
         status="ready",
         available=True,
-        detail="Detected package, weight, and required facelib assets.",
+        detail="Detected modern loader, face helper, weight, and required facelib assets.",
     )
 
 
 def _detect_gfpgan(config: SVDConfig) -> SVDCapability:
-    package_root = _find_site_package_dir("gfpgan")
-    missing: list[str] = []
-    if package_root is None:
-        missing.append("gfpgan package")
-    missing.extend(get_gfpgan_runtime_issues(config.postprocess))
-    missing = list(dict.fromkeys(missing))
-    if missing:
-        return SVDCapability(
-            name="GFPGAN",
-            status="missing",
-            available=False,
-            detail="Missing: " + ", ".join(missing),
-        )
+    missing = list(dict.fromkeys(get_gfpgan_runtime_issues(config.postprocess)))
     return SVDCapability(
         name="GFPGAN",
-        status="ready",
-        available=True,
-        detail="Detected package, weight, and required facelib assets.",
+        status="missing",
+        available=False,
+        detail=_missing_detail(missing),
     )
 
 
 def _detect_realesrgan(config: SVDConfig) -> SVDCapability:
-    package_root = _find_site_package_dir("codeformer")
-    missing: list[str] = []
-    if package_root is None:
-        missing.append("codeformer package")
-    missing.extend(get_realesrgan_runtime_issues(config.postprocess))
+    missing = get_realesrgan_runtime_issues(config.postprocess)
     if missing:
         return SVDCapability(
             name="RealESRGAN",
             status="missing",
             available=False,
-            detail="Missing: " + ", ".join(missing),
+            detail=_missing_detail(missing),
         )
     return SVDCapability(
         name="RealESRGAN",
         status="experimental",
         available=True,
-        detail="Detected local weight and worker runtime.",
+        detail="Detected modern loader, local weight, and worker runtime.",
     )
+
+
+def _missing_detail(missing: list[str]) -> str:
+    detail = "Missing: " + ", ".join(missing)
+    if any(item.endswith(" package") for item in missing):
+        detail += ". " + POSTPROCESS_INSTALL_HINT
+    return detail
 
 
 def _detect_rife(config: SVDConfig) -> SVDCapability:
@@ -315,21 +302,4 @@ def _find_rife_candidate(config: SVDConfig) -> Path | None:
     repo_candidate = Path(__file__).resolve().parents[2] / "tools" / "rife" / "rife-ncnn-vulkan.exe"
     if repo_candidate.exists():
         return repo_candidate
-    return None
-
-
-def _find_site_package_dir(name: str) -> Path | None:
-    roots: list[Path] = []
-    for root in site.getsitepackages():
-        roots.append(Path(root))
-    try:
-        user_site = site.getusersitepackages()
-        if user_site:
-            roots.append(Path(user_site))
-    except Exception:
-        pass
-    for root in roots:
-        candidate = root / name
-        if candidate.exists():
-            return candidate
     return None
