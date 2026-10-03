@@ -111,35 +111,38 @@ exercises it and is not a skip.
   `tests/gui_v2/test_pipeline_stage_cards_v2.py::test_pipeline_panel_stage_card_order` (existing) and
   `tests/gui_v2/test_zone_map_card_order_v2.py` (now pins
   `["txt2img", "img2img", "adetailer", "upscale"]`).
+- `tests/gui_v2/test_pipeline_config_panel_lora_runtime.py` — the skip escape hatch is removed. The test
+  converted a missing `PipelinePanelV2._lora_controls` surface into
+  `pytest.skip("... not implemented in v2 panel surface yet")`, although the surface is implemented
+  (`src/gui/pipeline_panel_v2.py` populates it from `get_lora_runtime_settings()`). It now asserts the
+  current contract directly (`_lora_controls` exists, is populated, contains `LoRA-Alpha`) and keeps its
+  strength/enabled/controller assertions. No production GUI code changed.
 - `tests/gui/test_image_thumbnail.py::test_thumbnail_loads_valid_image` — the unconditional
   `skipif(True)` is removed. The test is deterministic without a Tk root (patched `ImageTk`, mocked widget
   hooks, `tmp_path`). `test_thumbnail_open_current_path_uses_default_viewer` patched Windows-only
   `os.startfile` and failed on every non-Windows host; it now pins all three platform branches through the
   module's own `os`/`subprocess` view.
 
-## Skip census (static unconditional skips in `tests/`)
+## Skip census (unconditional and silent-absence skips in `tests/`)
 
 | | Base `223c4e2` | This package |
 |---|---:|---:|
 | `Implementation pending/deferred` skips (Golden Path) | 16 | 0 |
 | PR-GUI-F1 "removed/moved widget" markers | 6 files / classes | 0 |
 | `skipif(True)` | 1 | 0 |
-| Silent "not implemented" skip in stage-checkbox test | 1 | 0 |
-| Total static unconditional skip markers | 24 | 0 |
+| Silent "not implemented" skips (stage-checkbox order, LoRA runtime controls) | 2 | 0 |
+| Total static unconditional / silent-absence skips | 25 | 0 |
 
 ## Remaining legitimate skip classes (not changed)
 
 Tk/Tcl genuinely unavailable; Windows-only ctypes structures
 (`tests/tools/test_vid160c_commit_adjudication.py`); optional NumPy/OpenCV (`tests/helpers/optional_deps.py`,
 `importorskip`); explicit qualification-source environment variables; explicit real-process/real-backend
-opt-ins (shutdown-leak, real WebUI). Conditional/runtime `skip` call sites: 136 → 117
-(the reduction is the deleted/retired files).
+opt-ins (shutdown-leak, real WebUI). Conditional/runtime `skip` call sites (`skipif`, `pytest.skip(`, `importorskip`): 136 → 116
+(the reduction is the deleted/retired files and the removed silent-absence skips).
 
 ## Remaining test debt (recorded, not absorbed)
 
-- `tests/gui_v2/test_pipeline_config_panel_lora_runtime.py` still converts a missing LoRA runtime control
-  surface into `pytest.skip("... not implemented in v2 panel surface yet")`. It is outside the named
-  scope; it should be audited under the new policy in a later truth package.
 - `PipelineRunControlsV2` is unreferenced production code with one remaining forwarding test.
 
 ## Validation
@@ -159,6 +162,8 @@ Local, CPython 3.14.0rc2 under Xvfb, at the source head of this package:
 - `python tools/ci/run_pr_gate.py` (run once, near final source): **PR gate OK** — repository completeness,
   controller ratchet (4 ratcheted, no controller touched, no ceiling change), Ruff, mypy smoke, isolated
   collection (4238 tests), required smoke (184 passed).
+- After the final test-only repairs (seeded GP11 randomizer assertion; LoRA runtime-control skip removed): focused
+  PR-TEST-TRUTH-210 set 114 passed, 0 skipped; `run_pr_gate.py` re-run: PR gate OK (same collection/smoke counts).
 - `git diff --check`: clean.
 - GitHub exact-head CI (`required`, `full-suite`, "Run broader configured suite (Xvfb)"): not run by this
   package — publication requires separate owner authorization. For this test-truth PR acceptance requires all
