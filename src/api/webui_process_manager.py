@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -76,6 +76,12 @@ class WebUIProcessConfig:
     #: WebUI-family identity this launch config starts (``a1111_webui`` or ``forge_webui``).
     #: A1111 and Forge share this single manager/slot; there is no second managed owner.
     runtime_identity: str = "a1111_webui"
+    #: Concrete launch commands, per logical launch profile, that THIS manager supports. The manager's
+    #: own ``command`` stays authoritative: a profile change replaces it only with a command listed here.
+    #: ``None`` (the default) means the manager supports only its current profile, so a qualified
+    #: isolated A1111, a managed Forge or any explicitly configured runtime can never be switched to a
+    #: process-global command by a workload recommendation.
+    launch_profile_commands: Mapping[str, Sequence[str]] | None = None
 
     def build_env(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -183,13 +189,52 @@ class WebUIProcessManager:
     def get_launch_profile(self) -> str:
         return str(self._config.launch_profile or "standard")
 
-    def set_launch_profile(self, profile: str) -> None:
+    @staticmethod
+    def _normalize_launch_profile(profile: str | None) -> str:
+        return str(profile or "standard").strip() or "standard"
+
+    def supported_launch_profiles(self) -> tuple[str, ...]:
+        """Logical launch profiles this manager can apply (its current one plus any it declares)."""
+        declared = tuple(self._config.launch_profile_commands or ())
+        current = self.get_launch_profile()
+        return declared if current in declared else (current, *declared)
+
+    def supports_launch_profile(self, profile: str | None) -> bool:
+        """Whether ``profile`` is the current profile or one this manager explicitly declares."""
+        return self._normalize_launch_profile(profile) in self.supported_launch_profiles()
+
+    def set_launch_profile(self, profile: str) -> bool:
+        """Apply a logical launch profile; return whether it was applied.
+
+        Only a profile this manager declares (``WebUIProcessConfig.launch_profile_commands``) replaces the
+        concrete command. Anything else is refused WITHOUT touching the command, working directory,
+        environment or runtime identity, and never falls back to a process-global command.
+        """
         from src.config import app_config
 
-        normalized = str(profile or "standard").strip() or "standard"
+        normalized = self._normalize_launch_profile(profile)
+        commands = self._config.launch_profile_commands or {}
+        if normalized not in commands:
+            if normalized == self.get_launch_profile():
+                return True  # already the current profile; nothing to change
+            log_with_ctx(
+                logger,
+                logging.WARNING,
+                "WebUI launch profile not supported by this manager; runtime command left unchanged",
+                ctx=LogContext(subsystem="api"),
+                extra_fields={
+                    "event": "webui_launch_profile_unsupported",
+                    "requested_profile": normalized,
+                    "current_profile": self.get_launch_profile(),
+                    "runtime_identity": self.runtime_identity,
+                    "supported_profiles": list(self.supported_launch_profiles()),
+                },
+            )
+            return False
         self._config.launch_profile = normalized
-        self._config.command = list(app_config.resolve_webui_launch_command(normalized))
+        self._config.command = list(commands[normalized])
         app_config.set_webui_launch_profile(normalized)
+        return True
 
     def ensure_running(self) -> bool:
         # Note: The orphan monitor thread now handles preventing orphaned processes.
@@ -632,7 +677,9 @@ class WebUIProcessManager:
         log_with_ctx(logger, logging.INFO, "Restarting WebUI process", ctx=ctx)
         if profile_override:
             try:
-                self.set_launch_profile(profile_override)
+                if not self.set_launch_profile(profile_override):
+                    # Refused before anything is stopped: the running qualified runtime is untouched.
+                    return False
             except Exception as exc:
                 log_with_ctx(
                     logger,
@@ -1115,6 +1162,13 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
         or app_config.get_webui_health_total_timeout_seconds()
     )
     configured_identity = resolve_configured_webui_runtime_identity(settings)
+    # Only the StableNew-managed A1111 configuration declares the canonical A1111 profile commands; a
+    # Forge (or any other) identity never inherits A1111-specific flags merely because the APIs match.
+    profile_commands = (
+        app_config.get_webui_launch_profile_commands()
+        if configured_identity == "a1111_webui"
+        else None
+    )
     if configured_workdir:
         workdir_path = Path(configured_workdir)
         if workdir_path.exists() and workdir_path.is_dir():
@@ -1132,6 +1186,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                     autostart_enabled=configured_autostart,
                     base_url=configured_base_url,
                     runtime_identity=configured_identity,
+                    launch_profile_commands=profile_commands,
                 )
 
     # First try cached location
@@ -1154,6 +1209,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                     autostart_enabled=configured_autostart,
                     base_url=configured_base_url,
                     runtime_identity=configured_identity,
+                    launch_profile_commands=profile_commands,
                 )
                 return config
 
@@ -1173,6 +1229,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
             autostart_enabled=configured_autostart,
             base_url=configured_base_url,
             runtime_identity=configured_identity,
+            launch_profile_commands=profile_commands,
         )
 
     # Last resort: detect automatically (expensive)
@@ -1200,6 +1257,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                 autostart_enabled=configured_autostart,
                 base_url=configured_base_url,
                 runtime_identity=configured_identity,
+                launch_profile_commands=profile_commands,
             )
 
     return None

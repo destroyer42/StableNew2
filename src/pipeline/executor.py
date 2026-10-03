@@ -179,6 +179,24 @@ STALL_INTERRUPT_THRESHOLD_BY_STAGE: dict[str, float] = {
 # treat that as a separate end-of-request stall and interrupt sooner.
 POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC = 20.0
 POST_INTERRUPT_STALL_GRACE_SEC = 30.0
+
+
+def post_progress_response_threshold(stage_label: str | None) -> float:
+    """Seconds a stage may sit at completed progress before its still-blocking request is interrupted.
+
+    Ordinary stages keep the generic completion grace. A stage with its own hard-stall threshold
+    (ADetailer) never gets a completion grace shorter than that threshold: its detection/inpaint
+    sub-passes keep WebUI's progress report at 100 % while real work continues inside one request, and an
+    interrupt there ends the remaining ADetailer units early.
+    """
+
+    stage = str(stage_label or "")
+    return max(
+        POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC,
+        STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(stage, 0.0),
+    )
+
+
 EXTERNAL_WEBUI_STALL_ACTION_REQUIRED = "EXTERNAL_WEBUI_STALL_ACTION_REQUIRED"
 _EXTERNAL_WEBUI_STALL_ACTION = (
     "Restart or stop the external A1111 instance, then restore readiness."
@@ -1127,6 +1145,15 @@ class Pipeline:
             return []
         return [str(stage or "") for stage in self._current_stage_chain[index + 1 :]]
 
+    @staticmethod
+    def _manager_supports_launch_profile(manager: Any, profile: str | None) -> bool:
+        """Whether the manager's own configuration can apply ``profile`` (a manager that cannot say: yes)."""
+
+        supports = getattr(manager, "supports_launch_profile", None)
+        if not callable(supports):
+            return True
+        return bool(supports(profile))
+
     def _maybe_apply_workload_launch_policy(
         self,
         *,
@@ -1167,6 +1194,27 @@ class Pipeline:
             recommended == "standard" or app_config.is_guarded_webui_launch_profile(current_profile)
         ):
             return str(current_profile or recommended or "standard")
+
+        if manager is not None and not self._manager_supports_launch_profile(manager, recommended):
+            # The recommendation is an optimization: a manager whose qualified launch authority does not
+            # declare this profile keeps running exactly as launched. Pressure/admission still decide
+            # whether the stage may proceed.
+            log_with_ctx(
+                logger,
+                logging.WARNING,
+                f"[executor/launch-policy] {stage_name} workload prefers {recommended}, "
+                "which this runtime does not support; keeping its qualified launch command",
+                ctx=LogContext(subsystem="pipeline", stage=stage_name),
+                extra_fields={
+                    "event": "workload_launch_profile_unsupported",
+                    "outcome": "recommendation_not_applied",
+                    "current_profile": current_profile,
+                    "recommended_profile": recommended,
+                    "runtime_identity": getattr(manager, "runtime_identity", None),
+                    "model_name": requested_model,
+                },
+            )
+            return str(current_profile or "standard")
 
         log_with_ctx(
             logger,
@@ -1622,13 +1670,23 @@ class Pipeline:
         cause_codes = set(self._runtime_cause_codes(runtime_state))
         has_unsafe_pressure = "unsafe_pressure" in cause_codes or pressure_status == "unsafe"
         should_force_guarded = pressure_status in {"high_pressure", "unsafe"} and not guarded_active
+        # A guarded restart is only possible on a manager that declares that profile; otherwise the
+        # runtime keeps its qualified command and the existing pressure/admission checks below decide.
+        guarded_supported = self._manager_supports_launch_profile(
+            get_global_webui_process_manager(), "sdxl_guarded"
+        )
+        force_guarded_restart = should_force_guarded and guarded_supported
+        if should_force_guarded and not guarded_supported:
+            recovery_trace.append(
+                {"step": "launch_profile_unsupported", "profile": "sdxl_guarded", "applied": False}
+            )
         should_attempt_recovery = (
             status == "poisoned" and not has_unsafe_pressure
-        ) or should_force_guarded
+        ) or force_guarded_restart
         if should_attempt_recovery and self._attempt_webui_recovery(
             stage=stage_name,
             reason="runtime_poisoned_or_guarded_required",
-            profile_override="sdxl_guarded" if should_force_guarded else None,
+            profile_override="sdxl_guarded" if force_guarded_restart else None,
         ):
             try:
                 if hasattr(self.client, "clear_runtime_failure_state"):
@@ -1644,7 +1702,7 @@ class Pipeline:
                 {
                     "step": "restart",
                     "success": True,
-                    "profile_override": "sdxl_guarded" if should_force_guarded else None,
+                    "profile_override": "sdxl_guarded" if force_guarded_restart else None,
                 }
             ]
             recovered_status = str(runtime_state.get("status") or "healthy")
@@ -1895,6 +1953,15 @@ class Pipeline:
             logger.warning(
                 "Executor recovery requested for %s but no WebUI process manager is available",
                 reason,
+            )
+            return False
+        if profile_override and not self._manager_supports_launch_profile(manager, profile_override):
+            logger.warning(
+                "Executor WebUI recovery for stage=%s reason=%s skipped: the manager does not "
+                "support launch profile %s; its runtime was left untouched",
+                stage,
+                reason,
+                profile_override,
             )
             return False
         logger.warning(
@@ -2656,9 +2723,9 @@ class Pipeline:
                         ordinary_generation_active
                         and elapsed_since_progress >= effective_hard_threshold
                     )
-                    completion_stalled = (
-                        elapsed_since_progress >= POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC
-                        and (completed_steps or highest_progress >= 0.99)
+                    completion_response_threshold = post_progress_response_threshold(stage_label)
+                    completion_stalled = elapsed_since_progress >= completion_response_threshold and (
+                        completed_steps or highest_progress >= 0.99
                     )
                     if warning_due or hard_interrupt_due or completion_stalled:
                         now = time.monotonic()
@@ -2679,7 +2746,7 @@ class Pipeline:
                                     current_step,
                                     total_steps,
                                     elapsed_since_progress,
-                                    POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC,
+                                    completion_response_threshold,
                                     interrupt_threshold,
                                     interrupt_sent,
                                 )
@@ -2716,7 +2783,7 @@ class Pipeline:
                                 logger.error(
                                     "PR-HARDEN-004: Completion stall for %s exceeded %.0fs — sending interrupt to WebUI",
                                     stage_label,
-                                    POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC,
+                                    completion_response_threshold,
                                 )
                             else:
                                 logger.error(

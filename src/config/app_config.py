@@ -558,6 +558,11 @@ def resolve_webui_launch_command(profile: str | None) -> list[str]:
     return list(_WEBUI_LAUNCH_PROFILES[candidate])
 
 
+def get_webui_launch_profile_commands() -> dict[str, list[str]]:
+    """The canonical A1111 launch command for every logical profile (a copy)."""
+    return {name: list(command) for name, command in _WEBUI_LAUNCH_PROFILES.items()}
+
+
 def is_guarded_webui_launch_profile(profile: str | None) -> bool:
     candidate = str(profile or "").strip() or "standard"
     return candidate in {

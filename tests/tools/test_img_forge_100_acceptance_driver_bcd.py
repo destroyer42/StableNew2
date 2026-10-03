@@ -17,6 +17,8 @@ from pathlib import Path
 
 import pytest
 
+from src.api.webui_process_manager import WebUIProcessConfig, WebUIProcessManager
+from src.pipeline.executor import Pipeline
 from tests.helpers.fake_webui_transport import TINY_PNG_B64
 from tests.tools.test_img_forge_100_acceptance_driver import (  # noqa: F401 - fixture + helpers
     BACKENDS,
@@ -30,6 +32,8 @@ from tests.tools.test_img_forge_100_acceptance_driver import (  # noqa: F401 - f
 from tools.acceptance import img_forge_100_acceptance as driver
 
 SOURCE_BYTES = base64.b64decode(TINY_PNG_B64)
+# Captured at import, before canonical_context stubs the launch policy out (that stub hid the Pair-D defect).
+REAL_LAUNCH_POLICY = Pipeline._maybe_apply_workload_launch_policy
 
 
 def _sha(data: bytes) -> str:
@@ -197,3 +201,35 @@ def test_matched_arms_differ_only_in_backend_identity_and_job_location(letter, t
         data["workload"]["metadata"] = None
         data["output_plan"] = None
     assert a == f  # prompts, seeds, stages, geometry: semantically identical intent on both backends
+
+
+@pytest.mark.parametrize("backend", BACKENDS)
+def test_pair_d_with_the_real_launch_policy_never_restarts_or_rewrites_a_qualified_manager(
+    backend, canonical_context, tmp_path, matrix_file, monkeypatch
+):
+    """The 1.5x upscale of an SDXL job recommends sdxl_guarded; a qualified manager must ignore that."""
+
+    from src.config import app_config
+
+    # The premise: for the real frozen geometry the production recommender asks for the guarded profile at the upscale.
+    real_geometry = {"model_name": SETTINGS["checkpoint"], "stage_name": "upscale", "width": 1248, "height": 1824, "steps": 24}
+    assert app_config.recommend_webui_launch_profile_for_workload(**real_geometry) == "sdxl_guarded"
+    # The fake transport returns a 1x1 image, so give the policy the real geometry's (production) answer.
+    monkeypatch.setattr(app_config, "recommend_webui_launch_profile_for_workload", lambda **_k: "sdxl_guarded")
+    monkeypatch.setattr(Pipeline, "_maybe_apply_workload_launch_policy", REAL_LAUNCH_POLICY)
+    command = [r"C:\qualifiedenv\Scripts\python.exe", "launch.py", "--api", "--port", "7871", "--skip-install"]
+    manager = WebUIProcessManager(
+        WebUIProcessConfig(command=list(command), working_dir=str(tmp_path), runtime_identity=backend, base_url="http://127.0.0.1:1")
+    )
+    restarts: list[dict] = []
+    manager.restart_webui = lambda **kw: restarts.append(kw) or True  # type: ignore[method-assign]
+    monkeypatch.setattr(WebUIProcessManager, "owns_process", property(lambda self: True))
+    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: manager)
+
+    code, transport, reports = _drive("D", backend, tmp_path, matrix_file)
+
+    assert code == driver.EXIT_COMPLETED, _evidence(reports)
+    assert restarts == []  # the qualified runtime was not restarted for a launch profile
+    assert manager._config.command == command and manager.runtime_identity == backend
+    assert [p for _, p, _ in transport.generation_calls] == ["/sdapi/v1/txt2img", "/sdapi/v1/img2img", "/sdapi/v1/extra-single-image"]
+    assert "/sdapi/v1/interrupt" not in transport.paths("POST")  # and nothing was interrupted
