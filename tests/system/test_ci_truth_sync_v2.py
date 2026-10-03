@@ -105,7 +105,8 @@ def test_ci_is_python_312_only_with_no_version_matrix() -> None:
     assert "matrix" not in workflow
     assert "strategy:" not in workflow
     assert "3.11" not in workflow
-    assert workflow.count('python-version: "3.12"') == 2  # required + full-suite
+    assert "3.12" not in workflow and "3.13" not in workflow
+    assert workflow.count('python-version: "3.14"') == 2  # required + full-suite
 
 
 def test_ci_runs_once_per_pull_request_head_including_stacked_prs() -> None:
@@ -157,23 +158,26 @@ def test_pytest_gates_share_one_quiet_runner_authority() -> None:
     assert "subprocess" not in smoke  # smoke must not grow a second pytest runner
 
 
-def test_python_312_is_the_sole_runtime_contract_across_current_authorities() -> None:
+def test_python_314_is_the_sole_runtime_contract_across_current_authorities() -> None:
     pyproject = _read("pyproject.toml")
     pre_commit = _read(".pre-commit-config.yaml")
     bootstrap = _read("scripts/bootstrap_windows.ps1")
     readiness = _read("src/services/operator_readiness_service.py")
 
-    assert 'requires-python = ">=3.12,<3.13"' in pyproject
-    assert 'python_version = "3.12"' in pyproject
-    assert 'target-version = "py312"' in pyproject
-    assert "py311" not in pyproject
-    assert "python3.11" not in pre_commit and "3.11" not in pre_commit
-    assert "'^3\\.12\\.'" in bootstrap  # rejects every other minor, including 3.11 and 3.13+
-    assert 'foreach ($requested in @("3.12"))' in bootstrap
-    assert "3.11" not in bootstrap
-    assert "SUPPORTED_PYTHON_MINOR = (3, 12)" in readiness
+    assert 'requires-python = ">=3.14,<3.15"' in pyproject
+    assert 'python_version = "3.14"' in pyproject
+    assert 'target-version = "py314"' in pyproject
+    assert "target-version = ['py314']" in pyproject
+    assert "py311" not in pyproject and "py312" not in pyproject
+    assert "python3.11" not in pre_commit and "python3.12" not in pre_commit
+    assert "'^3\\.14\\.'" in bootstrap  # rejects every other minor, including 3.11 and 3.13+
+    assert 'foreach ($requested in @("3.14"))' in bootstrap
+    assert "Py_GIL_DISABLED" in bootstrap  # the free-threaded build is rejected
+    assert "3.11" not in bootstrap and "3.12" not in bootstrap
+    assert "SUPPORTED_PYTHON_MINOR = (3, 14)" in readiness
     for workflow in (ROOT / ".github/workflows").glob("*.yml"):
-        assert "3.11" not in workflow.read_text(encoding="utf-8"), workflow.name
+        text = workflow.read_text(encoding="utf-8")
+        assert "3.11" not in text and "3.12" not in text, workflow.name
 
 
 def test_testing_authority_defines_the_three_validation_levels() -> None:
@@ -181,8 +185,8 @@ def test_testing_authority_defines_the_three_validation_levels() -> None:
 
     for heading in ("Level 1", "Level 2", "Level 3"):
         assert heading in coding
-    assert "Python 3.12" in coding
-    assert "Python 3.11" not in coding
+    assert "Python 3.14" in coding
+    assert "Python 3.11" not in coding and "Python 3.12" not in coding
 
 
 def test_shutdown_leak_process_test_is_explicit_opt_in() -> None:

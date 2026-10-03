@@ -55,10 +55,10 @@ class ThreadRegistry:
     - Thread status is inspectable for debugging
     """
 
-    _instance: "ThreadRegistry | None" = None
+    _instance: ThreadRegistry | None = None
     _lock = threading.Lock()
 
-    def __new__(cls) -> "ThreadRegistry":
+    def __new__(cls) -> ThreadRegistry:
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:

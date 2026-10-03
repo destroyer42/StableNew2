@@ -27,9 +27,6 @@ graph change.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import TypeVar
-
-T = TypeVar("T")
 
 
 def is_legal_wan_length(length: int) -> bool:
@@ -51,7 +48,7 @@ def smallest_legal_wan_length(evidence_frames: int) -> int:
     return 1 + 4 * (((evidence_frames - 1) // 4) + 1)
 
 
-def trim_to_evidence_window(frames: Sequence[T], evidence_frames: int) -> list[T]:
+def trim_to_evidence_window[T](frames: Sequence[T], evidence_frames: int) -> list[T]:
     """Trim a decoded output (or any frame sequence) from the internal legal length back down to
     the frozen evidence-frame count. Drops only trailing frames -- exactly where the node's own
     documented hold-last-frame padding was appended to reach the legal length -- and never touches

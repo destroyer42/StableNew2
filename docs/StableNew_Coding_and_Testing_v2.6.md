@@ -27,9 +27,11 @@ the active roadmap.
 
 ## Supported Python
 
-The sole supported StableNew application/native-SVD interpreter is CPython
-3.12.x (`requires-python = ">=3.12,<3.13"`). Readiness and the Windows bootstrap
-accept only 3.12.x and reject 3.11 and 3.13+; mypy and the lint targets use 3.12.
+The sole supported StableNew application/native-SVD interpreter is standard-GIL
+CPython 3.14.x (`requires-python = ">=3.14,<3.15"`). Readiness and the Windows
+bootstrap accept only 3.14.x and reject 3.12, 3.13, 3.15+ and the free-threaded
+build; mypy and the lint targets use 3.14. Free-threaded Python and the
+experimental JIT are not enabled.
 A local run on another interpreter can provide diagnostic evidence but cannot
 replace required CI. The contract covers StableNew's own environment, not the
 separately owned A1111/ComfyUI runtimes.
@@ -96,7 +98,7 @@ execution is explicitly authorized.
   compact line on success and the complete pytest output on failure. Reuse
   exact-source green evidence; do not rerun it after docs-only edits.
 - **Level 3 - GitHub integration census.** Each pull-request head runs one workflow
-  on Python 3.12: one required gate and one informational full-suite job under
+  on Python 3.14: one required gate and one informational full-suite job under
   Xvfb. Branch pushes do not start a duplicate run, stacked PRs are covered, and a
   newer head cancels the superseded run. `workflow_dispatch` remains for explicit
   reruns or recovery.
@@ -125,7 +127,7 @@ Use `docs/CODEX_WORK_PACKAGE_TEMPLATE.md` for the standard closeout shape.
 
 ## Integration verdict
 
-GitHub required CI runs the required gate once, on Python 3.12, and it must pass
+GitHub required CI runs the required gate once, on Python 3.14, and it must pass
 before integration. The broader configured suite is an informational
 lane: it runs once to completion (no `--maxfail`) with `pytest-timeout` and a quiet
 summary (`-q -rfE --tb=short`), and its failures are

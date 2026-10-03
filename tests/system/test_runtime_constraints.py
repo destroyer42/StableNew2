@@ -18,7 +18,7 @@ from packaging.version import Version
 from tools.runtime import verify_runtime_pins as verifier
 
 ROOT = Path(__file__).resolve().parents[2]
-CONSTRAINTS = ROOT / "constraints" / "windows-py312-cu130.txt"
+CONSTRAINTS = ROOT / "constraints" / "windows-py314-cu130.txt"
 
 
 def _read(rel_path: str) -> str:
@@ -52,10 +52,10 @@ def test_constraints_declare_their_exact_target() -> None:
     )
 
     assert "Windows" in header
-    assert "CPython 3.12" in header
+    assert "CPython 3.14" in header and "standard-GIL" in header
     assert "CUDA 13.0" in header and "cu130" in header
     assert "RTX 4070 Ti" in header
-    assert "clean disposable environment" in header
+    assert "clean disposable CPython 3.14.x environments" in header
 
 
 def test_constraints_are_exact_unique_and_free_of_paths_urls_and_editables(pins) -> None:
@@ -354,10 +354,10 @@ def test_postprocess_stack_is_installed_only_on_request_and_core_never_installs_
 def test_unsupported_python_is_still_rejected_before_any_install() -> None:
     script = _bootstrap()
 
-    assert "'^3\\.12\\.'" in script
+    assert "'^3\\.14\\.'" in script
     assert script.index("Get-PythonVersion -Executable $pythonExe") < script.index('"-m", "venv"')
 
 
 def test_linux_github_ci_is_not_coupled_to_the_windows_cuda_resolution() -> None:
     assert "constraints/" not in _read(".github/workflows/ci.yml")
-    assert "windows-py312-cu130" not in _read(".github/workflows/ci.yml")
+    assert "windows-py314-cu130" not in _read(".github/workflows/ci.yml")

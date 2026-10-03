@@ -1,6 +1,6 @@
 """Verify an environment against StableNew's exact Windows runtime constraints.
 
-``constraints/windows-py312-cu130.txt`` is the only exact-version authority. This helper reads
+``constraints/windows-py314-cu130.txt`` is the only exact-version authority. This helper reads
 its ``name==version`` pins and compares them with the installed distributions through
 ``importlib.metadata``. It does not import any ML package, so it is cheap and GPU-free.
 Packages that are installed but not pinned are ignored.
@@ -26,7 +26,7 @@ from importlib import metadata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_CONSTRAINTS = ROOT / "constraints" / "windows-py312-cu130.txt"
+DEFAULT_CONSTRAINTS = ROOT / "constraints" / "windows-py314-cu130.txt"
 _PIN = re.compile(r"^(?P<name>[A-Za-z0-9][A-Za-z0-9._-]*)==(?P<version>[A-Za-z0-9][A-Za-z0-9.+!_-]*)$")
 _DIRECTIVE = re.compile(r"^#\s*(?P<key>profile|profile-marker)\s*:\s*(?P<value>.+?)\s*$")
 CORE = "core"

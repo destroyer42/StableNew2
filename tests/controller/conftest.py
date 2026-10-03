@@ -70,9 +70,7 @@ def job_service_with_stubs(
 
 
 @pytest.fixture
-def job_service_with_stub_runner_factory() -> Generator[
-    tuple[JobService, JobQueue, NullHistoryService], None, None
-]:
+def job_service_with_stub_runner_factory() -> Generator[tuple[JobService, JobQueue, NullHistoryService]]:
     """Create JobService using runner_factory DI pattern.
 
     Returns tuple of (service, queue, history) for assertions.

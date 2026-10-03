@@ -53,8 +53,16 @@ function Get-PythonVersion {
         throw "Python at '$Executable' returned no version."
     }
     $version = (($output | Select-Object -Last 1).ToString()).Trim()
-    if ($version -notmatch '^3\.12\.') {
-        throw "Python 3.12 is required; '$Executable' reports '$version'. Install official Python 3.12 or pass -PythonPath."
+    if ($version -notmatch '^3\.14\.') {
+        throw "Python 3.14 is required; '$Executable' reports '$version'. Install official Python 3.14 or pass -PythonPath."
+    }
+    # Only the standard (GIL) build is supported; the free-threaded build (3.14t) is rejected.
+    $freeThreaded = Invoke-CheckedProcess `
+        -Executable $Executable `
+        -Arguments @("-c", "import sysconfig; print(int(bool(sysconfig.get_config_var('Py_GIL_DISABLED'))))") `
+        -FailureMessage "Unable to inspect the Python build at '$Executable'."
+    if ((($freeThreaded | Select-Object -Last 1).ToString()).Trim() -ne "0") {
+        throw "'$Executable' is a free-threaded Python 3.14 build, which StableNew does not support. Install the standard (GIL) build of Python 3.14 or pass -PythonPath."
     }
     return $version
 }
@@ -70,7 +78,7 @@ function Resolve-SupportedPython {
 
     $launcher = Get-Command py.exe -ErrorAction SilentlyContinue
     if ($null -ne $launcher) {
-        foreach ($requested in @("3.12")) {
+        foreach ($requested in @("3.14")) {
             try {
                 $probe = & $launcher.Source "-$requested" "-c" "import sys; print(sys.executable)" 2>$null
                 if (($LASTEXITCODE -eq 0) -and ($null -ne $probe)) {
@@ -80,7 +88,7 @@ function Resolve-SupportedPython {
                     }
                 }
             } catch {
-                # Fall through to the python.exe check, which still enforces Python 3.12.
+                # Fall through to the python.exe check, which still enforces Python 3.14.
             }
         }
     }
@@ -89,7 +97,7 @@ function Resolve-SupportedPython {
     if ($null -ne $pythonCommand) {
         return $pythonCommand.Source
     }
-    throw "No Python executable was found. Install official Python 3.12, or pass -PythonPath."
+    throw "No Python executable was found. Install official Python 3.14, or pass -PythonPath."
 }
 
 function Assert-SafeVenvPath {
@@ -102,7 +110,7 @@ function Assert-SafeVenvPath {
     }
 }
 
-$ConstraintsFile = Join-Path $RepoRoot "constraints\windows-py312-cu130.txt"
+$ConstraintsFile = Join-Path $RepoRoot "constraints\windows-py314-cu130.txt"
 $RuntimePinVerifier = Join-Path $RepoRoot "tools\runtime\verify_runtime_pins.py"
 
 function Get-ConstraintPin {

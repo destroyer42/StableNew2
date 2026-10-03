@@ -4,7 +4,7 @@ import logging
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Generic, TypeVar
+from typing import Any, TypeVar
 
 from src.utils.thread_registry import ThreadRegistry, get_thread_registry
 
@@ -12,7 +12,7 @@ T = TypeVar("T")
 
 
 @dataclass
-class _TaskSpec(Generic[T]):
+class _TaskSpec[T]:
     key: str
     generation: int
     work: Callable[[], T]

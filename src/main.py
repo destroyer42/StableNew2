@@ -562,7 +562,7 @@ def _update_window_comfy_manager(window, comfy_manager: ComfyProcessManager) -> 
         controller.comfy_process_manager = comfy_manager
 
 
-def _install_file_access_hooks(logger: "FileAccessLogger") -> None:
+def _install_file_access_hooks(logger: FileAccessLogger) -> None:
     """
     Monkeypatch open / Path.open / importlib.import_module so that we can
     record which files are touched at runtime.
