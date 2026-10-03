@@ -11,11 +11,13 @@ from src.gui.layout_v2 import configure_grid_columns
 from src.gui.theme_v2 import style_text_widget
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.pipeline_layout_contract import build_form_column_specs
+from src.gui.view_contracts.video_experiment_contract import VideoExperimentSession
 from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
 )
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
+from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.state.output_routing import (
@@ -125,6 +127,15 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.effective_settings_var = tk.StringVar(value="Effective settings: defaults loaded")
         self._submitted_effective_settings: dict[str, Any] = {}
         self._defaults = dict(defaults)
+        # Transient, unsaved "Compare one control" state; previewing/queueing is delegated to the
+        # Video Workflow controller, which owns the NJR build and the single admission.
+        self._experiment_session = VideoExperimentSession(
+            resolve_baseline=lambda form, name: self._experiment_controller().resolve_experiment_baseline(
+                form, name
+            ),
+            build_preview=lambda **kw: self._experiment_controller().preview_experiment(**kw),
+            submit_plan=lambda plan: self._experiment_controller().submit_experiment(plan),
+        )
 
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=0)
@@ -172,6 +183,16 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.output_route_var,
         ):
             variable.trace_add("write", lambda *_args: self._refresh_workspace_summary())
+        # Any execution-affecting edit (including the per-job opt-in and the prompts) drops a
+        # preview, which must then be rebuilt.
+        self.experimental_opt_in_var.trace_add(
+            "write", lambda *_args: self._invalidate_experiment_preview()
+        )
+        for prompt_widget in (self.prompt_text, self.negative_prompt_text):
+            for sequence in ("<KeyRelease>", "<<Paste>>", "<<Cut>>"):
+                prompt_widget.bind(
+                    sequence, lambda _e: self._invalidate_experiment_preview(), add="+"
+                )
         self.depth_mode_var.trace_add(
             "write", lambda *_args: self._refresh_conditioning_controls_state()
         )
@@ -505,8 +526,20 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.workflow_controls_panel.grid(row=10, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.workflow_controls_panel.grid_remove()
 
+        self.experiment_panel = WorkflowExperimentPanel(
+            body,
+            session=self._experiment_session,
+            read_form=lambda: (
+                self.source_image_var.get().strip(),
+                self.get_video_workflow_state(for_submission=True),
+            ),
+            on_queued=self._on_experiment_queued,
+        )
+        self.experiment_panel.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(0, 6))
+        self.experiment_panel.grid_remove()
+
         submit_frame = ttk.Frame(body, style="Panel.TFrame")
-        submit_frame.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(10, 0))
+        submit_frame.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(10, 0))
         self.queue_workflow_button = ttk.Button(
             submit_frame,
             text="Queue Video Workflow",
@@ -748,6 +781,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         projection = dict(workflow_meta.get("operator_projection") or {})
         self.prompt_label.configure(text=str(projection.get("prompt_label") or "Prompt"))
         self.workflow_controls_panel.apply(workflow_meta.get("operator_controls"))
+        # Comparison is offered only for controls the selected workflow declares.
+        self.experiment_panel.apply_controls(
+            workflow_meta.get("operator_controls")
+            if self._experiment_controller() is not None
+            else None
+        )
         if enabled("seed"):
             self.seed_label.grid()
             self.seed_entry.grid()
@@ -901,6 +940,23 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                     f"submitted target={target['width']}x{target['height']}"
                 )
         self.effective_settings_var.set("Effective settings: " + " | ".join(effective_parts))
+        self._invalidate_experiment_preview()
+
+    def _experiment_controller(self) -> Any:
+        getter = getattr(self.app_controller, "get_video_workflow_controller", None)
+        return getter() if callable(getter) else None
+
+    def _invalidate_experiment_preview(self) -> None:
+        panel = getattr(self, "experiment_panel", None)
+        if panel is not None:
+            panel.invalidate_if_changed()
+
+    def _on_experiment_queued(self, job_ids: list[str]) -> None:
+        # Admission ran on a worker; refreshing GUI-visible queue state happens here, on Tk.
+        sync = getattr(self.app_controller, "sync_queue_state_after_direct_submission", None)
+        if callable(sync):
+            sync()
+        self.status_var.set(f"Queued {len(job_ids)} experiment jobs: " + ", ".join(job_ids))
 
     def _set_text_value(self, widget: tk.Text, value: str) -> None:
         widget.delete("1.0", "end")

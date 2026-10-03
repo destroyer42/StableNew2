@@ -92,7 +92,19 @@ it must not enqueue or execute work itself.
 The old pack-shaped `PipelineRunRequest` is not the generic application
 submission contract and was removed by `PR-MVP-030`. `JobService.submit_njrs`
 accepts complete NJRs plus the small `SubmissionPolicy` (priority and optional
-immediate-start preference).
+immediate-start preference). A multi-NJR call is admitted all-or-none:
+`JobRepository.record_job_submissions` commits the whole batch in one SQLite
+transaction, `JobQueue.submit_many` then projects every new job as runnable in one
+step, and only afterwards are submitted/queue-updated events emitted and the runner
+started. An admission failure leaves none of the batch durable, runnable or announced.
+Runner startup errors after admission are logged separately; admitted job identities
+are returned and their durable state is retained, without an automatic startup retry.
+`JobQueue` serializes each admission's durable commit and runnable projection together,
+so concurrent submissions retain the repository's FIFO order. Queue operations that
+rewrite the complete durable order (move up/down/front/back) use the same admission
+boundary, so an order is never derived from a projection that lags committed rows.
+Repository observers may read the queue during admission; the projection lock is held
+only for the projection step.
 
 ## 4. NormalizedJobRecord
 

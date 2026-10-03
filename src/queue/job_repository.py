@@ -8,7 +8,7 @@ import sqlite3
 import threading
 from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
-from dataclasses import asdict
+from dataclasses import asdict, dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -191,6 +191,18 @@ def _lineage(snapshot: Mapping[str, Any]) -> tuple[str | None, str | None]:
     )
 
 
+@dataclass(frozen=True)
+class _PreparedSubmission:
+    """A job's canonical snapshot data, computed before any transaction opens."""
+
+    job: Job
+    serialized_snapshot: str
+    fingerprint: str
+    parent_job_id: str | None
+    parent_artifact_id: str | None
+    payload_summary: str
+
+
 class JobRepository(JobHistoryStore):
     """SQLite-backed job authority and queue/history projection source."""
 
@@ -341,70 +353,107 @@ class JobRepository(JobHistoryStore):
         finally:
             connection.close()
 
-    def record_job_submission(self, job: Job) -> None:
+    def _prepare_submission(self, job: Job) -> _PreparedSubmission:
+        """Canonical snapshot, fingerprint and lineage for one job (no database access)."""
+
         snapshot, record = _canonical_snapshot(job)
         serialized_snapshot = _json_dumps(snapshot)
-        fingerprint = hashlib.sha256(serialized_snapshot.encode("utf-8")).hexdigest()
         parent_job_id, parent_artifact_id = _lineage(snapshot)
+        return _PreparedSubmission(
+            job=job,
+            serialized_snapshot=serialized_snapshot,
+            fingerprint=hashlib.sha256(serialized_snapshot.encode("utf-8")).hexdigest(),
+            parent_job_id=parent_job_id,
+            parent_artifact_id=parent_artifact_id,
+            payload_summary=f"{record.positive_prompt[:64]} | {record.base_model}",
+        )
+
+    def _insert_job_submission(
+        self,
+        connection: sqlite3.Connection,
+        prepared: _PreparedSubmission,
+        queue_order: int,
+    ) -> None:
+        """Conflict-check and insert one new job on the caller's open transaction."""
+
+        job = prepared.job
+        existing = connection.execute(
+            "SELECT njr_fingerprint FROM jobs WHERE job_id = ?", (job.job_id,)
+        ).fetchone()
+        if existing is not None:
+            if existing["njr_fingerprint"] == prepared.fingerprint:
+                raise JobConflictError(f"Job {job.job_id!r} has already been submitted")
+            raise JobConflictError(f"Job identity conflict for {job.job_id!r}")
+        created = _iso(job.created_at) or datetime.utcnow().isoformat()
+        connection.execute(
+            """
+            INSERT INTO jobs (
+                job_id, njr_snapshot, njr_fingerprint, priority, queue_order, status,
+                created_at, queued_at, started_at, completed_at, updated_at,
+                progress, eta_seconds, worker_id, run_mode, source, prompt_source,
+                prompt_pack_id, randomizer_metadata, variant_index, variant_total,
+                execution_metadata, error_message, error_envelope, result_json,
+                artifact_references, parent_job_id, parent_artifact_id, payload_summary
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                      ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                job.job_id,
+                prepared.serialized_snapshot,
+                prepared.fingerprint,
+                int(job.priority),
+                int(queue_order),
+                job.status.value,
+                created,
+                created,
+                _iso(job.started_at),
+                _iso(job.completed_at),
+                _iso(job.updated_at) or created,
+                float(job.progress),
+                job.eta_seconds,
+                str(job.worker_id) if job.worker_id is not None else None,
+                job.run_mode,
+                job.source,
+                job.prompt_source,
+                job.prompt_pack_id,
+                _json_dumps(job.randomizer_metadata or {}),
+                job.variant_index,
+                job.variant_total,
+                _json_dumps(_execution_metadata_to_dict(job.execution_metadata)),
+                job.error_message,
+                _json_dumps(serialize_envelope(job.error_envelope))
+                if job.error_envelope is not None
+                else None,
+                _json_dumps(job.result) if job.result is not None else None,
+                _json_dumps(_artifact_references(job.result)),
+                prepared.parent_job_id,
+                prepared.parent_artifact_id,
+                prepared.payload_summary,
+            ),
+        )
+
+    def record_job_submissions(self, jobs: Sequence[Job]) -> None:
+        """Durably admit a whole batch in ONE SQLite transaction (all or none).
+
+        Any failure (a conflict with an existing or earlier-in-batch identity, a write error)
+        rolls back every row of this call and leaves pre-existing rows untouched.  Callbacks run
+        only after the commit, so nothing is announced for a failed batch.
+        """
+
+        batch = [self._prepare_submission(job) for job in jobs]
+        if not batch:
+            return
         with self.transaction() as connection:
-            existing = connection.execute(
-                "SELECT njr_fingerprint FROM jobs WHERE job_id = ?", (job.job_id,)
-            ).fetchone()
-            if existing is not None:
-                if existing["njr_fingerprint"] == fingerprint:
-                    raise JobConflictError(f"Job {job.job_id!r} has already been submitted")
-                raise JobConflictError(f"Job identity conflict for {job.job_id!r}")
             next_order = connection.execute(
                 "SELECT COALESCE(MAX(queue_order), 0) + 1 AS value FROM jobs"
             ).fetchone()["value"]
-            created = _iso(job.created_at) or datetime.utcnow().isoformat()
-            connection.execute(
-                """
-                INSERT INTO jobs (
-                    job_id, njr_snapshot, njr_fingerprint, priority, queue_order, status,
-                    created_at, queued_at, started_at, completed_at, updated_at,
-                    progress, eta_seconds, worker_id, run_mode, source, prompt_source,
-                    prompt_pack_id, randomizer_metadata, variant_index, variant_total,
-                    execution_metadata, error_message, error_envelope, result_json,
-                    artifact_references, parent_job_id, parent_artifact_id, payload_summary
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                          ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
-                (
-                    job.job_id,
-                    serialized_snapshot,
-                    fingerprint,
-                    int(job.priority),
-                    int(next_order),
-                    job.status.value,
-                    created,
-                    created,
-                    _iso(job.started_at),
-                    _iso(job.completed_at),
-                    _iso(job.updated_at) or created,
-                    float(job.progress),
-                    job.eta_seconds,
-                    str(job.worker_id) if job.worker_id is not None else None,
-                    job.run_mode,
-                    job.source,
-                    job.prompt_source,
-                    job.prompt_pack_id,
-                    _json_dumps(job.randomizer_metadata or {}),
-                    job.variant_index,
-                    job.variant_total,
-                    _json_dumps(_execution_metadata_to_dict(job.execution_metadata)),
-                    job.error_message,
-                    _json_dumps(serialize_envelope(job.error_envelope))
-                    if job.error_envelope is not None
-                    else None,
-                    _json_dumps(job.result) if job.result is not None else None,
-                    _json_dumps(_artifact_references(job.result)),
-                    parent_job_id,
-                    parent_artifact_id,
-                    f"{record.positive_prompt[:64]} | {record.base_model}",
-                ),
-            )
-        self._emit(self.get_job(job.job_id))
+            for offset, prepared in enumerate(batch):
+                self._insert_job_submission(connection, prepared, int(next_order) + offset)
+        for prepared in batch:
+            self._emit(self.get_job(prepared.job.job_id))
+
+    def record_job_submission(self, job: Job) -> None:
+        self.record_job_submissions([job])
 
     def transition_job(
         self,

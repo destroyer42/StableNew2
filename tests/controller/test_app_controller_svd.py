@@ -136,7 +136,7 @@ def test_submit_svd_folder_batch_delegates_once_then_syncs_once() -> None:
     controller._svd_controller = Mock()
     controller._svd_controller.build_svd_config.return_value = "cfg"
     controller._svd_controller.submit_svd_folder_batch.return_value = ["job-1", "job-2"]
-    controller._sync_queue_state_after_direct_submission = Mock()
+    controller.sync_queue_state_after_direct_submission = Mock()
     controller._append_log = Mock()
 
     job_ids = controller.submit_svd_folder_batch(
@@ -152,7 +152,7 @@ def test_submit_svd_folder_batch_delegates_once_then_syncs_once() -> None:
         match_source_aspect=True,
         output_route="SVD",
     )
-    controller._sync_queue_state_after_direct_submission.assert_called_once()
+    controller.sync_queue_state_after_direct_submission.assert_called_once()
 
 
 def test_preview_svd_folder_batch_projects_counts_without_queue_submission() -> None:
@@ -293,7 +293,7 @@ def test_submit_video_workflow_job_syncs_queue_state_after_direct_enqueue() -> N
     controller = AppController.__new__(AppController)
     workflow_controller = Mock()
     workflow_controller.submit_video_workflow_job.return_value = "job-video-123"
-    controller._get_video_workflow_controller = Mock(return_value=workflow_controller)
+    controller.get_video_workflow_controller = Mock(return_value=workflow_controller)
     controller._refresh_app_state_queue = Mock()
     flush_now = Mock()
     controller.app_state = SimpleNamespace(flush_now=flush_now)

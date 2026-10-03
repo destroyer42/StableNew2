@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-01
+Updated: 2026-10-02
 
 ## Repository
 
@@ -407,6 +407,15 @@ Updated: 2026-10-01
   ran once the GPU was free: the separate motion prompt removed the duplicate subject (ghost persistence 28 to 0 of
   39) but the driven locomotion disappeared with it, and pose strength 1.5 / reference strength 1.3 did not restore
   it. Driving-motion quality therefore remains `EXECUTION_PASS / PRODUCT_QUALITY_PARTIAL` pending owner review.
+  `PR-VID-194 — One-Variable Operator Experiments` is **IMPLEMENTED / VERIFIED / READY FOR OWNER FINAL PR REVIEW;
+  NOT MERGED TO `main`** (`docs/Subsystems/Video/PR-VID-194_Animate2_One_Variable_Operator_Experiments.md`).
+  Video Workflow gains a bounded "Compare one control" section: the current resolved value of one spec-declared
+  operator control (Variant A) plus 1-3 candidates, one frozen baseline (one concrete seed, source and driving-video
+  hashes), every arm built through the same extracted `VideoWorkflowNjrBuilder` as a normal submission with the
+  existing `LearningJobContext`, a fail-closed controlled-diff gate, and a single `JobService.submit_njrs` call.
+  No new experiment store, queue or lifecycle authority, no automatic search or winner selection, and Wan-Animate-2
+  stays experimental per-job opt-in. Validation is CPU/fake-runtime only; no physical generation was run and no
+  promotion or readiness conclusion changed.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

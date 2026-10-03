@@ -41,6 +41,9 @@ class JobQueue:
         self._jobs: dict[str, Job] = {}
         self._counter = 0
         self._lock = Lock()
+        # Serializes durable queue-order writers (admission and complete reorders) with the
+        # projection step that follows them.  Lock order: _admission_lock, then _lock.
+        self._admission_lock = Lock()
         self._paused = False
         self._history_store = self._repository
         # PR-MEMORY-001: Bounded finalized jobs (max 100) using deque for FIFO eviction
@@ -65,12 +68,31 @@ class JobQueue:
         self._paused = bool(self._repository.get_setting("queue_paused", False))
 
     def submit(self, job: Job) -> None:
-        self._repository.record_job_submission(job)
-        job._persist_runtime_state = lambda current=job: self.persist_runtime_state(current)
-        with self._lock:
-            self._counter += 1
-            self._jobs[job.job_id] = job
-            heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
+        self.submit_many([job])
+
+    def submit_many(self, jobs: Iterable[Job]) -> None:
+        """Admit a batch all-or-none: durable commit first, then ONE projection step.
+
+        The repository commits the whole batch in a single transaction.  If that raises, nothing
+        was added to the runnable projection and no state change is announced.  Only after the
+        commit are all new jobs made runnable together under the queue lock, so a worker can never
+        observe a partially projected batch. Admissions serialize durable commit and projection
+        together, preserving repository FIFO order across concurrent callers.
+        """
+
+        batch = list(jobs)
+        if not batch:
+            return
+        # Keep the projection lock free for repository observers that read the queue.
+        with self._admission_lock:
+            self._repository.record_job_submissions(batch)
+            for job in batch:
+                job._persist_runtime_state = lambda current=job: self.persist_runtime_state(current)
+            with self._lock:
+                for job in batch:
+                    self._counter += 1
+                    self._jobs[job.job_id] = job
+                    heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
         self._notify_state_listeners()
 
     def get_next_job(self) -> Job | None:
@@ -321,6 +343,10 @@ class JobQueue:
     # ------------------------------------------------------------------
     # PR-GUI-F2: Queue Manipulation Methods
     # ------------------------------------------------------------------
+    # Each move derives a complete durable order from the projection, so it holds the
+    # admission lock to avoid ordering around rows an admission has committed but not yet
+    # projected.
+
 
     def move_up(self, job_id: str) -> bool:
         """Move a queued job up one position (higher priority).
@@ -332,7 +358,7 @@ class JobQueue:
             True if the job was moved, False if not found or already at top.
         """
         moved = False
-        with self._lock:
+        with self._admission_lock, self._lock:
             # Find queued jobs in order
             queued = self._get_ordered_queued_jobs()
             for i, (priority, counter, jid) in enumerate(queued):
@@ -363,7 +389,7 @@ class JobQueue:
             True if the job was moved, False if not found or already at bottom.
         """
         moved = False
-        with self._lock:
+        with self._admission_lock, self._lock:
             queued = self._get_ordered_queued_jobs()
             for i, (priority, counter, jid) in enumerate(queued):
                 if jid == job_id:
@@ -393,7 +419,7 @@ class JobQueue:
             True if the job was moved, False if not found or already at front.
         """
         moved = False
-        with self._lock:
+        with self._admission_lock, self._lock:
             queued = self._get_ordered_queued_jobs()
             if not queued:
                 return False
@@ -455,7 +481,7 @@ class JobQueue:
             True if the job was moved, False if not found or already at back.
         """
         moved = False
-        with self._lock:
+        with self._admission_lock, self._lock:
             queued = self._get_ordered_queued_jobs()
             if not queued:
                 return False

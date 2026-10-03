@@ -27,6 +27,7 @@ from src.pipeline.artifact_contract import extract_artifact_paths
 from src.pipeline.job_models_v2 import (
     CURRENT_NJR_SCHEMA_VERSION,
     ImageWorkloadSpec,
+    LearningJobContext,
     NJRProvenance,
     NormalizedJobRecord,
     OutputPlan,
@@ -200,6 +201,7 @@ class ReprocessJobBuilder:
         pack_name: str = "Reprocess",
         source: str = "reprocess",
         extra_metadata: dict[str, Any] | None = None,
+        learning_context: LearningJobContext | None = None,
     ) -> NormalizedJobRecord:
         """Build a single reprocessing job for a batch of images.
 
@@ -212,6 +214,8 @@ class ReprocessJobBuilder:
             negative_prompt: Negative prompt for stages that need it.
             model: Model name for reference (not used for upscale-only).
             pack_name: Pack name for folder organization.
+            learning_context: Optional experiment identity recorded in the immutable
+                provenance (``None`` leaves provenance unchanged for every other caller).
 
         Returns:
             NormalizedJobRecord configured for reprocessing.
@@ -332,7 +336,7 @@ class ReprocessJobBuilder:
             workload=workload,
             stages=tuple(stage_chain),
             output_plan=OutputPlan(base_output_dir=output_dir),
-            provenance=NJRProvenance(metadata=metadata),
+            provenance=NJRProvenance(metadata=metadata, learning_context=learning_context),
         )
 
     @staticmethod
