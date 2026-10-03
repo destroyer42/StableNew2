@@ -8,6 +8,10 @@ image parity verdict has been reached. The first attempt failed admission (secti
 cohort passed that repaired surface but was refused for prompt mismatch before network generation
 dispatch (section18). Neither attempt is evidence of Forge image failure.
 The bounded canonical intent-preservation repair and no-generation evidence are recorded in section19.
+Cohort3 (section20) stopped on a harness-context observation failure; section21 converges physical
+acceptance onto a thin in-repo canonical-path driver and proves it deterministically. Physical
+generation (the non-acceptance Forge viability probe and the two-job canonical baseline) remains
+**pending explicit owner authorization**.
 
 Base: `origin/main` `715e352f28640cb0eb3225a5b1752fc5e192c778` (PR #35 / PR-TEST-TRUTH-210 merged).
 Initial implementation/evidence: Claude Code cloud session. Local/Desktop installation and GET-only
@@ -1159,3 +1163,109 @@ telemetry and integrity checks. No contact sheet exists because no image was gen
 The known Forge Gradio/Pillow conflict and existing A1111 MediaPipe/protobuf and OpenCV/NumPy debt
 remain unchanged; successful startup does not qualify inference or establish those debts as the
 cause of this refusal. A1111 remains default. FORGE-110, publication and merge remain out of scope.
+
+## 21. Qualification convergence: thin canonical-path acceptance driver (no generation)
+
+Local HEAD at start: `46f44b7a6761ad48903e62297647a847db447b1f` (not reset to the older remote branch tip,
+not rebased, not pushed). Cohorts 1-3 stay **QUALIFICATION_INFRASTRUCTURE_BLOCKED** with zero generation
+requests reaching either backend; every terminal/unsubmitted job ID and all external evidence are untouched.
+Execution Profile: Standard / LOCAL desktop; Claude Code Sonnet 5.5 XHigh. Controller Surface Assessment:
+no controller/coordinator/production source change. No GPU, runtime launch (other than throwaway fake
+processes in tests), model, package or dependency action occurred.
+
+### Why three physical attempts failed for harness reasons: the architectural problems
+
+The old physical path was `tools/qualification/img_forge_100/run.py` (`execute_matrix`/`build_services`)
+plus an external, per-cohort `session.py`. Together they were a parallel application shell:
+
+1. **Evidence location was the application context.** `session.py` did `os.chdir(<evidence dir>)`.
+   `process_inspector_v2` recognizes StableNew only through a process whose working directory is under the
+   repository (or `-m src.main`, a known script, or an env marker queried only after those). The harness
+   process was therefore not an anchor, the manager-owned WebUI launcher/child tree had no anchored
+   ancestor, and `collect_process_risk_snapshot()` returned an empty observation (cohort 3).
+2. **Its own NJR construction** (`compile_case` hand-built `NormalizedJobRecord`, stage configs, the global
+   prompt policy call and the optimizer flag): cohort 2 failed because that copy of production intent was
+   incomplete.
+3. **Its own runtime transition coordinator** with `webui_manager_getter=lambda: None` and faked
+   `webui_endpoint_present`/identity, so production runtime transition and ownership were never exercised.
+4. **Its own backend registry, controllers and dispatch map** (`dispatch(job)` by backend id), and its own
+   polling loop.
+5. **A second dispatch authority**: `Session.request` was monkey-patched to audit/gate every generation POST
+   (payload equality, second-dispatch refusal, process-risk re-check, profile-changed, checkpoint checks).
+6. **A second lifecycle authority**: it swapped `manager._config` fields to move one manager between runtimes,
+   wrapped `JobService.submit_njrs`, ran port checks, a telemetry thread and a hard-stop state machine.
+7. **A second ownership/process-risk gate** (`webui_runtime_tree_count != 1`) contradicting production
+   admission, plus bespoke process-tree and listener heuristics.
+
+### Responsibilities removed from the harness
+
+NJR construction (now the production `build_cli_njr`), global-prompt/optimizer freezing (the production
+`apply_global_prompt_policy` plus the existing `prompt_optimizer` config key), runtime transition coordinator,
+backend registry/controllers/dispatch (the production `PipelineRunner` defaults), HTTP patching and
+generation auditing, manager-internal mutation, `submit_njrs` wrapping, the second process-risk gate, and
+`os.chdir`. `run.py`'s physical path is marked superseded; its validation/preview helpers and the historical
+tests remain.
+
+### New architecture: `tools/acceptance/img_forge_100_acceptance.py`
+
+    frozen intent (tests/data/contracts/img_forge_100_frozen_intent.json, Pair A only)
+      -> freeze_njr: build_cli_njr + apply_global_prompt_policy + prompt_optimizer.enabled=false
+      -> JobService.submit_njrs -> SQLite JobRepository/JobQueue -> SingleNodeJobRunner
+      -> PipelineController._run_job -> PipelineRunner.run_njr -> image backend registry -> WebUI-family backend
+      runtime: WebUIProcessManager only (start / observe / stop)   report: acceptance.json, intent.json
+
+Run as a module from the checkout, `python -m tools.acceptance.img_forge_100_acceptance --backend <id>
+--runtime-profile <json> --reports-dir <anywhere> --approved-intent-sha256 <digest>`; `--dry` freezes and
+prints the intent digest and submits/starts nothing. One job per invocation (the product keeps exactly one
+WebUI-family client per runtime slot, so A1111 then Forge are two invocations, which also matches the
+"A1111 first, stop on failure" rule). It requires the owner's exact intent digest, refuses a non-empty
+reports directory (evidence is never overwritten), never retries or replays, records an ambiguous or
+device-loss outcome and stops, and classifies - without a second heuristic - a manager-owned tree that the
+production inspector cannot see as `PRODUCTION_PROCESS_OBSERVATION_DEFECT` before submitting anything.
+
+### Proof that the reports directory does not alter application context
+
+`tests/tools/test_img_forge_100_acceptance_driver.py` (23 tests, mocked HTTP, real JobService/SQLite/run_njr,
+real runtime admission) runs the driver from the checkout with `os.chdir` made to fail, once with a repo-local
+reports directory and once with an external one, for A1111 and Forge. The intent digest, the SQLite-stored
+intent, every non-generation request, the single dispatched txt2img payload, the backend identity and the
+recorded cwd are identical. Frozen prompts match byte for byte (UTF-8) and hostile mutable global files do not
+reach them; global-prompt application is disabled (`has_frozen_global_prompt_policy`, all five stage flags
+false); `prompt_optimizer.enabled=false`; seed 424242; one generation POST. A1111 and Forge dispatch the same
+payload, and it is byte-identical to the request produced by the superseded `compile_case` NJR, so
+convergence did not move the owner-approved intent. AST checks forbid a second compiler/queue/dispatch/
+transition coordinator/ownership gate in the driver. Machine-local evidence (additive, external):
+`convergence-46f44b7-dryproof/` - intent digests A1111 `faa61efc…`, Forge `77cb94ab…`; the dispatched request
+sha256 `09860f19…` is identical across both backends and both reports locations.
+
+### Process observation (cohort-3 regression and manager evidence)
+
+A deterministic process table reproduces the failure and the cure with the real inspector: harness cwd =
+repository gives one runtime tree (roots `[11]`, three StableNew-like PIDs, normal); the old external-cwd,
+`session.py` context gives an empty observation. On Windows, a real `WebUIProcessManager` launches a throwaway
+`launch.py` server through the driver's runtime wrapper: the manager owns it, its launcher/child tree contains the
+listening PID, the production inspector sees exactly one tree rooted at the manager's PID with no duplicate
+finding, the job completes through the fake transport, the owned tree is released (no survivors/listeners) and the
+global manager is cleared. An occupied endpoint is refused and its external listener left running. The process
+container is not exposed by the manager's API and is not recorded. **No production process-observation defect
+is demonstrated:** the observer behaves as designed and the cause was the harness's working directory. The old
+mechanism could not be reproduced live from a venv launcher whose own cwd is the repository, because that shim
+is itself an anchored ancestor; the hermetic table test is the faithful reproduction. Independent unrelated
+WebUIs on other ports remain hardening debt, not a FORGE-100 blocker.
+
+### Validation
+
+Focused: driver 23, canonical path 19, process ownership/inspector 79, prompt intent 38, Forge/A1111
+adapters/client/transition 103, qualification tooling/descriptor 28, executor ADetailer 18 (308 passed). Scoped
+Ruff and `git diff --check` clean. One Python 3.14 PR gate: completeness, controller ratchet, Ruff, mypy smoke,
+4475 collected / 184 smoke passed.
+
+### Not done (awaiting explicit owner authorization)
+
+Phase 4 (one non-acceptance direct Forge viability generation) and Phase 5 (exactly two fresh canonical Pair-A
+jobs, A1111 then Forge) were not executed. The dispatched request carries no `override_settings`; the
+checkpoint is selected by the product's normal options write, so the probe must load the same checkpoint
+through the same launch profile rather than adding a request override. The known Gradio 4.40.0 / Pillow 12.3.0
+conflict is preserved. Next, if the baseline passes: `PR-IMG-FORGE-RUNTIME-100` (managed Forge runtime
+modeled on PR-COMFY-RUNTIME-100), including evaluation of API-only operation. A1111 remains default;
+FORGE-110, publication and merge remain out of scope.

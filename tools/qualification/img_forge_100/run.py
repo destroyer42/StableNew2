@@ -3,6 +3,13 @@
 Default CLI operation is preview only. Physical execution requires a separately approved matrix
 digest and source/runtime provenance. No raw generation API, retry, runtime launcher or cancellation
 case is provided here. Every failure stops further submission and retains the repository/artifacts.
+
+SUPERSEDED for physical acceptance: ``execute_matrix``/``build_services`` hand-build NJRs, a runtime
+transition coordinator with faked endpoint presence, backend wiring and dispatch, which duplicated
+production authority and (run from an external evidence directory) lost the StableNew process anchor in
+three physical attempts. Physical Pair-A acceptance now uses the thin canonical-path driver
+``tools/acceptance/img_forge_100_acceptance.py``. This module is retained for matrix validation/preview and
+for the historical tests that pin the frozen eight-case intent.
 """
 
 from __future__ import annotations
