@@ -27,7 +27,7 @@ Updated: 2026-10-03
   materially; GFPGAN stays a named method that fails closed. `opencv-python` stays core (Photo Optimize
   uses it; the retained helper requires it). See
   `docs/Subsystems/Video/PR-POSTPROC-100_Restoration_Isolation.md`.
-- Managed ComfyUI runtime (PR-COMFY-RUNTIME-100, current, under owner review; not merged to `main`): the
+- Managed ComfyUI runtime (PR-COMFY-RUNTIME-100, COMPLETE / ACCEPTED / INTEGRATED; PR #34): the
   StableNew-managed Comfy is a reproducible, independently owned runtime separate from the application
   environment: ComfyUI `v0.38.0` (`6b747c04…`) on official standard-GIL CPython 3.13.x, Torch `2.14.0+cu130`, no
   custom nodes, identity in `config/managed_comfy_runtime.json`, the complete exact package set in
@@ -39,6 +39,15 @@ Updated: 2026-10-03
   provenance; `@1.0.0`/`@1.1.0` are byte-identical. Workflows stay experimental. See
   `docs/Subsystems/Video/PR-COMFY-RUNTIME-100_Managed_Comfy_Runtime.md` and
   `docs/runbooks/managed_comfy_runtime.md`.
+- Pre-Forge execution and test truth (PR-TEST-TRUTH-210, current while its PR is open; bounded truth package, not
+  a product capability): `build_run_plan_from_njr` is fail-closed - only explicitly enabled, explicitly named
+  stages are planned, and a missing/blank stage identity or an empty/all-disabled chain raises `ValueError`
+  instead of becoming `txt2img`; `PipelineRunner.run_njr` validates the plan before any metrics/`free_vram`/backend
+  side effect. The active deterministic suite no longer carries permanent "Implementation pending/deferred" or
+  PR-GUI-F1 placeholder skips (Golden Path, run-control and stage-checkbox surfaces were mapped to their current
+  authority or retired). See
+  `docs/Subsystems/Testing/PR-TEST-TRUTH-210_Pre_Forge_Execution_and_Test_Truth.md`. After explicit owner
+  acceptance/integration the next product package is `PR-IMG-FORGE-100`.
 - Active diagnostic evidence: `DIAG-GPU-130 - Post-5600 Black-Screen Recurrence` - **XMP-OFF
   RECURRENCE / ACTIVE OBSERVATION; EXIT CRITERION NOT MET**. The owner confirms the RAM XMP profile
   has now been removed. After the 2026-09-25 07:06:20 ET boot, Windows reports both DIMMs at

@@ -137,6 +137,20 @@ the lane to required only after it is proven green. Tests must isolate host
 state: PromptPacks via `STABLENEW_PROMPTPACK_DIR`/injected `packs_dir`, runtime transitions via
 fake owner managers, and never read or write the owner's real data.
 
+## Skips and retired tests
+
+Active deterministic test suites must not preserve removed architecture or
+deferred/unimplemented product behavior through unconditional permanent skips.
+Obsolete tests are retired, current behavior is tested against its current
+authority, and genuine environment/optional/real-backend conditions use
+explicit predicates or opt-ins. A missing expected current surface fails the
+test; it is never converted into a skip. Deferred product behavior is recorded
+in documentation, not as a placeholder test. This does not require zero skips
+repository-wide: Tk genuinely unavailable, Windows-only structures, optional
+dependencies, qualification-source environment variables, and explicit
+real-process/real-backend opt-ins remain legitimate. See
+`docs/Subsystems/Testing/PR-TEST-TRUTH-210_Pre_Forge_Execution_and_Test_Truth.md`.
+
 ## Repository completeness
 
 Every imported production module must be tracked in Git. Source packages may
