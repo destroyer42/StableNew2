@@ -54,3 +54,14 @@ def test_descriptor_records_no_verdict_before_the_authorized_physical_run() -> N
     assert "NOT_AUTHORIZED" in data["qualification_status"]
     assert data["isolation"]["a1111_installation_mutation"] == "forbidden"
     assert data["dependency_install"]["model_downloads"].startswith("NOT authorized")
+
+
+def test_yolo_only_profile_keeps_mediapipe_outside_qualification() -> None:
+    data = _load()
+    profile = data["adetailer"]["qualification_profile"]
+    assert profile["yolo_face"].startswith("REQUIRED / QUALIFY")
+    assert profile["yolo_hands"].startswith("REQUIRED / QUALIFY")
+    for mode in ("mediapipe_face", "mediapipe_mesh", "mediapipe_eyes"):
+        assert profile[mode] == "NOT QUALIFIED"
+    assert "--skip-install" in data["launch"]["qualification_runtime_flags_owner_approved"]
+    assert data["launch"]["skip_install_scope"].startswith("Qualification only")

@@ -70,6 +70,8 @@
     "port_rationale": "StableNew's WebUI discovery scans 7860-7869; a distinct port outside that range keeps the Forge qualification endpoint from being auto-discovered as a default A1111.",
     "extension_safety_flags_pending_owner_approval": [],
     "extension_safety_flags_owner_approved": ["--ad-no-huggingface"],
+    "qualification_runtime_flags_owner_approved": ["--uv", "--skip-install"],
+    "skip_install_scope": "Qualification only: dependencies were prepared separately; disable extension installers to prevent reinstalling the owner-excluded broken MediaPipe artifact. Not a FORGE-110 production policy.",
     "extension_safety_flags_rationale": "Owner approved the no-download flag and existing-detector routing for the isolated install/preflight phase. Physical inference remains unauthorized. The extension flag remains explicit and separate from the three core launch flags.",
     "forbidden_tuning_flags": [
       "--xformers",
@@ -85,10 +87,11 @@
     "neo_requirements_file": "requirements.txt at the pinned commit (exact pins, includes diffusers 0.37.1, transformers 4.57.6, numpy 2.3.5, fastapi 0.127.1)",
     "model_downloads": "NOT authorized (checkpoints, VAEs, LoRAs, ControlNet models, detectors)",
     "adetailer_proposed_pins": ["ultralytics==8.3.253", "mediapipe==0.10.31", "rich==14.3.4"],
-    "adetailer_metadata_feasibility": "Historical index/filename-only feasibility: a 45-package closure had no declared requirement conflicts against shared Forge direct pins, and MediaPipe 0.10.31 was advertised as py3-none-win_amd64. Actual installed contents now contradict that platform claim (Linux WHEEL tag and .so); installed compatibility is BLOCKED. The historical snapshot is not a full Forge lock or an imported runtime verdict.",
-    "install_plan_status": "ISOLATED_UV_INSTALLER_EXIT_0 / PACKAGING_CONFLICTS / PREFLIGHT_BLOCKED",
-    "install_plan_blocker": "The authorized frozen --uv installer completed, but uv pip check and pip check both report the known Gradio 4.40.0/Pillow 12.3.0 conflict AND an unexpected MediaPipe 0.10.31 platform incompatibility. Installed MediaPipe WHEEL declares cp39-cp39-linux_x86_64 and RECORD contains a Linux .so despite the installer naming a py3-none-win_amd64 wheel. Owner rule C requires STOP before runtime startup. No package/pin/source repair was attempted; this is not an inference compatibility verdict.",
+    "adetailer_metadata_feasibility": "Historical advertised MediaPipe wheel metadata was contradicted by installed Linux contents. Owner adjudicated MediaPipe outside the accepted YOLO face/hand contract and authorized uninstall without replacement. No formal installed-distribution dependency is missing afterward; both checks report only the known Gradio/Pillow conflict. This does not prove extension registration or inference.",
+    "install_plan_status": "FORGE_INSTALL_WITH_KNOWN_METADATA_CONFLICT / PREFLIGHT_BLOCKED_RUNTIME_CONTRACT",
+    "install_plan_blocker": "After authorized MediaPipe removal, Gradio 4.40.0/Pillow 12.3.0 is the sole package inconsistency. Runtime preflight is blocked separately: cmd-flags returns HTTP500 response validation errors for port and forge_ref_a1111_home; ADetailer Script construction fails because shared.cmd_opts.use_cpu is absent. Owner hard gates 2 and 6 stopped further preflight. No source/extension/dependency repair was attempted.",
     "installation_observation": {
+      "snapshot_stage": "HISTORICAL_BEFORE_OWNER_AUTHORIZED_MEDIAPIPE_REMOVAL",
       "installer_exit": 0,
       "python": "3.13.16 Windows AMD64",
       "torch": "2.13.0+cu130",
@@ -103,6 +106,22 @@
       "runtime_started": false,
       "generation_dispatched": false,
       "evidence": "Machine-local evidence-install-d70373eb; qualification document section 13"
+    },
+    "yolo_profile_observation": {
+      "mediapipe": "UNINSTALLED / NO_REPLACEMENT / NO_RESIDUAL_PACKAGE_OR_DIST_INFO",
+      "package_classification": "FORGE_INSTALL_WITH_KNOWN_METADATA_CONFLICT",
+      "uv_check_exit": 1,
+      "pip_check_exit": 1,
+      "sole_package_conflict": "Gradio 4.40.0 requires Pillow>=8,<11; installed Pillow12.3.0",
+      "runtime_started": true,
+      "listener": "127.0.0.1:7871, qualification-owned process",
+      "runtime_identity": "unknown (cmd-flags HTTP500)",
+      "adetailer_module_import": "Initialized version26.2.0 without MediaPipe",
+      "adetailer_script_registration": "BLOCKED: Namespace has no attribute use_cpu",
+      "managed_runtime_smoke": "NOT_EXECUTED_AFTER_HARD_GATE_STOP",
+      "qualification_owned_runtime_stopped": true,
+      "generation_requests": 0,
+      "evidence": "Machine-local evidence-install-d70373eb/yolo-adjudication; qualification document section 14"
     },
     "install_protocol": "Qualification document section 12 records the original protocol; section 13 records its authorized execution and blocking result. Machine-local exact-command proposal in reports/img_forge_100/forge-install-protocol.md. Installation-only --exit and --skip-torch-cuda-test are distinct from subsequent runtime flags."
   },
@@ -132,6 +151,14 @@
     "commit_date": "2026-02-05T22:43:40+09:00",
     "install_py_dependencies": ["ultralytics>=8.3.75", "mediapipe>=0.10.13", "rich>=13.0.0"],
     "required_detectors": ["face_yolov8n.pt", "hand_yolov8n.pt"],
+    "qualification_profile": {
+      "yolo_face": "REQUIRED / QUALIFY (registration currently blocked)",
+      "yolo_hands": "REQUIRED / QUALIFY (registration currently blocked)",
+      "mediapipe_face": "NOT QUALIFIED",
+      "mediapipe_mesh": "NOT QUALIFIED",
+      "mediapipe_eyes": "NOT QUALIFIED",
+      "scope": "Owner-approved YOLO-only qualification. MediaPipe absence is not a StableNew regression; no replacement or source patch."
+    },
     "mediapipe_substitution": "forbidden (StableNew's accepted contract is the REST payload with YOLO detectors)",
     "detector_resolution": {
       "default_source": "huggingface_hub.hf_hub_download into the HuggingFace cache (network)",

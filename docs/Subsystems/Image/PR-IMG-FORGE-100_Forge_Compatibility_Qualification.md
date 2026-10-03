@@ -396,7 +396,7 @@ Sources: [Neo uv hook](https://github.com/Haoming02/sd-webui-forge-classic/blob/
 [uv environment/constraints](https://docs.astral.sh/uv/reference/environment/),
 [uv consistency checks](https://docs.astral.sh/uv/pip/inspection/).
 
-## 13. Authorized isolated installation — PREFLIGHT_BLOCKED
+## 13. Authorized isolated installation — PREFLIGHT_BLOCKED (historical checkpoint)
 
 Execution Profile + Model/Reasoning Recommendation: Standard bounded local runtime qualification;
 Local/Desktop, GPT-6.1 Sol XHigh or Sonnet 5.5 XHigh, preserving the accepted context and evidence.
@@ -455,3 +455,68 @@ checks, MediaPipe WHEEL/RECORD platform evidence, passive runtime capture and co
 An initial `pip inspect` console capture failed on cp1252 encoding of a package-description emoji;
 the read-only capture was repeated with `-X utf8` successfully, retaining the original partial output.
 This did not mutate packages or change the installer/consistency verdict.
+
+## 14. Owner-adjudicated YOLO-only profile — PREFLIGHT_BLOCKED
+
+Execution Profile + Model/Reasoning Recommendation: Standard bounded local qualification;
+Local/Desktop, GPT-6.1 Sol XHigh or Sonnet 5.5 XHigh. Reuse accepted source/validation context to avoid
+rediscovery. Controller Surface Assessment: no controller/coordinator or production implementation
+changes. Token-Efficient Validation Plan: capture the authorized isolated dependency removal, run both
+package checks, perform GET-only runtime preflight, stop at hard gates, and validate only updated
+descriptor assertions. Accepted Python 3.14 source/gate evidence remains applicable.
+
+The owner adjudicated MediaPipe outside the accepted ADetailer YOLO face/hand product contract.
+The bad **0.10.31** distribution was captured one final time, then removed with the isolated Forge
+interpreter's `python -m pip uninstall --yes mediapipe` (exit **0**). No replacement was installed.
+Verification found no `mediapipe*` package/dist-info paths, no import spec and no installed distribution.
+Both `uv pip check` and ordinary `pip check` then reported exactly one inconsistency: Gradio **4.40.0**
+requires Pillow **>=8,<11** while **12.3.0** is installed. No installed distribution reported missing
+MediaPipe. Package classification: **FORGE_INSTALL_WITH_KNOWN_METADATA_CONFLICT**. The same result and
+unchanged package freeze were verified after runtime shutdown.
+
+The qualification launch retained the frozen source/interpreter/endpoint/reference/offline environment
+and added owner-approved **`--skip-install`** alongside **`--ad-no-huggingface`**. This profile deliberately
+disables extension installers after environment preparation, preventing reintroduction of the known
+broken artifact. It is not a FORGE-110 production policy. No tuning flags or source patches were used.
+Logging-only UTF-8/unbuffered environment overrides captured startup output without the prior console
+encoding limitation. A1111/Comfy configuration and installations were untouched.
+
+Forge started and listened at **127.0.0.1:7871**. Startup reported **30.3 seconds**, Torch CUDA device
+RTX 4070 Ti and default PyTorch attention. Qualification-owned launcher/child PIDs and parent chains
+are preserved in machine-local evidence. The ADetailer module printed version **26.2.0**, **9 models**
+without MediaPipe installed. This proves module import/initial model-list initialization only, not
+successful script registration, detector API discovery or YOLO inference.
+
+Two distinct required runtime contracts failed:
+
+- **ADetailer script construction:** its `get_ultralytics_device()` reads
+  `shared.cmd_opts.use_cpu`; the frozen Forge namespace lacks that attribute. The script constructor
+  fails with `AttributeError`, for both script runners. Hard gate **2** applies. The earlier initialization
+  message cannot be treated as a registered/callable ADetailer script.
+- **Forge runtime identity API:** `GET /sdapi/v1/cmd-flags` returns **HTTP 500**. Frozen Forge's dynamic
+  `FlagsModel` infers `str | None` when a parser default is `None`, but `get_cmd_flags()` returns raw
+  parsed values. Response validation rejects integer `port=7871` and the `WindowsPath`
+  `forge_ref_a1111_home` value. Positive StableNew endpoint identity cannot be established; classifier
+  evidence remains **unknown** and the Forge guard rejects unknown before dispatch. Hard gate **6** applies.
+
+Only readiness GETs to cmd-flags occurred, including HTTP404 before API registration and HTTP500 after
+registration. No generation/options POST, ADetailer/upscale inference or other API capability probe ran.
+On observing the failures, only this session's owned launcher and child were stopped after command and
+parent-chain verification. They exited; port 7871 is free afterward. No restart/alternate candidate was tried.
+The managed WebUIProcessManager smoke was not executed because direct preflight failed; no external
+PID was adopted or stopped. A detached extension HEAD also caused a Git-info UI diagnostic, recorded
+without changing refs; it is not used as a third required-runtime contract finding.
+
+The isolated HF cache remained empty. `--ad-no-huggingface`, offline environment and the existing
+`ad_extra_models_dir` snapshot were retained; no detector download occurred. Exact face/hand API
+discovery, checkpoint/VAE/LoRA/upscaler API normalization and ControlNet API capability remain
+**NOT QUALIFIED / NOT OBSERVED**, not silently inferred from startup messages. ControlNet's UI callback
+did register in startup logs, but the required read-only API verdict is not established.
+
+Required qualification modes remain **YOLO face / YOLO hands**. MediaPipe face, mesh and eyes are
+explicitly **NOT QUALIFIED**, outside this package's contract and not StableNew regressions.
+The eight-job structure/assets/settings are unchanged; no physical jobs ran. Final state:
+**PREFLIGHT_BLOCKED** despite the now-acceptable known-only packaging conflict. Owner adjudication of
+the two frozen upstream runtime-contract failures is required before further runtime work. No StableNew,
+Forge or ADetailer production repair, alternate extension, dependency substitution or architecture change
+was attempted. A1111 remains default; FORGE-110 was not started.
