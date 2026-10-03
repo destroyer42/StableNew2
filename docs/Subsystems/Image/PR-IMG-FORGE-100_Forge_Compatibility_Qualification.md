@@ -1080,3 +1080,82 @@ Known Forge Gradio/Pillow conflict and existing A1111 package debt are unchanged
 Zero physical generation, runtime launch, detector/package download, process mutation or cohort3
 submission. A1111 remains default; FORGE-110 remains out of scope. Next action requires owner acceptance
 of this source checkpoint and renewed physical-cohort authorization with fresh job identities.
+
+## 20. Physical cohort 3: process observation blocked before submission
+
+The owner authorized the exact eight frozen workloads at StableNew
+`6426af124952a8c65be330fbc477fc2e4253edee`. Cohort **physical-6426af1-pass3** retained
+Forge `d70373ebcf1a96d210b78cd6f77196459e783e2a` and ADetailer-Neo
+`af228eba7a3f3691a25bcd1fc94aa95e600dd3e6`. The short freeze verified all six asset
+hashes, the accepted Forge package inventory, eight exact prompt character/UTF-8 comparisons,
+seed424242, complete frozen_njr global policy with all five application flags false, and the
+disabled optimizer. Settings, assets and generation intent were unchanged. Eight fresh NJRs
+were written with identity prefix **forge100-486af12a977b8806**; no historical identity was reused.
+The unchanged qualification tool requires interleaved backend order, within the owner's stated
+exception; Pair A A1111 was the first intended submission.
+
+Execution Profile: **Standard / LOCAL desktop**; recommendation **GPT-6.1 Sol XHigh** for Codex,
+**Sonnet5.5 XHigh** for Claude Code, preserving package context and minimizing another discovery
+cycle. Actual host model/effort and token usage were unavailable and are not inferred from this
+recommendation. Controller Surface Assessment: no controller/coordinator or production source
+changes. Token-Efficient Validation Plan: reuse accepted source/gate evidence; short frozen-input
+verification, passive pre-HTTP evidence and existing survivor telemetry; final SQLite/NJR/hash
+integrity checks only. No repeated PR gate or deterministic sweep.
+
+### Observed guard refusal
+
+The single WebUIProcessManager launched the A1111 profile successfully. It owned launcher
+**16024**, parent **17552**, and serving child **36808**; the latter owned the localhost7860
+listener. Readiness took **13.431s**. Read-only identity positively identified A1111; checkpoint,
+LoRA, required upscaler and both YOLO detector names were visible. The process-risk snapshot
+nevertheless returned **stablenew_like_count=0, raw WebUI count=0, runtime trees=0, status=normal**.
+The independent manager tree observation contained both PIDs. This was an empty observation,
+not a true duplicate-process finding. The harness's required exactly-one-tree check refused to
+proceed with `Unexpected independent runtime tree or competing runtime`.
+
+The qualification wrapper failed before calling the underlying `JobService.submit_njrs`.
+Consequently there were **zero persisted jobs, zero generation dispatches, zero generation
+retries, zero ambiguous dispatches, zero owned restarts and zero image artifacts**. The final
+pre-HTTP prompt guard and product runtime admission were not reached. All four pairs remain
+generation-untested; no Forge process was launched. The two earlier terminal failed jobs retain
+their failed states and their evidence is unchanged.
+
+### Bounded explanation and stop boundary
+
+Source inspection shows `iter_stablenew_like_processes` filters through repository-cwd,
+StableNew-main, known-script or environment anchors before ancestry grouping. `session.py`
+outside the repository and WebUI `launch.py` are not known-script anchors; environment markers
+are queried only after repository-cwd/known-script recognition. This session was invoked from
+its external evidence directory, which it also uses as its cwd. That launch context explains
+why the observer can omit the owned tree. This is a source-backed harness/observation explanation,
+not a demonstrated regression of ancestry grouping or a Forge execution failure. No additional
+live reproducer, bypass, repair or physical retry was performed. The earlier accepted real
+process-tree smoke and source validation remain accepted within their tested context.
+
+An initial evidence-preparation read used the wrong historical matrix path; it was corrected
+to compare preserved NJR filenames before any runtime launch or submission. It changed no
+frozen input, historical file, production source or runtime behavior.
+
+Final classification: **QUALIFICATION_INFRASTRUCTURE_BLOCKED**. This third distinct physical
+harness observation failure triggers the owner's stop rule: return for a bounded qualification-
+harness audit instead of another repair/retry cycle. No cohort4 or physical retry is authorized
+or recommended within this session.
+
+### Cleanup and preserved evidence
+
+The owner stopped its A1111 tree cleanly; neither PID survived, manager ownership cleared, and
+7860/7871/8189 plus the singleton port were released. No external runtime was mutated. SQLite
+has **zero total/queued/running jobs**, `integrity_check=ok`, and no foreign-key violations.
+All eight NJRs remain saved, unsubmitted, with no product replay lineage. Hash verification
+confirmed **89 prior-evidence files**, **eight protected owner files**, and all six frozen
+assets unchanged. No model/detector/package downloads or YOLO/MediaPipe inference occurred.
+The four startup telemetry samples reported **35C** and at most **830MiB** VRAM, with successful
+GPU queries; these are sampled startup observations, not generation resource/stability evidence.
+
+Machine-local **physical-6426af1-pass3/hold-report.json**, **events.jsonl**, **execute-summary.json**,
+**prompt-policy-freeze.json**, **freeze.json**, **evidence-inventory.json**, eight NJRs and the empty
+**run/jobs.sqlite3** preserve pins, asset hashes, launch profiles, PID tree, observer discrepancy,
+telemetry and integrity checks. No contact sheet exists because no image was generated.
+The known Forge Gradio/Pillow conflict and existing A1111 MediaPipe/protobuf and OpenCV/NumPy debt
+remain unchanged; successful startup does not qualify inference or establish those debts as the
+cause of this refusal. A1111 remains default. FORGE-110, publication and merge remain out of scope.
