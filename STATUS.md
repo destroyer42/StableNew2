@@ -12,6 +12,12 @@ Updated: 2026-10-02
   on Python 3.12 (one required gate, one informational full-suite job); the local `run_pr_gate.py`
   pytest gates are quiet on success and complete on failure. See
   `docs/StableNew_Coding_and_Testing_v2.6.md`.
+- Reproducible ML runtime (PR-RUNTIME-DEPS-100): the supported Windows/CPython 3.12/CUDA 13.0
+  environment is defined by `constraints/windows-py312-cu130.txt` (exact pins, including the
+  resolver `pip`) applied by `scripts/bootstrap_windows.ps1`; `tools/runtime/verify_runtime_pins.py`
+  detects drift in bootstrap and `-CheckOnly`. Accepted direct stack: Torch/torchvision `+cu130`
+  2.14.0/0.29.0, Diffusers 0.40.0, Transformers 5.17.0, Accelerate 1.15.0. `opencv-python` is
+  retained because facexlib/CodeFormer require it; restoration isolation is `PR-POSTPROC-100`.
 - Active diagnostic evidence: `DIAG-GPU-130 - Post-5600 Black-Screen Recurrence` - **XMP-OFF
   RECURRENCE / ACTIVE OBSERVATION; EXIT CRITERION NOT MET**. The owner confirms the RAM XMP profile
   has now been removed. After the 2026-09-25 07:06:20 ET boot, Windows reports both DIMMs at
