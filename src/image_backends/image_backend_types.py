@@ -15,6 +15,9 @@ from src.pipeline.artifact_contract import (
 )
 
 DEFAULT_IMAGE_BACKEND_ID = "a1111_webui"
+#: Explicit, non-default identity for the Forge WebUI runtime (PR-IMG-FORGE-100). Never inferred
+#: from a model name and never the resolution target for historical records.
+FORGE_IMAGE_BACKEND_ID = "forge_webui"
 
 
 def normalize_image_backend_options(

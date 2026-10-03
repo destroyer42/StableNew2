@@ -6,14 +6,39 @@ from collections.abc import Callable
 from typing import Any
 
 from src.api.client import SDWebUIClient
+from src.api.forge_client import ForgeWebUIClient
+from src.api.webui_runtime_identity import (
+    FORGE_WEBUI_IDENTITY,
+    normalize_webui_runtime_identity,
+    resolve_configured_webui_runtime_identity,
+)
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.video.workflow_registry import WorkflowRegistry, build_default_workflow_registry
 
 
 class DefaultImageRuntimePorts:
-    """Build StableNew's concrete image runtime client and runner."""
+    """Build StableNew's concrete image runtime client and runner.
+
+    The WebUI-family client is chosen once, from the explicitly configured runtime identity
+    (``webui_runtime_identity``: ``a1111_webui`` default, or ``forge_webui``). A1111 and Forge
+    occupy one runtime slot, so there is exactly one client per configured runtime; the client is
+    never swapped under a ``Pipeline`` between jobs, and a job whose backend identity does not match
+    the connected endpoint is rejected before dispatch by the runtime identity guard.
+    """
+
+    def __init__(self, *, runtime_identity: str | None = None) -> None:
+        self._runtime_identity = runtime_identity
+
+    def _configured_identity(self) -> str:
+        if self._runtime_identity is not None:
+            return normalize_webui_runtime_identity(self._runtime_identity)
+        from src.utils.config import ConfigManager
+
+        return resolve_configured_webui_runtime_identity(ConfigManager().load_settings())
 
     def create_client(self, *, base_url: str) -> SDWebUIClient:
+        if self._configured_identity() == FORGE_WEBUI_IDENTITY:
+            return ForgeWebUIClient(base_url=base_url)
         return SDWebUIClient(base_url=base_url)
 
     def create_runner(

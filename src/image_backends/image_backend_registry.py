@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from src.image_backends.a1111_webui_backend import A1111WebUIImageBackend
+from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
 from src.image_backends.image_backend_types import ImageBackendInterface
 
 
@@ -44,4 +45,7 @@ class ImageBackendRegistry:
 def build_default_image_backend_registry() -> ImageBackendRegistry:
     registry = ImageBackendRegistry()
     registry.register(A1111WebUIImageBackend())
+    # Registered for explicit selection only; DEFAULT_IMAGE_BACKEND_ID stays a1111_webui and the
+    # runner never resolves a missing identity to Forge (PR-IMG-FORGE-100 qualification).
+    registry.register(ForgeWebUIImageBackend())
     return registry

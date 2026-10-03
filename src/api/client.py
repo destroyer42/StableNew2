@@ -21,6 +21,7 @@ from src.api.healthcheck import (
     wait_for_webui_ready,
 )
 from src.api.types import GenerateError, GenerateErrorCode, GenerateOutcome, GenerateResult
+from src.api.webui_runtime_identity import WebUIRuntimeIdentity, probe_runtime_identity
 from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.api_failure_store_v2 import record_api_failure
 from src.utils.config import ConfigManager
@@ -87,6 +88,7 @@ DEFAULT_SCHEDULERS: tuple[str, ...] = (
 _STARTUP_GRACE_ENDPOINTS = {
     "/sdapi/v1/sd-models",
     "/sdapi/v1/sd-vae",
+    "/sdapi/v1/sd-modules",
     "/sdapi/v1/samplers",
     "/sdapi/v1/schedulers",
     "/sdapi/v1/upscalers",
@@ -2320,6 +2322,32 @@ class SDWebUIClient:
                 logger.error(f"Failed to parse current VAE response: {exc}")
                 self._mark_resource_endpoint_failed(endpoint)
                 return None
+
+    def probe_runtime_identity(self) -> WebUIRuntimeIdentity:
+        """Classify the connected WebUI-family endpoint with read-only GETs (PR-IMG-FORGE-100).
+
+        Uses the bare session (no retry/backoff and no API-failure recording): an expected 404 from
+        the other WebUI family must stay quiet, and this must never write options or generate.
+        """
+
+        def _fetch(path: str) -> Any:
+            try:
+                response = self._session.get(f"{self.base_url}{path}", timeout=5.0)
+            except Exception:  # noqa: BLE001 - unreachable means unclassified
+                return None
+            try:
+                if getattr(response, "status_code", None) != 200:
+                    return None
+                return response.json()
+            except Exception:  # noqa: BLE001
+                return None
+            finally:
+                try:
+                    response.close()
+                except Exception:  # noqa: BLE001
+                    pass
+
+        return probe_runtime_identity(_fetch)
 
 
 def validate_webui_health(*args, **kwargs):

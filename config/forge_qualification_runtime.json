@@ -1,0 +1,159 @@
+{
+  "schema_version": 1,
+  "kind": "forge_qualification_runtime",
+  "package": "PR-IMG-FORGE-100",
+  "purpose": "Evidence-oriented descriptor of the isolated Forge Neo qualification runtime. This is NOT a production runtime/bootstrap contract (that belongs to PR-IMG-FORGE-110 after qualification passes) and nothing in StableNew launches Forge from this file.",
+  "backend_id": "forge_webui",
+  "default_image_backend_id": "a1111_webui",
+  "qualification_status": "SOURCE_REVIEWED / PHYSICAL_QUALIFICATION_NOT_AUTHORIZED",
+  "classification": null,
+  "classification_allowed_values": [
+    "FORGE_TECHNICAL_PASS / PRODUCT_PARITY_PASS",
+    "FORGE_TECHNICAL_PASS / PRODUCT_PARITY_PENDING",
+    "FORGE_CONDITIONAL",
+    "FORGE_NO_GO"
+  ],
+  "source": {
+    "repository": "https://github.com/Haoming02/sd-webui-forge-classic",
+    "branch": "neo",
+    "commit": "97b26fb404314a11dad7cdde2706da57ea53f4f2",
+    "commit_date": "2026-10-02T18:08:06+08:00",
+    "discovery_reviewed_commit": "97b26fb404314a11dad7cdde2706da57ea53f4f2",
+    "refetched_on": "2026-10-03",
+    "drift_since_discovery": false,
+    "license": "AGPL-3.0",
+    "lineage_reference_only": "https://github.com/lllyasviel/stable-diffusion-webui-forge",
+    "note": "Re-fetch neo and compare against this commit before installation; if it moved, re-review the API matrix instead of silently advancing the pin."
+  },
+  "python": {
+    "requirement": "CPython 3.13.x (upstream tested with 3.13.12)",
+    "venv": "dedicated qualification venv; never the StableNew venv, the A1111 venv, or the managed Comfy venv",
+    "forbidden_interpreters": [
+      "StableNew application venv (CPython 3.14)",
+      "A1111 venv",
+      "managed Comfy venv"
+    ]
+  },
+  "isolation": {
+    "owns": [
+      "Forge source tree",
+      "Python 3.13 venv",
+      "extensions",
+      "runtime config (config.json/ui-config.json)",
+      "logs and output"
+    ],
+    "must_not_use": [
+      "StableNew venv",
+      "A1111 venv or install tree",
+      "managed Comfy venv",
+      "an existing desktop Forge install"
+    ],
+    "a1111_installation_mutation": "forbidden"
+  },
+  "launch": {
+    "frozen_flags": [
+      "--api",
+      "--port",
+      "<qualification_port>",
+      "--forge-ref-a1111-home",
+      "<existing A1111 root, read-only reference>"
+    ],
+    "qualification_port": 7871,
+    "port_rationale": "StableNew's WebUI discovery scans 7860-7869; a distinct port outside that range keeps the Forge qualification endpoint from being auto-discovered as a default A1111.",
+    "extension_safety_flags_pending_owner_approval": ["--ad-no-huggingface"],
+    "extension_safety_flags_rationale": "The ADetailer extension otherwise downloads its default YOLO detectors from HuggingFace at startup. Model downloads are not authorized, so the no-download flag is required for a fail-closed run; it is listed separately from the frozen launch flags because it deviates from the three-flag launch contract and needs explicit owner approval.",
+    "forbidden_tuning_flags": [
+      "--xformers",
+      "--sage",
+      "--flash",
+      "--cuda-stream",
+      "--pin-shared-memory"
+    ]
+  },
+  "dependency_install": {
+    "authorization_required": "owner (package downloads into the isolated venv only)",
+    "neo_default_torch": "torch==2.13.0+cu130 torchvision==0.28.0+cu130 (modules/launch_utils.py default install command)",
+    "neo_requirements_file": "requirements.txt at the pinned commit (exact pins, includes diffusers 0.37.1, transformers 4.57.6, numpy 2.3.5, fastapi 0.127.1)",
+    "model_downloads": "NOT authorized (checkpoints, VAEs, LoRAs, ControlNet models, detectors)"
+  },
+  "model_reference": {
+    "mechanism": "--forge-ref-a1111-home <A1111 root> (modules/launch_utils.py::configure_a1111_reference)",
+    "mapped_read_only": [
+      "embeddings",
+      "ESRGAN",
+      "Lora",
+      "Stable-diffusion (checkpoints)",
+      "text_encoder",
+      "VAE",
+      "ControlNet",
+      "ControlNetPreprocessor"
+    ],
+    "not_mapped": [
+      "models/adetailer (ADetailer detector directory)",
+      "HuggingFace cache used by the ADetailer extension"
+    ],
+    "consequence": "ADetailer detector models are not made visible by the model reference; see adetailer.detector_resolution."
+  },
+  "adetailer": {
+    "decision": "CANDIDATE_SELECTED_SOURCE_REVIEWED / NOT_INSTALLED / NOT_QUALIFIED",
+    "repository": "https://github.com/Bing-su/adetailer",
+    "commit": "3a599f5d4607d8f9d8b9fc5a15526197418dae1a",
+    "version": "26.2.0",
+    "commit_date": "2026-02-05T22:43:40+09:00",
+    "install_py_dependencies": ["ultralytics>=8.3.75", "mediapipe>=0.10.13", "rich>=13.0.0"],
+    "required_detectors": ["face_yolov8n.pt", "hand_yolov8n.pt"],
+    "mediapipe_substitution": "forbidden (StableNew's accepted contract is the REST payload with YOLO detectors)",
+    "detector_resolution": {
+      "default_source": "huggingface_hub.hf_hub_download into the HuggingFace cache (network)",
+      "offline_flag": "--ad-no-huggingface (cmd_opts.ad_no_huggingface): local-files-only lookup; absent detectors resolve INVALID and are dropped",
+      "local_directory_option": "ad_extra_models_dir (extension option scanned for *.pt)",
+      "hard_gate": "If face_yolov8n.pt or hand_yolov8n.pt cannot be resolved from an existing local directory, STOP before downloading anything and return the evidence."
+    },
+    "forge_neo_compatibility_review": {
+      "static_imports": "every modules.* symbol the extension imports exists in Neo at the pinned commit (processing.StableDiffusionProcessing, create_binary_mask, devices.NansException, sd_samplers.all_samplers, sd_schedulers.schedulers, ui_components.InputAccordion, safe.unsafe_torch_load, paths.extensions_dir/extensions_builtin_dir/models_path, img2img, images, script_callbacks, scripts, shared, sd_models, extensions)",
+      "forge_support_in_extension": "controlnet_ext_forge.py present (ControlNet via Forge)",
+      "not_proven": "Static symbol presence is not behavioral evidence. Ecosystem reports of Forge Neo + ADetailer incompatibilities were not verified from the cloud session; only a physical run proves the REST contract.",
+      "if_incompatible": "STOP. Do not cycle through community forks silently; return the incompatibility and candidate evidence for owner adjudication."
+    }
+  },
+  "controlnet": {
+    "stage": "none (StableNew has no ControlNet image stage; none is added by this package)",
+    "forge_capability": "built-in extension extensions-builtin/sd_forge_controlnet (script title \"ControlNet\")",
+    "qualification": "read-only: confirm the script is listed by /sdapi/v1/scripts, confirm referenced ControlNet model directories are visible, mutate/download nothing"
+  },
+  "api_surface_reviewed": {
+    "source_file": "modules/api/api.py",
+    "same_contract": [
+      "POST /sdapi/v1/txt2img",
+      "POST /sdapi/v1/img2img",
+      "POST /sdapi/v1/extra-single-image",
+      "GET /sdapi/v1/progress",
+      "POST /sdapi/v1/interrupt",
+      "GET /sdapi/v1/options",
+      "POST /sdapi/v1/options (sd_model_checkpoint handled via checkpoint_change; unknown model raises)",
+      "GET /sdapi/v1/cmd-flags",
+      "GET /sdapi/v1/sd-models",
+      "GET /sdapi/v1/samplers",
+      "GET /sdapi/v1/schedulers",
+      "GET /sdapi/v1/upscalers",
+      "GET /sdapi/v1/scripts",
+      "GET /sdapi/v1/script-info",
+      "POST /sdapi/v1/unload-checkpoint",
+      "POST /sdapi/v1/refresh-checkpoints"
+    ],
+    "different": {
+      "vae_listing": "GET /sdapi/v1/sd-modules (VAE + text encoders, entries {model_name, filename}); there is no /sdapi/v1/sd-vae",
+      "vae_selection": "the sd_vae option is a non-interactive 'Automatic' placeholder; the effective VAE is the forge_additional_modules option (written by module name, read back as file paths); unknown module names are silently dropped",
+      "per_request_vae": "override_settings.sd_vae is handled specially in modules/processing.py (_vae_override); behavior requires physical confirmation"
+    },
+    "identity_evidence": "/sdapi/v1/cmd-flags contains forge_ref_a1111_home AND /sdapi/v1/sd-modules returns a list"
+  },
+  "backend_policy": {
+    "durable_identity": "forge_webui",
+    "default_unchanged": "a1111_webui",
+    "historical_records_without_image_backend": "resolve to a1111_webui, never forge_webui",
+    "gui_backend_selector": "none in this package (PR-IMG-130)",
+    "per_stage_backend_selection": "none",
+    "backend_fallback": "none"
+  }
+}

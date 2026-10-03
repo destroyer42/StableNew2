@@ -814,6 +814,8 @@ class ConfigManager:
 
         return {
             "webui_base_url": "http://127.0.0.1:7860",
+            # WebUI-family runtime identity (PR-IMG-FORGE-100): a1111_webui (default) or forge_webui.
+            "webui_runtime_identity": "a1111_webui",
             "webui_workdir": str(app_config.get_webui_workdir() or ""),
             "webui_autostart_enabled": app_config.is_webui_autostart_enabled(),
             "webui_health_initial_timeout_seconds": app_config.get_webui_health_initial_timeout_seconds(),

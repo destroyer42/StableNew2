@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from src.api.webui_runtime_identity import resolve_configured_webui_runtime_identity
 from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
 from src.utils.process_container_v2 import (
@@ -72,6 +73,9 @@ class WebUIProcessConfig:
     auto_restart_on_crash: bool = False
     autostart_enabled: bool = False
     base_url: str | None = None
+    #: WebUI-family identity this launch config starts (``a1111_webui`` or ``forge_webui``).
+    #: A1111 and Forge share this single manager/slot; there is no second managed owner.
+    runtime_identity: str = "a1111_webui"
 
     def build_env(self) -> dict[str, str]:
         env = dict(os.environ)
@@ -143,6 +147,11 @@ class WebUIProcessManager:
     @property
     def process(self) -> subprocess.Popen | None:
         return self._process
+
+    @property
+    def runtime_identity(self) -> str:
+        """WebUI-family identity this manager's configuration launches (never inferred)."""
+        return str(getattr(self._config, "runtime_identity", "") or "a1111_webui")
 
     @property
     def owns_process(self) -> bool:
@@ -795,6 +804,7 @@ class WebUIProcessManager:
         return {
             "running": self.is_running(),
             "owns_process": self.owns_process,
+            "runtime_identity": self.runtime_identity,
             "pid": getattr(self._process, "pid", None) if self._process else None,
             "start_time": self._start_time,
             "last_exit_code": self._last_exit_code
@@ -1104,6 +1114,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
         settings.get("webui_health_total_timeout_seconds")
         or app_config.get_webui_health_total_timeout_seconds()
     )
+    configured_identity = resolve_configured_webui_runtime_identity(settings)
     if configured_workdir:
         workdir_path = Path(configured_workdir)
         if workdir_path.exists() and workdir_path.is_dir():
@@ -1120,6 +1131,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                     startup_timeout_seconds=configured_timeout,
                     autostart_enabled=configured_autostart,
                     base_url=configured_base_url,
+                    runtime_identity=configured_identity,
                 )
 
     # First try cached location
@@ -1141,6 +1153,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                     startup_timeout_seconds=configured_timeout,
                     autostart_enabled=configured_autostart,
                     base_url=configured_base_url,
+                    runtime_identity=configured_identity,
                 )
                 return config
 
@@ -1159,6 +1172,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
             startup_timeout_seconds=configured_timeout,
             autostart_enabled=configured_autostart,
             base_url=configured_base_url,
+            runtime_identity=configured_identity,
         )
 
     # Last resort: detect automatically (expensive)
@@ -1185,6 +1199,7 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
                 startup_timeout_seconds=configured_timeout,
                 autostart_enabled=configured_autostart,
                 base_url=configured_base_url,
+                runtime_identity=configured_identity,
             )
 
     return None
