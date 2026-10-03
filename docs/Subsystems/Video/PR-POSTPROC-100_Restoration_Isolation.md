@@ -1,6 +1,6 @@
 # PR-POSTPROC-100 — Restoration isolation and modernization
 
-Status: under owner review. Owner of the boundary: `src/video/restoration/`.
+Status: COMPLETE / ACCEPTED / INTEGRATED (PR #32). Owner of the boundary: `src/video/restoration/`.
 
 ## Boundary
 

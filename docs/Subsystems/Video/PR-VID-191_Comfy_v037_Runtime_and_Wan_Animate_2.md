@@ -21,6 +21,10 @@ Animate), no int8 "convrot" quantized-weight loader for `wan_animate_2_distill_i
 environment. Owner decision: point StableNew's managed Comfy at the proven v0.37.0 install now, and
 upgrade the desktop app to the newest ComfyUI later, once this setup is stable.
 
+> Superseded as the managed runtime by PR-COMFY-RUNTIME-100 (reproducible ComfyUI v0.38.0 on Python 3.13,
+> `docs/Subsystems/Video/PR-COMFY-RUNTIME-100_Managed_Comfy_Runtime.md`); the v0.37.0 install described here is
+> retained as the rollback and as this record's qualification evidence.
+
 ## Runtime switch (machine-local configuration, owner-authorized, not committed)
 
 The qualification ComfyUI v0.37.0 install is machine-local runtime infrastructure, not a repository

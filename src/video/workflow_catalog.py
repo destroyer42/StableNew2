@@ -21,6 +21,7 @@ def build_builtin_workflow_specs() -> tuple[WorkflowSpec, ...]:
         _build_ltx_multiframe_anchor_v1_conditioned(),
         _build_wan22_ti2v_5b_i2v_v1(),
         _build_wan22_ti2v_5b_i2v_v1_1(),
+        _build_wan22_ti2v_5b_i2v_v1_2(),
         *build_wan_animate2_specs(),
     )
 
@@ -363,7 +364,7 @@ def _build_ltx_multiframe_anchor_v1_conditioned() -> WorkflowSpec:
     )
 
 
-__all__ = ["build_builtin_workflow_specs"]
+__all__ = ["WAN22_RUNTIME_PROVENANCE", "WAN22_RUNTIME_VERSION", "build_builtin_workflow_specs"]
 
 
 # --- Wan2.2 TI2V-5B prompt-directed image-to-video (PR-VID-130, EXPERIMENTAL) -----------------
@@ -428,6 +429,18 @@ WAN22_FRAME_COUNT_POLICY = {
 # runtime instead of failing resource readiness against a resident one (PR-VID-190).  Only a
 # process StableNew launched and still owns is ever stopped, through ComfyProcessManager.stop().
 WAN22_RUNTIME_POLICY = {"release_owned_runtime_after_job": True}
+# PR-COMFY-RUNTIME-100: the identical 1.1.0 graph, files and policies, requalified on the repo-owned
+# managed ComfyUI v0.38.0 runtime (Python 3.13, Torch 2.14.0+cu130).  Only provenance differs;
+# config/managed_comfy_runtime.json owns the runtime identity.
+WAN22_RUNTIME_VERSION = "1.2.0"
+WAN22_RUNTIME_PROVENANCE = {
+    "qualification": (
+        "PR-VID-110 graph; PR-VID-190 frame-count and runtime policy; PR-COMFY-RUNTIME-100 managed "
+        "ComfyUI v0.38.0 runtime (Python 3.13, Torch 2.14.0+cu130)"
+    ),
+    "comfyui_version": "0.38.0",
+    "comfyui_revision": "6b747c0428c343e1417219641db93a4fb7cb69ae",
+}
 
 
 def _build_wan22_ti2v_5b_i2v_v1() -> WorkflowSpec:
@@ -448,11 +461,24 @@ def _build_wan22_ti2v_5b_i2v_v1_1() -> WorkflowSpec:
     )
 
 
+def _build_wan22_ti2v_5b_i2v_v1_2() -> WorkflowSpec:
+    """The 1.1.0 graph, files, frame-count and runtime policy, requalified on the managed
+    ComfyUI v0.38.0 runtime (PR-COMFY-RUNTIME-100); only qualification provenance differs."""
+
+    return _build_wan22_ti2v_5b_i2v(
+        workflow_version=WAN22_RUNTIME_VERSION,
+        frame_count_policy=WAN22_FRAME_COUNT_POLICY,
+        runtime_policy=WAN22_RUNTIME_POLICY,
+        provenance_overrides=WAN22_RUNTIME_PROVENANCE,
+    )
+
+
 def _build_wan22_ti2v_5b_i2v(
     *,
     workflow_version: str,
     frame_count_policy: dict[str, int] | None = None,
     runtime_policy: dict[str, Any] | None = None,
+    provenance_overrides: dict[str, str] | None = None,
 ) -> WorkflowSpec:
     variable_length = frame_count_policy is not None
     frame_count_bindings = (
@@ -595,6 +621,7 @@ def _build_wan22_ti2v_5b_i2v(
                 "upstream_revision": WAN22_UPSTREAM_REVISION,
                 "license": "Apache-2.0",
                 "files": {name: digest for _id, name, _hint, digest in WAN22_MODEL_FILES},
+                **(provenance_overrides or {}),
             },
             "resource_readiness": {
                 "policy": "wan22_ti2v_5b",

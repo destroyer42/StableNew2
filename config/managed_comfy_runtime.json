@@ -1,0 +1,38 @@
+{
+  "schema_version": 1,
+  "description": "Identity of the StableNew-managed ComfyUI runtime. Owns installation identity and launch policy only; workflow graphs, model hashes, controls and readiness thresholds stay in the workflow catalog.",
+  "upstream": {
+    "repository": "https://github.com/comfyanonymous/ComfyUI",
+    "release": "v0.38.0",
+    "version": "0.38.0",
+    "revision": "6b747c0428c343e1417219641db93a4fb7cb69ae"
+  },
+  "python": {
+    "minor": "3.13",
+    "implementation": "CPython",
+    "free_threaded": false,
+    "jit": false
+  },
+  "torch": {
+    "torch": "2.14.0+cu130",
+    "torchvision": "0.29.0+cu130",
+    "cuda": "13.0",
+    "index_url": "https://download.pytorch.org/whl/cu130"
+  },
+  "constraints": "constraints/comfy-windows-py313-cu130-v0.38.0.txt",
+  "install": {
+    "default_root": "%LOCALAPPDATA%/StableNew/ManagedComfy",
+    "layout": "<release>-py<minor-without-dot>/{source,venv}"
+  },
+  "launch_policy": {
+    "listen": "127.0.0.1",
+    "required_flags": ["--disable-pinned-memory", "--disable-auto-launch"],
+    "default_runtime_dir": "%LOCALAPPDATA%/StableNew/ComfyRuntime",
+    "runtime_folders": ["input", "output", "temp", "user"],
+    "extra_model_paths_file": "extra_model_paths.yaml"
+  },
+  "custom_nodes": {
+    "policy": "none",
+    "allowed_entries": ["__pycache__", "example_node.py.example", "websocket_image_save.py"]
+  }
+}
