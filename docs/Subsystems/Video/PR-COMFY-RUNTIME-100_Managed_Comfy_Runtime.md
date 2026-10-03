@@ -90,7 +90,11 @@ Accepted comparators (PR-VID-191, v0.37.0 on Python 3.11): Animate-2 driving, 41
 15.4 GB; TI2V, 49 frames, 59.5 s, 11,820 MiB, 17.0 GB. Run A used `@1.1.0` and Run B `@1.2.0` because the two
 graphs are hash-identical (pinned by test), so A/B differ only in the runtime; running both on `@1.0.0` would
 not have exercised the shipped version. Runs B and C record the serving runtime in their manifest and
-container metadata (`actual_runtime`: ComfyUI 0.38.0, Python 3.13.16, Torch 2.14.0+cu130, frontend 1.53.6).
+container metadata (`actual_runtime`: ComfyUI 0.38.0, Python 3.13.16, Torch 2.14.0+cu130, and the server's
+reported `required_frontend_version` 1.53.6). That last field is the frontend version the server says it
+requires, not a measurement of the frontend serving the request, and the code records it under that name. The
+Run B and Run C manifests retained machine-local were written before this was corrected and carry the same
+value under the earlier key `frontend_version`; they are historical evidence and were not rewritten.
 
 **Run A note.** Comfy's history reported success, the clip is valid and was preserved from Comfy's own output
 folder, and the owned runtime was released with the endpoint free and the GPU back to idle. StableNew then
@@ -168,7 +172,7 @@ operator checkout's uncommitted `presets/settings.json` now carries the managed 
 `comfy_workdir`, with `--disable-pinned-memory` and the port matching `comfy_base_url`. The previous file is
 kept beside it as `settings.json.before-pr-comfy-runtime-100`. It was launched once through the real
 `ComfyProcessManager` (free endpoint, owned, 9.8 s start, healthy, ComfyUI 0.38.0 / Python 3.13.16 / Torch
-2.14.0+cu130 / frontend 1.53.6, all nine registered workflow versions dependency-ready), stopped through the
+2.14.0+cu130 / reported required frontend 1.53.6, all nine registered workflow versions dependency-ready), stopped through the
 manager, and the endpoint was free with no orphan. The v0.37.0 qualification install is untouched and remains the
 rollback. Nothing owner-specific is committed; the repository default `presets/settings.json` is unchanged.
 

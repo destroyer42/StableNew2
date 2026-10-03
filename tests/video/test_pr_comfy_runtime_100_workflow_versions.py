@@ -189,11 +189,43 @@ def test_actual_runtime_identity_reads_the_servers_own_report_and_omits_what_it_
         "comfyui_version": "0.38.0",
         "python_version": "3.13.16",
         "pytorch_version": "2.14.0+cu130",
-        "frontend_version": "1.53.6",
+        "required_frontend_version": "1.53.6",
     }
     assert _actual_runtime_identity({"system": {"comfyui_version": "0.38.0"}}) == {"comfyui_version": "0.38.0"}
     for unusable in ({}, {"system": None}, {"system": "x"}, None, "stats", []):
         assert _actual_runtime_identity(unusable) == {}
+
+
+def test_the_frontend_is_recorded_only_as_the_requirement_the_server_reported() -> None:
+    reported = {"system": {"required_frontend_version": "1.53.6"}}
+
+    identity = _actual_runtime_identity(reported)
+
+    # The source field is a compatibility requirement, not the frontend actually serving the request:
+    # it keeps its own name, and nothing named or implying an installed/served frontend is invented.
+    assert identity == {"required_frontend_version": "1.53.6"}
+    assert "frontend_version" not in identity
+    # Absent stays absent: no requirement reported, no frontend key at all.
+    assert _actual_runtime_identity({"system": {"comfyui_version": "0.38.0", "required_frontend_version": ""}}) == {
+        "comfyui_version": "0.38.0"
+    }
+
+
+def test_a_job_records_the_reported_frontend_requirement_under_its_truthful_key(tmp_path) -> None:
+    stats = _stats(free_mib=11000)
+    stats["system"] = {"comfyui_version": "0.38.0", "required_frontend_version": "1.53.6"}
+    client = _FakeComfy(tmp_path, stats=stats)
+
+    result = _backend(client).execute(SimpleNamespace(), _request(tmp_path, opt_in=True))
+
+    assert result.backend_metadata["actual_runtime"] == {
+        "comfyui_version": "0.38.0",
+        "required_frontend_version": "1.53.6",
+    }
+    [manifest_file] = list((tmp_path / "run").glob("manifests/*.json"))
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"))
+    assert manifest["actual_runtime"]["required_frontend_version"] == "1.53.6"
+    assert "frontend_version" not in manifest["actual_runtime"]
 
 
 def test_a_job_records_the_runtime_that_actually_served_it(tmp_path) -> None:

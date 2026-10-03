@@ -133,6 +133,8 @@ def _actual_runtime_identity(system_stats: Any) -> dict[str, str]:
     Read from the ``/system_stats`` already fetched for resource readiness, so it costs no extra
     request; absent fields (a stub or older server) are simply omitted.  Recorded beside the
     workflow's declared qualification so a job's artifacts show which runtime actually produced them.
+    ``required_frontend_version`` keeps the meaning of its source field: the frontend version the
+    server declares it requires, not a measurement of the frontend actually serving the request.
     """
 
     system = _mapping_dict(system_stats.get("system")) if isinstance(system_stats, Mapping) else {}
@@ -141,7 +143,7 @@ def _actual_runtime_identity(system_stats: Any) -> dict[str, str]:
         "comfyui_version": system.get("comfyui_version"),
         "python_version": python_version,
         "pytorch_version": system.get("pytorch_version"),
-        "frontend_version": system.get("required_frontend_version"),
+        "required_frontend_version": system.get("required_frontend_version"),
     }
     return {name: str(value) for name, value in fields.items() if value}
 

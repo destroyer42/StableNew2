@@ -493,6 +493,51 @@ def test_bootstrap_rejects_other_pythons_free_threaded_builds_and_a_reused_wrong
     assert code.index("Assert-SupportedPython -Executable $VenvPython") < code.index('"-m", "pip", "install"')
 
 
+# --- The documented launch procedure matches how StableNew actually reads its configuration ---------
+
+RUNBOOK = ROOT / "docs" / "runbooks" / "managed_comfy_runtime.md"
+
+
+def test_runbook_documents_the_settings_comfy_command_array_as_the_managed_launch_path() -> None:
+    launch = RUNBOOK.read_text(encoding="utf-8").split("## Launch", 1)[1].split("## Rollback", 1)[0]
+    flat = re.sub(r"\s+", " ", launch)
+
+    for required in ("presets/settings.json", "`comfy_command`", "`comfy_workdir`", "`comfy_base_url`", "--port", "JSON array"):
+        assert required in flat, required
+    # The two flags the contract requires are named, and the verifier really emits both.
+    for flag in ("--disable-pinned-memory", "--disable-auto-launch"):
+        assert flag in flat and flag in _manifest()["launch_policy"]["required_flags"]
+    # The verifier's output is a JSON array of separate elements: that is what the settings array holds.
+    command = json.loads(
+        subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "runtime" / "verify_managed_comfy.py"), "--install-dir", "X", "--runtime-dir", "R", "--port", "8000", "--print-command"],
+            capture_output=True, text=True, check=True,
+        ).stdout
+    )
+    assert isinstance(command, list) and all(isinstance(element, str) for element in command)
+
+
+def test_runbook_does_not_recommend_the_whitespace_split_command_environment_override() -> None:
+    text = RUNBOOK.read_text(encoding="utf-8")
+    flat = re.sub(r"\s+", " ", text)
+
+    # Every mention is in the "not recommended / leave unset" paragraph, never an instruction to use it.
+    assert "STABLENEW_COMFY_COMMAND" in flat
+    for paragraph in re.split(r"\n\s*\n", text):
+        if "STABLENEW_COMFY_COMMAND" in paragraph:
+            squashed = re.sub(r"\s+", " ", paragraph)
+            assert "not** the recommended path" in squashed and "split it on whitespace" in squashed
+            assert "leave it unset" in squashed
+            assert "do not paste the verifier's output into it" in squashed
+    # The source claims the runbook makes are true: both readers really use a plain whitespace split.
+    for source in (ROOT / "src" / "main.py", ROOT / "src" / "video" / "comfy_process_manager.py"):
+        assert 'os.getenv("STABLENEW_COMFY_COMMAND", "").split()' in source.read_text(encoding="utf-8").replace(
+            "os.environ.get(", "os.getenv("
+        )
+    for other in ("STABLENEW_COMFY_WORKDIR", "STABLENEW_COMFY_BASE_URL"):
+        assert other not in text  # one supported configuration path, not a mix of authorities
+
+
 # --- Ownership: no process-name kill fallback ------------------------------------------------
 
 

@@ -77,22 +77,35 @@ config exist. Exit 0 is clean; 1 is drift (each problem listed); 2 is an unreada
 ## Launch
 
 Do not start it by hand for StableNew work. StableNew launches it through `ComfyProcessManager`, from the
-managed-Comfy command in StableNew's own machine-local settings. Print the exact command for your install
-(the contract's loopback listen address, StableNew-owned folders, `--disable-pinned-memory` and
-`--disable-auto-launch`):
+managed-Comfy configuration in StableNew's own machine-local `presets/settings.json`. That file's
+`comfy_command` array is the supported way to configure the managed runtime: each executable and argument is
+its own array element, so a path containing spaces is represented correctly.
 
-```powershell
-& "$env:LOCALAPPDATA\StableNew\ManagedComfy\v0.38.0-py313\venv\Scripts\python.exe" `
-  .\tools\runtime\verify_managed_comfy.py --install-dir "$env:LOCALAPPDATA\StableNew\ManagedComfy\v0.38.0-py313" `
-  --port 8000 --print-command
-```
+1. Print the command for your install. Use the port from your `comfy_base_url`:
 
-Put that command and `comfy_workdir` (the install's `source` folder) in the machine-local managed-Comfy
-configuration — a local edit of `presets/settings.json`, or the existing `STABLENEW_COMFY_COMMAND` /
-`STABLENEW_COMFY_WORKDIR` / `STABLENEW_COMFY_BASE_URL` environment overrides read at startup. Keep the
-port in `comfy_base_url` and the command identical. Do **not** commit the result: the paths are
-machine-specific and the repository default is unchanged. The command must keep `--disable-pinned-memory`;
-the Wan-Animate-2 workflows refuse to run on a runtime that cannot prove it.
+   ```powershell
+   & "$env:LOCALAPPDATA\StableNew\ManagedComfy\v0.38.0-py313\venv\Scripts\python.exe" `
+     .\tools\runtime\verify_managed_comfy.py --install-dir "$env:LOCALAPPDATA\StableNew\ManagedComfy\v0.38.0-py313" `
+     --port 8000 --print-command
+   ```
+
+   The output is a JSON array of strings: the managed interpreter and `main.py`, the loopback listen address,
+   the port, the StableNew-owned input/output/temp/user folders, the model path config, and the required flags
+   `--disable-pinned-memory` and `--disable-auto-launch`.
+2. In `presets/settings.json`, set `comfy_command` to those array elements, one element per string, unchanged and
+   in order. Do not drop `--disable-pinned-memory` (the Wan-Animate-2 workflows refuse to run on a runtime that
+   cannot prove it) or `--disable-auto-launch`.
+3. Set `comfy_workdir` to the install's `source` folder.
+4. Keep `comfy_base_url` and the command's `--port` aligned (same loopback port).
+
+`STABLENEW_COMFY_COMMAND` is **not** the recommended path for the managed runtime. Both startup readers
+(`src/main.py` and `src/video/comfy_process_manager.py`) split it on whitespace, so it cannot hold the JSON
+array above and cannot represent an executable or argument path containing spaces; do not paste the verifier's
+output into it. If it is set in the environment it can also override the settings array at app startup, so leave
+it unset when using the settings configuration.
+
+Do **not** commit the result: the paths are machine-specific and the repository default `presets/settings.json`
+is unchanged.
 
 If anything already answers on that endpoint, StableNew refuses to launch and reports it; it does not adopt,
 stop or replace it. Choose another loopback port or stop the other service yourself.
