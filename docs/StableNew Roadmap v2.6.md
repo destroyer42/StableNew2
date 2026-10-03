@@ -425,6 +425,25 @@ endpoints still require explicit isolation or authorization; deliberate
 real-model inference and platform/hardware changes remain serialized and
 separately owner-authorized regardless of which package is active.
 
+### Runtime & developer-experience modernization (ordered)
+
+After PR-VID-194 integration, the next runtime/DEVEX sequence is intentionally
+staged so CI policy, dependency reproducibility, optional legacy restoration,
+and interpreter promotion remain separately diagnosable:
+
+| Order | Work | Status | Outcome |
+|---:|---|---|---|
+| R1 | `PR-DEVEX-100` | Next | Use CPython 3.12.x as the deterministic bridge runtime; make validation quiet on success/detailed on failure; formalize focused/local-gate/GitHub-integration levels; remove duplicate feature-push CI; run one ordinary PR full suite; retain stacked-PR coverage and cancel superseded runs |
+| R2 | `PR-RUNTIME-DEPS-100` | Planned | Reproduce and constrain the already-qualified modern Windows/CUDA ML stack (Torch 2.14.x+cu130, Diffusers 0.40.0, Transformers 5.17.0, Accelerate 1.15.0, compatible headless OpenCV and supporting packages) so rebuilding the StableNew environment does not silently change runtime behavior |
+| R3 | `PR-POSTPROC-100` | Planned | Isolate optional legacy restoration dependencies from core native SVD; qualify Spandrel/modern loading paths and retire BasicSR-era compatibility shims where evidence permits while preserving CodeFormer/GFPGAN behavior until separately replaced |
+| R4 | `PR-PY314-100` | Planned / evidence-gated | Qualify normal-GIL CPython 3.14 against the cleaned constrained runtime; promote it as the sole StableNew application/native-SVD interpreter only if deterministic and target-hardware evidence passes; do not enable free-threaded Python or experimental JIT by default |
+| R5 | `PR-COMFY-RUNTIME-100` | Planned / separate runtime | Qualify modernization of the StableNew-managed ComfyUI environment independently from the StableNew application venv; never mutate/adopt an external Comfy runtime and do not couple A1111 environment changes to this sequence |
+
+Python 3.12 is therefore a stabilization bridge, not a presumed long-term
+endpoint. A1111 and ComfyUI retain independent runtime ownership; changing the
+StableNew application interpreter does not authorize rewriting either backend's
+environment.
+
 `PR-TEST-TRUTH-120`/`PR-TEST-TRUTH-121`, `DIAG-GPU-130` closeout,
 `PR-ASSET-120`, and `WP-PACK-AUDIT-100` are all **COMPLETE / ACCEPTED /
 INTEGRATED**; see `STATUS.md` for their current-state summary and
@@ -483,10 +502,29 @@ but cannot establish a failure family without supporting evidence.
 Image and video qualification share real GPU/runtime state and
 qualification infrastructure, so both belong here when selected.
 
-1. `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware Qualification` remains
+1. `PR-IMG-BACKEND-QUAL-100 — Modern Still-Image Backend Qualification`:
+   compare the accepted A1111 path with ComfyUI as the leading candidate for
+   primary modern still-image execution; Forge may be included as a low-cost
+   A1111-compatible transition candidate. Keep this qualification behind the
+   existing PR-IMG-100 one-backend-per-image-NJR contract. Compare keeper
+   quality, SDXL parity, modern-model and editing/control support, LoRA/
+   ControlNet/detail/upscale capability, cold/warm latency, VRAM/RAM,
+   deterministic replay/provenance, cancellation and ambiguous outcomes,
+   artifact ownership, and operator complexity. Qualification alone does not
+   change the default backend.
+2. If that evidence supports promotion, `PR-IMG-COMFY-100` becomes the bounded
+   production still-image slice. ComfyUI must remain behind StableNew-owned
+   intent/compiler/NJR/JobService/SQLite/PipelineRunner/artifact-history
+   authority; raw Comfy workflows and Comfy's internal queue stay backend
+   private. Preserve A1111 compatibility until explicit retirement criteria
+   are defined and satisfied.
+3. `PR-IMG-130` capability-aware image backend/model UX/compiler work becomes
+   actionable once a real second production backend exists.
+4. `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware Qualification` remains
    separately owner-authorized for model/download/GPU state.
-2. Production integration is only for an explicitly selected evidence-backed
+5. Production integration is only for an explicitly selected evidence-backed
    capability, extending PR-RUNTIME-100 ownership/coexistence behavior when a
    runtime actually becomes production. Extract reusable qualification
    primitives only after at least two qualifications show genuinely common
    needs.
+
