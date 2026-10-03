@@ -1,0 +1,116 @@
+{
+  "schema_version": 1,
+  "description": "Identity of the StableNew-managed Forge Neo runtime (runtime identity forge_webui). Owns installation identity, package identity, StableNew-owned runtime/config state, launch policy and external model/detector references only. It starts nothing (WebUIProcessManager is the sole lifecycle authority) and contains no generation settings. Not a production default: A1111 remains the default image backend.",
+  "runtime_identity": "forge_webui",
+  "upstream": {
+    "repository": "https://github.com/Haoming02/sd-webui-forge-classic",
+    "channel": "neo",
+    "revision": "d70373ebcf1a96d210b78cd6f77196459e783e2a"
+  },
+  "adetailer_neo": {
+    "repository": "https://github.com/Haoming02/ADetailer-Neo",
+    "revision": "af228eba7a3f3691a25bcd1fc94aa95e600dd3e6"
+  },
+  "python": {
+    "minor": "3.13",
+    "accepted": "3.13.16",
+    "implementation": "CPython",
+    "free_threaded": false,
+    "jit": false
+  },
+  "torch": {
+    "torch": "2.13.0+cu130",
+    "torchvision": "0.28.0+cu130",
+    "cuda": "13.0",
+    "index_url": "https://download.pytorch.org/whl/cu130",
+    "qualified_gpu_name_contains": "RTX 4070 Ti"
+  },
+  "constraints": "constraints/forge-windows-py313-cu130-neo-d70373eb.txt",
+  "package_count": 147,
+  "known_conflicts": [
+    {
+      "id": "gradio-pillow",
+      "tool": "pip check",
+      "package": "gradio",
+      "version": "4.40.0",
+      "requires": "pillow<11.0,>=8.0",
+      "dependency": "pillow",
+      "installed": "12.3.0",
+      "note": "Accepted upstream dependency inconsistency. Not repaired: do not downgrade Pillow, upgrade Gradio, patch metadata or suppress pip check. Any other pip-check line is MANAGED_FORGE_DRIFT."
+    }
+  ],
+  "install": {
+    "default_root": "%LOCALAPPDATA%/StableNew/Forge",
+    "layout": "neo-<revision8>/{source,venv,data,runtime}",
+    "marker": ".stablenew-managed-forge.json",
+    "path_budget": {
+      "max_venv_relative_path": 192,
+      "windows_path_limit": 259,
+      "note": "Longest path below venv in the accepted package set (torch's licenses tree). Windows long paths are off by default, so the venv prefix must leave this much room or pip fails deep into the install."
+    }
+  },
+  "launch_policy": {
+    "default_port": 7871,
+    "required_flags": ["--api", "--skip-install", "--ad-no-huggingface", "--uv"],
+    "forbidden_flag_fragments": ["listen", "share", "xformers", "sage", "flash", "cuda-malloc", "cuda-stream", "fp8", "nowebui", "no-webui", "autolaunch"],
+    "model_reference_flag": "--forge-ref-a1111-home",
+    "data_dir_flag": "--data-dir",
+    "launch_script": "launch.py",
+    "env": {
+      "GRADIO_ANALYTICS_ENABLED": "False",
+      "HF_HUB_OFFLINE": "1",
+      "TRANSFORMERS_OFFLINE": "1",
+      "YOLO_AUTOINSTALL": "False",
+      "YOLO_OFFLINE": "True",
+      "PYTHONIOENCODING": "utf-8",
+      "PYTHONUNBUFFERED": "1",
+      "STABLENEW_WEBUI_NEW_CONSOLE": "0"
+    }
+  },
+  "runtime_dirs": {
+    "data": "data",
+    "detectors": "data/models/adetailer",
+    "extensions": "data/extensions",
+    "huggingface_cache": "runtime/hf/hub",
+    "matplotlib": "runtime/matplotlib",
+    "yolo_config": "runtime/yolo",
+    "uv_cache": "runtime/uv-cache"
+  },
+  "config": {
+    "file": "data/config.json",
+    "required_settings": {
+      "disabled_extensions": [],
+      "ad_extra_models_dir": ""
+    }
+  },
+  "extensions": {
+    "allowed": ["adetailer-neo"],
+    "ignored_entries": ["Put Extensions here.txt", "__pycache__"]
+  },
+  "detectors": {
+    "files": {
+      "face_yolov8n.pt": "70b640f8f60b1cf0dcc72f30caf3da9495eb2fb6509da48c53374ad6806e6a9c",
+      "hand_yolov8n.pt": "3991202eb69e9ddcb3b9ba80cdeb41e734ffaf844403d6c9f47d515cd88c6f29"
+    },
+    "policy": "Exactly these two local YOLO files, copied from a caller-supplied verified directory after sha256 validation; never downloaded, never MediaPipe."
+  },
+  "models": {
+    "reference": "forge_ref_a1111_home",
+    "owner": "external; never copied or downloaded into the managed runtime",
+    "vae": "Automatic",
+    "files": {
+      "checkpoint": {
+        "path": "models/Stable-diffusion/cyberrealisticXL_v90-16fp.safetensors",
+        "sha256": "4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e"
+      },
+      "lora": {
+        "path": "models/Lora/add-detail-xl.safetensors",
+        "sha256": "0d9bd1b873a7863e128b4672e3e245838858f71469a3cec58123c16c06f83bd7"
+      },
+      "upscaler": {
+        "path": "models/ESRGAN/4xUltrasharp_4xUltrasharpV10.pth",
+        "sha256": "a5812231fc936b42af08a5edba784195495d303d5b3248c24489ef0c4021fe01"
+      }
+    }
+  }
+}
