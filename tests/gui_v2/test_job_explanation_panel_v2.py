@@ -107,3 +107,44 @@ def test_job_explanation_panel_uses_live_payload_when_run_metadata_missing(tmp_p
     assert "GLOBAL_BAD" in values[3]
 
     panel.destroy()
+
+
+def test_job_explanation_panel_shows_matrix_substitution_for_variant(tmp_path, tk_root):
+    controller = type(
+        "Controller",
+        (),
+        {
+            "get_job_explanation_payload": lambda self, job_id: {
+                "origin_text": f"Job: {job_id} | Pack: fantasy",
+                "stage_flow": ["txt2img"],
+                "metadata": {
+                    "variant_index": 1,
+                    "matrix_slot_values": {"job": "knight"},
+                },
+                "stage_prompts": [
+                    {
+                        "stage": "txt2img",
+                        "prompt": "A knight in a forest",
+                        "negative": "-",
+                        "global_terms": "-",
+                        "status": "available",
+                    }
+                ],
+            }
+        },
+    )()
+
+    panel = JobExplanationPanelV2(
+        "variant-job",
+        master=tk_root,
+        base_runs_dir=tmp_path / "runs",
+        controller=controller,
+    )
+
+    metadata_text = panel._metadata_text.get("1.0", tk.END)  # noqa: SLF001
+    assert "matrix_slot_values" in metadata_text
+    assert "knight" in metadata_text
+    values = panel.stage_tree.item(panel.stage_tree.get_children()[0], "values")
+    assert "A knight in a forest" in values[1]
+
+    panel.destroy()

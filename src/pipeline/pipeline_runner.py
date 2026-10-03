@@ -1105,6 +1105,11 @@ class PipelineRunner:
         Execute the pipeline using a NormalizedJobRecord (NJR-only, v2.6+ contract).
         This is the ONLY supported production entrypoint.
         """
+        # Pure RunPlan construction/validation precedes any runtime/API side effect so a
+        # malformed plan fails closed before metrics, cleanup, or backend calls.
+        from src.pipeline.run_plan import build_run_plan_from_njr
+
+        plan = build_run_plan_from_njr(njr)
         if hasattr(self._pipeline, "_begin_run_metrics"):
             self._pipeline._begin_run_metrics()
         # Best-effort local cleanup before every job. Do not block queued work on
@@ -1116,10 +1121,6 @@ class PipelineRunner:
                 client.free_vram(unload_model=False, refresh_checkpoints=False)
         except Exception:
             pass
-        # Build run plan directly from NJR
-        from src.pipeline.run_plan import build_run_plan_from_njr
-
-        plan = build_run_plan_from_njr(njr)
         image_backend_id = self._resolve_image_backend_id(
             njr, [job.stage_name for job in plan.jobs]
         )

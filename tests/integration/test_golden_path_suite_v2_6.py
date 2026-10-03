@@ -6,13 +6,14 @@ docs/E2E_Golden_Path_Test_Matrix_v2.6.md
 Tests validate the complete canonical execution path:
 PromptPack → Controller → Builder → Queue → Runner → History → Learning → Debug Hub
 
-Each test scenario (GP1-GP15) verifies end-to-end integrity with specific focus areas:
-- GP1-GP12: Core functionality (CORE-A/B/C/D)
-- GP13-GP15: Config sweeps + global negative (CORE-E)
+Active scenarios keep their historical GPn labels (GP1, GP2, GP3, GP5, GP6, GP10, GP11);
+the remaining labels are covered elsewhere or retired as recorded below.
 
-Test Status: ACTIVE IMPLEMENTATION (PR-TEST-004)
-Created: 2025-12-08
-Updated: 2025-12-21
+Every test in this module is active. Scenarios whose behavior is covered by a
+current authoritative test elsewhere, or that target removed/deferred behavior, are
+dispositioned in
+docs/Subsystems/Testing/PR-TEST-TRUTH-210_Pre_Forge_Execution_and_Test_Truth.md
+rather than preserved here as skips.
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ from __future__ import annotations
 import base64
 import json
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -28,11 +30,15 @@ import pytest
 from src.api.client import SDWebUIClient
 from src.gui.models.prompt_pack_model import PromptPackModel
 from src.pipeline.animatediff_models import AnimateDiffCapability
-from src.pipeline.job_models_v2 import StageConfig
+from src.pipeline.job_builder_v2 import JobBuilderV2
+from src.pipeline.job_models_v2 import BatchSettings, StageConfig
 from src.queue.job_history_store import JobHistoryEntry, JobHistoryStore
-from src.queue.job_model import JobStatus
+from src.queue.job_model import Job, JobStatus
+from src.queue.job_queue import JobQueue
+from src.queue.single_node_runner import SingleNodeJobRunner
+from src.randomizer import RandomizationPlanV2
 from tests.helpers.job_helpers import make_test_njr
-from tests.helpers.njr_factory import make_pipeline_njr
+from tests.helpers.njr_factory import make_pipeline_njr, make_queue_job
 from tests.helpers.njr_queue_harness import run_njr_via_queue
 
 # ============================================================================
@@ -188,10 +194,6 @@ class TestGP1SingleSimpleRun:
             workload = snapshot.get("workload", {})
             assert workload.get("positive_prompt") == pack.slots[0].text
 
-    def test_gp1_debug_hub_explain_job_works(self):
-        """GP1.4: Debug Hub can explain job with full builder trace."""
-        pytest.skip("Implementation deferred: Debug Hub integration pending")
-
 
 # ============================================================================
 # GP2: Queue-Only Run (Multiple Jobs, FIFO)
@@ -208,13 +210,40 @@ class TestGP2QueueOnlyRun:
     Coverage: CORE-A, CORE-B, CORE-C, CORE-D
     """
 
-    def test_gp2_multiple_jobs_fifo_order(self, tmp_path: Path):
-        """GP2.1: Jobs execute in FIFO order (A then B)."""
-        pytest.skip("Implementation pending: Requires Queue integration")
+    def test_gp2_runner_completes_job_a_before_starting_b(self):
+        """GP2.2: The single-node worker fully processes job A before starting job B."""
+        job_queue = JobQueue()
+        events: list[tuple[str, str]] = []
 
-    def test_gp2_runner_completes_job_a_before_starting_b(self, tmp_path: Path):
-        """GP2.2: Runner fully processes job A before starting job B."""
-        pytest.skip("Implementation pending: Requires SingleNodeJobRunner verification")
+        def run_callable(job: Job) -> dict[str, str]:
+            events.append(("start", job.job_id))
+            time.sleep(0.05)
+            events.append(("end", job.job_id))
+            return {"job_id": job.job_id, "status": "completed"}
+
+        runner = SingleNodeJobRunner(
+            job_queue=job_queue, run_callable=run_callable, poll_interval=0.01
+        )
+        try:
+            job_queue.submit(make_queue_job("gp2-a"))
+            job_queue.submit(make_queue_job("gp2-b"))
+            runner.start()
+
+            deadline = time.monotonic() + 5.0
+            while time.monotonic() < deadline:
+                job_b = job_queue.get_job("gp2-b")
+                if job_b is not None and job_b.status == JobStatus.COMPLETED:
+                    break
+                time.sleep(0.01)
+        finally:
+            runner.stop()
+
+        assert events == [
+            ("start", "gp2-a"),
+            ("end", "gp2-a"),
+            ("start", "gp2-b"),
+            ("end", "gp2-b"),
+        ]
 
 
 # ============================================================================
@@ -342,35 +371,6 @@ class TestGP3BatchExpansion:
 
 
 # ============================================================================
-# GP4: Randomizer Variant Sweep (No Batch)
-# ============================================================================
-
-
-@pytest.mark.golden_path
-@pytest.mark.gp4
-class TestGP4RandomizerVariantSweep:
-    """GP4: Validate matrix → variants → substitution.
-
-    Purpose: Randomizer produces distinct variants with matrix slot substitution.
-
-    Coverage: CORE-B, CORE-C, CORE-D
-    """
-
-    def test_gp4_randomizer_produces_3_variants(self, tmp_path: Path):
-        """GP4.1: Randomizer with 3 variants produces 3 distinct jobs."""
-        pytest.skip("Implementation pending: Requires RandomizerEngineV2 integration")
-
-        # Expected:
-        # - 3 records with variant_index=0,1,2
-        # - Different matrix_slot_values per variant
-        # - Prompts contain substituted values
-
-    def test_gp4_debug_hub_shows_substitution_steps(self, tmp_path: Path):
-        """GP4.2: Debug Hub shows matrix slot substitution for each variant."""
-        pytest.skip("Implementation pending: Requires Debug Hub matrix tracing")
-
-
-# ============================================================================
 # GP5: Randomizer × Batch Cross Product
 # ============================================================================
 
@@ -385,13 +385,34 @@ class TestGP5RandomizerBatchCrossProduct:
     Coverage: CORE-B, CORE-C, CORE-D
     """
 
-    def test_gp5_2_variants_x_2_batch_produces_4_jobs(self, tmp_path: Path):
-        """GP5.1: 2 variants × 2 batch = 4 jobs with distinct indices."""
-        pytest.skip("Implementation pending: Requires cross-product expansion")
+    def test_gp5_2_variants_x_2_batch_produces_4_jobs(self):
+        """GP5.1: 2 randomizer variants x 2 batch runs = 4 jobs with distinct indices."""
 
-        # Expected:
-        # - 4 jobs: (v0,b0), (v0,b1), (v1,b0), (v1,b1)
-        # - All processed by queue
+        @dataclass
+        class _Config:
+            prompt: str = "a test prompt"
+            model: str = "base-model"
+            cfg_scale: float = 7.0
+            steps: int = 20
+            seed: int = 42
+
+        jobs = JobBuilderV2().build_jobs(
+            base_config=_Config(),
+            randomization_plan=RandomizationPlanV2(
+                enabled=True, model_choices=["m1", "m2"], max_variants=2
+            ),
+            batch_settings=BatchSettings(batch_size=1, batch_runs=2),
+        )
+
+        assert [(job.variant_index, job.batch_index) for job in jobs] == [
+            (0, 0),
+            (0, 1),
+            (1, 0),
+            (1, 1),
+        ]
+        assert len({job.job_id for job in jobs}) == 4
+        assert {job.variant_total for job in jobs} == {2}
+        assert {job.batch_total for job in jobs} == {2}
 
 
 # ============================================================================
@@ -607,70 +628,6 @@ class TestGP6MultiStagePipeline:
 
 
 # ============================================================================
-# GP7: ADetailer + Multi-Stage
-# ============================================================================
-
-
-@pytest.mark.golden_path
-@pytest.mark.gp7
-class TestGP7ADetailerMultiStage:
-    """GP7: Validate ADetailer integration with multi-stage pipeline.
-
-    Purpose: ADetailer appears in stage chain at correct position.
-
-    Coverage: CORE-B, CORE-C, CORE-D
-    """
-
-    def test_gp7_adetailer_in_stage_chain(self, tmp_path: Path):
-        """GP7.1: Stage chain includes ADetailer at correct position."""
-        pytest.skip("Implementation pending: Requires ADetailer stage config")
-
-
-# ============================================================================
-# GP8: Stage Enable/Disable Integrity
-# ============================================================================
-
-
-@pytest.mark.golden_path
-@pytest.mark.gp8
-class TestGP8StageEnableDisable:
-    """GP8: Validate stage enable/disable integrity.
-
-    Purpose: Disabling stages removes them from stage chain without stale data.
-
-    Coverage: CORE-B, CORE-C, CORE-D
-    """
-
-    def test_gp8_disabled_stages_omitted_from_chain(self, tmp_path: Path):
-        """GP8.1: Disabled stages do not appear in StageChain."""
-        pytest.skip("Implementation pending: Requires stage override testing")
-
-
-# ============================================================================
-# GP9: Failure Path (Runner Error)
-# ============================================================================
-
-
-@pytest.mark.golden_path
-@pytest.mark.gp9
-class TestGP9FailurePath:
-    """GP9: Validate failure path handling.
-
-    Purpose: Runner errors transition job to FAILED without blocking queue.
-
-    Coverage: CORE-A, CORE-C, CORE-D
-    """
-
-    def test_gp9_runner_error_transitions_to_failed(self, tmp_path: Path):
-        """GP9.1: Job transitions to FAILED on runner error."""
-        pytest.skip("Implementation pending: Requires error injection")
-
-    def test_gp9_queue_not_blocked_by_failure(self, tmp_path: Path):
-        """GP9.2: Queue continues processing after job failure."""
-        pytest.skip("Implementation pending: Requires queue failure resilience test")
-
-
-# ============================================================================
 # GP10: Learning Integration
 # ============================================================================
 
@@ -761,144 +718,39 @@ class TestGP10LearningIntegration:
 @pytest.mark.golden_path
 @pytest.mark.gp11
 class TestGP11MixedQueue:
-    """GP11: Validate mixed queue with randomized and non-randomized jobs.
+    """GP11: Validate randomized and non-randomized jobs do not contaminate each other.
 
-    Purpose: Queue handles heterogeneous job types without contamination.
-
-    Coverage: CORE-A, CORE-B, CORE-C, CORE-D
-    """
-
-    def test_gp11_mixed_queue_correct_interleaving(self, tmp_path: Path):
-        """GP11.1: Mixed queue processes jobs in correct order without config contamination."""
-        pytest.skip("Implementation pending: Requires mixed job testing")
-
-
-# ============================================================================
-# GP12: Restore from History → Re-Run
-# ============================================================================
-
-
-@pytest.mark.golden_path
-@pytest.mark.gp12
-class TestGP12RestoreFromHistory:
-    """GP12: Validate history restore and re-run.
-
-    Purpose: History entry can be restored and produces identical results.
+    Purpose: Compiling a randomized config and a plain config from the same base keeps
+    each job's provenance and config isolated; FIFO queue ordering is covered by GP2.
 
     Coverage: CORE-A, CORE-B, CORE-C, CORE-D
     """
 
-    def test_gp12_restore_produces_identical_job(self, tmp_path: Path):
-        """GP12.1: Restored job produces identical prompt & config signature."""
-        pytest.skip("Implementation pending: Requires History restore functionality")
+    def test_gp11_randomized_and_plain_jobs_do_not_contaminate(self):
+        """GP11.1: Randomized variants never leak into plain jobs built from the same base."""
 
+        @dataclass
+        class _Config:
+            prompt: str = "a test prompt"
+            model: str = "base-model"
+            cfg_scale: float = 7.0
+            steps: int = 20
+            seed: int = 42
 
-# ============================================================================
-# GP13: Config Sweep (PR-CORE-E)
-# ============================================================================
+        builder = JobBuilderV2()
+        base = _Config()
+        randomized = builder.build_jobs(
+            base_config=base,
+            randomization_plan=RandomizationPlanV2(
+                enabled=True, model_choices=["m1", "m2"], max_variants=2
+            ),
+        )
+        plain = builder.build_jobs(base_config=base)
 
-
-@pytest.mark.golden_path
-@pytest.mark.gp13
-@pytest.mark.core_e
-class TestGP13ConfigSweep:
-    """GP13: Validate ConfigVariantPlanV2 → builder path.
-
-    Purpose: Config sweeps produce N jobs with varying configs.
-
-    Coverage: CORE-A, CORE-B, CORE-C, CORE-D, CORE-E
-    """
-
-    def test_gp13_config_sweep_produces_n_variants(self, tmp_path: Path):
-        """GP13.1: Config sweep with 3 cfg values produces 3 jobs."""
-        pytest.skip("Implementation pending: Requires PR-CORE-E ConfigVariantPlanV2")
-
-        # Expected:
-        # - 3 jobs with different cfg_scale values
-        # - Identical prompts
-        # - config_variant_index=0,1,2
-
-
-# ============================================================================
-# GP14: Config Sweep × Matrix Randomizer
-# ============================================================================
-
-
-@pytest.mark.golden_path
-@pytest.mark.gp14
-@pytest.mark.core_e
-class TestGP14ConfigSweepMatrixCrossProduct:
-    """GP14: Validate config sweep × matrix randomizer cross-product.
-
-    Purpose: Config sweeps + randomizer produce M×N jobs.
-
-    Coverage: CORE-B, CORE-C, CORE-D, CORE-E
-    """
-
-    def test_gp14_sweep_x_randomizer_produces_cross_product(self, tmp_path: Path):
-        """GP14.1: M config variants × N matrix variants = M×N jobs."""
-        pytest.skip("Implementation pending: Requires PR-CORE-E + RandomizerEngineV2")
-
-
-# ============================================================================
-# GP15: Global Negative Application Integrity
-# ============================================================================
-
-
-@pytest.mark.golden_path
-@pytest.mark.gp15
-@pytest.mark.core_e
-class TestGP15GlobalNegativeIntegrity:
-    """GP15: Validate global negative layering.
-
-    Purpose: Global negative toggles produce different final negative prompts.
-
-    Coverage: CORE-B, CORE-C, CORE-D, CORE-E
-    """
-
-    def test_gp15_global_negative_applied_correctly(self, tmp_path: Path):
-        """GP15.1: Global negative changes final negative prompt."""
-        pytest.skip("Implementation pending: Requires global negative layering")
-
-    def test_gp15_global_negative_does_not_mutate_pack(self, tmp_path: Path):
-        """GP15.2: Global negative toggle does not mutate PromptPack JSON."""
-        pytest.skip("Implementation pending: Requires PromptPack immutability test")
-
-
-# ============================================================================
-# Summary Test (Meta-Test)
-# ============================================================================
-
-
-@pytest.mark.golden_path
-@pytest.mark.summary
-def test_golden_path_coverage_summary():
-    """Meta-test that reports Golden Path test implementation status.
-
-    This test always passes but reports which GP scenarios are implemented.
-    """
-    implemented = []
-    skipped = []
-
-    # Count implemented vs skipped tests
-    for gp_num in range(1, 16):
-        # This is a placeholder - actual implementation would introspect test results
-        skipped.append(f"GP{gp_num}")
-
-    print(f"\n{'=' * 70}")
-    print("GOLDEN PATH TEST SUITE IMPLEMENTATION STATUS")
-    print(f"{'=' * 70}")
-    print(f"Implemented: {len(implemented)}/15 scenarios ({len(implemented) / 15 * 100:.1f}%)")
-    print(f"Skipped: {len(skipped)}/15 scenarios")
-    print("\nStatus: INITIAL SKELETON - All tests marked as 'skip' pending:")
-    print("  - PromptPack fixture creation")
-    print("  - JobBuilderV2 integration")
-    print("  - JobService lifecycle event emission")
-    print("  - RandomizerEngineV2 integration")
-    print("  - UnifiedConfigResolver verification")
-    print("  - Debug Hub integration")
-    print("  - Learning system integration")
-    print("  - PR-CORE-E (Config Sweeps + Global Negative)")
-    print(f"{'=' * 70}\n")
-
-    assert True, "Summary test completed"
+        assert [job.config["model"] for job in randomized] == ["m1", "m2"]
+        assert [job.variant_total for job in randomized] == [2, 2]
+        assert len(plain) == 1
+        assert plain[0].config["model"] == "base-model"
+        assert plain[0].variant_total == 1
+        assert not plain[0].randomizer_summary
+        assert base.model == "base-model"

@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -103,36 +102,41 @@ def test_thumbnail_handles_missing_file():
     thumb.create_text.assert_called()  # Should show placeholder
 
 
-@pytest.mark.skipif(True, reason="Requires full Tkinter environment - tested manually")
-def test_thumbnail_loads_valid_image():
-    """Verify loading a valid image file."""
+def test_thumbnail_loads_valid_image(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify loading a valid image file renders it centered without needing a Tk root."""
     from PIL import Image
 
+    from src.gui.widgets import image_thumbnail
     from src.gui.widgets.image_thumbnail import ImageThumbnail
 
-    # Create a test image
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-        img = Image.new("RGB", (100, 100), color="red")
-        img.save(f.name)
+    image_path = tmp_path / "red.png"
+    Image.new("RGB", (100, 100), color="red").save(image_path)
 
-        # Create mock widget
-        thumb = ImageThumbnail.__new__(ImageThumbnail)
-        thumb.max_width = 300
-        thumb.max_height = 300
-        thumb._photo_image = None
-        thumb._current_path = None
-        thumb.delete = MagicMock()
-        thumb.create_image = MagicMock()
-        thumb.winfo_width = MagicMock(return_value=300)
-        thumb.winfo_height = MagicMock(return_value=300)
+    # ImageTk.PhotoImage requires a live Tk interpreter; the widget logic under test does not.
+    photo_image_cls = MagicMock(name="PhotoImage")
+    monkeypatch.setattr(image_thumbnail, "ImageTk", MagicMock(PhotoImage=photo_image_cls))
 
-        result = thumb.load_image(f.name)
+    thumb = ImageThumbnail.__new__(ImageThumbnail)
+    thumb.max_width = 300
+    thumb.max_height = 300
+    thumb.fit_to_widget = False
+    thumb._photo_image = None
+    thumb._current_path = None
+    thumb._update_clickability = MagicMock()
+    thumb.delete = MagicMock()
+    thumb.create_image = MagicMock()
+    thumb.winfo_width = MagicMock(return_value=300)
+    thumb.winfo_height = MagicMock(return_value=300)
 
-        assert result is True
-        thumb.create_image.assert_called()
+    result = thumb.load_image(str(image_path))
 
-        # Cleanup
-        Path(f.name).unlink(missing_ok=True)
+    assert result is True
+    assert thumb._current_path == str(image_path)
+    rendered = photo_image_cls.call_args.args[0]
+    assert rendered.size == (100, 100)
+    thumb.create_image.assert_called_once_with(
+        150, 150, image=photo_image_cls.return_value, anchor="center"
+    )
 
 
 def test_thumbnail_clear():
@@ -157,8 +161,21 @@ def test_thumbnail_clear():
     thumb.create_text.assert_called()
 
 
-def test_thumbnail_open_current_path_uses_default_viewer(monkeypatch, tmp_path: Path):
-    """Verify clicking a loaded image opens the file in the default viewer."""
+@pytest.mark.parametrize(
+    ("os_name", "platform", "expected"),
+    [
+        ("nt", "win32", ("startfile", None)),
+        ("posix", "darwin", ("popen", "open")),
+        ("posix", "linux", ("popen", "xdg-open")),
+    ],
+)
+def test_thumbnail_open_current_path_uses_default_viewer(
+    monkeypatch, tmp_path: Path, os_name: str, platform: str, expected: tuple[str, str | None]
+):
+    """Verify clicking a loaded image opens the file in the platform default viewer."""
+    from types import SimpleNamespace
+
+    from src.gui.widgets import image_thumbnail
     from src.gui.widgets.image_thumbnail import ImageThumbnail
 
     image_path = tmp_path / "image.png"
@@ -167,9 +184,28 @@ def test_thumbnail_open_current_path_uses_default_viewer(monkeypatch, tmp_path: 
     thumb = ImageThumbnail.__new__(ImageThumbnail)
     thumb._current_path = str(image_path)
 
-    opened: list[str] = []
-    monkeypatch.setattr("os.startfile", lambda path: opened.append(path))
+    calls: list[tuple[str, object]] = []
+    # Patch only this module's view of os/subprocess so every platform branch is
+    # deterministic on any host (os.startfile exists only on Windows).
+    monkeypatch.setattr(
+        image_thumbnail,
+        "os",
+        SimpleNamespace(
+            name=os_name,
+            sys=SimpleNamespace(platform=platform),
+            startfile=lambda path: calls.append(("startfile", path)),
+        ),
+    )
+    monkeypatch.setattr(
+        image_thumbnail,
+        "subprocess",
+        SimpleNamespace(Popen=lambda argv: calls.append(("popen", argv))),
+    )
 
     thumb._open_current_path()
 
-    assert opened == [str(image_path)]
+    kind, launcher = expected
+    if kind == "startfile":
+        assert calls == [("startfile", str(image_path))]
+    else:
+        assert calls == [("popen", [launcher, str(image_path)])]

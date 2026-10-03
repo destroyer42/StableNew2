@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
 from src.pipeline.replay_engine import ReplayEngine
@@ -120,3 +123,18 @@ def test_replay_engine_checkpoint_callback_updates_job_metadata() -> None:
     assert job.execution_metadata.stage_checkpoints
     assert job.execution_metadata.stage_checkpoints[0].stage_name == "txt2img"
     assert job.execution_metadata.stage_checkpoints[0].output_paths == ["output/generated.png"]
+
+
+def test_replay_engine_rejects_malformed_plan_before_runner() -> None:
+    runner = StubRunner()
+    engine = ReplayEngine(runner, cancel_token=None)
+    malformed = SimpleNamespace(
+        job_id="replay-bad",
+        positive_prompt="castle",
+        stage_chain=(SimpleNamespace(stage_type="", enabled=True),),
+    )
+
+    with pytest.raises(ValueError, match="explicit stage_type"):
+        engine.replay_njr(malformed)  # type: ignore[arg-type]
+
+    assert runner.calls == []

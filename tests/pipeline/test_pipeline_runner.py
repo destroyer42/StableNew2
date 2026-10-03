@@ -94,6 +94,28 @@ def test_run_njr_delegates_to_executor() -> None:
     assert result.metadata["diagnostics_descriptor"]["output_count"] == 1
 
 
+def test_run_njr_rejects_invalid_plan_before_any_runtime_call() -> None:
+    from types import SimpleNamespace
+
+    import pytest
+
+    runner = PipelineRunner(Mock(), Mock())
+    pipeline = Mock()
+    pipeline.client = Mock()
+    runner._pipeline = pipeline
+    malformed = SimpleNamespace(
+        job_id="bad-plan",
+        positive_prompt="portrait",
+        stage_chain=(SimpleNamespace(stage_type="", enabled=True),),
+    )
+
+    with pytest.raises(ValueError, match="explicit stage_type"):
+        runner.run_njr(malformed, cancel_token=None)  # type: ignore[arg-type]
+
+    assert pipeline.mock_calls == []
+    assert pipeline.client.mock_calls == []
+
+
 def test_run_njr_emits_observation_only_adaptive_refinement_metadata() -> None:
     runner = PipelineRunner(Mock(), Mock())
     record = _minimal_normalized_record()

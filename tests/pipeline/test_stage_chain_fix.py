@@ -2,6 +2,8 @@
 Test that build_run_plan_from_njr creates jobs for enabled stages in stage_chain.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from src.pipeline.job_models_v2 import NormalizedJobRecord, StageConfig
@@ -75,3 +77,50 @@ def test_build_run_plan_normalizes_legacy_upscale_before_adetailer() -> None:
 
     assert [job.stage_name for job in plan.jobs] == ["txt2img", "adetailer", "upscale"]
     assert plan.enabled_stages == ["txt2img", "adetailer", "upscale"]
+
+
+def _malformed(*stages: object) -> SimpleNamespace:
+    """Duck-typed record that bypasses the NJR envelope to probe the helper directly."""
+    return SimpleNamespace(
+        job_id="malformed-001",
+        positive_prompt="portrait",
+        stage_chain=tuple(stages),
+    )
+
+
+@pytest.mark.parametrize("stage_type", ["", "   ", None])
+def test_build_run_plan_rejects_enabled_stage_without_identity(stage_type: object) -> None:
+    record = _malformed(SimpleNamespace(stage_type=stage_type, enabled=True))
+
+    with pytest.raises(ValueError, match="explicit stage_type"):
+        build_run_plan_from_njr(record)
+
+
+def test_build_run_plan_rejects_enabled_stage_missing_stage_type_attribute() -> None:
+    with pytest.raises(ValueError, match="explicit stage_type"):
+        build_run_plan_from_njr(_malformed(SimpleNamespace(enabled=True)))
+
+
+@pytest.mark.parametrize(
+    "stages",
+    [
+        (),
+        (SimpleNamespace(stage_type="txt2img", enabled=False),),
+        (SimpleNamespace(stage_type="", enabled=False),),
+        (SimpleNamespace(stage_type="txt2img"),),
+    ],
+)
+def test_build_run_plan_never_synthesizes_txt2img(stages: tuple[object, ...]) -> None:
+    with pytest.raises(ValueError, match="at least one enabled stage"):
+        build_run_plan_from_njr(_malformed(*stages))
+
+
+def test_build_run_plan_ignores_blank_identity_on_disabled_stage() -> None:
+    plan = build_run_plan_from_njr(
+        _malformed(
+            SimpleNamespace(stage_type="", enabled=False),
+            SimpleNamespace(stage_type="adetailer", enabled=True),
+        )
+    )
+
+    assert [job.stage_name for job in plan.jobs] == ["adetailer"]
