@@ -275,6 +275,67 @@ class TestQueuePanelHasControls:
         finally:
             root.destroy()
 
+    def test_queue_panel_update_from_app_state_projects_queue_truth(self):
+        """update_from_app_state projects rows, count, status and auto-run from app state."""
+        root = _skip_if_no_tk()
+        try:
+            from types import SimpleNamespace
+
+            from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
+            from src.gui.theme_v2 import apply_theme
+
+            apply_theme(root)
+            panel = QueuePanelV2(root)
+            panel.pack()
+
+            def _job(job_id: str, status: str = "QUEUED") -> SimpleNamespace:
+                return SimpleNamespace(
+                    job_id=job_id,
+                    status=status,
+                    get_display_summary=lambda: f"summary-{job_id}",
+                )
+
+            def _state(**overrides) -> SimpleNamespace:
+                values = {
+                    "is_queue_paused": False,
+                    "auto_run_queue": False,
+                    "running_job": None,
+                    "queue_jobs": [],
+                }
+                values.update(overrides)
+                return SimpleNamespace(**values)
+
+            panel.update_from_app_state(_state())
+            assert "Idle" in panel.queue_status_label.cget("text")
+            assert panel.count_label.cget("text") == "(0 jobs)"
+            assert panel.job_listbox.size() == 0
+
+            panel.update_from_app_state(_state(queue_jobs=[_job("a"), _job("b"), _job("c")]))
+            assert "3" in panel.queue_status_label.cget("text")
+            assert panel.count_label.cget("text") == "(3 jobs)"
+            assert [panel.job_listbox.get(i) for i in range(3)] == [
+                "#1  summary-a",
+                "#2  summary-b",
+                "#3  summary-c",
+            ]
+
+            panel.update_from_app_state(_state(is_queue_paused=True, queue_jobs=[_job("a")]))
+            assert "Paused" in panel.queue_status_label.cget("text")
+
+            panel.update_from_app_state(
+                _state(running_job=_job("r", "RUNNING"), queue_jobs=[_job("a")])
+            )
+            assert "Running" in panel.queue_status_label.cget("text")
+
+            panel.update_from_app_state(_state(auto_run_queue=True))
+            assert panel.auto_run_var.get() is True
+
+            # Missing or attribute-less app state must not raise.
+            panel.update_from_app_state(None)
+            panel.update_from_app_state(object())
+        finally:
+            root.destroy()
+
     def test_queue_panel_keeps_visibility_banner_hidden_when_mode_changes(self):
         """QueuePanelV2 should not surface visibility copy on the main pipeline screen."""
         root = _skip_if_no_tk()

@@ -37,69 +37,54 @@ class RunPlan:
     replay_of: str | None = None
 
 
+def _explicit_stage_name(stage_config: object) -> str:
+    raw = getattr(stage_config, "stage_type", None)
+    raw = getattr(raw, "value", raw)
+    name = str(raw).strip() if raw is not None else ""
+    if not name:
+        raise ValueError("RunPlan requires an explicit stage_type for every enabled stage")
+    return name
+
+
 def build_run_plan_from_njr(njr: NormalizedJobRecord) -> RunPlan:
     """
     Derives a RunPlan from a NormalizedJobRecord.
     This is the canonical path for both live runs and replays.
+
+    Fail-closed: only explicitly enabled, explicitly named stages are planned. A
+    missing/blank stage identity or an empty/all-disabled chain raises ``ValueError``;
+    this module never synthesizes a stage. Historical input must be hydrated into a
+    valid NJR before it reaches this function.
     """
     stage_chain: list[StageConfig] = list(getattr(njr, "stage_chain", []) or [])
-    indexed_stage_chain = list(enumerate(stage_chain))
-    indexed_stage_chain.sort(
-        key=lambda item: (
-            _CANONICAL_STAGE_ORDER.get(getattr(item[1], "stage_type", "") or "", 99),
-            item[0],
+    enabled_chain = [
+        (idx, stage, _explicit_stage_name(stage))
+        for idx, stage in enumerate(stage_chain)
+        if getattr(stage, "enabled", False)
+    ]
+    if not enabled_chain:
+        raise ValueError("RunPlan requires at least one enabled stage")
+    enabled_chain.sort(key=lambda item: (_CANONICAL_STAGE_ORDER.get(item[2], 99), item[0]))
+
+    jobs = [
+        PlannedJob(
+            stage_name=stage_type,
+            prompt_text=getattr(njr, "positive_prompt", "") or "",
+            variant_id=getattr(njr, "variant_index", 0),
+            batch_index=getattr(njr, "batch_index", 0),
+            seed=getattr(njr, "seed", None),
+            cfg_scale=getattr(njr, "cfg_scale", None),
+            sampler=getattr(njr, "sampler_name", None),
+            model=getattr(njr, "base_model", None),
         )
-    )
-    stage_chain = [stage for _, stage in indexed_stage_chain]
+        for _idx, _stage, stage_type in enabled_chain
+    ]
 
-    # Build a PlannedJob for EACH **ENABLED** stage in the chain
-    jobs = []
-    enabled_stages = []
-
-    for _idx, stage_config in enumerate(stage_chain):
-        # Check if stage is enabled
-        is_enabled = getattr(stage_config, "enabled", True)
-        if not is_enabled:
-            continue  # Skip disabled stages
-
-        stage_type = getattr(stage_config, "stage_type", "") or "txt2img"
-        enabled_stages.append(stage_type)
-
-        jobs.append(
-            PlannedJob(
-                stage_name=stage_type,
-                prompt_text=getattr(njr, "positive_prompt", "") or "",
-                variant_id=getattr(njr, "variant_index", 0),
-                batch_index=getattr(njr, "batch_index", 0),
-                seed=getattr(njr, "seed", None),
-                cfg_scale=getattr(njr, "cfg_scale", None),
-                sampler=getattr(njr, "sampler_name", None),
-                model=getattr(njr, "base_model", None),
-            )
-        )
-
-    # Fallback: if no enabled stages found, create a single txt2img job
-    if not jobs:
-        jobs.append(
-            PlannedJob(
-                stage_name="txt2img",
-                prompt_text=getattr(njr, "positive_prompt", "") or "",
-                variant_id=getattr(njr, "variant_index", 0),
-                batch_index=getattr(njr, "batch_index", 0),
-                seed=getattr(njr, "seed", None),
-                cfg_scale=getattr(njr, "cfg_scale", None),
-                sampler=getattr(njr, "sampler_name", None),
-                model=getattr(njr, "base_model", None),
-            )
-        )
-        enabled_stages = ["txt2img"]
-
-    plan = RunPlan(
+    return RunPlan(
         jobs=jobs,
         total_jobs=len(jobs),
         total_images=getattr(njr, "images_per_prompt", None) or 1,
-        enabled_stages=enabled_stages,
+        enabled_stages=[job.stage_name for job in jobs],
         source_job_id=getattr(njr, "job_id", None),
         replay_of=getattr(njr, "job_id", None),
     )
-    return plan

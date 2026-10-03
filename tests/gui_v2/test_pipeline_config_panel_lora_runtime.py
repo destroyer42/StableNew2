@@ -30,13 +30,12 @@ class FakeController:
 
 
 @pytest.mark.gui
-@pytest.mark.gui
 def test_pipeline_panel_lora_controls_update_controller(tk_root: tk.Tk) -> None:
     controller = FakeController()
     panel = PipelinePanelV2(tk_root, controller=controller, on_change=lambda: None)
     try:
-        if not hasattr(panel, "_lora_controls") or not panel._lora_controls:
-            pytest.skip("LoRA runtime controls not implemented in v2 panel surface yet")
+        assert hasattr(panel, "_lora_controls")
+        assert panel._lora_controls
         assert "LoRA-Alpha" in panel._lora_controls
         enabled_var, alpha_scale = panel._lora_controls["LoRA-Alpha"]
         assert abs(alpha_scale.get() - 0.6) < 1e-6

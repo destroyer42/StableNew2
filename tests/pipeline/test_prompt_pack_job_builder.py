@@ -317,6 +317,81 @@ def test_prompt_pack_job_builder_preserves_randomizer_with_matrix_variants(tmp_p
     assert [record.matrix_slot_values["job"] for record in records] == ["wizard", "knight"]
 
 
+def test_prompt_pack_job_builder_substitutes_matrix_slot_per_variant(tmp_path: Path) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    pack_json = _write_native_pack(
+        config_manager.packs_dir / "substitution-pack.json",
+        text="A [[job]] in a forest",
+        matrix={
+            "enabled": True,
+            "mode": "sequential",
+            "limit": 2,
+            "slots": [{"name": "job", "values": ["wizard", "knight"]}],
+        },
+    )
+    builder = PromptPackNormalizedJobBuilder(
+        config_manager=config_manager,
+        job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+        packs_dir=config_manager.packs_dir,
+    )
+    entry = PackJobEntry(
+        pack_id=pack_json.name,
+        pack_name="Substitution Pack",
+        prompt_text="A [[job]] in a forest",
+        config_snapshot={"randomization": {"enabled": False}},
+        stage_flags={"txt2img": True},
+        randomizer_metadata={"enabled": False},
+        pack_row_index=0,
+    )
+
+    records = builder.build_jobs([entry])
+
+    assert [record.positive_prompt for record in records] == [
+        "A wizard in a forest",
+        "A knight in a forest",
+    ]
+    assert [record.matrix_slot_values for record in records] == [
+        {"job": "wizard"},
+        {"job": "knight"},
+    ]
+
+
+def test_prompt_pack_job_builder_global_negative_is_toggleable_and_leaves_pack_untouched(
+    tmp_path: Path,
+) -> None:
+    config_manager = StubConfigManager(tmp_path)
+    pack_json = _write_native_pack(
+        config_manager.packs_dir / "global-negative-pack.json", text="A calm lake"
+    )
+    pack_bytes = pack_json.read_bytes()
+
+    def _build(*, apply_global_negative: bool) -> str:
+        pipeline = {
+            **BASE_PACK_CONFIG["pipeline"],
+            "apply_global_negative_txt2img": apply_global_negative,
+        }
+        config_manager._config = {**BASE_PACK_CONFIG, "pipeline": pipeline}  # noqa: SLF001
+        builder = PromptPackNormalizedJobBuilder(
+            config_manager=config_manager,
+            job_builder=JobBuilderV2(time_fn=lambda: 1.0, id_fn=SequentialIdGenerator()),
+            packs_dir=config_manager.packs_dir,
+        )
+        entry = PackJobEntry(
+            pack_id=pack_json.name,
+            pack_name="Global Negative Pack",
+            prompt_text="A calm lake",
+            config_snapshot={"randomization": {"enabled": False}},
+            stage_flags={"txt2img": True},
+            randomizer_metadata={"enabled": False},
+            pack_row_index=0,
+        )
+        return builder.build_jobs([entry])[0].negative_prompt
+
+    assert "global-negative" in _build(apply_global_negative=True)
+    assert "global-negative" not in _build(apply_global_negative=False)
+    assert pack_json.read_bytes() == pack_bytes
+
+
 def test_prompt_pack_job_builder_auto_limits_unbounded_matrix_expansion(tmp_path: Path) -> None:
     config_manager = StubConfigManager(tmp_path)
     pack_json = _write_native_pack(
