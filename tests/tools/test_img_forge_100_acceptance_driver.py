@@ -294,7 +294,8 @@ def test_the_driver_defines_no_second_compiler_queue_backend_dispatch_or_ownersh
 def test_the_driver_stays_a_small_observer_not_an_application_shell():
     # It replaces tools/qualification/img_forge_100/run.py's execute path (231 lines) and the ~420-line
     # external session wrapper; the structural tests above are the real guard, this only stops regrowth.
-    assert len(DRIVER_SOURCE.read_text(encoding="utf-8").splitlines()) <= 380
+    # Pair B/C/D freezing (production builders only) and asset verification added ~80 lines.
+    assert len(DRIVER_SOURCE.read_text(encoding="utf-8").splitlines()) <= 470
 
 
 def test_a_physical_run_requires_the_owners_exact_intent_digest(canonical_context, tmp_path):

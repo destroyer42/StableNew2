@@ -18,7 +18,11 @@ inspector anchors StableNew ancestry on the process's working directory) and poi
     python -m tools.acceptance.img_forge_100_acceptance --backend a1111_webui \
         --runtime-profile <profile.json> --reports-dir <evidence dir> --approved-intent-sha256 <digest>
 
-One job per invocation. Pair A only; B/C/D, the matrix and cancellation belong to later packages.
+One job per invocation. Pair A (default) is frozen from the tracked intent with the production CLI builder.
+Pairs B/C/D (``--case B|C|D --matrix <authoritative frozen matrix.json>``) use the same production builders
+(B/D: the CLI builder with the frozen LoRA token / ADetailer + upscale sections; C: ``ReprocessJobBuilder``
+for img2img from the frozen source image); the matrix settings must equal the tracked intent, and the case's
+assets are hash verified before any runtime starts. Cancellation and the full matrix belong to later packages.
 """
 
 from __future__ import annotations
@@ -64,19 +68,87 @@ def load_pair_a(intent_path: Path, backend: str) -> dict[str, Any]:
     return document["settings"]
 
 
-def freeze_njr(settings: dict[str, Any], backend: str, *, job_id: str, output_dir: Path) -> Any:
-    """Immutable NJR for the frozen txt2img intent; every transformation is a production helper."""
+CASES = ("A", "B", "C", "D")
+_CASE_ASSETS = {
+    "A": ("checkpoint",),
+    "B": ("checkpoint", "lora"),
+    "C": ("checkpoint", "input"),
+    "D": ("checkpoint", "face_detector", "hand_detector", "upscaler"),
+}
 
-    from src.pipeline.cli_njr_builder import build_cli_njr
+
+def load_frozen_case(matrix_path: Path, letter: str, backend: str, intent_path: Path) -> tuple[dict[str, Any], dict[str, Any]]:
+    """The authoritative frozen matrix and one case; its settings and case must equal the tracked intent."""
+
+    matrix = json.loads(Path(matrix_path).read_text(encoding="utf-8-sig"))
+    contract = json.loads(Path(intent_path).read_text(encoding="utf-8"))
+    if matrix["settings"] != contract["settings"]:
+        raise ValueError("The frozen matrix settings differ from the tracked frozen intent")
+    case_id = f"{letter}-{backend}"
+    case = next((c for c in matrix["cases"] if c["case_id"] == case_id), None)
+    tracked = next((c for c in contract["cases"] if c["case_id"] == case_id), None)
+    if case is None or tracked is None or any(case.get(k) != tracked.get(k) for k in ("stages", "overrides", "scenario", "backend")):
+        raise ValueError(f"The frozen matrix has no case {case_id} agreeing with the tracked intent")
+    return matrix, case
+
+
+def freeze_case_njr(matrix: dict[str, Any], case: dict[str, Any], *, job_id: str, output_dir: Path) -> Any:
+    """Immutable NJR for a frozen case; every transformation is a production builder or helper."""
+
+    letter, backend = case["scenario"], case["backend"]
+    settings = {**matrix["settings"], **case.get("overrides", {})}  # C carries its frozen 480x832 geometry
+    if letter != "C":
+        return freeze_njr(settings, backend, job_id=job_id, output_dir=output_dir, case=letter)
+    from src.pipeline.reprocess_builder import ReprocessJobBuilder
+
+    policy = _frozen_policy(settings, img2img_enabled=True)
+    section = {key: settings[key] for key in ("steps", "cfg_scale", "sampler_name", "scheduler", "seed", "width", "height", "clip_skip", "negative_prompt")}
+    section.update(model=settings["checkpoint"], vae=settings["vae"], denoising_strength=settings["img2img_denoise"])
+    config = {
+        "img2img": section,
+        "pipeline": policy["pipeline"],
+        "prompt_optimizer": {"enabled": False},
+        "backend_options": {"image": {"backend_id": backend}},
+        "model": settings["checkpoint"],
+        "vae": settings["vae"],
+        **{key: policy[key] for key in ("global_positive_prompt", "global_negative_prompt", "global_prompt_policy_source")},
+    }
+    return ReprocessJobBuilder(id_fn=lambda: job_id).build_reprocess_job(
+        [matrix["assets"]["input"]["path"]], ["img2img"], config=config, output_dir=str(output_dir),
+        prompt=settings["prompt"], negative_prompt=settings["negative_prompt"], model=settings["checkpoint"], pack_name=job_id,
+    )
+
+
+def verify_case_assets(matrix: dict[str, Any], letter: str) -> dict[str, Any]:
+    """Hash the assets this case needs against the frozen identities (raises on any change)."""
+
+    from tools.qualification.img_forge_100.provenance import verify_assets
+
+    return verify_assets({name: matrix["assets"][name] for name in _CASE_ASSETS[letter]})
+
+
+def _frozen_policy(settings: dict[str, Any], **pipeline: bool) -> dict[str, Any]:
+    """The production global-prompt policy with application disabled: frozen text, source ``frozen_njr``."""
+
+    flags = {"img2img_enabled": False, "adetailer_enabled": False, "upscale_enabled": False, **pipeline}
     from src.pipeline.global_prompt_policy import apply_global_prompt_policy
 
-    policy = apply_global_prompt_policy(
-        {"pipeline": {"img2img_enabled": False, "adetailer_enabled": False, "upscale_enabled": False}},
+    return apply_global_prompt_policy(
+        {"pipeline": flags},
         positive_enabled=False,
         negative_enabled=False,
         positive_text=settings.get("global_positive_prompt", ""),
         negative_text=settings.get("global_negative_prompt", ""),
     )
+
+
+def freeze_njr(settings: dict[str, Any], backend: str, *, job_id: str, output_dir: Path, case: str = "A") -> Any:
+    """Immutable NJR for the frozen txt2img intent (A); B adds the frozen LoRA token, D the frozen chain."""
+
+    from src.pipeline.cli_njr_builder import build_cli_njr
+
+    chain = case == "D"
+    policy = _frozen_policy(settings, adetailer_enabled=chain, upscale_enabled=chain)
     section = {
         "model": settings["checkpoint"],
         "vae": settings["vae"],
@@ -95,12 +167,15 @@ def freeze_njr(settings: dict[str, Any], backend: str, *, job_id: str, output_di
         "prompt_optimizer": {"enabled": False},
         **{key: policy[key] for key in ("global_positive_prompt", "global_negative_prompt", "global_prompt_policy_source")},
     }
-    config = {
+    config: dict[str, Any] = {
         "txt2img": section,
         "pipeline": policy["pipeline"],
         "backend_options": {"image": {"backend_id": backend}},
     }
-    njr = build_cli_njr(prompt=settings["prompt"], config=config, batch_size=1, run_name=job_id)
+    if chain:
+        config["adetailer"], config["upscale"] = dict(settings["adetailer"]), dict(settings["upscale"])
+    lora = f" <lora:{settings['lora_name']}:{settings['lora_strength']}>" if case == "B" else ""
+    njr = build_cli_njr(prompt=settings["prompt"] + lora, config=config, batch_size=1, run_name=job_id)
     return replace(njr, output_plan=replace(njr.output_plan, base_output_dir=str(output_dir)))
 
 
@@ -275,11 +350,20 @@ def run(args: argparse.Namespace, runtime: Any, *, client: Any = None, sampler: 
     if reports.exists() and any(reports.iterdir()):
         raise FileExistsError(f"{reports} already holds evidence; choose a new --reports-dir")
     reports.mkdir(parents=True, exist_ok=True)
-    settings = load_pair_a(Path(args.intent), args.backend)
-    job_id = args.job_id or f"forge100-baseline-{args.backend}-{int(time.time())}"
-    njr = freeze_njr(settings, args.backend, job_id=job_id, output_dir=reports / "output")
+    letter = getattr(args, "case", "A")
+    matrix: dict[str, Any] | None = None
+    if letter == "A":
+        settings = load_pair_a(Path(args.intent), args.backend)
+        job_id = args.job_id or f"forge100-baseline-{args.backend}-{int(time.time())}"
+        njr = freeze_njr(settings, args.backend, job_id=job_id, output_dir=reports / "output")
+    else:
+        if not getattr(args, "matrix", None):
+            raise ValueError(f"--matrix (the authoritative frozen matrix) is required for case {letter}")
+        matrix, case = load_frozen_case(Path(args.matrix), letter, args.backend, Path(args.intent))
+        job_id = args.job_id or f"forge100-{letter}-{args.backend}-{int(time.time())}"
+        njr = freeze_case_njr(matrix, case, job_id=job_id, output_dir=reports / "output")
     intent_sha = intent_digest(njr)
-    report: dict[str, Any] = {"job_id": job_id, "backend": args.backend, "intent_sha256": intent_sha, "cwd": str(Path.cwd()), "reports_dir": str(reports), "njr": njr.to_dict()}
+    report: dict[str, Any] = {"job_id": job_id, "case": letter, "backend": args.backend, "intent_sha256": intent_sha, "cwd": str(Path.cwd()), "reports_dir": str(reports), "njr": njr.to_dict()}
     _write_new(reports / "intent.json", report)
     if args.dry:
         print(json.dumps({"dry": True, "job_id": job_id, "intent_sha256": intent_sha, "reports_dir": str(reports)}))
@@ -289,6 +373,9 @@ def run(args: argparse.Namespace, runtime: Any, *, client: Any = None, sampler: 
 
     code, stack, submitted = EXIT_NOT_SUBMITTED, None, False
     try:
+        if matrix is not None:
+            # Before any runtime starts: the frozen assets are exactly the approved ones (and the source stays so).
+            report["assets_verified"] = verify_case_assets(matrix, letter)
         report["runtime_start"] = runtime.start()
         start = report["runtime_start"]
         if start.get("owns_process") and not start["process_risk"]["webui_runtime_tree_count"]:
@@ -313,6 +400,10 @@ def run(args: argparse.Namespace, runtime: Any, *, client: Any = None, sampler: 
             "artifacts": _artifacts(entry.result),
             "peaks": peaks.peaks.as_dict() if hasattr(peaks, "peaks") else None,
         }
+        if matrix is not None and letter == "C":
+            from tools.qualification.img_forge_100.provenance import hash_file
+
+            report["input_sha256_after"] = hash_file(matrix["assets"]["input"]["path"])
         stopped = any(marker in error.lower() for marker in _DEVICE_LOSS)
         code = EXIT_STOPPED if stopped else EXIT_COMPLETED if status == "completed" else EXIT_FAILED
     except AmbiguousDispatch as exc:
@@ -337,6 +428,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--runtime-profile", type=Path, help="JSON launch profile: command, working_dir, env_overrides, endpoint")
     parser.add_argument("--reports-dir", type=Path, default=None, help="where evidence is written (default: a fresh reports/img_forge_100_acceptance/<backend>-<time>); never changes the working directory")
     parser.add_argument("--intent", type=Path, default=DEFAULT_INTENT)
+    parser.add_argument("--case", choices=CASES, default="A", help="frozen pair; B/C/D also require --matrix")
+    parser.add_argument("--matrix", type=Path, default=None, help="authoritative frozen matrix.json (assets and cases) for B/C/D")
     parser.add_argument("--approved-intent-sha256", default="")
     parser.add_argument("--job-id", default="")
     parser.add_argument("--timeout-seconds", type=float, default=900.0)
