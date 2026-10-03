@@ -7,7 +7,7 @@ name = "stablenew"
 version = "1.0.0"
 description = "Stable Diffusion WebUI Automation Pipeline"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12,<3.13"
 license = {text = "MIT"}
 authors = [
     {name = "StableNew Contributors"}
@@ -44,7 +44,7 @@ svd = [
 
 [tool.black]
 line-length = 100
-target-version = ['py311']
+target-version = ['py312']
 include = '\.pyi?$'
 extend-exclude = '''
 /(
@@ -64,7 +64,7 @@ extend-exclude = '''
 
 [tool.ruff]
 line-length = 100
-target-version = "py311"
+target-version = "py312"
 extend-exclude = ["archive", "ARCHIVE", ".venv", "build", "dist"]
 
 [tool.ruff.lint]
@@ -81,6 +81,9 @@ ignore = [
     "E501",  # line too long (handled by black)
     "B008",  # do not perform function calls in argument defaults
     "C901",  # too complex
+    "UP040",  # PEP 695 `type` aliases: syntax modernization deferred (not a runtime change)
+    "UP047",  # PEP 695 generic functions: syntax modernization deferred
+    "UP046",  # PEP 695 generic classes: syntax modernization deferred
     "W191",  # indentation contains tabs
 ]
 
@@ -92,7 +95,7 @@ ignore = [
 known-first-party = ["src"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.12"
 ignore_missing_imports = false
 strict = true
 

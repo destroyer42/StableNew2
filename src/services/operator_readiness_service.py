@@ -17,6 +17,9 @@ from src.video.svd_capabilities import SVDPreflight, get_svd_preflight
 from src.video.svd_config import SVDConfig
 from src.video.svd_models import get_default_svd_cache_dir
 
+# StableNew's application/native-SVD runtime is CPython 3.12.x only (PR-DEVEX-100).
+SUPPORTED_PYTHON_MINOR = (3, 12)
+
 
 class ProductSupportState(str, Enum):
     """Product-policy classification; this is not an execution authorization."""
@@ -225,12 +228,12 @@ class OperatorReadinessService:
         version = self._python_version_provider()
         major, minor, patch = (int(value) for value in version[:3])
         detected = f"Python {major}.{minor}.{patch}"
-        if (major, minor) >= (3, 11):
+        if (major, minor) == SUPPORTED_PYTHON_MINOR:
             return OperatorReadinessRecord(
                 id="python_runtime",
                 display_name="Python runtime",
                 state=OperatorReadinessState.READY,
-                summary=f"{detected} meets the required Python 3.11+ runtime.",
+                summary=f"{detected} is the supported Python 3.12 runtime.",
                 blocking_reasons=(),
                 operator_actions=(),
                 source="sys.version_info",
@@ -238,9 +241,9 @@ class OperatorReadinessService:
         return _action_record(
             "python_runtime",
             "Python runtime",
-            "StableNew requires Python 3.11 or later.",
-            (f"Detected {detected}; required Python 3.11+.",),
-            ("Launch StableNew with a Python 3.11 or newer environment, then refresh readiness.",),
+            "StableNew requires Python 3.12.",
+            (f"Detected {detected}; required Python 3.12.x.",),
+            ("Launch StableNew with a Python 3.12 environment, then refresh readiness.",),
             "sys.version_info",
         )
 

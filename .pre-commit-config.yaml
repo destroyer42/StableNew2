@@ -57,7 +57,6 @@ repos:
     rev: 23.12.1
     hooks:
       - id: black
-        language_version: python3.11
         exclude: ^(archive|ARCHIVE)/
 
   - repo: https://github.com/pre-commit/mirrors-mypy

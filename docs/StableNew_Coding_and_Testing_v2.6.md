@@ -27,11 +27,12 @@ the active roadmap.
 
 ## Supported Python
 
-Supported product interpreters are Python 3.11 and 3.12. Use a supported local
-environment when one is readily available. Do not rebuild the machine merely
-to duplicate the supported-version matrix: GitHub required CI is the canonical
-cross-version integration verdict. A local unsupported-version run can provide
-diagnostic evidence but cannot replace required CI.
+The sole supported StableNew application/native-SVD interpreter is CPython
+3.12.x (`requires-python = ">=3.12,<3.13"`). Readiness and the Windows bootstrap
+accept only 3.12.x and reject 3.11 and 3.13+; mypy and the lint targets use 3.12.
+A local run on another interpreter can provide diagnostic evidence but cannot
+replace required CI. The contract covers StableNew's own environment, not the
+separately owned A1111/ComfyUI runtimes.
 
 ## Test configuration
 
@@ -82,6 +83,24 @@ changes. For phased PRs, use bounded implementation/proof, edge/lifecycle, and
 acceptance/closeout phases with a checkpoint between phases unless continuous
 execution is explicitly authorized.
 
+## Validation levels
+
+- **Level 1 - focused development validation.** While implementing or repairing,
+  run only the deterministic tests relevant to the changed behavior, quietly
+  (`python -m pytest -q <targets>`). Do not run the whole repository merely
+  because source changed.
+- **Level 2 - final local PR gate.** Near final verification run
+  `python tools/ci/run_pr_gate.py` once. It remains the local authority for
+  repository completeness, the controller ratchet, Ruff, the mypy smoke, isolated
+  collection and the required positive-list smoke. Its pytest gates print one
+  compact line on success and the complete pytest output on failure. Reuse
+  exact-source green evidence; do not rerun it after docs-only edits.
+- **Level 3 - GitHub integration census.** Each pull-request head runs one workflow
+  on Python 3.12: one required gate and one informational full-suite job under
+  Xvfb. Branch pushes do not start a duplicate run, stacked PRs are covered, and a
+  newer head cancels the superseded run. `workflow_dispatch` remains for explicit
+  reruns or recovery.
+
 Use `python -m pytest -q <targets>` for focused changed behavior. Run
 real-backend acceptance only when the PR outcome requires it. Do not claim a
 full green suite when environment-dependent tests were not executed.
@@ -106,12 +125,13 @@ Use `docs/CODEX_WORK_PACKAGE_TEMPLATE.md` for the standard closeout shape.
 
 ## Integration verdict
 
-GitHub required CI runs the required gate on Python 3.11 and 3.12. Both jobs
-must pass before integration. The broader configured suite is an informational
-lane: it runs to completion (no `--maxfail`) with `pytest-timeout`, and its failures are
+GitHub required CI runs the required gate once, on Python 3.12, and it must pass
+before integration. The broader configured suite is an informational
+lane: it runs once to completion (no `--maxfail`) with `pytest-timeout` and a quiet
+summary (`-q -rfE --tb=short`), and its failures are
 reported but do not block merges or broaden an unrelated PR. Because the stale-fixture debt
-was repaired in PR-TEST-TRUTH-200, a failure there is now a signal to investigate; promote
-the lane to required only after it is green on both Python versions. Tests must isolate host
+was repaired in PR-TEST-TRUTH-200, a failure there is a signal to investigate; promote
+the lane to required only after it is proven green. Tests must isolate host
 state: PromptPacks via `STABLENEW_PROMPTPACK_DIR`/injected `packs_dir`, runtime transitions via
 fake owner managers, and never read or write the owner's real data.
 
