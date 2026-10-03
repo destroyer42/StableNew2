@@ -31,6 +31,7 @@ DEFAULT_MANIFEST = ROOT / "config" / "managed_forge_runtime.json"
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MINOR = re.compile(r"^3\.\d{1,2}$")
+_VERSION_UID = re.compile(r"""^VERSION_UID\s*(?::[^=\n]+)?=\s*["']([^"']+)["']""", re.MULTILINE)
 _PIN = re.compile(r"^([A-Za-z0-9_.\-]+)==(\S+)\s*(?:#.*)?$")
 _URL_PIN = re.compile(r"^([A-Za-z0-9_.\-]+)\s*@\s*(\S+)\s+#\s*version=(\S+)\s*$")
 DRIFT = "MANAGED_FORGE_DRIFT"
@@ -85,6 +86,9 @@ def validate_manifest(
     for conflict in conflicts:
         if not all(conflict.get(k) for k in ("package", "version", "requires", "dependency", "installed")):
             problems.append("a known conflict must carry package, version, requires, dependency and installed")
+    config = manifest.get("config") or {}
+    if not str((config.get("required_settings") or {}).get("VERSION_UID", "")).strip() or not config.get("version_uid_source"):
+        problems.append("config must declare required_settings.VERSION_UID and the version_uid_source that defines it")
     budget = (manifest.get("install") or {}).get("path_budget") or {}
     if not all(isinstance(budget.get(k), int) and budget[k] > 0 for k in ("max_venv_relative_path", "windows_path_limit")):
         problems.append("install.path_budget must declare max_venv_relative_path and windows_path_limit")
@@ -312,6 +316,38 @@ def check_config(data_dir: Path, manifest: dict[str, Any]) -> list[str]:
     ]
 
 
+def check_uv(install_dir: Path) -> list[str]:
+    """``--uv`` is a required launch flag; Forge runs ``uv --help`` at start and waits for Enter if it fails.
+
+    The launch profile puts the venv's ``Scripts`` first on ``PATH``, so the venv must carry ``uv.exe``.
+    """
+
+    executable = install_dir / "venv" / "Scripts" / "uv.exe"
+    if executable.is_file():
+        return []
+    return [f"[{DRIFT}] the required --uv flag needs {executable}; without it Forge prints an error and waits for Enter"]
+
+
+def check_version_uid(source_dir: Path, manifest: dict[str, Any]) -> list[str]:
+    """The declared ``VERSION_UID`` is the one the pinned Forge source defines.
+
+    Forge refuses to start unattended when ``config.json`` lacks it: it prints a "clean reinstall" alert and
+    waits for Enter, which ``WebUIProcessManager`` can never answer. The value is a property of the pinned
+    revision, so a revision bump that changes it must be a deliberate contract change.
+    """
+
+    path = source_dir / manifest["config"]["version_uid_source"]
+    expected = manifest["config"]["required_settings"]["VERSION_UID"]
+    if not path.is_file():
+        return [f"VERSION_UID source missing: {path}"]
+    match = _VERSION_UID.search(path.read_text(encoding="utf-8"))
+    if match is None:
+        return [f"[{DRIFT}] no VERSION_UID is defined in {manifest['config']['version_uid_source']}"]
+    if match.group(1) != expected:
+        return [f"[{DRIFT}] the pinned Forge source defines VERSION_UID {match.group(1)!r}, the contract declares {expected!r}"]
+    return []
+
+
 def check_models(home: Path, manifest: dict[str, Any], *, hash_models: bool) -> list[str]:
     """External model references resolve to the accepted files (never copied or downloaded)."""
 
@@ -467,6 +503,8 @@ def main(argv: list[str] | None = None) -> int:
     problems += [f"[path-budget] {p}" for p in check_path_budget(args.install_dir, manifest)]
     problems += [f"[runtime-dir] {p}" for p in check_runtime_dirs(args.install_dir, manifest)]
     problems += [f"[config] {p}" for p in check_config(data_dir, manifest)]
+    problems += [f"[config] {p}" for p in check_version_uid(args.install_dir / "source", manifest)]
+    problems += [f"[uv] {p}" for p in check_uv(args.install_dir)]
     if args.model_reference_home is not None:
         problems += [f"[models] {p}" for p in check_models(args.model_reference_home, manifest, hash_models=not args.skip_model_hashes)]
         profile = build_launch_profile(manifest, install_dir=args.install_dir, model_home=args.model_reference_home, port=port)

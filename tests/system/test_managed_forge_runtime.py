@@ -96,6 +96,8 @@ def test_contract_owns_installation_and_references_not_generation_settings_or_a_
         (lambda m: m["detectors"]["files"].update({"mediapipe.task": "0" * 64}), "two YOLO"),
         (lambda m: m["models"]["files"].pop("lora"), "models.files"),
         (lambda m: m["install"].pop("path_budget"), "path_budget"),
+        (lambda m: m["config"]["required_settings"].pop("VERSION_UID"), "VERSION_UID"),
+        (lambda m: m["config"].pop("version_uid_source"), "VERSION_UID"),
     ],
 )
 def test_invalid_contracts_are_rejected(mutate, expected) -> None:
@@ -306,12 +308,55 @@ def test_runtime_directories_and_declared_config(tmp_path: Path) -> None:
 
     data = tmp_path / "data"
     assert "missing" in verifier.check_config(data, manifest)[0]
-    (data / "config.json").write_text(json.dumps({"disabled_extensions": [], "ad_extra_models_dir": "", "sd_model_checkpoint": "any.safetensors"}), encoding="utf-8")
+    declared = {"VERSION_UID": "PY313", "disabled_extensions": [], "ad_extra_models_dir": ""}
+    (data / "config.json").write_text(json.dumps({**declared, "sd_model_checkpoint": "any.safetensors"}), encoding="utf-8")
     assert verifier.check_config(data, manifest) == []  # Forge/StableNew may add saved options
-    (data / "config.json").write_text(json.dumps({"disabled_extensions": ["adetailer"], "ad_extra_models_dir": "C:/x"}), encoding="utf-8")
+    (data / "config.json").write_text(json.dumps({"VERSION_UID": "PY313", "disabled_extensions": ["adetailer"], "ad_extra_models_dir": "C:/x"}), encoding="utf-8")
     assert len(verifier.check_config(data, manifest)) == 2
     (data / "config.json").write_text("{not json", encoding="utf-8")
     assert "unreadable" in verifier.check_config(data, manifest)[0]
+
+
+def test_a_config_without_the_forge_version_uid_is_drift_because_forge_would_wait_for_enter(tmp_path: Path) -> None:
+    """The first managed launch failed exactly here: Forge printed a 'clean reinstall' alert and called input()."""
+
+    manifest = _manifest()
+    (tmp_path / "config.json").write_text(json.dumps({"disabled_extensions": [], "ad_extra_models_dir": ""}), encoding="utf-8")
+
+    [problem] = verifier.check_config(tmp_path, manifest)
+    assert "VERSION_UID" in problem and "MANAGED_FORGE_DRIFT" in problem
+    (tmp_path / "config.json").write_text(json.dumps({**manifest["config"]["required_settings"], "VERSION_UID": "PY312"}), encoding="utf-8")
+    assert any("VERSION_UID is 'PY312'" in p for p in verifier.check_config(tmp_path, manifest))  # a stale uid prompts too
+
+
+def test_the_required_uv_flag_needs_the_venv_to_carry_uv(tmp_path: Path) -> None:
+    """Forge's uv hook runs ``uv --help`` at start and blocks on input() when it fails."""
+
+    [problem] = verifier.check_uv(tmp_path)
+    assert "--uv" in problem and "MANAGED_FORGE_DRIFT" in problem
+    (tmp_path / "venv" / "Scripts").mkdir(parents=True)
+    (tmp_path / "venv" / "Scripts" / "uv.exe").write_bytes(b"")
+    assert verifier.check_uv(tmp_path) == []
+    assert "--uv" in _manifest()["launch_policy"]["required_flags"]
+    assert _lock()["uv"]  # the lock installs it, so a clean build always has it
+
+
+def test_the_declared_version_uid_must_be_the_one_the_pinned_source_defines(tmp_path: Path) -> None:
+    manifest = _manifest()
+    launch_utils = tmp_path / "modules" / "launch_utils.py"
+    launch_utils.parent.mkdir(parents=True)
+
+    launch_utils.write_text('from typing import Final\n\nVERSION_UID: Final[str] = "PY313"\n', encoding="utf-8")
+    assert verifier.check_version_uid(tmp_path, manifest) == []
+    launch_utils.write_text("VERSION_UID = 'PY313'\n", encoding="utf-8")  # an unannotated assignment is the same constant
+    assert verifier.check_version_uid(tmp_path, manifest) == []
+    launch_utils.write_text('VERSION_UID: Final[str] = "PY314"\n', encoding="utf-8")  # a revision bump changed it
+    [problem] = verifier.check_version_uid(tmp_path, manifest)
+    assert "PY314" in problem and "MANAGED_FORGE_DRIFT" in problem
+    launch_utils.write_text("x = 1\n", encoding="utf-8")
+    assert "no VERSION_UID" in verifier.check_version_uid(tmp_path, manifest)[0]
+    launch_utils.unlink()
+    assert "missing" in verifier.check_version_uid(tmp_path, manifest)[0]
 
 
 def _install_fake_torch(monkeypatch, *, version="2.13.0+cu130", vision="0.28.0+cu130", cuda="13.0", available=True, gpu="NVIDIA GeForce RTX 4070 Ti") -> None:

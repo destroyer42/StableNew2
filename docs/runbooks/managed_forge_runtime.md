@@ -71,8 +71,11 @@ The helper:
    accepted dependency graph is internally inconsistent (below), so it is reproduced, not re-resolved. The
    Torch family comes from the CUDA 13 index; nothing is resolved from PyPI at install time beyond the pinned
    exact versions;
-5. writes the StableNew-owned `data/config.json` (BOM-less UTF-8, declaring only `disabled_extensions: []` and
-   `ad_extra_models_dir: ""`);
+5. writes the StableNew-owned `data/config.json` (BOM-less UTF-8, declaring only `VERSION_UID`,
+   `disabled_extensions: []` and `ad_extra_models_dir: ""`). `VERSION_UID` (`PY313` for the pinned revision) is
+   Forge's own compatibility marker: a `config.json` without it makes Forge print a "clean reinstall" alert and
+   wait for Enter, which `WebUIProcessManager` cannot answer, so the unattended launch dies before it binds a
+   port;
 6. copies **only** `face_yolov8n.pt` and `hand_yolov8n.pt` from `-DetectorSourceDir`, after validating each
    SHA256. The source files are never modified or deleted. No detector or model is ever downloaded, and no
    MediaPipe model is installed;
@@ -108,7 +111,8 @@ The verifier is read-only and runs on the managed venv's interpreter. It checks:
 - Torch/torchvision are the pinned `+cu130` builds, CUDA is 13.0 and available, and the qualified GPU is visible;
 - `data/extensions` holds only `adetailer-neo`; `data/models/adetailer` holds exactly the two YOLO files with the
   accepted SHA256s (no MediaPipe, no extra detector);
-- the StableNew-owned runtime/config directories exist and `config.json` declares the contract's settings;
+- the StableNew-owned runtime/config directories exist, `config.json` declares the contract's settings, and the
+  declared `VERSION_UID` is the one the pinned Forge source (`modules/launch_utils.py`) defines;
 - the model references resolve to the accepted checkpoint, LoRA and upscaler with the accepted SHA256s;
 - the launch profile carries the required flags and nothing tuned.
 

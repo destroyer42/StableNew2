@@ -78,7 +78,9 @@
   },
   "config": {
     "file": "data/config.json",
+    "version_uid_source": "modules/launch_utils.py",
     "required_settings": {
+      "VERSION_UID": "PY313",
       "disabled_extensions": [],
       "ad_extra_models_dir": ""
     }
