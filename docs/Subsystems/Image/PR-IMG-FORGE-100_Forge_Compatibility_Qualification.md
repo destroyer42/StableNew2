@@ -1316,3 +1316,106 @@ clothing details; PSNR 8.7 dB); cross-engine parity is unadjudicated and belongs
 147-package freeze is unchanged (147 distributions identical to the accepted record; Gradio 4.40.0 /
 Pillow 12.3.0 conflict preserved, not repaired). Protected owner A1111 files, all prior evidence files and the
 Forge cache/runtime inventories are unchanged. Next (separately authorized): `PR-IMG-FORGE-RUNTIME-100`.
+
+## 23. PR-IMG-FORGE-RUNTIME-100: reproducible managed Forge runtime
+
+The hand-qualified Forge environment is replaced by a StableNew-owned runtime that is rebuilt from nothing and
+proven equivalent to it. Production source is unchanged from `702a4fe` (`src/`, the driver and the backend are
+untouched); the package adds only the contract, lock, bootstrap, verifier, runbook and tests (local commits
+`81b9059` and the repair `956796c`; nothing pushed). The runbook is `docs/runbooks/managed_forge_runtime.md`.
+
+**Final classification: `MANAGED_FORGE_RUNTIME_REPRODUCIBILITY_PASS`.** One canonical Pair-A Forge generation,
+run through the managed runtime, decodes to pixels **identical** to the accepted hand-built canonical image
+(`eab2c0ed...`): mean absolute difference 0.0, maximum 0, 0.0 of pixels differ, and the PNG pixel stream (IDAT) is
+byte-identical (sha256 `1fd7e794...`). This is runtime reproducibility, not Forge promotion; A1111 remains the
+default image backend and nothing selects managed Forge in production.
+
+What is pinned (`config/managed_forge_runtime.json`, `constraints/forge-windows-py313-cu130-neo-d70373eb.txt`):
+Forge `Haoming02/sd-webui-forge-classic` at `d70373eb...` and ADetailer-Neo at `af228eba...` (exact commits, never a
+branch; `git rev-parse HEAD` must equal the pin), standard-GIL CPython 3.13 (accepted 3.13.16, JIT off), Torch
+`2.13.0+cu130`, torchvision `0.28.0+cu130`, CUDA 13.0, and the complete accepted 147-distribution set installed
+with `pip install --no-deps`. The accepted Gradio 4.40.0 / Pillow 12.3.0 conflict is one structured entry
+(`known_conflicts`); the verifier accepts exactly that `pip check` line and treats any other as
+`MANAGED_FORGE_DRIFT`. Install layout `%LOCALAPPDATA%\StableNew\Forge\neo-d70373eb\{source,venv,data,runtime}`
+with a marker-first ownership claim (a directory without the marker is never modified, adopted, recreated or
+deleted). `WebUIProcessManager` stays the sole lifecycle authority; the bootstrap and verifier start, stop and
+adopt nothing and download no model or detector.
+
+Builds and checks (machine-local evidence `managed-forge-runtime-100/`, hashed in `evidence-inventory.json`):
+
+| Step | Result |
+|---|---|
+| First build attempt | Failed after 47 s: Windows long paths are off and torch's licenses tree is 192 characters deep (install path 265 > 259). Defect found by the first real build; layout shortened to `...\StableNew\Forge\neo-d70373eb`, `install.path_budget` added to the contract, and the bootstrap now refuses a too-long root before creating anything |
+| Build 1 (from nothing) | 3:33, verified: 147 packages, torch 2.13.0+cu130, CUDA 13.0, RTX 4070 Ti |
+| `-CheckOnly` | exit 0 in 8 s; install tree digest (paths, sizes, mtimes) unchanged |
+| Build 2 (`-Recreate`) | 3:19, verified; identical to build 1: Forge/ADetailer-Neo HEAD and cleanliness, extension set, detector hashes, config, launch profile, 147 package names/versions and per-package file counts |
+| Build 3 (`-Recreate`, after the repair below) | 3:23, verified; differs from build 2 only by the intended `VERSION_UID` in `config.json` |
+| Package set vs accepted hand-built env | 147 = 147, no missing/extra/version difference |
+
+`RECORD` hashes are identical for 115 of 147 distributions. The other 32 differ between builds by construction:
+pip generates a Windows console-script launcher whose embedded zip carries the install-time timestamp (verified
+in the `.exe`); `ruff` and `uv` ship prebuilt binaries and match.
+
+**Pre-dispatch defect found and repaired (not a generation).** The first physical launch exited before binding a
+port: Forge's `verify_version()` found no `VERSION_UID` in `config.json`, printed a "clean reinstall" alert and
+called `input()`, which `WebUIProcessManager` cannot answer (`EOFError`, exit 1). No job was dispatched (the
+acceptance record has `job: null`, no listener, no surviving process, GPU idle). The hand-built environment had the
+key because Forge wrote it on its first launch. The contract now declares `VERSION_UID` (`PY313`), and the
+verifier proves it equals the constant defined by the pinned source (`modules/launch_utils.py`) so a revision
+bump cannot leave it stale; it also proves `uv.exe` exists, because the required `--uv` flag has its own
+`input()` prompt (`modules_forge/uv_hook.py`). Only the repaired contract generated an image; the failed
+attempt's evidence is kept in `physical/failed-attempt-1-missing-version-uid/`.
+
+Physical comparison (canonical Pair A, seed 424242, frozen intent `77cb94ab...`, run from the checkout; job
+`forge100-managed-A-forge_webui-956796c`; production NJR -> JobService -> SQLite -> `run_njr` -> `forge_webui` ->
+`WebUIProcessManager` -> managed Forge):
+
+| | Accepted hand-built | Managed |
+|---|---|---|
+| Artifact sha256 / bytes | `eab2c0ed99fd...` / 1,150,195 | `afb405a55717...` / 1,150,206 |
+| Decoded RGB pixels | | identical (mean abs diff 0.0, max 0) |
+| PNG pixel stream (IDAT) | `1fd7e794...` | `1fd7e794...` (byte-identical) |
+| Seed requested / actual | 424242 / 424242 | 424242 / 424242 |
+| Final prompt / negative sha | `172f5b29...` / `ea02fc87...` | equal / equal |
+| Wall / runtime ready | 16.3 s / 14.2 s | 18.4 s / 36.5 s |
+| VRAM peak (baseline) | 8,118 MiB (483) | 10,502 MiB (539) |
+| Temp peak / power peak / min host RAM | 64 C / 252.2 W / 6.71 GB | 62 C / 249.3 W / 6.4 GB |
+| Process tree | 34776 -> 38400 | 39128 -> 22328 (listener); released, no survivors |
+
+The 11-byte file difference is only StableNew job-identity text metadata (`job_id`, `run_id`, `created_utc`,
+`njr_sha256`, `payload`, output paths); the generation `parameters` infotext and `Comment` are equal. The NJR and
+intent differ from the accepted run only in job id, run name and output paths. SQLite: `integrity_check ok`, no
+FK violations, one completed row. No GPU, display, WHEA, kernel-power or application-crash event in the window,
+no CUDA/OOM marker, no download. The post-run read-only verification of the managed runtime passed (147
+packages, source and extension still clean); all protected owner files, the A1111 model files, the hand-built
+environment, the accepted evidence and its cache/runtime inventories are unchanged.
+
+Observations (not verdicts):
+
+- **Cold first start.** Ready took 36.5 s versus 14.2 s: Forge reported `Startup time: 34.8s` (11.8 s imports,
+  9.4 s scripts), and Forge created its `data/cache` hash/metadata stores (29 files) on a fresh venv.
+- **Startup selects the first library checkpoint.** The managed config has no `sd_model_checkpoint`, so Forge
+  selected `realismFromHadesXL_2ndAnniversary.safetensors` (first in the referenced A1111 library) at startup and
+  StableNew's normal `/options` write then switched to the frozen `cyberrealisticXL_v90-16fp.safetensors`
+  (`model_switches` 0 -> 1, about 2 s more wall including a first-time 3.5 s hash). The accepted environment had
+  the checkpoint persisted from earlier sessions. Output is unaffected, but startup depends on whichever checkpoint
+  sorts first in the owner's library. Forge rewrote `config.json` during the run and it now carries the accepted
+  checkpoint; a fresh `-Recreate` returns to the declared state. Seeding `sd_model_checkpoint` in the contract is
+  the candidate remedy; it needs its own owner decision and physical confirmation and was not done here.
+- **VRAM peak.** Both runs plateau at 8,118 / 8,172 MiB with the model load inside the job window and identical
+  Forge memory-manager lines. The managed 10,502 MiB peak is one end-of-job sample (about 0.5 s, 12 % utilization)
+  that the accepted run's sampling did not catch; whether the accepted run has the same transient is unproven.
+- **Known runtime noise.** `GET /sdapi/v1/cmd-flags` returns 500 on this Forge for real flags (`port` int and
+  `forge_ref_a1111_home` Path fail response validation; StableNew treats it as optional corroboration); ADetailer-Neo
+  logs "Failed reading extension data" because the checkout is a detached HEAD at the exact commit; gradio
+  regenerates `gradio_rangeslider/rangeslider.pyi` at startup (the package set is unchanged). The accepted run's
+  three `DAT_tile` option failures (StableNew's best-effort upscale defaults) did not occur in the managed run.
+- **Deliberate differences from the hand-built environment.** `--data-dir` keeps config, extensions and detectors
+  in StableNew-owned `data/` (outside the source tree); the venv sits outside the source; no original ADetailer
+  extension exists (`disabled_extensions` is empty, not `["adetailer"]`); the two accepted YOLO files live in
+  `data/models/adetailer` (hash-verified, copied from a local source) rather than a Hugging Face snapshot
+  (ADetailer-Neo lists 2 models instead of 5; the frozen intent uses the two); the inert
+  `PIP_CONSTRAINT`/`UV_CONSTRAINT` env vars are omitted because `--skip-install` never installs.
+
+Not done, by design: no second generation, no A1111 generation, no Pair B/C/D, no retry, no default or GUI
+change, no `--nowebui`/API-only evaluation, no FORGE-110.

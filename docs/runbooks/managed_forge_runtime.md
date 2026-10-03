@@ -159,6 +159,18 @@ If anything already answers on that endpoint, StableNew refuses to launch and re
 stop or replace it. Choose another loopback port or stop the other service yourself. Run the profile from the
 StableNew repository root; the evidence directory must not become the application's working directory.
 
+### Known first-launch behavior
+
+- A fresh install has no `sd_model_checkpoint`, so Forge selects the first checkpoint in the referenced A1111
+  library at startup and StableNew's normal `/options` write switches to the frozen one on the first job (one
+  model switch, a first-time hash, a cold first start of roughly half a minute). Output is unaffected; Forge then
+  persists the selection in `data/config.json` and later launches start on it. Seeding the checkpoint in the
+  contract is a candidate improvement that needs its own qualification (see PR-IMG-FORGE-100, section 23).
+- Forge never prompts when its `config.json` carries the declared `VERSION_UID`; do not remove it by hand.
+- Harmless startup noise: `GET /sdapi/v1/cmd-flags` answers 500 on this Forge (StableNew treats it as optional),
+  ADetailer-Neo warns that it cannot read branch data from a detached HEAD, and gradio rewrites one `.pyi` stub
+  in the venv. None changes the package set; the verifier stays green.
+
 ## Rollback
 
 Builds are side by side (`neo-<revision8>`). The hand-qualified environment used by PR-IMG-FORGE-100 is not
