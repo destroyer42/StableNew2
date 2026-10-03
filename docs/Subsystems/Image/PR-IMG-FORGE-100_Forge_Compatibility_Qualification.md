@@ -1,9 +1,10 @@
 # PR-IMG-FORGE-100 — Forge Neo Compatibility / A1111 Successor Qualification
 
-Status: **PREFLIGHT_PASS_WITH_KNOWN_PACKAGING_CONFLICT — physical qualification NOT started.**
+Status: **FORGE_NO_GO — owner-authorized physical pass stopped at A1111 admission before generation.**
 Forge is an explicit, **non-default** backend identity (`forge_webui`). `a1111_webui` remains the
 default. Nothing here promotes Forge (that is `PR-IMG-FORGE-110`, a separate owner decision) and no
-final classification has been reached.
+image parity verdict has been reached. The frozen matrix cannot execute under current canonical
+runtime admission; this is not evidence of Forge image failure. See section 16.
 
 Base: `origin/main` `715e352f28640cb0eb3225a5b1752fc5e192c778` (PR #35 / PR-TEST-TRUTH-210 merged).
 Initial implementation/evidence: Claude Code cloud session. Local/Desktop installation and GET-only
@@ -677,3 +678,127 @@ and `git diff --check` pass. The single final Python **3.14.8** PR gate passes: 
 ratchet, Ruff, mypy smoke, **4392 collected**, **184 smoke passed**. No old full affected sweep was repeated.
 Exact-head remote CI is not asserted; commits remain local. Recommendation is recorded above;
 actual model/effort and token/cost/elapsed usage metrics are unavailable in this host's reported metadata.
+
+## 16. Owner-authorized physical pass: admission HOLD (2026-10-03)
+
+**FORGE_NO_GO** for execution of the frozen matrix at StableNew
+`f636f0e9702f0e1c4824353b780cceec05fc0214`. Exactly one ordinary NJR was submitted through
+JobService, SQLite and PipelineRunner.run_njr; it failed before generation. Seven remaining cases
+were not submitted. No Forge generation or technical/product image parity verdict is available.
+No production repair, retry, tuning, cancellation case, push, merge or FORGE-110 work occurred.
+
+Execution Profile: **Standard / LOCAL desktop**. Recommendation: GPT-6.1 Sol XHigh (Claude Code
+Sonnet 5.5 XHigh equivalent) for bounded canonical-path execution and failure evidence; expected
+successful-work cost favors retaining exact source/runtime context. Controller Surface Assessment:
+no controller/coordinator source changes or ratchet changes. Token-Efficient Validation Plan:
+reuse accepted exact-source Python3.14 gate; verify frozen assets, evidence hashes, SQLite integrity,
+JSON descriptor and final whitespace. Do not repeat source suites for physical evidence.
+
+### Freeze and runtime provenance
+
+The accepted proposal digest is
+`cc37bc5067a20a2e972ebe9c6eca3906d2609a2792265582345008c0b9b53cca`.
+The operational copy clears only the owner-approval blocker after explicit authorization, producing
+`3434b4f36b1027ff750f5a7b2c4f732d73b662f1efdc549ddd599a96df4864c5`.
+All cases, settings, prompts, seeds and assets are unchanged. The existing tool requires interleaved
+A-A1111/A-Forge/B-A1111/B-Forge/C-A1111/C-Forge/D-A1111/D-Forge order; the owner explicitly allowed
+that frozen-tooling exception. All eight immutable records were compiled; only the first is a
+persisted executable job. Others are planned identities, not claimed completed/history jobs.
+
+Both read-only preflights passed before submission. One WebUIProcessManager started and stopped
+each qualification-owned tree. The headless canonical service session held the real application
+singleton lock; no GUI widgets were involved. Explicit endpoints were used; discovery was blocked.
+No pre-existing A1111, Forge or Comfy process was present or adopted.
+
+- A1111: existing source `92b90ee4efc0e8355bb14981e4ae6c7a9b998741`, Python3.10.6,
+  Torch2.1.2+cu121 / CUDA12.1; existing Bing-su ADetailer `3a599f5d…`. Existing owner source/batch
+  changes were preserved and captured, not repaired. Its venv Python ran `launch.py --xformers
+  --api --port 7860 --skip-prepare-environment --ad-no-huggingface --ui-settings-file
+  <qualification settings copy> --ui-config-file <qualification UI copy>`. Baseline xformers was
+  preserved; no tuning flags were added. Supported separate settings copies prevent ordinary owner
+  settings writes. Existing HF cache was read offline.
+- Forge: source `d70373ebcf1a96d210b78cd6f77196459e783e2a`, ADetailer-Neo
+  `af228eba7a3f3691a25bcd1fc94aa95e600dd3e6`, Python3.13.16, Torch2.13.0+cu130 / CUDA13.0.
+  Accepted command/environment unchanged: venv Python `launch.py --uv --api --port 7871
+  --forge-ref-a1111-home <existing A1111 root> --ad-no-huggingface --skip-install`; isolated offline
+  HF/YOLO caches and existing detector directory. No MediaPipe distribution in Forge.
+- RTX4070Ti, 12282MiB, driver617.14. Startup/model loading occurred; inference did not.
+
+Forge's 147-package freeze is unchanged; pip and uv checks exit1 with **only** Gradio4.40.0 requiring
+Pillow>=8,<11 against12.3.0. That production-promotion issue remains unresolved. Separately, the
+existing A1111 pip check reports baseline debt: MediaPipe0.10.14 requires protobuf>=4.25.3,<5 but
+has3.20.0; opencv-contrib-python4.12.0.88 requires NumPy>=2,<2.3 but has1.26.2. No packages changed,
+and these are not additional Forge conflicts. Their effect on inference is untested.
+
+| Frozen local asset | SHA-256 |
+|---|---|
+| cyberrealisticXL_v90-16fp.safetensors | `4f2dc6418c8d93737e2d0a5f022707977c783851e79ccd23aed1fda8397ac10e` |
+| add-detail-xl.safetensors, strength0.82 | `0d9bd1b873a7863e128b4672e3e245838858f71469a3cec58123c16c06f83bd7` |
+| frozen athlete input,480x832 | `9c7915509bd7ac8961b255bda4ac1eca282056977389742eb782235c2aa74ec5` |
+| face_yolov8n.pt | `70b640f8f60b1cf0dcc72f30caf3da9495eb2fb6509da48c53374ad6806e6a9c` |
+| hand_yolov8n.pt | `3991202eb69e9ddcb3b9ba80cdeb41e734ffaf844403d6c9f47d515cd88c6f29` |
+| 4xUltrasharp_4xUltrasharpV10.pth | `a5812231fc936b42af08a5edba784195495d303d5b3248c24489ef0c4021fe01` |
+
+All six hashes matched before and after the pass. VAE is Automatic/embedded checkpoint semantics;
+no external VAE selected. Full frozen prompts/settings and path-specific provenance are preserved
+in machine-local evidence. Face/hand registry visibility passed; detector inference and D's fixed-seed
+dispatch/response agreement remain untested. No MediaPipe predictor was used.
+
+### Failure and lifecycle
+
+First submitted job: **forge100-3434b4f36b1027ff-A-a1111_webui**. Runtime identity was positively
+A1111; checkpoint16fp was loaded. Executor admission logged `poisoned`, cause `duplicate_process`,
+then refused txt2img. SQLite's terminal error is `No images were generated successfully`; logs retain
+the more specific cause. Captured owned tree: launcher18808 -> serving child40956. Both carry
+`launch.py`. The process-risk code counts WebUI-like PIDs rather than ownership trees; >1 makes the
+state critical. Thus the captured Windows venv parent/child pair explains the refusal. This is source
+analysis supported by the captured tree; current executor logs do not emit its full per-PID risk
+snapshot, so that snapshot is not claimed as directly observed.
+
+StableNew automatically restarted its **owned** runtime once,18808 ->40668 (serving child31500),
+then still refused admission. No generation request had been sent, and no job was resubmitted or
+replayed. This automatic recovery is disclosed separately from generation retry. Qualification stopped
+at the first failed terminal job; no guard was mocked/bypassed and no repair was made.
+
+Every planned ID has prefix `forge100-3434b4f36b1027ff-`:
+
+| Suffix / backend | Lifecycle | Requested / actual seed | Wall / repository time | Observed peak GPU memory |
+|---|---|---|---|---|
+| A-a1111_webui / a1111_webui | FAILED before dispatch |424242 / unavailable |25.659s including startup /14.369s |7943MiB, includes model startup/recovery |
+| A-forge_webui / forge_webui |NOT_SUBMITTED |424242 / unavailable |unavailable |unavailable |
+| B-a1111_webui / a1111_webui |NOT_SUBMITTED |424242 / unavailable |unavailable |unavailable |
+| B-forge_webui / forge_webui |NOT_SUBMITTED |424242 / unavailable |unavailable |unavailable |
+| C-a1111_webui / a1111_webui |NOT_SUBMITTED |424242 / unavailable |unavailable |unavailable |
+| C-forge_webui / forge_webui |NOT_SUBMITTED |424242 / unavailable |unavailable |unavailable |
+| D-a1111_webui / a1111_webui |NOT_SUBMITTED |424242 / unavailable |unavailable |unavailable |
+| D-forge_webui / forge_webui |NOT_SUBMITTED |424242 / unavailable |unavailable |unavailable |
+
+No seed was dispatched or response-derived. No generated image artifacts, stage output manifests,
+contact sheet, visible-difference assessment or pair timing/VRAM comparison exist. Failed run metadata,
+canonical NJRs, repository fingerprint/lifecycle, diagnostics result and logs are retained and hashed.
+Parent lineage is absent as intended; no replay was used. SQLite integrity_check is **ok**: exactly
+one failed row, zero queued/running rows, no orphan. Final manager has no PID/ownership; both runtime
+ports released. All owned children stopped. A later read-only owner-PID check found the completed
+session already exited and performed no out-of-band termination.
+
+Five-second survivor samples record job/backend/PID, log tails, runtime progress/memory, GPU and host
+RAM. Four job samples observed peak7943MiB GPU memory,35C, host used19190857728 bytes; sampled GPU
+utilization0%. Those are total device observations, not inference allocation peaks. No device loss,
+CUDA OOM or ambiguous POST occurred; System event4101 query found no matching events. Final GPU
+remained accessible,714MiB/0%/35C. This is not a generation stress/stability pass.
+
+No package/model/detector download observed; installers disabled, HF/YOLO offline, selected hashes
+unchanged. Original A1111 tracked-source/owner-config hashes unchanged; protected dirty VID-192
+worktree retains its original branch/HEAD/status; Comfy untouched. A1111 remains default.
+
+Machine-local evidence set: **physical-f636f0e-pass1**, under the existing qualification evidence root,
+including `hold-report.json`, `evidence-inventory.json` (41 files), `freeze.json`, package/runtime freeze,
+exact launch profiles, `events.jsonl`, owned process trees, WebUI logs, `run/jobs.sqlite3`, all eight
+compiled NJRs, first-job failed result and `run_metadata.json`. Large runtime responses and binaries
+are not committed to Git. Source gate evidence at f636f0e is reused; only factual docs/descriptor changed.
+
+Remaining owner decision: adjudicate the canonical owned-tree/process-risk admission blocker and
+existing A1111 package debt; authorize any bounded repair separately, then authorize a new frozen
+pass with new identities. No repair or retry during this stopped pass. A ninth cancellation generation
+is not warranted by the available evidence and was not executed. Forge remains unqualified; product
+visual parity and production promotion remain undecided.
