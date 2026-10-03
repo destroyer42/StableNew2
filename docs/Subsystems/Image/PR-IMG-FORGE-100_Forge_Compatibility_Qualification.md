@@ -1419,3 +1419,87 @@ Observations (not verdicts):
 
 Not done, by design: no second generation, no A1111 generation, no Pair B/C/D, no retry, no default or GUI
 change, no `--nowebui`/API-only evaluation, no FORGE-110.
+
+## 24. Pairs B/C/D capability qualification: B and C pass, D halted on A1111
+
+Matched A1111 and managed-Forge jobs for Pairs B (LoRA), C (img2img) and D (txt2img -> ADetailer face/hand ->
+upscale) ran through the converged acceptance driver (`--case B|C|D --matrix <frozen matrix>`), each as one
+canonical job (immutable NJR -> JobService -> SQLite -> `run_njr` -> backend -> `WebUIProcessManager`) with the
+frozen intent digests, no retry and no tuning. Five of the six budgeted jobs ran. Machine-local evidence:
+`physical-6e4404f-bcd/` (pre-run gate, per-job reports and verification JSON, console logs, sheets).
+
+**Result: `FORGE_TECHNICAL_QUALIFICATION_PASS` is NOT reached.** Pair D did not complete on the A1111 arm, so the
+gate stopped before the Forge arm; D-Forge was not run.
+
+| Pair | A1111 | managed Forge | Classification |
+|---|---|---|---|
+| B (LoRA `add-detail-xl:0.82`) | completed | completed | `B_TECHNICAL_PASS` |
+| C (img2img, source `9c791550...`, 480x832, denoise 0.30) | completed | completed | `C_TECHNICAL_PASS` |
+| D (ADetailer face+hand, 1.5x upscale) | failed after ADetailer; upscale never dispatched | not run | `A1111_CAPABILITY_BASELINE_FAILURE` (cause below) |
+
+Pre-run gate (all pass): exact clean HEAD, managed `-CheckOnly` (147 packages, only the declared Gradio/Pillow
+`pip check` line), asset hashes (checkpoint, LoRA, upscaler, both detectors in the HF source and in the managed
+`data/models/adetailer`, Pair-C source), frozen intents equal to the tracked contract, seed 424242, endpoints free,
+no WebUI process, GPU idle, no orphan jobs. All six intents were frozen with `--dry` first.
+
+**Freezing.** B and D use the production CLI builder (B appends the frozen `<lora:add-detail-xl:0.82>` token; D
+enables the frozen ADetailer and upscale sections); C uses `ReprocessJobBuilder` (img2img from the frozen source).
+For all six cases the dispatched requests, observed through the canonical path with a fake transport, equal the
+frozen matrix constructor's requests, including the outer ADetailer img2img seed 424242 and the 4xUltrasharp 1.5x
+upscale. The driver gained `--case/--matrix` and verifies the case's assets before any runtime starts; Pair A's
+path and digests are unchanged.
+
+**Pair B.** Prompt/negative are character-equal to the frozen intent with exactly one LoRA token; seeds requested
+424242 / actual 424242; checkpoint `cyberrealisticXL_v90-16fp`, VAE Automatic; one completed canonical job each.
+Forge logs `[LORA] Loaded add-detail-xl.safetensors` for the UNet and CLIP. StableNew does not persist the backend
+infotext (`Lora hashes`), so application is evidenced by the dispatched token, the pre-run file hash, and the
+decoded change against the accepted Pair-A image on the same seed (A1111 mean abs diff 9.1, Forge 24.3): an
+ignored LoRA would reproduce Pair A exactly.
+
+**Pair C.** The source hash is unchanged after both runs; outputs are 480x832 (the frozen source geometry);
+seed 424242; denoise 0.30. The img2img request carries no `sd_model`/`sd_vae`, so the active checkpoint is the
+runtime's own (A1111 loaded `cyberrealisticXL_v90-16fp [4f2dc6418c]` at startup; Forge starts on the persisted
+checkpoint), job metadata records the frozen model/VAE and zero model switches.
+
+**Pair D, A1111 (halted).** txt2img (seed 424242) and ADetailer (face detected by the YOLO model; requested and
+actual seed 424242) produced artifacts; the job then failed with `No images were generated successfully`
+(354.7 s). Cause, from the console and `src/`: after ADetailer, `Pipeline._maybe_apply_workload_launch_policy`
+judged the SDXL multi-stage job high-pressure and called the global `WebUIProcessManager.restart_webui(
+profile_override="sdxl_guarded")`; `app_config`'s `sdxl_guarded` profile is
+`["webui-user.bat", "--api", "--xformers", "--medvram-sdxl"]`, which replaced the qualified launch command and
+could not be executed (`'webui-user.bat' is not recognized`). The qualified A1111 was stopped by that restart, the
+runtime was declared poisoned, two further recovery attempts failed, and the upscale was refused before dispatch.
+It is a production orchestration defect relative to a manager-owned qualified runtime, not an engine failure:
+A1111 itself completed the stages it was asked to run. A preceding PR-HARDEN-004 watchdog also sent an interrupt
+to WebUI at a 20 s completion stall during ADetailer (progress 100 %), so the second (hand) ADetailer unit is
+unproven. Nothing was repaired or retried in the session; the same policy is backend-independent (it keys on
+model, geometry and downstream stages), so Forge would be expected to meet it. A bounded repair package must make
+the launch-policy upgrade honor (or be disabled for) a manager-owned qualified profile and review the stall
+interrupt, then rerun Pair D.
+
+Resources (host-reported by the driver's sampler; baseline / peak VRAM MiB, peak C, min host RAM GB):
+B A1111 7,575 / 11,931 (61, 5.31); B Forge 569 / 8,192 (64, 4.05); C A1111 7,615 / 7,860 (56, 11.23); C Forge
+606 / 7,881 (57, 5.00); D A1111 7,653 / 11,873 (63, 3.24). A1111 holds the checkpoint resident from startup, so
+its baseline includes the model; B and D on A1111 peaked within about 350-410 MiB of the 12,282 MiB card.
+Wall: B 14.5 / 16.3 s, C 3.9 / 7.9 s (A1111 / Forge).
+
+Stability and integrity: no GPU, display, WHEA, kernel-power or application-crash event in any job window; no CUDA
+or OOM marker; no download, package install or MediaPipe use; every console exception signature on the Forge side
+is already in the accepted set (`cmd-flags` validation, detached-HEAD extension note, connection-reset noise and
+the best-effort `DAT_tile` option failure); each job's SQLite `integrity_check` is ok with no FK violations and no
+queued/running row; owner files, the hand-built environment and prior evidence are unchanged. The managed Forge
+`-CheckOnly` passes after the run. A1111 rewrote its own `params.txt` and Forge its caches and `params.txt`
+(runtime state, not mutation of an external runtime). The Forge runtime started on its persisted checkpoint, so the
+first-library-checkpoint fallback did not occur (initial = selected = frozen checkpoint, zero model switches).
+
+Descriptive observations (owner adjudicates parity; no cross-backend threshold): at matched seeds A1111 and Forge
+render clearly different compositions for A and B (A1111: outdoor park with a tree and white shoes, short sleeve
+top; Forge: white wall, grass and concrete, three-quarter sleeve top, black shoes). The LoRA changes texture and
+detail on both backends without changing each backend's composition. For C both outputs keep the source's pose,
+framing, background and outfit with a slightly different face and fabric rendering, and neither matches the source
+pixels (mean abs diff 6.7 / 6.4). For D the A1111 ADetailer-stage image differs from its txt2img image across the
+whole frame (mean abs diff 8.5), because the frozen contract runs the outer ADetailer img2img over the full image
+at denoise 0.32 before the per-region unit.
+
+Next (separately authorized): a bounded repair of the launch-policy restart/stall behavior, then Pair D on both
+backends. A1111 remains default; FORGE-110, promotion and publication are not started.

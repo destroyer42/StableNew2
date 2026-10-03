@@ -48,9 +48,12 @@ Updated: 2026-10-03
   `tools/runtime/verify_managed_forge.py` (accepts only the declared Gradio/Pillow `pip check` line).
   `WebUIProcessManager` stays the only lifecycle authority. One canonical Pair-A Forge job through the managed
   runtime decodes to pixels identical to the accepted hand-built image (`MANAGED_FORGE_RUNTIME_REPRODUCIBILITY_PASS`).
-  A1111 remains the default image backend; nothing selects managed Forge in production. See
-  `docs/runbooks/managed_forge_runtime.md` and section 23 of
-  `docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md`.
+  A1111 remains the default image backend; nothing selects managed Forge in production. Capability
+  qualification: Pair B (LoRA) and Pair C (img2img) pass technically on A1111 and managed Forge; Pair D
+  (ADetailer + upscale) halted on the A1111 arm because the production launch-policy restart replaced the
+  qualified runtime command mid-job (a bounded repair package is required before Pair D reruns), so
+  `FORGE_TECHNICAL_QUALIFICATION_PASS` is not reached. See `docs/runbooks/managed_forge_runtime.md` and
+  sections 23-24 of `docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md`.
 - Pre-Forge execution and test truth (PR-TEST-TRUTH-210, current while its PR is open; bounded truth package, not
   a product capability): `build_run_plan_from_njr` is fail-closed - only explicitly enabled, explicitly named
   stages are planned, and a missing/blank stage identity or an empty/all-disabled chain raises `ValueError`
