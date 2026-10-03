@@ -31,7 +31,7 @@ def _healthy_runtime_admission(monkeypatch):
 
 
 @pytest.mark.parametrize("requested", [424242, 0, -1, None])
-def test_adetailer_dispatch_and_metadata_use_the_same_requested_seed(requested):
+def test_adetailer_dispatch_and_metadata_use_the_same_requested_seed(requested, tmp_path):
     pipeline = Pipeline(Mock(), Mock())
     config = {"adetailer_enabled": True}
     if requested is not None:
@@ -46,8 +46,8 @@ def test_adetailer_dispatch_and_metadata_use_the_same_requested_seed(requested):
         patch("src.pipeline.executor.json.dump") as write_manifest,
         patch("builtins.open", MagicMock()),
     ):
-        result = pipeline.run_adetailer(Path("input.png"), "prompt", "negative", config,
-                                       Path("output"), "seed-contract")
+        result = pipeline.run_adetailer(tmp_path / "input.png", "prompt", "negative", config,
+                                       tmp_path / "output", "seed-contract")
     payload = generate.call_args.args[1]
     assert payload["seed"] == (-1 if requested is None else requested)
     assert result["requested_seed"] == result["seeds"]["original_seed"] == payload["seed"]
