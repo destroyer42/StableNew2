@@ -45,12 +45,28 @@ powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_windows.ps1 `
 
 ## What the helper does
 
-The helper upgrades pip, installs `torch` from the official PyTorch CUDA
-index (default `https://download.pytorch.org/whl/cu130`), and then installs
-`requirements.txt` followed by `requirements-svd.txt`. Those requirement
-files and `pyproject.toml` remain the package authorities; the helper only
-defines the CUDA-specific Torch installation ordering. It verifies Python,
-CUDA-enabled Torch, the detected GPU, Diffusers and
+The supported runtime is reproducible from repository-owned authority:
+
+- `requirements.txt` / `requirements-svd.txt` stay the human-readable direct
+  dependencies.
+- `constraints/windows-py312-cu130.txt` is the single exact-version authority
+  for the supported Windows / CPython 3.12 / CUDA 13.0 environment, including
+  the resolver itself (`pip`). Every install the helper performs is constrained
+  by it, so a rebuild resolves the same packages instead of whatever is newest.
+  It is Windows-specific; Linux/GitHub CI does not use it.
+- Changing any pin is its own reviewed, qualified change. Do not regenerate the
+  file with `pip freeze` from a developer environment.
+
+The helper installs exactly the pinned pip (never `--upgrade`), installs
+`torch` and `torchvision` (which facexlib/CodeFormer require) at their pinned
+`+cu130` builds from the official PyTorch CUDA index (default
+`https://download.pytorch.org/whl/cu130`; PyPI is an extra index only for their
+ordinary dependencies), and then installs `requirements.txt` followed by
+`requirements-svd.txt`. A CPU-only Torch cannot satisfy or replace the pinned
+CUDA build. It then runs `pip check` and `tools/runtime/verify_runtime_pins.py`
+(a stdlib comparison of installed distributions against the constraints, which
+ignores unpinned extras) in both bootstrap and `-CheckOnly` modes, and verifies
+Python, CUDA-enabled Torch, the detected GPU, Diffusers and
 `StableVideoDiffusionPipeline`, Transformers, Accelerate, imageio-ffmpeg,
 and executable FFmpeg/ffprobe.
 
@@ -69,6 +85,12 @@ not start, stop, adopt, or configure it.
 
 - **Unsupported Python:** install official 3.12 (3.11 and 3.13+ are
   rejected), or pass `-PythonPath` to a 3.12 executable.
+- **Runtime drift reported:** a pinned package is missing or at a different
+  version. Rebuild with the helper (`-Recreate` only on a dedicated venv path)
+  rather than editing packages by hand.
+- **Path too long during install:** Windows can fail while unpacking deeply
+  nested package files (for example setuptools). Use a short `-VenvPath`
+  (such as `C:\sn-venv`) unless Windows long paths are enabled.
 - **CPU-only Torch or CUDA unavailable:** rerun with the official CUDA index
   using `-CudaIndexUrl` if the validated index has changed; do not accept a
   CPU-only environment for native SVD.

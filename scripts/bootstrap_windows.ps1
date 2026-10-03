@@ -3,6 +3,7 @@ param(
     [string]$PythonPath = "",
     [string]$VenvPath = "",
     [string]$CudaIndexUrl = "https://download.pytorch.org/whl/cu130",
+    [string]$PackageIndexUrl = "https://pypi.org/simple",
     [switch]$CheckOnly,
     [switch]$Recreate
 )
@@ -100,6 +101,32 @@ function Assert-SafeVenvPath {
     }
 }
 
+$ConstraintsFile = Join-Path $RepoRoot "constraints\windows-py312-cu130.txt"
+$RuntimePinVerifier = Join-Path $RepoRoot "tools\runtime\verify_runtime_pins.py"
+
+function Get-ConstraintPin {
+    param([Parameter(Mandatory = $true)][string]$Name)
+
+    $match = Select-String -LiteralPath $ConstraintsFile -Pattern ("^{0}==(\S+)\s*$" -f [regex]::Escape($Name)) |
+        Select-Object -First 1
+    if ($null -eq $match) {
+        throw "'$Name' is not pinned in '$ConstraintsFile'."
+    }
+    return $match.Matches[0].Groups[1].Value
+}
+
+function Assert-RuntimePins {
+    # Dependency consistency, then drift against the exact constraints (the only version authority).
+    Invoke-CheckedProcess `
+        -Executable $VenvPython `
+        -Arguments @("-m", "pip", "check") `
+        -FailureMessage "pip check found inconsistent dependencies in '$VenvPath'." | Out-Null
+    Invoke-CheckedProcess `
+        -Executable $VenvPython `
+        -Arguments @($RuntimePinVerifier, "--constraints", $ConstraintsFile) `
+        -FailureMessage "The environment in '$VenvPath' has drifted from the supported runtime constraints." | Out-Null
+}
+
 function Assert-CudaTorch {
     $output = Invoke-CheckedProcess `
         -Executable $VenvPython `
@@ -148,37 +175,46 @@ if ($CheckOnly) {
 
     $requirements = Join-Path $RepoRoot "requirements.txt"
     $svdRequirements = Join-Path $RepoRoot "requirements-svd.txt"
-    foreach ($requirementsFile in @($requirements, $svdRequirements)) {
+    foreach ($requirementsFile in @($requirements, $svdRequirements, $ConstraintsFile, $RuntimePinVerifier)) {
         if (-not (Test-Path -LiteralPath $requirementsFile -PathType Leaf)) {
             throw "Required package authority file is missing: '$requirementsFile'."
         }
     }
 
+    # The resolver is part of the runtime: install exactly the pip version pinned by the
+    # constraints (never "--upgrade", which would resolve with whatever pip is newest).
+    $pipVersion = Get-ConstraintPin -Name "pip"
     Invoke-CheckedProcess `
         -Executable $VenvPython `
-        -Arguments @("-m", "pip", "install", "--upgrade", "pip") `
-        -FailureMessage "Could not upgrade pip in '$VenvPath'." | Out-Null
+        -Arguments @("-m", "pip", "install", "pip==$pipVersion") `
+        -FailureMessage "Could not install the pinned pip $pipVersion in '$VenvPath'." | Out-Null
 
-    # Torch is the one deliberate package-level exception: install it from the
-    # official CUDA index before the repository requirement files are applied.
+    # The Torch family (torch + torchvision, which facexlib/CodeFormer require) is the one
+    # deliberate package-level exception: install it from the official CUDA index before the
+    # repository requirement files. The exact "+cu130" pins mean a CPU-only build can neither
+    # satisfy nor later replace it; PyPI is an extra index only because the CUDA index does not
+    # carry the pinned versions of Torch's ordinary dependencies (numpy, pillow, ...).
     Invoke-CheckedProcess `
         -Executable $VenvPython `
-        -Arguments @("-m", "pip", "install", "--index-url", $CudaIndexUrl, "torch") `
+        -Arguments @("-m", "pip", "install", "-c", $ConstraintsFile, "--index-url", $CudaIndexUrl, "--extra-index-url", $PackageIndexUrl, "torch", "torchvision") `
         -FailureMessage "Could not install CUDA-enabled Torch from '$CudaIndexUrl'." | Out-Null
 
     Invoke-CheckedProcess `
         -Executable $VenvPython `
-        -Arguments @("-m", "pip", "install", "-r", $requirements) `
+        -Arguments @("-m", "pip", "install", "-c", $ConstraintsFile, "-r", $requirements) `
         -FailureMessage "Could not install the base requirements from '$requirements'." | Out-Null
     Invoke-CheckedProcess `
         -Executable $VenvPython `
-        -Arguments @("-m", "pip", "install", "-r", $svdRequirements) `
+        -Arguments @("-m", "pip", "install", "-c", $ConstraintsFile, "-r", $svdRequirements) `
         -FailureMessage "Could not install the SVD requirements from '$svdRequirements'." | Out-Null
 
     # Keep CUDA Torch installation first so requirements resolution cannot select
     # a CPU-only build, then probe after its declared runtime dependencies exist.
     Assert-CudaTorch
 }
+
+# Both modes: the environment must match the exact known-good runtime (read-only checks).
+Assert-RuntimePins
 
 $verificationCode = @'
 import json
