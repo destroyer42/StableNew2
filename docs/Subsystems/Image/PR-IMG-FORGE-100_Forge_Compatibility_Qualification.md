@@ -10,8 +10,8 @@ dispatch (section18). Neither attempt is evidence of Forge image failure.
 The bounded canonical intent-preservation repair and no-generation evidence are recorded in section19.
 Cohort3 (section20) stopped on a harness-context observation failure; section21 converges physical
 acceptance onto a thin in-repo canonical-path driver and proves it deterministically. Physical
-generation (the non-acceptance Forge viability probe and the two-job canonical baseline) remains
-**pending explicit owner authorization**.
+generation (the non-acceptance Forge viability probe and the two-job canonical baseline) was then
+authorized and passed (section22): **`CANONICAL_FORGE_BASELINE_PASS`** for Pair A only.
 
 Base: `origin/main` `715e352f28640cb0eb3225a5b1752fc5e192c778` (PR #35 / PR-TEST-TRUTH-210 merged).
 Initial implementation/evidence: Claude Code cloud session. Local/Desktop installation and GET-only
@@ -1269,3 +1269,50 @@ through the same launch profile rather than adding a request override. The known
 conflict is preserved. Next, if the baseline passes: `PR-IMG-FORGE-RUNTIME-100` (managed Forge runtime
 modeled on PR-COMFY-RUNTIME-100), including evaluation of API-only operation. A1111 remains default;
 FORGE-110, publication and merge remain out of scope.
+
+## 22. Owner-authorized Phases 4-5: baseline physical result
+
+At StableNew `702a4fe8be2769be700fab1e8bd150c84c2aeeec` (clean; no production source change) the owner
+authorized exactly three generations: one non-acceptance direct Forge probe, then, only on its pass, one
+canonical A1111 and one canonical Forge Pair-A job. All three completed. No retry, replay, download,
+external-process mutation, GPU/display/power system event, CUDA/OOM marker or ambiguous dispatch occurred.
+Machine-local evidence (`physical-702a4fe-phase45/`, hashed in `evidence-inventory.json`, 39 files; run
+profiles are fresh copies so no historical evidence directory was a write target).
+
+**Final classification: `CANONICAL_FORGE_BASELINE_PASS`** (preceded by
+`FORGE_BASELINE_RUNTIME_VIABILITY_PASS`). This proves the pinned Forge runtime and StableNew's canonical Forge
+path execute the frozen Pair-A SDXL intent on this workstation. It is not A1111 parity, not Forge promotion,
+not a Pair B/C/D result, and not product-readiness; A1111 remains default.
+
+| | Phase 4 direct Forge (non-acceptance) | Canonical A1111 | Canonical Forge |
+|---|---|---|---|
+| Identity | `forge_webui` (Forge `d70373eb…`, ADetailer-Neo `af228eba…`, Py 3.13.16, Torch 2.13.0+cu130, CUDA 13.0) | `a1111_webui` | `forge_webui` |
+| Job | direct POST, request sha `09860f19…` | `forge100-phase5-A-a1111_webui-702a4fe` | `forge100-phase5-A-forge_webui-702a4fe` |
+| Seed requested / actual | 424242 / 424242 | 424242 / 424242 | 424242 / 424242 |
+| Wall | 14.7 s (generation POST) | 12.1 s | 16.3 s |
+| VRAM peak (baseline) | 9,835 MiB (1,034) | 11,573 MiB (8,075) | 8,118 MiB (483) |
+| Temp peak / min free host RAM | 63 C / 8.29 GB | 62 C / 11.69 GB | 64 C / 6.71 GB |
+| Artifact sha256 | `15277a21…` | `53143915…` | `eab2c0ed…` |
+| Process tree | owner 41456 -> child 12860 (listener) | 41548 -> 14860 | 34776 -> 38400 |
+
+Model selection (Phase 4): Forge launched on `cyberrealisticXL_v90-32fp`; StableNew's own `set_model` (`/options`
+`sd_model_checkpoint`) selected the frozen `cyberrealisticXL_v90-16fp.safetensors` (file sha256 `4f2dc641…`
+verified), `GET /options` confirmed it with `forge_additional_modules` empty and `sd_vae` Automatic immediately
+before the single POST. The frozen request is the product's own shape (it carries `sd_model`/`sd_vae` exactly as
+the executor builds them) and has no `override_settings`.
+
+Canonical jobs: both ran from the checkout through the converged driver (JobService -> SQLite ->
+`run_njr` -> backend registry -> `WebUIProcessManager`); the manager owned one launcher/serving-child tree with the
+listener inside it, the production inspector reported exactly one runtime tree rooted at the manager's PID
+(risk normal), and each owned tree was released with no survivors or listeners. The recorded final prompts are
+byte-equal (UTF-8 sha `172f5b29…` / `ea02fc87…`) to the frozen intent on both backends with global-prompt
+application false, source `frozen_njr`; the optimizer analysis ran in recommend-only mode and did not alter the
+final prompt. SQLite for each run: `integrity_check ok`, no FK violations, one completed row, none queued/running.
+
+Observations, not verdicts: the canonical Forge image is pixel-identical to the Phase-4 direct Forge image
+(mean difference 0.0; only PNG container bytes differ), which supports that the canonical path sends the same
+request. A1111 and Forge produce visibly different images for the same prompt/seed (different scene and
+clothing details; PSNR 8.7 dB); cross-engine parity is unadjudicated and belongs to a later package. Forge's
+147-package freeze is unchanged (147 distributions identical to the accepted record; Gradio 4.40.0 /
+Pillow 12.3.0 conflict preserved, not repaired). Protected owner A1111 files, all prior evidence files and the
+Forge cache/runtime inventories are unchanged. Next (separately authorized): `PR-IMG-FORGE-RUNTIME-100`.
