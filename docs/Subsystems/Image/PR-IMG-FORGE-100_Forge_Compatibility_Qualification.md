@@ -1,17 +1,19 @@
 # PR-IMG-FORGE-100 — Forge Neo Compatibility / A1111 Successor Qualification
 
-Status: **QUALIFICATION_INFRASTRUCTURE_BLOCKED — attempt2 is preserved; prompt-intent repair
-passes deterministic validation. Physical cohort3 requires renewed owner authorization.**
-Forge is an explicit, **non-default** backend identity (`forge_webui`). `a1111_webui` remains the
-default. Nothing here promotes Forge (that is `PR-IMG-FORGE-110`, a separate owner decision) and no
-image parity verdict has been reached. The first attempt failed admission (sections16-17); the resumed
-cohort passed that repaired surface but was refused for prompt mismatch before network generation
-dispatch (section18). Neither attempt is evidence of Forge image failure.
-The bounded canonical intent-preservation repair and no-generation evidence are recorded in section19.
-Cohort3 (section20) stopped on a harness-context observation failure; section21 converges physical
-acceptance onto a thin in-repo canonical-path driver and proves it deterministically. Physical
-generation (the non-acceptance Forge viability probe and the two-job canonical baseline) was then
-authorized and passed (section22): **`CANONICAL_FORGE_BASELINE_PASS`** for Pair A only.
+Status: **`FORGE_TECHNICAL_QUALIFICATION_PASS`** (technical gate only). Pair A (baseline) is complete, and the
+technical Pairs B (LoRA), C (img2img) and D (txt2img -> ADetailer face+hand -> 1.5x upscale) pass on both
+`a1111_webui` and `forge_webui` (sections 22-29; Pair D closed by PR-IMG-FORGE-D100/D110). Forge is a supported
+production still-image backend since `PR-IMG-FORGE-110` (section 27); `a1111_webui` remains the default and the
+rollback. PR-IMG-FORGE-D110 (section 29) fixes Forge cross-job module-state normalization only: it does **not**
+change the default backend and does not add a backend selector.
+
+Sections 1-26 are chronological history and are preserved as written. Statements in them such as "non-default",
+"Forge is not promoted", "physical qualification pending", `QUALIFICATION_INFRASTRUCTURE_BLOCKED` or "no image parity
+verdict" describe the state at that time and are superseded by sections 22-29. In that history the first attempt
+failed admission (sections 16-17), the resumed cohort was refused for prompt mismatch before network dispatch
+(section 18), the intent-preservation repair is section 19, cohort3 stopped on a harness-context failure (section 20),
+the thin canonical-path acceptance driver is section 21, and the canonical Pair-A baseline passed
+(`CANONICAL_FORGE_BASELINE_PASS`, section 22). None of the early attempts was evidence of Forge image failure.
 
 Base: `origin/main` `715e352f28640cb0eb3225a5b1752fc5e192c778` (PR #35 / PR-TEST-TRUTH-210 merged).
 Initial implementation/evidence: Claude Code cloud session. Local/Desktop installation and GET-only
