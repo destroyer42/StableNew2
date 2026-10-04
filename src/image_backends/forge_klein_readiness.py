@@ -1,3 +1,4 @@
+# CI-110 probe: bounded image-lane source change (measurement only; not for merge)
 """Conservative host-memory readiness for the FLUX.2 Klein profile (PR-IMG-116).
 
 PR-IMG-115 proved the GPU fit but severe host-memory pressure on the only qualified machine: the
