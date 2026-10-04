@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from typing import Any
 
-from .spec import ASSETS, FORGE_SHA
+from .spec import ASSETS, FORGE_SHA, verify_asset
 
 PORT = 7885  # qualification-owned loopback port, outside 7860-7869 and the production Forge 7871
 
@@ -26,6 +26,46 @@ def assert_isolated(root: Path, *, repo_root: Path, managed_install: Path, a1111
     for marker in (".venv", "stable-diffusion-webui", "comfyruntime", "managedcomfy"):
         if marker in lowered:
             raise ValueError(f"qualification root {resolved} must not be inside {marker}")
+
+
+def prepare_layout(root: Path, *, repo_root: Path, managed_install: Path, a1111_home: Path | None = None) -> dict[str, Path]:
+    """Resolve -> prove the root is allowed -> only then create the layout (a refused root is never touched)."""
+
+    assert_isolated(root, repo_root=repo_root, managed_install=managed_install, a1111_home=a1111_home)
+    return build_layout(root)
+
+
+def verify_actual_models(layout: dict[str, Path], source: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Size + SHA-256 of the files Forge will ACTUALLY load (``forge-data/models/*``), never an assumption.
+
+    A byte-identical copy is as good as a hard link; a same-name file with different bytes is not exact. Nothing is
+    repaired or overwritten. ``source`` is the already-verified ``assets/`` result: when a model file *is* the same
+    physical file as its verified source (a hard link) its bytes were just hashed once, so that digest is reused for the
+    identical file instead of reading 12 GB twice (the identity is still the digest, never the inode alone).
+    """
+
+    verified: dict[str, Any] = {}
+    for role, asset in ASSETS.items():
+        path = layout["models"] / asset.models_subdir / asset.filename
+        entry: dict[str, Any] = {"path": str(path)}
+        try:
+            origin = layout["assets"] / asset.filename
+            if source and role in source and path.is_file() and origin.is_file() and os.path.samefile(path, origin):
+                entry.update({**source[role], "path": str(path), "identity": "same_file_as_verified_source"})
+            else:
+                entry.update(verify_asset(role, path))
+                entry["identity"] = "hashed"
+            entry["exact"] = True
+        except ValueError as exc:
+            entry.update(exact=False, error=str(exc))
+        verified[role] = entry
+    return verified
+
+
+def require_exact_models(actual: dict[str, Any]) -> None:
+    bad = {role: entry.get("error", "mismatch") for role, entry in actual.items() if not entry.get("exact")}
+    if bad:
+        raise ValueError(f"the model files Forge would load are not the frozen assets: {bad}")
 
 
 def build_layout(root: Path) -> dict[str, Path]:

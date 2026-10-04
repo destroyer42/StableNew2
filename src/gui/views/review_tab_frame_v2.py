@@ -71,6 +71,8 @@ class ReviewTabFrame(ttk.Frame):
         self.stage_img2img_var = tk.BooleanVar(value=False)
         self.stage_adetailer_var = tk.BooleanVar(value=True)
         self.stage_upscale_var = tk.BooleanVar(value=False)
+        self.klein_edit_var = tk.BooleanVar(value=False)
+        self._klein_snapshot: dict[str, Any] | None = None
         self.prompt_mode_var = tk.StringVar(value="append")
         self.negative_mode_var = tk.StringVar(value="append")
         self._prompt_prev_mode = "append"
@@ -130,6 +132,7 @@ class ReviewTabFrame(ttk.Frame):
         self.stage_img2img_var.trace_add("write", lambda *_: self._refresh_effective_settings())
         self.stage_adetailer_var.trace_add("write", lambda *_: self._refresh_effective_settings())
         self.stage_upscale_var.trace_add("write", lambda *_: self._refresh_effective_settings())
+        self.klein_edit_var.trace_add("write", lambda *_: self._on_klein_edit_toggled())
         self.prompt_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self.negative_text.bind("<KeyRelease>", lambda _e: self._refresh_prompt_diff())
         self._set_readonly_text(self.current_prompt_text, "")
@@ -548,6 +551,19 @@ class ReviewTabFrame(ttk.Frame):
             command=lambda: self._reprocess(batch_all=True),
         )
         self.reprocess_all_button.grid(row=6, column=0, sticky="ew")
+        klein_check = ttk.Checkbutton(
+            run_box,
+            text="FLUX.2 Klein single-reference edit (Forge)",
+            variable=self.klein_edit_var,
+            style="Dark.TCheckbutton",
+        )
+        klein_check.grid(row=7, column=0, sticky="w", pady=(6, 0))
+        attach_tooltip(
+            klein_check,
+            "Edit exactly one selected image with FLUX.2 Klein 4B FP8 (img2img only, fixed Euler/Beta/"
+            "4 steps/CFG 1.0; the 768x1024 and 1024x1024 sizes are qualified). Requires the Forge "
+            "backend. Describe the desired edit in the prompt box; it replaces the prompt.",
+        )
         attach_tooltip(
             self.reprocess_selected_button,
             "Queue only the currently selected images for reprocessing with the checked stages and prompt edits shown in Review.",
@@ -1493,8 +1509,49 @@ class ReviewTabFrame(ttk.Frame):
         self._negative_prev_mode = self.negative_mode_var.get() or "append"
         self._sync_edit_box_to_mode("negative")
 
+    def _on_klein_edit_toggled(self) -> None:
+        if self.klein_edit_var.get():
+            if self._klein_snapshot is not None:
+                return  # a repeated callback while Klein stays checked never overwrites the snapshot
+            self._prompt_mode_edits[self._prompt_prev_mode] = self._get_text(self.prompt_text)
+            self._negative_mode_edits[self._negative_prev_mode] = self._get_text(self.negative_text)
+            self._klein_snapshot = {
+                "img2img": self.stage_img2img_var.get(),
+                "adetailer": self.stage_adetailer_var.get(),
+                "upscale": self.stage_upscale_var.get(),
+                "prompt_mode": self.prompt_mode_var.get(),
+                "negative_mode": self.negative_mode_var.get(),
+                "batch_size": self.batch_size_var.get(),
+                "prompt_edits": dict(self._prompt_mode_edits),
+                "negative_edits": dict(self._negative_mode_edits),
+            }
+            self.stage_img2img_var.set(True)
+            self.stage_adetailer_var.set(False)
+            self.stage_upscale_var.set(False)
+            self.prompt_mode_var.set("replace")
+            self.negative_mode_var.set("replace")
+            self.batch_size_var.set(1)
+            return
+        snapshot, self._klein_snapshot = self._klein_snapshot, None  # transient: cleared once restored
+        if snapshot is None:
+            return
+        self.stage_img2img_var.set(snapshot["img2img"])
+        self.stage_adetailer_var.set(snapshot["adetailer"])
+        self.stage_upscale_var.set(snapshot["upscale"])
+        self.prompt_mode_var.set(snapshot["prompt_mode"])
+        self.negative_mode_var.set(snapshot["negative_mode"])
+        self.batch_size_var.set(snapshot["batch_size"])
+        # The Klein session's own typing must not leak into the ordinary per-mode edits.
+        self._prompt_mode_edits = dict(snapshot["prompt_edits"])
+        self._negative_mode_edits = dict(snapshot["negative_edits"])
+        self._prompt_prev_mode = snapshot["prompt_mode"] or "append"
+        self._negative_prev_mode = snapshot["negative_mode"] or "append"
+        self._sync_edit_box_to_mode("prompt")
+        self._sync_edit_box_to_mode("negative")
+
     def _reprocess(self, *, batch_all: bool) -> None:
-        stages = self._selected_stages()
+        klein_edit = bool(self.klein_edit_var.get())
+        stages = ["img2img"] if klein_edit else self._selected_stages()
         if not stages:
             messagebox.showwarning("No stages", "Select at least one stage.")
             return
@@ -1524,6 +1581,18 @@ class ReviewTabFrame(ttk.Frame):
         prompt_delta = self.prompt_text.get("1.0", tk.END).strip()
         negative_delta = self.negative_text.get("1.0", tk.END).strip()
         batch_size = max(1, int(self.batch_size_var.get() or 1))
+        if klein_edit:
+            if len(targets) != 1:
+                messagebox.showwarning(
+                    "Klein edit",
+                    "FLUX.2 Klein single-reference edit needs exactly one selected image "
+                    "(multi-reference is not supported).",
+                )
+                return
+            if not prompt_delta:
+                messagebox.showwarning("Klein edit", "Describe the desired edit in the prompt box.")
+                return
+            negative_delta, batch_size = "", 1
 
         try:
             handler = getattr(controller, "on_reprocess_images_with_prompt_delta", None)
@@ -1541,13 +1610,17 @@ class ReviewTabFrame(ttk.Frame):
                             )
                             if isinstance(source_metadata, dict):
                                 source_metadata_by_image[str(target)] = source_metadata
+                if klein_edit:
+                    source_metadata_by_image = self._workflow_adapter.with_klein_edit_request(
+                        source_metadata_by_image, targets
+                    )
                 submitted = handler(
                     image_paths=[str(p) for p in targets],
                     stages=stages,
                     prompt_delta=prompt_delta,
                     negative_prompt_delta=negative_delta,
-                    prompt_mode=self.prompt_mode_var.get(),
-                    negative_prompt_mode=self.negative_mode_var.get(),
+                    prompt_mode="replace" if klein_edit else self.prompt_mode_var.get(),
+                    negative_prompt_mode="replace" if klein_edit else self.negative_mode_var.get(),
                     batch_size=batch_size,
                     source_metadata_by_image=source_metadata_by_image,
                 )

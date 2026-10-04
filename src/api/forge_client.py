@@ -24,6 +24,8 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+from collections.abc import Sequence
 from typing import Any
 
 from src.api.client import SDWebUIClient
@@ -94,8 +96,8 @@ class ForgeWebUIClient(SDWebUIClient):
         logger.debug("Retrieved %s Forge VAE/text-encoder modules", len(modules))
         return modules
 
-    def _resolve_module_name(self, requested: str) -> str:
-        """Map a requested VAE name onto an exact Forge module name, or raise."""
+    def _resolve_module_name(self, requested: str, *, noun: str = "VAE") -> str:
+        """Map a requested module name onto an exact Forge module name, or raise."""
 
         modules = self.get_vae_models()
         by_key = {_module_key(m["model_name"]): m["model_name"] for m in modules}
@@ -106,56 +108,102 @@ class ForgeWebUIClient(SDWebUIClient):
         if _strip_extension(key) in stripped:
             return stripped[_strip_extension(key)]
         raise ForgeVAEError(
-            f"VAE '{requested}' is not listed by the Forge endpoint ({SD_MODULES_ENDPOINT}); "
-            "refusing to write it because Forge would silently clear the VAE."
+            f"{noun} '{requested}' is not listed by the Forge endpoint ({SD_MODULES_ENDPOINT}); "
+            "refusing to write it because Forge would silently clear the module selection."
         )
 
     def set_vae(self, vae_name: str) -> bool:
-        requested = str(vae_name or "").strip()
-        automatic = requested.lower() in _AUTOMATIC_VAE_NAMES
-        target = [] if automatic else [self._resolve_module_name(requested)]
+        """Select one VAE module (or clear to Automatic) through the verified module write."""
 
-        can_send, reason = self._options_can_send()
+        requested = str(vae_name or "").strip()
+        if requested.lower() in _AUTOMATIC_VAE_NAMES:
+            return self._write_modules([], noun="VAE", strict=False)
+        return self._write_modules([requested], noun="VAE", strict=False)
+
+    def set_additional_modules(self, modules: Sequence[str]) -> bool:
+        """Select the complete Forge module set (e.g. a text encoder plus a VAE) in one write.
+
+        Every requested module is resolved against ``/sdapi/v1/sd-modules`` first (an unavailable
+        module raises before any write), the whole list is sent once, and the effective option is
+        read back and compared exactly; any mismatch raises so generation cannot proceed with an
+        unverified module set. An empty list clears the selection.
+
+        Unlike ``set_vae`` this never *skips* silently: the shared options throttle (a model switch
+        just before it) is waited out, and a SafeMode/readiness refusal raises, because a skipped
+        write would let Forge load the model without its text encoder (found by the PR-IMG-116 smoke).
+        """
+
+        requested = [str(item).strip() for item in modules if str(item or "").strip()]
+        return self._write_modules(requested, noun="module", strict=True)
+
+    def _await_options_write_allowed(self, *, noun: str) -> None:
+        """Strict writes: wait out the throttle (bounded); any other refusal is an error."""
+
+        deadline = time.monotonic() + max(15.0, 2 * float(self._options_min_interval_seconds))
+        while True:
+            can_send, reason = self._options_can_send()
+            if can_send:
+                return
+            if reason != "throttle" or time.monotonic() >= deadline:
+                raise ForgeVAEError(
+                    f"Forge {noun} selection was not applied ({reason}); generation must not proceed "
+                    "without the required modules."
+                )
+            time.sleep(min(0.5, max(0.01, float(self._options_min_interval_seconds) / 4)))
+
+    def _write_modules(self, requested: list[str], *, noun: str, strict: bool = False) -> bool:
+        targets = [self._resolve_module_name(item, noun=noun) for item in requested]
+        keys = [_strip_extension(_module_key(item)) for item in targets]
+        if len(set(keys)) != len(keys):
+            raise ForgeVAEError(f"Duplicate Forge {noun} selection: {requested}")
+
+        if strict:
+            self._await_options_write_allowed(noun=noun)
+            can_send, reason = True, None
+        else:
+            can_send, reason = self._options_can_send()
         if not can_send:
             if reason == "safe_mode":
                 logger.warning(
-                    "Skipping Forge set_vae because options writes are disabled (SafeMode); "
+                    "Skipping Forge module write because options writes are disabled (SafeMode); "
                     "target=%s",
-                    vae_name,
+                    requested,
                 )
             else:
-                logger.debug("Skipping Forge set_vae; reason=%s", reason)
+                logger.debug("Skipping Forge module write; reason=%s", reason)
             return False
 
         with self._request_context(
             "post",
             "/sdapi/v1/options",
-            json={FORGE_MODULES_OPTION: target},
+            json={FORGE_MODULES_OPTION: targets},
             timeout=75,  # a module change may reload the model
         ) as response:
             if response is None:
                 return False
 
-        observed = self.get_current_vae()
-        expected = "Automatic" if automatic else target[0]
-        # get_current_vae() reports "Automatic" for an empty module list, so one comparison covers
-        # both the explicit-module and the cleared case.
-        if _module_key(observed or "") != _module_key(expected):
+        observed = self.get_additional_modules()
+        observed_keys = sorted(_strip_extension(_module_key(item)) for item in observed or [])
+        if observed is None or observed_keys != sorted(keys):
+            expected_label = ", ".join(targets) if targets else "Automatic"
+            observed_label = ", ".join(observed) if observed else "Automatic"
             raise ForgeVAEError(
-                f"Forge did not apply VAE '{expected}' (endpoint reports '{observed}'); "
-                "generation must not proceed with an unverified VAE."
+                f"Forge did not apply {noun} '{expected_label}' (endpoint reports "
+                f"'{observed_label}'); generation must not proceed with an unverified selection."
             )
-        logger.info("Set Forge VAE module to: %s", expected)
+        logger.info("Set Forge modules to: %s", ", ".join(targets) if targets else "Automatic")
         return True
 
-    def get_current_vae(self) -> str | None:
+    def get_additional_modules(self) -> list[str] | None:
+        """Effective ``forge_additional_modules`` as file basenames; ``None`` when unreadable."""
+
         endpoint = "/sdapi/v1/options"
         if self._resource_endpoint_on_cooldown(endpoint):
             return None
 
         with self._request_context("get", endpoint, timeout=10) as response:
             if response is None:
-                logger.warning("get_current_vae: response is None")
+                logger.warning("get_additional_modules: response is None")
                 self._mark_resource_endpoint_failed(endpoint)
                 return None
             try:
@@ -167,9 +215,14 @@ class ForgeWebUIClient(SDWebUIClient):
 
         self._clear_resource_endpoint_failure(endpoint)
         modules = data.get(FORGE_MODULES_OPTION) if isinstance(data, dict) else None
-        if not isinstance(modules, list) or not modules:
-            return "Automatic"
-        names = [os.path.basename(str(item).replace("\\", "/")) for item in modules if item]
+        if not isinstance(modules, list):
+            return []
+        return [os.path.basename(str(item).replace("\\", "/")) for item in modules if item]
+
+    def get_current_vae(self) -> str | None:
+        names = self.get_additional_modules()
+        if names is None:
+            return None
         if not names:
             return "Automatic"
         return names[0] if len(names) == 1 else ", ".join(names)

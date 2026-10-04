@@ -9,7 +9,7 @@ import math
 import re
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from concurrent.futures import Future, ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import replace
@@ -304,6 +304,7 @@ class Pipeline:
         self._current_model: str | None = None
         self._model_synchronizer = A1111ModelSynchronizer(client)
         self._current_vae: str | None = None
+        self._current_modules: tuple[str, ...] | None = None
         self._current_hypernetwork: str | None = None
         self._current_hn_strength: float | None = None
         self._model_discovery_attempted = False
@@ -988,8 +989,18 @@ class Pipeline:
     # Internal helpers for throughput improvements
     # ------------------------------------------------------------------
 
-    def _ensure_model_and_vae(self, model_name: str | None, vae_name: str | None) -> None:
-        """Set model and/or VAE. Model and VAE switches are independent operations."""
+    def _ensure_model_and_vae(
+        self,
+        model_name: str | None,
+        vae_name: str | None,
+        additional_modules: Sequence[str] | None = None,
+    ) -> None:
+        """Set model and/or VAE. Model and VAE switches are independent operations.
+
+        ``additional_modules`` (a backend-projected Forge module set, e.g. Klein's text encoder plus
+        VAE) replaces the single-VAE path: the complete set is written and verified once, and the
+        implicit "model switched without a VAE -> Automatic" reset is skipped so it cannot clear it.
+        """
         model_switched = False
         if self._normalize_model_name(model_name):
             try:
@@ -1005,7 +1016,29 @@ class Pipeline:
             else:
                 logger.debug("WebUI model already verified: %s", model_name)
 
+        if additional_modules:
+            modules = tuple(str(item) for item in additional_modules)
+            setter = getattr(self.client, "set_additional_modules", None)
+            if not callable(setter):
+                raise RuntimeError(
+                    "This WebUI client cannot select an additional module set; the requested "
+                    f"modules {list(modules)} would not be applied."
+                )
+            if modules != self._current_modules or not self._modules_still_applied(modules):
+                self._current_modules = None
+                logger.info("Switching WebUI modules to: %s", ", ".join(modules))
+                if setter(list(modules)) is not True:
+                    raise RuntimeError(
+                        f"The WebUI module selection {list(modules)} was not applied; refusing to "
+                        "generate without the required modules."
+                    )
+                self._current_modules = modules
+                self._current_vae = None
+                self._record_vae_switch()
+            return
+
         # Handle VAE switching (independent of model - always execute if vae_name provided)
+        self._current_modules = None
         try:
             if vae_name:
                 desired_vae = self._normalize_vae_name(vae_name)
@@ -1025,6 +1058,19 @@ class Pipeline:
         except Exception:
             self._current_vae = None
             raise
+
+    def _modules_still_applied(self, modules: Sequence[str]) -> bool:
+        """Read-only check that the endpoint still reports exactly ``modules`` (external drift)."""
+
+        reader = getattr(self.client, "get_additional_modules", None)
+        observed = reader() if callable(reader) else None
+        if observed is None:
+            return False
+
+        def keys(names: Sequence[str]) -> list[str]:
+            return sorted(str(name).replace("\\", "/").rsplit("/", 1)[-1].rsplit(".", 1)[0].lower() for name in names)
+
+        return keys(observed) == keys(modules)
 
     def _assess_stage_pressure(
         self,
@@ -4858,8 +4904,9 @@ class Pipeline:
                 requested_vae,
             )
 
-            if requested_model or requested_vae:
-                self._ensure_model_and_vae(requested_model, requested_vae)
+            additional_modules = txt2img_config.get("additional_modules")
+            if requested_model or requested_vae or additional_modules:
+                self._ensure_model_and_vae(requested_model, requested_vae, additional_modules)
             self._check_model_drift(
                 stage_name="txt2img",
                 requested_model=requested_model,
@@ -5365,8 +5412,9 @@ class Pipeline:
             # Set model and VAE if specified
             model_name = config.get("model")
             vae_name = config.get("vae")
-            if model_name or vae_name:
-                self._ensure_model_and_vae(model_name, vae_name)
+            additional_modules = config.get("additional_modules")
+            if model_name or vae_name or additional_modules:
+                self._ensure_model_and_vae(model_name, vae_name, additional_modules)
 
             self._ensure_hypernetwork(
                 config.get("hypernetwork"),

@@ -1,0 +1,34 @@
+{
+  "schema": "stablenew.forge_klein_assets/1",
+  "profile": {"id": "flux2_klein_4b_fp8", "version": 1},
+  "note": "Exact PR-IMG-115 qualified assets. Mirrors src/image_backends/forge_klein_profile.py (a test pins equality). Installed only into <managed-forge-data>/models; never downloaded by StableNew.",
+  "assets": [
+    {
+      "role": "transformer",
+      "filename": "flux-2-klein-4b-fp8.safetensors",
+      "models_subdir": "Stable-diffusion",
+      "size": 4070624520,
+      "sha256": "97ed34fe0567e436200f2faee3939b88f2b5d99f8af2a4dc16532c4245c0ccb6",
+      "repo": "black-forest-labs/FLUX.2-klein-4b-fp8",
+      "revision": "5b4408e59397a4a37ccb46afe426d8ed86379441"
+    },
+    {
+      "role": "text_encoder",
+      "filename": "qwen_3_4b.safetensors",
+      "models_subdir": "text_encoder",
+      "size": 8044982048,
+      "sha256": "6c671498573ac2f7a5501502ccce8d2b08ea6ca2f661c458e708f36b36edfc5a",
+      "repo": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
+      "revision": "5f526678002e43af5551dadb73ce2e8c91b43afe"
+    },
+    {
+      "role": "vae",
+      "filename": "flux2-vae.safetensors",
+      "models_subdir": "VAE",
+      "size": 336211292,
+      "sha256": "868fe7b343cc8f3a19dbcfcafbc3d5f888802be3f89bd81b65b3621a066ce8f3",
+      "repo": "Comfy-Org/vae-text-encorder-for-flux-klein-4b",
+      "revision": "5f526678002e43af5551dadb73ce2e8c91b43afe"
+    }
+  ]
+}

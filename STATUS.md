@@ -61,6 +61,14 @@ Updated: 2026-10-03
   two-reference editing is blocked by a pinned-Forge API gap (`ImageStitch` script args rejected), not by the model.
   Model/runtime qualification only; no production integration. See
   `docs/Subsystems/Image/PR-IMG-115_FLUX2_Klein_4B_FP8_Target_Hardware_Qualification.md`.
+- FLUX.2 Klein 4B FP8 production slice (PR-IMG-116, local branch, `FLUX2_KLEIN_4B_FP8_PRODUCTION_SLICE_PASS`): on the existing
+  `forge_webui` backend, a versioned immutable model profile (`flux2_klein_4b_fp8` v1: exact transformer/Qwen3/VAE identities,
+  Euler/Beta/4/CFG 1.0, 768x1024 and 1024x1024) supports text-to-image (Pipeline tab) and one-reference edit (explicit Review
+  checkbox -> normal `img2img` reprocess NJR). Forge multi-module selection is verified and never skipped; unsupported work
+  (multi-reference, ADetailer, upscale, LoRA, ...) fails before dispatch; total physical RAM must be at least 32e9 bytes
+  (available RAM is evidence only). Assets install with `scripts/install_forge_klein_assets.ps1` into the managed Forge data
+  tree. Two production smokes passed on the RTX 4070 Ti. A1111 stays the default and the rollback; multi-reference is
+  unsupported and tracked separately. See `docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`.
 - Pre-Forge execution and test truth (PR-TEST-TRUTH-210, current while its PR is open; bounded truth package, not
   a product capability): `build_run_plan_from_njr` is fail-closed - only explicitly enabled, explicitly named
   stages are planned, and a missing/blank stage identity or an empty/all-disabled chain raises `ValueError`

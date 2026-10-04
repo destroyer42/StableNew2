@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from src.curation.curation_manifest import build_serialized_curation_source_metadata
+from src.image_backends.forge_klein_profile import KLEIN_EDIT_METADATA_KEY
 from src.pipeline.reprocess_builder import ReprocessEffectiveSettingsPreview, ReprocessJobBuilder
 from src.state.output_routing import resolve_output_artifact_path
 from src.utils.image_metadata import resolve_model_vae_fields, resolve_prompt_fields
@@ -346,6 +347,19 @@ class ReviewWorkflowAdapter:
             )
         )
         return " | ".join(bits)
+
+    @staticmethod
+    def with_klein_edit_request(
+        source_metadata_by_image: dict[str, dict[str, Any]] | None,
+        targets: list[Path],
+    ) -> dict[str, dict[str, Any]]:
+        """Mark each target as an explicit FLUX.2 Klein single-reference edit (never inferred)."""
+
+        marked: dict[str, dict[str, Any]] = {}
+        for target in targets:
+            existing = (source_metadata_by_image or {}).get(str(target)) or {}
+            marked[str(target)] = {**existing, KLEIN_EDIT_METADATA_KEY: True}
+        return marked
 
     def format_effective_settings_summary(
         self,

@@ -40,8 +40,13 @@ def normalize_image_backend_options(
     existing_options: Any,
     *,
     backend_id: str | None = None,
+    model_name: str | None = None,
 ) -> dict[str, Any]:
     """Persist explicit backend identity for newly constructed image work.
+
+    ``model_name`` (the selected checkpoint) stamps the qualified FLUX.2 Klein ``model_profile``
+    reference for new work; it is a no-op for every other model and never overwrites an explicit
+    profile.
 
     This is intentionally a construction-time operation.  The execution
     resolver remains the sole compatibility authority for historical records
@@ -72,6 +77,12 @@ def normalize_image_backend_options(
     if not normalized_backend_id:
         raise ValueError("backend_options.image.backend_id must not be blank")
     image["backend_id"] = normalized_backend_id
+    if model_name and "model_profile" not in image:
+        from src.image_backends.forge_klein_profile import model_profile_for_model
+
+        profile_reference = model_profile_for_model(model_name)
+        if profile_reference is not None:
+            image["model_profile"] = profile_reference
     options["image"] = image
     return options
 

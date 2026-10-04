@@ -22,6 +22,7 @@ from copy import deepcopy
 from dataclasses import asdict, is_dataclass
 from typing import Any
 
+from src.image_backends.forge_klein_profile import apply_klein_compile_policy
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.pipeline.config_variant_plan_v2 import ConfigVariantPlanV2
 from src.pipeline.job_models_v2 import (
@@ -143,7 +144,7 @@ class JobBuilderV2:
                             randomization_plan, variant_index
                         )
 
-                    config = self._config_mapping(matrix_config)
+                    config = apply_klein_compile_policy(self._config_mapping(matrix_config))
                     prompt_info = self._build_stage_prompt_info(config)
                     stage = StageConfig(
                         stage_type="txt2img",
@@ -163,7 +164,8 @@ class JobBuilderV2:
                             negative_prompt=prompt_info.final_negative_prompt,
                             config=config,
                             backend_options=normalize_image_backend_options(
-                                config.get("backend_options")
+                                config.get("backend_options"),
+                                model_name=self._model_name(config),
                             ),
                         ),
                         stages=(stage,),
@@ -344,6 +346,12 @@ class JobBuilderV2:
             return []
         pack_path = self._extract_config_value(config, "pack_path")
         return [PackUsageInfo(pack_name=pack_name, pack_path=pack_path or None)]
+
+    @staticmethod
+    def _model_name(config: dict[str, Any]) -> str | None:
+        txt2img = config.get("txt2img")
+        nested = txt2img.get("model") if isinstance(txt2img, dict) else None
+        return str(nested or config.get("model") or "") or None
 
     @staticmethod
     def _config_mapping(config: Any) -> dict[str, Any]:

@@ -89,3 +89,35 @@ Constraint: two-reference editing is unreachable through the pinned Forge API. H
 text encoder and FP8 transformer load. Not proven: multi-reference model quality, behaviour on a different Forge revision,
 tensor-level equality of the Comfy-Org single files with the official shards, production integration (model management, UI,
 job-level reference handling) and any ADetailer interaction.
+
+## Post-merge harness repair addendum (PR-IMG-116 phase 0)
+
+Review of the merged PR found four harness defects. None changes a recorded result, and no physical qualification was
+rerun (zero generations, zero downloads, no runtime started).
+
+1. **Loaded-model identity.** The harness verified `assets/` but could leave a different same-name file under
+   `forge-data/models/`, which is what Forge loads. `assets` now reports the source assets **and** the files Forge would
+   actually load with an explicit exact-match verdict; `freeze` refuses before writing a manifest unless the actual model
+   files match; `case` re-verifies them (and the frozen manifest) before consuming the case or starting a runtime. A
+   byte-identical copy passes; a same-name file with different bytes fails closed; nothing is repaired or overwritten.
+2. **Returned seed.** A valid image whose returned `seed` / `all_seeds` differs from the frozen requested seed is now a
+   `provenance_failure`, never a pass, and is never dispatched again. `seed_requested`, `seed_returned`, `all_seeds` and
+   `seed_match` are recorded.
+3. **Isolation order.** Every command proves the qualification root is outside the repository, the managed Forge install
+   and A1111 *before* creating any directory, link or config; a refused root leaves nothing behind.
+4. **NumPy.** `_decode_png()` is Pillow-only (decode, dimensions, RGB conversion and a pixel-variation statistic); NumPy is
+   not a StableNew dependency and appears nowhere in the harness or its tests. This was the cause of the four informational
+   full-suite CI failures.
+
+Read-only revalidation of the retained evidence: the files at `forge-data/models/...` in the qualification root were
+hashed in place and compared with the retained `assets/` files.
+
+| File (under `forge-data/models/`) | Bytes | SHA-256 | Frozen hash | Same file as `assets/` |
+|---|---|---|---|---|
+| `Stable-diffusion/flux-2-klein-4b-fp8.safetensors` | 4,070,624,520 | `97ed34fe...c0ccb6` | match | yes (hard link) |
+| `text_encoder/qwen_3_4b.safetensors` | 8,044,982,048 | `6c671498...edfc5a` | match | yes (hard link) |
+| `VAE/flux2-vae.safetensors` | 336,211,292 | `868fe7b3...66ce8f3` | match | yes (hard link) |
+
+All three actual loaded files have the exact frozen size and hash (`IMG115_PHYSICAL_EVIDENCE_IDENTITY_REVALIDATED`). The
+returned seeds recorded for Cases A, B and C (424242, 424243, 424244) already equalled their frozen requested seeds. The
+technical verdict `FLUX2_KLEIN_4B_FP8_PASS_CONSTRAINED` is unchanged and remains evidence-supported.

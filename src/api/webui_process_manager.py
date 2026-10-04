@@ -96,6 +96,7 @@ class WebUIProcessManager:
         self._config = config
         self._process: subprocess.Popen | None = None
         self._owns_process = False
+        self._launch_session_command: tuple[str, ...] | None = None
         self._last_exit_code: int | None = None
         self._start_time: float | None = None
         self._health_cache: bool | None = None
@@ -168,6 +169,22 @@ class WebUIProcessManager:
             and self._pid is not None
             and getattr(self._process, "pid", None) == self._pid
         )
+
+    @property
+    def endpoint(self) -> str:
+        """The base URL this manager is configured to serve (read-only; never inferred from health or ports)."""
+        return self._configured_base_url()
+
+    @property
+    def launch_session_command(self) -> list[str] | None:
+        """The exact command of the live process this manager launched, or ``None`` without ownership.
+
+        Recorded when the process is created, so a later configuration or launch-profile change never
+        rewrites what the current session actually runs.
+        """
+        if not self.owns_process or self._launch_session_command is None:
+            return None
+        return list(self._launch_session_command)
 
     def _configured_endpoint_is_occupied(self) -> bool:
         """Return whether the explicitly configured endpoint already accepts connections."""
@@ -413,6 +430,7 @@ class WebUIProcessManager:
             )
             self._pid = self._process.pid
             self._owns_process = True
+            self._launch_session_command = tuple(self._config.command)
             self._attach_pid_to_container(self._pid)
             self._start_time = time.time()
             launch_msg = format_launch_message(

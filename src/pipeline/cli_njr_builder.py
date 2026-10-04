@@ -3,6 +3,7 @@ from __future__ import annotations
 from copy import deepcopy
 from uuid import uuid4
 
+from src.image_backends.forge_klein_profile import apply_klein_compile_policy
 from src.image_backends.image_backend_types import normalize_image_backend_options
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
@@ -81,7 +82,7 @@ def build_cli_njr(
     batch_size: int,
     run_name: str | None = None,
 ) -> NormalizedJobRecord:
-    full_config = deepcopy(config)
+    full_config = apply_klein_compile_policy(deepcopy(config))
     txt2img = dict(full_config.get("txt2img", {}) or {})
     pipeline = dict(full_config.get("pipeline", {}) or {})
 
@@ -125,7 +126,10 @@ def build_cli_njr(
                 "execution_source": "cli",
                 **({"run_name": run_name} if run_name else {}),
             },
-            backend_options=normalize_image_backend_options(full_config.get("backend_options")),
+            backend_options=normalize_image_backend_options(
+                full_config.get("backend_options"),
+                model_name=str(txt2img.get("model") or "") or None,
+            ),
         ),
         stages=tuple(stage_chain),
         output_plan=OutputPlan(),
