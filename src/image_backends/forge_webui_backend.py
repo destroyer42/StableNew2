@@ -21,11 +21,14 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from src.image_backends.forge_klein_assets import verify_klein_assets
 from src.image_backends.forge_klein_profile import (
+    KLEIN_EDIT_METADATA_KEY,
     MODE_SINGLE_REFERENCE_EDIT,
     KleinProfile,
     KleinProfileError,
@@ -90,6 +93,8 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         super().__init__(transition=transition)
         self._memory_probe = memory_probe
         self._readiness: dict[str | None, KleinReadiness] = {}
+        self._identity: dict[str | None, dict[str, Any]] = {}
+        self._verified_source: dict[str | None, dict[str, Any]] = {}
 
     # ------------------------------------------------------------------ profile validation
 
@@ -184,7 +189,40 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         self._readiness[request.job_id] = check_klein_host_memory(
             profile, probe=self._memory_probe or read_host_memory
         )
+        # What Forge will load, by bytes: the API names below are only supplementary evidence of selection.
+        self._identity[request.job_id] = verify_klein_assets(profile)
         self._assert_assets_listed(pipeline, profile)
+        if request.stage_name == "img2img":
+            self._verified_source[request.job_id] = self._verify_frozen_source(request)
+
+    @staticmethod
+    def _verify_frozen_source(request: ImageExecutionRequest) -> dict[str, Any]:
+        """The source image must still be exactly the one frozen at Review admission (never refreshed)."""
+
+        if request.input_image_path is None:
+            raise KleinProfileError("A Klein edit needs its source image.")
+        source = Path(request.input_image_path)
+        wanted = os.path.normcase(os.path.abspath(source))
+        provenance = request.context_metadata.get("provenance") or {}
+        frozen = ""
+        for item in (provenance.get("reprocess") or {}).get("source_items") or []:
+            if os.path.normcase(os.path.abspath(str(item.get("input_image_path") or ""))) == wanted:
+                marker = (item.get("metadata") or {}).get(KLEIN_EDIT_METADATA_KEY)
+                frozen = str(marker.get("source_image_sha256") or "") if isinstance(marker, dict) else ""
+                break
+        if not frozen:
+            raise KleinProfileError(
+                "The job does not carry the frozen SHA-256 of its Klein source image; refusing to edit an unverified source."
+            )
+        if not source.is_file():
+            raise KleinProfileError(f"The Klein edit source image is missing: {source.name}")
+        actual = _sha256_file(source)
+        if actual != frozen:
+            raise KleinProfileError(
+                f"The Klein edit source image {source.name} changed after the job was admitted "
+                f"(frozen SHA-256 {frozen}, current {actual}); refusing to dispatch."
+            )
+        return {"name": source.name, "sha256": actual, "frozen_sha256": frozen, "verified_before_dispatch": True}
 
     @staticmethod
     def _assert_assets_listed(pipeline: Any, profile: KleinProfile) -> None:
@@ -265,9 +303,16 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
     # ------------------------------------------------------------------ evidence
 
     def execute(self, pipeline: Any, request: ImageExecutionRequest) -> ImageExecutionResult | None:
-        result = super().execute(pipeline, request)
+        try:
+            result = super().execute(pipeline, request)
+        except BaseException:
+            for scratch in (self._readiness, self._identity, self._verified_source):
+                scratch.pop(request.job_id, None)
+            raise
         profile = self._profile_for(request.backend_options)
         readiness = self._readiness.pop(request.job_id, None)
+        identity = self._identity.pop(request.job_id, None)
+        verified_source = self._verified_source.pop(request.job_id, None)
         if profile is None or result is None:
             return result
         mode = (
@@ -276,13 +321,11 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         evidence = klein_provenance(profile, mode=mode)
         if readiness is not None:
             evidence["host_memory_before_dispatch"] = readiness.as_dict()
-        evidence["observed"] = self._observe(pipeline)
-        if request.stage_name == "img2img" and request.input_image_path is not None:
-            source = Path(request.input_image_path)
-            evidence["source_image"] = {
-                "name": source.name,
-                "sha256": _sha256_file(source) if source.is_file() else None,
-            }
+        evidence["observed"] = self._observe(pipeline)  # Forge's reported names: supplementary evidence
+        if identity is not None:
+            evidence["asset_identity"] = identity  # local size + SHA-256 of the files Forge loads
+        if verified_source is not None:
+            evidence["source_image"] = verified_source
         result.backend_metadata["klein_profile"] = evidence
         return result
 

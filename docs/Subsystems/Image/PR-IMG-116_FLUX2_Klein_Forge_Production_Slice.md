@@ -79,14 +79,23 @@ re-verifies it read-only before reuse.
    steps and CFG equal the fixed values; geometry is qualified; no negative prompt, global prompt terms, prompt
    optimizer, hires fix, refiner, LoRA, ControlNet, aesthetic embedding, hypernetwork or foreign VAE; an edit has exactly
    one source image. All conflicts are listed in one error. Nothing is rewritten silently.
-2. **Host memory** (below), then **asset availability**: Forge must list the two modules and the checkpoint, otherwise
-   the error names the missing asset and the installer command (the executor otherwise turns stage exceptions into a
-   generic "no images" failure).
+2. **Host memory** (below), then **asset identity by bytes** (`src/image_backends/forge_klein_assets.py`): the three files
+   are located through the existing managed-Forge authority (the `forge_runtime_profile_path` setting -> the launch profile's
+   `--data-dir`; nothing machine-local is persisted in an NJR) and their exact size and SHA-256 are verified against the
+   profile. A verified file is cached keyed by its stat identity (path, size, mtime, ctime, inode, device): first use is
+   hashed, any observed change forces a rehash, so about 12.45 GB is not re-read per job. If no runtime profile can be
+   resolved, Klein fails closed. Forge's API names and the `/options` read-back remain only supplementary evidence of
+   selection. Then **asset availability**: Forge must list the two modules and the checkpoint, otherwise the error names the
+   missing asset and the installer command (the executor otherwise turns stage exceptions into a generic "no images"
+   failure).
+   **Edit source integrity**: immediately before an edit's generation POST the source file must exist and hash to the
+   SHA-256 frozen in the NJR at Review admission; a missing or mutated source fails before dispatch and the frozen digest is
+   never refreshed.
 3. **Projection**: exact checkpoint, the module set `[qwen_3_4b, flux2-vae]`, the fixed sampling values, empty negative,
    frozen empty global terms; for edits denoise 1.0 and the source image's size.
 4. **Evidence**: the stage result carries `image_backend_metadata.klein_profile` (profile id/version, mode, expected
-   transformer/module names, sizes and SHA-256, fixed sampling values, host-memory readings, what Forge reported active,
-   and for edits the source image name and SHA-256).
+   transformer/module names, sizes and SHA-256, the locally verified asset identity, fixed sampling values, host-memory
+   readings, what Forge reported active, and for edits the verified source image name and SHA-256).
 
 An A1111 job carrying a model profile is rejected by the shared base backend. There is no fallback to SDXL or A1111 and
 no model substitution; the existing client's refusal to replay an ambiguous generation POST is unchanged.
@@ -96,7 +105,7 @@ no model substitution; the existing client's refusal to replay an ambiguous gene
 **Text-to-image (Pipeline tab).** Selecting the exact Klein transformer in the existing Base Generation model feed
 projects the profile: Euler / Beta / 4 steps / CFG 1.0 are written into the controls and locked, the VAE is set to the
 model default (the profile owns its modules), the resolution presets shrink to 768x1024 and 1024x1024, and the helper
-text explains the fixed distilled settings. Selecting any other model restores the controls exactly. If the configured
+text explains the fixed distilled settings. Selecting any other model restores the exact values that were in the controls (sampler, scheduler, steps, CFG, VAE, size and preset, snapshotted once on the first transition into Klein and cleared after restoring). If the configured
 backend is not Forge the same text shows that Klein needs the Forge backend and that StableNew will not switch it.
 The compilers (`JobBuilderV2`, the PromptPack builder and the CLI builder) freeze the same values, clear negative text and
 global terms and switch the (default-on) prompt optimizer off for the Klein checkpoint, and stamp the profile reference;

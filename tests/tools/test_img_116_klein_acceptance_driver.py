@@ -33,6 +33,7 @@ def _host(monkeypatch: pytest.MonkeyPatch) -> None:
         forge_backend_module, "read_host_memory",
         lambda: HostMemorySnapshot(total_bytes=34_107_092_992, available_bytes=17_000_000_000),
     )
+    monkeypatch.setattr(forge_backend_module, "verify_klein_assets", lambda profile: {"stub": True})
     monkeypatch.setattr(driver, "_fault_events", lambda _start: [])
     monkeypatch.setattr(driver, "verify_installed_assets", lambda _dir: {"stubbed": True})
 

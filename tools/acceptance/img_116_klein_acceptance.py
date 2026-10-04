@@ -84,8 +84,8 @@ def verify_installed_assets(data_dir: Path) -> dict[str, Any]:
 
 
 @contextmanager
-def forge_selected_in_memory():
-    """The operator selecting ``forge_webui``: an in-process view of settings; nothing is written."""
+def forge_selected_in_memory(runtime_profile: Path | str = ""):
+    """The operator selecting ``forge_webui`` (and its managed runtime profile): an in-process view of settings."""
 
     from unittest.mock import patch
 
@@ -94,7 +94,11 @@ def forge_selected_in_memory():
     original = ConfigManager.load_settings
 
     def load_settings(self: Any, *args: Any, **kwargs: Any) -> dict[str, Any]:
-        return {**original(self, *args, **kwargs), "webui_runtime_identity": BACKEND}
+        return {
+            **original(self, *args, **kwargs),
+            "webui_runtime_identity": BACKEND,
+            "forge_runtime_profile_path": str(runtime_profile or ""),
+        }
 
     with patch.object(ConfigManager, "load_settings", load_settings):
         yield
@@ -191,7 +195,7 @@ def run(args: argparse.Namespace, runtime: Any, *, sampler: Any = None, client: 
     output_dir = reports / "output"
     source: Path | None = None
     source_sha_before = ""
-    with forge_selected_in_memory():
+    with forge_selected_in_memory(getattr(args, "runtime_profile", "") or ""):
         if smoke == "A":
             njr = freeze_smoke_a(job_id=job_id, output_dir=output_dir)
         else:

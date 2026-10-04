@@ -73,6 +73,73 @@ def test_selecting_klein_fixes_and_locks_the_controls_then_sdxl_restores_them(tk
         panel.destroy()
 
 
+def _configure_non_default_sdxl(panel: BaseGenerationPanelV2) -> dict:
+    panel.model_var.set("sdxl.safetensors")
+    panel.sampler_var.set("Euler a")
+    panel.scheduler_var.set("Karras")
+    panel.steps_var.set(37)
+    panel.cfg_var.set(6.5)
+    panel.vae_var.set("sdxl_vae.safetensors")
+    panel.width_var.set("1152")
+    panel.height_var.set("896")
+    panel.resolution_preset_var.set("1152x896 (9:7)")
+    return {
+        "sampler": panel.sampler_var.get(), "scheduler": panel.scheduler_var.get(), "steps": panel.steps_var.get(),
+        "cfg": panel.cfg_var.get(), "vae": panel.vae_var.get(), "width": panel.width_var.get(),
+        "height": panel.height_var.get(), "preset": panel.resolution_preset_var.get(),
+    }
+
+
+def _snapshot(panel: BaseGenerationPanelV2) -> dict:
+    return {
+        "sampler": panel.sampler_var.get(), "scheduler": panel.scheduler_var.get(), "steps": panel.steps_var.get(),
+        "cfg": panel.cfg_var.get(), "vae": panel.vae_var.get(), "width": panel.width_var.get(),
+        "height": panel.height_var.get(), "preset": panel.resolution_preset_var.get(),
+    }
+
+
+def test_klein_to_sdxl_round_trip_restores_the_exact_previous_non_default_values(tk_root: tk.Tk) -> None:
+    panel = _panel(tk_root, "forge_webui")
+    try:
+        before = _configure_non_default_sdxl(panel)
+        panel.model_var.set(KLEIN)
+        assert _snapshot(panel) != before and panel.steps_var.get() == 4  # Klein values are in effect
+        panel.model_var.set("sdxl.safetensors")
+        assert _snapshot(panel) == before
+        assert panel._klein_projection._saved_values == {} and panel._klein_projection._saved_states == {}
+    finally:
+        panel.destroy()
+
+
+def test_repeated_refresh_while_klein_is_active_never_overwrites_the_snapshot(tk_root: tk.Tk) -> None:
+    panel = _panel(tk_root, "forge_webui")
+    try:
+        before = _configure_non_default_sdxl(panel)
+        panel.model_var.set(KLEIN)
+        for _ in range(3):
+            panel._klein_projection.refresh()
+        panel.model_var.set(KLEIN)  # re-selecting Klein is not a new transition either
+        panel.model_var.set("sdxl.safetensors")
+        assert _snapshot(panel) == before
+    finally:
+        panel.destroy()
+
+
+def test_a_second_klein_session_snapshots_the_values_at_that_time(tk_root: tk.Tk) -> None:
+    panel = _panel(tk_root, "forge_webui")
+    try:
+        _configure_non_default_sdxl(panel)
+        panel.model_var.set(KLEIN)
+        panel.model_var.set("sdxl.safetensors")
+        panel.steps_var.set(21)
+        panel.cfg_var.set(4.0)
+        panel.model_var.set(KLEIN)
+        panel.model_var.set("sdxl.safetensors")
+        assert (panel.steps_var.get(), panel.cfg_var.get()) == (21, 4.0)
+    finally:
+        panel.destroy()
+
+
 def test_a1111_selection_shows_the_blocking_message_in_the_panel(tk_root: tk.Tk) -> None:
     panel = _panel(tk_root, "a1111_webui")
     try:

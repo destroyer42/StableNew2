@@ -17,6 +17,16 @@ from src.image_backends.image_backend_types import configured_image_backend_id
 
 logger = logging.getLogger(__name__)
 
+_VALUE_VARS = (
+    "sampler_var",
+    "scheduler_var",
+    "steps_var",
+    "cfg_var",
+    "vae_var",
+    "width_var",
+    "height_var",
+    "resolution_preset_var",
+)
 _LOCKABLE = (
     "_sampler_combo",
     "_scheduler_combo",
@@ -41,6 +51,7 @@ class KleinPanelProjection:
         self._saved_states: dict[str, str] = {}
         self._saved_presets: tuple[str, ...] | None = None
         self._saved_helper = ""
+        self._saved_values: dict[str, Any] = {}
         self._added_presets: list[str] = []
         self.last_projection: KleinControlProjection = project_klein_controls(None, None)
 
@@ -86,6 +97,13 @@ class KleinPanelProjection:
             self._saved_presets = tuple(combo["values"]) if combo is not None else None
             helper = getattr(panel, "_helper_label", None)
             self._saved_helper = str(helper.cget("text")) if helper is not None else ""
+            # The actual previous values (taken once, on the first transition into Klein; never overwritten
+            # while Klein stays active) so leaving Klein restores exactly what the operator had.
+            self._saved_values = {
+                name: getattr(panel, name).get()
+                for name in _VALUE_VARS
+                if getattr(panel, name, None) is not None
+            }
             self._active = True
         panel.sampler_var.set(projection.sampler)
         panel.scheduler_var.set(projection.scheduler)
@@ -137,6 +155,12 @@ class KleinPanelProjection:
         helper = getattr(panel, "_helper_label", None)
         if helper is not None:
             helper.configure(text=self._saved_helper)
+        for name, value in self._saved_values.items():
+            getattr(panel, name).set(value)
+        self._saved_values = {}  # transient: cleared once restored
+        self._saved_states = {}
+        self._saved_presets = None
+        self._saved_helper = ""
         self._active = False
 
 

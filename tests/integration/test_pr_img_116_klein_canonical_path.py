@@ -36,6 +36,7 @@ MODULES = [
     {"model_name": "sdxl_vae.safetensors", "filename": "/data/models/VAE/sdxl_vae.safetensors"},
 ]
 PROFILE = {"id": KLEIN_PROFILE_ID, "version": 1}
+_STUB_IDENTITY = {"transformer": {"name": KLEIN, "verified": "sha256"}}
 
 
 @pytest.fixture(autouse=True)
@@ -45,6 +46,8 @@ def _qualified_host(monkeypatch: pytest.MonkeyPatch) -> None:
         "read_host_memory",
         lambda: HostMemorySnapshot(total_bytes=34_107_092_992, available_bytes=17_000_000_000),
     )
+    # The byte-level asset identity is proven by dedicated tests; here it is stubbed (12 GB are never hashed).
+    monkeypatch.setattr(forge_backend_module, "verify_klein_assets", lambda profile: _STUB_IDENTITY)
     # The configured backend is an explicit, non-default operator setting.
     monkeypatch.setattr("src.pipeline.klein_edit_reprocess.configured_image_backend_id", lambda: "forge_webui")
     monkeypatch.setattr("src.image_backends.image_backend_types.configured_image_backend_id", lambda: "forge_webui")
@@ -395,3 +398,117 @@ def test_compile_policy_output_passes_the_runner_validation() -> None:
     )
     assert config["txt2img"]["steps"] == 4
     assert klein_edit_config(width=1024, height=1024)["width"] == 1024
+
+
+# --------------------------------------------------------------------------- review repair: bytes, not names
+
+
+@pytest.fixture
+def real_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Real byte-level verification against tiny stand-in assets pinned as the profile's identities."""
+
+    import src.image_backends.forge_klein_assets as assets_module
+    import src.image_backends.forge_klein_profile as profile_module
+    from tests.image_backends.test_forge_klein_assets import install, tiny_profile
+
+    profile = tiny_profile()
+    monkeypatch.setitem(profile_module._PROFILES, (KLEIN_PROFILE_ID, 1), profile)
+    data_dir = tmp_path / "forge-data"
+    install(data_dir, profile)
+    assets_module.clear_verified_cache()
+    monkeypatch.setattr(forge_backend_module, "verify_klein_assets", lambda p: assets_module.verify_klein_assets(p, data_dir=data_dir))
+    yield profile, data_dir
+    assets_module.clear_verified_cache()
+
+
+def test_exact_installed_files_dispatch_and_the_observed_identity_is_recorded(real_identity) -> None:
+    profile, _ = real_identity
+    transport = _transport()
+    entry = _run(_t2i_njr(job_id="klein-bytes-ok"), transport)
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    evidence = ((entry.result or {}).get("variants") or [{}])[0]["image_backend_metadata"]["klein_profile"]
+    assert {r: e["sha256"] for r, e in evidence["asset_identity"].items()} == {a.role: a.sha256 for a in profile.assets}
+    assert len(transport.generation_calls) == 1
+
+
+def test_same_name_wrong_bytes_fail_before_any_runtime_write_or_generation(real_identity) -> None:
+    profile, data_dir = real_identity
+    (data_dir / "models" / "VAE" / profile.vae.filename).write_bytes(b"x" * profile.vae.size)
+    transport = _transport()  # Forge's API happily lists the right NAMES
+    entry = _run(_t2i_njr(job_id="klein-bytes-wrong"), transport)
+    assert entry.status is JobStatus.FAILED and "SHA-256" in str(entry.error_message)
+    assert transport.generation_calls == [] and _option_writes(transport) == []
+
+
+def test_a_file_mutated_after_a_verified_job_fails_the_next_job_before_dispatch(real_identity) -> None:
+    import os
+
+    profile, data_dir = real_identity
+    transport = _transport()
+    client = _client(transport)
+    first = run_njr_via_queue(_t2i_njr(job_id="klein-mut-1"), client, timeout_seconds=60.0)
+    assert first.status is JobStatus.COMPLETED, first.error_message
+    target = data_dir / "models" / "text_encoder" / profile.text_encoder.filename
+    stat = target.stat()
+    target.write_bytes(b"q" * profile.text_encoder.size)
+    os.utime(target, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5_000_000))
+    second = run_njr_via_queue(_t2i_njr(job_id="klein-mut-2"), client, timeout_seconds=60.0)
+    assert second.status is JobStatus.FAILED and "SHA-256" in str(second.error_message)
+    assert len(transport.generation_calls) == 1  # only the first job ever dispatched
+
+
+def test_an_unverifiable_runtime_fails_closed_without_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.image_backends.forge_klein_profile import KleinProfileError
+
+    def unverifiable(_profile):
+        raise KleinProfileError("the identity of the Klein model files cannot be established")
+
+    monkeypatch.setattr(forge_backend_module, "verify_klein_assets", unverifiable)
+    transport = _transport()
+    entry = _run(_t2i_njr(job_id="klein-unverifiable"), transport)
+    assert entry.status is JobStatus.FAILED and "cannot be established" in str(entry.error_message)
+    assert transport.generation_calls == []
+
+
+# --------------------------------------------------------------------------- review repair: frozen source
+
+
+def test_an_unchanged_source_passes_the_frozen_digest_check(tmp_path: Path) -> None:
+    njr, source = _edit_njr(tmp_path)
+    entry = _run(njr, _transport())
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    evidence = ((entry.result or {}).get("variants") or [{}])[0]["image_backend_metadata"]["klein_profile"]
+    assert evidence["source_image"]["verified_before_dispatch"] is True
+    assert evidence["source_image"]["sha256"] == evidence["source_image"]["frozen_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
+
+
+def test_a_source_mutated_after_admission_fails_before_the_generation_post(tmp_path: Path) -> None:
+    njr, source = _edit_njr(tmp_path)
+    Image.new("RGB", (768, 1024), (1, 2, 3)).save(source)  # same size, different pixels, after admission
+    transport = _transport()
+    entry = _run(njr, transport)
+    assert entry.status is JobStatus.FAILED and "changed after the job was admitted" in str(entry.error_message)
+    assert transport.generation_calls == []
+    # the frozen digest is never refreshed: the immutable NJR still carries the admission-time value
+    frozen = njr.provenance.metadata["reprocess"]["source_items"][0]["metadata"][KLEIN_EDIT_METADATA_KEY]["source_image_sha256"]
+    assert frozen != hashlib.sha256(source.read_bytes()).hexdigest()
+
+
+def test_a_missing_source_fails_before_the_generation_post(tmp_path: Path) -> None:
+    njr, source = _edit_njr(tmp_path)
+    source.unlink()
+    transport = _transport()
+    entry = _run(njr, transport)
+    assert entry.status is JobStatus.FAILED
+    assert transport.generation_calls == []
+
+
+def test_an_edit_without_a_frozen_digest_is_refused() -> None:
+    from types import SimpleNamespace
+
+    from src.image_backends.forge_klein_profile import KleinProfileError
+    from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
+
+    request = SimpleNamespace(input_image_path=Path("x.png"), context_metadata={"provenance": {"reprocess": {"source_items": []}}})
+    with pytest.raises(KleinProfileError, match="frozen SHA-256"):
+        ForgeWebUIImageBackend._verify_frozen_source(request)  # type: ignore[arg-type]
