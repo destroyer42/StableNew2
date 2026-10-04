@@ -1,4 +1,4 @@
-"""Run the required positive-list deterministic smoke gate used by CI."""
+"""Run the required positive-list gate used by CI: the smoke list plus the cross-boundary contract suite."""
 
 from __future__ import annotations
 
@@ -24,13 +24,45 @@ REQUIRED_SMOKE_TARGETS = (
 )
 
 
+# Always-required cross-boundary contract suite (PR-DEVEX-CI-110): invariants BETWEEN subsystems, kept small and fast.
+# Feature behavior belongs to the affected lanes (tools/ci/validation_plan.py), not here. Each group names the invariant.
+CONTRACT_GATE_TARGETS = (
+    # immutable job identity survives construction boundaries; foreign backend/profile combinations fail closed
+    "tests/system/test_construction_identity_contract.py",
+    "tests/image_backends/test_image_backend_contract.py",
+    "tests/integration/test_pr_img_forge_100_canonical_path.py::test_identity_mismatch_fails_the_job_before_any_generation_post",
+    "tests/integration/test_pr_img_forge_100_canonical_path.py::test_a1111_njr_on_a1111_endpoint_is_unchanged_by_the_forge_guard",
+    # canonical production path (NJR -> JobService -> SQLite -> run_njr) and queue-first submission: the smoke list above
+    # (core_run_path, TestQueuedModeExecution) plus test_fake_backend_traverses_job_service_sqlite_and_canonical_result in the
+    # image-backend contract file listed first in this group.
+    # replay: new identity, parent lineage
+    "tests/controller/test_pipeline_replay_job_v2.py",
+    "tests/pipeline/test_replay_vs_fresh_v2.py",
+    # runtime ownership: only owned runtimes are mutated; external runtimes are never adopted or stopped
+    "tests/services/test_runtime_transition_service.py",
+    "tests/api/test_webui_process_manager_identity.py",
+    "tests/safety/test_forge_backend_isolation_safety.py",
+    # an ambiguous generation POST is never automatically replayed
+    "tests/api/test_webui_retry_policy_v2.py::test_txt2img_read_timeout_does_not_replay_generation_post",
+    "tests/api/test_webui_retry_policy_v2.py::test_img2img_read_timeout_does_not_replay_generation_post",
+    "tests/api/test_webui_retry_policy_v2.py::test_generic_connection_error_does_not_replay_generation_post",
+    "tests/api/test_webui_retry_policy_v2.py::test_adetailer_remains_single_attempt_on_ambiguous_timeout",
+    "tests/integration/test_pr_img_forge_100_canonical_path.py::test_ambiguous_dispatched_forge_generation_post_is_never_replayed",
+    "tests/pipeline/test_executor_generate_errors.py::test_ambiguous_external_generation_fails_without_recovery_or_replay",
+    # the validation policy that routes every other test
+    "tests/tools/test_ci_validation_plan.py",
+    "tests/tools/test_ci_census_summary.py",
+    "tests/tools/test_ci_previous_evidence.py",
+)
+
+
 def build_command() -> list[str]:
     """Return the pytest arguments after resolving repo-relative node IDs."""
 
     return [
         "-x",
         "-q",
-        *(repository_test_target(target) for target in REQUIRED_SMOKE_TARGETS),
+        *(repository_test_target(target) for target in (*REQUIRED_SMOKE_TARGETS, *CONTRACT_GATE_TARGETS)),
     ]
 
 

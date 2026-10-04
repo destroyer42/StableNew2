@@ -2,22 +2,159 @@ name: StableNew CI
 
 # One workflow per pull-request head: every PR base is covered (including stacked PRs that
 # target another feature branch), so ordinary branch pushes do not start a duplicate run.
-# Use workflow_dispatch for an explicit rerun or recovery.
+# Use workflow_dispatch for an explicit rerun, recovery, a full census of any ref, or release validation.
+#
+# Risk-proportionate validation (PR-DEVEX-CI-110). tools/ci/validation_plan.py (repository-owned policy)
+# classifies the base-to-head change set; this workflow only consumes its plan:
+#   docs-only         -> cheap checks, no Python environment, no tests
+#   executable PR     -> `required` (repository quality + cross-boundary contract gate), then the affected lanes
+#   broad / unbounded -> `required`, then ONE full census (it subsumes the affected lanes; they are not run twice)
+# The full census also runs on main three times a week (cron below; cadence is policy, edit it here),
+# on manual dispatch, and for any PR carrying the `full-census` label or a `[full-census]` head-commit marker.
 on:
   pull_request:
     branches: [ "**" ]
   workflow_dispatch:
+  schedule:
+    - cron: "0 7 * * 1,3,5"  # Mon/Wed/Fri 07:00 UTC; raise the frequency here if routing proves unstable
 
 # A newer head for the same PR (or manual ref) supersedes the run still in flight.
+permissions:
+  contents: read
+  checks: read
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # Required gate: repository truth + lint/types + isolated deterministic tests.
-  # This job MUST pass. Failures are not masked.
+  # Required gate: repository truth + lint/types + the cross-boundary contract suite. This job MUST pass and is
+  # always present (its check name is the branch-protection identity), but it is cheap for docs-only changes.
   required:
     runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.plan.outputs.docs_only }}
+      cheap_path: ${{ steps.plan.outputs.cheap_path }}
+      full_census: ${{ steps.plan.outputs.full_census }}
+      run_affected: ${{ steps.plan.outputs.run_affected }}
+      lanes: ${{ steps.plan.outputs.lanes }}
+      targets: ${{ steps.plan.outputs.targets }}
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Previous-head evidence (docs-only follow-up commits may reuse green evidence)
+      id: prev
+      if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
+      env:
+        GH_TOKEN: ${{ github.token }}
+        REPO: ${{ github.repository }}
+        BEFORE_SHA: ${{ github.event.before }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+      run: |
+        python3 tools/ci/previous_evidence.py --repo "$REPO" --before "$BEFORE_SHA" --base "$BASE_SHA" --github-output "$GITHUB_OUTPUT"
+
+    - name: Classify the change set (validation plan)
+      id: plan
+      env:
+        EVENT: ${{ github.event_name }}
+        BEFORE_SHA: ${{ github.event.before }}
+        PREVIOUS_GREEN: ${{ steps.prev.outputs.green }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ' ') }}
+      run: |
+        set -euo pipefail
+        args=(--event "$EVENT" --github-output "$GITHUB_OUTPUT")
+        if [ "$EVENT" = "pull_request" ]; then
+          args+=(--base "$BASE_SHA" --head "$HEAD_SHA" "--commit-message=$(git log -1 --format=%B "$HEAD_SHA")")
+          for label in $PR_LABELS; do args+=("--label=$label"); done  # '=' form: a value is never parsed as an option
+          if [ "$PREVIOUS_GREEN" = "true" ]; then args+=(--before "$BEFORE_SHA" --previous-green); fi
+        else
+          args+=(--files tools/ci/validation_plan.py)  # periodic/manual runs are always a full census
+        fi
+        python3 tools/ci/validation_plan.py "${args[@]}" | tee "$RUNNER_TEMP/plan.json"  # outside the checkout: it must stay clean
+
+    - name: Cheap documentation checks (docs-only change or docs-only delta over green evidence)
+      if: steps.plan.outputs.cheap_path == 'true'
+      env:
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        BEFORE_SHA: ${{ github.event.before }}
+        REUSE: ${{ steps.plan.outputs.reuse_previous_evidence }}
+      run: |
+        if [ "$REUSE" = "true" ]; then git diff --check "$BEFORE_SHA" "$HEAD_SHA"; else git diff --check "$BASE_SHA...$HEAD_SHA"; fi
+        python3 tools/ci/check_repository_completeness.py
+        python3 tools/ci/check_controller_surface.py
+        python3 tools/ci/ci_truth.py
+
+    - name: Set up Python 3.14
+      if: steps.plan.outputs.cheap_path != 'true'
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.14"
+
+    - name: Install pip tools
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        python -m pip install --upgrade pip
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        pip install pytest ruff==0.14.9 mypy types-requests
+
+    - name: Verify repository completeness
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        python tools/ci/check_repository_completeness.py
+
+    - name: Enforce controller surface ratchet
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        python tools/ci/check_controller_surface.py
+
+    - name: Lint (Ruff) — required
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        ruff check .
+
+    - name: Run mypy smoke gate
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        python tools/ci/run_mypy_smoke.py
+
+    - name: Collect the active test surface in isolation
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        python tools/ci/run_collection_gate.py
+
+    - name: Run required positive-list gate (smoke + cross-boundary contracts)
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        python tools/ci/run_required_smoke.py
+
+    - name: Verify the checkout remains clean
+      if: steps.plan.outputs.cheap_path != 'true'
+      run: |
+        git diff --exit-code
+        test -z "$(git status --porcelain --untracked-files=all)"
+
+    - name: Upload validation plan
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: validation-plan
+        path: ${{ runner.temp }}/plan.json
+
+  # Affected deterministic lanes for a bounded executable PR. Starts only after the required gate succeeds
+  # and is skipped when the full census runs (the census subsumes it). Informational like the census: it
+  # reports without blocking until the routing is proven.
+  affected:
+    needs: required
+    if: needs.required.outputs.run_affected == 'true'
+    runs-on: ubuntu-latest
+    continue-on-error: true
 
     steps:
     - name: Checkout repository
@@ -28,56 +165,38 @@ jobs:
       with:
         python-version: "3.14"
 
+    - name: Install system deps for Tk (required for GUI tests)
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y python3-tk xvfb
+
     - name: Install pip tools
       run: |
         python -m pip install --upgrade pip
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        pip install pytest ruff==0.14.9 mypy types-requests
+        pip install pytest pytest-xvfb pytest-timeout ruff==0.14.9
 
-    - name: Verify repository completeness
+    - name: Write the affected pytest targets
+      env:
+        AFFECTED_TARGETS: ${{ needs.required.outputs.targets }}
       run: |
-        python tools/ci/check_repository_completeness.py
+        printf '%s\n' "$AFFECTED_TARGETS" > affected-targets.txt
+        cat affected-targets.txt
 
-    - name: Enforce controller surface ratchet
-      run: |
-        python tools/ci/check_controller_surface.py
-
-    - name: Lint (Ruff) — required
-      run: |
-        ruff check .
-
-    - name: Run mypy smoke gate
-      run: |
-        python tools/ci/run_mypy_smoke.py
-
-    - name: Collect the active test surface in isolation
-      run: |
-        python tools/ci/run_collection_gate.py
-
-    - name: Run required positive-list smoke gate
-      run: |
-        python tools/ci/run_required_smoke.py
-
-    - name: Verify the checkout remains clean
-      run: |
-        git diff --exit-code
-        test -z "$(git status --porcelain --untracked-files=all)"
-
-    - name: Upload test results
-      uses: actions/upload-artifact@v4
-      if: always()
+    - name: Run the affected lanes (Xvfb)
+      uses: GabrielBB/xvfb-action@v1
       with:
-        name: required-test-results
-        path: |
-          .pytest_cache/
+        run: |
+          python -m pytest -q -rfE --tb=short --timeout=300 @affected-targets.txt
 
-  # Informational gate: the broader configured suite (headless-safe GUI v2,
-  # fake-backend integration, tools, video). It runs to completion (no
-  # --maxfail) with a per-test timeout so one hang cannot mask the census, and
-  # failures are reported without blocking merges. Success output is a concise
-  # summary; failures and errors keep their diagnostics. Promote it to required
-  # only after it is proven green.
+  # Informational gate: the broader configured suite (headless-safe GUI v2, fake-backend integration, tools,
+  # video). It runs to completion (no --maxfail) with a per-test timeout so one hang cannot mask the census, and
+  # failures are reported without blocking merges. Success output is a concise summary; failures and errors
+  # keep their diagnostics. It runs only for broad/unbounded changes, periodically on main, on manual dispatch
+  # and on explicit request, and only after the required gate succeeds. The JUnit timing census is published.
   full-suite:
+    needs: required
+    if: needs.required.outputs.full_census == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
 
@@ -105,7 +224,12 @@ jobs:
       uses: GabrielBB/xvfb-action@v1
       with:
         run: |
-          python -m pytest -q -rfE --tb=short --timeout=300
+          python -m pytest -q -rfE --tb=short --timeout=300 --junitxml=census.xml -o junit_family=xunit2 -o junit_duration_report=total
+
+    - name: Summarize the test census
+      if: always()
+      run: |
+        python tools/ci/census_summary.py census.xml --json census-summary.json >> "$GITHUB_STEP_SUMMARY"
 
     - name: Upload full test results
       uses: actions/upload-artifact@v4
@@ -113,4 +237,6 @@ jobs:
       with:
         name: full-test-results
         path: |
+          census.xml
+          census-summary.json
           .pytest_cache/

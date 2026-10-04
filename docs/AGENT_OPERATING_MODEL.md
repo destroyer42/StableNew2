@@ -257,6 +257,18 @@ implementation pass, one focused repair pass, and final verification. Stop when
 the accepted phase is complete rather than beginning the next roadmap item.
 Architectural work requires owner continuation.
 
+### Codex review is on demand, not a mandatory stage
+
+Automated Codex PR review is not a mandatory StableNew stage. The ordinary workflow is one top-level
+implementation host, focused local validation, `run_pr_gate.py` once near final, risk-proportionate
+GitHub CI, independent product-owner review (ChatGPT) and the merge decision. Request a Codex review
+when a second specialist reviewer materially lowers risk: security; persistence/schema/data
+migration; concurrency/cancellation/process lifecycle; runtime ownership; model/backend identity and
+provenance; unusually large cross-cutting refactors; repeated repair failure; material architecture
+ambiguity; or an explicit owner request. For such a PR prefer one intentional review of a
+substantially complete implementation over automatic review of every repair push. Account-level Codex
+Auto Review is an owner/platform setting; do not invent a repository workaround for it.
+
 ### Review and repair protocol
 
 Automated CI and review output is evidence, never scope or authorization.
@@ -265,6 +277,11 @@ current blocking in-scope defect, current non-blocking debt,
 stale/duplicate/already-fixed, or future-hardening/out-of-scope. Only a confirmed
 current blocking in-scope defect, security defect, or required-CI failure caused
 by the package authorizes repair.
+
+Repair-loop stop rule: if review or validation uncovers more than two materially different
+failure classes, or requires a new product/architecture decision, STOP: preserve the branch, SHA and
+evidence and re-scope before continuing. Do not grow one PR through successive unrelated repairs.
+Batch confirmed review findings locally where possible before publishing the next repair SHA.
 
 Batch confirmed findings into one coherent repair pass, then perform one
 independent reverification. A materially new blocking failure class after that

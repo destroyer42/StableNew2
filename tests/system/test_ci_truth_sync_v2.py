@@ -106,7 +106,7 @@ def test_ci_is_python_312_only_with_no_version_matrix() -> None:
     assert "strategy:" not in workflow
     assert "3.11" not in workflow
     assert "3.12" not in workflow and "3.13" not in workflow
-    assert workflow.count('python-version: "3.14"') == 2  # required + full-suite
+    assert workflow.count('python-version: "3.14"') == 3  # required + affected + full-suite
 
 
 def test_ci_runs_once_per_pull_request_head_including_stacked_prs() -> None:
@@ -125,14 +125,15 @@ def test_superseded_ci_runs_are_cancelled_per_pull_request() -> None:
     assert "github.event.pull_request.number" in concurrency
 
 
-def test_ci_census_is_one_required_job_and_one_full_suite_job() -> None:
+def test_ci_has_one_required_job_one_affected_lane_job_and_one_full_suite_job() -> None:
     jobs = _ci_section("\njobs:")
 
     assert re.findall(r"^  ([a-z][a-z-]*):\s*$", jobs, flags=re.MULTILINE) == [
         "required",
+        "affected",
         "full-suite",
     ]
-    required = _ci_section("  required:", "  full-suite:")
+    required = _ci_section("  required:", "  affected:")
     assert "continue-on-error" not in required  # the required gate is never masked
 
 
@@ -181,13 +182,24 @@ def test_python_314_is_the_sole_runtime_contract_across_current_authorities() ->
         assert "3.11" not in text and "3.12" not in text, workflow.name
 
 
-def test_testing_authority_defines_the_three_validation_levels() -> None:
-    coding = _read("docs/StableNew_Coding_and_Testing_v2.6.md")
+def _truth_module():
+    import importlib.util
 
+    spec = importlib.util.spec_from_file_location("ci_truth_authority", ROOT / "tools" / "ci" / "ci_truth.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_testing_authority_defines_the_three_validation_levels() -> None:
+    """The rules live in tools/ci/ci_truth.py (stdlib, also run by the docs-only cheap path); pytest binds to the same authority."""
+
+    problems = _truth_module().docs_truth_problems(ROOT)
+    assert [p for p in problems if "Level" in p or "Python 3." in p] == []
+    coding = _read("docs/StableNew_Coding_and_Testing_v2.6.md")
     for heading in ("Level 1", "Level 2", "Level 3"):
         assert heading in coding
-    assert "Python 3.14" in coding
-    assert "Python 3.11" not in coding and "Python 3.12" not in coding
 
 
 def test_shutdown_leak_process_test_is_explicit_opt_in() -> None:
@@ -198,11 +210,35 @@ def test_shutdown_leak_process_test_is_explicit_opt_in() -> None:
 
 
 def test_ci_docs_point_to_named_required_smoke_script() -> None:
-    coding = _read("docs/StableNew_Coding_and_Testing_v2.6.md")
-    agents = _read("AGENTS.md")
-    assert "python tools/ci/run_pr_gate.py" in coding
-    assert "python tools/ci/run_pr_gate.py" in agents
-    assert "GitHub required CI" in coding
+    assert _truth_module().docs_truth_problems(ROOT) == []
+    assert "python tools/ci/run_pr_gate.py" in _read("AGENTS.md")
+
+
+def test_the_cheap_docs_path_enforces_the_same_truth_without_the_application_environment() -> None:
+    workflow = _read(".github/workflows/ci.yml")
+    cheap = workflow[workflow.index("Cheap documentation checks") : workflow.index("Set up Python 3.14")]
+    assert "python3 tools/ci/ci_truth.py" in cheap
+    source = _read("tools/ci/ci_truth.py")
+    assert "pytest" not in source.replace("pytest truth tests", "") and "import yaml" not in source  # stdlib only
+
+
+def test_a_docs_edit_that_violates_current_ci_truth_is_detected(tmp_path: Path) -> None:
+    import shutil
+
+    for rel in ("docs/StableNew_Coding_and_Testing_v2.6.md", "AGENTS.md", "STATUS.md", "docs/CODEX_MAP.md"):
+        target = tmp_path / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / rel, target)
+    truth = _truth_module()
+    assert truth.docs_truth_problems(tmp_path) == []
+    coding = tmp_path / "docs/StableNew_Coding_and_Testing_v2.6.md"
+    coding.write_text(coding.read_text(encoding="utf-8").replace("python tools/ci/run_pr_gate.py", "run the gate"), encoding="utf-8")
+    assert any("run_pr_gate" in p for p in truth.docs_truth_problems(tmp_path))
+    status = tmp_path / "STATUS.md"
+    status.write_text(status.read_text(encoding="utf-8") + "\n(one required gate, one informational full-suite job)\n", encoding="utf-8")
+    assert any("pre-CI-110" in p for p in truth.docs_truth_problems(tmp_path))
+    result = __import__("subprocess").run([__import__("sys").executable, str(ROOT / "tools" / "ci" / "ci_truth.py")], capture_output=True, text=True)
+    assert result.returncode == 0  # the real repository currently satisfies its own truth
 
 
 def test_local_pr_gate_delegates_to_each_required_authority() -> None:
