@@ -321,7 +321,12 @@ class ReprocessJobBuilder:
             if is_video
             else ImageWorkloadSpec(
                 **workload_common,
-                backend_options=normalize_image_backend_options(config.get("backend_options")),
+                # The resolved model decides the model profile (central authority): a Klein transformer restored
+                # from an artifact keeps its versioned profile, so the profile envelope cannot be bypassed.
+                backend_options=normalize_image_backend_options(
+                    config.get("backend_options"),
+                    model_name=str(model or config.get("model") or "") or None,
+                ),
             )
         )
         return NormalizedJobRecord(

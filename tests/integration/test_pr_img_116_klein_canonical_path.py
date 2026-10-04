@@ -328,9 +328,12 @@ def test_an_arbitrary_review_image_needs_the_explicit_klein_selection(tmp_path: 
     plan = ReprocessJobBuilder().build_grouped_reprocess_jobs(
         items=[item], stages=["img2img"], fallback_config={}, batch_size=1, output_dir=str(tmp_path / "out")
     )
-    # a Klein-looking name alone is not enough: no explicit selection -> no profile, no Klein freeze
-    assert "model_profile" not in plan.jobs[0].backend_options.get("image", {})
-    assert plan.jobs[0].sampler_name != "Euler" or plan.jobs[0].steps != 4
+    # The explicit selection is what freezes the Klein edit (fixed sampling, one source, frozen source digest) ...
+    job = plan.jobs[0]
+    assert job.sampler_name != "Euler" or job.steps != 4
+    assert KLEIN_EDIT_METADATA_KEY not in job.provenance.metadata["reprocess"]["source_items"][0]["metadata"]
+    # ... but the qualified model never silently becomes unrestricted Forge work: the profile is preserved.
+    assert job.backend_options["image"]["model_profile"] == PROFILE
 
 
 @pytest.mark.parametrize(
@@ -561,3 +564,97 @@ def test_ordinary_forge_work_is_unchanged_when_no_owned_manager_exists(monkeypat
     entry = _run(njr, transport)
     assert entry.status is JobStatus.COMPLETED, entry.error_message
     assert [p for _, p, _ in transport.generation_calls] == ["/sdapi/v1/txt2img"]
+
+
+# --------------------------------------------------------------------------- closeout: profile survives reprocess construction
+
+
+def _artifact_item(tmp_path: Path, *, model: str = KLEIN, prompt: str = "polish the face") -> tuple[ReprocessSourceItem, Path]:
+    """What Review builds from an artifact: the model restored from embedded metadata, NO explicit Klein marker."""
+
+    source = _source_png(tmp_path)
+    return ReprocessSourceItem(input_image_path=str(source), prompt=prompt, model=model), source
+
+
+def _review_default_njr(tmp_path: Path, stages: list[str], *, model: str = KLEIN):
+    item, _ = _artifact_item(tmp_path, model=model)
+    plan = ReprocessJobBuilder().build_grouped_reprocess_jobs(
+        items=[item], stages=stages, fallback_config={}, batch_size=1, pack_name="ReviewReprocess",
+        source="review_tab", output_dir=str(tmp_path / "out"),
+    )
+    assert len(plan.jobs) == 1
+    return plan.jobs[0]
+
+
+def test_build_reprocess_job_stamps_the_profile_from_the_resolved_klein_model(tmp_path: Path) -> None:
+    source = _source_png(tmp_path)
+    njr = ReprocessJobBuilder().build_reprocess_job([source], ["adetailer"], model=KLEIN, output_dir=str(tmp_path / "out"))
+    assert njr.backend_options["image"]["model_profile"] == {"id": "flux2_klein_4b_fp8", "version": 1}
+    assert njr.backend_options["image"]["backend_id"] == "forge_webui"
+
+
+@pytest.mark.parametrize("stages", [["adetailer"], ["upscale"], ["img2img", "adetailer"]])
+def test_review_default_reprocess_of_a_klein_artifact_keeps_the_profile_and_fails_before_dispatch(tmp_path: Path, stages: list[str]) -> None:
+    njr = _review_default_njr(tmp_path, stages)
+    assert njr.backend_options["image"]["model_profile"] == {"id": "flux2_klein_4b_fp8", "version": 1}
+    transport = _transport()
+    entry = _run(njr, transport)
+    assert entry.status is JobStatus.FAILED and "FLUX.2 Klein 4B FP8" in str(entry.error_message)
+    assert transport.generation_calls == [] and _option_writes(transport) == []  # no generation, no options mutation
+
+
+def test_an_unmarked_klein_img2img_cannot_bypass_the_profile_validation(tmp_path: Path) -> None:
+    njr = _review_default_njr(tmp_path, ["img2img"])
+    assert njr.backend_options["image"]["model_profile"]["id"] == "flux2_klein_4b_fp8"  # not silently unrestricted Forge work
+    transport = _transport()
+    entry = _run(njr, transport)
+    assert entry.status is JobStatus.FAILED and "FLUX.2 Klein 4B FP8" in str(entry.error_message)
+    assert transport.generation_calls == [] and _option_writes(transport) == []
+
+
+def test_an_unmarked_klein_img2img_without_a_frozen_source_digest_is_refused_even_if_the_envelope_matches(tmp_path: Path) -> None:
+    """Even with every sampling field coincidentally in range, only the explicit edit path freezes the source digest."""
+
+    item, _ = _artifact_item(tmp_path)
+    item.config = klein_edit_config(width=768, height=1024)  # envelope-conforming config, but no Klein edit marker
+    plan = ReprocessJobBuilder().build_grouped_reprocess_jobs(
+        items=[item], stages=["img2img"], fallback_config={}, batch_size=1, output_dir=str(tmp_path / "out"))
+    transport = _transport()
+    entry = _run(plan.jobs[0], transport)
+    assert entry.status is JobStatus.FAILED
+    assert "frozen SHA-256" in str(entry.error_message) or "FLUX.2 Klein 4B FP8" in str(entry.error_message)
+    assert transport.generation_calls == []
+
+
+def test_the_explicit_klein_edit_path_is_unchanged_and_still_valid(tmp_path: Path) -> None:
+    njr, _source = _edit_njr(tmp_path)
+    assert njr.backend_options["image"]["model_profile"] == PROFILE
+    entry = _run(njr, _transport())
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+
+
+def test_sdxl_reprocess_receives_no_klein_profile_and_still_runs(tmp_path: Path) -> None:
+    sdxl_modules = [{"model_name": "sdxl_vae.safetensors", "filename": "/models/VAE/sdxl_vae.safetensors"}]
+    njr = _review_default_njr(tmp_path, ["img2img"], model="sdxl.safetensors")
+    assert njr.backend_options["image"] == {"backend_id": "forge_webui"}  # exactly as before: no profile key
+    transport = FakeWebUITransport(flavor="forge", modules=sdxl_modules)
+    entry = _run(njr, transport)
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    assert [p for _, p, _ in transport.generation_calls] == ["/sdapi/v1/img2img"]
+    assert "klein_profile" not in str(((entry.result or {}).get("variants") or [{}])[0].get("image_backend_metadata", {}))
+    for stages in (["adetailer"], ["upscale"]):
+        assert "model_profile" not in _review_default_njr(tmp_path, stages, model="sdxl.safetensors").backend_options["image"]
+
+
+def test_a_klein_model_on_a1111_keeps_its_profile_and_is_rejected_not_rerouted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from src.api.client import SDWebUIClient
+
+    monkeypatch.setattr("src.image_backends.image_backend_types.configured_image_backend_id", lambda: "a1111_webui")
+    njr = _review_default_njr(tmp_path, ["img2img"])
+    assert njr.backend_options["image"] == {"backend_id": "a1111_webui", "model_profile": PROFILE}  # profile preserved, backend not switched
+    transport = FakeWebUITransport(flavor="a1111", checkpoint=KLEIN)
+    a1111 = SDWebUIClient(base_url="http://127.0.0.1:7860", options_write_enabled=True)
+    a1111._session.request = transport  # type: ignore[method-assign]
+    entry = run_njr_via_queue(njr, a1111, timeout_seconds=60.0)
+    assert entry.status is JobStatus.FAILED and "requires the 'forge_webui' backend" in str(entry.error_message)
+    assert transport.generation_calls == []
