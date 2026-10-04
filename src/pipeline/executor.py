@@ -169,16 +169,17 @@ _MAX_STAGE_STEPS = 150
 POST_RECOVERY_HEALTH_CHECK_TIMEOUT_SEC = 30.0
 POST_RECOVERY_GRACE_WINDOW_SEC = 120.0
 
-# Per-stage stall interrupt overrides.  ADetailer has a short expected runtime
-# (14 steps, ~5-30s on typical hardware) so we can interrupt much sooner than
-# the default STALL_INTERRUPT_THRESHOLD_SEC used for txt2img / img2img.
+# Per-stage sampling/no-progress hard-stall overrides. ADetailer extension work
+# after nominal sampling completion is bounded by the client's transport timeout.
 STALL_INTERRUPT_THRESHOLD_BY_STAGE: dict[str, float] = {
     "adetailer": 45.0,
 }
-# If WebUI reports completion progress but the blocking request never returns,
+# For ordinary stages, if WebUI reports completion but the request never returns,
 # treat that as a separate end-of-request stall and interrupt sooner.
 POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC = 20.0
 POST_INTERRUPT_STALL_GRACE_SEC = 30.0
+
+
 EXTERNAL_WEBUI_STALL_ACTION_REQUIRED = "EXTERNAL_WEBUI_STALL_ACTION_REQUIRED"
 _EXTERNAL_WEBUI_STALL_ACTION = (
     "Restart or stop the external A1111 instance, then restore readiness."
@@ -1127,6 +1128,15 @@ class Pipeline:
             return []
         return [str(stage or "") for stage in self._current_stage_chain[index + 1 :]]
 
+    @staticmethod
+    def _manager_supports_launch_profile(manager: Any, profile: str | None) -> bool:
+        """Whether the manager's own configuration can apply ``profile`` (a manager that cannot say: yes)."""
+
+        supports = getattr(manager, "supports_launch_profile", None)
+        if not callable(supports):
+            return True
+        return bool(supports(profile))
+
     def _maybe_apply_workload_launch_policy(
         self,
         *,
@@ -1167,6 +1177,27 @@ class Pipeline:
             recommended == "standard" or app_config.is_guarded_webui_launch_profile(current_profile)
         ):
             return str(current_profile or recommended or "standard")
+
+        if manager is not None and not self._manager_supports_launch_profile(manager, recommended):
+            # The recommendation is an optimization: a manager whose qualified launch authority does not
+            # declare this profile keeps running exactly as launched. Pressure/admission still decide
+            # whether the stage may proceed.
+            log_with_ctx(
+                logger,
+                logging.WARNING,
+                f"[executor/launch-policy] {stage_name} workload prefers {recommended}, "
+                "which this runtime does not support; keeping its qualified launch command",
+                ctx=LogContext(subsystem="pipeline", stage=stage_name),
+                extra_fields={
+                    "event": "workload_launch_profile_unsupported",
+                    "outcome": "recommendation_not_applied",
+                    "current_profile": current_profile,
+                    "recommended_profile": recommended,
+                    "runtime_identity": getattr(manager, "runtime_identity", None),
+                    "model_name": requested_model,
+                },
+            )
+            return str(current_profile or "standard")
 
         log_with_ctx(
             logger,
@@ -1589,6 +1620,15 @@ class Pipeline:
             },
         )
 
+        # Independent runtime authorities need explicit ownership resolution;
+        # restarting our own runtime cannot safely resolve another tree.
+        if "duplicate_process" in self._runtime_cause_codes(runtime_state):
+            raise self._build_runtime_admission_error(
+                stage_name=stage_name,
+                runtime_state=runtime_state,
+                pressure_assessment=pressure_assessment,
+            )
+
         pressure_status = str((pressure_assessment or {}).get("status") or "normal")
         runtime_state, recovery_trace = self._attempt_runtime_soft_recovery(
             stage_name=stage_name,
@@ -1601,18 +1641,35 @@ class Pipeline:
         if status == "healthy":
             return runtime_state
 
+        if "duplicate_process" in self._runtime_cause_codes(runtime_state):
+            raise self._build_runtime_admission_error(
+                stage_name=stage_name,
+                runtime_state=runtime_state,
+                pressure_assessment=pressure_assessment,
+            )
+
         launch_profile = str(runtime_state.get("launch_profile") or "")
         guarded_active = app_config.is_guarded_webui_launch_profile(launch_profile)
         cause_codes = set(self._runtime_cause_codes(runtime_state))
         has_unsafe_pressure = "unsafe_pressure" in cause_codes or pressure_status == "unsafe"
         should_force_guarded = pressure_status in {"high_pressure", "unsafe"} and not guarded_active
+        # A guarded restart is only possible on a manager that declares that profile; otherwise the
+        # runtime keeps its qualified command and the existing pressure/admission checks below decide.
+        guarded_supported = self._manager_supports_launch_profile(
+            get_global_webui_process_manager(), "sdxl_guarded"
+        )
+        force_guarded_restart = should_force_guarded and guarded_supported
+        if should_force_guarded and not guarded_supported:
+            recovery_trace.append(
+                {"step": "launch_profile_unsupported", "profile": "sdxl_guarded", "applied": False}
+            )
         should_attempt_recovery = (
             status == "poisoned" and not has_unsafe_pressure
-        ) or should_force_guarded
+        ) or force_guarded_restart
         if should_attempt_recovery and self._attempt_webui_recovery(
             stage=stage_name,
             reason="runtime_poisoned_or_guarded_required",
-            profile_override="sdxl_guarded" if should_force_guarded else None,
+            profile_override="sdxl_guarded" if force_guarded_restart else None,
         ):
             try:
                 if hasattr(self.client, "clear_runtime_failure_state"):
@@ -1628,7 +1685,7 @@ class Pipeline:
                 {
                     "step": "restart",
                     "success": True,
-                    "profile_override": "sdxl_guarded" if should_force_guarded else None,
+                    "profile_override": "sdxl_guarded" if force_guarded_restart else None,
                 }
             ]
             recovered_status = str(runtime_state.get("status") or "healthy")
@@ -1879,6 +1936,15 @@ class Pipeline:
             logger.warning(
                 "Executor recovery requested for %s but no WebUI process manager is available",
                 reason,
+            )
+            return False
+        if profile_override and not self._manager_supports_launch_profile(manager, profile_override):
+            logger.warning(
+                "Executor WebUI recovery for stage=%s reason=%s skipped: the manager does not "
+                "support launch profile %s; its runtime was left untouched",
+                stage,
+                reason,
+                profile_override,
             )
             return False
         logger.warning(
@@ -2382,6 +2448,10 @@ class Pipeline:
         Emits a warning after PROGRESS_STALL_THRESHOLD_SEC without meaningful
         progress, then sends at most one interrupt at the stage hard threshold
         measured from that same last-meaningful-progress timestamp.
+
+        ADetailer's nominal completed sampling signal enters extension-active
+        work, not response completion. Only a new generation marker returns it
+        to sampling checks; the original POST's transport timeout remains its bound.
         """
         highest_progress = 0.0
         last_progress_time = time.monotonic()
@@ -2394,6 +2464,8 @@ class Pipeline:
         latest_progress: float = 0.0
         latest_current_step: int | None = None
         latest_total_steps: int | None = None
+        completion_response_threshold = POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC
+        progress_phase = "sampling"
 
         def escalate_if_due(now: float) -> None:
             nonlocal escalation_attempted
@@ -2476,7 +2548,7 @@ class Pipeline:
                 info = self.client.get_progress(skip_current_image=True)
 
                 if info is None:
-                    # WebUI is idle — either between jobs or restarted mid-call.
+                    # Idle does not prove ADetailer's extension chain has returned.
                     # Reset stall tracking so a fresh generation starting from 0%
                     # is not pre-judged as stalled by stale counters.
                     if last_active_generation_marker is not None or interrupt_sent:
@@ -2484,18 +2556,20 @@ class Pipeline:
                             "Poll loop: WebUI idle signal received for %s — resetting stall state",
                             stage_label,
                         )
-                    if stall_interrupt_time is None:
+                    if stall_interrupt_time is None and progress_phase != "adetailer_extension_active":
                         last_current_step = None
                         last_active_generation_marker = None
                         interrupt_sent = False
                         highest_progress = 0.0
+                        progress_phase = "sampling"
                         last_stall_log_time = 0.0
                         last_progress_time = time.monotonic()
                     else:
                         # Idle progress after an interrupt does not prove the
                         # original blocking POST has returned. Preserve this
                         # exact request's grace clock until the caller sets the
-                        # stop event on request completion.
+                        # stop event on request completion. In extension-active state
+                        # this is a no-op unless a real interrupt already occurred.
                         escalate_if_due(time.monotonic())
                 else:
                     observed_progress = max(
@@ -2536,6 +2610,18 @@ class Pipeline:
                     if newer_active_generation:
                         highest_progress = 0.0
                         last_current_step = None
+                        progress_phase = "sampling"
+                        logger.info(
+                            "[executor/progress-marker] stage=%s job_id=%s marker=%r "
+                            "timestamp_utc=%s progress=%.3f step=%s/%s",
+                            stage_label,
+                            self._current_job_id,
+                            active_generation_marker,
+                            datetime.utcnow().isoformat() + "Z",
+                            observed_progress,
+                            current_step,
+                            total_steps,
+                        )
 
                     progress_advanced = observed_progress > highest_progress
                     step_advanced = bool(
@@ -2626,9 +2712,21 @@ class Pipeline:
                         and total_steps is not None
                         and current_step >= total_steps
                     )
-                    ordinary_generation_active = (
-                        highest_progress > 0 and highest_progress < 0.99 and not completed_steps
-                    )
+                    if progress_phase == "sampling" and (completed_steps or highest_progress >= 0.99):
+                        progress_phase = (
+                            "adetailer_extension_active" if stage_label == "adetailer"
+                            else "response_completion"
+                        )
+                        logger.info(
+                            "[executor/progress-phase] stage=%s job_id=%s phase=%s "
+                            "timestamp_utc=%s monotonic=%.6f",
+                            stage_label,
+                            self._current_job_id,
+                            progress_phase,
+                            datetime.utcnow().isoformat() + "Z",
+                            time.monotonic(),
+                        )
+                    ordinary_generation_active = highest_progress > 0 and progress_phase == "sampling"
                     effective_hard_threshold = STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(
                         stage_label, STALL_INTERRUPT_THRESHOLD_SEC
                     )
@@ -2640,9 +2738,8 @@ class Pipeline:
                         ordinary_generation_active
                         and elapsed_since_progress >= effective_hard_threshold
                     )
-                    completion_stalled = (
-                        elapsed_since_progress >= POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC
-                        and (completed_steps or highest_progress >= 0.99)
+                    completion_stalled = elapsed_since_progress >= completion_response_threshold and (
+                        progress_phase == "response_completion"
                     )
                     if warning_due or hard_interrupt_due or completion_stalled:
                         now = time.monotonic()
@@ -2663,7 +2760,7 @@ class Pipeline:
                                     current_step,
                                     total_steps,
                                     elapsed_since_progress,
-                                    POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC,
+                                    completion_response_threshold,
                                     interrupt_threshold,
                                     interrupt_sent,
                                 )
@@ -2700,7 +2797,7 @@ class Pipeline:
                                 logger.error(
                                     "PR-HARDEN-004: Completion stall for %s exceeded %.0fs — sending interrupt to WebUI",
                                     stage_label,
-                                    POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC,
+                                    completion_response_threshold,
                                 )
                             else:
                                 logger.error(
@@ -2765,6 +2862,15 @@ class Pipeline:
             self._active_managed_stall_escalation = managed_stall_escalation_event
             try:
                 response = self._generate_images(stage, payload)
+                logger.info(
+                    "[executor/response] stage=%s job_id=%s timestamp_utc=%s monotonic=%.6f "
+                    "watchdog_stall=%s",
+                    stage_label,
+                    self._current_job_id,
+                    datetime.utcnow().isoformat() + "Z",
+                    time.monotonic(),
+                    stall_detected_event.is_set(),
+                )
             except Exception as exc:
                 if managed_stall_escalation_event.is_set():
                     if (
@@ -3606,7 +3712,6 @@ class Pipeline:
             "ad_inpaint_height": _coerce_dimension(config.get("ad_inpaint_height"), payload_height),
             "ad_x_offset": 0,  # Disable x tiling
             "ad_y_offset": 0,  # Disable y tiling
-            "ad_mask_only_top_k_largest": True,  # Process only largest detection
             "ad_use_steps": True,
             "ad_steps": get_with_fallback_warning(
                 config, "adetailer_steps", 14, source="run_adetailer"
@@ -3661,7 +3766,6 @@ class Pipeline:
             ),
             "ad_x_offset": 0,  # Disable x tiling
             "ad_y_offset": 0,  # Disable y tiling
-            "ad_mask_only_top_k_largest": True,  # Process only largest detection
             "ad_use_steps": True,
             "ad_steps": config.get("adetailer_hands_steps", 12),
             "ad_use_cfg_scale": True,
@@ -3701,6 +3805,7 @@ class Pipeline:
             "denoising_strength": config.get("adetailer_denoise", 0.4),
             "width": payload_width,
             "height": payload_height,
+            "seed": config.get("seed", -1),
             "alwayson_scripts": {
                 "ADetailer": {
                     "args": [
@@ -3811,6 +3916,7 @@ class Pipeline:
                 poll_interval=0.5,
                 progress_callback=on_adetailer_progress,
                 stage_label="adetailer",
+                cancel_token=cancel_token,
             )
         except Exception:
             logger.error(
@@ -3911,7 +4017,7 @@ class Pipeline:
             # Accumulated stage history from input image
             "stage_history": stage_history,
             # Legacy fields for backward compatibility
-            "requested_seed": config.get("seed", -1),
+            "requested_seed": payload.get("seed", -1),
             "actual_seed": gen_info.get("seed"),
             "actual_subseed": gen_info.get("subseed"),
         }

@@ -182,6 +182,12 @@ class FakeA1111:
             ], 200
         if path == "/sdapi/v1/options":
             return dict(self.options), 200
+        # The runtime identity probe (PR-IMG-FORGE-100) asks like it would a real A1111: flags without any
+        # forge_* key, and no /sd-modules (a Forge-only endpoint).
+        if path == "/sdapi/v1/cmd-flags":
+            return {"api": True, "port": 7860}, 200
+        if path == "/sdapi/v1/sd-modules":
+            return {"detail": "Not Found"}, 404
         if path == "/sdapi/v1/progress":
             return {"progress": 0.0, "eta_relative": 0.0, "state": {}, "current_image": None}, 200
         if path in {"/internal/ping", "/config"}:

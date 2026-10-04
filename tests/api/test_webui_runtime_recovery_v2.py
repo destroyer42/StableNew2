@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from src.api.webui_process_manager import WebUIProcessConfig, WebUIProcessManager
+from src.config import app_config
 
 
 def test_restart_webui_applies_guarded_profile_override(monkeypatch, tmp_path) -> None:
@@ -10,6 +11,8 @@ def test_restart_webui_applies_guarded_profile_override(monkeypatch, tmp_path) -
             working_dir=str(tmp_path),
             launch_profile="standard",
             base_url="http://127.0.0.1:7860",
+            # What the StableNew-managed A1111 configuration declares (build_default_webui_process_config).
+            launch_profile_commands=app_config.get_webui_launch_profile_commands(),
         )
     )
     monkeypatch.setattr(WebUIProcessManager, "owns_process", property(lambda self: True))

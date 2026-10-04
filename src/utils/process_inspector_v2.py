@@ -323,6 +323,37 @@ def collect_gpu_survivor_snapshot(*, timeout_s: float = 1.0) -> dict[str, object
     }
 
 
+def _independent_process_tree_roots(
+    candidates: Sequence[ProcessInfo], processes: Sequence[ProcessInfo]
+) -> list[int]:
+    """Count matching authorities by ancestry, retaining uncertain ancestry as roots.
+
+    Non-matching observed processes can bridge matching parent/descendant PIDs.
+    Missing ancestors never imply a relationship; cyclic ancestry is not safe
+    evidence for merging candidates.
+    """
+    by_pid = {proc.pid: proc for proc in processes}
+    matching_pids = {proc.pid for proc in candidates}
+    roots = []
+    for proc in candidates:
+        parent_pid = proc.parent_pid
+        visited = {proc.pid}
+        matching_ancestor = False
+        while parent_pid is not None:
+            if parent_pid in visited:
+                matching_ancestor = False
+                break
+            visited.add(parent_pid)
+            parent = by_pid.get(parent_pid)
+            if parent is None:
+                break
+            matching_ancestor |= parent_pid in matching_pids
+            parent_pid = parent.parent_pid
+        if not matching_ancestor:
+            roots.append(proc.pid)
+    return sorted(roots)
+
+
 def collect_process_risk_snapshot(
     *,
     rss_mb_threshold: float = 512.0,
@@ -340,6 +371,8 @@ def collect_process_risk_snapshot(
     ]
     webui_processes = [proc for proc in processes if _is_webui_process(proc.cmdline, proc.cwd)]
     comfy_processes = [proc for proc in processes if _is_comfyui_process(proc.cmdline, proc.cwd)]
+    main_tree_roots = _independent_process_tree_roots(significant_main_processes, processes)
+    webui_tree_roots = _independent_process_tree_roots(webui_processes, processes)
 
     suspicious: list[dict[str, object]] = []
     for proc in processes:
@@ -358,9 +391,9 @@ def collect_process_risk_snapshot(
             reasons.append(f"high_rss_{int(rss_mb_threshold)}mb_plus")
         if age_s is not None and age_s >= age_s_threshold and _is_pytest_process(proc.cmdline):
             reasons.append("stale_pytest_process")
-        if len(significant_main_processes) > 1 and proc in significant_main_processes:
+        if len(main_tree_roots) > 1 and proc in significant_main_processes:
             reasons.append("duplicate_stablenew_main")
-        if len(webui_processes) > 1 and is_webui_process:
+        if len(webui_tree_roots) > 1 and is_webui_process:
             reasons.append("duplicate_webui_process")
         if not reasons:
             continue
@@ -379,7 +412,7 @@ def collect_process_risk_snapshot(
     status = "normal"
     if suspicious:
         status = "warning"
-    if len(significant_main_processes) > 1 or len(webui_processes) > 1:
+    if len(main_tree_roots) > 1 or len(webui_tree_roots) > 1:
         status = "critical"
 
     return {
@@ -387,7 +420,11 @@ def collect_process_risk_snapshot(
         "stablenew_like_count": len(processes),
         "main_process_count": len(main_processes),
         "significant_main_process_count": len(significant_main_processes),
+        "significant_main_tree_count": len(main_tree_roots),
+        "significant_main_tree_roots": main_tree_roots,
         "webui_process_count": len(webui_processes),
+        "webui_runtime_tree_count": len(webui_tree_roots),
+        "webui_runtime_tree_roots": webui_tree_roots,
         "comfy_process_count": len(comfy_processes),
         "suspicious_processes": suspicious,
     }

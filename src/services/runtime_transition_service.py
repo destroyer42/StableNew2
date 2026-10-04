@@ -16,17 +16,28 @@ readiness for the requested target, this service reports ``ACTION_REQUIRED`` wit
 guidance and takes no OS action; it does not wait for the external process to disappear.
 
 Target runtime identities are StableNew execution runtimes, never model names:
-``RUNTIME_A1111_WEBUI``, ``RUNTIME_COMFY``, ``RUNTIME_SVD_NATIVE``.
+``RUNTIME_A1111_WEBUI``, ``RUNTIME_FORGE_WEBUI``, ``RUNTIME_COMFY``, ``RUNTIME_SVD_NATIVE``.
+
+A1111 and Forge are two identities occupying ONE WebUI-family runtime slot (one configured endpoint,
+one ``WebUIProcessManager``); there is no second managed owner. The manager declares which identity
+it launched (``runtime_identity``); an external endpoint's identity is observed read-only through
+``webui_runtime_identity`` (endpoint evidence, never process or folder names).
 
 Target-driven release policy (product decision, see the PR-RUNTIME-100 record):
 
-============  ====================================
+============  ==========================================================
 target        conflicting residencies released
-============  ====================================
-a1111_webui   owned Comfy, cached SVD state
-comfy         owned A1111, cached SVD state
-svd_native    owned A1111, owned Comfy
-============  ====================================
+============  ==========================================================
+a1111_webui   owned Forge (if the slot holds one), owned Comfy, SVD cache
+forge_webui   owned A1111 (if the slot holds one), owned Comfy, SVD cache
+comfy         whichever owned WebUI-family runtime, SVD cache
+svd_native    whichever owned WebUI-family runtime, owned Comfy
+============  ==========================================================
+
+External runtimes are immutable: a target external runtime is simply used; a *conflicting* external
+runtime (including an external Forge/A1111 occupying the slot of the other identity, or an
+endpoint that cannot be positively identified when the target is Forge) yields ``ACTION_REQUIRED``;
+unknown ownership causes no mutation.
 
 Nothing is restarted afterward: the target backend's own existing owner remains responsible for
 starting/loading what it needs (``WebUIProcessManager.ensure_running``, the Comfy backend's own
@@ -54,16 +65,29 @@ from enum import Enum
 from typing import Any
 
 RUNTIME_A1111_WEBUI = "a1111_webui"
+RUNTIME_FORGE_WEBUI = "forge_webui"
 RUNTIME_COMFY = "comfy"
 RUNTIME_SVD_NATIVE = "svd_native"
 _SVD_CACHE_RUNTIME = "svd_native_cache"
 
-KNOWN_TRANSITION_TARGETS = frozenset({RUNTIME_A1111_WEBUI, RUNTIME_COMFY, RUNTIME_SVD_NATIVE})
+KNOWN_TRANSITION_TARGETS = frozenset(
+    {RUNTIME_A1111_WEBUI, RUNTIME_FORGE_WEBUI, RUNTIME_COMFY, RUNTIME_SVD_NATIVE}
+)
+
+# The WebUI-family slot is shared by these two identities (one managed owner, one endpoint).
+_WEBUI_FAMILY = (RUNTIME_A1111_WEBUI, RUNTIME_FORGE_WEBUI)
+_OTHER_WEBUI_IDENTITY = {
+    RUNTIME_A1111_WEBUI: RUNTIME_FORGE_WEBUI,
+    RUNTIME_FORGE_WEBUI: RUNTIME_A1111_WEBUI,
+}
 
 # target -> managed process runtimes it must release before dispatch (SVD cache release is
-# separate: every non-SVD target also clears it, see prepare_for).
+# separate: every non-SVD target also clears it, see prepare_for).  For the WebUI-family targets the
+# listed WebUI id is the *other* identity in the shared slot; for comfy/svd_native the A1111 entry
+# stands for whichever WebUI-family runtime StableNew owns.
 _CONFLICTING_MANAGED_RUNTIMES: dict[str, tuple[str, ...]] = {
-    RUNTIME_A1111_WEBUI: (RUNTIME_COMFY,),
+    RUNTIME_A1111_WEBUI: (RUNTIME_COMFY, RUNTIME_FORGE_WEBUI),
+    RUNTIME_FORGE_WEBUI: (RUNTIME_COMFY, RUNTIME_A1111_WEBUI),
     RUNTIME_COMFY: (RUNTIME_A1111_WEBUI,),
     RUNTIME_SVD_NATIVE: (RUNTIME_A1111_WEBUI, RUNTIME_COMFY),
 }
@@ -120,6 +144,13 @@ class RuntimeTransitionError(RuntimeError):
         self.result = result
 
 
+def _managed_webui_identity(manager: Any) -> str:
+    """Identity the single WebUI manager launched; missing/unknown means the legacy A1111."""
+
+    declared = str(getattr(manager, "runtime_identity", "") or "")
+    return declared if declared in _WEBUI_FAMILY else RUNTIME_A1111_WEBUI
+
+
 def _default_webui_manager() -> Any:
     from src.api.webui_process_manager import get_global_webui_process_manager
 
@@ -160,6 +191,17 @@ def _default_webui_endpoint_presence() -> bool:
     return probe_webui_endpoint(base_url, timeout=0.5) != "free"
 
 
+def _default_webui_endpoint_identity() -> str:
+    """Read-only identity of the configured WebUI endpoint; called only when it is occupied."""
+
+    from src.api.webui_runtime_identity import probe_endpoint_runtime_identity
+
+    base_url = _configured_endpoint(
+        "webui_base_url", "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
+    )
+    return probe_endpoint_runtime_identity(base_url).identity
+
+
 def _default_comfy_endpoint_presence() -> bool:
     """Observe only the configured Comfy endpoint; never discover or mutate processes."""
 
@@ -179,6 +221,7 @@ class RuntimeTransitionCoordinator:
     comfy_manager_getter: Callable[[], Any] = field(default=_default_comfy_manager)
     svd_service_factory: Callable[[], Any] = field(default=_default_svd_service)
     webui_endpoint_present: Callable[[], bool] = field(default=_default_webui_endpoint_presence)
+    webui_endpoint_identity: Callable[[], str] = field(default=_default_webui_endpoint_identity)
     comfy_endpoint_present: Callable[[], bool] = field(default=_default_comfy_endpoint_presence)
 
     def prepare_for(self, target: str) -> RuntimeTransitionResult:
@@ -199,9 +242,14 @@ class RuntimeTransitionCoordinator:
         failed = False
 
         for runtime_id in conflicts:
-            state, attempted_this, completed_this, blocker = self._release_managed_runtime(
-                runtime_id
-            )
+            if target in _WEBUI_FAMILY and runtime_id in _WEBUI_FAMILY:
+                state, attempted_this, completed_this, blocker = self._release_other_webui_identity(
+                    target, runtime_id
+                )
+            else:
+                state, attempted_this, completed_this, blocker = self._release_managed_runtime(
+                    runtime_id
+                )
             ownership[runtime_id] = state
             attempted.extend(attempted_this)
             completed.extend(completed_this)
@@ -236,6 +284,91 @@ class RuntimeTransitionCoordinator:
             status=status,
             blockers=tuple(blockers),
         )
+
+    def _release_other_webui_identity(
+        self, target: str, other: str
+    ) -> tuple[RuntimeOwnershipState, list[str], list[str], str | None]:
+        """Clear the shared WebUI-family slot of the *other* identity ahead of ``target``.
+
+        Only a process StableNew owns (the existing ``WebUIProcessManager`` declares which identity
+        it launched) is ever released, through that manager's own ``stop_webui``. An external
+        endpoint is classified read-only: the target identity is simply used, the other identity
+        needs operator action, and an unclassifiable endpoint is tolerated for A1111 (existing
+        A1111-family fork compatibility) but is a blocker for Forge. Never adopts or stops an
+        external process.
+        """
+
+        manager = self.webui_manager_getter()
+        if manager is not None:
+            try:
+                running = bool(manager.is_running())
+                owns = bool(getattr(manager, "owns_process", False))
+            except Exception as exc:  # noqa: BLE001 - a broken probe blocks, it does not mutate
+                return (
+                    RuntimeOwnershipState.EXTERNAL,
+                    [],
+                    [],
+                    f"{other}: could not verify runtime state ({type(exc).__name__}: {exc})",
+                )
+            if running and owns:
+                occupant = _managed_webui_identity(manager)
+                if occupant != other:
+                    # StableNew owns the slot and it already holds the target identity.
+                    return RuntimeOwnershipState.ABSENT, [], [], None
+                try:
+                    manager.stop_webui()
+                    released = not bool(manager.is_running())
+                except Exception as exc:  # noqa: BLE001 - report, never mutate further
+                    return (
+                        RuntimeOwnershipState.OWNED,
+                        [other],
+                        [],
+                        f"{other}: release raised {type(exc).__name__}: {exc}",
+                    )
+                if not released:
+                    return (
+                        RuntimeOwnershipState.OWNED,
+                        [other],
+                        [],
+                        f"{other}: StableNew-owned process did not stop within its own shutdown "
+                        "bound",
+                    )
+                return RuntimeOwnershipState.OWNED, [other], [other], None
+        try:
+            present = bool(self.webui_endpoint_present())
+        except Exception as exc:  # noqa: BLE001 - failed observation is ambiguous, never mutable
+            return (
+                RuntimeOwnershipState.EXTERNAL,
+                [],
+                [],
+                f"{other}: could not verify configured endpoint ({type(exc).__name__}: {exc}); "
+                "treating it as external/ambiguous and taking no action.",
+            )
+        if not present:
+            return (
+                RuntimeOwnershipState.ABSENT
+                if manager is None
+                else RuntimeOwnershipState.NOT_RUNNING
+            ), [], [], None
+        try:
+            observed = str(self.webui_endpoint_identity() or "")
+        except Exception:  # noqa: BLE001 - an unreadable identity is simply unknown
+            observed = ""
+        if observed == target:
+            return RuntimeOwnershipState.ABSENT, [], [], None
+        if observed == other or target == RUNTIME_FORGE_WEBUI:
+            described = other if observed == other else "an external WebUI that is not positively Forge"
+            return (
+                RuntimeOwnershipState.EXTERNAL,
+                [],
+                [],
+                f"{other}: {described} occupies the configured WebUI endpoint, but this job "
+                f"targets {target}. StableNew did not launch it and will not adopt, stop, or "
+                "restart it; close it yourself (or point StableNew at the correct runtime) "
+                "before this job can proceed.",
+            )
+        # target a1111_webui + an endpoint that cannot be classified as Forge: tolerated.
+        return RuntimeOwnershipState.ABSENT, [], [], None
 
     def _release_managed_runtime(
         self, runtime_id: str
@@ -347,6 +480,7 @@ __all__ = [
     "KNOWN_TRANSITION_TARGETS",
     "RUNTIME_A1111_WEBUI",
     "RUNTIME_COMFY",
+    "RUNTIME_FORGE_WEBUI",
     "RUNTIME_SVD_NATIVE",
     "RuntimeOwnershipState",
     "RuntimeTransitionCoordinator",

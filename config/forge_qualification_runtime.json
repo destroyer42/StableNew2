@@ -1,0 +1,333 @@
+{
+  "schema_version": 1,
+  "kind": "forge_qualification_runtime",
+  "package": "PR-IMG-FORGE-100",
+  "purpose": "Evidence-oriented descriptor of the isolated Forge Neo qualification runtime. This is NOT a production runtime/bootstrap contract (that belongs to PR-IMG-FORGE-110 after qualification passes) and nothing in StableNew launches Forge from this file.",
+  "backend_id": "forge_webui",
+  "default_image_backend_id": "a1111_webui",
+  "qualification_status": "INSTALLED_UNQUALIFIED / QUALIFICATION_INFRASTRUCTURE_BLOCKED / ADMISSION_REPAIR_VALIDATED / PROMPT_INTENT_REPAIR_VALIDATED / NEW_PHYSICAL_ATTEMPT_PENDING_OWNER_APPROVAL",
+  "classification": "QUALIFICATION_INFRASTRUCTURE_BLOCKED",
+  "physical_checkpoint": {
+    "stable_sha": "f636f0e9702f0e1c4824353b780cceec05fc0214",
+    "original_matrix_sha256": "cc37bc5067a20a2e972ebe9c6eca3906d2609a2792265582345008c0b9b53cca",
+    "operational_matrix_sha256": "3434b4f36b1027ff750f5a7b2c4f732d73b662f1efdc549ddd599a96df4864c5",
+    "matrix_change": "Only the sole owner-approval execution blocker was cleared; all eight cases/settings/assets unchanged.",
+    "submitted_jobs": 1,
+    "failed_jobs": 1,
+    "failed_job_id": "forge100-3434b4f36b1027ff-A-a1111_webui",
+    "not_submitted_cases": 7,
+    "generation_requests": 0,
+    "blocker": "Owner-adjudicated StableNew infrastructure defect: matching PIDs in one owned Windows venv launcher/serving-child tree were counted as independent runtimes; zero generation dispatches. No Forge image verdict.",
+    "automatic_owned_runtime_restarts": 1,
+    "generation_retries_or_replays": 0,
+    "external_process_mutation": false,
+    "final_queue": "One failed SQLite job; zero queued/running; integrity_check ok; qualification ports released.",
+    "image_parity": "NOT_ASSESSABLE; no image artifacts or contact sheet",
+    "a1111_baseline_packaging_debt": "Current non-blocking environment debt; not the admission cause. Existing mediapipe0.10.14 requires protobuf>=4.25.3,<5 but has3.20.0; opencv-contrib-python4.12.0.88 requires numpy>=2,<2.3 but has1.26.2. No repair or package mutation; inference impact untested.",
+    "evidence": "Machine-local physical-f636f0e-pass1/hold-report.json, evidence-inventory.json, JobService/SQLite result, launch trees and survivor telemetry; qualification document section16.",
+    "next_decision": "Owner acceptance of process-tree admission repair, then authorization of a new physical pass at its accepted source SHA. Preserve terminal failed identity; replacement Pair-A A1111 needs a new job ID and qualification lineage referencing that failure. Generation intent unchanged."
+  },
+  "admission_repair": {
+    "risk_unit": "Independent matching process trees proven by PID/parent-PID ancestry through observed Python intermediates; raw counts preserved. Missing/cyclic ancestry cannot justify collapsing candidates.",
+    "diagnostics_added": [
+      "webui_runtime_tree_count",
+      "webui_runtime_tree_roots",
+      "significant_main_tree_count",
+      "significant_main_tree_roots"
+    ],
+    "recovery": "duplicate_process fails closed before soft recovery or owned restart; re-probe duplicates also block restart. Other established recovery behavior unchanged.",
+    "live_smoke": "PASS: actual managed A1111 raw WebUI PIDs2, tree1, normal risk, healthy admission, zero restarts/non-GETs/generation; owned tree stopped, no adoption.",
+    "failed_job_preservation": "Original SQLite database/result byte hashes unchanged; one failed terminal row, no requeue/reuse/deletion.",
+    "evidence": "Machine-local admission-repair-aa24dba/result.json; qualification document section17.",
+    "physical_generation": "Owner-authorized fresh cohort at 333bdbf passed owned A1111 admission but stopped before network generation dispatch for changed prompt intent; see resumed_physical_checkpoint."
+  },
+  "resumed_physical_checkpoint": {
+    "stable_sha": "333bdbf71113984ecb9a4c1fad9328d6b7a18459",
+    "cohort": "physical-333bdbf-pass2",
+    "operational_matrix_sha256": "d115bc2353d7b612aa2c40d9da89c69b49d28eb8f4a342b137708d35299f7796",
+    "lineage": "resumed physical cohort after admission infrastructure repair; not product replay",
+    "generation_intent": "All eight original cases/settings/assets unchanged; repaired source SHA, new cohort/lineage and explicit approval metadata only.",
+    "classification": "QUALIFICATION_INFRASTRUCTURE_BLOCKED",
+    "failed_job_id": "forge100-d115bc2353d7b612-A-a1111_webui",
+    "submitted_jobs": 1,
+    "failed_jobs": 1,
+    "not_submitted_cases": 7,
+    "generation_requests": 0,
+    "blocker": "Frozen prompt mismatch refused before HTTP dispatch: qualification compile_case omits canonical global-prompt pipeline flags; shared txt2img executor translation omits prompt_optimizer, enabling optimizer defaults. No repair or intent change in this physical pass.",
+    "admission": "Owned launcher35024 -> serving child20748: raw WebUI PIDs2, independent trees1/root35024, normal risk, zero owned restarts.",
+    "retry_evidence": "Zero network generation retries/replays or job resubmissions. Existing client made three local send attempts; the guard refused all before network dispatch. Two local retry attempts are preserved as evidence, not passing generation.",
+    "preservation": "All45 previous cohort files and eight protected A1111/VID-192 files have unchanged byte hashes; old terminal job and seven historical identities untouched.",
+    "final_queue": "One new terminal failed SQLite job; zero queued/running; integrity_check ok and no foreign-key violations; owned tree exited and ports released.",
+    "image_parity": "NOT_ASSESSABLE; no image artifacts/contact sheet. Forge was not launched this pass; no inference on either backend.",
+    "evidence": "Machine-local physical-333bdbf-pass2/hold-report.json, prompt-translation-evidence.json, evidence-inventory.json, frozen NJRs, normal SQLite failed lifecycle and survivor logs; qualification document section18.",
+    "next_decision": "Owner adjudication of bounded canonical prompt-policy/optimizer intent-preservation repair, then separate approval for a fresh physical cohort. Preserve both terminal failed jobs; never retry or requeue them."
+  },
+  "prompt_intent_repair": {
+    "qualification_construction": "compile_case uses canonical apply_global_prompt_policy; recorded global text is frozen and application explicitly disabled for every relevant stage. Matrix generation settings/assets are unchanged.",
+    "global_prompt_policy_source": "frozen_njr",
+    "stage_application_flags": {
+      "apply_global_positive_txt2img": false,
+      "apply_global_negative_txt2img": false,
+      "apply_global_negative_img2img": false,
+      "apply_global_negative_adetailer": false,
+      "apply_global_negative_upscale": false
+    },
+    "prompt_optimizer": {"enabled": false},
+    "shared_translation": "WebUIFamilyImageBackend forwards explicit prompt_optimizer in both txt2img and generic stage translation; identical A1111/Forge intent. Omission still uses established defaults; normal enabled optimizer/global-policy behavior remains intact.",
+    "deterministic_evidence": "Eight frozen-case pre-dispatch previews, including exact face/hand and upscale prompt provenance; Pair-A TEST records traverse JobService/SQLite/run_njr for both backends. Exact character and UTF-8 byte equality; hostile mutable global files do not affect frozen intent. No real HTTP/GPU/runtime.",
+    "retry_classification": "Prior generic RuntimeError triggered existing local retry handling, but all attempts stopped before network dispatch. It was not an ambiguous transport failure; existing generation-outcome-unknown refusal remains unchanged. No retry-policy change.",
+    "historical_evidence": "Both terminal infrastructure-failed jobs, physical-f636f0e-pass1 and physical-333bdbf-pass2 database/result/evidence bytes remain untouched.",
+    "next_decision": "Owner acceptance of repaired source/validation, then renewed authorization for physical cohort3 with fresh identities. No physical cohort3 started; Forge remains unqualified."
+  },
+  "classification_allowed_values": [
+    "QUALIFICATION_INFRASTRUCTURE_BLOCKED",
+    "FORGE_TECHNICAL_PASS / PRODUCT_PARITY_PASS",
+    "FORGE_TECHNICAL_PASS / PRODUCT_PARITY_PENDING",
+    "FORGE_CONDITIONAL",
+    "FORGE_NO_GO"
+  ],
+  "source": {
+    "repository": "https://github.com/Haoming02/sd-webui-forge-classic",
+    "branch": "neo",
+    "commit": "d70373ebcf1a96d210b78cd6f77196459e783e2a",
+    "commit_date": "2026-10-03T14:34:50Z",
+    "discovery_reviewed_commit": "97b26fb404314a11dad7cdde2706da57ea53f4f2",
+    "refetched_on": "2026-10-03",
+    "drift_since_discovery": true,
+    "bounded_review": {
+      "parent": "97b26fb404314a11dad7cdde2706da57ea53f4f2",
+      "commit_message": "bump",
+      "changed_files": [
+        "requirements.txt"
+      ],
+      "exact_change": "comfy-kitchen==0.2.36 -> comfy-kitchen==0.2.37",
+      "classification": "NON_MATERIAL_FOR_FROZEN_FP16_SDXL_MATRIX",
+      "reason": "Forge API, launcher, Python/Torch/CUDA, model/VAE/reference and ControlNet source are unchanged. Kitchen changes affect quantized kernels; the selected checkpoint has only F16 tensors and no quantization keys, and Comfy-Kitchen attention is opt-in and not enabled by the frozen flags. This is source/metadata evidence, not physical parity evidence."
+    },
+    "license": "AGPL-3.0",
+    "lineage_reference_only": "https://github.com/lllyasviel/stable-diffusion-webui-forge",
+    "note": "Owner froze this exact qualification candidate independently of current neo. Verify checkout SHA; never silently advance the pin."
+  },
+  "python": {
+    "requirement": "CPython 3.13.x (upstream tested with 3.13.12)",
+    "venv": "dedicated qualification venv; never the StableNew venv, the A1111 venv, or the managed Comfy venv",
+    "forbidden_interpreters": [
+      "StableNew application venv (CPython 3.14)",
+      "A1111 venv",
+      "managed Comfy venv"
+    ]
+  },
+  "isolation": {
+    "owns": [
+      "Forge source tree",
+      "Python 3.13 venv",
+      "extensions",
+      "runtime config (config.json/ui-config.json)",
+      "logs and output"
+    ],
+    "must_not_use": [
+      "StableNew venv",
+      "A1111 venv or install tree",
+      "managed Comfy venv",
+      "an existing desktop Forge install"
+    ],
+    "a1111_installation_mutation": "forbidden"
+  },
+  "launch": {
+    "frozen_flags": [
+      "--api",
+      "--port",
+      "<qualification_port>",
+      "--forge-ref-a1111-home",
+      "<existing A1111 root, read-only reference>"
+    ],
+    "qualification_port": 7871,
+    "port_rationale": "StableNew's WebUI discovery scans 7860-7869; a distinct port outside that range keeps the Forge qualification endpoint from being auto-discovered as a default A1111.",
+    "extension_safety_flags_pending_owner_approval": [],
+    "extension_safety_flags_owner_approved": [
+      "--ad-no-huggingface"
+    ],
+    "qualification_runtime_flags_owner_approved": [
+      "--uv",
+      "--skip-install"
+    ],
+    "skip_install_scope": "Qualification only: dependencies were prepared separately; disable extension installers to prevent reinstalling the owner-excluded broken MediaPipe artifact. Not a FORGE-110 production policy.",
+    "extension_safety_flags_rationale": "Owner approved the no-download flag and existing-detector routing for the isolated install/preflight phase. Physical inference remains unauthorized. The extension flag remains explicit and separate from the three core launch flags.",
+    "forbidden_tuning_flags": [
+      "--xformers",
+      "--sage",
+      "--flash",
+      "--cuda-stream",
+      "--pin-shared-memory"
+    ]
+  },
+  "dependency_install": {
+    "authorization_required": "owner (package downloads into the isolated venv only)",
+    "neo_default_torch": "torch==2.13.0+cu130 torchvision==0.28.0+cu130 (modules/launch_utils.py default install command)",
+    "neo_requirements_file": "requirements.txt at the pinned commit (exact pins, includes diffusers 0.37.1, transformers 4.57.6, numpy 2.3.5, fastapi 0.127.1)",
+    "model_downloads": "NOT authorized (checkpoints, VAEs, LoRAs, ControlNet models, detectors)",
+    "historical_bing_su_adetailer_proposed_pins": [
+      "ultralytics==8.3.253",
+      "mediapipe==0.10.31",
+      "rich==14.3.4"
+    ],
+    "current_yolo_dependency_profile": "Reuse installed ultralytics==8.3.253; MediaPipe absent by owner decision; ADetailer-Neo installer disabled. No package changes this pass.",
+    "adetailer_metadata_feasibility": "Historical advertised MediaPipe wheel metadata was contradicted by installed Linux contents. Owner adjudicated MediaPipe outside the accepted YOLO face/hand contract and authorized uninstall without replacement. No formal installed-distribution dependency is missing afterward; both checks report only the known Gradio/Pillow conflict. This does not prove extension registration or inference.",
+    "install_plan_status": "FORGE_INSTALL_WITH_KNOWN_METADATA_CONFLICT / NON_GENERATION_PREFLIGHT_PASS",
+    "install_plan_blocker": "No remaining non-generation runtime blocker. Gradio/Pillow packaging conflict remains. Physical qualification requires owner approval. Historical failed candidates/results are retained below.",
+    "installation_observation": {
+      "snapshot_stage": "HISTORICAL_BEFORE_OWNER_AUTHORIZED_MEDIAPIPE_REMOVAL",
+      "installer_exit": 0,
+      "python": "3.13.16 Windows AMD64",
+      "torch": "2.13.0+cu130",
+      "torchvision": "0.28.0+cu130",
+      "torch_cuda_metadata": "13.0",
+      "gradio": "4.40.0",
+      "pillow": "12.3.0",
+      "mediapipe": "0.10.31",
+      "uv_check_exit": 1,
+      "pip_check_exit": 1,
+      "additional_conflict": "MediaPipe installed wheel platform tag mismatch",
+      "runtime_started": false,
+      "generation_dispatched": false,
+      "evidence": "Machine-local evidence-install-d70373eb; qualification document section 13"
+    },
+    "yolo_profile_observation": {
+      "mediapipe": "UNINSTALLED / NO_REPLACEMENT / NO_RESIDUAL_PACKAGE_OR_DIST_INFO",
+      "package_classification": "FORGE_INSTALL_WITH_KNOWN_METADATA_CONFLICT",
+      "uv_check_exit": 1,
+      "pip_check_exit": 1,
+      "sole_package_conflict": "Gradio 4.40.0 requires Pillow>=8,<11; installed Pillow12.3.0",
+      "runtime_started": true,
+      "listener": "127.0.0.1:7871, qualification-owned process",
+      "runtime_identity": "unknown (cmd-flags HTTP500)",
+      "adetailer_module_import": "Initialized version26.2.0 without MediaPipe",
+      "adetailer_script_registration": "BLOCKED: Namespace has no attribute use_cpu",
+      "managed_runtime_smoke": "NOT_EXECUTED_AFTER_HARD_GATE_STOP",
+      "qualification_owned_runtime_stopped": true,
+      "generation_requests": 0,
+      "evidence": "Machine-local evidence-install-d70373eb/yolo-adjudication; qualification document section 14"
+    },
+    "install_protocol": "Qualification document section 12 records the original protocol; section 13 records its authorized execution and blocking result. Machine-local exact-command proposal in reports/img_forge_100/forge-install-protocol.md. Installation-only --exit and --skip-torch-cuda-test are distinct from subsequent runtime flags.",
+    "neo_profile_observation": {
+      "adetailer_sha": "af228eba7a3f3691a25bcd1fc94aa95e600dd3e6",
+      "extension_installer_executed": false,
+      "mediapipe": "ABSENT / NO_REPLACEMENT / NO_RESIDUAL_FILES",
+      "ultralytics": "8.3.253",
+      "uv_check_exit": 1,
+      "pip_check_exit": 1,
+      "sole_package_conflict": "Gradio 4.40.0 requires Pillow>=8,<11; installed Pillow12.3.0",
+      "package_freeze_unchanged": true,
+      "runtime_identity": "forge_webui from options and sd-modules; cmd-flags HTTP500 remains upstream",
+      "adetailer_registration": "ADetailer / Neo; frozen/live schema agreement",
+      "detectors": "Existing face_yolov8n.pt and hand_yolov8n.pt discovered offline; no downloads",
+      "controlnet": "FORGE_CONTROLNET_RUNTIME_CAPABILITY_PRESENT",
+      "managed_runtime_smoke": "PASS (GUI admission mocked; actual launch, health, identity, ownership, stop)",
+      "qualification_owned_runtime_stopped": true,
+      "generation_requests": 0,
+      "evidence": "Machine-local evidence-install-d70373eb/neo-adetailer-preflight-complete; qualification document section 15"
+    }
+  },
+  "model_reference": {
+    "mechanism": "--forge-ref-a1111-home <A1111 root> (modules/launch_utils.py::configure_a1111_reference)",
+    "mapped_read_only": [
+      "embeddings",
+      "ESRGAN",
+      "Lora",
+      "Stable-diffusion (checkpoints)",
+      "text_encoder",
+      "VAE",
+      "ControlNet",
+      "ControlNetPreprocessor"
+    ],
+    "not_mapped": [
+      "models/adetailer (ADetailer detector directory)",
+      "HuggingFace cache used by the ADetailer extension"
+    ],
+    "consequence": "ADetailer detector models are not made visible by the model reference; see adetailer.detector_resolution."
+  },
+  "adetailer": {
+    "decision": "OWNER_FROZEN_NEO_CANDIDATE_INSTALLED / NON_GENERATION_PREFLIGHT_PASS / NOT_PHYSICALLY_QUALIFIED",
+    "repository": "https://github.com/Haoming02/ADetailer-Neo",
+    "commit": "af228eba7a3f3691a25bcd1fc94aa95e600dd3e6",
+    "version": "Neo",
+    "commit_date": "2026-09-30T21:04:12+08:00",
+    "install_py_dependencies": [
+      "ultralytics==8.3.253",
+      "mediapipe==0.10.35"
+    ],
+    "required_detectors": [
+      "face_yolov8n.pt",
+      "hand_yolov8n.pt"
+    ],
+    "qualification_profile": {
+      "yolo_face": "REQUIRED / QUALIFY (offline API discovery passed; authorized physical pass stopped before inference)",
+      "yolo_hands": "REQUIRED / QUALIFY (offline API discovery passed; authorized physical pass stopped before inference)",
+      "mediapipe_face": "NOT QUALIFIED",
+      "mediapipe_mesh": "NOT QUALIFIED",
+      "mediapipe_eyes": "NOT QUALIFIED",
+      "scope": "Owner-approved YOLO-only qualification. MediaPipe absence is not a StableNew regression; no replacement or source patch."
+    },
+    "mediapipe_substitution": "forbidden (StableNew's accepted contract is the REST payload with YOLO detectors)",
+    "detector_resolution": {
+      "default_source": "torch.hub.download_url_to_file for ten defaults if no_huggingface is false",
+      "offline_flag": "--ad-no-huggingface skips the entire default-download branch, including MediaPipe/Ultralytics URLs",
+      "local_directory_option": "ad_extra_models_dir: pipe-separated directories recursively scanned for .pt/.tflite/.task",
+      "hard_gate": "If face_yolov8n.pt or hand_yolov8n.pt cannot be resolved from an existing local directory, STOP before downloading anything and return the evidence."
+    },
+    "forge_neo_compatibility_review": {
+      "scope": "Frozen source only; no history review, installer or inference",
+      "device": "YOLO uses shared.device; no use_cpu dependency",
+      "mediapipe": "Imports only inside MediaPipe predictors; absent and NOT QUALIFIED",
+      "seed": "get_seed uses p.all_seeds/p.seed; each tab inherits seed or seed+tab index according to existing ad_same_seed_for_each_tab option",
+      "vae": "Forge-aware checkpoint/module overrides; inherited embedded VAE remains representable",
+      "payload": "All active face/hand fields are SAME. Invalid ad_mask_only_top_k_largest is mechanically represented by existing ad_mask_filter_method + ad_mask_k; removed from shared payload. Both frozen schemas forbid that extra key.",
+      "schema_evidence": "tests/data/contracts/adetailer_neo_af228eba_schema.json"
+    },
+    "rejected_candidate": {
+      "repository": "https://github.com/Bing-su/adetailer",
+      "commit": "3a599f5d4607d8f9d8b9fc5a15526197418dae1a",
+      "reason": "Runtime constructor requires shared.cmd_opts.use_cpu absent in frozen Forge Neo; owner rejected without patching."
+    }
+  },
+  "controlnet": {
+    "stage": "none (StableNew has no ControlNet image stage; none is added by this package)",
+    "forge_capability": "built-in extension extensions-builtin/sd_forge_controlnet (script title \"ControlNet\")",
+    "qualification": "read-only: script/script-info and referenced model/module lists observed; FORGE_CONTROLNET_RUNTIME_CAPABILITY_PRESENT. Version route unavailable. No inference, download or StableNew image stage."
+  },
+  "api_surface_reviewed": {
+    "source_file": "modules/api/api.py",
+    "same_contract": [
+      "POST /sdapi/v1/txt2img",
+      "POST /sdapi/v1/img2img",
+      "POST /sdapi/v1/extra-single-image",
+      "GET /sdapi/v1/progress",
+      "POST /sdapi/v1/interrupt",
+      "GET /sdapi/v1/options",
+      "POST /sdapi/v1/options (sd_model_checkpoint handled via checkpoint_change; unknown model raises)",
+      "GET /sdapi/v1/cmd-flags",
+      "GET /sdapi/v1/sd-models",
+      "GET /sdapi/v1/samplers",
+      "GET /sdapi/v1/schedulers",
+      "GET /sdapi/v1/upscalers",
+      "GET /sdapi/v1/scripts",
+      "GET /sdapi/v1/script-info",
+      "POST /sdapi/v1/unload-checkpoint",
+      "POST /sdapi/v1/refresh-checkpoints"
+    ],
+    "different": {
+      "vae_listing": "GET /sdapi/v1/sd-modules (VAE + text encoders, entries {model_name, filename}); there is no /sdapi/v1/sd-vae",
+      "vae_selection": "the sd_vae option is a non-interactive 'Automatic' placeholder; the effective VAE is the forge_additional_modules option (written by module name, read back as file paths); unknown module names are silently dropped",
+      "per_request_vae": "override_settings.sd_vae is handled specially in modules/processing.py (_vae_override); behavior requires physical confirmation"
+    },
+    "identity_evidence": "/sdapi/v1/options mapping contains explicit Forge-only options AND /sdapi/v1/sd-modules list, without conflicting sd-vae signature. cmd-flags is optional corroboration."
+  },
+  "backend_policy": {
+    "durable_identity": "forge_webui",
+    "default_unchanged": "a1111_webui",
+    "historical_records_without_image_backend": "resolve to a1111_webui, never forge_webui",
+    "gui_backend_selector": "none in this package (PR-IMG-130)",
+    "per_stage_backend_selection": "none",
+    "backend_fallback": "none"
+  }
+}

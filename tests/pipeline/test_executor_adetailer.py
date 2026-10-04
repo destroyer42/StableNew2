@@ -1,5 +1,6 @@
 """Test ADetailer metadata generation and apply_global handling."""
 
+import json
 import logging
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
@@ -27,6 +28,95 @@ def _healthy_runtime_admission(monkeypatch):
     monkeypatch.setattr(
         Pipeline, "_ensure_runtime_admissible", lambda *_a, **_k: _HEALTHY_RUNTIME_ADMISSION
     )
+
+
+@pytest.mark.parametrize("requested", [424242, 0, -1, None])
+def test_adetailer_dispatch_and_metadata_use_the_same_requested_seed(requested, tmp_path):
+    pipeline = Pipeline(Mock(), Mock())
+    config = {"adetailer_enabled": True}
+    if requested is not None:
+        config["seed"] = requested
+    original_config = dict(config)
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(pipeline, "_generate_images", return_value={
+            "images": ["result_b64"], "info": json.dumps({"seed": 987654}),
+        }) as generate,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=True),
+        patch("src.pipeline.executor.json.dump") as write_manifest,
+        patch("builtins.open", MagicMock()),
+    ):
+        result = pipeline.run_adetailer(tmp_path / "input.png", "prompt", "negative", config,
+                                       tmp_path / "output", "seed-contract")
+    payload = generate.call_args.args[1]
+    assert payload["seed"] == (-1 if requested is None else requested)
+    assert result["requested_seed"] == result["seeds"]["original_seed"] == payload["seed"]
+    assert result["actual_seed"] == result["seeds"]["final_seed"] == 987654
+    manifest = next(call.args[0] for call in write_manifest.call_args_list
+                    if call.args[0].get("stage") == "adetailer")
+    assert manifest["requested_seed"] == payload["seed"] and manifest["actual_seed"] == 987654
+    assert config == original_config
+
+
+def test_face_and_hand_payload_keys_match_frozen_neo_schema_and_keep_top_k(tmp_path):
+    pipeline = Pipeline(Mock(), Mock())
+    config = {"seed": 424242, "adetailer_enabled": True,
+              "enable_face_pass": True, "enable_hands_pass": True,
+              "ad_mask_k_largest": 2, "ad_hands_mask_k": 4,
+              "adetailer_sampler": "Euler a", "adetailer_scheduler": "Karras",
+              "adetailer_hands_sampler": "Euler a", "adetailer_hands_scheduler": "Karras"}
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(pipeline, "_generate_images", return_value={"images": ["result_b64"]}) as generate,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=True),
+        patch("builtins.open", MagicMock()),
+    ):
+        pipeline.run_adetailer(tmp_path / "input.png", "prompt", "negative", config,
+                               tmp_path / "output", "schema-contract")
+    contract = json.loads((Path(__file__).parents[1] / "data/contracts/adetailer_neo_af228eba_schema.json")
+                          .read_text(encoding="utf-8"))
+    assert contract["source_sha"] == "af228eba7a3f3691a25bcd1fc94aa95e600dd3e6"
+    schema = contract["schema"]
+    assert schema["additionalProperties"] is False
+    args = generate.call_args.args[1]["alwayson_scripts"]["ADetailer"]["args"]
+    assert args[:2] == [True, False]
+    for payload, model, k in zip(args[2:], ("face_yolov8n.pt", "hand_yolov8n.pt"), (2, 4), strict=True):
+        assert set(payload) <= set(schema["properties"])
+        assert payload["ad_model"] == model and payload["ad_tab_enable"] is True
+        assert payload["ad_mask_filter_method"] == "Area" and payload["ad_mask_k"] == k
+        assert payload["ad_sampler"] == "Euler a" and payload["ad_scheduler"] == "Karras"
+
+
+@pytest.mark.parametrize(("face", "hands", "hand_model"), [
+    (True, False, "hand_yolov8n.pt"),
+    (False, True, "hand_yolov8n.pt"),
+    (True, True, "hand_yolov8n.pt"),
+    (True, True, "None"),
+])
+def test_adetailer_callsite_preserves_enabled_units_and_cancel_token_without_a_completion_timer(
+    face, hands, hand_model, tmp_path
+):
+    pipeline = Pipeline(Mock(), Mock())
+    token = Mock()
+    token.is_cancelled.return_value = False
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(pipeline, "_generate_images_with_progress", return_value={
+            "images": ["result_b64"], "info": json.dumps({"seed": 424242}),
+        }) as generate,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=True),
+        patch("builtins.open", MagicMock()),
+    ):
+        pipeline.run_adetailer(tmp_path / "input.png", "prompt", "negative", {
+            "adetailer_enabled": True,
+            "enable_face_pass": face, "enable_hands_pass": hands,
+            "adetailer_hands_model": hand_model, "seed": 424242,
+        }, tmp_path / "output", "unit-grace", cancel_token=token)
+
+    assert "completion_response_threshold_sec" not in generate.call_args.kwargs
+    assert generate.call_args.kwargs["cancel_token"] is token
+    units = generate.call_args.args[1]["alwayson_scripts"]["ADetailer"]["args"][2:]
+    assert [unit["ad_tab_enable"] for unit in units] == [face, hands]
 
 
 def test_adetailer_metadata_apply_global_defined():

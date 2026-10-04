@@ -1,12 +1,14 @@
 """StableNew-owned still-image backend contracts and implementations."""
 
 from src.image_backends.a1111_webui_backend import A1111WebUIImageBackend
+from src.image_backends.forge_webui_backend import ForgeWebUIImageBackend
 from src.image_backends.image_backend_registry import (
     ImageBackendRegistry,
     build_default_image_backend_registry,
 )
 from src.image_backends.image_backend_types import (
     DEFAULT_IMAGE_BACKEND_ID,
+    FORGE_IMAGE_BACKEND_ID,
     ImageBackendCapabilities,
     ImageBackendInterface,
     ImageExecutionRequest,
@@ -18,6 +20,8 @@ from src.image_backends.image_backend_types import (
 __all__ = [
     "A1111WebUIImageBackend",
     "DEFAULT_IMAGE_BACKEND_ID",
+    "FORGE_IMAGE_BACKEND_ID",
+    "ForgeWebUIImageBackend",
     "ImageBackendCapabilities",
     "ImageBackendInterface",
     "ImageBackendRegistry",

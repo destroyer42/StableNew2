@@ -39,6 +39,23 @@ Updated: 2026-10-03
   provenance; `@1.0.0`/`@1.1.0` are byte-identical. Workflows stay experimental. See
   `docs/Subsystems/Video/PR-COMFY-RUNTIME-100_Managed_Comfy_Runtime.md` and
   `docs/runbooks/managed_comfy_runtime.md`.
+- Managed Forge Neo runtime (PR-IMG-FORGE-RUNTIME-100, implemented and physically verified on a local feature
+  branch, not pushed, owner acceptance pending): the hand-qualified Forge environment is replaced by a
+  StableNew-owned runtime rebuilt from nothing - Forge `d70373eb…` and ADetailer-Neo `af228eba…` at exact commits,
+  standard-GIL CPython 3.13, Torch `2.13.0+cu130`, the complete accepted 147-distribution set
+  (`constraints/forge-windows-py313-cu130-neo-d70373eb.txt`, installed `--no-deps`), identity in
+  `config/managed_forge_runtime.json`, built by `scripts/bootstrap_managed_forge_windows.ps1` and drift-checked by
+  `tools/runtime/verify_managed_forge.py` (accepts only the declared Gradio/Pillow `pip check` line).
+  `WebUIProcessManager` stays the only lifecycle authority. One canonical Pair-A Forge job through the managed
+  runtime decodes to pixels identical to the accepted hand-built image (`MANAGED_FORGE_RUNTIME_REPRODUCIBILITY_PASS`).
+  Forge is a supported production still-image backend (PR-IMG-FORGE-110, `FORGE_PRODUCTION_PROMOTION_PASS`),
+  selected by `webui_runtime_identity`/`forge_runtime_profile_path`; A1111 remains the default and the rollback.
+  Capability
+  qualification: Pair B (LoRA) and Pair C (img2img) pass technically on A1111 and managed Forge; Pair D
+  (ADetailer + upscale) halted on the A1111 arm because the production launch-policy restart replaced the
+  qualified runtime command mid-job (a bounded repair package is required before Pair D reruns), so
+  `FORGE_TECHNICAL_QUALIFICATION_PASS` is not reached. See `docs/runbooks/managed_forge_runtime.md` and
+  sections 23-24 of `docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md`.
 - Pre-Forge execution and test truth (PR-TEST-TRUTH-210, current while its PR is open; bounded truth package, not
   a product capability): `build_run_plan_from_njr` is fail-closed - only explicitly enabled, explicitly named
   stages are planned, and a missing/blank stage identity or an empty/all-disabled chain raises `ValueError`
