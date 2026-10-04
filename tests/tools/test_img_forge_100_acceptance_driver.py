@@ -54,7 +54,8 @@ def _process_table(anchor_cwd: str, anchor_cmd: tuple[str, ...]):
 
     def table():
         now = time.time()
-        webui_dir = r"C:\stable-diffusion-webui"
+        # Absolute and outside the checkout on every OS (a "C:\..." literal is a repo-relative name on Linux).
+        webui_dir = str(Path(anchor_cwd).resolve().parent / "stable-diffusion-webui")
         yield inspector.ProcessInfo(10, 1, "python.exe", anchor_cmd, anchor_cwd, now, 120.0, ())
         yield inspector.ProcessInfo(11, 10, "python.exe", ("python.exe", "launch.py", "--api"), webui_dir, now, 80.0, ())
         yield inspector.ProcessInfo(12, 11, "python.exe", ("python.exe", "launch.py", "--api"), webui_dir, now, 3000.0, ())
