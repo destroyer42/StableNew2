@@ -89,8 +89,10 @@ jobs:
       env:
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        BEFORE_SHA: ${{ github.event.before }}
+        REUSE: ${{ steps.plan.outputs.reuse_previous_evidence }}
       run: |
-        git diff --check "$BASE_SHA...$HEAD_SHA"
+        if [ "$REUSE" = "true" ]; then git diff --check "$BEFORE_SHA" "$HEAD_SHA"; else git diff --check "$BASE_SHA...$HEAD_SHA"; fi
         python3 tools/ci/check_repository_completeness.py
         python3 tools/ci/check_controller_surface.py
 

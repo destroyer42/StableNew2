@@ -104,8 +104,8 @@ _RUNTIME_SOURCES = (
 
 #: Ordered (first match wins): pattern -> lanes. Executable-path ownership, source and tests alike.
 LANE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
-    *((pattern, (LANE_RUNTIME, LANE_CORE)) for pattern in _RUNTIME_SOURCES),
-    ("src/image_backends/*", (LANE_IMAGE, LANE_CORE)),
+    *((pattern, (LANE_RUNTIME,)) for pattern in _RUNTIME_SOURCES),
+    ("src/image_backends/*", (LANE_IMAGE,)),
     ("src/api/*", (LANE_IMAGE,)),
     ("src/pipeline/*svd*", (LANE_VIDEO, LANE_CORE)),
     ("src/pipeline/*video*", (LANE_VIDEO, LANE_CORE)),
@@ -125,15 +125,15 @@ LANE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("tests/api/test_webui_launch*", (LANE_RUNTIME,)),
     ("tests/api/test_webui_runtime*", (LANE_RUNTIME,)),
     ("tests/api/*", (LANE_IMAGE,)),
-    ("tests/services/test_runtime*", (LANE_RUNTIME, LANE_CORE)),
-    ("tests/integration/test_pr_runtime*", (LANE_RUNTIME, LANE_CORE)),
-    ("tests/integration/test_pr_img*", (LANE_IMAGE, LANE_CORE)),
+    ("tests/services/test_runtime*", (LANE_RUNTIME,)),
+    ("tests/integration/test_pr_runtime*", (LANE_RUNTIME,)),
+    ("tests/integration/test_pr_img*", (LANE_IMAGE,)),
     ("tests/video/*", (LANE_VIDEO,)),
     ("tests/gui_v2/*", (LANE_GUI,)),
     ("tests/gui/*", (LANE_GUI,)),
     ("tests/tools/test_operator_journey*", (LANE_QUALIFICATION, LANE_GUI)),
     ("tests/tools/*", (LANE_QUALIFICATION,)),
-    ("tests/app/*", (LANE_RUNTIME, LANE_CORE)),
+    ("tests/app/*", (LANE_RUNTIME,)),
     ("tests/*", (LANE_CORE,)),
 )
 

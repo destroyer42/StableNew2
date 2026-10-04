@@ -42,6 +42,17 @@ def test_image_source_and_image_test_route_to_image_and_the_changed_test_runs() 
     assert covered("tests/image_backends/test_forge_klein_profile.py", plan.affected_targets)
 
 
+def test_image_and_runtime_sources_do_not_drag_in_the_whole_core_lane() -> None:
+    """Proportionate routing: the contract gate protects the boundary; core runs only when core source changes."""
+
+    for path in ("src/image_backends/forge_webui_backend.py", "src/api/forge_client.py", "src/api/webui_process_manager.py"):
+        plan = vp.classify([path])
+        assert vp.LANE_CORE not in plan.lanes and not plan.full_census, path
+        assert not covered("tests/controller", plan.affected_targets), path
+    runtime = vp.classify(["src/api/webui_process_manager.py"])
+    assert runtime.lanes == (vp.LANE_RUNTIME,) and covered("tests/services/test_runtime_transition_service.py", runtime.affected_targets)
+
+
 def test_video_source_routes_to_video() -> None:
     plan = vp.classify(["src/video/svd_native.py"])
     assert plan.lanes == (vp.LANE_VIDEO,) and covered("tests/video", plan.affected_targets)
