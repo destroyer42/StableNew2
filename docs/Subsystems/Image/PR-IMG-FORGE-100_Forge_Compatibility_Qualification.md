@@ -1527,3 +1527,27 @@ Model/reasoning recommendation: GPT-6.1 Sol XHigh for the bounded concurrent wat
 Controller surface assessment: no controller changes. Validation uses simulated-clock completion/sampling,
 cancellation, escalation, ownership and non-replay tests, the accepted launch-profile regressions, canonical
 Pair-D driver tests, critical mutations, affected-file Ruff, a mypy baseline comparison and one final PR gate.
+
+The R2 physical result is **PAIR_D_COMPLETION_BOUND_REACHED / QUALIFICATION_INCOMPLETE**. At source
+`d646c32c9c44332185b7ba9e5838212a83d39564`, fresh job
+`forge100r2-D-a1111_webui-d646c32-20261003` reached completed sampling progress at
+`2026-10-04T00:21:35.103335Z`. The watchdog interrupted once at `00:23:05.310Z`, at a 90.2-second
+last-meaningful-progress age. The response returned at `00:23:13.543998Z` after interruption; this is
+**not a measured natural completion time**. Both face and hand detection are logged, but full hand
+inpaint/completion is unproven. Near-bound GPU activity continued with 11,850 MiB peak residency out of
+12,282 MiB. Peak temperature was 64 C; no relevant GPU/display/WHEA event was recorded in the run window.
+
+The qualification observer requested canonical `JobService.cancel_current` on the watchdog hard stop.
+SQLite retains the new job as cancelled. Only txt2img and ADetailer dispatched; no StableNew upscale
+request followed, and no D-Forge job was submitted. No retry, timeout extension, tuning, install or download
+was performed. The owned A1111 tree exited and port 7860 was released; no external runtime was touched.
+SQLite integrity is ok, with no FK violation or active row. Post-run managed Forge `-CheckOnly` passes.
+The 43 files of the prior f517 interrupted run remain byte-identical.
+
+R2 deterministic validation: 163 focused tests pass, both critical mutations produce six failures,
+affected-file Ruff passes, and executor mypy diagnostics equal the clean-source baseline (40 existing
+diagnostics, no additions). The Python 3.14 PR gate passes with 4,611 collected and 184 smoke tests passed.
+The new evidence is under `img_forge_100/physical-d646c32-d-r2/`, with the interim review and validation under
+`completion-stall-r2/`. Accepted A/B/C artifacts remain valid; a final D comparison cannot be produced without
+two naturally completed D artifacts. Further completion-policy or physical-run decisions require owner
+adjudication. This result does not establish a Forge Pair-D failure or technical qualification pass.
