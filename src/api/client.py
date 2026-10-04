@@ -224,19 +224,17 @@ def _log_stage_failure(stage: str, error: str | Exception) -> None:
     )
 
 
-_GENERATION_POST_ENDPOINTS = frozenset({"/sdapi/v1/txt2img", "/sdapi/v1/img2img"})
-# Every POST that makes the WebUI run a generation job (ADetailer rides img2img; upscale uses the
-# extras endpoint). A definite HTTP error response from one of these is never auto-replayed.
-_DISPATCHING_GENERATION_ENDPOINTS = _GENERATION_POST_ENDPOINTS | frozenset(
-    {"/sdapi/v1/extra-single-image"}
+# The one production identity of "a POST that makes the WebUI run a generation job" (ADetailer rides
+# img2img; upscale uses the extras endpoint). Both the ambiguous-transport classifier (never replay a
+# possibly-executed request) and the definite-HTTP-response rule (never replay a refused job) use it.
+_GENERATION_POST_ENDPOINTS = frozenset(
+    {"/sdapi/v1/txt2img", "/sdapi/v1/img2img", "/sdapi/v1/extra-single-image"}
 )
 DEFINITE_HTTP_RESPONSE_FAIL_FAST = "definite_http_response"
 
 
 def _is_generation_post(*, method: str, endpoint: str) -> bool:
-    return (
-        method.upper() == "POST" and endpoint.rstrip("/") in _DISPATCHING_GENERATION_ENDPOINTS
-    )
+    return method.upper() == "POST" and endpoint.rstrip("/") in _GENERATION_POST_ENDPOINTS
 
 
 def _is_ambiguous_generation_transport_failure(
@@ -244,7 +242,7 @@ def _is_ambiguous_generation_transport_failure(
 ) -> bool:
     """Return true only for generation transport failures that may follow dispatch."""
 
-    if method.upper() != "POST" or endpoint.rstrip("/") not in _GENERATION_POST_ENDPOINTS:
+    if not _is_generation_post(method=method, endpoint=endpoint):
         return False
     if isinstance(exc, requests.ConnectTimeout):
         return False
@@ -851,7 +849,7 @@ class SDWebUIClient:
             log_with_ctx(
                 logger,
                 logging.ERROR,
-                f"Request {method.upper()} {url} failed after {retries} attempts",
+                f"Request {method.upper()} {url} failed after {attempts_made or retries} attempts",
                 ctx=context,
                 extra_fields={
                     "error": str(last_exception),

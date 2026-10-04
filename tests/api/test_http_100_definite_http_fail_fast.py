@@ -163,7 +163,73 @@ def test_the_generation_post_set_is_derived_from_the_production_call_paths() -> 
 
     source = Path(client_module.__file__).read_text(encoding="utf-8")
     posted = set(re.findall(r'"post",\s*"(/sdapi/v1/[a-z0-9-]+)"', source))
-    dispatching = {p for p in posted if p in client_module._DISPATCHING_GENERATION_ENDPOINTS}
-    assert dispatching == {"/sdapi/v1/txt2img", "/sdapi/v1/img2img", "/sdapi/v1/extra-single-image"}
-    # the ambiguity (outcome-unknown) set is intentionally unchanged
-    assert client_module._GENERATION_POST_ENDPOINTS == {"/sdapi/v1/txt2img", "/sdapi/v1/img2img"}
+    generating = {"/sdapi/v1/txt2img", "/sdapi/v1/img2img", "/sdapi/v1/extra-single-image"}
+    assert generating <= posted
+    # one canonical identity shared by the definite-HTTP rule and the ambiguous-transport classifier
+    assert client_module._GENERATION_POST_ENDPOINTS == generating
+    assert not hasattr(client_module, "_DISPATCHING_GENERATION_ENDPOINTS")
+
+
+def test_a_fail_fast_500_reports_the_actual_attempt_count(recorder, caplog: pytest.LogCaptureFixture) -> None:
+    recorder.status = 500
+    client = _client()
+    with caplog.at_level("ERROR", logger="src.api.client"), pytest.raises(requests.HTTPError):
+        client._perform_request("post", "/sdapi/v1/txt2img", json={"prompt": "p"}, stage="txt2img", max_retries=3)
+
+    messages = [r.getMessage() for r in caplog.records if "failed after" in r.getMessage()]
+    assert len(recorder.calls) == 1
+    assert messages and "failed after 1 attempts" in messages[0]
+    assert "failed after 3 attempts" not in messages[0]
+
+
+@pytest.mark.parametrize(("endpoint", "stage"), [("/sdapi/v1/extra-single-image", "upscale"), ("/sdapi/v1/txt2img", "txt2img"), ("/sdapi/v1/img2img", "img2img"), ("/sdapi/v1/img2img", "adetailer")])
+@pytest.mark.parametrize("exc_type", [requests.ReadTimeout, requests.ConnectionError])
+def test_transport_loss_after_any_generation_post_is_one_post_and_outcome_unknown(monkeypatch, endpoint, stage, exc_type) -> None:
+    from src.api.client import WebUIGenerationOutcomeUnknownError
+
+    calls: list[str] = []
+
+    def _request(self, method, url, **kwargs):
+        calls.append(method)
+        raise exc_type("response lost after dispatch")
+
+    monkeypatch.setattr("src.api.client.requests.Session.request", _request)
+    client = _client()
+    with pytest.raises(WebUIGenerationOutcomeUnknownError):
+        client._perform_request("post", endpoint, json={"x": 1}, stage=stage)
+    assert calls == ["POST"]
+    assert client.retry_events == []
+
+
+def test_upscale_read_timeout_surfaces_outcome_unknown_with_request_may_have_executed(monkeypatch) -> None:
+    from src.api.client import WebUIGenerationOutcomeUnknownError
+
+    calls: list[str] = []
+
+    def _request(self, method, url, **kwargs):
+        calls.append(method)
+        raise requests.ReadTimeout("upscale response lost")
+
+    monkeypatch.setattr("src.api.client.requests.Session.request", _request)
+    client = _client()
+    with pytest.raises(WebUIGenerationOutcomeUnknownError) as exc_info:
+        client._perform_request("post", "/sdapi/v1/extra-single-image", json={"x": 1}, stage="upscale")
+    assert calls == ["POST"]
+    assert exc_info.value.endpoint == "/sdapi/v1/extra-single-image"
+    assert exc_info.value.attempt_count == 1
+    assert exc_info.value.request_may_have_executed is True
+
+
+def test_upscale_connect_timeout_keeps_its_safe_retry(monkeypatch) -> None:
+    calls: list[str] = []
+
+    def _request(self, method, url, **kwargs):
+        calls.append(method)
+        if len(calls) < 2:
+            raise requests.ConnectTimeout("connection not established")
+        return _Response(200, {"image": "ok"})
+
+    monkeypatch.setattr("src.api.client.requests.Session.request", _request)
+    client = _client()
+    assert client._perform_request("post", "/sdapi/v1/extra-single-image", json={"x": 1}, stage="upscale") is not None
+    assert calls == ["POST", "POST"]  # UPSCALE policy: 2 attempts, the second one proves the retry-safe case
