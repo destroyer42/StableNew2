@@ -171,6 +171,31 @@ StableNew repository root; the evidence directory must not become the applicatio
   ADetailer-Neo warns that it cannot read branch data from a detached HEAD, and gradio rewrites one `.pyi` stub
   in the venv. None changes the package set; the verifier stays green.
 
+## Production selection (PR-IMG-FORGE-110)
+
+Forge is a supported production still-image backend selected by configuration only; A1111 stays the default and
+the rollback. In `presets/settings.json` (machine-local, never committed):
+
+```json
+{
+  "webui_runtime_identity": "forge_webui",
+  "forge_runtime_profile_path": "C:\path\to\forge-profile.json",
+  "webui_base_url": "http://127.0.0.1:7871"
+}
+```
+
+`forge-profile.json` is the output of `verify_managed_forge.py --print-profile` (see Launch). New image work is
+then stamped `forge_webui`, `WebUIProcessManager` launches exactly the profile's command (never an A1111 command or
+profile map), and the runtime identity guard still rejects a job whose backend does not match the endpoint.
+`webui_base_url` must equal the profile endpoint or configuration fails closed.
+
+Rollback: set `webui_runtime_identity` back to `a1111_webui` (and `webui_base_url` to the A1111 endpoint). A job
+that explicitly names a backend keeps it. There is no automatic fallback or retry from Forge to A1111.
+
+Known limitation (tracked separately, not a demonstrated Forge incompatibility): the Pair-D ADetailer -> upscale
+chain is not fully qualified because StableNew's ADetailer progress watchdog can interrupt legitimate long-running
+extension work (see PR-IMG-FORGE-100, sections 24-26).
+
 ## Rollback
 
 Builds are side by side (`neo-<revision8>`). The hand-qualified environment used by PR-IMG-FORGE-100 is not

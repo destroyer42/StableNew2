@@ -1582,3 +1582,27 @@ competing sampling clock, missing new-marker reset or suppressed cancellation pr
 Affected-file Ruff and whitespace checks pass. Mypy matches the clean baseline's 40 existing executor
 diagnostics with no additions. The Python 3.14 PR gate passes: 4,607 collected, 184 smoke passed, Ruff
 and mypy smoke green. The smaller collection replaces superseded R2 timer tests with R3 semantics tests.
+
+## 27. PR-IMG-FORGE-110: production promotion
+
+**`FORGE_PRODUCTION_PROMOTION_PASS`.** The managed Forge runtime is a supported production still-image backend,
+selected by configuration (`webui_runtime_identity: forge_webui`, `forge_runtime_profile_path`, matching
+`webui_base_url`); A1111 remains the default and the explicit rollback. Production changes are minimal:
+`configured_image_backend_id()` stamps new image work with the configured identity (an explicit per-job backend
+always wins; unreadable configuration never selects Forge), and `build_default_webui_process_config` launches the
+managed profile's command for the Forge identity through the same single `WebUIProcessManager` (no A1111 command,
+profile map or auto-detection; endpoint mismatch fails closed). The canonical NJR/queue/runner path, runtime pins,
+prompt/model/replay/cancellation/history semantics and the ADetailer watchdog are unchanged; there is no fallback
+or retry between backends. Operator steps and rollback: `docs/runbooks/managed_forge_runtime.md`.
+
+Smoke (one ordinary canonical txt2img, settings-only selection, frozen Pair-A intent): the job was stamped
+`forge_webui`, the manager launched the managed command, the client was `ForgeWebUIClient`, the job completed in
+16.5 s (ready 32.4 s, VRAM 618 -> 7,740 MiB, 62 C) with no surviving process, and the decoded pixels equal the
+accepted Pair-A Forge image. No matrix, ADetailer or tuning run.
+
+Known limitation, tracked separately: the Pair-D ADetailer -> upscale chain remains incompletely qualified. In the
+A1111 rerun after the lifecycle repair the chain completed to the 1.5x upscale, but ADetailer ran at saturated VRAM
+(about 11.8 of 12.3 GiB; GPU at 100 % but about 55 W) for about 60 s and was interrupted by the watchdog at its 45 s
+completion grace before the hand detector ran. D-Forge has not been run. This is a StableNew watchdog/runtime-
+headroom question, not a demonstrated Forge incompatibility.
+

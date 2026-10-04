@@ -48,7 +48,9 @@ Updated: 2026-10-03
   `tools/runtime/verify_managed_forge.py` (accepts only the declared Gradio/Pillow `pip check` line).
   `WebUIProcessManager` stays the only lifecycle authority. One canonical Pair-A Forge job through the managed
   runtime decodes to pixels identical to the accepted hand-built image (`MANAGED_FORGE_RUNTIME_REPRODUCIBILITY_PASS`).
-  A1111 remains the default image backend; nothing selects managed Forge in production. Capability
+  Forge is a supported production still-image backend (PR-IMG-FORGE-110, `FORGE_PRODUCTION_PROMOTION_PASS`),
+  selected by `webui_runtime_identity`/`forge_runtime_profile_path`; A1111 remains the default and the rollback.
+  Capability
   qualification: Pair B (LoRA) and Pair C (img2img) pass technically on A1111 and managed Forge; Pair D
   (ADetailer + upscale) halted on the A1111 arm because the production launch-policy restart replaced the
   qualified runtime command mid-job (a bounded repair package is required before Pair D reruns), so
