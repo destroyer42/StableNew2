@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-03
+Updated: 2026-10-04
 
 ## Repository
 
@@ -51,11 +51,14 @@ Updated: 2026-10-03
   Forge is a supported production still-image backend (PR-IMG-FORGE-110, `FORGE_PRODUCTION_PROMOTION_PASS`),
   selected by `webui_runtime_identity`/`forge_runtime_profile_path`; A1111 remains the default and the rollback.
   Capability
-  qualification: Pair B (LoRA) and Pair C (img2img) pass technically on A1111 and managed Forge; Pair D
-  (ADetailer + upscale) halted on the A1111 arm because the production launch-policy restart replaced the
-  qualified runtime command mid-job (a bounded repair package is required before Pair D reruns), so
-  `FORGE_TECHNICAL_QUALIFICATION_PASS` is not reached. See `docs/runbooks/managed_forge_runtime.md` and
-  sections 23-24 of `docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md`.
+  qualification (`FORGE_TECHNICAL_QUALIFICATION_PASS`, technical gate only; Forge is not the default): Pairs B (LoRA),
+  C (img2img) and D (txt2img -> ADetailer face+hand -> 1.5x upscale) pass on A1111 and managed Forge. Pair D needed
+  three repairs: the launch-profile ownership repair, R3 ADetailer progress semantics (D100 A1111 arm: natural
+  completion, 127.6 s ADetailer response), and PR-IMG-FORGE-D110 (Forge module-baseline normalization: an ordinary
+  Forge stage reads the endpoint's persisted `forge_additional_modules` and verifiably replaces stale Klein modules
+  before any model load; Klein and A1111 paths are untouched). Known and separate: generic definite-HTTP-error
+  retries are unchanged. See `docs/runbooks/managed_forge_runtime.md` and sections 23-29 of
+  `docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md`.
 - FLUX.2 Klein 4B FP8 target-hardware qualification (PR-IMG-115, local branch, owner review pending,
   `FLUX2_KLEIN_4B_FP8_PASS_CONSTRAINED`, product value pending): on the pinned managed Forge and RTX 4070 Ti 12 GB,
   portrait, 1024x1024 and single-reference edit generations pass cleanly (about 9.7 GiB VRAM peak, no spill, no GPU event);
