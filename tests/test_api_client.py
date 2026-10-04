@@ -283,12 +283,14 @@ class TestSDWebUIClient:
         )
 
 
-def test_generate_images_500_then_connection_loss_is_outcome_unknown_not_crash_recovery():
+def test_generate_images_connection_loss_on_first_post_is_outcome_unknown_not_crash_recovery():
     """A generation POST whose response is lost after dispatch is an unknown outcome.
 
-    PR-HARDEN-008 Phase 2B: it is never replayed and never classified as a WebUI crash, so the
-    runner's crash/connection recovery and queue-retry paths (which would replay the dispatched
-    job) are not triggered; the diagnostics context still identifies the request and session.
+    PR-HARDEN-008 Phase 2B / PR-HTTP-100: it is never replayed and never classified as a WebUI
+    crash, so the runner's crash/connection recovery and queue-retry paths (which would replay the
+    dispatched job) are not triggered; the diagnostics context still identifies the request and
+    session. The lost response is the very first POST outcome; a definite HTTP error response is a
+    different contract (one dispatched attempt, covered by test_http_100_definite_http_fail_fast).
     """
 
     client = SDWebUIClient()
@@ -299,7 +301,6 @@ def test_generate_images_500_then_connection_loss_is_outcome_unknown_not_crash_r
         m.post(
             f"{API_BASE_URL}/sdapi/v1/txt2img",
             [
-                {"status_code": 500, "text": "server fatal error"},
                 {"exc": requests.exceptions.ConnectionError("Connection refused")},
                 {"status_code": 200, "json": {"images": ["must-never-be-requested"]}},
             ],
@@ -307,7 +308,7 @@ def test_generate_images_500_then_connection_loss_is_outcome_unknown_not_crash_r
 
         outcome = client.generate_images(stage="txt2img", payload={})
 
-        assert m.call_count == 2, "the lost-response POST must not be replayed"
+        assert m.call_count == 1, "the lost-response POST must be dispatched once and never replayed"
 
     assert outcome.error is not None
     assert outcome.error.code == GenerateErrorCode.OUTCOME_UNKNOWN
