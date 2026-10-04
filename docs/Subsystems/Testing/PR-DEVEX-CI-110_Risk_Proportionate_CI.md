@@ -226,4 +226,7 @@ PRs the saving shrinks, which the plan artifact (`validation-plan`, one per run)
 ### Evidence reuse
 
 The docs-only follow-up commit that records this evidence is itself the demonstration: its push is a docs-only delta over a head whose
-`required` and `full-suite` check runs completed green, so the run takes the cheap path (recorded in the PR) instead of re-running the census.
+`required` and `full-suite` check runs completed green, so the run takes the cheap path instead of re-running the census. Measured on run
+37214096384 (the evidence commit itself): `required` 14 s; Python setup, pip, lint, mypy, collection, the contract gate and the clean-tree
+check `skipped`; `affected` and `full-suite` `skipped`; the plan artifact records `cheap_path: true`, `reuse_previous_evidence: true` while the
+base-to-head classification stays `full_census_required` (a docs commit does not downgrade it). One billed minute instead of 13-14.
