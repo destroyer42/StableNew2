@@ -1600,8 +1600,8 @@ Smoke (one ordinary canonical txt2img, settings-only selection, frozen Pair-A in
 16.5 s (ready 32.4 s, VRAM 618 -> 7,740 MiB, 62 C) with no surviving process, and the decoded pixels equal the
 accepted Pair-A Forge image. No matrix, ADetailer or tuning run.
 
-Known limitation, tracked separately: the Pair-D ADetailer -> upscale chain remains incompletely qualified. In the
-A1111 rerun after the lifecycle repair the chain completed to the 1.5x upscale, but ADetailer ran at saturated VRAM
-(about 11.8 of 12.3 GiB; GPU at 100 % but about 55 W) for about 60 s and was interrupted by the watchdog at its 45 s
-completion grace before the hand detector ran. D-Forge has not been run. This is a StableNew watchdog/runtime-
-headroom question, not a demonstrated Forge incompatibility.
+Known limitation, tracked separately: Pair D remains incomplete because StableNew's ADetailer progress/watchdog
+semantics interrupt legitimate long-running ADetailer work. In the latest A1111 run, both face and hand detection
+executed, but the request remained active beyond 90.2 seconds after nominal progress completion and was interrupted
+before natural ADetailer completion. Upscale did not execute in that run. D-Forge was not run. This is not evidence
+of a Forge incompatibility (see sections 25-26).
