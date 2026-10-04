@@ -169,9 +169,8 @@ _MAX_STAGE_STEPS = 150
 POST_RECOVERY_HEALTH_CHECK_TIMEOUT_SEC = 30.0
 POST_RECOVERY_GRACE_WINDOW_SEC = 120.0
 
-# Per-stage stall interrupt overrides.  ADetailer has a short expected runtime
-# (14 steps, ~5-30s on typical hardware) so we can interrupt much sooner than
-# the default STALL_INTERRUPT_THRESHOLD_SEC used for txt2img / img2img.
+# Per-stage sampling/no-progress hard-stall overrides. Completion of an
+# ADetailer request gets this basis per enabled detection/inpaint unit.
 STALL_INTERRUPT_THRESHOLD_BY_STAGE: dict[str, float] = {
     "adetailer": 45.0,
 }
@@ -181,19 +180,23 @@ POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC = 20.0
 POST_INTERRUPT_STALL_GRACE_SEC = 30.0
 
 
-def post_progress_response_threshold(stage_label: str | None) -> float:
+def post_progress_response_threshold(
+    stage_label: str | None, *, enabled_units: int = 1
+) -> float:
     """Seconds a stage may sit at completed progress before its still-blocking request is interrupted.
 
     Ordinary stages keep the generic completion grace. A stage with its own hard-stall threshold
     (ADetailer) never gets a completion grace shorter than that threshold: its detection/inpaint
     sub-passes keep WebUI's progress report at 100 % while real work continues inside one request, and an
-    interrupt there ends the remaining ADetailer units early.
+    interrupt there ends the remaining ADetailer units early. The caller knows
+    the enabled units; ordinary stages retain their existing completion grace.
     """
 
     stage = str(stage_label or "")
     return max(
         POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC,
-        STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(stage, 0.0),
+        STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(stage, 0.0)
+        * (max(1, enabled_units) if stage == "adetailer" else 1),
     )
 
 
@@ -2458,6 +2461,7 @@ class Pipeline:
         stall_detected_event: threading.Event | None = None,
         cancel_token: Any | None = None,
         managed_stall_escalation_event: threading.Event | None = None,
+        completion_response_threshold_sec: float | None = None,
     ) -> None:
         """
         Background thread that polls WebUI for progress.
@@ -2477,6 +2481,12 @@ class Pipeline:
         latest_progress: float = 0.0
         latest_current_step: int | None = None
         latest_total_steps: int | None = None
+        completion_response_threshold = (
+            completion_response_threshold_sec
+            if completion_response_threshold_sec is not None
+            else post_progress_response_threshold(stage_label)
+        )
+        completion_response_active = False
 
         def escalate_if_due(now: float) -> None:
             nonlocal escalation_attempted
@@ -2572,6 +2582,7 @@ class Pipeline:
                         last_active_generation_marker = None
                         interrupt_sent = False
                         highest_progress = 0.0
+                        completion_response_active = False
                         last_stall_log_time = 0.0
                         last_progress_time = time.monotonic()
                     else:
@@ -2619,6 +2630,7 @@ class Pipeline:
                     if newer_active_generation:
                         highest_progress = 0.0
                         last_current_step = None
+                        completion_response_active = False
 
                     progress_advanced = observed_progress > highest_progress
                     step_advanced = bool(
@@ -2709,8 +2721,20 @@ class Pipeline:
                         and total_steps is not None
                         and current_step >= total_steps
                     )
+                    if completed_steps or highest_progress >= 0.99:
+                        if not completion_response_active:
+                            logger.info(
+                                "[executor/completion] stage=%s job_id=%s timestamp_utc=%s "
+                                "monotonic=%.6f grace_seconds=%.1f",
+                                stage_label,
+                                self._current_job_id,
+                                datetime.utcnow().isoformat() + "Z",
+                                time.monotonic(),
+                                completion_response_threshold,
+                            )
+                        completion_response_active = True
                     ordinary_generation_active = (
-                        highest_progress > 0 and highest_progress < 0.99 and not completed_steps
+                        highest_progress > 0 and not completion_response_active
                     )
                     effective_hard_threshold = STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(
                         stage_label, STALL_INTERRUPT_THRESHOLD_SEC
@@ -2723,9 +2747,8 @@ class Pipeline:
                         ordinary_generation_active
                         and elapsed_since_progress >= effective_hard_threshold
                     )
-                    completion_response_threshold = post_progress_response_threshold(stage_label)
                     completion_stalled = elapsed_since_progress >= completion_response_threshold and (
-                        completed_steps or highest_progress >= 0.99
+                        completion_response_active
                     )
                     if warning_due or hard_interrupt_due or completion_stalled:
                         now = time.monotonic()
@@ -2813,6 +2836,7 @@ class Pipeline:
         progress_callback: Any | None = None,
         stage_label: str | None = None,
         cancel_token: Any | None = None,
+        completion_response_threshold_sec: float | None = None,
     ) -> dict[str, Any] | None:
         """
         Call generation endpoint with concurrent progress polling.
@@ -2842,12 +2866,22 @@ class Pipeline:
                 stall_detected_event,
                 cancel_token,
                 managed_stall_escalation_event,
+                completion_response_threshold_sec=completion_response_threshold_sec,
             )
 
             # Make the actual generation request (blocking)
             self._active_managed_stall_escalation = managed_stall_escalation_event
             try:
                 response = self._generate_images(stage, payload)
+                logger.info(
+                    "[executor/response] stage=%s job_id=%s timestamp_utc=%s monotonic=%.6f "
+                    "watchdog_stall=%s",
+                    stage_label,
+                    self._current_job_id,
+                    datetime.utcnow().isoformat() + "Z",
+                    time.monotonic(),
+                    stall_detected_event.is_set(),
+                )
             except Exception as exc:
                 if managed_stall_escalation_event.is_set():
                     if (
@@ -3885,6 +3919,10 @@ class Pipeline:
                 self.progress_controller.report_progress("adetailer", percent, eta_text)
 
         # Call adetailer endpoint (internally routes to img2img with ADETAILER_RETRY_POLICY)
+        enabled_units = sum(
+            bool(unit["ad_tab_enable"]) and unit["ad_model"] not in (None, "", "None")
+            for unit in (face_args, hand_args)
+        )
         stage_start = time.monotonic()
         try:
             response = self._generate_images_with_progress(
@@ -3893,6 +3931,10 @@ class Pipeline:
                 poll_interval=0.5,
                 progress_callback=on_adetailer_progress,
                 stage_label="adetailer",
+                cancel_token=cancel_token,
+                completion_response_threshold_sec=post_progress_response_threshold(
+                    "adetailer", enabled_units=enabled_units
+                ),
             )
         except Exception:
             logger.error(

@@ -1501,5 +1501,29 @@ pixels (mean abs diff 6.7 / 6.4). For D the A1111 ADetailer-stage image differs 
 whole frame (mean abs diff 8.5), because the frozen contract runs the outer ADetailer img2img over the full image
 at denoise 0.32 before the per-region unit.
 
-Next (separately authorized): a bounded repair of the launch-policy restart/stall behavior, then Pair D on both
-backends. A1111 remains default; FORGE-110, promotion and publication are not started.
+The launch-profile ownership repair is accepted at `f517a96`: qualified WebUI-family commands cannot be
+replaced by process-global A1111 profiles. Pair D remains incomplete pending natural face-and-hand completion.
+A1111 remains default; FORGE-110, promotion and publication are not started.
+
+## 25. ADetailer completion-response policy (FORGE-100R2)
+
+ADetailer reports completed WebUI sampling progress while its detection/inpaint units can still be working.
+The executor derives a finite response-completion grace from its existing 45-second ADetailer hard-stall
+basis multiplied by the enabled detector units in the actual stage request. One unit retains 45 seconds;
+the frozen face-and-hand request receives 90 seconds. The stage passes that threshold explicitly to the
+progress monitor. Completed progress enters the completion phase, which excludes the ordinary sampling
+hard-stall clock even if a sub-unit resets its step counter. Ordinary sampling stalls and generic 20-second
+completion grace are unchanged. Cancellation remains immediate; managed escalation remains bounded and
+external runtimes are never restarted or killed. Ambiguous dispatched requests are never replayed.
+
+The preserved `forge100r-D-a1111_webui-f517a96` job has a completed SQLite lifecycle and final 1.5x upscale
+artifact, but its ADetailer request was interrupted at a last-meaningful-progress age of 45.3 seconds. Face
+detection is logged; hand execution is not proven. This is interrupted qualification evidence, not a natural
+completion or Pair-D technical pass. Machine-local review and protected evidence hashes are retained under
+`img_forge_100/completion-stall-r2/`; the original evidence remains under `physical-f517a96-d/`.
+
+Execution profile: Standard, local Windows with the existing isolated Python 3.14 test environment.
+Model/reasoning recommendation: GPT-6.1 Sol XHigh for the bounded concurrent watchdog and ownership seam.
+Controller surface assessment: no controller changes. Validation uses simulated-clock completion/sampling,
+cancellation, escalation, ownership and non-replay tests, the accepted launch-profile regressions, canonical
+Pair-D driver tests, critical mutations, affected-file Ruff, a mypy baseline comparison and one final PR gate.

@@ -129,6 +129,74 @@ def test_adetailer_wedged_beyond_its_completion_threshold_is_interrupted_exactly
     assert stalled.times[0] == 45.0
 
 
+@pytest.mark.parametrize("units", [1, 2])
+def test_completion_grace_scales_only_for_adetailer_units(units):
+    assert post_progress_response_threshold("adetailer", enabled_units=units) == 45.0 * units
+    assert post_progress_response_threshold("txt2img", enabled_units=units) == 20.0
+
+
+@pytest.mark.parametrize("stop_after", [45.0, 60.0, 89.0, 90.0, 119.0])
+def test_two_units_do_not_interrupt_at_45_but_interrupt_once_at_the_derived_bound(rig, stop_after):
+    _poll(rig, "adetailer", stop_after=stop_after,
+          completion_response_threshold_sec=post_progress_response_threshold("adetailer", enabled_units=2))
+
+    assert rig.interrupts == ([] if stop_after < 90.0 else [90.0])
+
+
+def test_completed_steps_enter_completion_phase_even_below_99_percent_and_stay_there(rig):
+    def progress(**_kwargs):
+        # ADetailer can reset the step counter between units without a new request marker.
+        return ProgressInfo(0.5, None, 5 if rig.clock.now == 0 else 0, 5, None, {})
+
+    rig.client.get_progress.side_effect = progress
+    _poll(rig, "adetailer", stop_after=89.0, completion_response_threshold_sec=90.0)
+
+    assert rig.interrupts == []  # the sampling hard clock must not fire at 45 s
+
+
+def test_two_unit_grace_does_not_delay_operator_cancellation(rig):
+    token = SimpleNamespace(is_cancelled=lambda: rig.clock.now >= 50.0)
+    _poll(rig, "adetailer", stop_after=100.0, cancel_token=token,
+          completion_response_threshold_sec=90.0)
+
+    assert rig.interrupts == [50.0]
+
+
+@pytest.mark.parametrize(("stop_after", "restarts"), [(119.0, 0), (120.0, 1), (160.0, 1)])
+def test_two_unit_completion_escalation_waits_the_owned_post_interrupt_grace(
+    rig, monkeypatch, stop_after, restarts
+):
+    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: _manager(True))
+    _poll(rig, "adetailer", stop_after=stop_after, completion_response_threshold_sec=90.0)
+    assert rig.interrupts == [90.0]
+    assert manager_restarts == [{"wait_ready": True, "max_attempts": 1}] * restarts
+
+
+def test_two_unit_external_completion_stall_never_mutates_external_runtime(rig, monkeypatch):
+    monkeypatch.setattr("src.pipeline.executor.get_global_webui_process_manager", lambda: _manager(False))
+    _poll(rig, "adetailer", stop_after=160.0, completion_response_threshold_sec=90.0)
+    assert rig.interrupts == [90.0] and manager_restarts == []
+
+
+def test_request_specific_completion_threshold_reaches_the_concurrent_monitor(monkeypatch):
+    pipeline = Pipeline(Mock(), Mock(spec=StructuredLogger))
+    observed = threading.Event()
+    thresholds = []
+
+    def poll(*_args, completion_response_threshold_sec=None):
+        thresholds.append(completion_response_threshold_sec)
+        observed.set()
+
+    def generate(*_args):
+        assert observed.wait(timeout=1.0)
+        return {"images": []}
+
+    monkeypatch.setattr(pipeline, "_poll_progress_loop", poll)
+    monkeypatch.setattr(pipeline, "_generate_images", generate)
+    pipeline._generate_images_with_progress("adetailer", {}, completion_response_threshold_sec=90.0)
+    assert thresholds == [90.0]
+
+
 def test_the_ordinary_adetailer_no_progress_stall_is_unchanged(rig):
     rig.client.get_progress.return_value = ProgressInfo(0.5, None, 10, 20, None, {})
 

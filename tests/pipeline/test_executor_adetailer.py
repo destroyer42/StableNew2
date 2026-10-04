@@ -87,6 +87,38 @@ def test_face_and_hand_payload_keys_match_frozen_neo_schema_and_keep_top_k(tmp_p
         assert payload["ad_sampler"] == "Euler a" and payload["ad_scheduler"] == "Karras"
 
 
+@pytest.mark.parametrize(("face", "hands", "hand_model", "grace"), [
+    (True, False, "hand_yolov8n.pt", 45.0),
+    (False, True, "hand_yolov8n.pt", 45.0),
+    (True, True, "hand_yolov8n.pt", 90.0),
+    (True, True, "None", 45.0),
+])
+def test_adetailer_callsite_passes_actual_enabled_unit_grace_and_cancel_token(
+    face, hands, hand_model, grace, tmp_path
+):
+    pipeline = Pipeline(Mock(), Mock())
+    token = Mock()
+    token.is_cancelled.return_value = False
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="fake_b64"),
+        patch.object(pipeline, "_generate_images_with_progress", return_value={
+            "images": ["result_b64"], "info": json.dumps({"seed": 424242}),
+        }) as generate,
+        patch("src.pipeline.executor.save_image_from_base64", return_value=True),
+        patch("builtins.open", MagicMock()),
+    ):
+        pipeline.run_adetailer(tmp_path / "input.png", "prompt", "negative", {
+            "adetailer_enabled": True,
+            "enable_face_pass": face, "enable_hands_pass": hands,
+            "adetailer_hands_model": hand_model, "seed": 424242,
+        }, tmp_path / "output", "unit-grace", cancel_token=token)
+
+    assert generate.call_args.kwargs["completion_response_threshold_sec"] == grace
+    assert generate.call_args.kwargs["cancel_token"] is token
+    units = generate.call_args.args[1]["alwayson_scripts"]["ADetailer"]["args"][2:]
+    assert [unit["ad_tab_enable"] for unit in units] == [face, hands]
+
+
 def test_adetailer_metadata_apply_global_defined():
     """Ensure apply_global is defined and False in ADetailer metadata."""
     pipeline = Pipeline(Mock(), Mock())
