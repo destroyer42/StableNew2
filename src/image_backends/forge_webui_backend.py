@@ -190,7 +190,8 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             profile, probe=self._memory_probe or read_host_memory
         )
         # What Forge will load, by bytes: the API names below are only supplementary evidence of selection.
-        self._identity[request.job_id] = verify_klein_assets(profile)
+        endpoint = str(getattr(getattr(pipeline, "client", None), "base_url", "") or "")
+        self._identity[request.job_id] = verify_klein_assets(profile, endpoint=endpoint)
         self._assert_assets_listed(pipeline, profile)
         if request.stage_name == "img2img":
             self._verified_source[request.job_id] = self._verify_frozen_source(request)

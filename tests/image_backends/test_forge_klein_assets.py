@@ -13,7 +13,6 @@ import src.image_backends.forge_klein_assets as assets_module
 from src.image_backends.forge_klein_assets import (
     clear_verified_cache,
     data_dir_from_launch_command,
-    resolve_forge_data_dir,
     verify_klein_assets,
 )
 from src.image_backends.forge_klein_profile import KLEIN_PROFILE_V1, KleinAsset, KleinProfileError
@@ -127,31 +126,101 @@ def test_launch_command_data_dir_parsing():
     assert data_dir_from_launch_command(["py", "launch.py"]) is None
 
 
-class _Settings:
-    def __init__(self, path: str) -> None:
-        self.path = path
-
-    def __call__(self, *_a, **_k):
-        return self
-
-    def load_settings(self):
-        return {"forge_runtime_profile_path": self.path}
+ENDPOINT = "http://127.0.0.1:7871"
 
 
-def test_the_data_dir_comes_from_the_existing_runtime_profile_authority(tmp_path, monkeypatch):
+def owned_manager(data_dir, *, identity="forge_webui", owns=True, endpoint=ENDPOINT, command=None):
+    from types import SimpleNamespace
+
+    cmd = command if command is not None else (["py", "launch.py", "--port", "7871", "--data-dir", str(data_dir)] if data_dir else ["py"])
+    return SimpleNamespace(runtime_identity=identity, owns_process=owns, endpoint=endpoint,
+                           launch_session_command=cmd if owns else None)
+
+
+def use_manager(monkeypatch, manager) -> None:
+    monkeypatch.setattr("src.image_backends.forge_klein_assets._active_manager", lambda: manager)
+
+
+def test_owned_managed_forge_with_the_right_endpoint_and_command_passes(tmp_path, monkeypatch):
+    profile = tiny_profile()
+    install(tmp_path, profile)
+    use_manager(monkeypatch, owned_manager(tmp_path))
+    identity = verify_klein_assets(profile, endpoint=ENDPOINT)
+    assert {r: e["sha256"] for r, e in identity.items()} == {a.role: a.sha256 for a in profile.assets}
+    assert verify_klein_assets(profile, endpoint="http://localhost:7871/")["vae"]["cache"] == "hit"  # same endpoint, cache kept
+
+
+@pytest.mark.parametrize(
+    ("manager_kwargs", "fragment"),
+    [
+        ({"manager": None}, "No StableNew WebUI process manager"),  # B: an external Forge with no manager of ours
+        ({"owns": False}, "does not own"),  # C
+        ({"identity": "a1111_webui"}, "not forge_webui"),  # D
+        ({"endpoint": "http://127.0.0.1:7999"}, "not the client endpoint"),  # E
+        ({"command": ["py", "launch.py"]}, "declares no --data-dir"),
+    ],
+)
+def test_anything_but_a_positively_owned_serving_forge_fails_closed(tmp_path, monkeypatch, manager_kwargs, fragment):
+    profile = tiny_profile()
+    install(tmp_path, profile)
+    manager = None if "manager" in manager_kwargs else owned_manager(tmp_path, **manager_kwargs)
+    use_manager(monkeypatch, manager)
+    with pytest.raises(KleinProfileError, match=fragment) as caught:
+        verify_klein_assets(profile, endpoint=ENDPOINT)
+    assert "requires the StableNew-owned managed Forge" in str(caught.value)  # actionable
+
+
+def test_an_empty_client_endpoint_cannot_be_matched(tmp_path, monkeypatch):
+    profile = tiny_profile()
+    install(tmp_path, profile)
+    use_manager(monkeypatch, owned_manager(tmp_path))
+    with pytest.raises(KleinProfileError, match="not the client endpoint"):
+        verify_klein_assets(profile, endpoint="")
+
+
+def test_verification_follows_the_actual_owned_launch_command_not_a_configured_profile(tmp_path, monkeypatch):
     import json
 
+    profile = tiny_profile()
+    actual, configured = tmp_path / "actual-data", tmp_path / "configured-data"
+    install(actual, profile)
+    for a in profile.assets:  # the configured profile tree has WRONG bytes: it must never be consulted
+        target = configured / "models" / a.models_subdir / a.filename
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(b"w" * a.size)
     profile_file = tmp_path / "forge-profile.json"
-    profile_file.write_text(json.dumps({
-        "runtime_identity": "forge_webui", "command": ["py", "launch.py", "--data-dir", str(tmp_path / "data")],
-        "endpoint": "http://127.0.0.1:7871", "working_dir": str(tmp_path),
-    }), encoding="utf-8")
-    monkeypatch.setattr("src.utils.config.ConfigManager", _Settings(str(profile_file)))
-    assert resolve_forge_data_dir() == tmp_path / "data"
+    profile_file.write_text(json.dumps({"command": ["py", "--data-dir", str(configured)]}), encoding="utf-8")
+    monkeypatch.setattr("src.utils.config.ConfigManager", type("C", (), {"load_settings": lambda self: {"forge_runtime_profile_path": str(profile_file)}}))
+    use_manager(monkeypatch, owned_manager(actual))
+    assert verify_klein_assets(profile, endpoint=ENDPOINT)["transformer"]["sha256"] == profile.transformer.sha256
 
 
-@pytest.mark.parametrize("configured", ["", "does-not-exist.json"])
-def test_an_unverifiable_runtime_fails_closed(monkeypatch, configured):
-    monkeypatch.setattr("src.utils.config.ConfigManager", _Settings(configured))
-    with pytest.raises(KleinProfileError, match="cannot be established"):
-        resolve_forge_data_dir()
+def test_wrong_bytes_in_the_owned_data_dir_fail(tmp_path, monkeypatch):
+    profile = tiny_profile()
+    install(tmp_path, profile)
+    (tmp_path / "models" / "VAE" / profile.vae.filename).write_bytes(b"x" * profile.vae.size)
+    use_manager(monkeypatch, owned_manager(tmp_path))
+    with pytest.raises(KleinProfileError, match="SHA-256"):
+        verify_klein_assets(profile, endpoint=ENDPOINT)
+
+
+def test_the_real_manager_exposes_the_launch_session_only_while_it_owns_the_process():
+    from types import SimpleNamespace
+
+    from src.api.webui_process_manager import (
+        WebUIProcessConfig,
+        WebUIProcessManager,
+        clear_global_webui_process_manager,
+    )
+
+    try:
+        manager = WebUIProcessManager(WebUIProcessConfig(command=["py", "--data-dir", "D:/a"], base_url="http://127.0.0.1:7871/", runtime_identity="forge_webui"))
+        assert manager.launch_session_command is None and manager.endpoint == "http://127.0.0.1:7871/"
+        manager._owns_process, manager._process, manager._pid = True, SimpleNamespace(pid=7), 7
+        manager._launch_session_command = ("py", "--data-dir", "D:/a")
+        manager._config.command = ["py", "--data-dir", "D:/changed-later"]  # a later config change must not rewrite the session
+        assert manager.launch_session_command == ["py", "--data-dir", "D:/a"]
+        manager._owns_process = False
+        assert manager.launch_session_command is None
+    finally:
+        clear_global_webui_process_manager()

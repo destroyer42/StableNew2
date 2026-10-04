@@ -243,3 +243,121 @@ def test_review_without_the_klein_selection_is_the_unchanged_reprocess_path(tk_r
         assert call["source_metadata_by_image"] is None
     finally:
         tab.destroy()
+
+
+# --- Review: the Klein checkbox must leave ordinary Review state exactly as it found it -------------------------
+
+
+def _ordinary_review(tab: ReviewTabFrame) -> None:
+    """A deliberately non-default ordinary Review configuration with work in progress in several modes."""
+
+    tab.stage_img2img_var.set(False)
+    tab.stage_adetailer_var.set(True)
+    tab.stage_upscale_var.set(True)
+    tab.batch_size_var.set(4)
+    tab.prompt_mode_var.set("modify")
+    tab.negative_mode_var.set("append")
+    tab.prompt_text.delete("1.0", tk.END)
+    tab.prompt_text.insert("1.0", "modified ordinary prompt")
+    tab.negative_text.delete("1.0", tk.END)
+    tab.negative_text.insert("1.0", "ordinary negative delta")
+
+
+def _review_state(tab: ReviewTabFrame) -> dict:
+    return {
+        "img2img": tab.stage_img2img_var.get(), "adetailer": tab.stage_adetailer_var.get(), "upscale": tab.stage_upscale_var.get(),
+        "prompt_mode": tab.prompt_mode_var.get(), "negative_mode": tab.negative_mode_var.get(), "batch": tab.batch_size_var.get(),
+        "prompt_text": tab.prompt_text.get("1.0", tk.END).strip(), "negative_text": tab.negative_text.get("1.0", tk.END).strip(),
+    }
+
+
+def test_review_klein_check_then_uncheck_is_an_exact_round_trip(tk_root: tk.Tk, tmp_path: Path) -> None:
+    tab, _controller, _ = _review(tk_root, tmp_path)
+    try:
+        _ordinary_review(tab)
+        before = _review_state(tab)
+        tab.klein_edit_var.set(True)
+        assert (tab.stage_img2img_var.get(), tab.stage_adetailer_var.get(), tab.stage_upscale_var.get()) == (True, False, False)
+        assert (tab.prompt_mode_var.get(), tab.negative_mode_var.get(), tab.batch_size_var.get()) == ("replace", "replace", 1)
+        tab.prompt_text.delete("1.0", tk.END)
+        tab.prompt_text.insert("1.0", "change only the jacket to red leather")  # the Klein session types its own prompt
+        tab.klein_edit_var.set(False)
+        assert _review_state(tab) == before  # stages, modes, batch size AND the visible edit boxes are back
+        assert tab._klein_snapshot is None  # transient state cleared
+    finally:
+        tab.destroy()
+
+
+def test_review_klein_repeated_checked_callbacks_keep_the_original_snapshot(tk_root: tk.Tk, tmp_path: Path) -> None:
+    tab, _controller, _ = _review(tk_root, tmp_path)
+    try:
+        _ordinary_review(tab)
+        before = _review_state(tab)
+        tab.klein_edit_var.set(True)
+        for _ in range(3):
+            tab._on_klein_edit_toggled()  # still checked: forced values are now in effect, snapshot must not change
+        tab.klein_edit_var.set(True)
+        tab.klein_edit_var.set(False)
+        assert _review_state(tab) == before
+    finally:
+        tab.destroy()
+
+
+def test_review_second_klein_session_snapshots_the_values_current_at_that_time(tk_root: tk.Tk, tmp_path: Path) -> None:
+    tab, _controller, _ = _review(tk_root, tmp_path)
+    try:
+        _ordinary_review(tab)
+        tab.klein_edit_var.set(True)
+        tab.klein_edit_var.set(False)
+        tab.stage_img2img_var.set(True)
+        tab.stage_upscale_var.set(False)
+        tab.batch_size_var.set(9)
+        tab.negative_mode_var.set("replace")
+        second_before = _review_state(tab)
+        tab.klein_edit_var.set(True)
+        tab.klein_edit_var.set(False)
+        assert _review_state(tab) == second_before
+        assert second_before["batch"] == 9 and second_before["upscale"] is False
+    finally:
+        tab.destroy()
+
+
+def test_review_prompt_edit_contents_stay_coherent_across_modes_after_a_round_trip(tk_root: tk.Tk, tmp_path: Path) -> None:
+    tab, _controller, _ = _review(tk_root, tmp_path)
+    try:
+        tab.prompt_mode_var.set("append")
+        tab.prompt_text.delete("1.0", tk.END)
+        tab.prompt_text.insert("1.0", "append text")
+        tab.prompt_mode_var.set("replace")
+        tab.prompt_text.delete("1.0", tk.END)
+        tab.prompt_text.insert("1.0", "ordinary replace text")
+        tab.prompt_mode_var.set("append")
+        tab.klein_edit_var.set(True)  # Klein forces replace and the user types the edit instruction there
+        tab.prompt_text.delete("1.0", tk.END)
+        tab.prompt_text.insert("1.0", "klein instruction")
+        tab.klein_edit_var.set(False)
+        assert tab.prompt_mode_var.get() == "append" and tab.prompt_text.get("1.0", tk.END).strip() == "append text"
+        tab.prompt_mode_var.set("replace")  # the ordinary replace-mode work was not overwritten by the Klein session
+        assert tab.prompt_text.get("1.0", tk.END).strip() == "ordinary replace text"
+    finally:
+        tab.destroy()
+
+
+def test_review_submit_after_unchecking_uses_the_restored_ordinary_settings(tk_root: tk.Tk, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tkinter import messagebox
+
+    monkeypatch.setattr(messagebox, "showinfo", lambda *a, **k: None)
+    tab, controller, images = _review(tk_root, tmp_path)
+    try:
+        _ordinary_review(tab)
+        tab.klein_edit_var.set(True)
+        tab.klein_edit_var.set(False)
+        tab._reprocess(batch_all=True)
+        (call,) = controller.calls
+        assert call["stages"] == ["adetailer", "upscale"]
+        assert (call["prompt_mode"], call["negative_prompt_mode"], call["batch_size"]) == ("modify", "append", 4)
+        assert call["prompt_delta"] == "modified ordinary prompt" and call["negative_prompt_delta"] == "ordinary negative delta"
+        assert call["source_metadata_by_image"] is None  # no Klein marker once the checkbox is off
+        assert call["image_paths"] == [str(images[0])]
+    finally:
+        tab.destroy()

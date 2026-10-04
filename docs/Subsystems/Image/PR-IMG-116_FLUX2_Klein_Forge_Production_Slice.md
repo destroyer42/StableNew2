@@ -17,6 +17,7 @@ Canonical path (unchanged):
 | Fixed sampling | Euler, Beta, 4 steps, CFG 1.0, empty negative prompt, no global prompt terms, no prompt optimizer |
 | Edit semantics | init image is the one Klein reference, denoise 1.0, no `ImageStitch Integrated` |
 | Qualified geometry | 768x1024 and 1024x1024 (anything else is rejected before dispatch) |
+| Runtime | the StableNew-owned managed Forge only (see "Managed-Forge requirement"); other Forge use is unaffected |
 | Host RAM | the qualified machine class only (see "Host-memory readiness") |
 | Not supported | multi-reference / `ImageStitch`, ADetailer, upscale, hires fix, refiner, LoRA, ControlNet, prompt optimizer, negative prompts, any other sampler/scheduler/steps/CFG, Klein 9B/Base/BF16/GGUF/NVFP4 |
 
@@ -79,15 +80,20 @@ re-verifies it read-only before reuse.
    steps and CFG equal the fixed values; geometry is qualified; no negative prompt, global prompt terms, prompt
    optimizer, hires fix, refiner, LoRA, ControlNet, aesthetic embedding, hypernetwork or foreign VAE; an edit has exactly
    one source image. All conflicts are listed in one error. Nothing is rewritten silently.
-2. **Host memory** (below), then **asset identity by bytes** (`src/image_backends/forge_klein_assets.py`): the three files
-   are located through the existing managed-Forge authority (the `forge_runtime_profile_path` setting -> the launch profile's
-   `--data-dir`; nothing machine-local is persisted in an NJR) and their exact size and SHA-256 are verified against the
-   profile. A verified file is cached keyed by its stat identity (path, size, mtime, ctime, inode, device): first use is
-   hashed, any observed change forces a rehash, so about 12.45 GB is not re-read per job. If no runtime profile can be
-   resolved, Klein fails closed. Forge's API names and the `/options` read-back remain only supplementary evidence of
-   selection. Then **asset availability**: Forge must list the two modules and the checkpoint, otherwise the error names the
-   missing asset and the installer command (the executor otherwise turns stage exceptions into a generic "no images"
-   failure).
+2. **Host memory** (below), then **asset identity by bytes bound to the serving runtime**
+   (`src/image_backends/forge_klein_assets.py`). Qualified Klein v1 requires the **StableNew-owned managed Forge**.
+   Through the existing `WebUIProcessManager` authority the backend establishes that a current manager reports
+   `runtime_identity == "forge_webui"`, currently owns its live launch-session process (`owns_process`), serves the same
+   endpoint the client dispatches to, and that the model data directory is read from the **actual command of that owned
+   launch session** (new read-only `launch_session_command` / `endpoint` properties; not a configured profile, port or
+   filename). The exact size and SHA-256 of the three files are then verified in that directory. Ownership is never inferred
+   from endpoint health, PID existence, port occupancy or Forge API identity. If any link cannot be established the job fails
+   before any generation POST or options write with an actionable message, and an external Forge is never adopted, killed,
+   restarted or modified. A verified file is cached keyed by its stat identity (path, size, mtime, ctime, inode, device): first
+   use is hashed, any observed change forces a rehash, so about 12.45 GB is not re-read per job. Forge's API names and the
+   `/options` read-back remain only supplementary evidence of selection. Then **asset availability**: Forge must list the two
+   modules and the checkpoint, otherwise the error names the missing asset and the installer command (the executor otherwise
+   turns stage exceptions into a generic "no images" failure).
    **Edit source integrity**: immediately before an edit's generation POST the source file must exist and hash to the
    SHA-256 frozen in the NJR at Review admission; a missing or mutated source fails before dispatch and the frozen digest is
    never refreshed.
@@ -113,7 +119,8 @@ a job for a non-Forge configuration is rejected before dispatch with the same ac
 
 **Single-reference edit (Review tab).** One explicit checkbox, "FLUX.2 Klein single-reference edit (Forge)", selects
 the mode (never inferred from an image's name or content): it forces `img2img` only, prompt mode Replace, no negative
-and batch 1, and requires exactly one selected image and a prompt describing the edit. The existing Review handler builds
+and batch 1, and requires exactly one selected image and a prompt describing the edit. The ordinary Review stages, prompt modes, batch size
+and visible prompt/negative edit boxes are snapshotted on the first check and restored exactly when the box is unchecked. The existing Review handler builds
 a normal immutable reprocess NJR through `ReprocessJobBuilder` (`src/pipeline/klein_edit_reprocess.py`): stage chain
 `img2img`, `forge_webui`, Klein profile v1 frozen, one source image, the source's size, name and SHA-256 and the usual
 parent lineage recorded in the NJR. Errors (backend, geometry, stages) surface in the Review dialog before anything is
@@ -136,6 +143,13 @@ evidence, and:
 It is a read-only check: no scheduler, lease, memory release or process kill. The acceptance driver records, per smoke:
 total physical RAM, available RAM before the runtime/model starts, available RAM immediately before generation dispatch,
 minimum available RAM during the job, the Forge-tree private-memory peak and the dedicated VRAM peak.
+
+## Managed-Forge requirement (Klein only)
+
+Qualified Klein v1 requires a StableNew-owned managed Forge, because StableNew must cryptographically bind the asset
+provenance to the files loaded by the serving runtime and cannot do that for a Forge process it did not launch. The
+restriction applies **only to the qualified Klein profile**: ordinary external Forge support for every other model on the
+generic `forge_webui` backend is unchanged.
 
 ## Multi-reference limitation
 

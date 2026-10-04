@@ -47,7 +47,7 @@ def _qualified_host(monkeypatch: pytest.MonkeyPatch) -> None:
         lambda: HostMemorySnapshot(total_bytes=34_107_092_992, available_bytes=17_000_000_000),
     )
     # The byte-level asset identity is proven by dedicated tests; here it is stubbed (12 GB are never hashed).
-    monkeypatch.setattr(forge_backend_module, "verify_klein_assets", lambda profile: _STUB_IDENTITY)
+    monkeypatch.setattr(forge_backend_module, "verify_klein_assets", lambda profile, **_k: _STUB_IDENTITY)
     # The configured backend is an explicit, non-default operator setting.
     monkeypatch.setattr("src.pipeline.klein_edit_reprocess.configured_image_backend_id", lambda: "forge_webui")
     monkeypatch.setattr("src.image_backends.image_backend_types.configured_image_backend_id", lambda: "forge_webui")
@@ -405,18 +405,24 @@ def test_compile_policy_output_passes_the_runner_validation() -> None:
 
 @pytest.fixture
 def real_identity(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    """Real byte-level verification against tiny stand-in assets pinned as the profile's identities."""
+    """Real byte-level verification against tiny stand-in assets, bound to a (fake) StableNew-owned launch session."""
 
     import src.image_backends.forge_klein_assets as assets_module
     import src.image_backends.forge_klein_profile as profile_module
-    from tests.image_backends.test_forge_klein_assets import install, tiny_profile
+    from tests.image_backends.test_forge_klein_assets import (
+        install,
+        owned_manager,
+        tiny_profile,
+        use_manager,
+    )
 
     profile = tiny_profile()
     monkeypatch.setitem(profile_module._PROFILES, (KLEIN_PROFILE_ID, 1), profile)
     data_dir = tmp_path / "forge-data"
     install(data_dir, profile)
     assets_module.clear_verified_cache()
-    monkeypatch.setattr(forge_backend_module, "verify_klein_assets", lambda p: assets_module.verify_klein_assets(p, data_dir=data_dir))
+    monkeypatch.setattr(forge_backend_module, "verify_klein_assets", assets_module.verify_klein_assets)  # undo the stub
+    use_manager(monkeypatch, owned_manager(data_dir, endpoint="http://127.0.0.1:7861"))
     yield profile, data_dir
     assets_module.clear_verified_cache()
 
@@ -460,7 +466,7 @@ def test_a_file_mutated_after_a_verified_job_fails_the_next_job_before_dispatch(
 def test_an_unverifiable_runtime_fails_closed_without_dispatch(monkeypatch: pytest.MonkeyPatch) -> None:
     from src.image_backends.forge_klein_profile import KleinProfileError
 
-    def unverifiable(_profile):
+    def unverifiable(_profile, **_kwargs):
         raise KleinProfileError("the identity of the Klein model files cannot be established")
 
     monkeypatch.setattr(forge_backend_module, "verify_klein_assets", unverifiable)
@@ -512,3 +518,46 @@ def test_an_edit_without_a_frozen_digest_is_refused() -> None:
     request = SimpleNamespace(input_image_path=Path("x.png"), context_metadata={"provenance": {"reprocess": {"source_items": []}}})
     with pytest.raises(KleinProfileError, match="frozen SHA-256"):
         ForgeWebUIImageBackend._verify_frozen_source(request)  # type: ignore[arg-type]
+
+
+def test_klein_on_an_external_forge_fails_before_any_runtime_write_or_generation(real_identity, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A positively identified Forge that StableNew does not own is rejected, for Klein only."""
+
+    from tests.image_backends.test_forge_klein_assets import owned_manager, use_manager
+
+    use_manager(monkeypatch, owned_manager(None, owns=False))
+    transport = _transport()  # its API happily reports Forge and the right names
+    entry = _run(_t2i_njr(job_id="klein-external"), transport)
+    assert entry.status is JobStatus.FAILED and "requires the StableNew-owned managed Forge" in str(entry.error_message)
+    assert transport.generation_calls == [] and _option_writes(transport) == []
+
+
+def test_klein_with_a_manager_serving_another_endpoint_fails_closed(real_identity, monkeypatch: pytest.MonkeyPatch) -> None:
+    from tests.image_backends.test_forge_klein_assets import owned_manager, use_manager
+
+    _profile, data_dir = real_identity
+    use_manager(monkeypatch, owned_manager(data_dir, endpoint="http://127.0.0.1:9999"))
+    transport = _transport()
+    entry = _run(_t2i_njr(job_id="klein-endpoint"), transport)
+    assert entry.status is JobStatus.FAILED and "not the client endpoint" in str(entry.error_message)
+    assert transport.generation_calls == []
+
+
+def test_ordinary_forge_work_is_unchanged_when_no_owned_manager_exists(monkeypatch: pytest.MonkeyPatch) -> None:
+    """External Forge remains fully supported for everything except the qualified Klein profile."""
+
+    monkeypatch.setattr("src.image_backends.forge_klein_assets._active_manager", lambda: None)
+    sdxl_modules = [{"model_name": "sdxl_vae.safetensors", "filename": "/models/VAE/sdxl_vae.safetensors"}]
+    transport = FakeWebUITransport(flavor="forge", modules=sdxl_modules)
+    njr = make_pipeline_njr(
+        job_id="sdxl-external", positive_prompt="a lighthouse", negative_prompt="lowres", base_model="sdxl.safetensors",
+        sampler_name="Euler a", steps=24, cfg_scale=5.5, width=832, height=1216, seed=7,
+        stage_chain=(make_stage_config("txt2img", steps=24, cfg_scale=5.5, sampler_name="Euler a", scheduler="Karras",
+                                       model="sdxl.safetensors", vae="sdxl_vae.safetensors"),),
+        config={"model": "sdxl.safetensors", "vae": "sdxl_vae.safetensors", "prompt": "a lighthouse", "sampler_name": "Euler a",
+                "scheduler": "Karras", "steps": 24, "cfg_scale": 5.5, "width": 832, "height": 1216},
+        backend_options={"image": {"backend_id": "forge_webui"}},
+    )
+    entry = _run(njr, transport)
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    assert [p for _, p, _ in transport.generation_calls] == ["/sdapi/v1/txt2img"]

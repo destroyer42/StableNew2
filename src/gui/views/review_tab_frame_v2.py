@@ -72,6 +72,7 @@ class ReviewTabFrame(ttk.Frame):
         self.stage_adetailer_var = tk.BooleanVar(value=True)
         self.stage_upscale_var = tk.BooleanVar(value=False)
         self.klein_edit_var = tk.BooleanVar(value=False)
+        self._klein_snapshot: dict[str, Any] | None = None
         self.prompt_mode_var = tk.StringVar(value="append")
         self.negative_mode_var = tk.StringVar(value="append")
         self._prompt_prev_mode = "append"
@@ -1509,14 +1510,44 @@ class ReviewTabFrame(ttk.Frame):
         self._sync_edit_box_to_mode("negative")
 
     def _on_klein_edit_toggled(self) -> None:
-        if not self.klein_edit_var.get():
+        if self.klein_edit_var.get():
+            if self._klein_snapshot is not None:
+                return  # a repeated callback while Klein stays checked never overwrites the snapshot
+            self._prompt_mode_edits[self._prompt_prev_mode] = self._get_text(self.prompt_text)
+            self._negative_mode_edits[self._negative_prev_mode] = self._get_text(self.negative_text)
+            self._klein_snapshot = {
+                "img2img": self.stage_img2img_var.get(),
+                "adetailer": self.stage_adetailer_var.get(),
+                "upscale": self.stage_upscale_var.get(),
+                "prompt_mode": self.prompt_mode_var.get(),
+                "negative_mode": self.negative_mode_var.get(),
+                "batch_size": self.batch_size_var.get(),
+                "prompt_edits": dict(self._prompt_mode_edits),
+                "negative_edits": dict(self._negative_mode_edits),
+            }
+            self.stage_img2img_var.set(True)
+            self.stage_adetailer_var.set(False)
+            self.stage_upscale_var.set(False)
+            self.prompt_mode_var.set("replace")
+            self.negative_mode_var.set("replace")
+            self.batch_size_var.set(1)
             return
-        self.stage_img2img_var.set(True)
-        self.stage_adetailer_var.set(False)
-        self.stage_upscale_var.set(False)
-        self.prompt_mode_var.set("replace")
-        self.negative_mode_var.set("replace")
-        self.batch_size_var.set(1)
+        snapshot, self._klein_snapshot = self._klein_snapshot, None  # transient: cleared once restored
+        if snapshot is None:
+            return
+        self.stage_img2img_var.set(snapshot["img2img"])
+        self.stage_adetailer_var.set(snapshot["adetailer"])
+        self.stage_upscale_var.set(snapshot["upscale"])
+        self.prompt_mode_var.set(snapshot["prompt_mode"])
+        self.negative_mode_var.set(snapshot["negative_mode"])
+        self.batch_size_var.set(snapshot["batch_size"])
+        # The Klein session's own typing must not leak into the ordinary per-mode edits.
+        self._prompt_mode_edits = dict(snapshot["prompt_edits"])
+        self._negative_mode_edits = dict(snapshot["negative_edits"])
+        self._prompt_prev_mode = snapshot["prompt_mode"] or "append"
+        self._negative_prev_mode = snapshot["negative_mode"] or "append"
+        self._sync_edit_box_to_mode("prompt")
+        self._sync_edit_box_to_mode("negative")
 
     def _reprocess(self, *, batch_all: bool) -> None:
         klein_edit = bool(self.klein_edit_var.get())
