@@ -502,15 +502,18 @@ def test_the_verifier_and_bootstrap_never_start_stop_adopt_or_kill_a_runtime() -
         assert forbidden not in code, forbidden
 
 
-def test_the_managed_forge_runtime_is_not_a_production_default() -> None:
+def test_a1111_remains_the_default_and_forge_is_only_selectable_by_configuration() -> None:
+    """PR-IMG-FORGE-110: Forge is a supported backend, but nothing selects it unless configured."""
+
     from src.image_backends.image_backend_types import DEFAULT_IMAGE_BACKEND_ID
+    from src.utils.config import ConfigManager
 
     assert DEFAULT_IMAGE_BACKEND_ID == "a1111_webui"
-    for tracked in ("presets/settings.json", "src/main.py", "src/utils/config.py"):
+    defaults = ConfigManager()._default_settings()
+    assert defaults["webui_runtime_identity"] == "a1111_webui" and defaults["forge_runtime_profile_path"] == ""
+    for tracked in ("presets/settings.json", "src/main.py"):
         text = (ROOT / tracked).read_text(encoding="utf-8")
         assert "StableNew/Forge" not in text and "managed_forge" not in text.lower(), tracked
-    sources = "".join(p.read_text(encoding="utf-8") for p in (ROOT / "src").rglob("*.py"))
-    assert "managed_forge_runtime" not in sources  # the application does not consume the managed runtime
 
 
 def test_forge_authorities_are_separate_from_the_application_and_comfy_runtimes() -> None:
