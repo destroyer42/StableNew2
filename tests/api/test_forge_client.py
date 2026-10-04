@@ -238,3 +238,10 @@ def test_set_additional_modules_raises_when_options_writes_are_disabled() -> Non
     with pytest.raises(ForgeVAEError, match="was not applied"):
         client.set_additional_modules(["qwen_3_4b.safetensors", "flux2-vae.safetensors"])
     assert _writes(transport) == []
+
+
+def test_module_set_key_is_order_case_and_extension_insensitive() -> None:
+    from src.api.forge_client import module_set_key
+
+    assert module_set_key(["/d/Qwen_3_4B.safetensors", "flux2-vae"]) == ["flux2-vae", "qwen_3_4b"]
+    assert module_set_key(None) == [] and module_set_key(["", "  "]) == []

@@ -1,17 +1,19 @@
 # PR-IMG-FORGE-100 — Forge Neo Compatibility / A1111 Successor Qualification
 
-Status: **QUALIFICATION_INFRASTRUCTURE_BLOCKED — attempt2 is preserved; prompt-intent repair
-passes deterministic validation. Physical cohort3 requires renewed owner authorization.**
-Forge is an explicit, **non-default** backend identity (`forge_webui`). `a1111_webui` remains the
-default. Nothing here promotes Forge (that is `PR-IMG-FORGE-110`, a separate owner decision) and no
-image parity verdict has been reached. The first attempt failed admission (sections16-17); the resumed
-cohort passed that repaired surface but was refused for prompt mismatch before network generation
-dispatch (section18). Neither attempt is evidence of Forge image failure.
-The bounded canonical intent-preservation repair and no-generation evidence are recorded in section19.
-Cohort3 (section20) stopped on a harness-context observation failure; section21 converges physical
-acceptance onto a thin in-repo canonical-path driver and proves it deterministically. Physical
-generation (the non-acceptance Forge viability probe and the two-job canonical baseline) was then
-authorized and passed (section22): **`CANONICAL_FORGE_BASELINE_PASS`** for Pair A only.
+Status: **`FORGE_TECHNICAL_QUALIFICATION_PASS`** (technical gate only). Pair A (baseline) is complete, and the
+technical Pairs B (LoRA), C (img2img) and D (txt2img -> ADetailer face+hand -> 1.5x upscale) pass on both
+`a1111_webui` and `forge_webui` (sections 22-29; Pair D closed by PR-IMG-FORGE-D100/D110). Forge is a supported
+production still-image backend since `PR-IMG-FORGE-110` (section 27); `a1111_webui` remains the default and the
+rollback. PR-IMG-FORGE-D110 (section 29) fixes Forge cross-job module-state normalization only: it does **not**
+change the default backend and does not add a backend selector.
+
+Sections 1-26 are chronological history and are preserved as written. Statements in them such as "non-default",
+"Forge is not promoted", "physical qualification pending", `QUALIFICATION_INFRASTRUCTURE_BLOCKED` or "no image parity
+verdict" describe the state at that time and are superseded by sections 22-29. In that history the first attempt
+failed admission (sections 16-17), the resumed cohort was refused for prompt mismatch before network dispatch
+(section 18), the intent-preservation repair is section 19, cohort3 stopped on a harness-context failure (section 20),
+the thin canonical-path acceptance driver is section 21, and the canonical Pair-A baseline passed
+(`CANONICAL_FORGE_BASELINE_PASS`, section 22). None of the early attempts was evidence of Forge image failure.
 
 Base: `origin/main` `715e352f28640cb0eb3225a5b1752fc5e192c778` (PR #35 / PR-TEST-TRUTH-210 merged).
 Initial implementation/evidence: Claude Code cloud session. Local/Desktop installation and GET-only
@@ -1605,3 +1607,43 @@ semantics interrupt legitimate long-running ADetailer work. In the latest A1111 
 executed, but the request remained active beyond 90.2 seconds after nominal progress completion and was interrupted
 before natural ADetailer completion. Upscale did not execute in that run. D-Forge was not run. This is not evidence
 of a Forge incompatibility (see sections 25-26).
+
+## 28. PR-IMG-FORGE-D100: Pair-D natural-completion gate
+
+Base `4f10c71`, frozen Pair-D intents unchanged (A1111 `ce21d7bf...`, Forge `b67e1b3a...`). Evidence (outside the repository):
+`C:\Users\rob\qual\img_forge_100\physical-4f10c71-d-closure`.
+
+* **A1111: technical pass.** One canonical job, 182.0 s; txt2img -> ADetailer -> upscale; ADetailer entered
+  `adetailer_extension_active` and its response arrived naturally after 127.6 s (past the R2 90.2 s bound that R3 removed);
+  detections 1 face, 2 hands; final 1248x1824 `d296724c...`; seeds 424242; zero interrupt/stall/recovery/retry; VRAM
+  7,923 -> 11,914 MiB; minimum host RAM 7.2 GB; 64 C; no system events; clean ownership/cleanup.
+* **Forge: not qualified (new class).** The first txt2img failed in 7.7 s: the managed Forge `data/config.json` still held
+  `forge_additional_modules = [flux2-vae, qwen_3_4b]` from the IMG-116 Klein smoke. The executor's VAE cache cannot see state
+  persisted by an earlier job, and "Automatic" normalizes to the same key as an unknown VAE, so nothing cleared the modules;
+  Forge loaded the SDXL checkpoint with the Flux.2 VAE (`size mismatch ... IntegratedAutoencoderKL`), HTTP 500, retried
+  three times by the (unchanged) generic client. A StableNew state-normalization defect, not a Forge incompatibility.
+
+## 29. PR-IMG-FORGE-D110: Forge cross-job module-state normalization
+
+`ForgeWebUIImageBackend` (Forge only; `WebUIFamilyImageBackend`, the executor, `client.py` and A1111 are untouched) now runs
+`_normalize_module_baseline` before every non-Klein stage. It reads `get_additional_modules()`; a non-empty selection that is
+not exactly what the work needs (nothing for Automatic VAE, exactly the requested VAE otherwise) is replaced through the
+existing strict `set_additional_modules()` write, then read back; an empty or already-matching selection is never written.
+An unreadable, unwritable or unverifiable state refuses the stage before any dispatch (Forge is never restarted, `config.json`
+is never edited, and nothing depends on a previous job's cleanup). The event is recorded in the stage's backend metadata
+(`forge_module_baseline`). Klein keeps its exact two-module write and no clear precedes it.
+
+Deterministic proof: `tests/integration/test_pr_img_forge_d110_module_state.py` (12 canonical-path tests against a stateful
+Forge fake that rejects an SDXL generation made with Klein modules, exactly like D100) and the backend unit tests. The
+pre-D110 behavior is reproduced by disabling the hook (the job fails with the D100 error). Gate: 363 focused tests,
+Ruff, mypy smoke and `tools/ci/run_pr_gate.py` (341 smoke) pass.
+
+Physical closure (`C:\Users\rob\qual\img_forge_100\physical-97f9d8f-d110`, source `97f9d8f`, exactly one Forge job):
+starting from the preserved residue (`flux2-vae`, `qwen_3_4b`), StableNew itself logged
+`[forge/module-baseline] ... selecting Automatic`, set and verified the empty set before the model load, and the job completed
+in 29.0 s: one txt2img, one ADetailer (face + hand: 1 face, 2 hands; natural response, no interrupt/stall/retry) and
+the upscale; final 1248x1824 `b89942fa...`; seed 424242; VRAM 701 -> 11,004 MiB; minimum host RAM 7.97 GB; 63 C; no system
+events; one job, zero request failures or replays. Module state after the job is `[]`. **`FORGE_PAIR_D_TECHNICAL_PASS`**; with
+Pairs A/B/C and the D100 A1111 arm (reused: the D110 production diff is Forge-only and does not touch the A1111 execution
+path) the technical qualification gate is `FORGE_TECHNICAL_QUALIFICATION_PASS`. This does not change the default backend or add
+a selector.
