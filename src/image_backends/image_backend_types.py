@@ -20,10 +20,26 @@ DEFAULT_IMAGE_BACKEND_ID = "a1111_webui"
 FORGE_IMAGE_BACKEND_ID = "forge_webui"
 
 
+def configured_image_backend_id() -> str:
+    """The still-image backend new work is constructed for: the configured WebUI-family identity.
+
+    ``a1111_webui`` unless the operator explicitly selected ``forge_webui`` (``webui_runtime_identity``).
+    Selection is configuration only: there is no fallback between backends.
+    """
+
+    try:
+        from src.api.webui_runtime_identity import resolve_configured_webui_runtime_identity
+        from src.utils.config import ConfigManager
+
+        return resolve_configured_webui_runtime_identity(ConfigManager().load_settings())
+    except Exception:
+        return DEFAULT_IMAGE_BACKEND_ID
+
+
 def normalize_image_backend_options(
     existing_options: Any,
     *,
-    backend_id: str = DEFAULT_IMAGE_BACKEND_ID,
+    backend_id: str | None = None,
 ) -> dict[str, Any]:
     """Persist explicit backend identity for newly constructed image work.
 
@@ -47,6 +63,8 @@ def normalize_image_backend_options(
     else:
         raise ValueError("backend_options.image must be a mapping")
 
+    if backend_id is None:
+        backend_id = configured_image_backend_id() if "backend_id" not in image else DEFAULT_IMAGE_BACKEND_ID
     explicit_backend_id = image.get("backend_id", backend_id)
     if not isinstance(explicit_backend_id, str):
         raise ValueError("backend_options.image.backend_id must be a string")
