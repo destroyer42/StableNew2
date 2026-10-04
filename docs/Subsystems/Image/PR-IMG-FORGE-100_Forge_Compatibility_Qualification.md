@@ -1605,4 +1605,3 @@ A1111 rerun after the lifecycle repair the chain completed to the 1.5x upscale, 
 (about 11.8 of 12.3 GiB; GPU at 100 % but about 55 W) for about 60 s and was interrupted by the watchdog at its 45 s
 completion grace before the hand detector ran. D-Forge has not been run. This is a StableNew watchdog/runtime-
 headroom question, not a demonstrated Forge incompatibility.
-
