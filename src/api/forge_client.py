@@ -70,6 +70,12 @@ def _strip_extension(value: str) -> str:
     return lowered
 
 
+def module_set_key(names: Sequence[str] | None) -> list[str]:
+    """Order- and extension-insensitive identity of a module selection (``[]`` is "Automatic")."""
+
+    return sorted(_strip_extension(_module_key(item)) for item in names or [] if str(item or "").strip())
+
+
 class ForgeWebUIClient(SDWebUIClient):
     """``SDWebUIClient`` with Forge Neo's VAE/module contract."""
 
@@ -233,5 +239,6 @@ __all__ = [
     "ForgeVAEError",
     "ForgeWebUIClient",
     "SD_MODULES_ENDPOINT",
+    "module_set_key",
     "normalize_sd_modules",
 ]

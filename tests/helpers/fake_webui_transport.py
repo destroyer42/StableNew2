@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import threading
 from collections import defaultdict
+from collections.abc import Callable
 from typing import Any
 
 import requests
@@ -66,6 +67,8 @@ class FakeWebUITransport:
         seed: int = 12345,
         generation_error: Exception | None = None,
         block_generation_until_interrupt: bool = False,
+        reject_generation_when: Callable[[dict[str, Any]], str | None] | None = None,
+        ignore_module_writes: bool = False,
     ) -> None:
         if flavor not in {"forge", "a1111"}:
             raise ValueError(flavor)
@@ -85,6 +88,12 @@ class FakeWebUITransport:
         # When set, a generation POST blocks until POST /sdapi/v1/interrupt arrives (deterministic
         # stand-in for a long generation that only operator cancellation can end).
         self.block_generation_until_interrupt = block_generation_until_interrupt
+        # Forge loads the model lazily on a generation POST; this models the real failure of a
+        # checkpoint meeting an incompatible persisted module set (HTTP 500, a *definite* error).
+        self.reject_generation_when = reject_generation_when
+        self.ignore_module_writes = ignore_module_writes  # a write that silently does not stick
+        self.generation_module_state: list[list[str]] = []
+        self.rejected_generations: list[str] = []
         self.generation_started = threading.Event()
         self.interrupted = threading.Event()
         self.options: dict[str, Any] = {"sd_model_checkpoint": checkpoint, "sd_vae": "Automatic"}
@@ -154,6 +163,14 @@ class FakeWebUITransport:
             return FakeResponse({})
         if path in GENERATION_PATHS:
             self.payloads[path].append(dict(body or {}))
+            self.generation_module_state.append(
+                [str(m).replace("\\", "/").rsplit("/", 1)[-1] for m in self.options.get("forge_additional_modules") or []]
+            )
+            if self.reject_generation_when is not None:
+                reason = self.reject_generation_when(dict(self.options))
+                if reason:
+                    self.rejected_generations.append(reason)
+                    return FakeResponse({"error": "RuntimeError", "detail": "", "message": reason}, 500)
             if self.block_generation_until_interrupt:
                 self.generation_started.set()
                 if not self.interrupted.wait(timeout=10.0):
@@ -169,6 +186,8 @@ class FakeWebUITransport:
     def _apply_options(self, body: dict[str, Any]) -> None:
         for key, value in body.items():
             if key == "forge_additional_modules" and self.flavor == "forge":
+                if self.ignore_module_writes:
+                    continue
                 known = {m["model_name"]: m["filename"] for m in self.modules}
                 # Forge silently drops module names it does not know.
                 self.options[key] = sorted(

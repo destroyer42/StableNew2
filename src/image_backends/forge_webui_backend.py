@@ -14,7 +14,13 @@ Model-specific Forge translation lives here (PR-IMG-116): when ``backend_options
 names the qualified FLUX.2 Klein 4B FP8 profile, the backend validates the immutable intent against the
 profile (rejecting conflicts instead of rewriting them), gates dispatch on host memory, projects the
 profile's exact checkpoint/module set and fixed sampling parameters onto the executor config, and
-records durable evidence. Work without a model profile (SDXL, ...) takes the inherited path untouched.
+records durable evidence. Work without a model profile (SDXL, ...) takes the inherited stage path, preceded by a module-baseline
+check (PR-IMG-FORGE-D110): Forge persists ``forge_additional_modules`` across jobs, so a previous Klein
+job's text encoder/VAE would otherwise be applied to an ordinary checkpoint. Every such stage reads the
+endpoint's module selection and, only when it is a non-empty selection that differs from what the work
+needs (nothing for Automatic VAE, exactly the requested VAE otherwise), writes and verifies the needed set
+through the existing ``ForgeWebUIClient`` module API before the stage can load a model. Unreadable or
+unverifiable state refuses the stage; nothing depends on a previous job's cleanup.
 """
 
 from __future__ import annotations
@@ -26,6 +32,7 @@ from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Any
 
+from src.api.forge_client import ForgeVAEError, module_set_key
 from src.image_backends.forge_klein_assets import verify_klein_assets
 from src.image_backends.forge_klein_profile import (
     KLEIN_EDIT_METADATA_KEY,
@@ -56,6 +63,7 @@ from src.services.runtime_transition_service import (
     RUNTIME_FORGE_WEBUI,
     RuntimeTransitionCoordinator,
 )
+from src.utils.webui_resource_names import normalize_vae_config_value
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +103,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         self._readiness: dict[str | None, KleinReadiness] = {}
         self._identity: dict[str | None, dict[str, Any]] = {}
         self._verified_source: dict[str | None, dict[str, Any]] = {}
+        self._module_baseline: dict[str | None, dict[str, Any]] = {}
 
     # ------------------------------------------------------------------ profile validation
 
@@ -182,9 +191,86 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             unsupported_features=features,
         )
 
+    # ------------------------------------------------------------------ module baseline (D110)
+
+    def _requested_vae(self, request: ImageExecutionRequest) -> str:
+        """The VAE the executor will be asked for on this stage ("" means Automatic)."""
+
+        if request.stage_name == "txt2img":
+            config = self._txt2img_executor_config(request)
+        else:
+            config = self._stage_executor_config(request)
+        return normalize_vae_config_value(
+            config.get("vae") if "vae" in config else config.get("vae_name")
+        )
+
+    def _normalize_module_baseline(
+        self, pipeline: Any, request: ImageExecutionRequest
+    ) -> dict[str, Any]:
+        """Ordinary (non-Klein) Forge work must not inherit a previous job's persisted modules.
+
+        Forge keeps ``forge_additional_modules`` until something overwrites it, and the executor's
+        in-memory VAE cache cannot see a selection written by an earlier job or process. Read the
+        endpoint's real selection before any model transition; a non-empty selection that is not
+        exactly what this work needs (nothing for Automatic, the requested VAE otherwise) is replaced
+        through the existing verified module write. An empty selection is left alone (an explicit VAE
+        is then selected by the executor's normal path). Unreadable or unverifiable state refuses
+        the stage before any dispatch; nothing is guessed and Forge is never restarted or edited.
+        """
+
+        client = getattr(pipeline, "client", None)
+        reader = getattr(client, "get_additional_modules", None)
+        setter = getattr(client, "set_additional_modules", None)
+        if not callable(reader) or not callable(setter):
+            raise ForgeVAEError(
+                "This Forge client cannot read and select the module set; refusing to dispatch "
+                f"{request.stage_name} without a verified module baseline."
+            )
+        observed = reader()
+        if not isinstance(observed, list):
+            raise ForgeVAEError(
+                "Forge's current module selection could not be read; refusing to dispatch "
+                f"{request.stage_name} without a verified module baseline."
+            )
+        requested_vae = self._requested_vae(request)
+        desired = [requested_vae] if requested_vae else []
+        event: dict[str, Any] = {
+            "stage": request.stage_name,
+            "observed_before": list(observed),
+            "required": desired,
+            "applied": False,
+        }
+        if not observed or module_set_key(observed) == module_set_key(desired):
+            return event
+        logger.warning(
+            "[forge/module-baseline] stage=%s endpoint reports persistent modules %s; selecting %s "
+            "before any model load",
+            request.stage_name,
+            observed,
+            desired or "Automatic (no modules)",
+        )
+        if setter(list(desired)) is not True:
+            raise ForgeVAEError(
+                f"Forge module selection {desired or 'Automatic'} was not applied; refusing to dispatch "
+                f"{request.stage_name} with stale modules {observed}."
+            )
+        after = reader()
+        if not isinstance(after, list) or module_set_key(after) != module_set_key(desired):
+            raise ForgeVAEError(
+                f"Forge reports modules {after} after selecting {desired or 'Automatic'}; refusing to "
+                f"dispatch {request.stage_name} with an unverified module baseline."
+            )
+        event["applied"] = True
+        event["observed_after"] = list(after)
+        return event
+
     def _before_dispatch(self, pipeline: Any, request: ImageExecutionRequest) -> None:
         profile = self._profile_for(request.backend_options)
         if profile is None:
+            if request.stage_name in self.capabilities.stage_types:
+                self._module_baseline[request.job_id] = self._normalize_module_baseline(
+                    pipeline, request
+                )
             return
         self._readiness[request.job_id] = check_klein_host_memory(
             profile, probe=self._memory_probe or read_host_memory
@@ -307,10 +393,18 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         try:
             result = super().execute(pipeline, request)
         except BaseException:
-            for scratch in (self._readiness, self._identity, self._verified_source):
+            for scratch in (
+                self._readiness,
+                self._identity,
+                self._verified_source,
+                self._module_baseline,
+            ):
                 scratch.pop(request.job_id, None)
             raise
         profile = self._profile_for(request.backend_options)
+        baseline = self._module_baseline.pop(request.job_id, None)
+        if profile is None and result is not None and baseline is not None:
+            result.backend_metadata["forge_module_baseline"] = baseline
         readiness = self._readiness.pop(request.job_id, None)
         identity = self._identity.pop(request.job_id, None)
         verified_source = self._verified_source.pop(request.job_id, None)

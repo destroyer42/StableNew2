@@ -43,6 +43,24 @@ FORGE = WebUIRuntimeIdentity(FORGE_WEBUI_IDENTITY)
 A1111 = WebUIRuntimeIdentity(A1111_WEBUI_IDENTITY)
 
 
+def _forge_client(probe, modules: list[str] | None = None) -> SimpleNamespace:
+    """Forge-shaped client double: identity probe plus a persistent, verified module selection (D110)."""
+
+    state = {"modules": list(modules or []), "writes": []}
+
+    def _set(selection) -> bool:
+        state["writes"].append(list(selection))
+        state["modules"] = list(selection)
+        return True
+
+    return SimpleNamespace(
+        probe_runtime_identity=probe,
+        get_additional_modules=lambda: list(state["modules"]),
+        set_additional_modules=_set,
+        module_state=state,
+    )
+
+
 def _ready_transition() -> Mock:
     transition = Mock()
     transition.prepare_for.return_value = Mock(ready=True)
@@ -65,9 +83,7 @@ def _runner(tmp_path: Path, observed: WebUIRuntimeIdentity | None, transitions: 
     output = tmp_path / "txt2img.png"
     output.write_bytes(b"png")
     pipeline.run_txt2img_stage.return_value = {"path": str(output), "all_paths": [str(output)]}
-    pipeline.client = SimpleNamespace(
-        probe_runtime_identity=(lambda: observed) if observed is not None else None
-    )
+    pipeline.client = _forge_client((lambda: observed) if observed is not None else None)
     runner._pipeline = pipeline
     return runner, pipeline
 
@@ -312,6 +328,8 @@ def test_forge_delegates_each_stage_with_the_same_translation_as_a1111(
             "path": str(tmp_path / f"{stage_name}.png")
         }
         pipeline.client = SimpleNamespace(probe_runtime_identity=lambda observed=observed: observed)
+    # Forge additionally verifies its module baseline; A1111's client has no module API at all (D110).
+    forge_pipeline.client = _forge_client(lambda: FORGE)
     forge_transition = _ready_transition()
     forge_request = _request(stage_name, tmp_path, "forge_webui")
     forge_result = ForgeWebUIImageBackend(transition=forge_transition).execute(
@@ -345,7 +363,7 @@ def test_forge_txt2img_preserves_prompt_model_vae_sampler_scheduler_steps_cfg_ge
 ) -> None:
     pipeline = Mock()
     pipeline.run_txt2img_stage.return_value = {"path": str(tmp_path / "txt2img.png")}
-    pipeline.client = SimpleNamespace(probe_runtime_identity=lambda: FORGE)
+    pipeline.client = _forge_client(lambda: FORGE)
     ForgeWebUIImageBackend(transition=_ready_transition()).execute(
         pipeline, _request("txt2img", tmp_path, "forge_webui")
     )
@@ -364,7 +382,7 @@ def test_forge_txt2img_preserves_prompt_model_vae_sampler_scheduler_steps_cfg_ge
 def test_forge_img2img_preserves_input_image_denoise_model_and_vae(tmp_path: Path) -> None:
     pipeline = Mock()
     pipeline.run_img2img_stage.return_value = {"path": str(tmp_path / "img2img.png")}
-    pipeline.client = SimpleNamespace(probe_runtime_identity=lambda: FORGE)
+    pipeline.client = _forge_client(lambda: FORGE)
     request = _request("img2img", tmp_path, "forge_webui")
     ForgeWebUIImageBackend(transition=_ready_transition()).execute(pipeline, request)
     kwargs = pipeline.run_img2img_stage.call_args.kwargs
@@ -380,7 +398,7 @@ def test_forge_adetailer_and_upscale_keep_the_current_stage_contract(tmp_path: P
     pipeline = Mock()
     pipeline.run_adetailer_stage.return_value = {"path": str(tmp_path / "a.png")}
     pipeline.run_upscale_stage.return_value = {"path": str(tmp_path / "u.png")}
-    pipeline.client = SimpleNamespace(probe_runtime_identity=lambda: FORGE)
+    pipeline.client = _forge_client(lambda: FORGE)
     backend = ForgeWebUIImageBackend(transition=_ready_transition())
     backend.execute(pipeline, _request("adetailer", tmp_path, "forge_webui"))
     config = pipeline.run_adetailer_stage.call_args.kwargs["config"]
@@ -421,4 +439,94 @@ def test_transition_failure_blocks_forge_before_identity_probe_or_generation(
             pipeline, _request("txt2img", tmp_path, "forge_webui")
         )
     probe.assert_not_called()
+    pipeline.run_txt2img_stage.assert_not_called()
+
+
+# --------------------------------------------------------------------------------------------
+# PR-IMG-FORGE-D110: ordinary Forge work establishes its own module baseline before every stage
+# --------------------------------------------------------------------------------------------
+
+KLEIN_RESIDUE = ["flux2-vae.safetensors", "qwen_3_4b.safetensors"]
+
+
+def _baseline_request(tmp_path: Path, vae: str | None, stage: str = "txt2img") -> ImageExecutionRequest:
+    request = _request(stage, tmp_path, "forge_webui")
+    request.selected_vae = vae
+    return request
+
+
+def _execute(tmp_path: Path, client, vae: str | None, stage: str = "txt2img"):
+    pipeline = Mock()
+    getattr(pipeline, f"run_{stage}_stage").return_value = {"path": str(tmp_path / f"{stage}.png")}
+    pipeline.client = client
+    result = ForgeWebUIImageBackend(transition=_ready_transition()).execute(
+        pipeline, _baseline_request(tmp_path, vae, stage)
+    )
+    return pipeline, result
+
+
+@pytest.mark.parametrize("vae", [None, "", "Automatic", "None"])
+def test_automatic_vae_clears_klein_residue_before_the_stage_runs(tmp_path: Path, vae) -> None:
+    client = _forge_client(lambda: FORGE, KLEIN_RESIDUE)
+    pipeline, result = _execute(tmp_path, client, vae)
+    assert client.module_state["writes"] == [[]] and client.module_state["modules"] == []
+    pipeline.run_txt2img_stage.assert_called_once()
+    assert result.backend_metadata["forge_module_baseline"]["applied"] is True
+
+
+def test_explicit_vae_replaces_unrelated_residue_with_exactly_the_requested_vae(tmp_path: Path) -> None:
+    client = _forge_client(lambda: FORGE, KLEIN_RESIDUE)
+    _execute(tmp_path, client, "known-vae.safetensors")
+    assert client.module_state["writes"] == [["known-vae.safetensors"]]
+
+
+@pytest.mark.parametrize(
+    ("current", "vae"),
+    [([], None), ([], "known-vae.safetensors"), (["known-vae.safetensors"], "known-vae"), (["Known-VAE.safetensors"], "known-vae.safetensors")],
+)
+def test_matching_or_empty_state_is_never_written(tmp_path: Path, current: list[str], vae) -> None:
+    client = _forge_client(lambda: FORGE, current)
+    _, result = _execute(tmp_path, client, vae)
+    assert client.module_state["writes"] == []
+    assert result.backend_metadata["forge_module_baseline"]["applied"] is False
+
+
+def test_unreadable_module_state_refuses_the_stage_before_it_runs(tmp_path: Path) -> None:
+    from src.api.forge_client import ForgeVAEError
+
+    client = _forge_client(lambda: FORGE, KLEIN_RESIDUE)
+    client.get_additional_modules = lambda: None
+    pipeline = Mock()
+    pipeline.client = client
+    with pytest.raises(ForgeVAEError, match="could not be read"):
+        ForgeWebUIImageBackend(transition=_ready_transition()).execute(
+            pipeline, _baseline_request(tmp_path, None)
+        )
+    pipeline.run_txt2img_stage.assert_not_called()
+    assert client.module_state["writes"] == []
+
+
+def test_a_client_without_the_module_api_refuses_rather_than_assuming_an_empty_state(tmp_path: Path) -> None:
+    from src.api.forge_client import ForgeVAEError
+
+    pipeline = Mock()
+    pipeline.client = SimpleNamespace(probe_runtime_identity=lambda: FORGE)
+    with pytest.raises(ForgeVAEError, match="cannot read and select"):
+        ForgeWebUIImageBackend(transition=_ready_transition()).execute(
+            pipeline, _baseline_request(tmp_path, None)
+        )
+    pipeline.run_txt2img_stage.assert_not_called()
+
+
+def test_an_unverified_clear_refuses_the_stage(tmp_path: Path) -> None:
+    from src.api.forge_client import ForgeVAEError
+
+    client = _forge_client(lambda: FORGE, KLEIN_RESIDUE)
+    client.set_additional_modules = lambda selection: True  # claims success, state does not change
+    pipeline = Mock()
+    pipeline.client = client
+    with pytest.raises(ForgeVAEError, match="unverified module baseline"):
+        ForgeWebUIImageBackend(transition=_ready_transition()).execute(
+            pipeline, _baseline_request(tmp_path, None)
+        )
     pipeline.run_txt2img_stage.assert_not_called()
