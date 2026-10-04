@@ -543,8 +543,9 @@ qualification infrastructure, so both belong here when selected.
    retirement criteria are defined and satisfied.
 5. `PR-IMG-130` capability-aware image backend/model UX/compiler work becomes
    actionable once a real second production backend exists.
-6. `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware Qualification` remains
-   separately owner-authorized for model/download/GPU state.
+6. `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware Qualification` ran as a
+   model/runtime qualification (`FLUX2_KLEIN_4B_FP8_PASS_CONSTRAINED`; product value pending owner review). See
+   `docs/Subsystems/Image/PR-IMG-115_FLUX2_Klein_4B_FP8_Target_Hardware_Qualification.md`.
 7. Production integration is only for an explicitly selected evidence-backed
    capability, extending PR-RUNTIME-100 ownership/coexistence behavior when a
    runtime actually becomes production. Extract reusable qualification
