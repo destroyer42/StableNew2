@@ -2,6 +2,8 @@ import threading
 import time
 from collections import defaultdict
 
+_NEVER_TRIGGERED = float("-inf")
+
 
 class SystemWatchdogV2:
     # Tune these as needed
@@ -38,7 +40,9 @@ class SystemWatchdogV2:
         self._thread: threading.Thread | None = None
 
         self._lock = threading.Lock()
-        self._last_trigger_ts: dict[str, float] = defaultdict(lambda: 0.0)
+        # "Never triggered" is -inf, not 0.0: time.monotonic() is host uptime, so a 0.0 default
+        # would suppress a first trigger for one cooldown after boot.
+        self._last_trigger_ts: dict[str, float] = defaultdict(lambda: _NEVER_TRIGGERED)
         self._in_flight: dict[str, bool] = defaultdict(lambda: False)
         self._runner_stall_episode_active = False
         self._observed_runner_job_id: str | None = None
@@ -120,7 +124,7 @@ class SystemWatchdogV2:
                 self._trigger("queue_runner_stall", now)
         else:
             if self._runner_stall_episode_active:
-                self._last_trigger_ts["queue_runner_stall"] = 0.0
+                self._last_trigger_ts["queue_runner_stall"] = _NEVER_TRIGGERED
             self._runner_stall_episode_active = False
 
     def _queue_running_but_stalled(self, now: float) -> bool:

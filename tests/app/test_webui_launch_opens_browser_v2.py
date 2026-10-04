@@ -86,6 +86,17 @@ def test_webui_launch_opens_browser(monkeypatch):
     open_mock = mock.Mock()
     monkeypatch.setattr(webbrowser, "open_new_tab", open_mock)
 
+    def run_inline(_window, *, name, work, on_done):
+        # The off-Tk hand-off has its own tests (test_webui_connection_off_tk_120); this test is
+        # about the launch outcome (state projection + browser), so complete the work inline.
+        try:
+            result, error = work(), None
+        except Exception as exc:  # noqa: BLE001
+            result, error = None, exc
+        on_done(result, error)
+
+    monkeypatch.setattr("src.main._run_webui_connection_off_tk", run_inline)
+
     _update_window_webui_manager(window, fake_manager)
 
     panel = window.status_bar_v2.webui_panel

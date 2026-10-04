@@ -161,7 +161,7 @@ def build_async(
         pass
     now = time.monotonic()
     with _BUNDLE_LOCK:
-        last = _LAST_BUNDLE_TS.get(reason, 0.0)
+        last = _LAST_BUNDLE_TS.get(reason, float("-inf"))  # never emitted; not host-uptime based
         if reason in _IN_FLIGHT:
             return
         if (now - last) < float(cooldown_s):

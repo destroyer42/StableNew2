@@ -143,12 +143,6 @@ def test_watchdog_still_triggers_on_true_stall():
         diag = DiagnosticsServiceV2(tmpdir)
         watchdog = SystemWatchdogV2(app, diag, check_interval_s=0.25)
 
-        # "Never triggered" defaults to 0.0 against time.monotonic() (host uptime). On a host that
-        # booted less than a cooldown ago (a freshly started CI runner) that default would suppress
-        # this first trigger, so make the test independent of host uptime.
-        watchdog._last_trigger_ts["ui_heartbeat_stall"] = float("-inf")
-        _LAST_BUNDLE_TS["ui_heartbeat_stall"] = float("-inf")
-
         # Start watchdog
         watchdog.start()
 
