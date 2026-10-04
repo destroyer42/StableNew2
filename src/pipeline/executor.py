@@ -1027,7 +1027,11 @@ class Pipeline:
             if modules != self._current_modules or not self._modules_still_applied(modules):
                 self._current_modules = None
                 logger.info("Switching WebUI modules to: %s", ", ".join(modules))
-                setter(list(modules))
+                if setter(list(modules)) is not True:
+                    raise RuntimeError(
+                        f"The WebUI module selection {list(modules)} was not applied; refusing to "
+                        "generate without the required modules."
+                    )
                 self._current_modules = modules
                 self._current_vae = None
                 self._record_vae_switch()

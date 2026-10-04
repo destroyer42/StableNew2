@@ -206,3 +206,35 @@ def test_set_vae_delegates_to_the_single_module_write_authority() -> None:
     client.set_additional_modules(["qwen_3_4b", "flux2-vae"])
     assert client.set_vae("sdxl_vae.safetensors") is True
     assert _writes(transport)[-1] == {"forge_additional_modules": ["sdxl_vae.safetensors"]}
+
+
+def _throttled_client(transport: FakeWebUITransport, interval: float = 0.3) -> ForgeWebUIClient:
+    client = _client(transport)
+    client._options_min_interval_seconds = interval  # the production client throttles consecutive /options writes
+    return client
+
+
+def test_set_additional_modules_waits_out_the_options_throttle_instead_of_skipping() -> None:
+    transport = FakeWebUITransport(modules=KLEIN_MODULES)
+    client = _throttled_client(transport)
+    client.set_additional_modules(["flux2-vae.safetensors"])  # e.g. directly after a model switch
+    assert client.set_additional_modules(["qwen_3_4b.safetensors", "flux2-vae.safetensors"]) is True
+    assert _writes(transport)[-1] == {"forge_additional_modules": ["qwen_3_4b", "flux2-vae"]}
+    assert sorted(client.get_additional_modules() or []) == ["flux2-vae.safetensors", "qwen_3_4b.safetensors"]
+
+
+def test_set_vae_keeps_its_existing_skip_semantics_under_the_throttle() -> None:
+    transport = FakeWebUITransport(modules=KLEIN_MODULES)
+    client = _throttled_client(transport, interval=30.0)
+    assert client.set_vae("flux2-vae.safetensors") is True
+    assert client.set_vae("sdxl_vae.safetensors") is False  # unchanged SDXL behavior: skipped, not waited
+    assert len(_writes(transport)) == 1
+
+
+def test_set_additional_modules_raises_when_options_writes_are_disabled() -> None:
+    transport = FakeWebUITransport(modules=KLEIN_MODULES)
+    client = ForgeWebUIClient(base_url="http://127.0.0.1:7861", options_write_enabled=False)
+    client._session.request = transport  # type: ignore[method-assign]
+    with pytest.raises(ForgeVAEError, match="was not applied"):
+        client.set_additional_modules(["qwen_3_4b.safetensors", "flux2-vae.safetensors"])
+    assert _writes(transport) == []

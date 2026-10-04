@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from collections.abc import Sequence
 from typing import Any
 
@@ -116,8 +117,8 @@ class ForgeWebUIClient(SDWebUIClient):
 
         requested = str(vae_name or "").strip()
         if requested.lower() in _AUTOMATIC_VAE_NAMES:
-            return self._write_modules([], noun="VAE")
-        return self._write_modules([requested], noun="VAE")
+            return self._write_modules([], noun="VAE", strict=False)
+        return self._write_modules([requested], noun="VAE", strict=False)
 
     def set_additional_modules(self, modules: Sequence[str]) -> bool:
         """Select the complete Forge module set (e.g. a text encoder plus a VAE) in one write.
@@ -126,18 +127,41 @@ class ForgeWebUIClient(SDWebUIClient):
         module raises before any write), the whole list is sent once, and the effective option is
         read back and compared exactly; any mismatch raises so generation cannot proceed with an
         unverified module set. An empty list clears the selection.
+
+        Unlike ``set_vae`` this never *skips* silently: the shared options throttle (a model switch
+        just before it) is waited out, and a SafeMode/readiness refusal raises, because a skipped
+        write would let Forge load the model without its text encoder (found by the PR-IMG-116 smoke).
         """
 
         requested = [str(item).strip() for item in modules if str(item or "").strip()]
-        return self._write_modules(requested, noun="module")
+        return self._write_modules(requested, noun="module", strict=True)
 
-    def _write_modules(self, requested: list[str], *, noun: str) -> bool:
+    def _await_options_write_allowed(self, *, noun: str) -> None:
+        """Strict writes: wait out the throttle (bounded); any other refusal is an error."""
+
+        deadline = time.monotonic() + max(15.0, 2 * float(self._options_min_interval_seconds))
+        while True:
+            can_send, reason = self._options_can_send()
+            if can_send:
+                return
+            if reason != "throttle" or time.monotonic() >= deadline:
+                raise ForgeVAEError(
+                    f"Forge {noun} selection was not applied ({reason}); generation must not proceed "
+                    "without the required modules."
+                )
+            time.sleep(min(0.5, max(0.01, float(self._options_min_interval_seconds) / 4)))
+
+    def _write_modules(self, requested: list[str], *, noun: str, strict: bool = False) -> bool:
         targets = [self._resolve_module_name(item, noun=noun) for item in requested]
         keys = [_strip_extension(_module_key(item)) for item in targets]
         if len(set(keys)) != len(keys):
             raise ForgeVAEError(f"Duplicate Forge {noun} selection: {requested}")
 
-        can_send, reason = self._options_can_send()
+        if strict:
+            self._await_options_write_allowed(noun=noun)
+            can_send, reason = True, None
+        else:
+            can_send, reason = self._options_can_send()
         if not can_send:
             if reason == "safe_mode":
                 logger.warning(

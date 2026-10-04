@@ -103,6 +103,32 @@ def _option_writes(transport):
     return [b for v, p, b in transport.calls if v == "POST" and p == "/sdapi/v1/options"]
 
 
+def test_modules_are_applied_even_when_a_model_switch_just_consumed_the_options_throttle() -> None:
+    """Smoke A found Forge loading Klein with no modules: the model-switch /options POST throttled the module POST."""
+
+    import time
+
+    transport = _transport()
+    client = _client(transport)
+    client._options_min_interval_seconds = 0.6
+    client._last_options_post_ts = time.monotonic()  # an /options write (the model switch) happened an instant ago
+    entry = run_njr_via_queue(_t2i_njr(job_id="klein-throttle"), client, timeout_seconds=60.0)
+
+    assert entry.status is JobStatus.COMPLETED, entry.error_message
+    assert sorted(m.rsplit("/", 1)[-1] for m in transport.options["forge_additional_modules"]) == [
+        "flux2-vae.safetensors", "qwen_3_4b.safetensors"]
+    assert [p for _, p, _ in transport.generation_calls] == ["/sdapi/v1/txt2img"]  # generation only after the modules
+
+
+def test_an_unconfirmed_module_selection_never_reaches_generation() -> None:
+    transport = _transport()
+    client = _client(transport)
+    client.set_additional_modules = lambda _modules: False  # type: ignore[method-assign]
+    entry = run_njr_via_queue(_t2i_njr(job_id="klein-unconfirmed"), client, timeout_seconds=60.0)
+    assert entry.status is JobStatus.FAILED
+    assert transport.generation_calls == []
+
+
 def test_klein_t2i_dispatches_once_with_exact_modules_and_fixed_semantics() -> None:
     transport = _transport()
     entry = _run(_t2i_njr(), transport)
