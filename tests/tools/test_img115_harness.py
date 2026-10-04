@@ -279,18 +279,23 @@ def test_the_harness_never_touches_production_settings_or_the_backend_configurat
 # --- case execution with fakes: classification and no-replay ----------------------------------------------
 
 
-def _png_b64(width: int, height: int) -> str:
-    import numpy as np
+def _png_b64(width: int, height: int, *, constant: bool = False) -> str:
+    """Pillow only (NumPy is not a StableNew dependency): a noisy image, or a flat one."""
 
-    rng = np.random.default_rng(1)
+    import random
+
     buffer = io.BytesIO()
-    Image.fromarray(rng.integers(0, 255, (height, width, 3), dtype=np.uint8)).save(buffer, format="PNG")
+    if constant:
+        Image.new("RGB", (width, height), (120, 120, 120)).save(buffer, format="PNG")
+    else:
+        Image.frombytes("RGB", (width, height), random.Random(1).randbytes(width * height * 3)).save(buffer, format="PNG")
     return base64.b64encode(buffer.getvalue()).decode()
 
 
 class _Http:
-    def __init__(self, behaviour="ok", *, wrong_size=False):
+    def __init__(self, behaviour="ok", *, wrong_size=False, seed=None, all_seeds=None, image="noise"):
         self.behaviour, self.wrong_size, self.posts, self.options = behaviour, wrong_size, [], {}
+        self.seed, self.all_seeds, self.image = seed, all_seeds, image
 
     def get(self, url, **_k):
         if url.endswith("/progress") or "/progress" in url:
@@ -307,7 +312,13 @@ class _Http:
         if self.behaviour == "oom":
             return SimpleNamespace(status_code=500, text="CUDA out of memory", json=lambda: {})
         size = (100, 100) if self.wrong_size else (json["width"], json["height"])
-        body = {"images": [_png_b64(*size)], "info": __import__("json").dumps({"seed": json["seed"], "all_seeds": [json["seed"]]})}
+        if self.image == "garbage":
+            image = base64.b64encode(b"not a png at all").decode()
+        else:
+            image = _png_b64(*size, constant=self.image == "constant")
+        seed = json["seed"] if self.seed is None else self.seed
+        all_seeds = [json["seed"]] if self.all_seeds is None else self.all_seeds
+        body = {"images": [image], "info": __import__("json").dumps({"seed": seed, "all_seeds": all_seeds})}
         return SimpleNamespace(status_code=200, text="", json=lambda: body)
 
 
@@ -331,11 +342,27 @@ class _FakeForge:
         return {"owned_pids": [], "survivors": []}
 
 
+def _tiny_assets(monkeypatch, assets_dir: Path) -> None:
+    """Tiny stand-ins pinned as the frozen identities (distinct bytes per role, no 12 GB of weights)."""
+
+    import hashlib
+
+    assets_dir.mkdir(parents=True, exist_ok=True)
+    for role, original in list(spec.ASSETS.items()):
+        content = f"tiny-{role}-weights".encode()
+        monkeypatch.setitem(spec.ASSETS, role, spec.Asset(original.role, original.repo, original.revision, original.remote_path,
+                                                          original.filename, len(content), hashlib.sha256(content).hexdigest(),
+                                                          original.models_subdir))
+        (assets_dir / original.filename).write_bytes(content)
+
+
 @pytest.fixture
 def qualification_root(tmp_path, monkeypatch):
     root = tmp_path / "qual"
+    _tiny_assets(monkeypatch, root / "assets")
     layout = build_layout(root)
-    manifest = {"qualification_source_sha": run_module._git_head(), "cases": spec.CASES,
+    sources = {role: spec.verify_asset(role, layout["assets"] / a.filename) for role, a in spec.ASSETS.items()}
+    manifest = {"qualification_source_sha": run_module._git_head(), "cases": spec.CASES, "assets": sources,
                 "fallback_reference_2": run_module._fallback_reference(layout["evidence"] / "fallback.png")}
     manifest["manifest_sha256"] = api.frozen_digest(manifest)
     (layout["evidence"] / "frozen-manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -356,6 +383,8 @@ def test_a_successful_case_records_one_dispatch_the_model_stack_seed_and_a_valid
     assert record["active_checkpoint"] == "flux-2-klein-4b-fp8.safetensors"
     assert sorted(record["active_modules"]) == ["flux2-vae.safetensors", "qwen_3_4b.safetensors"]
     assert record["seed_returned"] == 424242 and record["image"]["valid"] and record["image"]["size"] == [768, 1024]
+    assert record["seed_requested"] == 424242 and record["seed_match"] is True and record["all_seeds"] == [424242]
+    assert {r: e["sha256"] for r, e in record["model_identity"].items()} == {r: a.sha256 for r, a in spec.ASSETS.items()}
     assert record["stop"]["survivors"] == []
 
 
@@ -451,3 +480,248 @@ def test_only_an_api_layer_rejection_without_generation_work_can_be_reopened(tmp
     ledger = _rejected_ledger(tmp_path, **entry)
     with pytest.raises(RuntimeError, match="only an API-layer rejection"):
         ledger.reopen_rejected("C", "x")
+
+
+# --- post-merge repairs (PR-IMG-116 phase 0): what Forge loads, returned seed, isolation order, no NumPy ----------
+
+
+def _model_file(root: Path, role: str) -> Path:
+    asset = spec.ASSETS[role]
+    return root / "forge-data" / "models" / asset.models_subdir / asset.filename
+
+
+def test_a_correct_source_and_a_correct_model_tree_pass_with_both_identities_reported(qualification_root):
+    report = run_module.cmd_assets(qualification_root, qualification_root.parent / "install")
+
+    assert report["exact_match"] is True
+    for role, asset in spec.ASSETS.items():
+        assert report["assets"][role]["sha256"] == asset.sha256
+        assert report["forge_models"][role]["exact"] is True and report["forge_models"][role]["sha256"] == asset.sha256
+        assert report["linked_into_forge_data"][role] is True
+
+
+def test_a_same_name_model_tree_file_with_different_bytes_fails_closed(qualification_root):
+    target = _model_file(qualification_root, "vae")
+    size = spec.ASSETS["vae"].size
+    target.unlink()  # break the hard link; the verified source in assets/ is untouched
+    target.write_bytes(b"x" * size)
+
+    report = run_module.cmd_assets(qualification_root, qualification_root.parent / "install")
+
+    assert report["exact_match"] is False
+    assert report["forge_models"]["vae"]["exact"] is False and "sha256" in report["forge_models"]["vae"]["error"]
+    assert report["assets"]["vae"]["sha256"] == spec.ASSETS["vae"].sha256  # the source alone would have looked fine
+
+
+def test_a_stale_model_tree_file_is_not_accepted_just_because_the_source_asset_is_correct(qualification_root):
+    target = _model_file(qualification_root, "text_encoder")
+    target.unlink()
+    target.write_bytes(b"stale")  # wrong size
+
+    report = run_module.cmd_assets(qualification_root, qualification_root.parent / "install")
+
+    assert report["exact_match"] is False and "size" in report["forge_models"]["text_encoder"]["error"]
+    assert report["linked_into_forge_data"]["text_encoder"] is False
+
+
+def test_a_byte_identical_copy_in_the_model_tree_is_accepted_without_hard_link_identity(qualification_root):
+    import shutil
+
+    target = _model_file(qualification_root, "transformer")
+    target.unlink()
+    shutil.copyfile(qualification_root / "assets" / spec.ASSETS["transformer"].filename, target)
+
+    report = run_module.cmd_assets(qualification_root, qualification_root.parent / "install")
+
+    assert report["exact_match"] is True
+    assert report["linked_into_forge_data"]["transformer"] is False  # a distinct file, exact bytes
+    assert report["forge_models"]["transformer"]["identity"] == "hashed"
+
+
+def test_freeze_refuses_before_any_manifest_when_the_actual_model_tree_is_wrong(qualification_root, monkeypatch):
+    target = _model_file(qualification_root, "vae")
+    target.unlink()
+    target.write_bytes(b"x" * spec.ASSETS["vae"].size)
+    evidence = qualification_root / "evidence"
+    for entry in evidence.iterdir():
+        entry.unlink()  # a fresh package: nothing frozen yet
+    ran: list[str] = []
+    monkeypatch.setattr(run_module.subprocess, "run", lambda *a, **k: ran.append(str(a)))
+
+    with pytest.raises(ValueError, match="Forge would load"):
+        run_module.cmd_freeze(qualification_root, qualification_root.parent / "install")
+
+    assert list(evidence.iterdir()) == [] and ran == []  # no manifest, no reference image, no subprocess
+
+
+def test_freeze_records_both_identities_when_everything_is_exact(qualification_root, monkeypatch):
+    evidence = qualification_root / "evidence"
+    for entry in evidence.iterdir():
+        entry.unlink()
+    real_run = run_module.subprocess.run
+
+    def fake_run(cmd, *a, **k):
+        if "torch" in " ".join(map(str, cmd)):
+            return SimpleNamespace(stdout=json.dumps({"python": "3.13.16", "torch": "t", "torchvision": "v"}))
+        return real_run(cmd, *a, **k)
+
+    monkeypatch.setattr(run_module.subprocess, "run", fake_run)
+    monkeypatch.setattr(run_module, "launch_profile", lambda root, install: {"command": ["x"], "working_dir": "w", "endpoint": "e"})
+
+    manifest = run_module.cmd_freeze(qualification_root, qualification_root.parent / "install")
+
+    assert set(manifest["forge_models"]) == set(manifest["assets"]) == set(spec.ASSETS)
+    assert all(e["exact"] for e in manifest["forge_models"].values())
+    api.check_frozen(json.loads((evidence / "frozen-manifest.json").read_text()))
+
+
+def test_a_case_refuses_before_any_runtime_when_the_model_tree_changed_after_freezing(qualification_root):
+    target = _model_file(qualification_root, "transformer")
+    target.unlink()
+    target.write_bytes(b"y" * spec.ASSETS["transformer"].size)
+    forge = _FakeForge()
+
+    with pytest.raises(ValueError, match="Forge would load"):
+        run_module.run_case("A", qualification_root, qualification_root.parent / "install", http=_Http(), forge=forge, events=lambda _s: [])
+
+    assert forge.started == 0
+    assert api.Ledger(qualification_root / "evidence" / "ledger.json").state("A") == ""  # the case was not consumed
+
+
+def test_a_case_also_refuses_a_model_file_that_is_exact_but_not_the_frozen_one(qualification_root):
+    manifest_path = qualification_root / "evidence" / "frozen-manifest.json"
+    manifest = json.loads(manifest_path.read_text())
+    manifest["assets"]["vae"]["sha256"] = "0" * 64
+    manifest.pop("manifest_sha256")
+    manifest["manifest_sha256"] = api.frozen_digest(manifest)
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    forge = _FakeForge()
+
+    with pytest.raises(ValueError, match="no longer matches the frozen manifest"):
+        run_module.run_case("A", qualification_root, qualification_root.parent / "install", http=_Http(), forge=forge, events=lambda _s: [])
+
+    assert forge.started == 0
+
+
+# --- returned seed provenance ------------------------------------------------------------------------------
+
+
+def test_a_matching_returned_seed_passes_and_is_recorded(qualification_root):
+    record = _run("A", qualification_root, _Http())
+    assert (record["state"], record["seed_requested"], record["seed_returned"], record["all_seeds"], record["seed_match"]) == (
+        "passed", 424242, 424242, [424242], True)
+
+
+@pytest.mark.parametrize("wrong", [{"seed": 1}, {"all_seeds": [424243]}, {"seed": 1, "all_seeds": [1]}, {"seed": -1}])
+def test_a_valid_image_with_a_wrong_returned_seed_is_not_a_pass(qualification_root, wrong):
+    http = _Http(**wrong)
+    record = _run("A", qualification_root, http)
+    assert record["state"] == "failed" and record["class"] == "provenance_failure" and record["seed_match"] is False
+    assert record["seed_requested"] == 424242 and record["image"]["valid"] is True  # the image was fine; its provenance was not
+    assert sum(u.endswith("/txt2img") for u in http.posts) == 1  # never dispatched again
+    with pytest.raises(RuntimeError, match="no retry"):
+        _run("A", qualification_root, _Http())
+    with pytest.raises(RuntimeError, match="Case A must pass"):
+        _run("B", qualification_root, _Http())
+
+
+def test_only_the_all_seeds_entries_of_the_returned_images_are_relevant(qualification_root):
+    record = _run("A", qualification_root, _Http(all_seeds=[424242, 5]))  # one image returned: one relevant entry
+    assert record["state"] == "passed" and record["seed_match"] is True
+
+
+# --- isolation before mutation ------------------------------------------------------------------------------
+
+
+@pytest.fixture
+def protected(tmp_path, monkeypatch):
+    repo, install, a1111 = tmp_path / "repo", tmp_path / "Forge" / "neo-d70373eb", tmp_path / "stable-diffusion-webui"
+    for path in (repo, install, a1111):
+        (path / "keep").mkdir(parents=True)
+    monkeypatch.setattr(run_module, "REPO_ROOT", repo)
+    monkeypatch.setattr(run_module, "A1111", a1111)
+    return {"repo": repo, "managed Forge": install, "A1111": a1111}
+
+
+def _tree(path: Path) -> list[str]:
+    return sorted(str(p.relative_to(path)) for p in path.rglob("*"))
+
+
+@pytest.mark.parametrize("which", ["repo", "managed Forge", "A1111"])
+@pytest.mark.parametrize("command", ["assets", "freeze", "case", "repair"])
+def test_a_root_inside_a_protected_location_is_refused_before_anything_is_created(protected, which, command):
+    install = protected["managed Forge"]
+    root = protected[which] / "qual-root"
+    before = {name: _tree(path) for name, path in protected.items()}
+    invoke = {
+        "assets": lambda: run_module.cmd_assets(root, install),
+        "freeze": lambda: run_module.cmd_freeze(root, install),
+        "case": lambda: run_module.run_case("A", root, install, http=_Http(), forge=_FakeForge(), events=lambda _s: []),
+        "repair": lambda: run_module.cmd_repair("C", root, "x", install),
+    }[command]
+
+    with pytest.raises(ValueError, match="must be outside"):
+        invoke()
+
+    assert not root.exists()
+    assert {name: _tree(path) for name, path in protected.items()} == before  # zero new files or directories anywhere
+
+
+def test_the_isolation_check_precedes_layout_creation_in_every_command():
+    import ast
+
+    tree = ast.parse((REPO / "tools" / "qualification" / "img115" / "run.py").read_text(encoding="utf-8"))
+    assert "build_layout" not in {n.id for n in ast.walk(tree) if isinstance(n, ast.Name)}  # only prepare_layout (check first)
+    runtime = (REPO / "tools" / "qualification" / "img115" / "runtime.py").read_text(encoding="utf-8")
+    prepare = runtime[runtime.index("def prepare_layout"):runtime.index("def verify_actual_models")]
+    assert prepare.index("assert_isolated(") < prepare.index("build_layout(")
+
+
+# --- Pillow-only image validation (NumPy is not a StableNew dependency) --------------------------------------
+
+
+def test_a_pillow_only_valid_image_passes_with_the_recorded_evidence_fields():
+    raw, facts = run_module._decode_png(_png_b64(64, 48), 64, 48)
+    assert raw and facts["valid"] is True
+    assert set(facts) >= {"size", "dimensions_ok", "pixel_std", "non_constant", "valid"}
+    assert facts["size"] == [64, 48] and facts["pixel_std"] > 40  # uniform noise is far from constant
+
+
+def test_wrong_dimensions_a_constant_image_and_garbage_are_all_failures_not_exceptions(qualification_root):
+    _, wrong = run_module._decode_png(_png_b64(64, 48), 32, 32)
+    assert wrong["dimensions_ok"] is False and wrong["valid"] is False
+    _, flat = run_module._decode_png(_png_b64(64, 48, constant=True), 64, 48)
+    assert flat["dimensions_ok"] is True and flat["non_constant"] is False and flat["valid"] is False
+    _, junk = run_module._decode_png(base64.b64encode(b"not a png").decode(), 64, 48)
+    assert junk["valid"] is False and "decode_error" in junk
+    _, bad64 = run_module._decode_png("@@@not-base64@@@", 64, 48)
+    assert bad64["valid"] is False
+
+    record = _run("A", qualification_root, _Http(image="constant"))
+    assert record["class"] == "technical_failure" and record["image"]["non_constant"] is False
+
+
+def test_a_garbage_image_response_is_recorded_as_a_technical_failure_after_one_dispatch(qualification_root):
+    http = _Http(image="garbage")
+    record = _run("A", qualification_root, http)
+    assert record["state"] == "failed" and record["class"] == "technical_failure"
+    assert sum(u.endswith("/txt2img") for u in http.posts) == 1
+
+
+def test_the_harness_imports_and_decodes_without_numpy_installed():
+    import subprocess
+    import sys
+
+    code = (
+        "import sys; sys.modules['numpy'] = None\n"  # any 'import numpy' now raises ImportError
+        "import tools.qualification.img115.run as r, tools.qualification.img115.api, tools.qualification.img115.runtime\n"
+        "import base64, io\n"
+        "from PIL import Image\n"
+        "buf = io.BytesIO(); Image.frombytes('RGB', (8, 8), bytes(range(192))).save(buf, format='PNG')\n"
+        "raw, facts = r._decode_png(base64.b64encode(buf.getvalue()).decode(), 8, 8)\n"
+        "assert facts['valid'], facts\n"
+        "print('ok')\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], cwd=REPO, capture_output=True, text=True, timeout=120)
+    assert result.returncode == 0 and result.stdout.strip() == "ok", result.stderr
+    assert "numpy" not in ALL_SRC.lower()  # no import (or mention) anywhere in the harness

@@ -1,7 +1,8 @@
 """IMG-115 CLI: ``assets`` (verify + layout), ``freeze`` (write the frozen manifest), ``case A|B|C|D`` (one dispatch).
 
 One process per case. Results go to <root>/evidence; a case is dispatched at most once (see api.Ledger).
-Classes recorded per case: passed | technical_failure | integration_gap | resource_limit | ambiguous | hard_stop.
+Classes recorded per case: passed | technical_failure | provenance_failure | integration_gap | resource_limit | ambiguous | hard_stop.
+Every command proves the root's isolation before creating anything, and verifies the model files Forge will actually load.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ import argparse
 import base64
 import io
 import json
+import os
 import subprocess
 import sys
 import threading
@@ -28,7 +30,13 @@ from .api import (
     options_payload,
     resolve_references,
 )
-from .runtime import OwnedForge, assert_isolated, build_layout, launch_profile
+from .runtime import (
+    OwnedForge,
+    launch_profile,
+    prepare_layout,
+    require_exact_models,
+    verify_actual_models,
+)
 from .spec import (
     ASSETS,
     CASES,
@@ -71,25 +79,43 @@ def _fallback_reference(path: Path) -> dict[str, str]:
     return {"path": str(path), "sha256": sha256_file(path)}
 
 
-def cmd_assets(root: Path) -> dict[str, Any]:
-    layout = build_layout(root)
+def _layout(root: Path, install: Path) -> dict[str, Path]:
+    """Isolation is proven BEFORE anything under ``root`` is created (a refused root is never touched)."""
+
+    return prepare_layout(root, repo_root=REPO_ROOT, managed_install=install, a1111_home=A1111)
+
+
+def _assets_report(layout: dict[str, Path]) -> dict[str, Any]:
+    """Source assets AND the model files Forge will actually load, with an explicit exact-match verdict."""
+
     verified = {role: verify_asset(role, layout["assets"] / asset.filename) for role, asset in ASSETS.items()}
     reject_substitution({role: Path(v["path"]).name for role, v in verified.items()})
-    models = layout["forge-data"] / "models"
+    actual = verify_actual_models(layout, verified)
     linked = {
-        role: (models / a.models_subdir / a.filename).stat().st_ino == (layout["assets"] / a.filename).stat().st_ino
+        role: (layout["models"] / a.models_subdir / a.filename).is_file()
+        and os.path.samefile(layout["models"] / a.models_subdir / a.filename, layout["assets"] / a.filename)
         for role, a in ASSETS.items()
     }
-    return {"assets": verified, "linked_into_forge_data": linked, "total_bytes": sum(a.size for a in ASSETS.values())}
+    exact = all(entry.get("exact") for entry in actual.values()) and all(
+        entry.get("sha256") == verified[role]["sha256"] for role, entry in actual.items()
+    )
+    return {"assets": verified, "forge_models": actual, "linked_into_forge_data": linked, "exact_match": exact,
+            "total_bytes": sum(a.size for a in ASSETS.values())}
+
+
+def cmd_assets(root: Path, install: Path = DEFAULT_INSTALL) -> dict[str, Any]:
+    return _assets_report(_layout(root, install))
 
 
 def cmd_freeze(root: Path, install: Path) -> dict[str, Any]:
-    layout = build_layout(root)
-    assert_isolated(root, repo_root=REPO_ROOT, managed_install=install, a1111_home=A1111)
+    layout = _layout(root, install)
     target = layout["evidence"] / "frozen-manifest.json"
     if target.exists():
         raise RuntimeError("the manifest is already frozen")
-    assets = cmd_assets(root)
+    assets = _assets_report(layout)
+    if not assets["exact_match"]:  # refuse BEFORE any manifest, reference image or subprocess exists
+        require_exact_models(assets["forge_models"])
+        raise ValueError("the model files Forge would load differ from the verified source assets")
     py = install / "venv" / "Scripts" / "python.exe"
     code = "import sys,json,torch,torchvision;print(json.dumps({'python':sys.version.split()[0],'torch':torch.__version__,'torchvision':torchvision.__version__}))"
     facts = json.loads(subprocess.run([str(py), "-c", code], capture_output=True, text=True, check=True).stdout)
@@ -101,6 +127,7 @@ def cmd_freeze(root: Path, install: Path) -> dict[str, Any]:
         "forge_sha": FORGE_SHA,
         "runtime": facts,
         "assets": assets["assets"],
+        "forge_models": assets["forge_models"],
         "total_bytes": assets["total_bytes"],
         "forge_options": options_payload(layout["forge-data"] / "models") | {"forge_unet_storage_dtype": "Automatic (not set)"},
         "launch": {"command": profile["command"], "working_dir": profile["working_dir"], "endpoint": profile["endpoint"]},
@@ -118,10 +145,10 @@ def cmd_freeze(root: Path, install: Path) -> dict[str, Any]:
     return manifest
 
 
-def cmd_repair(case_id: str, root: Path, reason: str) -> dict[str, Any]:
+def cmd_repair(case_id: str, root: Path, reason: str, install: Path = DEFAULT_INSTALL) -> dict[str, Any]:
     """Record the harness repair (addendum at the current clean HEAD) and reopen ONE API-rejected case, once per package."""
 
-    layout = build_layout(root)
+    layout = _layout(root, install)
     if subprocess.run(["git", "-C", str(REPO_ROOT), "status", "--porcelain"], capture_output=True, text=True).stdout.strip():
         raise RuntimeError("commit the repair before recording it")
     frozen = json.loads((layout["evidence"] / "frozen-manifest.json").read_text(encoding="utf-8"))
@@ -210,18 +237,37 @@ def _fault_events(start: datetime) -> list[dict[str, Any]]:
     return fault_events_since(start)
 
 
+def _pixel_std(rgb: Any) -> float:
+    """Standard deviation over every R/G/B value (Pillow only; decoded integer pixels cannot be non-finite)."""
+
+    from PIL import ImageStat
+
+    stat = ImageStat.Stat(rgb)
+    grand_mean = sum(stat.mean) / len(stat.mean)
+    variance = sum(v + (m - grand_mean) ** 2 for v, m in zip(stat.var, stat.mean, strict=True)) / len(stat.mean)
+    return variance**0.5
+
+
 def _decode_png(b64: str, width: int, height: int) -> tuple[bytes, dict[str, Any]]:
-    import numpy as np
+    """Validate base64, decodability, dimensions and pixel variation. Never raises: an invalid image is a recorded failure."""
+
     from PIL import Image
 
-    raw = base64.b64decode(b64.split(",")[-1])
-    image = Image.open(io.BytesIO(raw))
-    array = np.asarray(image.convert("RGB"), dtype=np.float32)
+    try:
+        raw = base64.b64decode(b64.split(",")[-1])
+    except ValueError as exc:  # binascii.Error is a ValueError
+        return b"", {"size": None, "dimensions_ok": False, "pixel_std": 0.0, "non_constant": False, "valid": False, "decode_error": f"base64: {exc}"}
+    try:
+        image = Image.open(io.BytesIO(raw))
+        rgb = image.convert("RGB")  # forces a full decode: a truncated or corrupt PNG fails here
+        std = _pixel_std(rgb)
+    except Exception as exc:  # noqa: BLE001 - any decode failure is an invalid image, not an ambiguous dispatch
+        return raw, {"size": None, "dimensions_ok": False, "pixel_std": 0.0, "non_constant": False, "valid": False, "decode_error": f"{type(exc).__name__}: {exc}"}
     facts: dict[str, Any] = {
-        "size": list(image.size), "dimensions_ok": image.size == (width, height), "finite": bool(np.isfinite(array).all()),
-        "pixel_std": round(float(array.std()), 2), "non_constant": bool(array.std() > 2.0),
+        "size": list(image.size), "dimensions_ok": image.size == (width, height),
+        "pixel_std": round(std, 2), "non_constant": bool(std > 2.0),
     }
-    facts["valid"] = facts["dimensions_ok"] and facts["finite"] and facts["non_constant"]
+    facts["valid"] = facts["dimensions_ok"] and facts["non_constant"]
     return raw, facts
 
 
@@ -254,6 +300,17 @@ def _select_model(http: Any, base: str, options: dict[str, Any], record: dict[st
         raise RuntimeError(f"the requested model/modules are not active: {record['active_checkpoint']} {record['active_modules']}")
 
 
+def _seed_matches(requested: int, info: dict[str, Any], image_count: int) -> bool:
+    """The returned seed (and every returned image's entry of ``all_seeds``) must equal the frozen requested seed."""
+
+    if info.get("seed") != requested:
+        return False
+    all_seeds = info.get("all_seeds")
+    if all_seeds:
+        return len(all_seeds) >= image_count and all(seed == requested for seed in all_seeds[:image_count])
+    return True
+
+
 def _classify_response(response: Any, case: dict[str, Any], case_dir: Path, outputs: Path, case_id: str, record: dict[str, Any]) -> tuple[str, str]:
     record["http_status"] = response.status_code
     if response.status_code != 200:
@@ -272,7 +329,12 @@ def _classify_response(response: Any, case: dict[str, Any], case_dir: Path, outp
     out = outputs / f"case-{case_id}.png"
     out.write_bytes(raw)
     record.update({"png_path": str(out), "png_sha256": sha256_file(out), "image": facts, "images_returned": len(images)})
-    return ("passed", "passed") if facts["valid"] else ("failed", "technical_failure")
+    record["seed_match"] = _seed_matches(case["seed"], info, len(images))
+    if not facts["valid"]:
+        return "failed", "technical_failure"
+    if not record["seed_match"]:  # a valid image whose returned seed differs from the frozen one is not evidence of the frozen case
+        return "failed", "provenance_failure"
+    return "passed", "passed"
 
 
 def run_case(case_id: str, root: Path, install: Path, *, http: Any = None, forge: OwnedForge | None = None, events: Any = None) -> dict[str, Any]:
@@ -282,8 +344,7 @@ def run_case(case_id: str, root: Path, install: Path, *, http: Any = None, forge
 
     http = http or requests
     events = events or _fault_events
-    layout = build_layout(root)
-    assert_isolated(root, repo_root=REPO_ROOT, managed_install=install, a1111_home=A1111)
+    layout = _layout(root, install)
     models, outputs = layout["forge-data"] / "models", layout["outputs"]
     case_dir = layout["evidence"] / f"case-{case_id}"
     frozen = json.loads((layout["evidence"] / "frozen-manifest.json").read_text(encoding="utf-8"))
@@ -297,6 +358,13 @@ def run_case(case_id: str, root: Path, install: Path, *, http: Any = None, forge
         allowed.add(extra["qualification_source_sha"])
     if _git_head() not in allowed and not any(_descendant_docs_only(sha) for sha in allowed):
         raise RuntimeError("harness source changed since the manifest was frozen")
+    # What Forge will actually load must still be the frozen assets, checked BEFORE the case is consumed or a runtime starts.
+    actual_models = verify_actual_models(layout)
+    require_exact_models(actual_models)
+    frozen_assets = frozen.get("assets") or {}
+    for role, entry in actual_models.items():
+        if frozen_assets.get(role, {}).get("sha256") != entry["sha256"]:
+            raise ValueError(f"the {role} Forge would load no longer matches the frozen manifest")
     ledger = Ledger(layout["evidence"] / "ledger.json")
     ledger.begin(case_id)
     case = CASES[case_id]
@@ -309,6 +377,7 @@ def run_case(case_id: str, root: Path, install: Path, *, http: Any = None, forge
     (case_dir / "payload.json").write_text(json.dumps(shown, indent=2), encoding="utf-8")
     record: dict[str, Any] = {
         "case": case_id, "references": [{"path": str(p), "sha256": s} for p, s in refs], "seed_requested": case["seed"],
+        "model_identity": {role: {"path": e["path"], "bytes": e["bytes"], "sha256": e["sha256"]} for role, e in actual_models.items()},
     }
     forge = forge or OwnedForge(launch_profile(root, install))
     pre_start = datetime.now()
@@ -390,9 +459,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--install", type=Path, default=DEFAULT_INSTALL)
     args = parser.parse_args(argv)
     if args.command == "assets":
-        print(json.dumps(cmd_assets(args.root), indent=2))
+        report = cmd_assets(args.root, args.install)
+        print(json.dumps(report, indent=2))
+        return 0 if report["exact_match"] else 1
     elif args.command == "repair":
-        print(json.dumps(cmd_repair(args.case, args.root, "txt2img+ImageStitch rejected by the Forge API layer; edit now uses /img2img"), indent=2))
+        print(json.dumps(cmd_repair(args.case, args.root, "txt2img+ImageStitch rejected by the Forge API layer; edit now uses /img2img", args.install), indent=2))
     elif args.command == "freeze":
         manifest = cmd_freeze(args.root, args.install)
         print(json.dumps({k: manifest[k] for k in ("manifest_sha256", "qualification_source_sha", "runtime")}, indent=2))
@@ -401,7 +472,7 @@ def main(argv: list[str] | None = None) -> int:
             parser.error("case requires A, B, C or D")
         record = run_case(args.case, args.root, args.install)
         keys = ("case", "state", "class", "ready_seconds", "model_select_seconds", "generation_seconds", "png_sha256", "image",
-                "seed_returned", "telemetry_peaks", "memory_peaks", "oom_markers", "error")
+                "seed_returned", "seed_match", "telemetry_peaks", "memory_peaks", "oom_markers", "error")
         print(json.dumps({k: record.get(k) for k in keys}, indent=2, default=str))
         return 0 if record["state"] == "passed" else 1
     return 0
