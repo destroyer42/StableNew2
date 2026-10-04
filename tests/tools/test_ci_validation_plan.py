@@ -91,11 +91,18 @@ def test_ci_framework_and_policy_changes_also_activate_the_ci_authority_lane() -
         assert vp.LANE_CI_AUTHORITY in vp.classify([path]).lanes, path
 
 
-def test_unknown_executable_paths_escalate_conservatively_and_are_never_dropped() -> None:
-    plan = vp.classify(["mystery/thing.py"])
-    assert not plan.docs_only and vp.LANE_CORE in plan.lanes and plan.escalations and plan.affected_targets
-    assert vp.classify([".gitignore"]).escalations
-    assert vp.classify(["main.py"]).affected_targets  # an unmapped root script still runs something
+@pytest.mark.parametrize("path", ["mystery/thing.py", "main.py", "newtool/run.sh", "somefile.cfg", "docs/tool.json"])
+def test_unknown_ownership_is_never_assumed_core_only_it_requires_the_full_census(path: str) -> None:
+    plan = vp.classify([path])
+    assert not plan.docs_only and plan.full_census and vp.LANE_FULL_CENSUS in plan.lanes
+    assert plan.escalations and "unknown" in plan.escalations[0] and plan.full_census_reasons
+    assert plan.affected_targets == () and not plan.run_affected  # the census subsumes the lanes
+
+
+@pytest.mark.parametrize("path", [".gitignore", ".editorconfig", "presets/global_negative.txt", "packs/anything.json", "config/other.json", "data/x.json"])
+def test_known_data_and_repo_meta_trees_are_owned_not_unknown(path: str) -> None:
+    plan = vp.classify([path])
+    assert not plan.full_census and not plan.escalations and vp.LANE_CORE in plan.lanes and plan.run_affected
 
 
 def test_mixed_changes_are_additive_not_dominated_by_one_lane() -> None:
@@ -158,6 +165,90 @@ def test_full_census_suppresses_the_duplicate_affected_lanes() -> None:
     assert forced.full_census and forced.affected_targets == () and not forced.run_affected
 
 
+# --- cross-domain source -> test ownership (the lane of a source is not where all its tests live) -----------------------
+
+
+def _routed(plan: vp.ValidationPlan, test_path: str) -> bool:
+    return plan.full_census or covered(test_path, plan.affected_targets)
+
+
+def test_learning_gui_sources_activate_the_learning_domain_tests_besides_gui() -> None:
+    for source in ("src/gui/controllers/learning_controller.py", "src/gui/learning_state.py", "src/gui/views/learning_review_panel.py",
+                   "src/gui_v2/adapters/learning_adapter_v2.py"):
+        plan = vp.classify([source])
+        assert vp.LANE_GUI in plan.lanes and not plan.full_census, source
+        for test in ("tests/learning_v2", "tests/learning", "tests/controller/test_learning_controller_njr.py",
+                     "tests/integration/test_learning_review_recommendation_e2e.py"):
+            assert _routed(plan, test), (source, test)
+
+
+def test_prompt_workspace_and_pack_model_state_sources_activate_state_and_promptpack_tests_besides_gui() -> None:
+    for source in ("src/gui/models/prompt_pack_model.py", "src/gui/models/prompt_metadata.py", "src/gui/prompt_workspace_state.py"):
+        plan = vp.classify([source])
+        assert vp.LANE_GUI in plan.lanes and not plan.full_census, source
+        for test in ("tests/state/test_prompt_workspace_state.py", "tests/promptpacks/test_storage.py", "tests/test_json_unification.py"):
+            assert _routed(plan, test), (source, test)
+
+
+def test_central_gui_state_and_panels_reach_their_core_runtime_image_and_video_owners() -> None:
+    state = vp.classify(["src/gui/app_state_v2.py"])
+    assert {vp.LANE_GUI, vp.LANE_CORE} <= set(state.lanes) and _routed(state, "tests/queue")
+    assert _routed(vp.classify(["src/gui/panels_v2/running_job_panel_v2.py"]), "tests/integration/test_job_timing_e2e.py")
+    assert _routed(vp.classify(["src/gui/preview_panel_v2.py"]), "tests/controller/test_pack_draft_to_normalized_preview_v2.py")
+    assert vp.LANE_RUNTIME in vp.classify(["src/gui/api_status_panel.py"]).lanes
+    assert vp.LANE_IMAGE in vp.classify(["src/gui/dropdown_loader_v2.py"]).lanes
+    assert vp.LANE_VIDEO in vp.classify(["src/gui/views/movie_clips_tab_frame_v2.py"]).lanes
+    assert _routed(vp.classify(["src/gui/stage_cards_v2/adetailer_stage_card_v2.py"]), "tests/test_pr_008.py")
+
+
+def _direct_importers(sources: list[str]) -> dict[str, set[str]]:
+    """Re-derive the evidence: which test files import each source module directly (static AST scan)."""
+
+    import ast
+
+    wanted = {s: s[: -len(".py")].replace("/", ".") for s in sources}
+    found: dict[str, set[str]] = {s: set() for s in sources}
+    for path in sorted((ROOT / "tests").rglob("test_*.py")):
+        rel = path.relative_to(ROOT).as_posix()
+        if rel.startswith(("tests/legacy", "tests/quarantine", "tests/gui_v1_legacy", "tests/scripts")):
+            continue
+        try:
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+        except (SyntaxError, UnicodeDecodeError):
+            continue
+        for node in ast.walk(tree):
+            names: list[str] = []
+            if isinstance(node, ast.ImportFrom) and node.module and node.module.startswith("src"):
+                names = [node.module, *(f"{node.module}.{alias.name}" for alias in node.names)]
+            elif isinstance(node, ast.Import):
+                names = [alias.name for alias in node.names]
+            for source, dotted in wanted.items():
+                if dotted in names:
+                    found[source].add(rel)
+    return found
+
+
+def test_every_test_that_directly_imports_a_cross_domain_gui_source_is_routed_to_it() -> None:
+    """Strengthened ownership proof: not 'some lane owns the file' but 'the changed source runs the tests that import it'."""
+
+    sources = [
+        "src/gui/controllers/learning_controller.py", "src/gui/learning_state.py", "src/gui/models/prompt_pack_model.py",
+        "src/gui/prompt_workspace_state.py", "src/gui/models/prompt_metadata.py", "src/gui/app_state_projection_sink.py",
+        "src/gui/panels_v2/running_job_panel_v2.py", "src/gui/preview_panel_v2.py", "src/gui/sidebar_panel_v2.py",
+        "src/gui/job_history_panel_v2.py", "src/gui/views/learning_review_panel.py", "src/gui/views/movie_clips_tab_frame_v2.py",
+        "src/gui/api_status_panel.py", "src/gui/dropdown_loader_v2.py", "src/gui_v2/adapters/learning_adapter_v2.py",
+    ]
+    live = [s for s in sources if (ROOT / s).exists()]
+    importers = _direct_importers(live)
+    missing: dict[str, list[str]] = {}
+    for source, tests in importers.items():
+        plan = vp.classify([source])
+        gaps = sorted(t for t in tests if not _routed(plan, t))
+        if gaps:
+            missing[source] = gaps[:5]
+    assert not missing, f"changed source would not run the tests that import it: {missing}"
+
+
 def test_a_bounded_executable_pr_does_not_run_the_full_census_but_runs_its_lanes() -> None:
     plan = vp.classify(["src/image_backends/forge_webui_backend.py"])
     assert not plan.full_census and plan.run_affected and plan.affected_targets
@@ -183,7 +274,10 @@ def test_the_plan_cli_writes_github_outputs_for_the_workflow(tmp_path: Path) -> 
     )
     text = out.read_text(encoding="utf-8")
     assert "docs_only=false" in text and "full_census=false" in text and "run_affected=true" in text
-    assert "lanes=video" in text and "targets<<__TARGETS__" in text and "tests/video" in text
+    import re
+
+    block = re.search(r"targets<<(TARGETS_[0-9a-f]{32})\n(.*?)\n\1\n", text, re.S)
+    assert "lanes=video" in text and block and "tests/video" in block.group(2)  # random delimiter: no path can end the block
     assert '"docs_only": false' in result.stdout
 
 
@@ -295,5 +389,5 @@ def test_evidence_is_never_reused_unless_the_delta_is_docs_only_over_green_evide
 def test_a_pure_docs_pr_needs_no_reuse_and_the_workflow_reads_the_previous_head_checks() -> None:
     docs = vp.classify(["docs/x.md"])
     assert vp.apply_evidence_reuse(docs, ["docs/x.md"], previous_green=True) is docs
-    assert "github.event.before" in WORKFLOW and "check-runs" in WORKFLOW and "--previous-green" in WORKFLOW
-    assert 'name=="required"' in WORKFLOW and 'name=="full-suite"' in WORKFLOW  # only a completed prior census/lane counts
+    assert "github.event.before" in WORKFLOW and "--previous-green" in WORKFLOW
+    assert "tools/ci/previous_evidence.py" in WORKFLOW  # the policy is a tested helper, not jq in YAML

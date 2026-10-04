@@ -52,6 +52,7 @@ CONTRACT_GATE_TARGETS = (
     # the validation policy that routes every other test
     "tests/tools/test_ci_validation_plan.py",
     "tests/tools/test_ci_census_summary.py",
+    "tests/tools/test_ci_previous_evidence.py",
 )
 
 

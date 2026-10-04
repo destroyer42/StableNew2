@@ -30,10 +30,17 @@ base-to-head change set
   the runner's system Python. No Python 3.14 setup, no pip install, no tests, no census.
 * **Executable PR**: `required` (installs the environment once) then `affected` (only after `required` succeeds).
 * **Broad / unbounded**: `required`, then one `full-suite`; `affected` is skipped because the census subsumes it (no double payment).
-* **Docs-only follow-up over green evidence**: a docs-only delta (`before..after`) on a head whose `required` gate and any started
-  `affected`/`full-suite` job completed green takes the cheap path. The base-to-head classification is *not* downgraded (a docs
-  commit never turns an executable PR into a docs-only one); only what this run re-executes changes. A docs-only delta over an
-  unvalidated, failed or still-running head gets the normal routing, and an explicit full-census request always wins.
+* **Docs-only follow-up over green evidence**: a docs-only delta (`before..after`) takes the cheap path only when the repository-owned
+  helper `tools/ci/previous_evidence.py` (a pure, tested policy, not jq in YAML) finds the previous head's evidence green: the latest
+  GitHub-Actions `required` check run concluded `success`; the latest `affected` and `full-suite` runs concluded `success` or `skipped`
+  (a check that merely has `status: completed` is never enough: failure, cancelled, timed_out, action_required, neutral, in-progress
+  or missing all block reuse); and the current PR base is already an ancestor of the previous head (if `main` advanced, normal
+  validation runs). The base-to-head classification is *not* downgraded; only what this run re-executes changes. An explicit
+  full-census request always wins.
+* **Docs-only keeps CI/document truth**: the cheap path runs `tools/ci/ci_truth.py` (stdlib; the same authority the pytest truth tests
+  call), so a docs edit that violates current CI/testing canonical truth (Level 1-3 testing authority, the PR-gate pointer in `AGENTS.md`,
+  stale "always a full-suite job" statements in `STATUS.md`/`CODEX_MAP.md`) fails the cheap job without installing the application
+  environment. Ordinary docs edits do not become full-census changes.
 * Preserved: one PR-head workflow (no push trigger), `cancel-in-progress` per PR head, `workflow_dispatch`, and the `required` check
   name (branch-protection identity).
 
@@ -52,7 +59,7 @@ source is rarely touched (`learning`, `promptpacks`, `randomizer`, ...) run when
 | `core` | `src/queue`, `src/history`, `src/state`, `src/pipeline`, `src/controller`, `src/services`, `src/utils`, other `src/*` | queue, history, migrations, state, controller, pipeline, integration, services, system, safety, unit, utils, regression, compat, app, cli, top-level files |
 | `image` | `src/image_backends`, `src/api` (except runtime), `src/pipeline` (with `core`) | image_backends, api, image integration/safety, Klein/reprocess pipeline tests |
 | `video` | `src/video`, SVD/video pipeline modules | video, SVD/video pipeline tests |
-| `gui` | `src/gui`, `src/gui_v2`, `src/controller` | gui_v2, gui, review, curation, GUI controller and journey tests |
+| `gui` | `src/gui`, `src/gui_v2`, `src/controller` | gui_v2, gui, review, curation, top-level state/GUI tests, GUI controller and journey tests (+ the cross-domain rules above) |
 | `runtime` | process manager, runtime identity/transition, bootstrap scripts, `tools/runtime`, managed-runtime config | process/launch/runtime API and service tests, managed runtime system tests, app, safety |
 | `qualification_tools` | `tools/qualification`, `tools/acceptance`, other `tools/*` | `tests/tools` |
 | `ci_test_authority` | workflows, `tools/ci`, `pyproject.toml`, conftest | (implies the full census) |
@@ -62,8 +69,17 @@ source is rarely touched (`learning`, `promptpacks`, `randomizer`, ...) run when
 * **Full census** (`full_census_required`): `pyproject.toml`, requirements/constraints/locks, pytest/tox/mypy/ruff configuration,
   `.python-version`, `.github/workflows`, `tools/ci` (the policy, the gate, the census tooling), any `conftest.py`, and shared test
   infrastructure (`tests/helpers`, `tests/fixtures`, `tests/mocks`, `tests/data`).
-* **Unknown executable/config path** (no rule matches: a new top-level directory, `.gitignore`, a root script): routed to `core`
-  *and* recorded as an escalation; it is never docs-only and never "no tests".
+* **Unknown ownership** (no lane rule matches: a new top-level directory, an unmapped root script or config file): `full_census_required`
+  and recorded as an escalation. It is never docs-only, never "no tests" and never assumed to be core-only. Known data/meta trees
+  (`presets/`, `packs/`, `lists/`, `data/`, `config/`, `.gitignore`, `.editorconfig`, `.gitattributes`, `.claude/`) are explicitly owned
+  by `core` so ordinary data edits do not escalate.
+* **Cross-domain source -> test ownership** (`CROSS_DOMAIN_RULES`, additive on top of the lane rules; coarse, not a dependency graph):
+  learning GUI surfaces (`src/gui/*learning*`, `src/gui_v2/*learning*`) also run the learning, learning_v2, learning-controller and
+  golden-path tests; prompt-workspace/pack model-state surfaces (`src/gui/models/*`, `prompt_workspace_state`, `prompt_pack_adapter_v2`)
+  also run state, promptpack and the top-level state tests; `app_state_v2` and its projection sink also activate `core`; GUI panels also
+  run the controller preview/sidebar and integration (queue/job-timing) tests; API-status, dropdown-loader and movie/video GUI views
+  also activate `runtime`, `image` and `video`. A policy test re-derives the evidence (which test files import each source directly)
+  and fails if a changed source would not run the tests that import it.
 * Text that is executable or configuration (`.github/workflows`, `scripts`, `config/*.json`, `presets/*.txt`, `.md` under `src/` or
   `tests/`) is never documentation.
 * **Directly changed tests always run**: every modified `test_*.py` is added to the affected targets (or is covered by the census).
@@ -180,53 +196,6 @@ census everywhere: make `full_census` always true in `.github/workflows/ci.yml` 
 
 ## GitHub evidence
 
-All numbers are hosted `ubuntu-latest` job durations read from the GitHub API (job `started_at` to `completed_at`; GitHub bills each
-job rounded up to whole minutes). Runs: old workflow = PR #38 head `92d42ba` (run 37209295689); new workflow = this PR and two throw-away
-probe PRs stacked on it (#40, #41; closed unmerged).
-
-| Route | Jobs (duration -> billed) | Billed min | Wall |
-|---|---|---:|---:|
-| **Old, every PR** | required 69 s -> 2; full-suite 687 s -> 12 | **14** | ~11.5 min |
-| **New: docs-only** (probe #40: one new `.md`) | required 12 s -> 1 (no Python setup, no tests); affected and full-suite skipped | **1** | 12 s |
-| **New: bounded image-lane source change** (probe #41: one-line change in `src/image_backends`) | required 72 s -> 2; affected 99 s -> 2 (8 pytest targets in the image lane) | **4** | ~3 min |
-| New: the same probe before the routing was narrowed (image sources also activated `core`) | required 68 s -> 2; affected 370 s -> 7 | 9 | ~7.3 min |
-| **New: broad / CI-authority PR** (this PR, run 37211828273 and, after the routing refinement, 37213256366) | required 51-52 s -> 1; full-suite 686-690 s -> 12; affected skipped (subsumed) | **13** | ~12 min |
-| New: docs-only follow-up commit over green evidence (this PR) | see "Evidence reuse" below | 1 | seconds |
-
-* Contract gate on the hosted runner: **294-295 tests in 19-25 s**; the whole `required` job is 51-72 s for an executable PR, of which
-  checkout ~5 s, `pip install` ~9-14 s, collection gate ~8-15 s.
-* Hosted setup overhead per heavy job: checkout ~5 s, Tk/Xvfb apt ~11-17 s, `pip install` ~8-14 s (about 30 s plus the Python setup action);
-  a second heavy job (`affected` or `full-suite`) therefore costs roughly 30-40 s of setup before its first test.
-* Required-gate ordering is real: on a failing cheap check the census/affected jobs are `skipped` (they `need` `required`).
-
-### Hosted full census (qualification of the new CI authority)
-
-This PR changed CI/test authority, so the plan classified it `core, qualification_tools, ci_test_authority, full_census_required`
-(reasons: the workflow, `tools/ci/*`), ran `required`, then exactly one `full-suite`, and skipped `affected`:
-
-* **4,898 collected, 4,851 passed, 47 skipped, 0 failed**; suite wall 656 s (job 690 s; pytest step 662 s).
-* The informational failures that PR #37 produced (NumPy-dependent IMG-115 harness tests) are gone: the census is green.
-* Skips on Linux: 47 (Windows-only ctypes/branch tests 18, optional `cv2`/`numpy` extras, `ffprobe` absent, opt-in local tests).
-* Time by area (hosted): gui_v2 88 s, tools 85 s, controller 78 s, pipeline 76 s, api 59 s, top-level files 55 s, system 38 s, video 38 s,
-  integration 32 s, utils 21 s. The 10 slowest files are 32% of test time; the 50 slowest are 56%. The slowest tests are real-time waits
-  (`test_check_api_ready_failure` 31.6 s, `test_ensure_connected_timeout_sets_error` 30.8 s, `test_client_closed_on_failure` 23.1 s,
-  `test_filesystem_fallback` 14.6 s). The full slowest-200 list, the by-file table and the skip reasons are in the run's
-  `full-test-results` artifact (`census.xml`, `census-summary.json`) and its step summary. (Local Windows figures above differ because
-  of the platform; both agree on the shape.)
-
-### Expected monthly impact (from the measured per-route minutes; an illustrative mix, not a forecast)
-
-The previous workflow billed ~14 min per PR head (the 672 minutes in four days is about 48 heads). With the measured routes, a mix of
-one third docs-only (1 min), one half bounded source (4-9 min, average ~6) and one sixth broad (13 min) averages about 5.5 billed minutes
-per head, i.e. roughly 60% fewer minutes for the same number of heads, and a bounded or docs-only head returns feedback in about 3 minutes or
-seconds instead of ~11.5. The periodic census adds about 13 runs a month (3/week) at ~14 minutes, ~180 minutes, which buys main-branch full evidence
-regardless of routing. A 2,000-minute allowance is therefore not exhausted by the same development tempo; if the mix is dominated by broad
-PRs the saving shrinks, which the plan artifact (`validation-plan`, one per run) makes visible.
-
-### Evidence reuse
-
-The docs-only follow-up commit that records this evidence is itself the demonstration: its push is a docs-only delta over a head whose
-`required` and `full-suite` check runs completed green, so the run takes the cheap path instead of re-running the census. Measured on run
-37214096384 (the evidence commit itself): `required` 14 s; Python setup, pip, lint, mypy, collection, the contract gate and the clean-tree
-check `skipped`; `affected` and `full-suite` `skipped`; the plan artifact records `cheap_path: true`, `reuse_previous_evidence: true` while the
-base-to-head classification stays `full_census_required` (a docs commit does not downgrade it). One billed minute instead of 13-14.
+Hosted timing and the final census for the repaired executable SHA are recorded here after that SHA's single full census completes
+(a docs-only commit then reuses the evidence through the safe path above). Earlier measurements taken on the first implementation
+SHAs are not repeated here to avoid presenting superseded routing as final.

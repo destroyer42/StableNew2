@@ -23,6 +23,7 @@ import json
 import os
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -119,6 +120,17 @@ LANE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("tools/acceptance/*", (LANE_QUALIFICATION,)),
     ("tools/operator_journey/*", (LANE_QUALIFICATION, LANE_GUI)),
     ("tools/*", (LANE_QUALIFICATION,)),
+    # known data/config trees consumed by core code and tests (not unknown ownership)
+    ("presets/*", (LANE_CORE,)),
+    ("packs/*", (LANE_CORE,)),
+    ("lists/*", (LANE_CORE,)),
+    ("data/*", (LANE_CORE,)),
+    ("config/*", (LANE_CORE,)),
+    (".stableNew_version.txt", (LANE_CORE,)),
+    (".editorconfig", (LANE_CORE,)),
+    (".gitattributes", (LANE_CORE,)),
+    (".gitignore", (LANE_CORE,)),
+    (".claude/*", (LANE_CORE,)),
     # tests (by area)
     ("tests/image_backends/*", (LANE_IMAGE,)),
     ("tests/api/test_webui_process*", (LANE_RUNTIME,)),
@@ -151,7 +163,7 @@ LANE_TARGETS: dict[str, tuple[str, ...]] = {
     ),
     LANE_VIDEO: ("tests/video", "tests/pipeline/test_*svd*", "tests/pipeline/test_*video*"),
     LANE_GUI: (
-        "tests/gui_v2", "tests/gui", "tests/review", "tests/curation", "tests/test_*gui*.py",
+        "tests/gui_v2", "tests/gui", "tests/review", "tests/curation", "tests/test_*.py",
         "tests/tools/test_operator_journey*", "tests/controller/test_*gui*", "tests/controller/test_app_controller*",
     ),
     LANE_RUNTIME: (
@@ -188,6 +200,39 @@ DOMAIN_TARGETS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("tests/ai_v2/*", ("tests/ai_v2",)),
     ("tests/photo_optimize/*", ("tests/photo_optimize",)),
     ("tests/debughub/*", ("tests/debughub",)),
+)
+
+#: Cross-domain ownership for known sources whose relevant tests live outside their filesystem lane. Additive on top of
+#: LANE_RULES (every matching rule applies): (source pattern, extra lanes, extra pytest targets). Coarse by design - not a
+#: dependency graph; each entry is backed by tests that import the source directly (a policy test re-derives that evidence).
+_LEARNING_TESTS = (
+    "tests/learning", "tests/learning_v2", "tests/controller/test_learning*", "tests/integration/test_learning*",
+    "tests/integration/test_golden_path*",
+)
+_PROMPT_STATE_TESTS = (
+    "tests/state", "tests/promptpacks", "tests/test_*.py", "tests/integration/test_golden_path*",
+    "tests/controller/test_content_visibility*", "tests/learning_v2/test_lora_variable_service.py",
+)
+CROSS_DOMAIN_RULES: tuple[tuple[str, tuple[str, ...], tuple[str, ...]], ...] = (
+    # learning GUI surfaces: the learning domain tests are their direct owners
+    ("src/gui/*learning*", (), _LEARNING_TESTS),
+    ("src/gui_v2/*learning*", (), _LEARNING_TESTS),
+    # prompt workspace / pack model-state surfaces: state + promptpack coverage
+    ("src/gui/models/*", (), _PROMPT_STATE_TESTS),
+    ("src/gui/prompt_workspace_state.py", (), _PROMPT_STATE_TESTS),
+    ("src/gui/prompt_pack_adapter_v2.py", (), _PROMPT_STATE_TESTS),
+    # the central GUI application state is consumed across controller, pipeline, queue and API tests
+    ("src/gui/app_state_v2.py", (LANE_CORE,), ()),
+    ("src/gui/app_state_projection_sink.py", (LANE_CORE,), ()),
+    # GUI panels are exercised by controller preview/sidebar tests and the queue/job-timing integration tests
+    ("src/gui/*panel*", (), ("tests/integration", "tests/controller", "tests/test_*.py")),
+    ("src/gui/api_status_panel.py", (LANE_RUNTIME,), ()),
+    ("src/gui/dropdown_loader_v2.py", (LANE_IMAGE,), ()),
+    ("src/gui/*movie*", (LANE_VIDEO,), ()),
+    ("src/gui/view_contracts/*video*", (LANE_VIDEO,), ()),
+    ("src/gui/stage_cards_v2/*", (), ("tests/test_*.py",)),
+    ("src/gui/utils/*", (), ("tests/utils",)),
+    ("src/gui/widgets/*", (), ("tests/controller/test_*lora*", "tests/utils")),
 )
 
 #: Test areas that deliberately sit outside every lane's backbone but are reachable via DOMAIN_TARGETS
@@ -320,14 +365,21 @@ def classify(
         executable = True
         rule = next(((p, ln) for p, ln in LANE_RULES if _match(path, p)), None)
         if rule is None:
-            # Unknown executable/config path: never docs-only, never "no tests". Escalate conservatively.
-            escalations.append(f"{path}: unknown path routed to core")
-            lanes.add(LANE_CORE)
-            note(LANE_CORE, path)
+            # Unknown ownership is never assumed to be core-only: the impact cannot be bounded, so run the full census.
+            escalations.append(f"{path}: unknown ownership")
+            full_reasons.append(f"{path}: unknown executable/config ownership (impact cannot be bounded)")
+            lanes.add(LANE_FULL_CENSUS)
+            note(LANE_FULL_CENSUS, path)
         else:
             for lane in rule[1]:
                 lanes.add(lane)
                 note(lane, path)
+        for cross_pattern, cross_lanes, cross_targets in CROSS_DOMAIN_RULES:
+            if _match(path, cross_pattern):
+                for lane in cross_lanes:
+                    lanes.add(lane)
+                    note(lane, path)
+                patterns.extend(cross_targets)
         for domain_pattern, targets in DOMAIN_TARGETS:
             if _match(path, domain_pattern):
                 patterns.extend(targets)
@@ -427,7 +479,8 @@ def _github_output(plan: ValidationPlan, handle) -> None:
     kv("full_census", str(plan.full_census and not plan.cheap_path).lower())
     kv("run_affected", str(plan.run_affected).lower())
     kv("lanes", ",".join(plan.lanes))
-    handle.write("targets<<__TARGETS__\n" + "\n".join(plan.affected_targets) + "\n__TARGETS__\n")
+    delimiter = "TARGETS_" + uuid.uuid4().hex  # unguessable: a path can never end the block and inject output keys
+    handle.write(f"targets<<{delimiter}\n" + "\n".join(plan.affected_targets) + f"\n{delimiter}\n")
 
 
 def main(argv: list[str] | None = None) -> int:

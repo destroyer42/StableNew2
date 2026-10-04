@@ -11,8 +11,9 @@ Updated: 2026-10-03
   COMPLETE / ACCEPTED / INTEGRATED; PR #33): StableNew's application/native-SVD interpreter is standard-GIL CPython 3.14.x only
   (3.12, 3.13, 3.15+ and the free-threaded build are rejected by readiness/bootstrap; no JIT).
   GitHub CI runs once per PR head
-  on Python 3.14 (one required gate, one informational full-suite job); the local `run_pr_gate.py`
-  pytest gates are quiet on success and complete on failure. See
+  on Python 3.14 with risk-proportionate routing (PR-DEVEX-CI-110: `required`, then only the affected lanes or, for
+  broad/unbounded changes, one informational full census; docs-only changes take a cheap path); the local
+  `run_pr_gate.py` pytest gates are quiet on success and complete on failure. See
   `docs/StableNew_Coding_and_Testing_v2.6.md`.
 - Reproducible ML runtime (PR-RUNTIME-DEPS-100): the supported Windows/CPython 3.14/CUDA 13.0
   environment is defined by `constraints/windows-py314-cu130.txt` (exact pins, including the

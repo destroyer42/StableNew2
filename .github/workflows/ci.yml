@@ -46,22 +46,16 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Previous-head evidence (docs-only follow-up commits reuse green evidence)
+    - name: Previous-head evidence (docs-only follow-up commits may reuse green evidence)
       id: prev
       if: github.event_name == 'pull_request' && github.event.action == 'synchronize'
       env:
         GH_TOKEN: ${{ github.token }}
         REPO: ${{ github.repository }}
         BEFORE_SHA: ${{ github.event.before }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
       run: |
-        green=false
-        runs=$(gh api "repos/$REPO/commits/$BEFORE_SHA/check-runs?per_page=100" 2>/dev/null || echo '{}')
-        required=$(echo "$runs" | jq -r '[.check_runs[]? | select(.name=="required")] | first | .conclusion // ""')
-        census=$(echo "$runs" | jq -r '[.check_runs[]? | select(.name=="full-suite")] | first | .status // "absent"')
-        affected=$(echo "$runs" | jq -r '[.check_runs[]? | select(.name=="affected")] | first | .status // "absent"')
-        if [ "$required" = "success" ] && { [ "$census" = "absent" ] || [ "$census" = "completed" ]; } && { [ "$affected" = "absent" ] || [ "$affected" = "completed" ]; }; then green=true; fi
-        echo "required=$required census=$census affected=$affected green=$green"
-        echo "green=$green" >> "$GITHUB_OUTPUT"
+        python3 tools/ci/previous_evidence.py --repo "$REPO" --before "$BEFORE_SHA" --base "$BASE_SHA" --github-output "$GITHUB_OUTPUT"
 
     - name: Classify the change set (validation plan)
       id: plan
@@ -76,8 +70,8 @@ jobs:
         set -euo pipefail
         args=(--event "$EVENT" --github-output "$GITHUB_OUTPUT")
         if [ "$EVENT" = "pull_request" ]; then
-          args+=(--base "$BASE_SHA" --head "$HEAD_SHA" --commit-message "$(git log -1 --format=%B "$HEAD_SHA")")
-          for label in $PR_LABELS; do args+=(--label "$label"); done
+          args+=(--base "$BASE_SHA" --head "$HEAD_SHA" "--commit-message=$(git log -1 --format=%B "$HEAD_SHA")")
+          for label in $PR_LABELS; do args+=("--label=$label"); done  # '=' form: a value is never parsed as an option
           if [ "$PREVIOUS_GREEN" = "true" ]; then args+=(--before "$BEFORE_SHA" --previous-green); fi
         else
           args+=(--files tools/ci/validation_plan.py)  # periodic/manual runs are always a full census
@@ -95,6 +89,7 @@ jobs:
         if [ "$REUSE" = "true" ]; then git diff --check "$BEFORE_SHA" "$HEAD_SHA"; else git diff --check "$BASE_SHA...$HEAD_SHA"; fi
         python3 tools/ci/check_repository_completeness.py
         python3 tools/ci/check_controller_surface.py
+        python3 tools/ci/ci_truth.py
 
     - name: Set up Python 3.14
       if: steps.plan.outputs.cheap_path != 'true'
