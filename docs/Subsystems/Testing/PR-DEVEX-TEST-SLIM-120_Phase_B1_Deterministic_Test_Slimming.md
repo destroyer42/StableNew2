@@ -21,10 +21,11 @@ Before = unmodified `origin/main` (`83fa2b2e`); after = this branch. "after" val
 | `test_webui_launch_emits_proc_log` | see "GUI process logging" | 2.78 s locally (10.4 s hosted) | 1.43 s, deterministic |
 | Whole focused set (10 files, 82 tests) | | 185.1 s | 14.8 s (+ 10 new tests) |
 
-Local full census on the final source SHA: **5,040 collected, 5,016 passed, 22 skipped, 2 failed, 1,002 s** (the CI-110
-local census was 4,830 tests / 1,100 s). None of the targeted tests is in the slowest-30 any more; the operator-journey file
-(~148 s, six tests) is now the dominant cost and is a Phase B3 matter. The hosted Python 3.14 CI census is the integration
-verdict (see the heartbeat finding below for the one failure it exposed). Of the two local census failures, neither is caused by this change: the stale API-client test was repaired afterwards (see "Findings outside scope") and the cancellation test is a non-blocking load-sensitive wait unless hosted CI reproduces it.
+Local full census on the Phase B1 implementation SHA `5b45e94` (before the later bounded test-truth repairs): **5,040 collected, 5,016
+passed, 22 skipped, 2 failed, 1,002 s** (the CI-110 local census was 4,830 tests / 1,100 s). None of the targeted tests is in the
+slowest-30 any more; the operator-journey file (~148 s, six tests) is now the dominant cost and is a Phase B3 matter. Its two failures were
+not caused by Phase B1: the stale API-client test was repaired afterwards and the cancellation test is a local-only load-sensitive
+observation (see "Findings outside scope"). The final hosted Python 3.14 integration result is under "Validation".
 
 ## What changed and the signal each test keeps
 
@@ -75,18 +76,17 @@ verdict (see the heartbeat finding below for the one failure it exposed). Of the
   lost-response `ConnectionError`, the POST is dispatched exactly once and never replayed, the outcome stays
   `GenerateErrorCode.OUTCOME_UNKNOWN`, and the not-a-crash diagnostics plus endpoint/method/session assertions are unchanged. The definite-500
   half of the old scenario is owned by `test_http_100_definite_http_fail_fast.py` (untouched). No production code changed.
-* **Exposed by this PR's speed-up, repaired before merge:** the first hosted census of this branch (run 37229044537, failed job rerun once, identical
-  result) failed only `tests/controller/test_heartbeat_stall_fix.py::test_watchdog_still_triggers_on_true_stall`, while the same census on unmodified
-  `main` (workflow_dispatch run 37230548767) did not. Root cause (reproduced locally by forcing a small `time.monotonic()` origin, 60 s fails / 400 s
+* **Exposed by the speed-up and repaired (the final hosted census is green):** an intermediate hosted census of this work (identical on one rerun) failed only `tests/controller/test_heartbeat_stall_fix.py::test_watchdog_still_triggers_on_true_stall`, while the same census on unmodified
+  `main` did not. Root cause (reproduced locally by forcing a small `time.monotonic()` origin, 60 s fails / 400 s
   passes, identical assertion): `SystemWatchdogV2._last_trigger_ts` and `_LAST_BUNDLE_TS` use `0.0` for "never triggered", compared against
   `time.monotonic()` (host uptime on Linux), so the first trigger is suppressed while uptime is below the 120 s watchdog / 30 s bundle cooldown. This
   PR removed roughly 90 s of real waits ahead of that test, so on a freshly booted hosted runner the test now runs inside that window. The test now
   seeds both "never triggered" values with `-inf` (test-only; no assertion changed). Production code was not changed; the same default means the real
   watchdog cannot raise a `ui_heartbeat_stall` bundle during the first two minutes after host boot, which is a possible separate (unrelated) hardening item.
 * `tests/pipeline/test_pr_harden_009_r1a_txt2img_cancellation.py::test_canonical_txt2img_completes_once_when_not_cancelled` failed once
-  in the 17-minute local census (a UI heartbeat-stall diagnostics bundle was written during it, i.e. the machine was loaded) and passed
-  in three isolated reruns and with the neighbouring file. Treat as a load-sensitive wall-clock wait (Phase B1.1 candidate); not
-  attributable to this change.
+  in the 17-minute **local** census (a UI heartbeat-stall diagnostics bundle was written during it, i.e. the machine was loaded) and passed
+  in three isolated reruns and with the neighbouring file. It did not reproduce in any hosted census, including the final one. Treat as a
+  local-only load-sensitive wall-clock observation (Phase B1.1 candidate if it ever recurs in hosted CI); not attributable to this change.
 * `test_process_inspector_shortcut_logs` (about 2.4 s) and other GUI tests build a full app and still perform a short loopback
   readiness probe at startup; Phase B3 (GUI/E2E restructuring).
 * Fake processes elsewhere that never report an exit may hide the same 10 s `stop_webui()` poll; a quick audit is a B1.1 candidate.
@@ -95,6 +95,10 @@ verdict (see the heartbeat finding below for the one failure it exposed). Of the
 
 ## Validation
 
-`python tools/ci/run_pr_gate.py` passed on this source (completeness, controller ratchet, Ruff, mypy smoke, 5,038-test collection,
-341-test required smoke). `tools/ci/validation_plan.py` classifies this change as a full census because
-`tools/ci/controller_surface_baseline.json` is CI authority (expected: the ratchet ceiling was lowered).
+* `python tools/ci/run_pr_gate.py` passed on the implementation source (completeness, controller ratchet, Ruff, mypy smoke, 5,038-test
+  collection, 341-test required smoke). `tools/ci/validation_plan.py` classifies this change as a full census because
+  `tools/ci/controller_surface_baseline.json` is CI authority (expected: the ratchet ceiling was lowered).
+* **Final hosted Python 3.14 integration result (executable SHA `9fb842f`):** `required` green; `full-suite` green with **4,993 passed,
+  47 skipped, 0 failed**, about 503 s of pytest (8 min 53 s full-suite job); `affected` skipped because the census subsumes it. The same
+  census on unmodified `main` before this work took 643 s of pytest (5,030 tests, 1 failure: the stale API-client test since repaired).
+  Docs-only commits after that SHA reuse this evidence.
