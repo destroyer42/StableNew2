@@ -30,7 +30,7 @@ def test_upscale_image_payload_uses_data_url() -> None:
 
 
 def test_upscale_image_handles_http_error() -> None:
-    """HTTP errors from the WebUI should not raise and should be retried."""
+    """A definite HTTP error from the WebUI does not raise and is never replayed (PR-HTTP-100)."""
     client = SDWebUIClient()
     client._sleep = _no_sleep
     with requests_mock.Mocker() as mocker:
@@ -41,7 +41,7 @@ def test_upscale_image_handles_http_error() -> None:
         )
         result = client.upscale_image("raw_base64_data", "Latent", 1.5)
         assert result is None
-        assert len(mocker.request_history) == 2
+        assert len(mocker.request_history) == 1
 
 
 def test_upscale_image_uses_extended_endpoint_timeout() -> None:
