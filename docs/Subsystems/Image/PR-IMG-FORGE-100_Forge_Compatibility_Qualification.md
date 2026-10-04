@@ -1508,7 +1508,7 @@ A1111 remains default; FORGE-110, promotion and publication are not started.
 ## 25. ADetailer completion-response policy (FORGE-100R2)
 
 ADetailer reports completed WebUI sampling progress while its detection/inpaint units can still be working.
-The executor derives a finite response-completion grace from its existing 45-second ADetailer hard-stall
+The superseded R2 experiment derived a finite response-completion grace from its existing 45-second ADetailer hard-stall
 basis multiplied by the enabled detector units in the actual stage request. One unit retains 45 seconds;
 the frozen face-and-hand request receives 90 seconds. The stage passes that threshold explicitly to the
 progress monitor. Completed progress enters the completion phase, which excludes the ordinary sampling
@@ -1551,3 +1551,34 @@ The new evidence is under `img_forge_100/physical-d646c32-d-r2/`, with the inter
 `completion-stall-r2/`. Accepted A/B/C artifacts remain valid; a final D comparison cannot be produced without
 two naturally completed D artifacts. Further completion-policy or physical-run decisions require owner
 adjudication. This result does not establish a Forge Pair-D failure or technical qualification pass.
+
+## 26. R3 ADetailer progress semantics
+
+The R2 90.2-second interruption falsified a completion grace derived from sampling progress or detector
+count. Nominal 100% is not completion of the ADetailer extension chain. The owner-approved R3 policy
+separates sampling liveness from extension activity in the existing executor monitor. ADetailer enters
+`adetailer_extension_active` on nominal completed steps/progress while its original POST remains active.
+Neither the generic completion clock nor the sampling no-progress clock interrupts that state. An idle
+poll or step reset alone does not prove a new sampling pass; a new `job_timestamp`/`job` marker restores
+sampling tracking and its existing 45-second hard-stall protection. Other stages retain their policies.
+
+The HTTP client retains the sole request-duration bound, `DEFAULT_GENERATION_TIMEOUT = 600.0`; R3 adds
+no completion timeout. A dispatched transport timeout remains `OUTCOME_UNKNOWN` and is never replayed.
+Operator cancellation still interrupts promptly. Managed escalation requires an actual qualifying
+failure/stall, not extension activity; external process mutation remains prohibited. The obsolete R2
+unit-count completion timer is removed. Detector settings, launch profiles and pressure policy are unchanged.
+
+Execution profile: Standard, local Windows/Python 3.14. Model/reasoning recommendation: GPT-6.1 Sol XHigh
+(Claude alternative: Sonnet 5.5 XHigh). Controller surface assessment: no controller or manager edits.
+Token-efficient validation: simulated-clock progress/sub-pass/cancellation tests, actual client timeout
+interception, relevant recovery/ownership/launch-profile and canonical Pair-D driver tests; four targeted
+in-memory mutations; affected-file Ruff, unchanged-baseline mypy comparison and one final PR gate.
+Machine-local evidence is retained under `img_forge_100/progress-semantics-r3/`. Historical R2 evidence
+is immutable. Physical Pair-D completion remains unproven until the separately authorized fresh jobs finish.
+
+R3 source validation: 169 focused tests and 13 cancellation tests pass. Restoring the completion heuristic,
+competing sampling clock, missing new-marker reset or suppressed cancellation produces respectively
+12, 10, 2 and 1 targeted failures. Mutations alter loaded functions only; tracked source remains intact.
+Affected-file Ruff and whitespace checks pass. Mypy matches the clean baseline's 40 existing executor
+diagnostics with no additions. The Python 3.14 PR gate passes: 4,607 collected, 184 smoke passed, Ruff
+and mypy smoke green. The smaller collection replaces superseded R2 timer tests with R3 semantics tests.

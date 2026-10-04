@@ -169,35 +169,15 @@ _MAX_STAGE_STEPS = 150
 POST_RECOVERY_HEALTH_CHECK_TIMEOUT_SEC = 30.0
 POST_RECOVERY_GRACE_WINDOW_SEC = 120.0
 
-# Per-stage sampling/no-progress hard-stall overrides. Completion of an
-# ADetailer request gets this basis per enabled detection/inpaint unit.
+# Per-stage sampling/no-progress hard-stall overrides. ADetailer extension work
+# after nominal sampling completion is bounded by the client's transport timeout.
 STALL_INTERRUPT_THRESHOLD_BY_STAGE: dict[str, float] = {
     "adetailer": 45.0,
 }
-# If WebUI reports completion progress but the blocking request never returns,
+# For ordinary stages, if WebUI reports completion but the request never returns,
 # treat that as a separate end-of-request stall and interrupt sooner.
 POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC = 20.0
 POST_INTERRUPT_STALL_GRACE_SEC = 30.0
-
-
-def post_progress_response_threshold(
-    stage_label: str | None, *, enabled_units: int = 1
-) -> float:
-    """Seconds a stage may sit at completed progress before its still-blocking request is interrupted.
-
-    Ordinary stages keep the generic completion grace. A stage with its own hard-stall threshold
-    (ADetailer) never gets a completion grace shorter than that threshold: its detection/inpaint
-    sub-passes keep WebUI's progress report at 100 % while real work continues inside one request, and an
-    interrupt there ends the remaining ADetailer units early. The caller knows
-    the enabled units; ordinary stages retain their existing completion grace.
-    """
-
-    stage = str(stage_label or "")
-    return max(
-        POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC,
-        STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(stage, 0.0)
-        * (max(1, enabled_units) if stage == "adetailer" else 1),
-    )
 
 
 EXTERNAL_WEBUI_STALL_ACTION_REQUIRED = "EXTERNAL_WEBUI_STALL_ACTION_REQUIRED"
@@ -2461,7 +2441,6 @@ class Pipeline:
         stall_detected_event: threading.Event | None = None,
         cancel_token: Any | None = None,
         managed_stall_escalation_event: threading.Event | None = None,
-        completion_response_threshold_sec: float | None = None,
     ) -> None:
         """
         Background thread that polls WebUI for progress.
@@ -2469,6 +2448,10 @@ class Pipeline:
         Emits a warning after PROGRESS_STALL_THRESHOLD_SEC without meaningful
         progress, then sends at most one interrupt at the stage hard threshold
         measured from that same last-meaningful-progress timestamp.
+
+        ADetailer's nominal completed sampling signal enters extension-active
+        work, not response completion. Only a new generation marker returns it
+        to sampling checks; the original POST's transport timeout remains its bound.
         """
         highest_progress = 0.0
         last_progress_time = time.monotonic()
@@ -2481,12 +2464,8 @@ class Pipeline:
         latest_progress: float = 0.0
         latest_current_step: int | None = None
         latest_total_steps: int | None = None
-        completion_response_threshold = (
-            completion_response_threshold_sec
-            if completion_response_threshold_sec is not None
-            else post_progress_response_threshold(stage_label)
-        )
-        completion_response_active = False
+        completion_response_threshold = POST_PROGRESS_RESPONSE_STALL_THRESHOLD_SEC
+        progress_phase = "sampling"
 
         def escalate_if_due(now: float) -> None:
             nonlocal escalation_attempted
@@ -2569,7 +2548,7 @@ class Pipeline:
                 info = self.client.get_progress(skip_current_image=True)
 
                 if info is None:
-                    # WebUI is idle — either between jobs or restarted mid-call.
+                    # Idle does not prove ADetailer's extension chain has returned.
                     # Reset stall tracking so a fresh generation starting from 0%
                     # is not pre-judged as stalled by stale counters.
                     if last_active_generation_marker is not None or interrupt_sent:
@@ -2577,19 +2556,20 @@ class Pipeline:
                             "Poll loop: WebUI idle signal received for %s — resetting stall state",
                             stage_label,
                         )
-                    if stall_interrupt_time is None:
+                    if stall_interrupt_time is None and progress_phase != "adetailer_extension_active":
                         last_current_step = None
                         last_active_generation_marker = None
                         interrupt_sent = False
                         highest_progress = 0.0
-                        completion_response_active = False
+                        progress_phase = "sampling"
                         last_stall_log_time = 0.0
                         last_progress_time = time.monotonic()
                     else:
                         # Idle progress after an interrupt does not prove the
                         # original blocking POST has returned. Preserve this
                         # exact request's grace clock until the caller sets the
-                        # stop event on request completion.
+                        # stop event on request completion. In extension-active state
+                        # this is a no-op unless a real interrupt already occurred.
                         escalate_if_due(time.monotonic())
                 else:
                     observed_progress = max(
@@ -2630,7 +2610,18 @@ class Pipeline:
                     if newer_active_generation:
                         highest_progress = 0.0
                         last_current_step = None
-                        completion_response_active = False
+                        progress_phase = "sampling"
+                        logger.info(
+                            "[executor/progress-marker] stage=%s job_id=%s marker=%r "
+                            "timestamp_utc=%s progress=%.3f step=%s/%s",
+                            stage_label,
+                            self._current_job_id,
+                            active_generation_marker,
+                            datetime.utcnow().isoformat() + "Z",
+                            observed_progress,
+                            current_step,
+                            total_steps,
+                        )
 
                     progress_advanced = observed_progress > highest_progress
                     step_advanced = bool(
@@ -2721,21 +2712,21 @@ class Pipeline:
                         and total_steps is not None
                         and current_step >= total_steps
                     )
-                    if completed_steps or highest_progress >= 0.99:
-                        if not completion_response_active:
-                            logger.info(
-                                "[executor/completion] stage=%s job_id=%s timestamp_utc=%s "
-                                "monotonic=%.6f grace_seconds=%.1f",
-                                stage_label,
-                                self._current_job_id,
-                                datetime.utcnow().isoformat() + "Z",
-                                time.monotonic(),
-                                completion_response_threshold,
-                            )
-                        completion_response_active = True
-                    ordinary_generation_active = (
-                        highest_progress > 0 and not completion_response_active
-                    )
+                    if progress_phase == "sampling" and (completed_steps or highest_progress >= 0.99):
+                        progress_phase = (
+                            "adetailer_extension_active" if stage_label == "adetailer"
+                            else "response_completion"
+                        )
+                        logger.info(
+                            "[executor/progress-phase] stage=%s job_id=%s phase=%s "
+                            "timestamp_utc=%s monotonic=%.6f",
+                            stage_label,
+                            self._current_job_id,
+                            progress_phase,
+                            datetime.utcnow().isoformat() + "Z",
+                            time.monotonic(),
+                        )
+                    ordinary_generation_active = highest_progress > 0 and progress_phase == "sampling"
                     effective_hard_threshold = STALL_INTERRUPT_THRESHOLD_BY_STAGE.get(
                         stage_label, STALL_INTERRUPT_THRESHOLD_SEC
                     )
@@ -2748,7 +2739,7 @@ class Pipeline:
                         and elapsed_since_progress >= effective_hard_threshold
                     )
                     completion_stalled = elapsed_since_progress >= completion_response_threshold and (
-                        completion_response_active
+                        progress_phase == "response_completion"
                     )
                     if warning_due or hard_interrupt_due or completion_stalled:
                         now = time.monotonic()
@@ -2836,7 +2827,6 @@ class Pipeline:
         progress_callback: Any | None = None,
         stage_label: str | None = None,
         cancel_token: Any | None = None,
-        completion_response_threshold_sec: float | None = None,
     ) -> dict[str, Any] | None:
         """
         Call generation endpoint with concurrent progress polling.
@@ -2866,7 +2856,6 @@ class Pipeline:
                 stall_detected_event,
                 cancel_token,
                 managed_stall_escalation_event,
-                completion_response_threshold_sec=completion_response_threshold_sec,
             )
 
             # Make the actual generation request (blocking)
@@ -3919,10 +3908,6 @@ class Pipeline:
                 self.progress_controller.report_progress("adetailer", percent, eta_text)
 
         # Call adetailer endpoint (internally routes to img2img with ADETAILER_RETRY_POLICY)
-        enabled_units = sum(
-            bool(unit["ad_tab_enable"]) and unit["ad_model"] not in (None, "", "None")
-            for unit in (face_args, hand_args)
-        )
         stage_start = time.monotonic()
         try:
             response = self._generate_images_with_progress(
@@ -3932,9 +3917,6 @@ class Pipeline:
                 progress_callback=on_adetailer_progress,
                 stage_label="adetailer",
                 cancel_token=cancel_token,
-                completion_response_threshold_sec=post_progress_response_threshold(
-                    "adetailer", enabled_units=enabled_units
-                ),
             )
         except Exception:
             logger.error(

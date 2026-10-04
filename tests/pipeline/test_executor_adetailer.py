@@ -87,14 +87,14 @@ def test_face_and_hand_payload_keys_match_frozen_neo_schema_and_keep_top_k(tmp_p
         assert payload["ad_sampler"] == "Euler a" and payload["ad_scheduler"] == "Karras"
 
 
-@pytest.mark.parametrize(("face", "hands", "hand_model", "grace"), [
-    (True, False, "hand_yolov8n.pt", 45.0),
-    (False, True, "hand_yolov8n.pt", 45.0),
-    (True, True, "hand_yolov8n.pt", 90.0),
-    (True, True, "None", 45.0),
+@pytest.mark.parametrize(("face", "hands", "hand_model"), [
+    (True, False, "hand_yolov8n.pt"),
+    (False, True, "hand_yolov8n.pt"),
+    (True, True, "hand_yolov8n.pt"),
+    (True, True, "None"),
 ])
-def test_adetailer_callsite_passes_actual_enabled_unit_grace_and_cancel_token(
-    face, hands, hand_model, grace, tmp_path
+def test_adetailer_callsite_preserves_enabled_units_and_cancel_token_without_a_completion_timer(
+    face, hands, hand_model, tmp_path
 ):
     pipeline = Pipeline(Mock(), Mock())
     token = Mock()
@@ -113,7 +113,7 @@ def test_adetailer_callsite_passes_actual_enabled_unit_grace_and_cancel_token(
             "adetailer_hands_model": hand_model, "seed": 424242,
         }, tmp_path / "output", "unit-grace", cancel_token=token)
 
-    assert generate.call_args.kwargs["completion_response_threshold_sec"] == grace
+    assert "completion_response_threshold_sec" not in generate.call_args.kwargs
     assert generate.call_args.kwargs["cancel_token"] is token
     units = generate.call_args.args[1]["alwayson_scripts"]["ADetailer"]["args"][2:]
     assert [unit["ad_tab_enable"] for unit in units] == [face, hands]
