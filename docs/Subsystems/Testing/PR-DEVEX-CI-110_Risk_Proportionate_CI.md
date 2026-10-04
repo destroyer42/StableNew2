@@ -42,13 +42,15 @@ base-to-head change set
 `docs_only`, `core`, `image`, `video`, `gui`, `runtime`, `qualification_tools`, `ci_test_authority`, `full_census_required`.
 A change may activate several lanes and every activated lane runs. Ownership is by path (`LANE_RULES`) and test membership is by
 explicit target lists (`LANE_TARGETS`, `DOMAIN_TARGETS`) - a cross-boundary test belongs to every lane that owns one side of the
-boundary, not only to its directory (for example `tests/integration/test_pr_img*` is in `image` and in `core`). Domain families whose
+boundary, not only to its directory (for example `tests/integration/test_pr_img*` and `tests/safety/test_forge*` are image-lane
+targets that live under other directories). Image and runtime sources deliberately do **not** activate `core`: the always-run contract gate
+protects the boundary, and `core` runs when core source (queue, NJR, compiler, runner, controller, services, utils) changes. Domain families whose
 source is rarely touched (`learning`, `promptpacks`, `randomizer`, ...) run when their source or tests change.
 
 | Lane | Source ownership (examples) | Affected tests |
 |---|---|---|
 | `core` | `src/queue`, `src/history`, `src/state`, `src/pipeline`, `src/controller`, `src/services`, `src/utils`, other `src/*` | queue, history, migrations, state, controller, pipeline, integration, services, system, safety, unit, utils, regression, compat, app, cli, top-level files |
-| `image` | `src/image_backends`, `src/api` (except runtime), `src/pipeline` | image_backends, api, image integration/safety, Klein/reprocess pipeline tests |
+| `image` | `src/image_backends`, `src/api` (except runtime), `src/pipeline` (with `core`) | image_backends, api, image integration/safety, Klein/reprocess pipeline tests |
 | `video` | `src/video`, SVD/video pipeline modules | video, SVD/video pipeline tests |
 | `gui` | `src/gui`, `src/gui_v2`, `src/controller` | gui_v2, gui, review, curation, GUI controller and journey tests |
 | `runtime` | process manager, runtime identity/transition, bootstrap scripts, `tools/runtime`, managed-runtime config | process/launch/runtime API and service tests, managed runtime system tests, app, safety |
@@ -178,4 +180,50 @@ census everywhere: make `full_census` always true in `.github/workflows/ci.yml` 
 
 ## GitHub evidence
 
-GITHUB_EVIDENCE_PLACEHOLDER
+All numbers are hosted `ubuntu-latest` job durations read from the GitHub API (job `started_at` to `completed_at`; GitHub bills each
+job rounded up to whole minutes). Runs: old workflow = PR #38 head `92d42ba` (run 37209295689); new workflow = this PR and two throw-away
+probe PRs stacked on it (#40, #41; closed unmerged).
+
+| Route | Jobs (duration -> billed) | Billed min | Wall |
+|---|---|---:|---:|
+| **Old, every PR** | required 69 s -> 2; full-suite 687 s -> 12 | **14** | ~11.5 min |
+| **New: docs-only** (probe #40: one new `.md`) | required 12 s -> 1 (no Python setup, no tests); affected and full-suite skipped | **1** | 12 s |
+| **New: bounded image-lane source change** (probe #41: one-line change in `src/image_backends`) | required 72 s -> 2; affected 99 s -> 2 (8 pytest targets in the image lane) | **4** | ~3 min |
+| New: the same probe before the routing was narrowed (image sources also activated `core`) | required 68 s -> 2; affected 370 s -> 7 | 9 | ~7.3 min |
+| **New: broad / CI-authority PR** (this PR, run 37211828273 and, after the routing refinement, 37213256366) | required 51-52 s -> 1; full-suite 686-690 s -> 12; affected skipped (subsumed) | **13** | ~12 min |
+| New: docs-only follow-up commit over green evidence (this PR) | see "Evidence reuse" below | 1 | seconds |
+
+* Contract gate on the hosted runner: **294-295 tests in 19-25 s**; the whole `required` job is 51-72 s for an executable PR, of which
+  checkout ~5 s, `pip install` ~9-14 s, collection gate ~8-15 s.
+* Hosted setup overhead per heavy job: checkout ~5 s, Tk/Xvfb apt ~11-17 s, `pip install` ~8-14 s (about 30 s plus the Python setup action);
+  a second heavy job (`affected` or `full-suite`) therefore costs roughly 30-40 s of setup before its first test.
+* Required-gate ordering is real: on a failing cheap check the census/affected jobs are `skipped` (they `need` `required`).
+
+### Hosted full census (qualification of the new CI authority)
+
+This PR changed CI/test authority, so the plan classified it `core, qualification_tools, ci_test_authority, full_census_required`
+(reasons: the workflow, `tools/ci/*`), ran `required`, then exactly one `full-suite`, and skipped `affected`:
+
+* **4,898 collected, 4,851 passed, 47 skipped, 0 failed**; suite wall 656 s (job 690 s; pytest step 662 s).
+* The informational failures that PR #37 produced (NumPy-dependent IMG-115 harness tests) are gone: the census is green.
+* Skips on Linux: 47 (Windows-only ctypes/branch tests 18, optional `cv2`/`numpy` extras, `ffprobe` absent, opt-in local tests).
+* Time by area (hosted): gui_v2 88 s, tools 85 s, controller 78 s, pipeline 76 s, api 59 s, top-level files 55 s, system 38 s, video 38 s,
+  integration 32 s, utils 21 s. The 10 slowest files are 32% of test time; the 50 slowest are 56%. The slowest tests are real-time waits
+  (`test_check_api_ready_failure` 31.6 s, `test_ensure_connected_timeout_sets_error` 30.8 s, `test_client_closed_on_failure` 23.1 s,
+  `test_filesystem_fallback` 14.6 s). The full slowest-200 list, the by-file table and the skip reasons are in the run's
+  `full-test-results` artifact (`census.xml`, `census-summary.json`) and its step summary. (Local Windows figures above differ because
+  of the platform; both agree on the shape.)
+
+### Expected monthly impact (from the measured per-route minutes; an illustrative mix, not a forecast)
+
+The previous workflow billed ~14 min per PR head (the 672 minutes in four days is about 48 heads). With the measured routes, a mix of
+one third docs-only (1 min), one half bounded source (4-9 min, average ~6) and one sixth broad (13 min) averages about 5.5 billed minutes
+per head, i.e. roughly 60% fewer minutes for the same number of heads, and a bounded or docs-only head returns feedback in about 3 minutes or
+seconds instead of ~11.5. The periodic census adds about 13 runs a month (3/week) at ~14 minutes, ~180 minutes, which buys main-branch full evidence
+regardless of routing. A 2,000-minute allowance is therefore not exhausted by the same development tempo; if the mix is dominated by broad
+PRs the saving shrinks, which the plan artifact (`validation-plan`, one per run) makes visible.
+
+### Evidence reuse
+
+The docs-only follow-up commit that records this evidence is itself the demonstration: its push is a docs-only delta over a head whose
+`required` and `full-suite` check runs completed green, so the run takes the cheap path (recorded in the PR) instead of re-running the census.
