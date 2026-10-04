@@ -24,7 +24,7 @@ Before = unmodified `origin/main` (`83fa2b2e`); after = this branch. "after" val
 Local full census on the final source SHA: **5,040 collected, 5,016 passed, 22 skipped, 2 failed, 1,002 s** (the CI-110
 local census was 4,830 tests / 1,100 s). None of the targeted tests is in the slowest-30 any more; the operator-journey file
 (~148 s, six tests) is now the dominant cost and is a Phase B3 matter. The hosted Python 3.14 CI census is the integration
-verdict and was not run from this session. Of the two local census failures, neither is caused by this change: the stale API-client test was repaired afterwards (see "Findings outside scope") and the cancellation test is a non-blocking load-sensitive wait unless hosted CI reproduces it.
+verdict (see the heartbeat finding below for the one failure it exposed). Of the two local census failures, neither is caused by this change: the stale API-client test was repaired afterwards (see "Findings outside scope") and the cancellation test is a non-blocking load-sensitive wait unless hosted CI reproduces it.
 
 ## What changed and the signal each test keeps
 
@@ -75,6 +75,14 @@ verdict and was not run from this session. Of the two local census failures, nei
   lost-response `ConnectionError`, the POST is dispatched exactly once and never replayed, the outcome stays
   `GenerateErrorCode.OUTCOME_UNKNOWN`, and the not-a-crash diagnostics plus endpoint/method/session assertions are unchanged. The definite-500
   half of the old scenario is owned by `test_http_100_definite_http_fail_fast.py` (untouched). No production code changed.
+* **Exposed by this PR's speed-up, repaired before merge:** the first hosted census of this branch (run 37229044537, failed job rerun once, identical
+  result) failed only `tests/controller/test_heartbeat_stall_fix.py::test_watchdog_still_triggers_on_true_stall`, while the same census on unmodified
+  `main` (workflow_dispatch run 37230548767) did not. Root cause (reproduced locally by forcing a small `time.monotonic()` origin, 60 s fails / 400 s
+  passes, identical assertion): `SystemWatchdogV2._last_trigger_ts` and `_LAST_BUNDLE_TS` use `0.0` for "never triggered", compared against
+  `time.monotonic()` (host uptime on Linux), so the first trigger is suppressed while uptime is below the 120 s watchdog / 30 s bundle cooldown. This
+  PR removed roughly 90 s of real waits ahead of that test, so on a freshly booted hosted runner the test now runs inside that window. The test now
+  seeds both "never triggered" values with `-inf` (test-only; no assertion changed). Production code was not changed; the same default means the real
+  watchdog cannot raise a `ui_heartbeat_stall` bundle during the first two minutes after host boot, which is a possible separate (unrelated) hardening item.
 * `tests/pipeline/test_pr_harden_009_r1a_txt2img_cancellation.py::test_canonical_txt2img_completes_once_when_not_cancelled` failed once
   in the 17-minute local census (a UI heartbeat-stall diagnostics bundle was written during it, i.e. the machine was loaded) and passed
   in three isolated reruns and with the neighbouring file. Treat as a load-sensitive wall-clock wait (Phase B1.1 candidate); not
