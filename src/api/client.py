@@ -225,6 +225,18 @@ def _log_stage_failure(stage: str, error: str | Exception) -> None:
 
 
 _GENERATION_POST_ENDPOINTS = frozenset({"/sdapi/v1/txt2img", "/sdapi/v1/img2img"})
+# Every POST that makes the WebUI run a generation job (ADetailer rides img2img; upscale uses the
+# extras endpoint). A definite HTTP error response from one of these is never auto-replayed.
+_DISPATCHING_GENERATION_ENDPOINTS = _GENERATION_POST_ENDPOINTS | frozenset(
+    {"/sdapi/v1/extra-single-image"}
+)
+DEFINITE_HTTP_RESPONSE_FAIL_FAST = "definite_http_response"
+
+
+def _is_generation_post(*, method: str, endpoint: str) -> bool:
+    return (
+        method.upper() == "POST" and endpoint.rstrip("/") in _DISPATCHING_GENERATION_ENDPOINTS
+    )
 
 
 def _is_ambiguous_generation_transport_failure(
@@ -663,6 +675,12 @@ class SDWebUIClient:
                         status_code=status_code,
                         response_snippet=truncated_text,
                     )
+                    if fail_fast_reason is None and _is_generation_post(
+                        method=method, endpoint=endpoint
+                    ):
+                        # The server answered: the job was dispatched and refused. Replaying it is
+                        # not "retrying a lost request"; the caller decides what a failure means.
+                        fail_fast_reason = DEFINITE_HTTP_RESPONSE_FAIL_FAST
                     if fail_fast_reason is not None:
                         http_exc.fail_fast_reason = fail_fast_reason
                     if (
@@ -795,8 +813,8 @@ class SDWebUIClient:
                         logger,
                         logging.WARNING,
                         (
-                            f"Request {method.upper()} {url} received structured HTTP 500 "
-                            f"({fail_fast_reason}); skipping retries"
+                            f"Request {method.upper()} {url} received a definite HTTP error "
+                            f"response ({fail_fast_reason}); skipping retries"
                         ),
                         ctx=context,
                         extra_fields={
