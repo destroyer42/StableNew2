@@ -178,4 +178,6 @@ or owner SQLite/history/settings was launched or mutated.
   `..._with_root_fallback_run` build `AppController.__new__(AppController)` without
   `_runtime_projection_coordinator`, so they fail when the file runs alone (identical on the base commit) yet
   pass inside the full suite through test-order state. They are stale fixtures for a refactored controller,
-  not product defects.
+  not product defects. **Resolved:** both tests were retired by `PR-TEST-TRUTH-220_GUI_Projection_Binding_Test_Truth.md`
+  (the current contract is projection-driven and covered elsewhere); that report also corrects the "full suite" remark:
+  `tests/gui` is excluded from default collection by `pyproject.toml`, so they only ran when targeted explicitly.
