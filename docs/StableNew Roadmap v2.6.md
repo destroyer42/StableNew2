@@ -546,6 +546,10 @@ qualification infrastructure, so both belong here when selected.
 6. `PR-IMG-115 — FLUX.2 Klein 4B FP8 Target-Hardware Qualification` ran as a
    model/runtime qualification (`FLUX2_KLEIN_4B_FP8_PASS_CONSTRAINED`; product value pending owner review). See
    `docs/Subsystems/Image/PR-IMG-115_FLUX2_Klein_4B_FP8_Target_Hardware_Qualification.md`.
+   `PR-IMG-116 — FLUX.2 Klein 4B FP8 Forge Production Slice` then promoted the qualified model into the existing
+   `forge_webui` backend (text-to-image and one-reference edit; `FLUX2_KLEIN_4B_FP8_PRODUCTION_SLICE_PASS`); multi-reference
+   and the Forge-default/selector work remain separate. See
+   `docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`.
 7. Production integration is only for an explicitly selected evidence-backed
    capability, extending PR-RUNTIME-100 ownership/coexistence behavior when a
    runtime actually becomes production. Extract reusable qualification

@@ -142,7 +142,43 @@ rerouted. Removing the three installed files is safe (jobs then fail early with 
 
 ## Physical acceptance
 
-PHYSICAL_EVIDENCE_PLACEHOLDER
+Two production smokes through the real path (`tools/acceptance/img_116_klein_acceptance.py`; managed Forge started and stopped
+only through `WebUIProcessManager`; production settings untouched; assets installed with the installer into the managed data
+tree and re-hashed by the driver before each run). Evidence: `C:\Users\rob\qual\img_116\`.
+
+| | Smoke A: production text-to-image | Smoke B: Review single-reference edit |
+|---|---|---|
+| Path | `build_cli_njr` -> `JobService` -> SQLite -> `run_njr` -> `forge_webui` | production `AppController.on_reprocess_images_with_prompt_delta` with the explicit Klein marker -> `ReprocessJobBuilder` -> same `JobService` |
+| Intent | 768x1024, seed 424242, Euler/Beta/4/CFG 1.0, IMG-115 portrait prompt | `img2img` only, one source image, "keep the same person, face, pose, framing, hands, motorcycle, lighting and background; change only the jacket to deep red leather" |
+| Job id | `img116-klein-a-1791115317` | `f0a820fcbf06458bace5a7c9a0bbea09` |
+| Result | completed, 19.7 s (includes the model load) | completed, 16.7 s |
+| Artifact SHA-256 | `eccf3c7b94a872a096b9f7c26826caf744fdc597cc596fee8e4fe22a5d384e72` | `a48c2b78fe2421101ce5766b43cac145573a723aee4edb5972c966a702a908a9` |
+| Seed | requested 424242, returned 424242 | requested -1 (Review default), returned 2412197479 |
+| Profile / modules | profile v1 persisted in the immutable snapshot; Forge reported `flux-2-klein-4b-fp8` with `qwen_3_4b` + `flux2-vae` | same |
+| Source lineage | n/a | source path and SHA-256 recorded (`eccf3c7b...`, unchanged after the run); baseline from the source PNG's embedded metadata |
+| Dispatches | 1 generation POST | 1 generation POST |
+| Memory | total 34.11 GB; available 17.28 GB before the runtime started, 15.35 GB immediately before generation dispatch, **minimum 0.24 GB** during the job | total 34.11 GB; available 18.05 / 16.06 GB, **minimum 0.06 GB** |
+| Forge-tree private peak | 26,286 MiB (RSS peak 16,507 MiB) | 26,294 MiB (RSS peak 15,715 MiB) |
+| Dedicated VRAM peak | 9,538 MiB (baseline 856), 57 C | 9,795 MiB (baseline 869), 59 C |
+| Windows / GPU events | none | none |
+| Cleanup | owned tree stopped, no process left, port free | same |
+
+The edit changed only the jacket (deep red leather); face, pose, hands, motorcycle, sign and street are preserved.
+
+**First attempt of Smoke A (disclosed).** The first Smoke A job failed before any sampling (`You do not have Qwen3 state dict`):
+Forge loaded Klein with no modules. The model-switch `/options` write consumed the client's 6 s options throttle, so the
+module write was silently skipped (`set_vae` skip semantics) and the executor ignored the `False` return. No GPU work ran
+and no GPU/system event occurred. The existing client then re-sent the HTTP 500 three times (its normal definite-error
+retry), so three requests reached Forge, none past model load. The defect was fixed (strict module write that waits out the
+throttle, executor refuses unconfirmed modules, regression test that fails on the old behavior) and the owner authorized the
+retry. In total: 3 physical jobs executed (one failed pre-sampling), 2 completed generations.
+
+**Available-RAM evidence and recommendation.** Pre-dispatch available RAM across the three launches was 15.35-16.06 GB
+immediately before generation (17.1-18.05 GB before the runtime started), yet every completed run fell to 0.06-0.24 GB
+available because the Forge tree's private memory (about 26.3 GiB, above physical RAM) is backed by the pagefile; Windows
+commit headroom before dispatch was about 19.9-20.0 GB. The starting value therefore did not predict the dip, and three
+samples cannot justify a numeric available-RAM warning threshold; none is implemented. If a threshold is wanted later,
+commit headroom is the more meaningful candidate signal and needs more runs (including lower starting levels) first.
 
 ## Validation
 
