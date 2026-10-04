@@ -17,6 +17,9 @@ SCHEDULER = "Beta"
 NEGATIVE_PROMPT = ""
 STITCH_SCRIPT = "ImageStitch Integrated"  # Forge's built-in reference mechanism (references via alwayson_scripts)
 STITCH_MAX_DIM = 1024
+EDIT_ENDPOINT = "/sdapi/v1/img2img"  # Klein edit: init image = reference 1 (Forge ini_latent), denoise 1.0
+T2I_ENDPOINT = "/sdapi/v1/txt2img"
+EDIT_DENOISE = 1.0
 
 
 @dataclass(frozen=True)

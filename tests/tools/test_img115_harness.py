@@ -110,8 +110,11 @@ def test_payloads_carry_the_frozen_parameters_and_use_the_builtin_reference_mech
     assert (text["steps"], text["cfg_scale"], text["seed"], text["width"], text["height"]) == (4, 1.0, 424242, 768, 1024)
     assert "alwayson_scripts" not in text and "override_settings" not in text and text["negative_prompt"] == ""
     two = api.build_payload("D", ["r1", "r2"])
-    script = two["alwayson_scripts"]["ImageStitch Integrated"]["args"]
-    assert script == [True, ["r1", "r2"], 1024] and two["seed"] == 424245
+    assert two["init_images"] == ["r1"] and two["denoising_strength"] == 1.0 and two["seed"] == 424245  # reference 1 = init image
+    assert two["alwayson_scripts"]["ImageStitch Integrated"]["args"] == [True, ["r2"], 1024]  # further references: built-in script
+    one = api.build_payload("C", ["r1"])
+    assert one["init_images"] == ["r1"] and "alwayson_scripts" not in one and one["seed"] == 424244
+    assert [api.endpoint_for(c) for c in "ABCD"] == ["/sdapi/v1/txt2img"] * 2 + ["/sdapi/v1/img2img"] * 2
     with pytest.raises(ValueError):
         api.build_payload("D", ["only-one"])
     with pytest.raises(ValueError):
@@ -416,3 +419,35 @@ def test_a_changed_reference_stops_the_edit_before_any_runtime_starts(qualificat
         run_module.run_case("C", qualification_root, qualification_root.parent / "install", http=_Http(), forge=forge, events=lambda _s: [])
 
     assert forge.started == 0
+
+
+# --- the single infrastructure-repair exception ------------------------------------------------------------
+
+
+def _rejected_ledger(tmp_path, **entry):
+    ledger = api.Ledger(tmp_path / "ledger.json")
+    ledger.data["cases"] = {"A": {"state": "passed", "png_path": "a.png", "png_sha256": "a" * 64},
+                            "C": {"state": "failed", "dispatches": 1, "http_status": 500, "generation_seconds": 0.2, **entry}}
+    return ledger
+
+
+def test_an_api_rejected_dispatch_can_be_reopened_exactly_once_and_stays_counted(tmp_path):
+    ledger = _rejected_ledger(tmp_path)
+    ledger.reopen_rejected("C", "payload shape")
+    ledger.begin("C")
+    ledger.mark_dispatched("C")
+    assert ledger.data["cases"]["C"]["dispatches_total"] == 1 and ledger.data["cases"]["C"]["dispatches"] == 1  # 2 POSTs in total
+    assert ledger.data["repairs"][0]["case"] == "C"
+    ledger.finish("C", "failed", http_status=500, generation_seconds=0.1)
+    with pytest.raises(RuntimeError, match="already used"):
+        ledger.reopen_rejected("C", "again")
+
+
+@pytest.mark.parametrize(
+    "entry",
+    [{"state": "passed"}, {"http_status": 200}, {"generation_seconds": 19.0}, {"png_path": "c.png"}, {"state": "ambiguous"}],
+)
+def test_only_an_api_layer_rejection_without_generation_work_can_be_reopened(tmp_path, entry):
+    ledger = _rejected_ledger(tmp_path, **entry)
+    with pytest.raises(RuntimeError, match="only an API-layer rejection"):
+        ledger.reopen_rejected("C", "x")

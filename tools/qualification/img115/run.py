@@ -23,6 +23,7 @@ from .api import (
     build_payload,
     check_frozen,
     encode_reference,
+    endpoint_for,
     frozen_digest,
     options_payload,
     resolve_references,
@@ -115,6 +116,26 @@ def cmd_freeze(root: Path, install: Path) -> dict[str, Any]:
     manifest["manifest_sha256"] = frozen_digest(manifest)
     target.write_text(json.dumps(manifest, indent=2), encoding="utf-8")
     return manifest
+
+
+def cmd_repair(case_id: str, root: Path, reason: str) -> dict[str, Any]:
+    """Record the harness repair (addendum at the current clean HEAD) and reopen ONE API-rejected case, once per package."""
+
+    layout = build_layout(root)
+    if subprocess.run(["git", "-C", str(REPO_ROOT), "status", "--porcelain"], capture_output=True, text=True).stdout.strip():
+        raise RuntimeError("commit the repair before recording it")
+    frozen = json.loads((layout["evidence"] / "frozen-manifest.json").read_text(encoding="utf-8"))
+    check_frozen(frozen)
+    record = json.loads((layout["evidence"] / f"case-{case_id}" / "record.json").read_text(encoding="utf-8"))
+    ledger = Ledger(layout["evidence"] / "ledger.json")
+    entry = ledger.data["cases"][case_id]
+    entry.setdefault("http_status", record.get("http_status"))
+    entry.setdefault("generation_seconds", record.get("generation_seconds"))
+    ledger.reopen_rejected(case_id, reason)
+    addendum = {"qualification_source_sha": _git_head(), "base_manifest_sha256": frozen["manifest_sha256"], "case": case_id, "reason": reason,
+                "frozen_intent_changed": False}
+    (layout["evidence"] / "frozen-addendum.json").write_text(json.dumps(addendum, indent=2), encoding="utf-8")
+    return addendum
 
 
 class _TreeSampler:
@@ -267,7 +288,14 @@ def run_case(case_id: str, root: Path, install: Path, *, http: Any = None, forge
     case_dir = layout["evidence"] / f"case-{case_id}"
     frozen = json.loads((layout["evidence"] / "frozen-manifest.json").read_text(encoding="utf-8"))
     check_frozen(frozen)
-    if _git_head() != frozen["qualification_source_sha"] and not _descendant_docs_only(frozen["qualification_source_sha"]):
+    allowed = {frozen["qualification_source_sha"]}
+    addendum = layout["evidence"] / "frozen-addendum.json"
+    if addendum.exists():  # a recorded infrastructure repair of the harness (never of the frozen intent)
+        extra = json.loads(addendum.read_text(encoding="utf-8"))
+        if extra.get("base_manifest_sha256") != frozen["manifest_sha256"]:
+            raise RuntimeError("the addendum does not belong to this frozen manifest")
+        allowed.add(extra["qualification_source_sha"])
+    if _git_head() not in allowed and not any(_descendant_docs_only(sha) for sha in allowed):
         raise RuntimeError("harness source changed since the manifest was frozen")
     ledger = Ledger(layout["evidence"] / "ledger.json")
     ledger.begin(case_id)
@@ -315,8 +343,9 @@ def run_case(case_id: str, root: Path, install: Path, *, http: Any = None, forge
             threading.Thread(target=poll, daemon=True).start()
             ledger.mark_dispatched(case_id)  # before the POST: a crash can only ever look ambiguous
             response = None
+            url = f"{forge.base_url}{endpoint_for(case_id)}"  # built before the send: only a failed send is ambiguous
             try:
-                response = http.post(f"{forge.base_url}/sdapi/v1/txt2img", json=payload, timeout=1800)
+                response = http.post(url, json=payload, timeout=1800)
             except Exception as exc:  # noqa: BLE001 - outcome unknown: never replayed
                 state, klass = "ambiguous", "ambiguous"
                 record["error"] = f"{type(exc).__name__}: {exc}"
@@ -348,20 +377,22 @@ def run_case(case_id: str, root: Path, install: Path, *, http: Any = None, forge
     elif state == "failed" and any(m in tail for m in _RESOURCE):
         klass = "resource_limit"
     record["state"], record["class"] = state, klass
-    ledger.finish(case_id, state, **{k: record[k] for k in ("png_path", "png_sha256") if k in record}, **{"class": klass})
+    ledger.finish(case_id, state, **{k: record[k] for k in ("png_path", "png_sha256", "http_status", "generation_seconds") if k in record}, **{"class": klass})
     (case_dir / "record.json").write_text(json.dumps(record, indent=2, default=str), encoding="utf-8")
     return record
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["assets", "freeze", "case"])
+    parser.add_argument("command", choices=["assets", "freeze", "case", "repair"])
     parser.add_argument("case", nargs="?", choices=sorted(CASES))
     parser.add_argument("--root", type=Path, default=DEFAULT_ROOT)
     parser.add_argument("--install", type=Path, default=DEFAULT_INSTALL)
     args = parser.parse_args(argv)
     if args.command == "assets":
         print(json.dumps(cmd_assets(args.root), indent=2))
+    elif args.command == "repair":
+        print(json.dumps(cmd_repair(args.case, args.root, "txt2img+ImageStitch rejected by the Forge API layer; edit now uses /img2img"), indent=2))
     elif args.command == "freeze":
         manifest = cmd_freeze(args.root, args.install)
         print(json.dumps({k: manifest[k] for k in ("manifest_sha256", "qualification_source_sha", "runtime")}, indent=2))

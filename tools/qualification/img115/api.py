@@ -10,12 +10,15 @@ from typing import Any
 from .spec import (
     ASSETS,
     CASES,
+    EDIT_DENOISE,
+    EDIT_ENDPOINT,
     GUIDANCE,
     SAMPLER,
     SCHEDULER,
     STEPS,
     STITCH_MAX_DIM,
     STITCH_SCRIPT,
+    T2I_ENDPOINT,
     digest,
     sha256_file,
 )
@@ -32,8 +35,13 @@ def options_payload(models_dir: Path) -> dict[str, Any]:
     }
 
 
+def endpoint_for(case_id: str) -> str:
+    return EDIT_ENDPOINT if CASES[case_id]["kind"] == "edit" else T2I_ENDPOINT
+
+
 def build_payload(case_id: str, references_b64: list[str]) -> dict[str, Any]:
-    """The /sdapi/v1/txt2img request. Klein edit = txt2img with the built-in ImageStitch references (empty latent)."""
+    """The generation request. txt2img for A/B. Edit (C/D): /img2img where reference 1 is the init image (Forge feeds it to
+    Klein as a reference latent, ``klein_do_reference``) and further references go through the built-in ImageStitch script."""
 
     case = CASES[case_id]
     if bool(case["references"]) != bool(references_b64) or len(case["references"]) != len(references_b64):
@@ -41,11 +49,15 @@ def build_payload(case_id: str, references_b64: list[str]) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "prompt": case["prompt"], "negative_prompt": case["negative_prompt"], "steps": STEPS, "cfg_scale": GUIDANCE,
         "sampler_name": SAMPLER, "scheduler": SCHEDULER, "width": case["width"], "height": case["height"], "seed": case["seed"],
-        "batch_size": 1, "n_iter": 1, "enable_hr": False, "restore_faces": False, "tiling": False,
+        "batch_size": 1, "n_iter": 1, "restore_faces": False, "tiling": False,
         "do_not_save_samples": True, "do_not_save_grid": True,
     }
-    if references_b64:
-        payload["alwayson_scripts"] = {STITCH_SCRIPT: {"args": [True, list(references_b64), STITCH_MAX_DIM]}}
+    if case["kind"] == "txt2img":
+        payload["enable_hr"] = False
+        return payload
+    payload.update({"init_images": [references_b64[0]], "denoising_strength": EDIT_DENOISE, "resize_mode": 0})
+    if len(references_b64) > 1:
+        payload["alwayson_scripts"] = {STITCH_SCRIPT: {"args": [True, list(references_b64[1:]), STITCH_MAX_DIM]}}
     return payload
 
 
@@ -92,7 +104,8 @@ class Ledger:
             raise RuntimeError("Case A must pass before any other case")
         if case_id in ("C", "D") and self.state("A") not in PASS_STATES:
             raise RuntimeError(f"case {case_id} needs Case A's output")
-        self.data["cases"][case_id] = {"state": "dispatching", "dispatches": 0}
+        prior = self.data["cases"].get(case_id, {})
+        self.data["cases"][case_id] = {"state": "dispatching", "dispatches": 0, "dispatches_total": prior.get("dispatches_total", 0)}
         self._save()
 
     def mark_dispatched(self, case_id: str) -> None:
@@ -109,6 +122,22 @@ class Ledger:
         entry = self.data["cases"][case_id]
         entry.update(facts)
         entry["state"] = state
+        self._save()
+
+    def reopen_rejected(self, case_id: str, reason: str) -> None:
+        """The single, explicit exception to 'no retry': a harness (infrastructure) defect repair.
+
+        Allowed once per package, and only when the recorded dispatch was rejected by Forge's API layer (HTTP 5xx) before any
+        generation work (no image, < 2 s). The dispatch counts stay cumulative and the repair is recorded.
+        """
+
+        entry = self.data["cases"].get(case_id, {})
+        if self.data.get("repairs"):
+            raise RuntimeError("the one infrastructure repair of this package is already used")
+        if entry.get("state") != "failed" or not str(entry.get("http_status", "")).startswith("5") or entry.get("png_path") or float(entry.get("generation_seconds", 99)) >= 2.0:
+            raise RuntimeError("only an API-layer rejection with no generation work can be reopened")
+        self.data["repairs"] = [{"case": case_id, "reason": reason, "prior": dict(entry)}]
+        self.data["cases"][case_id] = {"dispatches_total": int(entry.get("dispatches", 0)) + int(entry.get("dispatches_total", 0))}
         self._save()
 
     def output(self, case_id: str) -> dict[str, Any] | None:
