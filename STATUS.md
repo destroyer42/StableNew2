@@ -39,8 +39,7 @@ Updated: 2026-10-03
   provenance; `@1.0.0`/`@1.1.0` are byte-identical. Workflows stay experimental. See
   `docs/Subsystems/Video/PR-COMFY-RUNTIME-100_Managed_Comfy_Runtime.md` and
   `docs/runbooks/managed_comfy_runtime.md`.
-- Managed Forge Neo runtime (PR-IMG-FORGE-RUNTIME-100, implemented and physically verified on a local feature
-  branch, not pushed, owner acceptance pending): the hand-qualified Forge environment is replaced by a
+- Managed Forge Neo runtime (PR-IMG-FORGE-RUNTIME-100 and PR-IMG-FORGE-110, COMPLETE / ACCEPTED / INTEGRATED; PR #36): the hand-qualified Forge environment is replaced by a
   StableNew-owned runtime rebuilt from nothing - Forge `d70373eb…` and ADetailer-Neo `af228eba…` at exact commits,
   standard-GIL CPython 3.13, Torch `2.13.0+cu130`, the complete accepted 147-distribution set
   (`constraints/forge-windows-py313-cu130-neo-d70373eb.txt`, installed `--no-deps`), identity in
@@ -56,6 +55,12 @@ Updated: 2026-10-03
   qualified runtime command mid-job (a bounded repair package is required before Pair D reruns), so
   `FORGE_TECHNICAL_QUALIFICATION_PASS` is not reached. See `docs/runbooks/managed_forge_runtime.md` and
   sections 23-24 of `docs/Subsystems/Image/PR-IMG-FORGE-100_Forge_Compatibility_Qualification.md`.
+- FLUX.2 Klein 4B FP8 target-hardware qualification (PR-IMG-115, local branch, owner review pending,
+  `FLUX2_KLEIN_4B_FP8_PASS_CONSTRAINED`, product value pending): on the pinned managed Forge and RTX 4070 Ti 12 GB,
+  portrait, 1024x1024 and single-reference edit generations pass cleanly (about 9.7 GiB VRAM peak, no spill, no GPU event);
+  two-reference editing is blocked by a pinned-Forge API gap (`ImageStitch` script args rejected), not by the model.
+  Model/runtime qualification only; no production integration. See
+  `docs/Subsystems/Image/PR-IMG-115_FLUX2_Klein_4B_FP8_Target_Hardware_Qualification.md`.
 - Pre-Forge execution and test truth (PR-TEST-TRUTH-210, current while its PR is open; bounded truth package, not
   a product capability): `build_run_plan_from_njr` is fail-closed - only explicitly enabled, explicitly named
   stages are planned, and a missing/blank stage identity or an empty/all-disabled chain raises `ValueError`
@@ -64,7 +69,7 @@ Updated: 2026-10-03
   PR-GUI-F1 placeholder skips (Golden Path, run-control and stage-checkbox surfaces were mapped to their current
   authority or retired). See
   `docs/Subsystems/Testing/PR-TEST-TRUTH-210_Pre_Forge_Execution_and_Test_Truth.md`. After explicit owner
-  acceptance/integration the next product package is `PR-IMG-FORGE-100`.
+  acceptance/integration the next product package was `PR-IMG-FORGE-100` (now integrated).
 - Active diagnostic evidence: `DIAG-GPU-130 - Post-5600 Black-Screen Recurrence` - **XMP-OFF
   RECURRENCE / ACTIVE OBSERVATION; EXIT CRITERION NOT MET**. The owner confirms the RAM XMP profile
   has now been removed. After the 2026-09-25 07:06:20 ET boot, Windows reports both DIMMs at
