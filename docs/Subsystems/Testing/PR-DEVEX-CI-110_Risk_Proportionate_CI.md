@@ -196,6 +196,51 @@ census everywhere: make `full_census` always true in `.github/workflows/ci.yml` 
 
 ## GitHub evidence
 
-Hosted timing and the final census for the repaired executable SHA are recorded here after that SHA's single full census completes
-(a docs-only commit then reuses the evidence through the safe path above). Earlier measurements taken on the first implementation
-SHAs are not repeated here to avoid presenting superseded routing as final.
+Hosted `ubuntu-latest` job durations from the GitHub API (job `started_at` to `completed_at`; GitHub bills each job rounded up to whole
+minutes). Old workflow = PR #38 head `92d42ba` (run 37209295689). New workflow = this PR and two throw-away probe PRs (#40, #41; closed
+unmerged). The final executable SHA is `0c27395` (run 37214862663); the docs/evidence commit that records it is a docs-only delta.
+
+| Route | Jobs (duration -> billed) | Billed min | Wall |
+|---|---|---:|---:|
+| **Old, every PR** | required 69 s -> 2; full-suite 687 s -> 12 | **14** | ~11.5 min |
+| **New: docs-only** (probe #40: one new `.md`) | required 12 s -> 1 (no Python setup, no tests); affected and full-suite skipped | **1** | 12 s |
+| **New: bounded image-lane source change** (probe #41: one-line change in `src/image_backends`; image routing is unchanged by the final repair) | required 72 s -> 2; affected 99 s -> 2 (8 pytest targets) | **4** | ~3 min |
+| Same probe before image sources stopped activating `core` | required 68 s -> 2; affected 370 s -> 7 | 9 | ~7.3 min |
+| **New: broad / CI-authority PR** (this PR, final SHA `0c27395`) | required 72 s -> 2; full-suite 651 s -> 11; affected skipped (subsumed) | **13** | ~12 min |
+| New: docs-only follow-up over green evidence | `required` only, no environment, no tests | 1 | seconds (14 s measured on the first evidence-reuse run, `bcebe62`) |
+
+* Contract gate on the hosted runner: **341 tests in 28 s** at the final SHA (the policy/helper tests joined the gate); the whole `required` job is
+  51-72 s for an executable PR (checkout ~5 s, `pip install` ~9-14 s, collection gate ~8-15 s).
+* Hosted setup overhead per heavy job: checkout ~5 s, Tk/Xvfb apt ~11-17 s, `pip install` ~8-14 s (about 30 s plus the Python setup action);
+  a second heavy job (`affected` or `full-suite`) costs roughly 30-40 s of setup before its first test.
+* Required-gate ordering is real: if a cheap check fails, `affected` and `full-suite` are `skipped` because they `need` `required`.
+
+### Hosted full census (qualification of the repaired CI authority)
+
+This PR changes CI/test authority: the plan classified it `core, qualification_tools, ci_test_authority, full_census_required`, ran `required`,
+then exactly one `full-suite`, and skipped `affected`. The previous head's evidence was green but the delta (`tools/ci`, workflow) was executable, so
+no evidence was reused.
+
+* **4,944 collected, 4,897 passed, 47 skipped, 0 failed**; suite wall 620 s (job 651 s; pytest step 624 s).
+* The informational failures that PR #37 produced (NumPy-dependent IMG-115 harness tests) are gone.
+* Linux skips: 47 (Windows-only ctypes/branch tests, optional `cv2`/`numpy` extras, `ffprobe` absent, opt-in local tests).
+* The full slowest-200 list, by-file and by-area tables and skip reasons are in the run's `full-test-results` artifact (`census.xml`,
+  `census-summary.json`) and its step summary. Earlier hosted runs of this PR showed the same shape: gui_v2/tools/controller/pipeline/api
+  dominate; the slowest tests are real-time waits (`test_check_api_ready_failure`, `test_ensure_connected_timeout_sets_error`,
+  `test_client_closed_on_failure`, `test_filesystem_fallback`).
+
+### Expected monthly impact (from the measured per-route minutes; an illustrative mix, not a forecast)
+
+The previous workflow billed ~14 min per PR head (672 minutes in four days is about 48 heads). With the measured routes, a mix of one third
+docs-only (1 min), one half bounded source (4-9 min, average ~6) and one sixth broad (13 min) averages about 5.5 billed minutes per head, roughly
+60% fewer minutes for the same number of heads, and a bounded or docs-only head returns feedback in about 3 minutes or seconds instead of ~11.5.
+The periodic census adds about 13 runs a month (3/week) at ~13-14 minutes, ~180 minutes, which buys full main-branch evidence regardless of
+routing. If broad PRs dominate the mix the saving shrinks; the per-run `validation-plan` artifact makes the mix visible. Unknown ownership now
+escalates to the census, so new unmapped paths cost more until they are given an owner in `LANE_RULES`.
+
+### Evidence reuse
+
+The evidence-recording docs commit is itself a docs-only delta over the green final SHA, so it takes the cheap path under the repaired policy
+(`required` success, `affected` skipped, `full-suite` success, base an ancestor of the previous head). Deterministic tests cover the refusal cases
+(completed-but-failed census or affected lane, cancelled/in-progress/timed-out/action-required, required failure, base not an ancestor, missing
+check runs, non-Actions check runs, latest-run-wins).
