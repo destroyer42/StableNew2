@@ -71,19 +71,6 @@ def build_v2_app(
         runtime_ports=kernel.runtime_ports,
         optional_dependency_snapshot=kernel.capabilities,
     )
-    # --- BEGIN PR-CORE1-D21A: Diagnostics/Watchdog wiring ---
-    # DiagnosticsServiceV2 and SystemWatchdogV2 are now initialized in AppController
-    # --- END PR-CORE1-D21A ---
-
-    # --- BEGIN PR-CORE1-D21A: Diagnostics/Watchdog wiring ---
-    from pathlib import Path
-
-    from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
-
-    diagnostics_service = DiagnosticsServiceV2(Path("reports") / "diagnostics")
-    app_controller.attach_watchdog(diagnostics_service)
-    # --- END PR-CORE1-D21A ---
-
     # Ensure pipeline_controller is set before constructing MainWindowV2
     pipeline_controller = getattr(app_controller, "pipeline_controller", None)
     window = MainWindowV2(
@@ -98,5 +85,17 @@ def build_v2_app(
 
     # Now set the main_window on controller
     app_controller.set_main_window(window)
+
+    # --- BEGIN PR-CORE1-D21A: Diagnostics/Watchdog wiring ---
+    # The watchdog observes the Tk heartbeat that MainWindowV2 installs, so it is attached
+    # only once the window (and therefore the heartbeat source) exists. Attaching it earlier
+    # would monitor a heartbeat nobody is producing yet.
+    from pathlib import Path
+
+    from src.services.diagnostics_service_v2 import DiagnosticsServiceV2
+
+    diagnostics_service = DiagnosticsServiceV2(Path("reports") / "diagnostics")
+    app_controller.attach_watchdog(diagnostics_service)
+    # --- END PR-CORE1-D21A ---
 
     return root, app_state, app_controller, window

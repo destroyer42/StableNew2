@@ -382,6 +382,42 @@ def _async_bootstrap_comfy(root: Any, app_state, window) -> None:
     )
 
 
+def _run_webui_connection_off_tk(window, *, name: str, work, on_done) -> None:
+    """Run blocking WebUI connection work on a tracked thread; deliver the result on Tk.
+
+    ``WebUIConnectionController.ensure_connected``/``reconnect`` may legitimately take far longer
+    than the UI-heartbeat stall threshold (bounded warm-up, retries and alternate-port discovery),
+    so a GUI callback must never run them on the Tk thread. ``on_done(result, error)`` is always
+    invoked on the Tk thread (the same marshalling the async Run submission uses).
+    """
+
+    def _post(fn) -> None:
+        run_in_main_thread = getattr(window, "run_in_main_thread", None)
+        if callable(run_in_main_thread):
+            run_in_main_thread(fn)
+        else:
+            window.after(0, fn)
+
+    def _worker() -> None:
+        result = None
+        error: Exception | None = None
+        try:
+            result = work()
+        except Exception as exc:  # noqa: BLE001 - reported to the Tk-thread handler
+            error = exc
+        _post(lambda: on_done(result, error))
+
+    from src.utils.thread_registry import get_thread_registry
+
+    get_thread_registry().spawn(
+        target=_worker,
+        name=name,
+        daemon=True,
+        purpose="Bounded WebUI connection/readiness work requested from the GUI",
+        suppress_daemon_warning=True,
+    )
+
+
 def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> None:
     """Update the window with the WebUI manager (called from main thread)."""
     window.webui_process_manager = webui_manager
@@ -421,6 +457,40 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                 consecutive_failures = 0
                 error_logged = False
                 base_generation_refreshed = False
+                # Single-flight guard. Only ever read or written on the Tk thread (operations start
+                # from Tk callbacks and finish through Tk-thread delivery), so no lock is needed.
+                connection_op_in_flight = False
+
+                def start_connection_op(op_name: str, work, on_result, on_error, on_started=None) -> bool:
+                    """Start one bounded WebUI connection operation off Tk, unless one is running."""
+                    nonlocal connection_op_in_flight
+                    if connection_op_in_flight:
+                        logging.info(
+                            "WebUI connection operation already in progress; ignoring %s", op_name
+                        )
+                        return False
+                    connection_op_in_flight = True
+                    if on_started is not None:
+                        # Project CONNECTING before the work starts so a fast completion can
+                        # never be overwritten by this intermediate state.
+                        on_started()
+
+                    def _done(result, error) -> None:
+                        nonlocal connection_op_in_flight
+                        connection_op_in_flight = False
+                        if error is not None:
+                            on_error(error)
+                        else:
+                            on_result(result)
+
+                    try:
+                        _run_webui_connection_off_tk(
+                            window, name=f"WebUI-{op_name}", work=work, on_done=_done
+                        )
+                    except Exception:
+                        connection_op_in_flight = False
+                        raise
+                    return True
 
                 def trigger_sidebar_refresh() -> None:
                     sidebar = getattr(window, "sidebar_panel_v2", None)
@@ -469,20 +539,33 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                             }:
                                 base_generation_refreshed = False
 
-                        if consecutive_failures >= 3:
-                            try:
-                                new_state = connection_controller.ensure_connected(autostart=True)
-                                if new_state != state:
-                                    state = new_state
-                                    last_logged_state = None  # force log on change
-                            except Exception as exc:
+                        if consecutive_failures >= 3 and not connection_op_in_flight:
+
+                            def _autoreconnect_done(_new_state) -> None:
+                                nonlocal last_logged_state
+                                last_logged_state = None  # force log on change
+                                update_status()
+
+                            def _autoreconnect_failed(exc: Exception) -> None:
+                                nonlocal consecutive_failures, error_logged
                                 if not error_logged:
                                     logging.warning(
                                         "WebUI autostart retry failed after 3 disconnects: %s", exc
                                     )
                                     error_logged = True
-                                state = WebUIConnectionState.ERROR
                                 consecutive_failures = 0
+                                sync_state(WebUIConnectionState.ERROR)
+
+                            try:
+                                start_connection_op(
+                                    "autoreconnect",
+                                    lambda: connection_controller.ensure_connected(autostart=True),
+                                    _autoreconnect_done,
+                                    _autoreconnect_failed,
+                                )
+                            except Exception as exc:
+                                _autoreconnect_failed(exc)
+                                state = WebUIConnectionState.ERROR
 
                         sync_state(state)
                         last_logged_state = state
@@ -507,10 +590,10 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
 
                 # Set up callbacks for the buttons
                 def launch_callback() -> None:
-                    nonlocal consecutive_failures, error_logged, last_logged_state
-                    try:
-                        logging.info("Launch WebUI button clicked")
-                        new_state = connection_controller.ensure_connected(autostart=True)
+                    logging.info("Launch WebUI button clicked")
+
+                    def _launched(new_state) -> None:
+                        nonlocal consecutive_failures, error_logged, last_logged_state
                         sync_state(new_state)
                         if new_state == WebUIConnectionState.READY:
                             try:
@@ -522,18 +605,44 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                         consecutive_failures = 0
                         error_logged = False
                         last_logged_state = None
+
+                    def _launch_failed(exc: Exception) -> None:
+                        logging.warning(f"Failed to launch WebUI: {exc}")
+                        sync_state(WebUIConnectionState.ERROR)
+
+                    try:
+                        start_connection_op(
+                            "launch",
+                            lambda: connection_controller.ensure_connected(autostart=True),
+                            _launched,
+                            _launch_failed,
+                            on_started=lambda: sync_state(WebUIConnectionState.CONNECTING),
+                        )
                     except Exception as e:
                         logging.warning(f"Failed to launch WebUI: {e}")
 
                 def retry_callback() -> None:
-                    nonlocal consecutive_failures, error_logged, last_logged_state
-                    try:
-                        logging.info("Retry WebUI connection button clicked")
-                        new_state = connection_controller.reconnect()
+                    logging.info("Retry WebUI connection button clicked")
+
+                    def _retried(new_state) -> None:
+                        nonlocal consecutive_failures, error_logged, last_logged_state
                         sync_state(new_state)
                         consecutive_failures = 0
                         error_logged = False
                         last_logged_state = None
+
+                    def _retry_failed(exc: Exception) -> None:
+                        logging.warning(f"Failed to retry WebUI connection: {exc}")
+                        sync_state(WebUIConnectionState.ERROR)
+
+                    try:
+                        start_connection_op(
+                            "retry",
+                            connection_controller.reconnect,
+                            _retried,
+                            _retry_failed,
+                            on_started=lambda: sync_state(WebUIConnectionState.CONNECTING),
+                        )
                     except Exception as e:
                         logging.warning(f"Failed to retry WebUI connection: {e}")
 
