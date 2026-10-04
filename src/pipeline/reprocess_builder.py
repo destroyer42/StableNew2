@@ -37,6 +37,7 @@ from src.pipeline.job_models_v2 import (
     VideoWorkloadSpec,
     WorkloadKind,
 )
+from src.pipeline.klein_edit_reprocess import is_klein_edit_item, prepare_klein_edit_item
 
 REPROCESS_SCHEMA_VERSION = "stablenew.reprocess.v2.6"
 IMAGE_EDIT_SCHEMA_VERSION = "stablenew.image_edit.v2.6"
@@ -998,8 +999,14 @@ class ReprocessJobBuilder:
 
         grouped: dict[tuple[str, str, str, str, str], dict[str, Any]] = {}
         base_config = fallback_config or {}
+        klein_group_keys: set[tuple[str, str, str, str, str]] = set()
         for item in items:
-            merged_config = self._merge_nested_dicts(base_config, dict(item.config or {}))
+            is_klein = is_klein_edit_item(item)
+            if is_klein:
+                item, klein_config = prepare_klein_edit_item(item, list(stages))
+                merged_config = klein_config
+            else:
+                merged_config = self._merge_nested_dicts(base_config, dict(item.config or {}))
             self.apply_model_vae_to_config(
                 merged_config,
                 model=item.model,
@@ -1025,6 +1032,8 @@ class ReprocessJobBuilder:
                 config_signature,
                 resolved_output_dir,
             )
+            if is_klein:
+                klein_group_keys.add(group_key)
             group = grouped.get(group_key)
             if group is None:
                 group = {
@@ -1039,10 +1048,12 @@ class ReprocessJobBuilder:
             group["items"].append(item)
 
         jobs: list[NormalizedJobRecord] = []
-        for group in grouped.values():
+        for group_key, group in grouped.items():
             group_items = list(group["items"])
-            for idx in range(0, len(group_items), batch_size):
-                chunk = group_items[idx : idx + batch_size]
+            # A Klein edit job carries exactly one source image (no multi-reference).
+            group_batch_size = 1 if group_key in klein_group_keys else batch_size
+            for idx in range(0, len(group_items), group_batch_size):
+                chunk = group_items[idx : idx + group_batch_size]
                 job_output_dir = (
                     str(output_dir_factory(chunk))
                     if callable(output_dir_factory)

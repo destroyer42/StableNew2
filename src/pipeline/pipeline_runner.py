@@ -2222,6 +2222,10 @@ class PipelineRunner:
         backend_options = thaw_json(getattr(njr, "backend_options", {}))
         backend_id = resolve_image_backend_id(backend_options)
         self._image_backends.validate_stage_chain(backend_id, image_stages)
+        # Backend-owned immutable-intent check (e.g. a model profile's envelope) before any dispatch.
+        validate_intent = getattr(self._image_backends.get(backend_id), "validate_njr_intent", None)
+        if callable(validate_intent):
+            validate_intent(njr, image_stages)
         return backend_id
 
     def _execute_image_backend(

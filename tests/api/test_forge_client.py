@@ -144,3 +144,65 @@ def test_construction_performs_no_network_or_process_work() -> None:
     transport = FakeWebUITransport()
     _client(transport)
     assert transport.calls == []
+
+
+KLEIN_MODULES = [
+    {"model_name": "qwen_3_4b", "filename": "/data/models/text_encoder/qwen_3_4b.safetensors"},
+    {"model_name": "flux2-vae", "filename": "/data/models/VAE/flux2-vae.safetensors"},
+    *MODULES,
+]
+
+
+def _writes(transport: FakeWebUITransport) -> list[dict]:
+    return [b for verb, path, b in transport.calls if verb == "POST" and path == "/sdapi/v1/options"]
+
+
+def test_set_additional_modules_sends_the_complete_list_once_and_verifies_the_exact_set() -> None:
+    transport = FakeWebUITransport(modules=KLEIN_MODULES)
+    client = _client(transport)
+    assert client.set_additional_modules(["qwen_3_4b.safetensors", "flux2-vae.safetensors"]) is True
+    assert _writes(transport) == [{"forge_additional_modules": ["qwen_3_4b", "flux2-vae"]}]
+    # Forge reports the module set as paths; the fake orders them, the contract is the exact set.
+    assert sorted(client.get_additional_modules() or []) == [
+        "flux2-vae.safetensors",
+        "qwen_3_4b.safetensors",
+    ]
+
+
+def test_set_additional_modules_refuses_an_unavailable_module_before_any_write() -> None:
+    transport = FakeWebUITransport(modules=MODULES)
+    client = _client(transport)
+    with pytest.raises(ForgeVAEError, match="not listed by the Forge endpoint"):
+        client.set_additional_modules(["qwen_3_4b.safetensors", "sdxl_vae.safetensors"])
+    assert _writes(transport) == []
+
+
+def test_set_additional_modules_fails_closed_when_forge_applies_only_part_of_the_set() -> None:
+    transport = FakeWebUITransport(modules=KLEIN_MODULES)
+    client = _client(transport)
+    original = transport._apply_options
+
+    def drop_second(body: dict) -> None:
+        original({"forge_additional_modules": body["forge_additional_modules"][:1]})
+
+    transport._apply_options = drop_second  # type: ignore[method-assign]
+    with pytest.raises(ForgeVAEError, match="did not apply module"):
+        client.set_additional_modules(["qwen_3_4b.safetensors", "flux2-vae.safetensors"])
+
+
+def test_set_additional_modules_rejects_duplicates_and_empty_clears() -> None:
+    transport = FakeWebUITransport(modules=KLEIN_MODULES)
+    client = _client(transport)
+    with pytest.raises(ForgeVAEError, match="Duplicate"):
+        client.set_additional_modules(["flux2-vae", "flux2-vae.safetensors"])
+    client.set_additional_modules(["flux2-vae"])
+    assert client.set_additional_modules([]) is True
+    assert client.get_current_vae() == "Automatic"
+
+
+def test_set_vae_delegates_to_the_single_module_write_authority() -> None:
+    transport = FakeWebUITransport(modules=KLEIN_MODULES)
+    client = _client(transport)
+    client.set_additional_modules(["qwen_3_4b", "flux2-vae"])
+    assert client.set_vae("sdxl_vae.safetensors") is True
+    assert _writes(transport)[-1] == {"forge_additional_modules": ["sdxl_vae.safetensors"]}

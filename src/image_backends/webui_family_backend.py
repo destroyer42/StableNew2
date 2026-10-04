@@ -18,6 +18,7 @@ from src.api.webui_runtime_identity import (
     assert_runtime_matches_backend,
     classify_client_runtime,
 )
+from src.image_backends.forge_klein_profile import KleinProfileError, resolve_model_profile
 from src.image_backends.image_backend_types import (
     ImageBackendCapabilities,
     ImageExecutionRequest,
@@ -147,7 +148,41 @@ class WebUIFamilyImageBackend:
                 config[key] = execution[key]
         return {key: value for key, value in config.items() if value is not None}
 
+    # -- Identity-specific hooks (no-ops here; ``ForgeWebUIImageBackend`` overrides for model profiles) --
+
+    def _reject_foreign_model_profile(self, backend_options: Any) -> None:
+        """A model profile is only meaningful on the backend it was qualified for."""
+
+        profile = resolve_model_profile(backend_options)
+        if profile is not None and profile.backend_id != self.backend_id:
+            raise KleinProfileError(
+                f"{profile.display_name} (profile v{profile.version}) requires the "
+                f"'{profile.backend_id}' backend; this work targets '{self.backend_id}'. "
+                "StableNew never switches or falls back between backends."
+            )
+
+    def validate_njr_intent(self, njr: Any, stage_names: list[str]) -> None:
+        """Reject work this backend cannot run, before the runner dispatches any stage."""
+
+        self._reject_foreign_model_profile(getattr(njr, "backend_options", None))
+
+    def _validate_request(self, request: ImageExecutionRequest) -> None:
+        """Pure intent check, run before any runtime side effect (raise to refuse)."""
+
+        self._reject_foreign_model_profile(request.backend_options)
+
+    def _before_dispatch(self, pipeline: Any, request: ImageExecutionRequest) -> None:
+        """Last check before the first generation POST of this stage (raise to refuse)."""
+
+    def _finalize_config(
+        self, request: ImageExecutionRequest, config: dict[str, Any]
+    ) -> dict[str, Any]:
+        """Backend-specific projection of the finished executor config (identity by default)."""
+
+        return config
+
     def execute(self, pipeline: Any, request: ImageExecutionRequest) -> ImageExecutionResult | None:
+        self._validate_request(request)
         # Release conflicting StableNew-owned runtime residency (owned Comfy, the other WebUI
         # identity, cached SVD state) before this backend is used; never touches an external
         # runtime.  See PR-RUNTIME-100 / PR-IMG-FORGE-100.
@@ -158,9 +193,10 @@ class WebUIFamilyImageBackend:
         assert_runtime_matches_backend(
             self.backend_id, classify_client_runtime(getattr(pipeline, "client", None))
         )
+        self._before_dispatch(pipeline, request)
 
         if request.stage_name == "txt2img":
-            config = self._txt2img_executor_config(request)
+            config = self._finalize_config(request, self._txt2img_executor_config(request))
             result = pipeline.run_txt2img_stage(
                 request.prompt,
                 request.negative_prompt,
@@ -173,7 +209,7 @@ class WebUIFamilyImageBackend:
         elif request.stage_name == "img2img":
             if request.input_image_path is None:
                 raise ValueError("img2img requires input image from previous stage")
-            config = self._stage_executor_config(request)
+            config = self._finalize_config(request, self._stage_executor_config(request))
             result = pipeline.run_img2img_stage(
                 input_image_path=request.input_image_path,
                 prompt=request.prompt,
