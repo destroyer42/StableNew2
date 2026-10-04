@@ -106,7 +106,7 @@ def test_ci_is_python_312_only_with_no_version_matrix() -> None:
     assert "strategy:" not in workflow
     assert "3.11" not in workflow
     assert "3.12" not in workflow and "3.13" not in workflow
-    assert workflow.count('python-version: "3.14"') == 2  # required + full-suite
+    assert workflow.count('python-version: "3.14"') == 3  # required + affected + full-suite
 
 
 def test_ci_runs_once_per_pull_request_head_including_stacked_prs() -> None:
@@ -125,14 +125,15 @@ def test_superseded_ci_runs_are_cancelled_per_pull_request() -> None:
     assert "github.event.pull_request.number" in concurrency
 
 
-def test_ci_census_is_one_required_job_and_one_full_suite_job() -> None:
+def test_ci_has_one_required_job_one_affected_lane_job_and_one_full_suite_job() -> None:
     jobs = _ci_section("\njobs:")
 
     assert re.findall(r"^  ([a-z][a-z-]*):\s*$", jobs, flags=re.MULTILINE) == [
         "required",
+        "affected",
         "full-suite",
     ]
-    required = _ci_section("  required:", "  full-suite:")
+    required = _ci_section("  required:", "  affected:")
     assert "continue-on-error" not in required  # the required gate is never masked
 
 

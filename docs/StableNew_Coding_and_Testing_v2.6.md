@@ -97,11 +97,21 @@ execution is explicitly authorized.
   collection and the required positive-list smoke. Its pytest gates print one
   compact line on success and the complete pytest output on failure. Reuse
   exact-source green evidence; do not rerun it after docs-only edits.
-- **Level 3 - GitHub integration census.** Each pull-request head runs one workflow
-  on Python 3.14: one required gate and one informational full-suite job under
-  Xvfb. Branch pushes do not start a duplicate run, stacked PRs are covered, and a
-  newer head cancels the superseded run. `workflow_dispatch` remains for explicit
-  reruns or recovery.
+- **Level 3 - risk-proportionate GitHub CI (PR-DEVEX-CI-110).** Each pull-request head
+  runs one workflow on Python 3.14 whose routing comes from the repository-owned
+  `tools/ci/validation_plan.py` (base-to-head change set -> additive coarse lanes).
+  Docs-only changes take a cheap path with no Python environment. Every executable PR
+  runs the required gate (repository quality plus the small cross-boundary contract
+  suite in `tools/ci/run_required_smoke.py`), then only the affected lanes. Broad or
+  unbounded changes (dependencies, pytest/CI configuration, shared test
+  infrastructure, the validation policy itself, unknown impact) run the required gate
+  and then one full census, which subsumes the affected lanes. The full census also
+  runs on main Monday/Wednesday/Friday, on `workflow_dispatch`, before releases, and
+  for any PR labelled `full-census` or whose head commit carries `[full-census]`.
+  Branch pushes do not start a duplicate run, stacked PRs are covered, and a newer
+  head cancels the superseded run. Physical GPU/A1111/Forge/Comfy/SVD behavior is
+  never claimed by hosted CI; it stays opt-in local acceptance. See
+  `docs/Subsystems/Testing/PR-DEVEX-CI-110_Risk_Proportionate_CI.md`.
 
 Use `python -m pytest -q <targets>` for focused changed behavior. Run
 real-backend acceptance only when the PR outcome requires it. Do not claim a
@@ -128,8 +138,9 @@ Use `docs/CODEX_WORK_PACKAGE_TEMPLATE.md` for the standard closeout shape.
 ## Integration verdict
 
 GitHub required CI runs the required gate once, on Python 3.14, and it must pass
-before integration. The broader configured suite is an informational
-lane: it runs once to completion (no `--maxfail`) with `pytest-timeout` and a quiet
+before integration. The affected-lane job and the broader configured suite are
+informational lanes (the census runs only for broad/unbounded changes, on schedule,
+on dispatch and on request): each runs once to completion (no `--maxfail`) with `pytest-timeout` and a quiet
 summary (`-q -rfE --tb=short`), and its failures are
 reported but do not block merges or broaden an unrelated PR. Because the stale-fixture debt
 was repaired in PR-TEST-TRUTH-200, a failure there is a signal to investigate; promote

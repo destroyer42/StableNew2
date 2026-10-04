@@ -69,6 +69,14 @@ Updated: 2026-10-03
   (available RAM is evidence only). Assets install with `scripts/install_forge_klein_assets.ps1` into the managed Forge data
   tree. Two production smokes passed on the RTX 4070 Ti. A1111 stays the default and the rollback; multi-reference is
   unsupported and tracked separately. See `docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`.
+- Risk-proportionate CI (PR-DEVEX-CI-110): the repository-owned `tools/ci/validation_plan.py` classifies the base-to-head change
+  set into additive coarse lanes and the single PR-head workflow consumes it. Docs-only changes take a cheap path (no Python
+  environment); every executable PR runs `required` (repository quality plus a small cross-boundary contract suite, 294 tests) and
+  then only its affected lanes; broad/unbounded changes (dependencies, pytest/CI configuration, shared test infrastructure, the policy
+  itself, unknown impact) run one full census instead. The full census also runs on main Monday/Wednesday/Friday, on dispatch, before
+  releases and on request (`full-census` label or `[full-census]` commit marker). No tests were deleted; a measured test and ownership
+  census is in `docs/Subsystems/Testing/PR-DEVEX-CI-110_Risk_Proportionate_CI.md`. Codex review is on demand, not a mandatory stage
+  (`docs/AGENT_OPERATING_MODEL.md`).
 - Pre-Forge execution and test truth (PR-TEST-TRUTH-210, current while its PR is open; bounded truth package, not
   a product capability): `build_run_plan_from_njr` is fail-closed - only explicitly enabled, explicitly named
   stages are planned, and a missing/blank stage identity or an empty/all-disabled chain raises `ValueError`
