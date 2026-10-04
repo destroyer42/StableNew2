@@ -15,6 +15,7 @@ import requests
 
 from src.api.client import SDWebUIClient
 from src.api.forge_client import ForgeWebUIClient
+from src.pipeline.global_prompt_policy import apply_global_prompt_policy
 from src.queue.job_model import JobStatus
 from tests.helpers.fake_webui_transport import GENERATION_PATHS, TINY_PNG_B64, FakeWebUITransport
 from tests.helpers.njr_factory import make_pipeline_njr, make_stage_config
@@ -57,17 +58,26 @@ def _njr(backend_id: str | None, **overrides):
         width=832,
         height=1216,
         seed=overrides.pop("seed", 424242),
-        config={
-            "model": "sdxl.safetensors",
-            "vae": "sdxl_vae.safetensors",
-            "prompt": "a lighthouse at dusk",
-            "sampler_name": "Euler a",
-            "scheduler": "Karras",
-            "steps": 24,
-            "cfg_scale": 5.5,
-            "width": 832,
-            "height": 1216,
-        },
+        # The frozen (empty) global prompt policy makes the NJR the only prompt authority; without
+        # it the executor falls back to the mutable legacy global prompt files/defaults.
+        config=apply_global_prompt_policy(
+            {
+                "model": "sdxl.safetensors",
+                "vae": "sdxl_vae.safetensors",
+                "prompt": "a lighthouse at dusk",
+                "negative_prompt": "lowres, blurry",
+                "sampler_name": "Euler a",
+                "scheduler": "Karras",
+                "steps": 24,
+                "cfg_scale": 5.5,
+                "width": 832,
+                "height": 1216,
+            },
+            positive_enabled=False,
+            positive_text="",
+            negative_enabled=False,
+            negative_text="",
+        ),
         backend_options=backend_options,
         **overrides,
     )
@@ -93,7 +103,7 @@ def test_forge_txt2img_enters_through_queue_and_records_forge_identity_everywher
     assert [path for _, path, _ in transport.generation_calls] == ["/sdapi/v1/txt2img"]
     payload = transport.payloads["/sdapi/v1/txt2img"][0]
     assert "a lighthouse at dusk" in payload["prompt"]
-    assert "lowres, blurry" in payload["negative_prompt"]
+    assert payload["negative_prompt"] == "lowres, blurry"
     assert (payload["steps"], payload["cfg_scale"]) == (24, 5.5)
     assert (payload["width"], payload["height"]) == (832, 1216)
     assert payload["seed"] == 424242

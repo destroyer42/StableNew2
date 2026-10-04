@@ -1,7 +1,19 @@
 import pytest
 
+from src.api.client import DEFAULT_SCHEDULERS
+from src.api.webui_resource_service import WebUIResourceService as ExtendedWebUIResourceService
 from src.api.webui_resources import WebUIResourceService
 from tests.helpers.webui_mocks import DummyWebUIClient
+
+
+@pytest.fixture
+def forbid_webui_client(monkeypatch):
+    """Fail loudly if a filesystem-only service ever constructs a WebUI client."""
+
+    def _boom(*args, **kwargs):
+        raise AssertionError("filesystem-only resource discovery must not create a WebUI client")
+
+    monkeypatch.setattr("src.api.webui_resources.SDWebUIClient", _boom)
 
 
 @pytest.fixture
@@ -66,15 +78,83 @@ def _build_resource_map(service: WebUIResourceService) -> dict[str, list]:
     }
 
 
-def test_filesystem_fallback(temp_webui_root):
+def test_filesystem_fallback(temp_webui_root, forbid_webui_client):
     service = WebUIResourceService(client=None, webui_root=str(temp_webui_root))
+    assert service.client is None
     resources = _build_resource_map(service)
-    assert resources["models"], "Expected fallback models for filesystem lookup"
-    assert resources["vaes"], "Expected fallback VAEs for filesystem lookup"
-    assert resources["hypernetworks"], "Expected fallback hypernetworks for filesystem lookup"
-    assert resources["embeddings"], "Expected fallback embeddings for filesystem lookup"
-    assert resources["upscalers"], "Expected fallback upscalers for filesystem lookup"
+    assert {r.name for r in resources["models"]} == {"fallback-model"}
+    assert [r.name for r in resources["vaes"]] == ["fallback-vae.pt"]
+    assert [r.name for r in resources["hypernetworks"]] == ["hypernet1"]
+    assert [r.name for r in resources["embeddings"]] == ["embed1"]
+    assert [r.name for r in resources["upscalers"]] == ["upscaler1"]
     assert set(resources.keys()) >= {"models", "vaes", "hypernetworks", "embeddings", "upscalers"}
     assert "refiner_models" in resources
     assert "adetailer_models" in resources
     assert "adetailer_detectors" in resources
+
+
+def test_omitted_client_builds_default_api_first_client(monkeypatch, temp_webui_root):
+    class _RecordingClient:
+        instances: list = []
+
+        def __init__(self) -> None:
+            self.calls: list[str] = []
+            _RecordingClient.instances.append(self)
+
+        def get_models(self):
+            self.calls.append("get_models")
+            return [{"model_name": "api-model", "title": "API Model"}]
+
+    monkeypatch.setattr("src.api.webui_resources.SDWebUIClient", _RecordingClient)
+
+    service = WebUIResourceService(webui_root=str(temp_webui_root))
+
+    assert len(_RecordingClient.instances) == 1
+    assert service.client is _RecordingClient.instances[0]
+    # API-first: the API answer wins over the filesystem model present under the root
+    assert [r.name for r in service.list_models()] == ["api-model"]
+    assert service.client.calls == ["get_models"]
+
+
+def test_explicit_client_is_used_as_given(temp_webui_root, forbid_webui_client):
+    client = DummyWebUIClient(models=[{"model_name": "m", "title": "M"}])
+    service = WebUIResourceService(client=client, webui_root=str(temp_webui_root))
+    assert service.client is client
+
+
+def test_extended_service_omitted_and_explicit_none_follow_the_same_contract(
+    monkeypatch, temp_webui_root
+):
+    created: list[object] = []
+
+    def _factory():
+        created.append(object())
+        return created[-1]
+
+    monkeypatch.setattr("src.api.webui_resources.SDWebUIClient", _factory)
+
+    default_service = ExtendedWebUIResourceService(webui_root=str(temp_webui_root))
+    assert created and default_service.client is created[0]
+
+    created.clear()
+    fs_only = ExtendedWebUIResourceService(client=None, webui_root=str(temp_webui_root))
+    assert created == []
+    assert fs_only.client is None
+
+
+def test_extended_filesystem_only_refresh_all_touches_no_client(
+    temp_webui_root, forbid_webui_client
+):
+    service = ExtendedWebUIResourceService(client=None, webui_root=str(temp_webui_root))
+
+    resources = service.refresh_all()
+
+    assert {r.name for r in resources["models"]} == {"fallback-model"}
+    assert [r.name for r in resources["vaes"]] == ["fallback-vae.pt"]
+    assert [r.name for r in resources["hypernetworks"]] == ["hypernet1"]
+    assert [r.name for r in resources["embeddings"]] == ["embed1"]
+    assert [r.name for r in resources["upscalers"]] == ["upscaler1"]
+    assert resources["samplers"] == []
+    assert resources["schedulers"] == list(DEFAULT_SCHEDULERS)
+    assert resources["adetailer_models"] == []
+    assert resources["adetailer_detectors"] == []

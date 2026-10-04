@@ -17,18 +17,21 @@ class _DummyProcess:
         self.pid = 12345
         self.stdout = io.BytesIO(b"")
         self.stderr = io.BytesIO(b"")
+        self.returncode: int | None = None
 
-    def poll(self) -> None:
-        return None
+    def poll(self) -> int | None:
+        return self.returncode
 
-    def wait(self, timeout: float | None = None) -> None:  # noqa: ARG003 - signature compatibility
-        return None
+    def wait(self, timeout: float | None = None) -> int | None:  # noqa: ARG002 - signature compatibility
+        return self.returncode
 
+    # A real process exits once terminated/killed; without this the manager's stop path polls its
+    # full graceful-exit window (10 s) during app teardown.
     def terminate(self) -> None:
-        pass
+        self.returncode = 0
 
     def kill(self) -> None:
-        pass
+        self.returncode = -9
 
 
 class _DummyThread:
@@ -52,6 +55,17 @@ def test_webui_launch_emits_proc_log(monkeypatch) -> None:
     monkeypatch.setattr(
         "src.api.webui_process_manager.subprocess.Popen",
         lambda *args, **kwargs: _DummyProcess(),
+    )
+
+    # Hermetic launch: no loopback probe for a running StableNew GUI (a closed port costs ~1 s on
+    # Windows and a live GUI would change the outcome) and no probe of the WebUI port at startup.
+    monkeypatch.setattr(
+        "src.utils.single_instance.SingleInstanceLock.is_gui_running",
+        staticmethod(lambda *args, **kwargs: True),
+    )
+    monkeypatch.setattr(
+        "src.controller.webui_connection_controller.WebUIConnectionController.is_port_listening",
+        lambda self, *args, **kwargs: False,
     )
 
     config = WebUIProcessConfig(command=["python", "-m", "http.server"], working_dir=".")

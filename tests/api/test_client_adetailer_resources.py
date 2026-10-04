@@ -22,6 +22,8 @@ class TestADetailerResources:
     def setup_method(self):
         """Setup for each test."""
         self.client = SDWebUIClient(base_url=API_BASE_URL)
+        # Fallback/failure cases ride retry-safe GETs; fake the wait (retry policy has its own tests).
+        self.client._sleep = lambda _duration: None
 
     def test_get_adetailer_models_from_scripts_api(self):
         """Test successful retrieval of ADetailer models from scripts API."""
@@ -211,6 +213,8 @@ class TestADetailerResourcesRegression:
     def setup_method(self):
         """Setup for each test."""
         self.client = SDWebUIClient(base_url=API_BASE_URL)
+        # Fallback/failure cases ride retry-safe GETs; fake the wait (retry policy has its own tests).
+        self.client._sleep = lambda _duration: None
 
     def test_regression_empty_dropdowns_prevented(self):
         """
