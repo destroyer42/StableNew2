@@ -30,10 +30,13 @@ class TestSDWebUIClient:
             assert self.client.check_api_ready() is True
 
     def test_check_api_ready_failure(self):
-        """Test failed API readiness check"""
+        """Test failed API readiness check (retry waits are faked; policy tests own backoff)"""
+        self.client._sleep = MagicMock()
         with requests_mock.Mocker() as m:
             m.get(f"{API_BASE_URL}/sdapi/v1/sd-models", exc=requests.exceptions.ConnectTimeout)
             assert self.client.check_api_ready() is False
+        # the retry-safe GET still backed off between attempts; only the real wait is removed
+        self.client._sleep.assert_called()
 
     def test_txt2img_success(self):
         """Test successful txt2img call"""

@@ -28,16 +28,31 @@ class WebUIResource:
     raw: dict[str, Any] | None = None
 
 
+# Marks "no client argument supplied" so an explicit ``client=None`` can mean filesystem-only.
+DEFAULT_CLIENT: Any = object()
+
+
 class WebUIResourceService:
-    def __init__(self, client: SDWebUIClient | None = None, webui_root: str | None = None):
-        self.client = client or SDWebUIClient()
+    """WebUI resource discovery: API first, filesystem fallback.
+
+    Omitting ``client`` builds a default ``SDWebUIClient`` (API-first). Passing
+    ``client=None`` explicitly selects filesystem-only discovery: no client is created and
+    no WebUI request is ever made.
+    """
+
+    def __init__(
+        self,
+        client: SDWebUIClient | None = DEFAULT_CLIENT,
+        webui_root: str | None = None,
+    ):
+        self.client = SDWebUIClient() if client is DEFAULT_CLIENT else client
         self.webui_root = webui_root or os.environ.get(
             "STABLENEW_WEBUI_ROOT", "stable-diffusion-webui"
         )
         self.root_path = Path(self.webui_root or "stable-diffusion-webui")
 
     def list_models(self) -> list[WebUIResource]:
-        # If no client, always use filesystem fallback
+        # Filesystem-only mode (explicit client=None): never touch a client
         def is_in_temp_dir(file: Path) -> bool:
             # Only include files strictly under the provided webui_root
             try:
@@ -97,7 +112,7 @@ class WebUIResourceService:
 
     def list_vaes(self) -> list[WebUIResource]:
         try:
-            api_vaes = self.client.get_vae_models()
+            api_vaes = self.client.get_vae_models() if self.client is not None else None
             if api_vaes:
                 resources: list[WebUIResource] = []
                 for item in api_vaes:
@@ -132,7 +147,7 @@ class WebUIResourceService:
 
     def list_hypernetworks(self) -> list[WebUIResource]:
         try:
-            api_hypernets = self.client.get_hypernetworks()
+            api_hypernets = self.client.get_hypernetworks() if self.client is not None else None
             if api_hypernets:
                 return [
                     WebUIResource(
@@ -179,7 +194,7 @@ class WebUIResourceService:
 
     def list_upscalers(self) -> list[WebUIResource]:
         try:
-            api_upscalers = self.client.get_upscalers()
+            api_upscalers = self.client.get_upscalers() if self.client is not None else None
             if api_upscalers:
                 return [
                     WebUIResource(

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from typing import Any
 
@@ -15,11 +14,9 @@ class QueueRunSubmissionService:
         *,
         append_log: Callable[[str], None],
         capture_stage_plan_for_tests: Callable[[Any], None],
-        invoke_mock_generate_for_tests: Callable[[], None],
     ) -> None:
         self._append_log = append_log
         self._capture_stage_plan_for_tests = capture_stage_plan_for_tests
-        self._invoke_mock_generate_for_tests = invoke_mock_generate_for_tests
 
     def ensure_queue_run_mode(self, app_state: Any, button_source: str) -> None:
         pipeline_state = getattr(app_state, "pipeline_state", None)
@@ -91,11 +88,6 @@ class QueueRunSubmissionService:
             )
             return False
         try:
-            pytest_flag = os.environ.get("PYTEST_CURRENT_TEST")
-            if not pytest_flag:
-                os.environ.pop("PYTEST_CURRENT_TEST", None)
-            else:
-                self._invoke_mock_generate_for_tests()
             self._capture_stage_plan_for_tests(pipeline_controller)
             self._append_log(
                 f"[controller] _start_run_v2 via PipelineController.start_pipeline "

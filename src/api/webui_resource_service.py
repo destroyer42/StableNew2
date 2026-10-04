@@ -6,6 +6,7 @@ from collections.abc import Iterable
 from typing import Any
 
 from src.api.client import DEFAULT_SCHEDULERS, SDWebUIClient, normalize_scheduler_names
+from src.api.webui_resources import DEFAULT_CLIENT
 from src.api.webui_resources import WebUIResourceService as BaseWebUIResourceService
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ def normalize_resource_map(payload: dict[str, Any] | None) -> dict[str, list[Any
 class WebUIResourceService(BaseWebUIResourceService):
     """WebUI resource helper that can refresh all resource lists at once."""
 
-    def __init__(self, client: SDWebUIClient | None = None, **kwargs: Any) -> None:
+    def __init__(self, client: SDWebUIClient | None = DEFAULT_CLIENT, **kwargs: Any) -> None:
         super().__init__(client=client, **kwargs)
 
     def refresh_all(self, timeout: float = 5.0) -> dict[str, list[Any]]:
@@ -58,9 +59,7 @@ class WebUIResourceService(BaseWebUIResourceService):
             futures = {
                 "models": executor.submit(self.list_models),
                 "vaes": executor.submit(self.list_vaes),
-                "samplers": executor.submit(
-                    lambda: self._normalize_sampler_names(self.client.get_samplers() or [])
-                ),
+                "samplers": executor.submit(self._fetch_samplers),
                 "schedulers": executor.submit(self._fetch_schedulers),
                 "upscalers": executor.submit(self.list_upscalers),
                 "hypernetworks": executor.submit(self.list_hypernetworks),
@@ -84,8 +83,15 @@ class WebUIResourceService(BaseWebUIResourceService):
 
             return results
 
+    def _fetch_samplers(self) -> list[str]:
+        if self.client is None:  # filesystem-only mode: samplers are API-only
+            return []
+        return self._normalize_sampler_names(self.client.get_samplers() or [])
+
     def _fetch_schedulers(self) -> list[str]:
         """Fetch schedulers while preserving a non-empty compatibility result."""
+        if self.client is None:  # filesystem-only mode: schedulers are API-only
+            return list(DEFAULT_SCHEDULERS)
         try:
             raw = self.client.get_schedulers()
         except Exception as exc:

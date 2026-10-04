@@ -502,7 +502,9 @@ class AppController:
         self._apply_initial_resource_probe_grace()
         self._webui_api: WebUIAPI | None = None
         client = getattr(self, "_api_client", None)
-        self.resource_service = resource_service or WebUIResourceService(client=client)
+        self.resource_service = resource_service or (
+            WebUIResourceService(client=client) if client is not None else WebUIResourceService()
+        )
         self.state.resources = self._empty_resource_map()
         self.webui_process_manager = webui_process_manager
         self._cancel_token: CancelToken | None = None
@@ -1481,58 +1483,6 @@ class AppController:
             # Test helper only; failures must not block user runs
             pass
 
-    def _invoke_mock_generate_for_tests(self) -> None:
-        """Trigger the patched ApiClient.generate_images during pytest runs."""
-        if not os.environ.get("PYTEST_CURRENT_TEST"):
-            return
-        try:
-            from types import SimpleNamespace
-
-            from src.api.client import ApiClient
-
-            cfg = getattr(self.state, "current_config", None)
-            pipeline_tab = getattr(getattr(self, "main_window", None), "pipeline_tab", None)
-            tab_state = getattr(pipeline_tab, "pipeline_state", None)
-            app_state_pipeline = getattr(self.app_state, "pipeline_state", None)
-
-            prompt = (
-                getattr(tab_state, "prompt", None)
-                or getattr(app_state_pipeline, "prompt", None)
-                or getattr(cfg, "prompt", "")
-                or ""
-            )
-            negative = (
-                getattr(tab_state, "negative_prompt", None)
-                or getattr(app_state_pipeline, "negative_prompt", None)
-                or getattr(cfg, "negative_prompt", "")
-                or ""
-            )
-
-            request = SimpleNamespace(
-                prompt=prompt,
-                negative_prompt=negative,
-                sampler="Euler",
-                scheduler="Karras",
-                steps=25,
-                cfg_scale=7.0,
-                batch_size=2,
-            )
-
-            payload = {
-                "prompt": prompt,
-                "negative_prompt": negative,
-                "sampler_name": "Euler",
-                "scheduler": "Karras",
-                "steps": 25,
-                "cfg_scale": 7.0,
-                "batch_size": 2,
-            }
-
-            client = ApiClient()
-            client.generate_images(request, payload)
-        except Exception:
-            pass
-
     def _build_randomizer_metadata(self) -> dict[str, Any]:
         return {
             "enabled": bool(self.state.current_config.randomization_enabled),
@@ -1674,7 +1624,6 @@ class AppController:
         return QueueRunSubmissionService(
             append_log=self._append_log,
             capture_stage_plan_for_tests=self._capture_stage_plan_for_tests,
-            invoke_mock_generate_for_tests=self._invoke_mock_generate_for_tests,
         )
 
     def _get_gui_config_service(self) -> GuiConfigService:
