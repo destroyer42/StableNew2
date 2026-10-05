@@ -190,15 +190,23 @@ jobs:
           python -m pytest -q -rfE --tb=short --timeout=300 @affected-targets.txt
 
   # Informational gate: the broader configured suite (headless-safe GUI v2, fake-backend integration, tools,
-  # video). It runs to completion (no --maxfail) with a per-test timeout so one hang cannot mask the census, and
-  # failures are reported without blocking merges. Success output is a concise summary; failures and errors
-  # keep their diagnostics. It runs only for broad/unbounded changes, periodically on main, on manual dispatch
-  # and on explicit request, and only after the required gate succeeds. The JUnit timing census is published.
-  full-suite:
+  # video). PR-DEVEX-CENSUS-140: the census runs as THREE independent file-level shards (separate runner, Python
+  # process, Xvfb and JUnit each) so its wall time is the slowest shard, not the whole suite. The partition is
+  # `sha256(repo-relative test path) % 3` over the same active test files pytest collects (tools/ci/census_shards.py);
+  # a new test file is assigned automatically. Each shard runs ordinary pytest to completion (no --maxfail) with a
+  # per-test timeout. The aggregate `full-suite` job below is the human-visible census verdict: it fails closed if
+  # any shard artifact is missing, any active file is unassigned or doubly assigned, or any shard failed, and it
+  # publishes one merged census. It runs only for broad/unbounded changes, periodically on main, on manual
+  # dispatch and on explicit request, and only after the required gate succeeds. Informational: not a merge gate.
+  full-suite-shard:
     needs: required
     if: needs.required.outputs.full_census == 'true'
     runs-on: ubuntu-latest
     continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2]  # keep in step with --shards 3 below (a truth test enforces it)
 
     steps:
     - name: Checkout repository
@@ -220,16 +228,45 @@ jobs:
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         pip install pytest pytest-xvfb pytest-timeout ruff==0.14.9
 
-    - name: Run broader configured suite (Xvfb)
+    - name: Run census shard ${{ matrix.shard }} of 3 (Xvfb)
       uses: GabrielBB/xvfb-action@v1
       with:
         run: |
-          python -m pytest -q -rfE --tb=short --timeout=300 --junitxml=census.xml -o junit_family=xunit2 -o junit_duration_report=total
+          python tools/ci/census_shards.py run-shard --shards 3 --index ${{ matrix.shard }} --out-dir census-shard-results
 
-    - name: Summarize the test census
+    - name: Upload shard results
+      uses: actions/upload-artifact@v4
       if: always()
+      with:
+        name: census-shard-${{ matrix.shard }}
+        path: census-shard-results/
+
+  full-suite:
+    needs: [required, full-suite-shard]
+    if: ${{ always() && needs.required.result == 'success' && needs.required.outputs.full_census == 'true' }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.14
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.14"
+
+    - name: Download shard results
+      uses: actions/download-artifact@v4
+      with:
+        pattern: census-shard-*
+        merge-multiple: true
+        path: census-results
+
+    - name: Verify census completeness and summarize
       run: |
-        python tools/ci/census_summary.py census.xml --json census-summary.json >> "$GITHUB_STEP_SUMMARY"
+        set -o pipefail
+        python tools/ci/census_shards.py verify --shards 3 --results-dir census-results --json census-summary.json | tee -a "$GITHUB_STEP_SUMMARY"
 
     - name: Upload full test results
       uses: actions/upload-artifact@v4
@@ -237,6 +274,5 @@ jobs:
       with:
         name: full-test-results
         path: |
-          census.xml
+          census-results/
           census-summary.json
-          .pytest_cache/
