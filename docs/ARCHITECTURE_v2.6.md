@@ -44,9 +44,9 @@ not a foundation to finish. The recovery baseline and exact commit evidence are
 recorded in the active roadmap and Git history for `PR-MVP-000`.
 
 Approved for the first post-v2.6 image architecture change: still-image
-execution will use **one typed image backend per image NJR**. A1111/WebUI remains
-the current/default production image backend and must preserve accepted behavior
-behind that boundary. Per-stage backend composition and ComfyUI-centric image
+execution will use **one typed image backend per image NJR**. A1111/WebUI was the first
+and, until `PR-IMG-FORGE-120`, the default production image backend and must preserve
+accepted behavior behind that boundary (new work now defaults to managed Forge, section 7.2.1). Per-stage backend composition and ComfyUI-centric image
 execution remain possible future options, but neither is part of the first
 backend-neutralization PR.
 
@@ -281,7 +281,8 @@ current process/session may terminate it or its proven descendants.
 
 ### 7.1 Current v2.6 implementation
 
-The accepted production still-image path is A1111/WebUI-centric. A1111-specific
+The first accepted production still-image path is A1111/WebUI-centric (managed Forge is the new-work default since
+`PR-IMG-FORGE-120`, section 7.2.1). A1111-specific
 payload construction, checkpoint/VAE synchronization, extension semantics,
 progress, cancellation, stall handling, and managed/external runtime ownership
 remain accepted production behavior, now behind the implemented image backend
@@ -305,10 +306,25 @@ The implemented modules are `src/image_backends/image_backend_types.py`,
 `src/image_backends/image_backend_registry.py`, and
 `src/image_backends/a1111_webui_backend.py`. A1111 payload/config translation is
 adapter-private; the runner sends a neutral request. New image build paths
-normalize explicit `a1111_webui` identity, while historical missing or blank
+normalize an explicit backend identity (originally `a1111_webui`; now the configured new-work default, section
+7.2.1), while historical missing or blank
 identity resolves once to A1111 without mutating persisted NJRs. The legacy
 `AppController.run_txt2img_once` event shim now submits through the canonical
 queue path and no longer calls a direct runner shortcut.
+
+### 7.2.1 Current default — PR-IMG-FORGE-120
+
+Two durable image backends, `a1111_webui` and `forge_webui`, sit behind the one-backend-per-image-NJR boundary and share
+ONE WebUI-family runtime slot (one configured endpoint, one `WebUIProcessManager`). **New work defaults to
+`forge_webui`** (`NEW_IMAGE_BACKEND_DEFAULT_ID`) when `webui_runtime_identity` is unset; an explicit `a1111_webui` is the
+supported rollback. The historical compatibility rule is unchanged and deliberately separate: a persisted image NJR with
+no backend identity resolves to `a1111_webui` (`LEGACY_MISSING_IMAGE_BACKEND_ID`) and is never reinterpreted or mutated;
+replay clones the persisted record. An unrecognized or unreadable backend configuration fails closed; there is no
+fallback between the backends and no dynamic per-job runtime switching (a mismatched job is refused before dispatch by the
+runtime identity guard). The default Forge runtime is the canonical managed install described by
+`config/managed_forge_runtime.json`, whose launch profile has one authority, `src/utils/managed_forge_runtime.py`. The
+default endpoint is identity-aware (Forge `127.0.0.1:7871`, A1111 `127.0.0.1:7860`). Installation stays an explicit operator
+action and external runtimes are never adopted, killed or restarted.
 
 A future `diffusers` image backend may host multiple model families. Ideogram 4
 is the first planned qualification target after PR-IMG-100, but Ideogram is a

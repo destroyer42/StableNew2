@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "description": "Identity of the StableNew-managed Forge Neo runtime (runtime identity forge_webui). Owns installation identity, package identity, StableNew-owned runtime/config state, launch policy and external model/detector references only. It starts nothing (WebUIProcessManager is the sole lifecycle authority) and contains no generation settings. Not a production default: A1111 remains the default image backend.",
+  "description": "Identity of the StableNew-managed Forge Neo runtime (runtime identity forge_webui). Owns installation identity, package identity, StableNew-owned runtime/config state, launch policy and external model/detector references only. It starts nothing (WebUIProcessManager is the sole lifecycle authority) and contains no generation settings. It is the product default runtime for new still-image work (PR-IMG-FORGE-120); A1111 is the explicit rollback.",
   "runtime_identity": "forge_webui",
   "upstream": {
     "repository": "https://github.com/Haoming02/sd-webui-forge-classic",
