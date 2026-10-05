@@ -10,6 +10,12 @@ from src.controller.runtime_state import PipelineState
 from src.gui import design_system_v2 as design_system
 from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
+from src.gui.layout_v2 import (
+    apply_compact_column_minsizes,
+    apply_compact_label_wraps,
+    apply_compact_layout_hooks,
+    measure_horizontal_extent,
+)
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
@@ -17,9 +23,16 @@ from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.pipeline_layout_contract import (
+    COMPACT_LABEL_WRAPLENGTH_CAP,
+    COMPACT_MINSIZE_SCALES,
+    PIPELINE_MIN_REALIZED_WIDTH,
+    get_compact_minsize,
     get_stage_card_min_width,
     get_visible_stage_order,
-    normalize_window_geometry,
+    pipeline_layout_fits,
+    select_compact_scale,
+    should_probe_normal_layout,
+    should_refit_compact,
 )
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
@@ -313,39 +326,132 @@ class PipelineTabFrame(ttk.Frame):
         self.pack_loader_compat = self.sidebar
         self.left_compat = self.sidebar
 
-        # PR-GUI-D: Ensure minimum window width on first show
-        self._width_ensured = False
+        # PR-GUI-100: the root window size is owned by the shared screen-aware window layout contract
+        # (view_contracts/window_layout_contract.py); this tab never resizes the root.
+        self._hot_surfaces_flushed_on_map = False
+        # Responsive presentation state (PR-GUI-100): presentation only, never a second state authority.
+        self._compact_layout = False
+        self._compact_scale: float | None = None
+        self._normal_unfit_width: int | None = None  # widest width at which the normal layout was measured not to fit
+        self._compact_search_width = 0
+        self._responsive_eval_width = 0
+        self._responsive_after_id: str | None = None
         self.bind("<Map>", self._on_first_map)
+        self.bind("<Configure>", self._on_layout_configure, add="+")
         self._bind_process_inspector_shortcut()
 
-    # -------------------------------------------------------------------------
-    # PR-GUI-D: Minimum Window Width
-    # -------------------------------------------------------------------------
-    MIN_WINDOW_WIDTH = 1400
-
     def _on_first_map(self, event: tk.Event | None = None) -> None:
-        """Called when the Pipeline tab becomes visible for the first time."""
-        if self._width_ensured:
-            self._schedule_hot_surface_flush_if_needed()
-            return
-        self._width_ensured = True
-        self._ensure_minimum_window_width()
+        """Called when the Pipeline tab becomes visible: flush deferred hot surfaces (never resizes the root)."""
+        self._hot_surfaces_flushed_on_map = True
         self._schedule_hot_surface_flush_if_needed()
+        self._schedule_responsive_layout()
 
-    def _ensure_minimum_window_width(self) -> None:
-        """Expand the window if it's narrower than the minimum for 3 columns."""
+    # -- responsive presentation (PR-GUI-100) ---------------------------------------------------------------------------
+    #
+    # The Pipeline shows its normal three-column presentation when the rendered layout fits and otherwise a reversible
+    # compact presentation, decided from measured geometry (no fixed pixel breakpoint): fonts, display scaling and the Tk
+    # build all change how much width the forms need. Only grid-column minimums, label wraps and a few grid cells change;
+    # no widget is moved to another parent, recreated or rebound, so no state, controller or scroll ownership is involved.
+
+    def _on_layout_configure(self, event: tk.Event | None = None) -> None:
+        if event is not None and event.widget is not self:
+            return
+        self._schedule_responsive_layout()
+
+    def _schedule_responsive_layout(self) -> None:
+        """Coalesce resize events: evaluate once the geometry has settled."""
+        if self._responsive_after_id is not None:
+            return
         try:
-            root = self.winfo_toplevel()
-            current_geom = root.geometry()
-        except Exception:
+            self._responsive_after_id = self.after_idle(self._run_responsive_layout)
+        except tk.TclError:
+            self._responsive_after_id = None
+
+    def _run_responsive_layout(self) -> None:
+        self._responsive_after_id = None
+        try:
+            if not self.winfo_exists() or not self.winfo_viewable():
+                return  # a hidden tab is evaluated when it maps
+            self._apply_responsive_layout(self.winfo_width())
+        except tk.TclError:
             return
 
-        updated = normalize_window_geometry(current_geom, self.MIN_WINDOW_WIDTH)
-        if updated:
-            try:
-                root.geometry(updated)
-            except Exception:
-                pass
+    def _apply_responsive_layout(self, width: int) -> None:
+        """Pick normal or compact presentation for ``width`` from the measured fit (deterministic, no oscillation)."""
+        if width < PIPELINE_MIN_REALIZED_WIDTH or width == self._responsive_eval_width:
+            return  # unrealized geometry, or nothing changed since the last evaluation
+        self._responsive_eval_width = width
+        if self._compact_layout:
+            if should_probe_normal_layout(width, self._normal_unfit_width):
+                self._set_presentation(compact=False)
+                if self._layout_fits():
+                    return
+                self._normal_unfit_width = width
+                self._fit_compact_presentation()
+            elif not self._layout_fits() or should_refit_compact(width, self._compact_search_width):
+                self._fit_compact_presentation()
+            return
+        if self._layout_fits():
+            return
+        self._normal_unfit_width = width
+        self._fit_compact_presentation()
+
+    def normal_layout_fits(self) -> bool:
+        """Whether the normal presentation fits right now; leaves the current presentation unchanged."""
+        compact, scale = self._compact_layout, self._compact_scale
+        self._set_presentation(compact=False)
+        fits = self._layout_fits()
+        self._set_presentation(compact=compact, scale=scale)
+        return fits
+
+    def _fit_compact_presentation(self) -> None:
+        """Enter compact presentation at the least aggressive scale that fits (the smallest if none does)."""
+
+        def fits_at(scale: float) -> bool:
+            self._set_presentation(compact=True, scale=scale)
+            return self._layout_fits()
+
+        scale, _fits = select_compact_scale(fits_at)
+        if self._compact_scale != scale:
+            self._set_presentation(compact=True, scale=scale)
+        self._compact_search_width = self.winfo_width()
+        self.update_idletasks()  # captions wrap to their final slots
+        for scroll in (self.left_scroll, self.stage_scroll, self.right_scroll):
+            apply_compact_label_wraps(scroll, True, COMPACT_LABEL_WRAPLENGTH_CAP)
+
+    def _set_presentation(self, *, compact: bool, scale: float | None = None) -> None:
+        if compact:
+            scale = COMPACT_MINSIZE_SCALES[0] if scale is None else scale
+            for scroll in (self.left_scroll, self.stage_scroll):
+                apply_compact_column_minsizes(
+                    scroll, True, lambda minsize, _scale=scale: get_compact_minsize(minsize, _scale)
+                )
+        else:
+            scale = None
+            for scroll in (self.left_scroll, self.stage_scroll):
+                apply_compact_column_minsizes(scroll, False, lambda minsize: minsize)
+        if compact != self._compact_layout:
+            for scroll in (self.left_scroll, self.stage_scroll):
+                apply_compact_layout_hooks(scroll, compact)
+            if not compact:
+                for scroll in (self.left_scroll, self.stage_scroll, self.right_scroll):
+                    apply_compact_label_wraps(scroll, False, COMPACT_LABEL_WRAPLENGTH_CAP)
+            else:
+                self.update_idletasks()
+                for scroll in (self.left_scroll, self.stage_scroll, self.right_scroll):
+                    apply_compact_label_wraps(scroll, True, COMPACT_LABEL_WRAPLENGTH_CAP)
+        self._compact_layout = compact
+        self._compact_scale = scale
+
+    def _layout_fits(self) -> bool:
+        """Whether every actionable control in the left and stage surfaces fits its viewport as rendered now."""
+        self.update_idletasks()
+        return pipeline_layout_fits(
+            [
+                measure_horizontal_extent(scroll.inner, scroll.viewport_width())
+                for scroll in (self.left_scroll, self.stage_scroll)
+            ]
+        )
 
     def update_pack_list(self, pack_names: list[str]) -> None:
         """Update the pack list in the pack loader compat."""

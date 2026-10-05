@@ -16,6 +16,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_two_pane_workspace_column_specs,
 )
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.state.output_routing import OUTPUT_ROUTE_SVD, OUTPUT_ROUTE_TESTING
@@ -282,8 +283,12 @@ class SVDTabFrameV2(ttk.Frame):
         self.status_label.grid(row=2, column=0, columnspan=6, sticky="w", pady=(6, 0))
 
     def _build_body(self, model_options: list[str]) -> None:
-        body = ttk.Frame(self, style="Panel.TFrame")
-        body.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        # PR-GUI-100: the settings workspace is taller than many viewports; it scrolls instead of growing the window.
+        self._body_scroll = ScrollableFrame(self, style="Panel.TFrame")
+        self._body_scroll.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        self._body_scroll.inner.columnconfigure(0, weight=1)
+        body = ttk.Frame(self._body_scroll.inner, style="Panel.TFrame")
+        body.grid(row=0, column=0, sticky="nsew")
         configure_grid_columns(
             body,
             get_two_pane_workspace_column_specs(

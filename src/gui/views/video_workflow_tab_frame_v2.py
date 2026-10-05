@@ -19,6 +19,7 @@ from src.gui.view_contracts.video_workspace_contract import (
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.state.output_routing import (
     OUTPUT_ROUTE_MOVIE_CLIPS,
@@ -266,8 +267,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
 
     def _build_body(self) -> None:
-        body = ttk.Frame(self, style="Panel.TFrame", padding=8)
-        body.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        # PR-GUI-100: the workflow body keeps growing with workflow controls; it scrolls instead of growing the window.
+        self._body_scroll = ScrollableFrame(self, style="Panel.TFrame")
+        self._body_scroll.grid(row=2, column=0, sticky="nsew", padx=6, pady=(0, 6))
+        self._body_scroll.inner.columnconfigure(0, weight=1)
+        body = ttk.Frame(self._body_scroll.inner, style="Panel.TFrame", padding=8)
+        body.grid(row=0, column=0, sticky="nsew")
         configure_grid_columns(
             body,
             build_form_column_specs(

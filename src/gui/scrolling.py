@@ -19,18 +19,11 @@ def enable_mousewheel(widget: tk.Widget) -> None:
         except Exception:
             pass
 
-    def _bind(_event: tk.Event) -> None:
-        widget.bind_all("<MouseWheel>", _on_mousewheel, add="+")
-        widget.bind_all("<Button-4>", _on_mousewheel, add="+")
-        widget.bind_all("<Button-5>", _on_mousewheel, add="+")
-
-    def _unbind(_event: tk.Event) -> None:
-        widget.unbind_all("<MouseWheel>")
-        widget.unbind_all("<Button-4>")
-        widget.unbind_all("<Button-5>")
-
-    widget.bind("<Enter>", _bind, add="+")
-    widget.bind("<Leave>", _unbind, add="+")
+    # PR-GUI-100: bind on the widget itself. A global ``bind_all``/``unbind_all`` on enter/leave removed every other
+    # widget's global wheel binding (including ScrollableFrame's router) whenever the pointer left this widget.
+    widget.bind("<MouseWheel>", _on_mousewheel, add="+")
+    widget.bind("<Button-4>", _on_mousewheel, add="+")
+    widget.bind("<Button-5>", _on_mousewheel, add="+")
 
 
 def make_scrollable(parent: tk.Widget, *, orient: str = "vertical") -> tuple[ttk.Frame, tk.Widget]:
