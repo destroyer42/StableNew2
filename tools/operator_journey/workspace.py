@@ -154,6 +154,9 @@ class OperatorWorkspace:
             directory.mkdir(parents=True, exist_ok=True)
         settings = {
             "webui_base_url": self.webui_base_url,
+            # The journey's fake backend emulates A1111; managed Forge is the product default, so the compatibility
+            # runtime is selected explicitly in this isolated workspace (never in the operator's real settings).
+            "webui_runtime_identity": "a1111_webui",
             "webui_autostart_enabled": False,
             "comfy_autostart_enabled": False,
             "output_dir": str(self.output_dir),

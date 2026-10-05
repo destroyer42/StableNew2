@@ -494,7 +494,12 @@ def test_the_verifier_and_bootstrap_never_start_stop_adopt_or_kill_a_runtime() -
     assert not called & {"Popen", "kill", "terminate", "system", "startfile", "process_iter", "WebUIProcessManager"}
     imported = {a.name.split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names}
     imported |= {(n.module or "").split(".")[0] for n in ast.walk(tree) if isinstance(n, ast.ImportFrom)}
-    assert not imported & {"psutil", "requests", "urllib", "socket", "src"}  # no process, network or application code
+    assert not imported & {"psutil", "requests", "urllib", "socket"}  # no process or network code
+    # The verifier consumes the ONE shared launch-profile authority and no other application code (PR-IMG-FORGE-120).
+    imported_src = {
+        n.module for n in ast.walk(tree) if isinstance(n, ast.ImportFrom) and (n.module or "").startswith("src")
+    } | {a.name for n in ast.walk(tree) if isinstance(n, ast.Import) for a in n.names if a.name.startswith("src")}
+    assert imported_src == {"src.utils.managed_forge_runtime"}
     for forbidden in ("psutil", "taskkill", "import requests", "urlopen", "urlretrieve"):
         assert forbidden not in source, forbidden
     code = _strip_comments(BOOTSTRAP.read_text(encoding="utf-8")).lower()
@@ -502,15 +507,21 @@ def test_the_verifier_and_bootstrap_never_start_stop_adopt_or_kill_a_runtime() -
         assert forbidden not in code, forbidden
 
 
-def test_a1111_remains_the_default_and_forge_is_only_selectable_by_configuration() -> None:
-    """PR-IMG-FORGE-110: Forge is a supported backend, but nothing selects it unless configured."""
+def test_forge_is_the_default_for_new_work_and_a1111_is_the_explicit_rollback() -> None:
+    """PR-IMG-FORGE-120: managed Forge is the new-work default; a historical missing identity is still A1111."""
 
-    from src.image_backends.image_backend_types import DEFAULT_IMAGE_BACKEND_ID
+    from src.image_backends.image_backend_types import (
+        FORGE_IMAGE_BACKEND_ID,
+        LEGACY_MISSING_IMAGE_BACKEND_ID,
+        NEW_IMAGE_BACKEND_DEFAULT_ID,
+    )
     from src.utils.config import ConfigManager
 
-    assert DEFAULT_IMAGE_BACKEND_ID == "a1111_webui"
+    assert NEW_IMAGE_BACKEND_DEFAULT_ID == FORGE_IMAGE_BACKEND_ID == "forge_webui"
+    assert LEGACY_MISSING_IMAGE_BACKEND_ID == "a1111_webui"  # deliberately different from the new-work default
     defaults = ConfigManager()._default_settings()
-    assert defaults["webui_runtime_identity"] == "a1111_webui" and defaults["forge_runtime_profile_path"] == ""
+    assert "webui_runtime_identity" not in defaults  # unset means the product default; an explicit value is operator intent
+    assert defaults["forge_runtime_profile_path"] == ""  # the canonical managed install needs no hand-made profile
     for tracked in ("presets/settings.json", "src/main.py"):
         text = (ROOT / tracked).read_text(encoding="utf-8")
         assert "StableNew/Forge" not in text and "managed_forge" not in text.lower(), tracked

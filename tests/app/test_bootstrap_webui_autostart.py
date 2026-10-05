@@ -60,6 +60,7 @@ def test_build_default_webui_process_config_prefers_persisted_settings(monkeypat
 
     fake_manager = mock.Mock()
     fake_manager.load_settings.return_value = {
+        "webui_runtime_identity": "a1111_webui",  # the persisted-A1111 flow; Forge is the default when unset
         "webui_workdir": str(workdir),
         "webui_base_url": "http://127.0.0.1:9999",
         "webui_autostart_enabled": True,

@@ -9,6 +9,8 @@ from src.api.client import SDWebUIClient
 from src.api.forge_client import ForgeWebUIClient
 from src.api.webui_runtime_identity import (
     FORGE_WEBUI_IDENTITY,
+    effective_webui_base_url,
+    load_backend_settings,
     normalize_webui_runtime_identity,
     resolve_configured_webui_runtime_identity,
 )
@@ -19,22 +21,28 @@ from src.video.workflow_registry import WorkflowRegistry, build_default_workflow
 class DefaultImageRuntimePorts:
     """Build StableNew's concrete image runtime client and runner.
 
-    The WebUI-family client is chosen once, from the explicitly configured runtime identity
-    (``webui_runtime_identity``: ``a1111_webui`` default, or ``forge_webui``). A1111 and Forge
-    occupy one runtime slot, so there is exactly one client per configured runtime; the client is
-    never swapped under a ``Pipeline`` between jobs, and a job whose backend identity does not match
-    the connected endpoint is rejected before dispatch by the runtime identity guard.
+    The WebUI-family client is chosen once, from the configured runtime identity
+    (``webui_runtime_identity``: managed Forge ``forge_webui`` when unset, the product default, or an
+    explicit ``a1111_webui`` rollback; an unrecognized or unreadable configuration raises instead of
+    selecting either). A1111 and Forge occupy one runtime slot, so there is exactly one client per
+    configured runtime; the client is never swapped under a ``Pipeline`` between jobs, and a job whose
+    backend identity does not match the connected endpoint (for example a historical A1111 replay while
+    Forge is configured) is rejected before dispatch by the runtime identity guard. There is no fallback.
     """
 
     def __init__(self, *, runtime_identity: str | None = None) -> None:
         self._runtime_identity = runtime_identity
 
+    @staticmethod
+    def base_url() -> str:
+        """The endpoint of the configured runtime: the explicit setting, else the identity default (Forge 7871)."""
+
+        return effective_webui_base_url()
+
     def _configured_identity(self) -> str:
         if self._runtime_identity is not None:
             return normalize_webui_runtime_identity(self._runtime_identity)
-        from src.utils.config import ConfigManager
-
-        return resolve_configured_webui_runtime_identity(ConfigManager().load_settings())
+        return resolve_configured_webui_runtime_identity(load_backend_settings())
 
     def create_client(self, *, base_url: str) -> SDWebUIClient:
         if self._configured_identity() == FORGE_WEBUI_IDENTITY:

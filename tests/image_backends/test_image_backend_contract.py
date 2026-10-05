@@ -77,10 +77,10 @@ def test_new_cli_image_build_persists_backend_and_preserves_video_options() -> N
         },
         batch_size=1,
     )
-    assert record.backend_options["image"]["backend_id"] == "a1111_webui"
+    assert record.backend_options["image"]["backend_id"] == "forge_webui"  # new work: the product default
     assert record.backend_options["video"]["svd_native"]["fps"] == 7
     restored = NormalizedJobRecord.from_dict(record.to_dict())
-    assert restored.backend_options["image"]["backend_id"] == "a1111_webui"
+    assert restored.backend_options["image"]["backend_id"] == "forge_webui"
 
 
 def test_historical_missing_image_backend_resolves_to_a1111() -> None:
@@ -98,10 +98,14 @@ def test_new_image_normalizer_rejects_malformed_identity() -> None:
         normalize_image_backend_options({"image": {"backend_id": 3}})
 
 
-def test_replay_preserves_explicit_backend_identity_and_creates_new_lineage() -> None:
+@pytest.mark.parametrize("source_identity", ["a1111_webui", "forge_webui"])
+def test_replay_preserves_explicit_backend_identity_and_creates_new_lineage(source_identity: str) -> None:
     original = build_cli_njr(
         prompt="prompt",
-        config={"txt2img": {"model": "model.safetensors"}},
+        config={
+            "txt2img": {"model": "model.safetensors"},
+            "backend_options": {"image": {"backend_id": source_identity}},
+        },
         batch_size=1,
         run_name="parent-job",
     )
@@ -113,7 +117,21 @@ def test_replay_preserves_explicit_backend_identity_and_creates_new_lineage() ->
 
     assert replay.job_id == "replay-job"
     assert replay.source.parent_job_id == original.job_id
-    assert replay.backend_options["image"]["backend_id"] == "a1111_webui"
+    # The source's backend semantics are preserved: replay never "upgrades" A1111 work to the new-work default.
+    assert replay.backend_options["image"]["backend_id"] == source_identity
+
+
+def test_replay_of_a_historical_record_without_identity_stays_a1111_and_is_not_rewritten() -> None:
+    record = make_pipeline_njr(job_id="legacy-parent")
+    payload = record.to_dict()
+    payload["workload"]["backend_options"] = {}  # persisted before image backend identity existed
+    legacy = NormalizedJobRecord.from_dict(payload)
+
+    replay = compile_replay_intent(ReplayIntent(record=legacy), id_fn=lambda: "legacy-replay")
+
+    assert "image" not in replay.backend_options  # the persisted snapshot is cloned, never stamped with a new identity
+    assert resolve_image_backend_id(replay.backend_options) == "a1111_webui"
+    assert resolve_image_backend_id(legacy.backend_options) == "a1111_webui"
 
 
 def test_fake_backend_uses_normal_runner_path_without_webui(tmp_path: Path) -> None:
@@ -330,3 +348,21 @@ def test_a1111_adapter_delegates_each_supported_stage(stage_name: str, tmp_path:
     if stage_name == "upscale":
         assert config["upscaler"] == "R-ESRGAN 4x+"
         assert config["prompt"] == "stage prompt"
+
+
+@pytest.mark.parametrize(
+    "producer",
+    [
+        "src/pipeline/job_builder_v2.py",  # Pipeline normal jobs
+        "src/pipeline/prompt_pack_job_builder.py",  # PromptPack jobs
+        "src/pipeline/cli_njr_builder.py",  # CLI
+        "src/pipeline/reprocess_builder.py",  # Review / image reprocess
+        "src/gui/controllers/learning_controller.py",  # Learning experiments
+    ],
+)
+def test_every_new_image_producer_stamps_identity_through_the_one_normalization_boundary(producer: str) -> None:
+    """New work gets its backend only from the configured default at construction: no producer hard-codes one."""
+
+    source = (Path(__file__).resolve().parents[2] / producer).read_text(encoding="utf-8")
+    assert "normalize_image_backend_options(" in source
+    assert "a1111_webui" not in source and "forge_webui" not in source  # never stamped by literal or by model name

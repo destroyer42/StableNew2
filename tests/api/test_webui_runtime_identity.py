@@ -14,6 +14,7 @@ from src.api.webui_runtime_identity import (
     FORGE_WEBUI_IDENTITY,
     UNKNOWN_RUNTIME_IDENTITY,
     UNKNOWN_WEBUI_IDENTITY,
+    WebUIRuntimeConfigurationError,
     WebUIRuntimeIdentity,
     WebUIRuntimeIdentityMismatch,
     assert_runtime_matches_backend,
@@ -223,30 +224,41 @@ def test_classify_client_runtime_degrades_to_unknown_for_clients_without_a_probe
 # --------------------------------------------------------------------------------------------
 
 
-def test_configured_identity_defaults_to_a1111_and_never_infers_from_names(
+def test_configured_identity_defaults_to_forge_and_never_infers_from_names(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.delenv("STABLENEW_WEBUI_RUNTIME_IDENTITY", raising=False)
-    assert resolve_configured_webui_runtime_identity({}) == A1111_WEBUI_IDENTITY
-    assert resolve_configured_webui_runtime_identity(None) == A1111_WEBUI_IDENTITY
-    # A workdir or model name that merely contains "forge" is never evidence.
-    settings = {"webui_workdir": "D:/forge", "webui_base_url": "http://forge:7860"}
-    assert resolve_configured_webui_runtime_identity(settings) == A1111_WEBUI_IDENTITY
+    assert resolve_configured_webui_runtime_identity({}) == FORGE_WEBUI_IDENTITY  # PR-IMG-FORGE-120 product default
+    assert resolve_configured_webui_runtime_identity(None) == FORGE_WEBUI_IDENTITY
+    # A workdir or URL whose NAME suggests a runtime is never evidence, in either direction.
+    for settings in (
+        {"webui_workdir": "D:/forge", "webui_base_url": "http://forge:7860"},
+        {"webui_workdir": "D:/stable-diffusion-webui", "webui_base_url": "http://a1111:7860"},
+    ):
+        assert resolve_configured_webui_runtime_identity(settings) == FORGE_WEBUI_IDENTITY
     assert (
         resolve_configured_webui_runtime_identity({"webui_runtime_identity": "forge_webui"})
         == FORGE_WEBUI_IDENTITY
     )
-
-
-def test_unrecognized_configured_identity_is_rejected_not_coerced() -> None:
-    with pytest.raises(ValueError):
-        normalize_webui_runtime_identity("forge")
-    assert normalize_webui_runtime_identity("") == A1111_WEBUI_IDENTITY
-    # The resolver logs and degrades to A1111; the dispatch-time guard still fails closed.
+    # An explicit a1111_webui is the supported rollback and is never rewritten to the default.
     assert (
-        resolve_configured_webui_runtime_identity({"webui_runtime_identity": "forge"})
+        resolve_configured_webui_runtime_identity({"webui_runtime_identity": "a1111_webui"})
         == A1111_WEBUI_IDENTITY
     )
+
+
+def test_unrecognized_configured_identity_fails_closed_instead_of_degrading(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("STABLENEW_WEBUI_RUNTIME_IDENTITY", raising=False)
+    with pytest.raises(WebUIRuntimeConfigurationError):
+        normalize_webui_runtime_identity("forge")
+    assert normalize_webui_runtime_identity("") == FORGE_WEBUI_IDENTITY  # blank is "unset", not an identity
+    # No silent A1111 (or Forge) degradation: configuration is an error before anything is selected.
+    for bad in ("forge", "a1111", "FORGE_WEBUI", "comfy"):
+        with pytest.raises(WebUIRuntimeConfigurationError, match="no backend fallback"):
+            resolve_configured_webui_runtime_identity({"webui_runtime_identity": bad})
+    assert issubclass(WebUIRuntimeConfigurationError, ValueError)
 
 
 def test_environment_fallback_is_used_only_when_setting_is_blank(

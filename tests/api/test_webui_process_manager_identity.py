@@ -27,7 +27,7 @@ def test_there_is_no_second_webui_family_process_manager() -> None:
     assert not Path("src/api/forge_process_manager.py").exists()
 
 
-def test_default_config_carries_the_configured_identity(monkeypatch, tmp_path: Path) -> None:
+def test_explicit_a1111_default_config_carries_its_identity_and_endpoint(monkeypatch, tmp_path: Path) -> None:
     workdir = tmp_path / "webui"
     workdir.mkdir()
     (workdir / "webui.bat").write_text("")
@@ -38,7 +38,7 @@ def test_default_config_carries_the_configured_identity(monkeypatch, tmp_path: P
             return {
                 "webui_workdir": str(workdir),
                 "webui_base_url": "http://127.0.0.1:7861",
-                "webui_runtime_identity": "forge_webui",
+                "webui_runtime_identity": "a1111_webui",  # explicit rollback: the A1111 branch carries its identity
             }
 
     import src.config.app_config as app_config
@@ -52,5 +52,23 @@ def test_default_config_carries_the_configured_identity(monkeypatch, tmp_path: P
     config = manager_module.build_default_webui_process_config()
 
     assert config is not None
-    assert config.runtime_identity == "forge_webui"
+    assert config.runtime_identity == "a1111_webui"
     assert config.base_url == "http://127.0.0.1:7861"
+
+
+def test_a_failed_forge_health_check_never_scans_for_or_adopts_another_webui(monkeypatch) -> None:
+    """The A1111 port-discovery fallback would rebind a Forge manager to whatever answers (an external process)."""
+
+    import src.api.healthcheck as healthcheck
+
+    def _never_ready(*_args, **_kwargs):
+        raise RuntimeError("not ready")
+
+    monkeypatch.setattr(healthcheck, "wait_for_webui_ready", _never_ready)
+    monkeypatch.setattr(
+        manager_module, "discover_webui_port", lambda *a, **k: (_ for _ in ()).throw(AssertionError("scanned"))
+    )
+    config = WebUIProcessConfig(command=["launch"], runtime_identity="forge_webui", base_url="http://127.0.0.1:7871")
+
+    assert WebUIProcessManager(config).check_health() is False
+    assert config.base_url == "http://127.0.0.1:7871"  # never rebound to a discovered port

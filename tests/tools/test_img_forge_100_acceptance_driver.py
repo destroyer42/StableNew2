@@ -547,3 +547,66 @@ def test_the_forge_profile_must_use_the_frozen_loopback_port():
     with pytest.raises(ValueError):
         driver.ManagedWebUIRuntime({"endpoint": "http://example.com:7871", "command": ["x"]}, "forge_webui")
     assert driver.ManagedWebUIRuntime({"endpoint": "http://127.0.0.1:7871", "command": ["x"]}, "forge_webui").endpoint
+
+
+# --- PR-IMG-FORGE-120: the default-path acceptance driver injects NO backend selection ------------------------------
+
+
+def _default_driver():
+    from tools.acceptance import img_forge_120_default_acceptance as default_driver
+
+    return default_driver
+
+
+def test_the_default_acceptance_driver_stamps_forge_from_the_default_and_supplies_no_backend_options(monkeypatch):
+    import src.utils.config as config_module
+
+    class _Config:
+        def load_settings(self):
+            return {}
+
+    monkeypatch.setattr(config_module, "ConfigManager", lambda *a, **k: _Config())
+    monkeypatch.delenv("STABLENEW_WEBUI_RUNTIME_IDENTITY", raising=False)
+    default_driver = _default_driver()
+    settings = driver.load_pair_a(driver.DEFAULT_INTENT, "forge_webui")
+
+    njr = default_driver.freeze_default_njr(settings, job_id="default-1", output_dir=Path("out"))
+
+    assert njr.backend_options["image"]["backend_id"] == "forge_webui"  # produced by the production default alone
+    source = Path(default_driver.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    keys = {n.value for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str)}
+    kwargs = {k.arg for n in ast.walk(tree) if isinstance(n, ast.Call) for k in n.keywords}
+    assert "runtime_identity" not in kwargs and "backend_options" not in kwargs  # nothing injected into any call
+    assert "--backend" not in keys and "--runtime-profile" not in keys  # no selection arguments exist
+
+
+def test_the_default_acceptance_driver_refuses_an_explicit_identity_or_profile(monkeypatch, tmp_path):
+    import src.utils.config as config_module
+
+    default_driver = _default_driver()
+    real_manager = config_module.ConfigManager  # the genuine class, captured before it is patched
+
+    def with_settings(stored: dict) -> None:
+        presets = tmp_path / f"p{len(list(tmp_path.iterdir()))}"
+        presets.mkdir()
+        (presets / "settings.json").write_text(json.dumps(stored), encoding="utf-8")
+        monkeypatch.setattr(config_module, "ConfigManager", lambda *a, **k: real_manager(presets_dir=presets))
+
+    monkeypatch.delenv("STABLENEW_WEBUI_RUNTIME_IDENTITY", raising=False)
+    monkeypatch.delenv("STABLENEW_WEBUI_BASE_URL", raising=False)
+
+    with_settings({"webui_base_url": "http://127.0.0.1:7860"})  # a normal persisted configuration
+    evidence = default_driver.effective_configuration()
+    assert evidence["effective_identity"] == "forge_webui" and evidence["effective_base_url"] == "http://127.0.0.1:7871"
+    assert evidence["stored_has_webui_runtime_identity"] is False
+
+    with_settings({"webui_runtime_identity": "forge_webui"})  # even an explicit Forge would not prove the DEFAULT
+    with pytest.raises(PermissionError, match="explicit webui_runtime_identity"):
+        default_driver.effective_configuration()
+    with_settings({"forge_runtime_profile_path": "C:/x/profile.json"})
+    with pytest.raises(PermissionError, match="forge_runtime_profile_path"):
+        default_driver.effective_configuration()
+    with_settings({"webui_runtime_identity": "a1111_webui"})
+    with pytest.raises(PermissionError):
+        default_driver.effective_configuration()

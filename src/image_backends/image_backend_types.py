@@ -14,26 +14,34 @@ from src.pipeline.artifact_contract import (
     extract_artifact_paths,
 )
 
-DEFAULT_IMAGE_BACKEND_ID = "a1111_webui"
-#: Explicit, non-default identity for the Forge WebUI runtime (PR-IMG-FORGE-100). Never inferred
-#: from a model name and never the resolution target for historical records.
+#: Durable image backend identities. They are two backends behind the existing one-backend-per-image-NJR boundary and
+#: share one WebUI-family runtime slot (one endpoint, one ``WebUIProcessManager``).
+A1111_IMAGE_BACKEND_ID = "a1111_webui"
 FORGE_IMAGE_BACKEND_ID = "forge_webui"
+
+#: The product default for NEW still-image work when no explicit runtime identity is configured (PR-IMG-FORGE-120).
+NEW_IMAGE_BACKEND_DEFAULT_ID = FORGE_IMAGE_BACKEND_ID
+#: The bounded compatibility rule for HISTORICAL records that predate image backend identity: a missing or blank
+#: ``backend_options.image.backend_id`` was A1111 when it was persisted and still resolves to A1111. It is deliberately
+#: not the new-work default, so persisted work is never reinterpreted.
+LEGACY_MISSING_IMAGE_BACKEND_ID = A1111_IMAGE_BACKEND_ID
 
 
 def configured_image_backend_id() -> str:
-    """The still-image backend new work is constructed for: the configured WebUI-family identity.
+    """The still-image backend NEW work is constructed for: the configured WebUI-family identity.
 
-    ``a1111_webui`` unless the operator explicitly selected ``forge_webui`` (``webui_runtime_identity``).
-    Selection is configuration only: there is no fallback between backends.
+    ``forge_webui`` (the product default) unless the operator explicitly selected the ``a1111_webui`` rollback
+    (``webui_runtime_identity``). Selection is configuration only: there is no fallback between backends, and an
+    unrecognized or unreadable backend configuration raises ``WebUIRuntimeConfigurationError`` instead of selecting
+    either one.
     """
 
-    try:
-        from src.api.webui_runtime_identity import resolve_configured_webui_runtime_identity
-        from src.utils.config import ConfigManager
+    from src.api.webui_runtime_identity import (
+        load_backend_settings,
+        resolve_configured_webui_runtime_identity,
+    )
 
-        return resolve_configured_webui_runtime_identity(ConfigManager().load_settings())
-    except Exception:
-        return DEFAULT_IMAGE_BACKEND_ID
+    return resolve_configured_webui_runtime_identity(load_backend_settings())
 
 
 def normalize_image_backend_options(
@@ -69,7 +77,9 @@ def normalize_image_backend_options(
         raise ValueError("backend_options.image must be a mapping")
 
     if backend_id is None:
-        backend_id = configured_image_backend_id() if "backend_id" not in image else DEFAULT_IMAGE_BACKEND_ID
+        # Only a construction with no explicit identity consults the configured default; an explicit identity in the
+        # options (including a replay or reprocess source) is kept and never rewritten.
+        backend_id = configured_image_backend_id() if "backend_id" not in image else NEW_IMAGE_BACKEND_DEFAULT_ID
     explicit_backend_id = image.get("backend_id", backend_id)
     if not isinstance(explicit_backend_id, str):
         raise ValueError("backend_options.image.backend_id must be a string")
@@ -88,14 +98,17 @@ def normalize_image_backend_options(
 
 
 def resolve_image_backend_id(backend_options: Any) -> str:
-    """Resolve the sole bounded historical compatibility default."""
+    """Resolve the identity of a PERSISTED record: the sole bounded historical compatibility default.
+
+    Missing or blank identity is A1111 (``LEGACY_MISSING_IMAGE_BACKEND_ID``), never the new-work default.
+    """
 
     options = dict(backend_options or {}) if isinstance(backend_options, Mapping) else {}
     image_options = options.get("image")
     if not isinstance(image_options, Mapping):
-        return DEFAULT_IMAGE_BACKEND_ID
+        return LEGACY_MISSING_IMAGE_BACKEND_ID
     backend_id = str(image_options.get("backend_id") or "").strip()
-    return backend_id or DEFAULT_IMAGE_BACKEND_ID
+    return backend_id or LEGACY_MISSING_IMAGE_BACKEND_ID
 
 
 @dataclass(frozen=True, slots=True)
@@ -106,6 +119,9 @@ class ImageBackendCapabilities:
     supports_prompt_text: bool = True
     supports_negative_prompt: bool = True
     artifact_type: str = "image"
+    #: False for a runtime that has no Hypernetwork support (the pinned Forge Neo removed them): such work is refused
+    #: before dispatch and the Randomizer does not present the feature.
+    supports_hypernetworks: bool = True
 
 
 @dataclass(slots=True)

@@ -3,11 +3,14 @@
 Status: **`FORGE_TECHNICAL_QUALIFICATION_PASS`** (technical gate only). Pair A (baseline) is complete, and the
 technical Pairs B (LoRA), C (img2img) and D (txt2img -> ADetailer face+hand -> 1.5x upscale) pass on both
 `a1111_webui` and `forge_webui` (sections 22-29; Pair D closed by PR-IMG-FORGE-D100/D110). Forge is a supported
-production still-image backend since `PR-IMG-FORGE-110` (section 27); `a1111_webui` remains the default and the
-rollback. PR-IMG-FORGE-D110 (section 29) fixes Forge cross-job module-state normalization only: it does **not**
-change the default backend and does not add a backend selector.
+production still-image backend since `PR-IMG-FORGE-110` (section 27). **Superseded for the default:** since
+`PR-IMG-FORGE-120` (`docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md`) managed Forge is the
+default for new work and `a1111_webui` is the explicit rollback; a historical record with no backend identity still
+resolves to `a1111_webui`. PR-IMG-FORGE-D110 (section 29) fixed Forge cross-job module-state normalization only: it did
+**not** change the default backend and added no backend selector.
 
-Sections 1-26 are chronological history and are preserved as written. Statements in them such as "non-default",
+Sections 1-29 are chronological history and are preserved as written; statements in them that A1111 "remains the
+default" describe the state at that time. Statements in sections 1-26 such as "non-default",
 "Forge is not promoted", "physical qualification pending", `QUALIFICATION_INFRASTRUCTURE_BLOCKED` or "no image parity
 verdict" describe the state at that time and are superseded by sections 22-29. In that history the first attempt
 failed admission (sections 16-17), the resumed cohort was refused for prompt mismatch before network dispatch

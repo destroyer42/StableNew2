@@ -22,8 +22,10 @@ from src.api.webui_runtime_identity import (
     WebUIRuntimeIdentityMismatch,
 )
 from src.image_backends import (
-    DEFAULT_IMAGE_BACKEND_ID,
+    A1111_IMAGE_BACKEND_ID,
     FORGE_IMAGE_BACKEND_ID,
+    LEGACY_MISSING_IMAGE_BACKEND_ID,
+    NEW_IMAGE_BACKEND_DEFAULT_ID,
     A1111WebUIImageBackend,
     ForgeWebUIImageBackend,
     ImageBackendRegistry,
@@ -93,11 +95,11 @@ def _runner(tmp_path: Path, observed: WebUIRuntimeIdentity | None, transitions: 
 # --------------------------------------------------------------------------------------------
 
 
-def test_forge_identity_is_durable_and_a1111_remains_the_default() -> None:
-    assert FORGE_IMAGE_BACKEND_ID == "forge_webui"
-    assert DEFAULT_IMAGE_BACKEND_ID == "a1111_webui"
-    assert ForgeWebUIImageBackend.backend_id == "forge_webui"
-    assert normalize_image_backend_options(None)["image"]["backend_id"] == "a1111_webui"
+def test_forge_is_the_new_work_default_and_a1111_the_historical_compatibility_identity() -> None:
+    assert FORGE_IMAGE_BACKEND_ID == NEW_IMAGE_BACKEND_DEFAULT_ID == "forge_webui"
+    assert A1111_IMAGE_BACKEND_ID == LEGACY_MISSING_IMAGE_BACKEND_ID == "a1111_webui"
+    assert ForgeWebUIImageBackend.backend_id == "forge_webui" and A1111WebUIImageBackend.backend_id == "a1111_webui"
+    assert normalize_image_backend_options(None)["image"]["backend_id"] == "forge_webui"
     assert (
         normalize_image_backend_options({"image": {"backend_id": "forge_webui"}})["image"][
             "backend_id"
@@ -106,7 +108,7 @@ def test_forge_identity_is_durable_and_a1111_remains_the_default() -> None:
     )
 
 
-def test_registry_contains_forge_without_making_it_the_default() -> None:
+def test_registry_contains_both_backends_and_historical_records_still_resolve_to_a1111() -> None:
     registry = build_default_image_backend_registry()
     assert registry.list_backend_ids() == ["a1111_webui", "forge_webui"]
     assert isinstance(registry.get("forge_webui"), ForgeWebUIImageBackend)
@@ -116,9 +118,15 @@ def test_registry_contains_forge_without_making_it_the_default() -> None:
     assert resolve_image_backend_id({"image": {"backend_id": "forge_webui"}}) == "forge_webui"
 
 
-def test_new_image_work_defaults_to_a1111_and_explicit_forge_survives_compilation() -> None:
+def test_new_image_work_defaults_to_forge_and_explicit_identities_survive_compilation() -> None:
     default_record = build_cli_njr(prompt="p", config={"txt2img": {}}, batch_size=1)
-    assert default_record.backend_options["image"]["backend_id"] == "a1111_webui"
+    assert default_record.backend_options["image"]["backend_id"] == "forge_webui"
+    a1111_record = build_cli_njr(
+        prompt="p",
+        config={"txt2img": {}, "backend_options": {"image": {"backend_id": "a1111_webui"}}},
+        batch_size=1,
+    )
+    assert a1111_record.backend_options["image"]["backend_id"] == "a1111_webui"  # an explicit identity is never rewritten
     forge_record = build_cli_njr(
         prompt="p",
         config={"txt2img": {}, "backend_options": {"image": {"backend_id": "forge_webui"}}},
@@ -530,3 +538,150 @@ def test_an_unverified_clear_refuses_the_stage(tmp_path: Path) -> None:
             pipeline, _baseline_request(tmp_path, None)
         )
     pipeline.run_txt2img_stage.assert_not_called()
+
+
+# --------------------------------------------------------------------------------------------
+# PR-IMG-FORGE-120: the pinned Forge Neo has no Hypernetworks; such work is refused before dispatch
+# --------------------------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"txt2img": {"hypernetwork": "styleA", "hypernetwork_strength": 0.7}},
+        {"txt2img": {"hypernetwork": "None"}, "img2img": {"hypernetwork": "styleB"}},
+        {"adetailer": {"hypernetwork": "styleC"}},
+        {"hypernetwork": "styleD"},
+        {"pipeline": {"hypernetworks": [{"name": "styleE", "strength": 0.5}]}},  # a Randomizer sweep
+    ],
+    ids=["txt2img", "img2img", "adetailer", "top-level", "randomizer-sweep"],
+)
+def test_forge_refuses_hypernetwork_intent_before_any_dispatch(tmp_path: Path, config: dict) -> None:
+    from src.image_backends.forge_webui_backend import ForgeUnsupportedIntentError
+
+    runner, pipeline = _runner(tmp_path, FORGE)  # an identified Forge: only the capability check can stop this job
+    with pytest.raises(ForgeUnsupportedIntentError, match="Hypernetworks are not supported by the Forge runtime") as raised:
+        runner.run_njr(make_pipeline_njr(backend_options={"image": {"backend_id": "forge_webui"}}, config=config))
+
+    assert "a1111_webui" in str(raised.value)  # actionable: how to get the feature back
+    assert "Generation was not dispatched" in str(raised.value)
+    pipeline.run_txt2img_stage.assert_not_called()
+    pipeline.run_img2img_stage.assert_not_called()
+    pipeline.run_adetailer_stage.assert_not_called()
+    pipeline.run_upscale_stage.assert_not_called()
+
+
+def test_forge_runs_work_that_names_no_hypernetwork_and_a1111_keeps_the_feature(tmp_path: Path) -> None:
+    from src.image_backends.backend_capabilities import capabilities_for
+    from src.image_backends.forge_webui_backend import requested_hypernetworks
+
+    assert capabilities_for("forge_webui").supports_hypernetworks is False
+    assert capabilities_for("a1111_webui").supports_hypernetworks is True  # explicit A1111 retains the feature
+    assert requested_hypernetworks({"txt2img": {"hypernetwork": "None"}, "hypernetwork": "", "pipeline": {"hypernetworks": []}}) == []
+
+    runner, pipeline = _runner(tmp_path, FORGE)
+    ok = runner.run_njr(
+        make_pipeline_njr(
+            backend_options={"image": {"backend_id": "forge_webui"}}, config={"txt2img": {"hypernetwork": "None"}}
+        )
+    )
+    assert ok.success is True
+    pipeline.run_txt2img_stage.assert_called_once()
+
+    runner, pipeline = _runner(tmp_path, A1111)  # the A1111 backend does not apply the Forge capability gate
+    a1111 = runner.run_njr(
+        make_pipeline_njr(backend_options={"image": {"backend_id": "a1111_webui"}}, config={"txt2img": {"hypernetwork": "styleA"}})
+    )
+    assert a1111.success is True
+    pipeline.run_txt2img_stage.assert_called_once()
+
+
+# --- Hypernetwork intent carried only by the immutable NJR's stage chain (hosted review of PR #53) -----------------------
+#
+# ``PipelineRunner`` serializes each ``StageConfig`` and ``WebUIFamilyImageBackend._stage_executor_config`` flattens its
+# ``extra`` into the executor configuration, so ``extra["hypernetwork"]`` reaches ``_ensure_hypernetwork`` exactly like a
+# config-section value does. Enforcement must therefore read the whole immutable NJR, not only ``njr.config``.
+
+
+def _stage_extra_njr(stage: str, extra: dict, *, enabled: bool = True, backend_id: str = "forge_webui") -> NormalizedJobRecord:
+    from tests.helpers.njr_factory import make_stage_config
+
+    chain = [make_stage_config("txt2img", enabled=True, extra=extra if stage == "txt2img" else {})]
+    if stage != "txt2img":
+        chain.append(make_stage_config(stage, enabled=enabled, extra=extra))
+    njr = make_pipeline_njr(backend_options={"image": {"backend_id": backend_id}}, stage_chain=chain)
+    assert "hypernetwork" not in str(njr.config)  # the stage extra is the ONLY place the intent exists
+    return njr
+
+
+@pytest.mark.parametrize("stage", ["txt2img", "img2img", "adetailer", "upscale"])
+def test_forge_refuses_a_hypernetwork_carried_only_by_a_stage_extra_before_any_runtime_side_effect(
+    tmp_path: Path, stage: str
+) -> None:
+    from src.image_backends.forge_webui_backend import ForgeUnsupportedIntentError
+
+    transitions = {"a1111": _ready_transition(), "forge": _ready_transition()}
+    runner, pipeline = _runner(tmp_path, FORGE, transitions)
+    probe = Mock(return_value=FORGE)
+    pipeline.client = _forge_client(probe)  # an identified Forge: only the immutable-intent check can stop this job
+    njr = _stage_extra_njr(stage, {"hypernetwork": "styleA", "hypernetwork_strength": 0.6})
+
+    with pytest.raises(ForgeUnsupportedIntentError, match="Hypernetworks are not supported by the Forge runtime") as raised:
+        runner.run_njr(njr)
+
+    assert "styleA" in str(raised.value) and stage in str(raised.value)  # actionable: what, and where it came from
+    assert "a1111_webui" in str(raised.value) and "Generation was not dispatched" in str(raised.value)
+    # nothing observable happened: no runtime transition, no endpoint identity probe, no options write, no generation
+    for transition in transitions.values():
+        transition.prepare_for.assert_not_called()
+    probe.assert_not_called()
+    assert pipeline.client.module_state["writes"] == []
+    pipeline.run_txt2img_stage.assert_not_called()
+    pipeline.run_img2img_stage.assert_not_called()
+    pipeline.run_adetailer_stage.assert_not_called()
+    pipeline.run_upscale_stage.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"txt2img": {"hypernetwork": "styleB"}},  # a nested section, as a config would spell it
+        {"pipeline": {"hypernetworks": [{"name": "styleC", "strength": 0.5}]}},  # a Randomizer sweep
+    ],
+    ids=["nested-section", "randomizer-sweep"],
+)
+def test_the_stage_extra_is_read_with_the_same_rules_as_the_run_config(tmp_path: Path, extra: dict) -> None:
+    from src.image_backends.forge_webui_backend import ForgeUnsupportedIntentError
+
+    backend = ForgeWebUIImageBackend(transition=_ready_transition())
+    with pytest.raises(ForgeUnsupportedIntentError, match="Hypernetworks are not supported"):
+        backend.validate_njr_intent(_stage_extra_njr("img2img", extra), ["txt2img", "img2img"])
+
+
+@pytest.mark.parametrize("value", ["None", "none", "", "   ", None], ids=["None", "none", "blank", "spaces", "null"])
+def test_a_none_blank_or_absent_stage_extra_hypernetwork_is_not_intent(tmp_path: Path, value) -> None:
+    backend = ForgeWebUIImageBackend(transition=_ready_transition())
+    stages = ["txt2img", "img2img"]
+    backend.validate_njr_intent(_stage_extra_njr("img2img", {"hypernetwork": value}), stages)
+    backend.validate_njr_intent(_stage_extra_njr("img2img", {"unrelated": "x"}), stages)  # absent
+    backend.validate_njr_intent(_stage_extra_njr("img2img", {}), stages)
+
+    runner, pipeline = _runner(tmp_path, FORGE)
+    ok = runner.run_njr(_stage_extra_njr("txt2img", {"hypernetwork": value}))
+    assert ok.success is True
+    pipeline.run_txt2img_stage.assert_called_once()
+
+
+def test_a_disabled_stage_cannot_dispatch_so_its_extra_is_not_intent() -> None:
+    backend = ForgeWebUIImageBackend(transition=_ready_transition())
+    backend.validate_njr_intent(_stage_extra_njr("img2img", {"hypernetwork": "styleA"}, enabled=False), ["txt2img"])
+
+
+def test_explicit_a1111_keeps_a_stage_extra_hypernetwork(tmp_path: Path) -> None:
+    njr = _stage_extra_njr("txt2img", {"hypernetwork": "styleA"}, backend_id="a1111_webui")
+    A1111WebUIImageBackend(transition=_ready_transition()).validate_njr_intent(njr, ["txt2img"])  # no refusal
+
+    runner, pipeline = _runner(tmp_path, A1111)
+    result = runner.run_njr(njr)
+    assert result.success is True
+    pipeline.run_txt2img_stage.assert_called_once()

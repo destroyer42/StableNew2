@@ -49,6 +49,7 @@ from src.api.webui_resource_service import (
     normalize_resource_map,
 )
 from src.api.webui_resources import WebUIResource
+from src.api.webui_runtime_identity import resolve_effective_webui_base_url
 from src.app.optional_dependency_probes import OptionalDependencySnapshot
 from src.config.app_config import (
     get_jsonl_log_config,
@@ -484,9 +485,7 @@ class AppController:
         # Use default port and discover later if connection fails
         load_settings = getattr(self._config_manager, "load_settings", None)
         settings = load_settings() if callable(load_settings) else {}
-        default_url = str(settings.get("webui_base_url") or "").strip() or os.getenv(
-            "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
-        )
+        default_url = resolve_effective_webui_base_url(settings)
 
         if pipeline_runner is not None:
             self.pipeline_runner = pipeline_runner
@@ -4586,7 +4585,7 @@ class AppController:
 
     def _ensure_webui_api(self) -> WebUIAPI:
         if self._webui_api is None:
-            self._webui_api = WebUIAPI()
+            self._webui_api = WebUIAPI(client=getattr(self, "_api_client", None))  # the configured runtime's client
         return self._webui_api
 
     def on_run_clicked(self) -> None:

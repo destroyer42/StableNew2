@@ -13,7 +13,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from src.api.webui_runtime_identity import resolve_configured_webui_runtime_identity
+from src.api.webui_runtime_identity import (
+    FORGE_WEBUI_IDENTITY,
+    explicit_webui_base_url,
+    load_backend_settings,
+    resolve_configured_webui_runtime_identity,
+    resolve_effective_webui_base_url,
+)
 from src.utils import LogContext, get_logger, log_with_ctx
 from src.utils.logging_helpers_v2 import build_run_session_id, format_launch_message
 from src.utils.process_container_v2 import (
@@ -301,6 +307,10 @@ class WebUIProcessManager:
         try:
             return wait_for_webui_ready(url, timeout=15.0, poll_interval=3.0)
         except Exception:
+            if self._config.runtime_identity != "a1111_webui":
+                # Managed Forge listens on its own configured endpoint. Scanning the A1111 port range and rebinding
+                # to whatever answers would adopt an external process, which StableNew never does.
+                return False
             # PR-PORT-DISCOVERY: If health check failed on expected port, try to discover
             # WebUI on alternate ports in case previous shutdown left orphan on port 7860
             # and WebUI auto-incremented to 7861
@@ -1176,22 +1186,95 @@ def load_managed_forge_runtime_profile(path: str | Path) -> dict[str, Any]:
     return profile
 
 
+def _forge_process_config(
+    profile: Mapping[str, Any],
+    *,
+    base_url: str,
+    autostart_enabled: bool,
+    fallback_timeout: float,
+) -> WebUIProcessConfig:
+    """The ``WebUIProcessConfig`` of a managed Forge launch profile: its command is the only command, never A1111's."""
+
+    return WebUIProcessConfig(
+        command=list(profile["command"]),
+        working_dir=str(profile["working_dir"]),
+        env_overrides=dict(profile.get("env_overrides") or {}),
+        startup_timeout_seconds=float(profile.get("startup_timeout_seconds") or fallback_timeout),
+        autostart_enabled=autostart_enabled,
+        base_url=base_url,
+        runtime_identity=FORGE_WEBUI_IDENTITY,
+    )
+
+
+def _resolve_model_reference_home(settings: Mapping[str, Any]) -> str | None:
+    """The existing A1111 home managed Forge references for models (never copied, never modified).
+
+    The configured ``webui_workdir`` first, then the supported app-config default, then the supported detection near
+    the repository. Only its location is used: no A1111 command, launch profile, cache or process is involved.
+    """
+
+    from src.config import app_config
+
+    configured = str(settings.get("webui_workdir") or "").strip()
+    if configured:
+        return configured
+    return str(app_config.get_webui_workdir() or "").strip() or detect_default_webui_workdir()
+
+
+def _build_forge_process_config(
+    settings: Mapping[str, Any], *, autostart_enabled: bool, configured_timeout: float
+) -> WebUIProcessConfig:
+    """Production Forge: the managed runtime's launch profile is authoritative; there is no fall-through to A1111.
+
+    An explicit ``forge_runtime_profile_path`` (advanced override) is loaded as before. Otherwise the canonical managed
+    install named by ``config/managed_forge_runtime.json`` is resolved through the same launch-profile authority the
+    verifier uses (``src.utils.managed_forge_runtime``). A missing install raises ``ManagedForgeUnavailable`` with setup
+    guidance: StableNew never installs Forge and never substitutes A1111.
+    """
+
+    from src.utils.managed_forge_runtime import resolve_default_launch_profile
+
+    explicit_url = explicit_webui_base_url(settings, identity=FORGE_WEBUI_IDENTITY)
+    profile_path = str(settings.get("forge_runtime_profile_path") or "").strip()
+    if profile_path:
+        profile = load_managed_forge_runtime_profile(profile_path)
+        endpoint = str(profile["endpoint"])
+        if explicit_url and explicit_url.rstrip("/") != endpoint.rstrip("/"):
+            raise ValueError(
+                f"webui_base_url {explicit_url!r} must equal the managed Forge endpoint {endpoint!r}"
+            )
+    else:
+        profile = resolve_default_launch_profile(
+            model_home=_resolve_model_reference_home(settings), base_url=explicit_url
+        )
+        endpoint = str(profile["endpoint"])
+        if explicit_url and explicit_url.rstrip("/") != endpoint.rstrip("/"):
+            raise ValueError(
+                f"webui_base_url {explicit_url!r} must equal the managed Forge endpoint {endpoint!r}"
+            )
+    return _forge_process_config(
+        profile, base_url=endpoint, autostart_enabled=autostart_enabled, fallback_timeout=configured_timeout
+    )
+
+
 def build_default_webui_process_config() -> WebUIProcessConfig | None:
-    """Build a WebUIProcessConfig using app_config defaults and detection."""
+    """Build the WebUIProcessConfig of the configured WebUI-family runtime (managed Forge unless A1111 is explicit).
+
+    An unrecognized identity or unreadable settings raise before anything is selected; there is no silent fallback
+    between Forge and A1111.
+    """
 
     try:
         from src.config import app_config
-        from src.utils.config import ConfigManager
     except Exception:
         return None
 
     launch_profile = app_config.get_webui_launch_profile()
 
-    settings = ConfigManager().load_settings()
+    settings = load_backend_settings()
     configured_workdir = str(settings.get("webui_workdir") or "").strip()
-    configured_base_url = str(settings.get("webui_base_url") or "").strip() or os.environ.get(
-        "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
-    )
+    configured_identity = resolve_configured_webui_runtime_identity(settings)
+    configured_base_url = resolve_effective_webui_base_url(settings, identity=configured_identity)
     configured_autostart = bool(
         settings.get("webui_autostart_enabled", app_config.is_webui_autostart_enabled())
     )
@@ -1199,33 +1282,13 @@ def build_default_webui_process_config() -> WebUIProcessConfig | None:
         settings.get("webui_health_total_timeout_seconds")
         or app_config.get_webui_health_total_timeout_seconds()
     )
-    configured_identity = resolve_configured_webui_runtime_identity(settings)
-    forge_profile_path = str(settings.get("forge_runtime_profile_path") or "").strip()
-    if configured_identity == "forge_webui" and forge_profile_path:
-        # Production Forge: the managed runtime's own launch profile is authoritative. No A1111 command,
-        # cache, profile map or auto-detection is consulted, and the endpoint must match the client's.
-        profile = load_managed_forge_runtime_profile(forge_profile_path)
-        if configured_base_url.rstrip("/") != str(profile["endpoint"]).rstrip("/"):
-            raise ValueError(
-                f"webui_base_url {configured_base_url!r} must equal the managed Forge endpoint "
-                f"{profile['endpoint']!r}"
-            )
-        return WebUIProcessConfig(
-            command=list(profile["command"]),
-            working_dir=str(profile["working_dir"]),
-            env_overrides=dict(profile.get("env_overrides") or {}),
-            startup_timeout_seconds=float(profile.get("startup_timeout_seconds") or configured_timeout),
-            autostart_enabled=configured_autostart,
-            base_url=configured_base_url,
-            runtime_identity="forge_webui",
+    if configured_identity == FORGE_WEBUI_IDENTITY:
+        return _build_forge_process_config(
+            settings, autostart_enabled=configured_autostart, configured_timeout=configured_timeout
         )
-    # Only the StableNew-managed A1111 configuration declares the canonical A1111 profile commands; a
-    # Forge (or any other) identity never inherits A1111-specific flags merely because the APIs match.
-    profile_commands = (
-        app_config.get_webui_launch_profile_commands()
-        if configured_identity == "a1111_webui"
-        else None
-    )
+    # Explicit A1111 rollback (the only identity that reaches here): the StableNew-managed A1111 configuration declares
+    # the canonical A1111 profile commands. No Forge profile is read or required on this path.
+    profile_commands = app_config.get_webui_launch_profile_commands()
     if configured_workdir:
         workdir_path = Path(configured_workdir)
         if workdir_path.exists() and workdir_path.is_dir():

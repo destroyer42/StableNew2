@@ -159,8 +159,8 @@ more than one source image is accepted. It is tracked separately.
 
 ## Rollback
 
-Nothing is forced. A1111 stays the default; `webui_runtime_identity` selects Forge. To roll back, choose another model
-or set the runtime identity back to `a1111_webui`. Klein NJRs in history keep their recorded profile and are never
+Nothing is forced. Forge is the new-work default (`PR-IMG-FORGE-120`; at the time of this slice A1111 was). To roll back, choose
+another model or set the runtime identity explicitly to `a1111_webui`. Klein NJRs in history keep their recorded profile and are never
 rerouted. Removing the three installed files is safe (jobs then fail early with the missing-asset message).
 
 ## Physical acceptance

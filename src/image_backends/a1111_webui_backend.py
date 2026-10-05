@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from src.image_backends.image_backend_types import (
-    DEFAULT_IMAGE_BACKEND_ID,
+    A1111_IMAGE_BACKEND_ID,
     ImageBackendCapabilities,
 )
 from src.image_backends.webui_family_backend import WebUIFamilyImageBackend
@@ -11,7 +11,7 @@ from src.services.runtime_transition_service import RUNTIME_A1111_WEBUI
 
 
 class A1111WebUIImageBackend(WebUIFamilyImageBackend):
-    backend_id = DEFAULT_IMAGE_BACKEND_ID
+    backend_id = A1111_IMAGE_BACKEND_ID
     capabilities = ImageBackendCapabilities(
         backend_id=backend_id,
         stage_types=("txt2img", "img2img", "adetailer", "upscale"),

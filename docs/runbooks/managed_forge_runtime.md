@@ -6,8 +6,8 @@ It is independent of the StableNew application environment (standard-GIL CPython
 constraints and bootstrap. None is installed into, imported by, or derived from another.
 
 It replaces the hand-qualified Forge environment used in PR-IMG-FORGE-100 with one that can be rebuilt from
-nothing and proven identical. It is **not a production default**: `a1111_webui` remains the default image
-backend and nothing in StableNew selects this runtime unless a qualification explicitly does so.
+nothing and proven identical. It is the **product default** for new still-image work (`PR-IMG-FORGE-120`): when `webui_runtime_identity` is unset
+StableNew selects this runtime. `a1111_webui` remains a supported, explicit rollback (see Rollback).
 
 An external Forge or A1111 install is **not** covered here and is never adopted, upgraded, modified or
 stopped by this tooling. `WebUIProcessManager` remains the only lifecycle authority for both
@@ -171,32 +171,57 @@ StableNew repository root; the evidence directory must not become the applicatio
   ADetailer-Neo warns that it cannot read branch data from a detached HEAD, and gradio rewrites one `.pyi` stub
   in the venv. None changes the package set; the verifier stays green.
 
-## Production selection (PR-IMG-FORGE-110)
+## Production default (PR-IMG-FORGE-120)
 
-Forge is a supported production still-image backend selected by configuration only; A1111 stays the default and
-the rollback. In `presets/settings.json` (machine-local, never committed):
+Forge is the default still-image backend. With no `webui_runtime_identity` in `presets/settings.json` (and no
+`STABLENEW_WEBUI_RUNTIME_IDENTITY`), StableNew:
+
+- stamps new image work `forge_webui`;
+- uses the identity-aware default endpoint `http://127.0.0.1:7871` (the manifest's default port; the flat `7860` that
+  older settings files persist is not treated as a Forge choice, while any other explicit loopback URL is honored);
+- builds the launch profile itself from `config/managed_forge_runtime.json` and the canonical install
+  `%LOCALAPPDATA%\StableNew\Forge\neo-d70373eb` through the same code the verifier uses (no profile file is needed),
+  with the model-reference home taken from `webui_workdir` (your existing A1111 folder);
+- starts and stops it only through `WebUIProcessManager`, and refuses to touch an external process on the endpoint.
+
+**Setup prerequisite.** The managed install is not created automatically. If it is missing, incomplete, not marked
+`verified` for the pinned revision, or the model-reference home has no `models` folder, StableNew reports exactly what is
+missing and stops: it does not install Forge, download anything, or start A1111 instead. Run the bootstrap once (see
+Build). An invalid or unreadable `settings.json` also stops startup with a message; nothing is guessed.
+
+`forge_runtime_profile_path` (the output of `verify_managed_forge.py --print-profile`) remains an optional advanced
+override of the launch profile; with it set, `webui_base_url` is either unset/default or must equal the profile's endpoint.
+
+The runtime identity guard still rejects a job whose backend does not match the endpoint before any dispatch.
+
+Known limitation (tracked separately, not a demonstrated Forge incompatibility): the Pair-D ADetailer -> upscale
+chain was qualified after the progress-watchdog and module-state repairs (see PR-IMG-FORGE-100, sections 24-29).
+
+### Forge limitations the application enforces
+
+- **Hypernetworks** are removed in the pinned Forge Neo. A job that names one is refused before dispatch with guidance to use
+  the A1111 rollback, and the Randomizer does not present the feature as usable under Forge.
+- **ADetailer detectors:** the managed runtime ships exactly `face_yolov8n.pt` and `hand_yolov8n.pt` (no MediaPipe). When the
+  endpoint's own detector list is unavailable, only those two are offered.
+
+### Explicit A1111 rollback
+
+In `presets/settings.json`:
 
 ```json
 {
-  "webui_runtime_identity": "forge_webui",
-  "forge_runtime_profile_path": "C:\path\to\forge-profile.json",
-  "webui_base_url": "http://127.0.0.1:7871"
+  "webui_runtime_identity": "a1111_webui",
+  "webui_base_url": "http://127.0.0.1:7860"
 }
 ```
 
-`forge-profile.json` is the output of `verify_managed_forge.py --print-profile` (see Launch). New image work is
-then stamped `forge_webui`, `WebUIProcessManager` launches exactly the profile's command (never an A1111 command or
-profile map), and the runtime identity guard still rejects a job whose backend does not match the endpoint.
-`webui_base_url` must equal the profile endpoint or configuration fails closed.
+(`webui_base_url` may instead be removed: an explicit A1111 with no URL uses `127.0.0.1:7860`. Do not leave a Forge URL
+such as `:7871` in place.) The A1111 path reads no Forge profile, needs no managed install, and uses the existing
+`webui_workdir`, launch-profile commands and cache; new work is stamped `a1111_webui`. Jobs created earlier with no backend
+identity, or with an explicit `a1111_webui`, run only under this configuration: while Forge is configured they are
+refused before dispatch with an `ACTION REQUIRED` message. There is no automatic fallback or retry in either direction.
 
-Rollback: set `webui_runtime_identity` back to `a1111_webui` (and `webui_base_url` to the A1111 endpoint). A job
-that explicitly names a backend keeps it. There is no automatic fallback or retry from Forge to A1111.
-
-Known limitation (tracked separately, not a demonstrated Forge incompatibility): the Pair-D ADetailer -> upscale
-chain is not fully qualified because StableNew's ADetailer progress watchdog can interrupt legitimate long-running
-extension work (see PR-IMG-FORGE-100, sections 24-26).
-
-## Rollback
+## Rolling back the managed install itself
 
 Builds are side by side (`neo-<revision8>`). The hand-qualified environment used by PR-IMG-FORGE-100 is not
 modified by this tooling. To roll back, point the Forge runtime profile back at that environment; the managed

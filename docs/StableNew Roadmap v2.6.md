@@ -525,7 +525,11 @@ qualification infrastructure, so both belong here when selected.
    Promotion` may make Forge the default A1111-family production backend while
    retaining the existing A1111 backend as a compatibility/replay path until
    explicit retirement criteria are met. Do not combine this promotion with
-   ComfyUI integration.
+   ComfyUI integration. **Complete:** `PR-IMG-FORGE-110` made Forge a supported
+   production backend and `PR-IMG-FORGE-120` made it the default for new work (managed
+   Forge default runtime, identity-aware endpoint, explicit A1111 rollback, historical
+   missing identity still A1111, one physical default-path job accepted). A1111 is
+   retained as the rollback/compatibility backend; it is not retired.
 3. `PR-IMG-BACKEND-QUAL-100 — Forge vs Comfy Modern Still-Image Qualification`:
    compare the qualified Forge production path against ComfyUI as the competing
    modern still-image execution architecture behind the existing PR-IMG-100

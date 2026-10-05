@@ -29,6 +29,17 @@ from src.utils.logger import StructuredLogger
 from src.utils.prompt_packs import PromptPackInfo
 
 
+@pytest.fixture(autouse=True)
+def _explicit_a1111_compatibility_runtime(monkeypatch):
+    """These tests drive a deterministic fake A1111-style WebUI.
+
+    Managed Forge is the product default (PR-IMG-FORGE-120), so the compatibility backend under test is selected
+    explicitly, exactly as an operator on the A1111 rollback would; a fake cannot be positively identified as Forge.
+    """
+
+    monkeypatch.setenv("STABLENEW_WEBUI_RUNTIME_IDENTITY", "a1111_webui")
+
+
 class _DeterministicWebUI:
     options_write_enabled = True
 

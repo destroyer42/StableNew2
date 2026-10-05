@@ -79,6 +79,18 @@ def module_set_key(names: Sequence[str] | None) -> list[str]:
 class ForgeWebUIClient(SDWebUIClient):
     """``SDWebUIClient`` with Forge Neo's VAE/module contract."""
 
+    @staticmethod
+    def _get_default_adetailer_models() -> list[str]:
+        """Detectors to advertise when the endpoint's own list is unavailable: only the managed runtime's accepted set.
+
+        The generic A1111 default (yolov8s variants, person segmentation, MediaPipe) is not installed in the managed
+        Forge runtime, so offering it would present controls that fail at execution.
+        """
+
+        from src.utils.managed_forge_runtime import accepted_detector_names
+
+        return list(accepted_detector_names())
+
     def get_vae_models(self) -> list[dict[str, Any]]:
         endpoint = SD_MODULES_ENDPOINT
         if self._resource_endpoint_startup_grace_active(endpoint):

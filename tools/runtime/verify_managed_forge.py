@@ -27,7 +27,18 @@ from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_MANIFEST = ROOT / "config" / "managed_forge_runtime.json"
+if str(ROOT) not in sys.path:  # run as a script by the managed venv's interpreter: the repository root is not on sys.path
+    sys.path.insert(0, str(ROOT))
+
+# The launch-profile rules live in ONE StableNew-owned authority, shared with the default production path
+# (src/api/webui_process_manager.py). This module only verifies an install against the contract.
+from src.utils.managed_forge_runtime import (  # noqa: E402
+    DEFAULT_MANIFEST,
+    build_launch_profile,
+    check_launch_command,
+    load_manifest,
+)
+
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MINOR = re.compile(r"^3\.\d{1,2}$")
@@ -39,13 +50,6 @@ DRIFT = "MANAGED_FORGE_DRIFT"
 
 def normalize_name(name: str) -> str:
     return re.sub(r"[-_.]+", "-", name).lower()
-
-
-def load_manifest(path: Path = DEFAULT_MANIFEST) -> dict[str, Any]:
-    data = json.loads(path.read_text(encoding="utf-8"))
-    if not isinstance(data, dict):
-        raise ValueError("manifest must be a JSON object")
-    return data
 
 
 def validate_manifest(
@@ -386,65 +390,7 @@ def check_torch(manifest: dict[str, Any]) -> tuple[list[str], dict[str, Any]]:
     return problems, {"torch": str(torch.__version__), "torchvision": str(torchvision.__version__), "cuda": str(torch.version.cuda), "gpu": gpu}
 
 
-# --- launch profile (printed, never executed) ----------------------------------------------------------
-
-
-def build_launch_profile(manifest: dict[str, Any], *, install_dir: Path, model_home: Path, port: int) -> dict[str, Any]:
-    """The WebUIProcessManager launch profile: command, working directory and environment, loopback only."""
-
-    policy = manifest["launch_policy"]
-    venv = install_dir / "venv"
-    runtime = manifest["runtime_dirs"]
-    command = [
-        str(venv / "Scripts" / "python.exe"),
-        policy["launch_script"],
-        "--uv",
-        "--api",
-        "--port",
-        str(port),
-        policy["data_dir_flag"],
-        str(install_dir / manifest["runtime_dirs"]["data"]),
-        policy["model_reference_flag"],
-        str(model_home),
-        "--ad-no-huggingface",
-        "--skip-install",
-    ]
-    env = dict(policy["env"])
-    env.update(
-        {
-            "HF_HUB_CACHE": str(install_dir / runtime["huggingface_cache"]),
-            "MPLCONFIGDIR": str(install_dir / runtime["matplotlib"]),
-            "YOLO_CONFIG_DIR": str(install_dir / runtime["yolo_config"]),
-            "UV_CACHE_DIR": str(install_dir / runtime["uv_cache"]),
-            "UV_PYTHON": str(venv / "Scripts" / "python.exe"),
-            "VIRTUAL_ENV": str(venv),
-            "PATH": str(venv / "Scripts") + os.pathsep + os.environ.get("PATH", ""),
-        }
-    )
-    return {
-        "runtime_identity": manifest["runtime_identity"],
-        "command": command,
-        "working_dir": str(install_dir / "source"),
-        "env_overrides": env,
-        "endpoint": f"http://127.0.0.1:{port}",
-        "startup_timeout_seconds": 180,
-    }
-
-
-def check_launch_command(command: list[str], manifest: dict[str, Any]) -> list[str]:
-    """A launch command keeps the qualified semantics: required flags present, loopback, nothing tuned."""
-
-    policy = manifest["launch_policy"]
-    flags = {part for part in command if part.startswith("--")}
-    problems = [f"launch command lacks required flag {flag}" for flag in policy["required_flags"] if flag not in flags]
-    if policy["model_reference_flag"] not in flags:
-        problems.append(f"launch command lacks {policy['model_reference_flag']} (the accepted model reference)")
-    problems += [
-        f"launch command carries tuning/exposure flag {flag}"
-        for flag in sorted(flags)
-        if any(fragment in flag.lower() for fragment in policy["forbidden_flag_fragments"])
-    ]
-    return problems
+# --- launch profile: built and checked by the shared authority (src/utils/managed_forge_runtime.py) ----------
 
 
 def main(argv: list[str] | None = None) -> int:

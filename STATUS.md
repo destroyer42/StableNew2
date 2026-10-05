@@ -49,9 +49,10 @@ Updated: 2026-10-05
   `WebUIProcessManager` stays the only lifecycle authority. One canonical Pair-A Forge job through the managed
   runtime decodes to pixels identical to the accepted hand-built image (`MANAGED_FORGE_RUNTIME_REPRODUCIBILITY_PASS`).
   Forge is a supported production still-image backend (PR-IMG-FORGE-110, `FORGE_PRODUCTION_PROMOTION_PASS`),
-  selected by `webui_runtime_identity`/`forge_runtime_profile_path`; A1111 remains the default and the rollback.
+  selected by `webui_runtime_identity`/`forge_runtime_profile_path`; A1111 was the default and is now the explicit
+  rollback (`PR-IMG-FORGE-120`, below).
   Capability
-  qualification (`FORGE_TECHNICAL_QUALIFICATION_PASS`, technical gate only; Forge is not the default): Pairs B (LoRA),
+  qualification (`FORGE_TECHNICAL_QUALIFICATION_PASS`, technical gate only): Pairs B (LoRA),
   C (img2img) and D (txt2img -> ADetailer face+hand -> 1.5x upscale) pass on A1111 and managed Forge. Pair D needed
   three repairs: the launch-profile ownership repair, R3 ADetailer progress semantics (D100 A1111 arm: natural
   completion, 127.6 s ADetailer response), and PR-IMG-FORGE-D110 (Forge module-baseline normalization: an ordinary
@@ -71,7 +72,7 @@ Updated: 2026-10-05
   checkbox -> normal `img2img` reprocess NJR). Forge multi-module selection is verified and never skipped; unsupported work
   (multi-reference, ADetailer, upscale, LoRA, ...) fails before dispatch; total physical RAM must be at least 32e9 bytes
   (available RAM is evidence only). Assets install with `scripts/install_forge_klein_assets.ps1` into the managed Forge data
-  tree. Two production smokes passed on the RTX 4070 Ti. A1111 stays the default and the rollback; multi-reference is
+  tree. Two production smokes passed on the RTX 4070 Ti. A1111 is the explicit rollback; multi-reference is
   unsupported and tracked separately. See `docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`.
 - Risk-proportionate CI (PR-DEVEX-CI-110): the repository-owned `tools/ci/validation_plan.py` classifies the base-to-head change
   set into additive coarse lanes and the single PR-head workflow consumes it. Docs-only changes take a cheap path (no Python
@@ -519,6 +520,19 @@ Updated: 2026-10-05
   breakpoint: lower form column minimums chosen by fit, capped label wraps, reflowed hint/ADetailer cells; no widget moves),
   so no actionable control is clipped at laptop widths or in other Tk/font environments. Known debt (GUI-110 visual
   density): the scroll viewports stay short at 768 px height because fixed headers and the Operator Log sit outside them.
+- `PR-IMG-FORGE-120 — Forge Default Production Promotion` is **COMPLETE / ACCEPTED / PHYSICALLY + HOSTED
+  VERIFIED — `NEW_WORK_DEFAULT_FORGE_PASS`** (`docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md`). New
+  still-image work defaults to the StableNew-managed Forge runtime (`forge_webui`) when `webui_runtime_identity` is unset;
+  an explicit `a1111_webui` is the supported rollback; an unrecognized or unreadable configuration fails closed. A
+  historical image NJR with no backend identity still resolves to `a1111_webui` (a separate constant from the new-work
+  default) and replay never upgrades it. The default endpoint is identity-aware (Forge 7871, A1111 7860) and the default
+  managed profile comes from one shared launch-profile authority (`src/utils/managed_forge_runtime.py`, used by the
+  verifier and `build_default_webui_process_config`); a missing managed install fails closed with setup guidance and is
+  never installed or replaced by A1111. There is no backend or runtime fallback, one `WebUIProcessManager` remains the only
+  lifecycle authority, and external runtimes are never adopted, killed or restarted. One physical default-path SDXL job
+  passed with no backend selection injected. Hypernetwork intent (in the run config or any enabled image stage) is refused
+  before any Forge runtime side effect (explicit A1111 keeps the feature), and an unavailable ADetailer detector refresh
+  exposes only the managed runtime's accepted detectors. No Forge, ADetailer, Torch or dependency pin changed.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
@@ -697,8 +711,8 @@ checkpoint unchanged. The harness never starts, adopts, or stops A1111.
 The first approved post-v2.6 architecture PR, `PR-IMG-100 — Backend-Neutral
 Image Execution`, is complete / accepted / integrated. The accepted course of
 action is **one typed image backend per image NJR**.
-A1111/WebUI remains the default/current production image backend and its accepted
-behavior must be preserved behind the new boundary. Newly compiled image NJRs
+A1111/WebUI was the default production image backend (new work now defaults to Forge, `PR-IMG-FORGE-120`) and its
+accepted behavior must be preserved behind the new boundary. Newly compiled image NJRs
 will explicitly persist image backend identity through the existing immutable
 `backend_options` workload layer; historical v2.6 image NJRs that lack backend
 identity will resolve deterministically to A1111 through one bounded compatibility
