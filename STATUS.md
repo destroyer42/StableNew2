@@ -520,8 +520,8 @@ Updated: 2026-10-05
   breakpoint: lower form column minimums chosen by fit, capped label wraps, reflowed hint/ADetailer cells; no widget moves),
   so no actionable control is clipped at laptop widths or in other Tk/font environments. Known debt (GUI-110 visual
   density): the scroll viewports stay short at 768 px height because fixed headers and the Operator Log sit outside them.
-- `PR-IMG-FORGE-120 — Forge Default Production Promotion` is **IMPLEMENTED / PHYSICALLY ACCEPTED / READY FOR OWNER
-  REVIEW; NOT PUBLISHED** (`docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md`). New
+- `PR-IMG-FORGE-120 — Forge Default Production Promotion` is **IMPLEMENTED / PHYSICALLY ACCEPTED / PUBLISHED AS PR
+  #53 FOR OWNER REVIEW; NOT MERGED** (`docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md`). New
   still-image work defaults to the StableNew-managed Forge runtime (`forge_webui`) when `webui_runtime_identity` is unset;
   an explicit `a1111_webui` is the supported rollback; an unrecognized or unreadable configuration fails closed. A
   historical image NJR with no backend identity still resolves to `a1111_webui` (a separate constant from the new-work
