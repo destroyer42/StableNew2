@@ -80,7 +80,11 @@ def canonical_context(monkeypatch, tmp_path):
         _process_table(str(REPO_ROOT), ("python.exe", "-m", "tools.acceptance.img_forge_100_acceptance")),
     )
     # Mutable operator state must never reach frozen intent: hostile runtime globals.
-    manager = ConfigManager(presets_dir=tmp_path / "presets", packs_dir=tmp_path / "packs")
+    manager = ConfigManager(
+        presets_dir=tmp_path / "presets",
+        packs_dir=tmp_path / "packs",
+        global_prompt_dir=tmp_path / "global-prompts",
+    )
     manager.save_global_positive_state("MUTABLE runtime positive", True)
     manager.save_global_negative_state("MUTABLE runtime negative", True)
     monkeypatch.setattr("src.pipeline.executor.ConfigManager", lambda: manager)
@@ -355,7 +359,11 @@ def live_context(monkeypatch, tmp_path):
     """The canonical context with the REAL process inspector, so a live manager-owned tree is observed."""
 
     monkeypatch.chdir(REPO_ROOT)
-    manager = ConfigManager(presets_dir=tmp_path / "presets", packs_dir=tmp_path / "packs")
+    manager = ConfigManager(
+        presets_dir=tmp_path / "presets",
+        packs_dir=tmp_path / "packs",
+        global_prompt_dir=tmp_path / "global-prompts",
+    )
     monkeypatch.setattr("src.pipeline.executor.ConfigManager", lambda: manager)
     for target, replacement in (
         (Pipeline, "_apply_webui_defaults_once"),

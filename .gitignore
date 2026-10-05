@@ -128,3 +128,7 @@ data/job_history.jsonl
 /tmp_prompt_pack_probe3/
 /tmp_prompt_pack_probe4/
 /tmp_prompt_pack_probe5/
+
+# Saved Global Positive/Negative prompt text is per-user state (see src/prompting/global_prompt_paths.py).
+/presets/global_positive.txt
+/presets/global_negative.txt

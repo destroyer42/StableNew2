@@ -160,6 +160,8 @@ class ConfigManager:
         self,
         presets_dir: str | Path = "presets",
         packs_dir: str | Path | None = None,
+        *,
+        global_prompt_dir: str | Path | None = None,
     ):
         """
         Initialize configuration manager.
@@ -168,15 +170,24 @@ class ConfigManager:
             presets_dir: Directory containing preset files.
             packs_dir: Explicit PromptPack directory. When omitted, use the
                 canonical per-user storage resolver.
+            global_prompt_dir: Explicit directory for the saved Global Positive/Negative
+                prompt text. When omitted, use the canonical per-user storage resolver;
+                the text is never read from or written to ``presets_dir``.
         """
         self.presets_dir = Path(presets_dir)
         self.presets_dir.mkdir(exist_ok=True)
+        from src.prompting.global_prompt_paths import (
+            GLOBAL_NEGATIVE_FILENAME,
+            GLOBAL_POSITIVE_FILENAME,
+            resolve_global_prompt_dir,
+        )
         from src.promptpacks.paths import resolve_prompt_pack_dir
 
         self.packs_dir = resolve_prompt_pack_dir(packs_dir)
-        self._global_negative_path = self.presets_dir / "global_negative.txt"
+        self.global_prompt_dir = resolve_global_prompt_dir(global_prompt_dir)
+        self._global_negative_path = self.global_prompt_dir / GLOBAL_NEGATIVE_FILENAME
         self._global_negative_cache: str | None = None
-        self._global_positive_path = self.presets_dir / "global_positive.txt"
+        self._global_positive_path = self.global_prompt_dir / GLOBAL_POSITIVE_FILENAME
         self._global_positive_cache: str | None = None
         self._default_preset_path = self.presets_dir / ".default_preset"
         self._settings_path = self.presets_dir / "settings.json"
@@ -862,8 +873,8 @@ class ConfigManager:
             "comfy_health_retry_interval_seconds": 1.0,
             "comfy_health_total_timeout_seconds": 30.0,
             "webui_options_write_enabled": True,
-            # Persisted sidebar defaults.  Text lives in the existing prompt
-            # files; enabled state lives in the existing settings authority.
+            # Persisted sidebar defaults.  Text lives in the per-user GlobalPrompts
+            # directory; enabled state lives in this settings authority.
             "global_positive_enabled": False,
             "global_negative_enabled": True,
             "output_dir": str(Path("output")),
