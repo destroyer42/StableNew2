@@ -28,7 +28,10 @@ removing the ignore exposes nothing new.
 
 The change touches `pyproject.toml`, `run_collection_gate.py` and `validation_plan.py`, so the repository's own plan classifies it as CI/test
 authority with a full census (`affected` is subsumed, not run in addition). The CI-truth-sync and validation-plan/routing-rot tests pass (81), the PR gate passes
-(5,079 collected, 341-test required smoke) and the controller ratchet is unchanged. Full-census evidence is recorded with the pull request.
+(5,079 collected, 341-test required smoke) and the controller ratchet is unchanged. Local census on the implementation tree: 5,081 JUnit cases: 5,058 passed, 22 skipped, 1 failed, in 985 s. The repository collection gate
+remains 5,079 runnable tests; the +2 in the JUnit census are the two previously documented collection-time skips (the same distinction as
+5,038 gate-collected vs 5,040 JUnit cases in the Phase B1 report), so 5,081 - 2 = 5,079 and collection authority stayed exactly stable. The one local
+failure was the known load-sensitive `test_pr_harden_009_r1a_txt2img_cancellation`, unrelated to this change. The hosted full census is the canonical verdict.
 
 ## Not changed
 
