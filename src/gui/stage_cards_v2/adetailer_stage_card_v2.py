@@ -22,6 +22,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_stage_card_min_width,
     get_two_pair_form_column_specs,
 )
+from src.image_backends.backend_capabilities import configured_adetailer_detector_fallbacks
 
 
 class ADetailerStageCardV2(BaseStageCardV2):
@@ -45,6 +46,10 @@ class ADetailerStageCardV2(BaseStageCardV2):
     STAGE_MODEL_INHERIT = "Inherit Base Generation"
 
     def __init__(self, master: tk.Misc, *, theme: Any | None = None, **kwargs: Any) -> None:
+        # Under Forge the generic detector lists are not installed: offer only the managed runtime's accepted set.
+        forge_fallbacks = configured_adetailer_detector_fallbacks()
+        if forge_fallbacks is not None:
+            self.MODEL_OPTIONS, self.HAND_MODEL_OPTIONS = list(forge_fallbacks[0]), list(forge_fallbacks[1])
         self.stage_model_override_var = tk.StringVar(value="")
 
         self.enable_face_pass_var = tk.BooleanVar(value=True)

@@ -85,11 +85,43 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+class ForgeUnsupportedIntentError(ValueError):
+    """The job asks for something the Forge runtime cannot do; refused before any dispatch."""
+
+
+_HYPERNETWORK_SECTIONS = ("txt2img", "img2img", "adetailer", "upscale")
+
+
+def requested_hypernetworks(config: Mapping[str, Any] | None) -> list[str]:
+    """Hypernetworks a run config asks for: a stage or top-level ``hypernetwork`` that is not none, or a sweep entry."""
+
+    data = config if isinstance(config, Mapping) else {}
+
+    def active(value: Any) -> str:
+        text = str(value or "").strip()
+        return "" if text.lower() in {"", "none"} else text
+
+    found: list[str] = []
+    if active(data.get("hypernetwork")):
+        found.append(active(data.get("hypernetwork")))
+    for section in _HYPERNETWORK_SECTIONS:
+        stage = data.get(section)
+        if isinstance(stage, Mapping) and active(stage.get("hypernetwork")):
+            found.append(f"{active(stage.get('hypernetwork'))} ({section})")
+    pipeline = data.get("pipeline")
+    for entry in (pipeline.get("hypernetworks") if isinstance(pipeline, Mapping) else None) or []:
+        name = entry.get("name") if isinstance(entry, Mapping) else entry
+        if active(name):
+            found.append(f"{active(name)} (randomizer sweep)")
+    return found
+
+
 class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
     backend_id = FORGE_IMAGE_BACKEND_ID
     capabilities = ImageBackendCapabilities(
         backend_id=backend_id,
         stage_types=("txt2img", "img2img", "adetailer", "upscale"),
+        supports_hypernetworks=False,  # the pinned Forge Neo removed Hypernetworks
     )
     transition_target = RUNTIME_FORGE_WEBUI
 
@@ -134,11 +166,18 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
 
     def validate_njr_intent(self, njr: Any, stage_names: list[str]) -> None:
         backend_options = getattr(njr, "backend_options", None) or {}
+        config = getattr(njr, "config", None) or {}
+        config = config if isinstance(config, Mapping) else {}
+        hypernetworks = requested_hypernetworks(config)
+        if hypernetworks and not self.capabilities.supports_hypernetworks:
+            raise ForgeUnsupportedIntentError(
+                "Hypernetworks are not supported by the Forge runtime (the pinned Forge Neo removed them), but this job "
+                f"requests: {', '.join(hypernetworks)}. Generation was not dispatched. Remove the hypernetwork, or "
+                "select the A1111 compatibility runtime (webui_runtime_identity = a1111_webui) to use it."
+            )
         profile = self._profile_for(backend_options)
         if profile is None:
             return
-        config = getattr(njr, "config", None) or {}
-        config = config if isinstance(config, Mapping) else {}
         features = (
             detect_unsupported_features(config, positive_prompt=str(njr.positive_prompt or ""))
             + self._vae_conflict(getattr(njr, "vae", None), profile)

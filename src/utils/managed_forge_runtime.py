@@ -17,6 +17,7 @@ setup guidance; there is never an automatic install and never a fall-through to 
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 from pathlib import Path
@@ -47,6 +48,13 @@ def load_manifest(path: Path = DEFAULT_MANIFEST) -> dict[str, Any]:
     if not isinstance(data, dict):
         raise ValueError("manifest must be a JSON object")
     return data
+
+
+@functools.lru_cache(maxsize=1)
+def accepted_detector_names() -> tuple[str, ...]:
+    """The ADetailer detectors the managed runtime guarantees (the manifest's two YOLO files; never MediaPipe)."""
+
+    return tuple(load_manifest()["detectors"]["files"])
 
 
 # --- install identity -------------------------------------------------------------------------------------------
@@ -228,6 +236,7 @@ def resolve_default_launch_profile(
 
 __all__ = [
     "DEFAULT_MANIFEST",
+    "accepted_detector_names",
     "ManagedForgeUnavailable",
     "build_launch_profile",
     "check_launch_command",

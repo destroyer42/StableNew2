@@ -119,6 +119,9 @@ class ImageBackendCapabilities:
     supports_prompt_text: bool = True
     supports_negative_prompt: bool = True
     artifact_type: str = "image"
+    #: False for a runtime that has no Hypernetwork support (the pinned Forge Neo removed them): such work is refused
+    #: before dispatch and the Randomizer does not present the feature.
+    supports_hypernetworks: bool = True
 
 
 @dataclass(slots=True)

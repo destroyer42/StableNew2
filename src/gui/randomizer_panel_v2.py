@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from dataclasses import dataclass
 from tkinter import ttk
 from typing import Any
@@ -15,10 +16,12 @@ from src.gui_v2.adapters.randomizer_adapter_v2 import (
     compute_variant_stats,
     preview_variants,
 )
+from src.image_backends.backend_capabilities import configured_backend_supports_hypernetworks
 
 from . import theme as theme_mod
 
 DEFAULT_MAX_VARIANTS = 512
+HYPERNETWORKS_UNAVAILABLE_LABEL = "Hypernetworks - not available with Forge (A1111 only)"
 
 
 @dataclass
@@ -34,9 +37,25 @@ class MatrixRow:
 class RandomizerPanelV2(ttk.Frame):
     """Full-featured Randomizer card for the Pipeline tab with plan builder UI."""
 
-    def __init__(self, master: tk.Misc, *, controller=None, theme=None, **kwargs) -> None:
+    def __init__(
+        self,
+        master: tk.Misc,
+        *,
+        controller=None,
+        theme=None,
+        hypernetworks_supported: Callable[[], bool] | None = None,
+        **kwargs,
+    ) -> None:
         style_name = getattr(theme, "SURFACE_FRAME_STYLE", theme_mod.SURFACE_FRAME_STYLE)
         super().__init__(master, style=style_name, padding=theme_mod.PADDING_MD, **kwargs)
+        # Presentation of the configured runtime's capability: the pinned Forge Neo removed Hypernetworks, so under
+        # Forge the row is shown inactive and contributes nothing; explicit A1111 keeps the feature.
+        try:
+            self._hypernetworks_supported = bool(
+                (hypernetworks_supported or configured_backend_supports_hypernetworks)()
+            )
+        except Exception:  # noqa: BLE001 - presentation only; the backend refuses unsupported work before dispatch
+            self._hypernetworks_supported = True
         self._controller = controller
         self._theme = theme
         self.controller = controller  # alias for legacy compatibility
@@ -247,7 +266,13 @@ class RandomizerPanelV2(ttk.Frame):
 
         # Seed default matrix rows
         self._add_matrix_row(label="Model matrix entries", key="model")
-        self._add_matrix_row(label="Hypernetworks (name[:strength])", key="hypernetwork")
+        self._add_matrix_row(
+            label="Hypernetworks (name[:strength])"
+            if self._hypernetworks_supported
+            else HYPERNETWORKS_UNAVAILABLE_LABEL,
+            enabled=self._hypernetworks_supported,
+            key="hypernetwork",
+        )
 
         # Initial state update
         self._update_controls_state()
@@ -272,6 +297,11 @@ class RandomizerPanelV2(ttk.Frame):
         if key:
             self.matrix_vars[key] = value_var
         self._rebuild_matrix_ui_from_model()
+
+    def _row_available(self, row: MatrixRow) -> bool:
+        """A Hypernetwork row is inert (shown disabled, never in the plan) when the runtime cannot use it."""
+
+        return row.key != "hypernetwork" or getattr(self, "_hypernetworks_supported", True)
 
     def _clone_matrix_row(self, index: int) -> None:
         """Clone a matrix row at the given index."""
@@ -334,6 +364,13 @@ class RandomizerPanelV2(ttk.Frame):
                 command=lambda i=idx: self._delete_matrix_row(i),
             )
             del_btn.grid(row=idx, column=4, padx=(0, 0))
+
+            if not self._row_available(row):
+                enabled_cb.state(["disabled"])
+                label_entry.configure(state="disabled")
+                value_entry.configure(state="disabled")
+                clone_btn.state(["disabled"])
+                del_btn.state(["disabled"])
 
             # Attach change traces
             row.value_var.trace_add("write", self._handle_var_change)
@@ -598,7 +635,7 @@ class RandomizerPanelV2(ttk.Frame):
         """Build the matrix payload from all enabled rows."""
         payload: dict[str, Any] = {}
         for row in self._rows:
-            if not row.enabled_var.get():
+            if not row.enabled_var.get() or not self._row_available(row):
                 continue
             label = row.label_var.get().strip().lower()
             key = row.key
@@ -628,7 +665,7 @@ class RandomizerPanelV2(ttk.Frame):
     def _get_hypernetwork_entries(self) -> list[dict]:
         """Get hypernetwork entries from the hypernetwork row."""
         for row in self._rows:
-            if row.key == "hypernetwork" and row.enabled_var.get():
+            if row.key == "hypernetwork" and row.enabled_var.get() and self._row_available(row):
                 return self._parse_hyper_entries(row.value_var.get())
         return []
 
@@ -659,6 +696,8 @@ class RandomizerPanelV2(ttk.Frame):
 
         # Load hypernetworks
         hyper_entries = pipeline_cfg.get("hypernetworks") or config.get("hypernetworks") or []
+        if not getattr(self, "_hypernetworks_supported", True):
+            hyper_entries = []  # an unusable feature is never loaded into the plan
         hyper_texts: list[str] = []
         for entry in hyper_entries:
             if isinstance(entry, dict):
@@ -676,7 +715,7 @@ class RandomizerPanelV2(ttk.Frame):
                 hyper_texts.append(name_text)
             else:
                 hyper_texts.append(f"{name_text}:{strength}")
-        if len(self._rows) > 1:
+        if len(self._rows) > 1 and getattr(self, "_hypernetworks_supported", True):
             self._rows[1].value_var.set(", ".join(hyper_texts))
 
         # Load seed settings
