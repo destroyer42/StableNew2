@@ -87,10 +87,14 @@ Making Forge the default must not expose controls the pinned Forge Neo cannot ho
 **Hypernetworks (the pinned Forge Neo removed them).** `ImageBackendCapabilities.supports_hypernetworks` is a typed
 capability: true for A1111, false for Forge.
 - Execution: `ForgeWebUIImageBackend.validate_njr_intent`, which the runner calls before any dispatch for every Forge job,
-  refuses any Hypernetwork intent (a stage or top-level `hypernetwork` that is not `None`, or a Randomizer sweep entry)
-  with `ForgeUnsupportedIntentError`: the runtime does not support Hypernetworks, generation was not dispatched, and
-  `webui_runtime_identity = a1111_webui` restores the feature. No generation request is sent (asserted for every stage).
-  Explicit A1111 keeps the feature unchanged.
+  refuses any Hypernetwork intent with `ForgeUnsupportedIntentError`: the runtime does not support Hypernetworks,
+  generation was not dispatched, and `webui_runtime_identity = a1111_webui` restores the feature. The intent is read from
+  the whole immutable NJR by one helper (`requested_hypernetworks_for_njr`): the run config (a stage section or top-level
+  `hypernetwork` that is not `None`, or a Randomizer sweep entry) and the `extra` of every enabled image `StageConfig`,
+  which the executor flattens into its configuration and would otherwise reach the unsupported `/options` write. `None`,
+  blank or absent is not intent, and a disabled stage is never dispatched. Nothing runs before the refusal: no runtime
+  transition, endpoint identity probe, options write or generation request (asserted for every stage). Explicit A1111
+  keeps the feature unchanged.
 - Presentation: the Randomizer's Hypernetwork matrix row is projected through the same capability: under Forge it is
   inactive, disabled, relabeled as unavailable, and contributes nothing to the plan even if forced on or loaded from a
   saved config. Known pre-existing debt, not repaired here: `RandomizerPanelV2` cannot be constructed on `main` (a Tk
@@ -133,7 +137,9 @@ as Forge. Default-selection behavior is asserted in `tests/api/test_forge_produc
 - Focused: image backend, Forge selection, runtime identity, process-manager profile ownership, runtime ports,
   transition, managed-runtime contract and acceptance-driver tests; extended in their existing owners.
 - Mutation: forcing the default identity back to A1111 turns 16 tests red; for the capability closure, declaring Forge
-  Hypernetwork-capable turns 7 red, dropping the Forge client's detector fallback 1, and ignoring the card's fallback 2.
+  Hypernetwork-capable turns 7 red, dropping the Forge client's detector fallback 1, and ignoring the card's fallback 2;
+  reading only the run config (the defect found in hosted review of PR #53, where an NJR whose only Hypernetwork was a
+  stage `extra` dispatched normally) turns the 6 stage-extra tests red.
 - Validation plan: the PR changes a CI-authority file (the controller-ratchet ceiling), so a full census is required; it
   is run locally (sharded) and hosted CI routes it too.
 - `python tools/ci/run_pr_gate.py`: OK at the executable SHA (350 smoke, 5,147 collected); controller ratchet OK

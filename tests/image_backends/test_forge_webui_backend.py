@@ -594,3 +594,94 @@ def test_forge_runs_work_that_names_no_hypernetwork_and_a1111_keeps_the_feature(
     )
     assert a1111.success is True
     pipeline.run_txt2img_stage.assert_called_once()
+
+
+# --- Hypernetwork intent carried only by the immutable NJR's stage chain (hosted review of PR #53) -----------------------
+#
+# ``PipelineRunner`` serializes each ``StageConfig`` and ``WebUIFamilyImageBackend._stage_executor_config`` flattens its
+# ``extra`` into the executor configuration, so ``extra["hypernetwork"]`` reaches ``_ensure_hypernetwork`` exactly like a
+# config-section value does. Enforcement must therefore read the whole immutable NJR, not only ``njr.config``.
+
+
+def _stage_extra_njr(stage: str, extra: dict, *, enabled: bool = True, backend_id: str = "forge_webui") -> NormalizedJobRecord:
+    from tests.helpers.njr_factory import make_stage_config
+
+    chain = [make_stage_config("txt2img", enabled=True, extra=extra if stage == "txt2img" else {})]
+    if stage != "txt2img":
+        chain.append(make_stage_config(stage, enabled=enabled, extra=extra))
+    njr = make_pipeline_njr(backend_options={"image": {"backend_id": backend_id}}, stage_chain=chain)
+    assert "hypernetwork" not in str(njr.config)  # the stage extra is the ONLY place the intent exists
+    return njr
+
+
+@pytest.mark.parametrize("stage", ["txt2img", "img2img", "adetailer", "upscale"])
+def test_forge_refuses_a_hypernetwork_carried_only_by_a_stage_extra_before_any_runtime_side_effect(
+    tmp_path: Path, stage: str
+) -> None:
+    from src.image_backends.forge_webui_backend import ForgeUnsupportedIntentError
+
+    transitions = {"a1111": _ready_transition(), "forge": _ready_transition()}
+    runner, pipeline = _runner(tmp_path, FORGE, transitions)
+    probe = Mock(return_value=FORGE)
+    pipeline.client = _forge_client(probe)  # an identified Forge: only the immutable-intent check can stop this job
+    njr = _stage_extra_njr(stage, {"hypernetwork": "styleA", "hypernetwork_strength": 0.6})
+
+    with pytest.raises(ForgeUnsupportedIntentError, match="Hypernetworks are not supported by the Forge runtime") as raised:
+        runner.run_njr(njr)
+
+    assert "styleA" in str(raised.value) and stage in str(raised.value)  # actionable: what, and where it came from
+    assert "a1111_webui" in str(raised.value) and "Generation was not dispatched" in str(raised.value)
+    # nothing observable happened: no runtime transition, no endpoint identity probe, no options write, no generation
+    for transition in transitions.values():
+        transition.prepare_for.assert_not_called()
+    probe.assert_not_called()
+    assert pipeline.client.module_state["writes"] == []
+    pipeline.run_txt2img_stage.assert_not_called()
+    pipeline.run_img2img_stage.assert_not_called()
+    pipeline.run_adetailer_stage.assert_not_called()
+    pipeline.run_upscale_stage.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "extra",
+    [
+        {"txt2img": {"hypernetwork": "styleB"}},  # a nested section, as a config would spell it
+        {"pipeline": {"hypernetworks": [{"name": "styleC", "strength": 0.5}]}},  # a Randomizer sweep
+    ],
+    ids=["nested-section", "randomizer-sweep"],
+)
+def test_the_stage_extra_is_read_with_the_same_rules_as_the_run_config(tmp_path: Path, extra: dict) -> None:
+    from src.image_backends.forge_webui_backend import ForgeUnsupportedIntentError
+
+    backend = ForgeWebUIImageBackend(transition=_ready_transition())
+    with pytest.raises(ForgeUnsupportedIntentError, match="Hypernetworks are not supported"):
+        backend.validate_njr_intent(_stage_extra_njr("img2img", extra), ["txt2img", "img2img"])
+
+
+@pytest.mark.parametrize("value", ["None", "none", "", "   ", None], ids=["None", "none", "blank", "spaces", "null"])
+def test_a_none_blank_or_absent_stage_extra_hypernetwork_is_not_intent(tmp_path: Path, value) -> None:
+    backend = ForgeWebUIImageBackend(transition=_ready_transition())
+    stages = ["txt2img", "img2img"]
+    backend.validate_njr_intent(_stage_extra_njr("img2img", {"hypernetwork": value}), stages)
+    backend.validate_njr_intent(_stage_extra_njr("img2img", {"unrelated": "x"}), stages)  # absent
+    backend.validate_njr_intent(_stage_extra_njr("img2img", {}), stages)
+
+    runner, pipeline = _runner(tmp_path, FORGE)
+    ok = runner.run_njr(_stage_extra_njr("txt2img", {"hypernetwork": value}))
+    assert ok.success is True
+    pipeline.run_txt2img_stage.assert_called_once()
+
+
+def test_a_disabled_stage_cannot_dispatch_so_its_extra_is_not_intent() -> None:
+    backend = ForgeWebUIImageBackend(transition=_ready_transition())
+    backend.validate_njr_intent(_stage_extra_njr("img2img", {"hypernetwork": "styleA"}, enabled=False), ["txt2img"])
+
+
+def test_explicit_a1111_keeps_a_stage_extra_hypernetwork(tmp_path: Path) -> None:
+    njr = _stage_extra_njr("txt2img", {"hypernetwork": "styleA"}, backend_id="a1111_webui")
+    A1111WebUIImageBackend(transition=_ready_transition()).validate_njr_intent(njr, ["txt2img"])  # no refusal
+
+    runner, pipeline = _runner(tmp_path, A1111)
+    result = runner.run_njr(njr)
+    assert result.success is True
+    pipeline.run_txt2img_stage.assert_called_once()

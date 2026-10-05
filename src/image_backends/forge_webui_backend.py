@@ -89,7 +89,7 @@ class ForgeUnsupportedIntentError(ValueError):
     """The job asks for something the Forge runtime cannot do; refused before any dispatch."""
 
 
-_HYPERNETWORK_SECTIONS = ("txt2img", "img2img", "adetailer", "upscale")
+_HYPERNETWORK_SECTIONS = ("txt2img", "img2img", "adetailer", "upscale")  # the image stages, as config sections and stage types
 
 
 def requested_hypernetworks(config: Mapping[str, Any] | None) -> list[str]:
@@ -113,6 +113,22 @@ def requested_hypernetworks(config: Mapping[str, Any] | None) -> list[str]:
         name = entry.get("name") if isinstance(entry, Mapping) else entry
         if active(name):
             found.append(f"{active(name)} (randomizer sweep)")
+    return found
+
+
+def requested_hypernetworks_for_njr(njr: Any) -> list[str]:
+    """Hypernetwork intent anywhere the immutable NJR can execute it.
+
+    ``PipelineRunner`` serializes each ``StageConfig`` and the executor config flattens its ``extra``, so an enabled image
+    stage's ``extra`` is read exactly like the run config (``requested_hypernetworks`` is the single rule for both).
+    """
+
+    found = requested_hypernetworks(getattr(njr, "config", None))
+    for stage in getattr(njr, "stage_chain", None) or ():
+        stage_type = str(getattr(stage, "stage_type", "") or "")
+        if not getattr(stage, "enabled", False) or stage_type not in _HYPERNETWORK_SECTIONS:
+            continue  # a disabled stage is never dispatched; non-image stages are not this backend's
+        found.extend(f"{item} ({stage_type} stage extra)" for item in requested_hypernetworks(getattr(stage, "extra", None)))
     return found
 
 
@@ -168,7 +184,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         backend_options = getattr(njr, "backend_options", None) or {}
         config = getattr(njr, "config", None) or {}
         config = config if isinstance(config, Mapping) else {}
-        hypernetworks = requested_hypernetworks(config)
+        hypernetworks = requested_hypernetworks_for_njr(njr)
         if hypernetworks and not self.capabilities.supports_hypernetworks:
             raise ForgeUnsupportedIntentError(
                 "Hypernetworks are not supported by the Forge runtime (the pinned Forge Neo removed them), but this job "
