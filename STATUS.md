@@ -513,9 +513,11 @@ Updated: 2026-10-05
   single screen-aware authority for the default size, the minimum size and saved-geometry normalization (Pipeline's
   separate 1400 px width force is retired). Review, SVD Img2Vid and Video Workflow scroll through the existing
   `ScrollableFrame`, whose mouse-wheel handling is now one pointer-routed dispatcher per Tk interpreter. No generation,
-  queue, backend, NJR, runtime or persistence behavior changed. **Known limit (not repaired; needs a Pipeline layout
-  decision):** the three-column Pipeline workspace still needs about 1896 px of window width; at laptop widths its
-  left-column Base Generation form and several stage-card controls are clipped horizontally.
+  queue, backend, NJR, runtime or persistence behavior changed. Below a 1880 px width the Pipeline tab switches to a
+  compact, reversible presentation (lower form column minimums and capped label wraps; no widget moves) so no actionable
+  control is clipped at laptop widths; the normal three-column workspace is unchanged from 1880 px up. Known debt (GUI-110
+  visual density): the scroll viewports stay short at 768 px height because fixed headers and the Operator Log sit outside
+  them.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

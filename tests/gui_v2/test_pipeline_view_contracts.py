@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
 from src.gui.view_contracts.pipeline_layout_contract import (
     LABEL_COLUMN_MIN_WIDTH,
@@ -8,6 +10,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     WORKSPACE_CENTER_COLUMN_MIN_WIDTH,
     WORKSPACE_LEFT_COLUMN_MIN_WIDTH,
     WORKSPACE_RIGHT_COLUMN_MIN_WIDTH,
+    get_compact_minsize,
     get_form_min_width,
     get_stage_card_min_width,
     get_three_pair_form_column_specs,
@@ -15,6 +18,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_two_pair_form_column_specs,
     get_two_pane_workspace_column_specs,
     get_visible_stage_order,
+    is_compact_pipeline_width,
 )
 
 
@@ -63,3 +67,17 @@ def test_workspace_column_specs_define_shared_surface_minimums() -> None:
         {"index": 1, "weight": 3, "minsize": WORKSPACE_CENTER_COLUMN_MIN_WIDTH},
         {"index": 2, "weight": 3, "minsize": WORKSPACE_RIGHT_COLUMN_MIN_WIDTH},
     )
+
+
+@pytest.mark.parametrize(
+    ("width", "compact"),
+    [(0, False), (1, False), (399, False), (1280, True), (1342, True), (1879, True), (1880, False), (2560, False)],
+)
+def test_compact_pipeline_breakpoint_ignores_unrealized_widths(width: int, compact: bool) -> None:
+    assert is_compact_pipeline_width(width) is compact
+
+
+def test_compact_minsize_scales_form_columns_and_leaves_small_ones() -> None:
+    assert get_compact_minsize(160) < 160
+    assert get_compact_minsize(88) < 88
+    assert get_compact_minsize(24) == 24

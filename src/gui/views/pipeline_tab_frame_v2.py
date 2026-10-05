@@ -10,6 +10,7 @@ from src.controller.runtime_state import PipelineState
 from src.gui import design_system_v2 as design_system
 from src.gui.dropdown_loader_v2 import DropdownLoader
 from src.gui.job_history_panel_v2 import JobHistoryPanelV2
+from src.gui.layout_v2 import apply_compact_column_minsizes, apply_compact_label_wraps
 from src.gui.panels_v2.queue_panel_v2 import QueuePanelV2
 from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
@@ -17,8 +18,11 @@ from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
 from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.pipeline_layout_contract import (
+    COMPACT_LABEL_WRAPLENGTH_CAP,
+    get_compact_minsize,
     get_stage_card_min_width,
     get_visible_stage_order,
+    is_compact_pipeline_width,
 )
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
@@ -315,13 +319,39 @@ class PipelineTabFrame(ttk.Frame):
         # PR-GUI-100: the root window size is owned by the shared screen-aware window layout contract
         # (view_contracts/window_layout_contract.py); this tab never resizes the root.
         self._hot_surfaces_flushed_on_map = False
+        self._compact_layout = False
         self.bind("<Map>", self._on_first_map)
+        self.bind("<Configure>", self._on_layout_configure, add="+")
         self._bind_process_inspector_shortcut()
 
     def _on_first_map(self, event: tk.Event | None = None) -> None:
         """Called when the Pipeline tab becomes visible: flush deferred hot surfaces (never resizes the root)."""
         self._hot_surfaces_flushed_on_map = True
         self._schedule_hot_surface_flush_if_needed()
+
+    def _on_layout_configure(self, event: tk.Event | None = None) -> None:
+        if event is not None and event.widget is not self:
+            return
+        self._apply_responsive_layout(int(getattr(event, "width", 0) or self.winfo_width()))
+
+    def _apply_responsive_layout(self, width: int) -> None:
+        """Compact the left/stage forms below the breakpoint, restore them above it (PR-GUI-100).
+
+        Presentation only: grid-column minimums and label wraps change, no widget is moved, recreated or rebound, so no
+        state, controller or scroll ownership is involved.
+        """
+        compact = is_compact_pipeline_width(width)
+        if compact == self._compact_layout:
+            return
+        self._compact_layout = compact
+        for scroll in (self.left_scroll, self.stage_scroll):
+            apply_compact_column_minsizes(scroll, compact, get_compact_minsize)
+        self.update_idletasks()  # realize the compacted column widths before wrapping captions to their slots
+        for scroll in (self.left_scroll, self.stage_scroll, self.right_scroll):
+            apply_compact_label_wraps(scroll, compact, COMPACT_LABEL_WRAPLENGTH_CAP)
+        base_generation = getattr(self.sidebar, "get_base_generation_panel", lambda: None)()
+        if base_generation is not None and hasattr(base_generation, "set_compact_layout"):
+            base_generation.set_compact_layout(compact)
 
     def update_pack_list(self, pack_names: list[str]) -> None:
         """Update the pack list in the pack loader compat."""

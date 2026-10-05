@@ -15,6 +15,7 @@ from src.gui.layout_v2 import configure_grid_columns
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import BODY_LABEL_STYLE, MUTED_LABEL_STYLE
 from src.gui.view_contracts.pipeline_layout_contract import (
+    COMPACT_HINT_WRAPLENGTH,
     LABEL_COLUMN_MIN_WIDTH,
     PRIMARY_CONTROL_MIN_WIDTH,
     SECONDARY_CONTROL_MIN_WIDTH,
@@ -127,6 +128,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._steps_spin: ttk.Spinbox | None = None
         self._cfg_spin: ttk.Spinbox | None = None
         self._helper_label: ttk.Label | None = None
+        self._compact_hint_labels: list[ttk.Label] = []
         self._dimension_validate_cmd = None
 
         if embed_mode:
@@ -323,6 +325,7 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             style=MUTED_LABEL_STYLE,
         )
         seed_hint.grid(row=row_idx, column=2, sticky="ew", padx=(0, 8), pady=(0, 4))
+        self._compact_hint_labels.append(seed_hint)
         seed_button = ttk.Button(parent, text="Rand", width=6, command=self._randomize_seed)
         seed_button.grid(row=row_idx, column=3, sticky="w", pady=(0, 4))
 
@@ -342,11 +345,13 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             style=MUTED_LABEL_STYLE,
         )
         subseed_hint.grid(row=row_idx + 1, column=2, sticky="ew", padx=(0, 8), pady=(0, 4))
+        self._compact_hint_labels.append(subseed_hint)
         subseed_button = ttk.Button(parent, text="Rand", width=6, command=self._randomize_subseed)
         subseed_button.grid(row=row_idx + 1, column=3, sticky="w", pady=(0, 4))
 
         subseed_strength_label = ttk.Label(parent, text="Subseed Strength", style=BODY_LABEL_STYLE)
         subseed_strength_label.grid(row=row_idx + 2, column=0, sticky="w", padx=(0, 4), pady=(0, 4))
+        self._compact_hint_labels.append(subseed_strength_label)
         subseed_strength_entry = ttk.Entry(
             parent, textvariable=self.subseed_strength_var, style="Dark.TEntry"
         )
@@ -364,6 +369,11 @@ class BaseGenerationPanelV2(BaseStageCardV2):
             subseed_strength_label,
             subseed_strength_entry,
         )
+
+    def set_compact_layout(self, compact: bool) -> None:
+        """Wrap the unwrapped hint labels while the Pipeline is narrow (PR-GUI-100); reversible, no widget moves."""
+        for label in self._compact_hint_labels:
+            label.configure(wraplength=COMPACT_HINT_WRAPLENGTH if compact else 0)
 
     def _configure_layout_columns(self, parent: ttk.Frame) -> None:
         configure_grid_columns(

@@ -232,6 +232,117 @@ def test_pipeline_tab_never_resizes_the_root_window() -> None:
 
 
 # -----------------------------------------------------------------------------
+# Responsive Pipeline layout (PR-GUI-100)
+# -----------------------------------------------------------------------------
+
+_ACTIONABLE_CLASSES = (ttk.Button, ttk.Combobox, ttk.Entry, ttk.Spinbox, ttk.Checkbutton, ttk.Radiobutton)
+
+
+def _pipeline_tab_at_width(root: tk.Tk, width: int):
+    from src.gui.app_state_v2 import AppStateV2
+    from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
+
+    root.geometry(f"{width}x800+0+0")
+    root.deiconify()  # a withdrawn root never realizes its children's sizes
+    tab = PipelineTabFrame(root, app_state=AppStateV2())
+    tab.pack(fill="both", expand=True)
+    root.update()
+    root.update()
+    return tab
+
+
+def _descendants(widget: tk.Misc) -> list[tk.Misc]:
+    found: list[tk.Misc] = []
+    for child in widget.winfo_children():
+        found.append(child)
+        found.extend(_descendants(child))
+    return found
+
+
+def _horizontally_clipped_controls(tab) -> list[str]:
+    clipped: list[str] = []
+    for scroll in (tab.left_scroll, tab.stage_scroll, tab.right_scroll):
+        view_left = scroll._canvas.winfo_rootx()
+        view_width = scroll._canvas.winfo_width()
+        for widget in _descendants(scroll.inner):
+            if not isinstance(widget, _ACTIONABLE_CLASSES) or not widget.winfo_ismapped():
+                continue
+            left = widget.winfo_rootx() - view_left
+            if left < -1 or left + widget.winfo_width() > view_width + 1:
+                clipped.append(f"{widget.winfo_class()} {widget}")
+    return clipped
+
+
+def _responsive_snapshot(tab) -> dict[tuple[str, str], int]:
+    """Every grid-column minimum in the left/stage forms and every label wraplength the compact layout may change."""
+    snapshot: dict[tuple[str, str], int] = {}
+    for scroll in (tab.left_scroll, tab.stage_scroll, tab.right_scroll):
+        for widget in [scroll, *_descendants(scroll)]:
+            if widget.winfo_class() in ("TLabel", "Label"):
+                snapshot[(str(widget), "wraplength")] = int(str(widget.cget("wraplength")) or 0)
+            for index in range(int(widget.grid_size()[0])):
+                snapshot[(str(widget), f"minsize{index}")] = int(widget.columnconfigure(index)["minsize"])
+    return snapshot
+
+
+@pytest.mark.parametrize(
+    ("width", "compact"),
+    [(1280, True), (1342, True), (1879, True), (1880, False), (1896, False)],
+    ids=["min-window", "laptop-1366", "just-below-breakpoint", "breakpoint", "desktop-1920"],
+)
+def test_pipeline_controls_are_never_horizontally_clipped(width: int, compact: bool) -> None:
+    """Narrow windows compact the forms, wide ones keep the normal three columns; neither clips a control."""
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter not available: {exc}")
+        return
+
+    try:
+        tab = _pipeline_tab_at_width(root, width)
+        assert tab._compact_layout is compact
+        assert _horizontally_clipped_controls(tab) == []
+        for scroll in (tab.left_scroll, tab.stage_scroll, tab.right_scroll):
+            assert scroll.winfo_viewable()  # left, stage and right surfaces all stay reachable
+    finally:
+        root.destroy()
+
+
+def test_pipeline_responsive_breakpoint_round_trip_is_lossless() -> None:
+    """Crossing the breakpoint both ways keeps the same widgets, values, column minimums and scroll ownership."""
+    try:
+        root = tk.Tk()
+    except tk.TclError as exc:
+        pytest.skip(f"Tkinter not available: {exc}")
+        return
+
+    try:
+        from src.gui.widgets.scrollable_frame_v2 import _WheelRouter
+
+        tab = _pipeline_tab_at_width(root, 1896)
+        panel = tab.sidebar.get_base_generation_panel()
+        panel.seed_var.set("12345")
+        widgets = {str(w) for w in _descendants(tab)}
+        snapshot = _responsive_snapshot(tab)
+        router_frames = _WheelRouter.for_widget(tab).frame_count
+        assert tab._compact_layout is False
+
+        for width in (1342, 1896, 1280, 1896):
+            root.geometry(f"{width}x800+0+0")
+            root.update()
+            root.update()
+            assert tab._compact_layout is (width < 1880)
+            assert {str(w) for w in _descendants(tab)} == widgets  # nothing orphaned, duplicated or rebuilt
+            assert panel.seed_var.get() == "12345"
+            assert _WheelRouter.for_widget(tab).frame_count == router_frames
+            assert _horizontally_clipped_controls(tab) == []
+
+        assert _responsive_snapshot(tab) == snapshot  # the normal layout is restored exactly
+    finally:
+        root.destroy()
+
+
+# -----------------------------------------------------------------------------
 # Preview Panel Tests (No Inner Scroll)
 # -----------------------------------------------------------------------------
 
