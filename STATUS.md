@@ -537,6 +537,13 @@ Updated: 2026-10-05
 
 `main` is the integrated v2.6 release baseline and now contains the accepted
 PR-MVP-090 line.
+Global Positive/Negative prompt text is per-user state, not repository preset content:
+`ConfigManager` stores it in `%LOCALAPPDATA%\StableNew\GlobalPrompts` (`STABLENEW_GLOBAL_PROMPT_DIR`
+overrides; `src/prompting/global_prompt_paths.py` is the path authority), the enabled flags stay in the
+settings authority, and `presets/global_positive.txt` / `presets/global_negative.txt` are retired, ignored
+and never read. Frozen NJR policy and execution are unchanged. See
+`docs/Subsystems/Prompting/PR-DEVEX-PROMPTS-170_Global_Prompt_User_State.md`.
+
 The canonical documentation order is `AGENTS.md`, `STATUS.md`,
 `docs/CODEX_MAP.md`, the relevant architecture section, the relevant coding and
 testing section, the roadmap for sequencing, and Git history only when current
