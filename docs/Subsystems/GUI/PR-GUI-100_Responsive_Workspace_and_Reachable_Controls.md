@@ -1,6 +1,6 @@
 # PR-GUI-100 — Responsive Workspace & Reachable Controls Foundation
 
-Status: IMPLEMENTED / VERIFIED LOCALLY / READY FOR OWNER REVIEW (not pushed). Baseline: `main` @ `e6b6a1f`.
+Status: IMPLEMENTED / VERIFIED LOCALLY + HOSTED / READY FOR OWNER FINAL REVIEW (not merged). Baseline: `main` @ `e6b6a1f`.
 Includes a responsive Pipeline layout repair (below) added after the first acceptance pass found Pipeline clipped at laptop widths.
 
 Scope: make the main window never demand more than the display provides, and keep the long workspaces reachable by
@@ -127,6 +127,13 @@ control, and from about 2200 px they use the normal presentation.
 
 Review, SVD and Video Workflow have 0 clipped controls at every width above and are unchanged. The viewport heights are
 unchanged (338 px for the Pipeline columns); wrapped captions only lengthen the scrollable content.
+
+## Hosted evidence
+
+The first hosted run, on the fixed-breakpoint candidate, failed the GUI `affected` lane: the Linux/Xvfb runner's Tk and
+font metrics showed that a fixed pixel breakpoint and a fixed compact scale measured on Windows were
+environment-dependent. The fit-driven presentation (above) replaced them. On the final head, hosted `required` and the GUI
+`affected` lane both pass, and the full census is skipped by the validation plan as expected.
 
 ## Known limits (not repaired)
 
