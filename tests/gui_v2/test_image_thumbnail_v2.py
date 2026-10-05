@@ -71,13 +71,31 @@ def test_fit_thumbnail_resize_debounces_and_discards_stale_path() -> None:
     thumb.load_image.assert_not_called()
 
 
-def test_thumbnail_handles_missing_pil():
-    """Verify graceful degradation without PIL."""
+def test_thumbnail_handles_missing_pil(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+    """Verify graceful degradation without PIL: load fails with a placeholder, no exception."""
     from src.gui.widgets import image_thumbnail
+    from src.gui.widgets.image_thumbnail import ImageThumbnail
 
-    # Module should load regardless of PIL availability
-    assert hasattr(image_thumbnail, "ImageThumbnail")
-    assert hasattr(image_thumbnail, "PIL_AVAILABLE")
+    monkeypatch.setattr(image_thumbnail, "PIL_AVAILABLE", False)
+    image_path = tmp_path / "image.png"
+    image_path.write_bytes(b"png")
+
+    thumb = ImageThumbnail.__new__(ImageThumbnail)
+    thumb.max_width = 300
+    thumb.max_height = 300
+    thumb._photo_image = None
+    thumb._current_path = None
+    thumb._update_clickability = MagicMock()
+    thumb.delete = MagicMock()
+    thumb.create_text = MagicMock()
+    thumb.winfo_width = MagicMock(return_value=300)
+    thumb.winfo_height = MagicMock(return_value=300)
+
+    assert thumb.load_image(str(image_path)) is False
+    thumb.create_text.assert_called()
+    assert "PIL not installed" in thumb.create_text.call_args.kwargs.get(
+        "text", " ".join(str(a) for a in thumb.create_text.call_args.args)
+    )
 
 
 def test_thumbnail_handles_missing_file():
