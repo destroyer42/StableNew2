@@ -498,8 +498,8 @@ Updated: 2026-10-05
   ran once the GPU was free: the separate motion prompt removed the duplicate subject (ghost persistence 28 to 0 of
   39) but the driven locomotion disappeared with it, and pose strength 1.5 / reference strength 1.3 did not restore
   it. Driving-motion quality therefore remains `EXECUTION_PASS / PRODUCT_QUALITY_PARTIAL` pending owner review.
-  `PR-VID-194 — One-Variable Operator Experiments` is **IMPLEMENTED / VERIFIED / READY FOR OWNER FINAL PR REVIEW;
-  NOT MERGED TO `main`** (`docs/Subsystems/Video/PR-VID-194_Animate2_One_Variable_Operator_Experiments.md`).
+  `PR-VID-194 — One-Variable Operator Experiments` is **IMPLEMENTED / VERIFIED / INTEGRATED** (PR #28, merge
+  `9688c5a`; `docs/Subsystems/Video/PR-VID-194_Animate2_One_Variable_Operator_Experiments.md`).
   Video Workflow gains a bounded "Compare one control" section: the current resolved value of one spec-declared
   operator control (Variant A) plus 1-3 candidates, one frozen baseline (one concrete seed, source and driving-video
   hashes), every arm built through the same extracted `VideoWorkflowNjrBuilder` as a normal submission with the
@@ -507,6 +507,15 @@ Updated: 2026-10-05
   No new experiment store, queue or lifecycle authority, no automatic search or winner selection, and Wan-Animate-2
   stays experimental per-job opt-in. Validation is CPU/fake-runtime only; no physical generation was run and no
   promotion or readiness conclusion changed.
+- `PR-GUI-100 — Responsive Workspace & Reachable Controls Foundation` is **IMPLEMENTED / VERIFIED LOCALLY / READY FOR
+  OWNER REVIEW; NOT PUSHED** (`docs/Subsystems/GUI/PR-GUI-100_Responsive_Workspace_and_Reachable_Controls.md`). The main
+  window no longer demands a viewport larger than the display: `src/gui/view_contracts/window_layout_contract.py` is the
+  single screen-aware authority for the default size, the minimum size and saved-geometry normalization (Pipeline's
+  separate 1400 px width force is retired). Review, SVD Img2Vid and Video Workflow scroll through the existing
+  `ScrollableFrame`, whose mouse-wheel handling is now one pointer-routed dispatcher per Tk interpreter. No generation,
+  queue, backend, NJR, runtime or persistence behavior changed. **Known limit (not repaired; needs a Pipeline layout
+  decision):** the three-column Pipeline workspace still needs about 1896 px of window width; at laptop widths its
+  left-column Base Generation form and several stage-card controls are clipped horizontally.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

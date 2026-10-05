@@ -4,7 +4,6 @@ from src.gui.view_contracts.feedback_panel_contract import FeedbackPanelState, u
 from src.gui.view_contracts.form_section_contract import FormSectionState, update_form_section
 from src.gui.view_contracts.pipeline_layout_contract import (
     get_visible_stage_order,
-    normalize_window_geometry,
 )
 from src.gui.view_contracts.prompt_editor_contract import (
     build_editor_warning_text,
@@ -29,7 +28,6 @@ __all__ = [
     "build_editor_warning_text",
     "build_slot_labels",
     "find_undefined_slots",
-    "normalize_window_geometry",
     "resolve_queue_status_display",
     "resolve_queue_status_from_label",
     "update_feedback_state",

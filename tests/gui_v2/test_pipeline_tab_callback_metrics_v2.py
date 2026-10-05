@@ -166,7 +166,6 @@ def test_pipeline_tab_defers_hidden_hot_surfaces_until_visible() -> None:
         "last_ms": 0.0,
         "slow_count": 0,
     }
-    tab._width_ensured = True
     scheduled: list[tuple[int, object]] = []
     tab.after = lambda delay_ms, fn: scheduled.append((delay_ms, fn))  # type: ignore[method-assign]
 

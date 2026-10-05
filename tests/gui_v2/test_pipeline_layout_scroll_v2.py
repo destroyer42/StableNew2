@@ -4,7 +4,7 @@ This module tests:
 - Pipeline tab has three ScrollableFrame columns
 - Each column has scrollable content
 - Mouse wheel bindings work correctly per column
-- Minimum window width is applied on first show
+- Pipeline never resizes the root window (PR-GUI-100)
 - Preview panel has no inner scrollbar (uses column scroll)
 """
 
@@ -51,8 +51,8 @@ def test_scrollable_frame_has_canvas_and_scrollbar() -> None:
 
 
 @pytest.mark.gui
-def test_scrollable_frame_mousewheel_bindings() -> None:
-    """ScrollableFrame should bind/unbind mouse wheel on enter/leave."""
+def test_scrollable_frame_wheel_router_is_shared_scoped_and_cleaned_up() -> None:
+    """One interpreter-wide wheel router serves every ScrollableFrame and removes only its own binding (PR-GUI-100)."""
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -60,24 +60,63 @@ def test_scrollable_frame_mousewheel_bindings() -> None:
         return
 
     try:
-        from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
+        from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame, _WheelRouter
 
-        sf = ScrollableFrame(root)
-        sf.pack(fill="both", expand=True)
-        root.update_idletasks()
+        root.geometry("900x300+50+50")  # wide enough that both frames are visible
+        first = ScrollableFrame(root)
+        second = ScrollableFrame(root)
+        # place() gives each frame a fixed half of the window regardless of the canvases' requested widths
+        first.place(relx=0.0, rely=0.0, relwidth=0.5, relheight=1.0)
+        second.place(relx=0.5, rely=0.0, relwidth=0.5, relheight=1.0)
+        combo = ttk.Combobox(first.inner, values=["a", "b"])
+        combo.pack()
+        for frame in (first, second):
+            for index in range(60):
+                ttk.Label(frame.inner, text=f"row {index}").pack()
+        root.deiconify()
+        # winfo_containing() is z-order based: keep the test window above other desktop windows
+        root.attributes("-topmost", True)
+        root.lift()
+        root.update()
 
-        # Initially wheel should not be bound
-        assert sf._wheel_bound is False
+        router = _WheelRouter.for_widget(root)
+        base = router.frame_count - 2  # frames other tests in this process may still hold on the shared interpreter
+        assert router.installed and router.frame_count == base + 2
+        # Enter/Leave no longer toggle anything: nothing can steal or disable another frame's wheel.
+        first._canvas.event_generate("<Enter>")
+        first._canvas.event_generate("<Leave>")
+        root.update()
+        assert router.installed
 
-        # Simulate enter event on canvas
-        sf._canvas.event_generate("<Enter>")
-        root.update_idletasks()
-        assert sf._wheel_bound is True
+        def wheel_over(widget, delta=-120):
+            widget.event_generate(
+                "<MouseWheel>", delta=delta, rootx=widget.winfo_rootx() + 5, rooty=widget.winfo_rooty() + 5
+            )
+            root.update()
 
-        # Simulate leave event on canvas
-        sf._canvas.event_generate("<Leave>")
-        root.update_idletasks()
-        assert sf._wheel_bound is False
+        assert first.has_scroll_overflow() and second.has_scroll_overflow()
+        wheel_over(first._canvas)
+        assert first._canvas.yview()[0] > 0.0  # the region under the pointer scrolled...
+        assert second._canvas.yview()[0] == 0.0  # ...and only that region
+        before = first._canvas.yview()[0]
+        wheel_over(combo)
+        assert first._canvas.yview()[0] == before  # a combobox keeps its own wheel behavior
+        wheel_over(second.inner)
+        assert second._canvas.yview()[0] > 0.0
+
+        # No overflow -> nothing to scroll, harmlessly.
+        short = ScrollableFrame(root)
+        assert not short.has_scroll_overflow()
+        short.destroy()
+        assert router.installed and router.frame_count == base + 2
+
+        first.destroy()
+        assert router.installed and router.frame_count == base + 1
+        second.destroy()
+        assert router.frame_count == base
+        if base == 0:
+            assert not router.installed
+            assert str(root.tk.call("bind", "all", "<MouseWheel>")).strip() == ""  # no stale global handler
     finally:
         root.destroy()
 
@@ -162,22 +201,13 @@ def test_pipeline_tab_columns_have_content() -> None:
 
 
 # -----------------------------------------------------------------------------
-# Minimum Window Width Tests
+# Root window size ownership (PR-GUI-100)
 # -----------------------------------------------------------------------------
 
 
 @pytest.mark.gui
-def test_pipeline_tab_has_min_width_constant() -> None:
-    """Pipeline tab should define MIN_WINDOW_WIDTH constant."""
-    from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
-
-    assert hasattr(PipelineTabFrame, "MIN_WINDOW_WIDTH")
-    assert PipelineTabFrame.MIN_WINDOW_WIDTH >= 1200  # Reasonable minimum
-
-
-@pytest.mark.gui
-def test_ensure_minimum_window_width_expands_narrow_window() -> None:
-    """_ensure_minimum_window_width should expand a narrow window."""
+def test_pipeline_tab_never_resizes_the_root_window() -> None:
+    """The shared screen-aware window layout is the only root-size authority; Pipeline no longer forces a width."""
     try:
         root = tk.Tk()
         root.geometry("800x600+100+100")
@@ -186,97 +216,17 @@ def test_ensure_minimum_window_width_expands_narrow_window() -> None:
         return
 
     try:
+        from src.gui.app_state_v2 import AppStateV2
         from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 
-        # Create pipeline tab with minimal mocks
-        mock_controller = MagicMock()
-        mock_controller.list_models.return_value = []
-        mock_controller.list_vaes.return_value = []
-        mock_controller.list_upscalers.return_value = []
-        mock_controller.get_current_config.return_value = {}
-        mock_controller.restore_last_run.return_value = None
-
-        mock_app_state = MagicMock()
-        mock_app_state.resources = {}
-        mock_app_state.job_draft = None
-        mock_app_state.queue_status = {}
-        mock_app_state.subscribe = MagicMock()
-        mock_app_state.add_resource_listener = MagicMock()
-
-        pipeline_tab = PipelineTabFrame(
-            root,
-            app_controller=mock_controller,
-            app_state=mock_app_state,
-        )
+        assert not hasattr(PipelineTabFrame, "MIN_WINDOW_WIDTH")
+        assert not hasattr(PipelineTabFrame, "_ensure_minimum_window_width")
+        pipeline_tab = PipelineTabFrame(root, app_state=AppStateV2(), pipeline_controller=MagicMock())
         pipeline_tab.pack(fill="both", expand=True)
-        root.update_idletasks()
-
-        # Manually call the method
-        pipeline_tab._ensure_minimum_window_width()
-        root.update_idletasks()
-
-        # Parse the new geometry
-        geom = root.geometry()
-        width_str = geom.split("x")[0]
-        width = int(width_str)
-
-        assert width >= PipelineTabFrame.MIN_WINDOW_WIDTH, (
-            f"Window should be at least {PipelineTabFrame.MIN_WINDOW_WIDTH}px wide, got {width}"
-        )
-    finally:
-        root.destroy()
-
-
-@pytest.mark.gui
-def test_ensure_minimum_window_width_preserves_large_window() -> None:
-    """_ensure_minimum_window_width should not shrink a large window."""
-    try:
-        root = tk.Tk()
-        root.geometry("1800x900+50+50")
-    except tk.TclError as exc:
-        pytest.skip(f"Tkinter not available: {exc}")
-        return
-
-    try:
-        from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
-
-        mock_controller = MagicMock()
-        mock_controller.list_models.return_value = []
-        mock_controller.list_vaes.return_value = []
-        mock_controller.list_upscalers.return_value = []
-        mock_controller.get_current_config.return_value = {}
-        mock_controller.restore_last_run.return_value = None
-
-        mock_app_state = MagicMock()
-        mock_app_state.resources = {}
-        mock_app_state.job_draft = None
-        mock_app_state.queue_status = {}
-        mock_app_state.subscribe = MagicMock()
-        mock_app_state.add_resource_listener = MagicMock()
-
-        pipeline_tab = PipelineTabFrame(
-            root,
-            app_controller=mock_controller,
-            app_state=mock_app_state,
-        )
-        pipeline_tab.pack(fill="both", expand=True)
-        root.update_idletasks()
-
-        # Get original width
-        original_geom = root.geometry()
-        original_width = int(original_geom.split("x")[0])
-
-        # Call the method
-        pipeline_tab._ensure_minimum_window_width()
-        root.update_idletasks()
-
-        # Width should remain unchanged
-        new_geom = root.geometry()
-        new_width = int(new_geom.split("x")[0])
-
-        assert new_width >= original_width, (
-            f"Window should not shrink (was {original_width}, now {new_width})"
-        )
+        root.update()
+        pipeline_tab._on_first_map()
+        root.update()
+        assert root.geometry().startswith("800x600")
     finally:
         root.destroy()
 

@@ -31,6 +31,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_two_pane_workspace_column_specs,
 )
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.queue.job_history_store import JobHistoryEntry
@@ -224,8 +225,13 @@ class ReviewTabFrame(ttk.Frame):
         )
 
     def _build_body(self) -> None:
-        body = ttk.Frame(self, style="Panel.TFrame")
-        body.grid(row=2, column=0, sticky="nsew", padx=6, pady=4)
+        # PR-GUI-100: preview/metadata and the edit/reprocess controls share one scrollable workspace so the
+        # ~620 px preview keeps its size and the controls below it stay reachable on short screens.
+        self._workspace_scroll = ScrollableFrame(self, style="Panel.TFrame")
+        self._workspace_scroll.grid(row=2, column=0, sticky="nsew", padx=6, pady=4)
+        self._workspace_scroll.inner.columnconfigure(0, weight=1)
+        body = ttk.Frame(self._workspace_scroll.inner, style="Panel.TFrame")
+        body.grid(row=0, column=0, sticky="nsew")
         configure_grid_columns(body, get_two_pane_workspace_column_specs())
         body.rowconfigure(0, weight=1)
         self._body_frame = body
@@ -324,8 +330,8 @@ class ReviewTabFrame(ttk.Frame):
         ).grid(row=0, column=0, sticky="ew")
 
     def _build_controls(self) -> None:
-        controls = ttk.Frame(self, style="Panel.TFrame")
-        controls.grid(row=3, column=0, sticky="ew", padx=6, pady=(4, 6))
+        controls = ttk.Frame(self._workspace_scroll.inner, style="Panel.TFrame")
+        controls.grid(row=1, column=0, sticky="ew", pady=(4, 6))
         configure_grid_columns(
             controls,
             get_two_pane_workspace_column_specs(

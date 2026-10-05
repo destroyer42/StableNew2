@@ -19,7 +19,6 @@ from src.gui.tooltip import attach_tooltip
 from src.gui.view_contracts.pipeline_layout_contract import (
     get_stage_card_min_width,
     get_visible_stage_order,
-    normalize_window_geometry,
 )
 from src.gui.views.stage_cards_panel import StageCardsPanel
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
@@ -313,39 +312,16 @@ class PipelineTabFrame(ttk.Frame):
         self.pack_loader_compat = self.sidebar
         self.left_compat = self.sidebar
 
-        # PR-GUI-D: Ensure minimum window width on first show
-        self._width_ensured = False
+        # PR-GUI-100: the root window size is owned by the shared screen-aware window layout contract
+        # (view_contracts/window_layout_contract.py); this tab never resizes the root.
+        self._hot_surfaces_flushed_on_map = False
         self.bind("<Map>", self._on_first_map)
         self._bind_process_inspector_shortcut()
 
-    # -------------------------------------------------------------------------
-    # PR-GUI-D: Minimum Window Width
-    # -------------------------------------------------------------------------
-    MIN_WINDOW_WIDTH = 1400
-
     def _on_first_map(self, event: tk.Event | None = None) -> None:
-        """Called when the Pipeline tab becomes visible for the first time."""
-        if self._width_ensured:
-            self._schedule_hot_surface_flush_if_needed()
-            return
-        self._width_ensured = True
-        self._ensure_minimum_window_width()
+        """Called when the Pipeline tab becomes visible: flush deferred hot surfaces (never resizes the root)."""
+        self._hot_surfaces_flushed_on_map = True
         self._schedule_hot_surface_flush_if_needed()
-
-    def _ensure_minimum_window_width(self) -> None:
-        """Expand the window if it's narrower than the minimum for 3 columns."""
-        try:
-            root = self.winfo_toplevel()
-            current_geom = root.geometry()
-        except Exception:
-            return
-
-        updated = normalize_window_geometry(current_geom, self.MIN_WINDOW_WIDTH)
-        if updated:
-            try:
-                root.geometry(updated)
-            except Exception:
-                pass
 
     def update_pack_list(self, pack_names: list[str]) -> None:
         """Update the pack list in the pack loader compat."""

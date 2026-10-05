@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from src.gui.main_window_v2 import (
-    DEFAULT_MAIN_WINDOW_HEIGHT,
-    DEFAULT_MAIN_WINDOW_WIDTH,
-    MainWindowV2,
-)
+from src.gui.main_window_v2 import MainWindowV2
+from src.gui.view_contracts.window_layout_contract import compute_window_layout
 from src.services.ui_state_store import UIStateStore
+
+# The stub roots have no screen; MainWindowV2 falls back to a 1920x1080 display for its layout.
+DEFAULT_GEOMETRY = compute_window_layout(1920, 1080).default_geometry
 
 
 class _StubRoot:
@@ -326,7 +326,7 @@ def test_ensure_window_geometry_ignores_offscreen_saved_geometry(tmp_path: Path)
     with patch("src.gui.main_window_v2.get_ui_state_store", return_value=store):
         window._ensure_window_geometry()
 
-    assert window.root.geometry() == f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+    assert window.root.geometry() == DEFAULT_GEOMETRY
     assert window.root.deiconified == 1
 
 
@@ -347,13 +347,13 @@ def test_save_ui_state_replaces_offscreen_geometry(tmp_path: Path) -> None:
     saved = store.load_state()
     assert saved is not None
     assert (
-        saved["window"]["geometry"] == f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+        saved["window"]["geometry"] == DEFAULT_GEOMETRY
     )
 
 
 def test_capture_visible_window_geometry_ignores_iconic_offscreen_geometry() -> None:
     window = MainWindowV2.__new__(MainWindowV2)
-    visible_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}+200+120"
+    visible_geometry = f"{DEFAULT_GEOMETRY}+200+120"
     window.root = _StubRoot(visible_geometry)
     window._last_visible_window_geometry = None
 
@@ -370,7 +370,7 @@ def test_capture_visible_window_geometry_ignores_iconic_offscreen_geometry() -> 
 def test_ensure_window_visible_after_restore_uses_last_visible_geometry() -> None:
     window = MainWindowV2.__new__(MainWindowV2)
     window.root = _StubRoot("1984x1110+-32000+-32000")
-    visible_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}+200+120"
+    visible_geometry = f"{DEFAULT_GEOMETRY}+200+120"
     window._last_visible_window_geometry = visible_geometry
 
     window._ensure_window_visible_after_restore()
@@ -384,7 +384,7 @@ def test_ensure_window_visible_after_restore_uses_last_visible_geometry() -> Non
 def test_on_window_map_restores_visible_geometry_after_minimize() -> None:
     window = MainWindowV2.__new__(MainWindowV2)
     window.root = _StubRoot("1984x1110+-32000+-32000")
-    visible_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}+140+90"
+    visible_geometry = f"{DEFAULT_GEOMETRY}+140+90"
     window._last_visible_window_geometry = visible_geometry
 
     window._on_window_map()

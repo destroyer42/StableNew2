@@ -25,11 +25,17 @@ from src.gui.panels_v2.operator_readiness_panel_v2 import (
 )
 from src.gui.status_bar_v2 import StatusBarV2
 from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY, apply_theme
+from src.gui.view_contracts.window_layout_contract import (
+    WINDOW_SENTINEL_OFFSCREEN,
+    WindowLayout,
+    compute_window_layout,
+    normalize_saved_geometry,
+    parse_geometry,
+)
 from src.gui.views.character_training_frame import CharacterTrainingFrame
 from src.gui.views.learning_tab_frame_v2 import LearningTabFrame
 from src.gui.views.movie_clips_tab_frame_v2 import MovieClipsTabFrameV2
 from src.gui.views.photo_optimize_tab_frame_v2 import PhotoOptimizeTabFrame
-from src.gui.views.pipeline_tab_frame_v2 import PipelineTabFrame
 from src.gui.views.prompt_tab_frame_v2 import PromptTabFrame
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
 from src.gui.views.svd_tab_frame_v2 import SVDTabFrameV2
@@ -45,7 +51,7 @@ from src.utils.config import ConfigManager
 
 logger = logging.getLogger(__name__)
 
-_WINDOW_SENTINEL_OFFSCREEN = -10000
+_WINDOW_SENTINEL_OFFSCREEN = WINDOW_SENTINEL_OFFSCREEN
 
 
 class HeaderZone(ttk.Frame):
@@ -199,12 +205,6 @@ class BottomZone(ttk.Frame):
             pass
 
 
-DEFAULT_MAIN_WINDOW_WIDTH = int(PipelineTabFrame.DEFAULT_COLUMN_WIDTH * 3.1)
-DEFAULT_MAIN_WINDOW_HEIGHT = int(900 * 1.5)
-MIN_MAIN_WINDOW_WIDTH = DEFAULT_MAIN_WINDOW_WIDTH
-MIN_MAIN_WINDOW_HEIGHT = int(740 * 1.5)
-
-
 class MainWindowV2:
     """Minimal V2 spine used by legacy controllers and new app entrypoint."""
 
@@ -233,6 +233,7 @@ class MainWindowV2:
         self.app_state.set_invoker(self._invoker)
 
         self.root.title("StableNew V2 (Spine)")
+        self._window_layout = self._current_window_layout()
         self._ensure_window_geometry()
 
         apply_theme(self.root)
@@ -779,8 +780,26 @@ class MainWindowV2:
             except Exception:
                 pass
 
+    def _layout(self) -> WindowLayout:
+        layout = getattr(self, "_window_layout", None)
+        if layout is None:
+            layout = self._window_layout = self._current_window_layout()
+        return layout
+
+    def _current_window_layout(self) -> WindowLayout:
+        """Screen-aware default/minimum window size (PR-GUI-100); never larger than the display."""
+
+        try:
+            screen_width = int(self.root.winfo_screenwidth() or 0)
+            screen_height = int(self.root.winfo_screenheight() or 0)
+        except Exception:
+            screen_width = screen_height = 0
+        if screen_width <= 0 or screen_height <= 0:
+            screen_width, screen_height = 1920, 1080
+        return compute_window_layout(screen_width, screen_height)
+
     def _ensure_window_geometry(self) -> None:
-        """Apply default geometry/minimums so the three-column layout is visible."""
+        """Apply screen-aware default geometry/minimums; long workspaces scroll instead of growing the window."""
         # PR-PERSIST-001: Try to restore saved window geometry
         ui_store = get_ui_state_store()
         state = ui_store.load_state()
@@ -804,10 +823,17 @@ class MainWindowV2:
 
             if saved_geometry:
                 try:
-                    if self._is_window_geometry_visible(saved_geometry):
-                        self.root.geometry(saved_geometry)
+                    normalized_geometry = normalize_saved_geometry(
+                        str(saved_geometry), self._layout()
+                    )
+                    if normalized_geometry and self._is_window_geometry_visible(normalized_geometry):
+                        self.root.geometry(normalized_geometry)
                         restored = True
-                        logger.debug(f"Restored window geometry: {saved_geometry}")
+                        logger.debug(
+                            "Restored window geometry: %s (saved %s)",
+                            normalized_geometry,
+                            saved_geometry,
+                        )
                     else:
                         logger.warning(
                             "Ignoring saved off-screen window geometry: %s",
@@ -834,10 +860,16 @@ class MainWindowV2:
                 width = 0
                 height = 0
 
-            if width < MIN_MAIN_WINDOW_WIDTH or height < MIN_MAIN_WINDOW_HEIGHT:
-                self.root.geometry(f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}")
+            layout = self._layout()
+            if (
+                width < layout.min_width
+                or height < layout.min_height
+                or width > layout.screen_width
+                or height > layout.screen_height
+            ):
+                self.root.geometry(layout.default_geometry)
 
-        self.root.minsize(MIN_MAIN_WINDOW_WIDTH, MIN_MAIN_WINDOW_HEIGHT)
+        self.root.minsize(self._layout().min_width, self._layout().min_height)
         try:
             self.root.deiconify()
         except Exception:
@@ -847,30 +879,14 @@ class MainWindowV2:
     def _parse_window_geometry(
         self, geometry: str
     ) -> tuple[int, int, int | None, int | None] | None:
-        text = str(geometry or "").strip()
-        if "x" not in text:
-            return None
-        try:
-            width_str, remainder = text.split("x", 1)
-            width = int(width_str)
-            x = y = None
-            if "+" in remainder:
-                height_str, x_str, y_str = remainder.split("+", 2)
-                height = int(height_str)
-                x = int(x_str)
-                y = int(y_str)
-            else:
-                height = int(remainder)
-            return width, height, x, y
-        except Exception:
-            return None
+        return parse_geometry(geometry)
 
     def _is_window_geometry_visible(self, geometry: str) -> bool:
         parsed = self._parse_window_geometry(geometry)
         if parsed is None:
             return False
         width, height, x, y = parsed
-        if width < MIN_MAIN_WINDOW_WIDTH or height < MIN_MAIN_WINDOW_HEIGHT:
+        if width < self._layout().min_width or height < self._layout().min_height:
             return False
         if x is None or y is None:
             return True
@@ -927,7 +943,7 @@ class MainWindowV2:
         if fallback_geometry and not self._is_window_geometry_visible(fallback_geometry):
             fallback_geometry = None
         if not fallback_geometry:
-            fallback_geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+            fallback_geometry = self._layout().default_geometry
         try:
             self.root.deiconify()
         except Exception:
@@ -1457,9 +1473,9 @@ class MainWindowV2:
                     if self._is_window_geometry_visible(str(preserved_geometry or "")):
                         geometry = str(preserved_geometry)
                     else:
-                        geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+                        geometry = self._layout().default_geometry
                 else:
-                    geometry = f"{DEFAULT_MAIN_WINDOW_WIDTH}x{DEFAULT_MAIN_WINDOW_HEIGHT}"
+                    geometry = self._layout().default_geometry
 
             # Get selected tab index
             selected_tab_index = 0
