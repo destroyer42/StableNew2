@@ -54,6 +54,13 @@ A reversible temporary mutation of production code was applied for each distinct
 | P8a | `detect_lora_keywords` returns nothing | pass / FAIL / pass |
 | P8b | `detect_lora_keywords` invents a keyword | pass / FAIL / pass |
 
+Independent verification (separate read-only session) re-derived every pair and **approved all nine deletions** (`VERIFIED REDUNDANT`; no blocking finding).
+It confirmed blob-identity for eight pairs and AST-identity of all test functions for the ninth (only `__main__` print text differs), no `src/`, routing or marker change,
+no stale references (the only mentions are two bare basenames in `CHANGELOG.md` that still exist at the survivor paths), and 5,068 collected (5,080 at baseline).
+Probe-validity notes from that review: P1, P2, P4, P5b, P6 are valid; P3 and P7 are weak (the survivors detect them only by crashing; identical in both copies, so nothing was lost);
+`detect_lora_keywords` returns a `LoRAMetadata` object, not a list, so P8a/P8b as worded only fail by exception, and a semantic variant (valid result with injected keywords) also fails all three
+keyword tests.
+
 Sensitivity limit found while probing (shared by both identical copies, so nothing was lost by consolidating): the matrix-filename uniqueness test derives
 uniqueness from the per-variant prefix, so a mutation that keeps the prefix but drops matrix/seed hashing is **not** detected. Strengthening it is separate debt.
 Likewise `test_reprocess_batching` only fails if the builder raises (its counts are local loop counters).
@@ -72,5 +79,9 @@ Likewise `test_reprocess_batching` only fails if the builder raises (its counts 
 All Klein/Forge/D110 canonical-path matrices, the mvp_045/060 journeys, the runtime-transition and SVD/Wan queue slices, the learning `test_pr_learn_300_*` files, the harden watchdog/cancellation files and
 the Comfy lifecycle files were kept (unique invariants or backend-specific signal). The two `tests/scripts` duplicate pairs and the near-duplicate `tests/test_pr_005_006.py` / `test_pr_008.py` vs their
 `tests/gui_v2/` versions (not byte-identical; GUI surfaces) are deferred. The identical teardown/ownership tests repeated across the `tests/tools/test_vid*` qualification files are a candidate for a later, separate review.
+
+Observation (non-blocking): `tools/ci/validation_plan.py` routes top-level `tests/test_*.py` to the GUI lane and several cross-domain rules, while the surviving copies live in
+`tests/utils`, `tests/pipeline`, `tests/state` and `tests/controller`, which the core lane covers fully. A change confined to `src/gui/*` therefore no longer selects the removed
+top-level copy of `test_override_functionality`; this is a test-selection change, not lost coverage (the test mocks the stage panel and calls no `src/gui` code), and the full census still runs it.
 
 Hosted CI: pending.
