@@ -124,7 +124,6 @@ addopts = [
     "--strict-config",
     "--showlocals",
     "--import-mode=importlib",
-    "--ignore=tests/gui",
     "--ignore=tests/gui_v1_legacy",
     "--ignore=tests/legacy",
     "--ignore=tests/quarantine",

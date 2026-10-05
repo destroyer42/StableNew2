@@ -34,7 +34,6 @@ def test_pytest_has_one_strict_configuration_authority() -> None:
     assert '"--strict-markers"' in pyproject
     assert '"--import-mode=importlib"' in pyproject
     for excluded in (
-        "tests/gui",
         "tests/gui_v1_legacy",
         "tests/legacy",
         "tests/quarantine",

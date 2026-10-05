@@ -142,7 +142,6 @@ LANE_RULES: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("tests/integration/test_pr_img*", (LANE_IMAGE,)),
     ("tests/video/*", (LANE_VIDEO,)),
     ("tests/gui_v2/*", (LANE_GUI,)),
-    ("tests/gui/*", (LANE_GUI,)),
     ("tests/tools/test_operator_journey*", (LANE_QUALIFICATION, LANE_GUI)),
     ("tests/tools/*", (LANE_QUALIFICATION,)),
     ("tests/app/*", (LANE_RUNTIME,)),
@@ -163,7 +162,7 @@ LANE_TARGETS: dict[str, tuple[str, ...]] = {
     ),
     LANE_VIDEO: ("tests/video", "tests/pipeline/test_*svd*", "tests/pipeline/test_*video*"),
     LANE_GUI: (
-        "tests/gui_v2", "tests/gui", "tests/review", "tests/curation", "tests/test_*.py",
+        "tests/gui_v2", "tests/review", "tests/curation", "tests/test_*.py",
         "tests/tools/test_operator_journey*", "tests/controller/test_*gui*", "tests/controller/test_app_controller*",
     ),
     LANE_RUNTIME: (

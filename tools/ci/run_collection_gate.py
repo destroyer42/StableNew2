@@ -34,7 +34,6 @@ GUARDED_RUNTIME_PATHS = (
 )
 
 DEFAULT_COLLECTION_EXCLUDES = (
-    "tests/gui",
     "tests/gui_v1_legacy",
     "tests/legacy",
     "tests/quarantine",
