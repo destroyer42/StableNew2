@@ -508,9 +508,9 @@ Updated: 2026-10-05
   No new experiment store, queue or lifecycle authority, no automatic search or winner selection, and Wan-Animate-2
   stays experimental per-job opt-in. Validation is CPU/fake-runtime only; no physical generation was run and no
   promotion or readiness conclusion changed.
-- `PR-GUI-100 — Responsive Workspace & Reachable Controls Foundation` is **IMPLEMENTED / VERIFIED / READY FOR
-  OWNER FINAL REVIEW; NOT MERGED** (`docs/Subsystems/GUI/PR-GUI-100_Responsive_Workspace_and_Reachable_Controls.md`). Hosted
-  GitHub CI passed both `required` and the GUI `affected` lane after the fit-driven Pipeline repair. The main
+- `PR-GUI-100 — Responsive Workspace & Reachable Controls Foundation` is **COMPLETE / ACCEPTED / HOSTED
+  VERIFIED** (`docs/Subsystems/GUI/PR-GUI-100_Responsive_Workspace_and_Reachable_Controls.md`). Hosted
+  CI passes both `required` and the GUI `affected` lane with the fit-driven Pipeline presentation. The main
   window no longer demands a viewport larger than the display: `src/gui/view_contracts/window_layout_contract.py` is the
   single screen-aware authority for the default size, the minimum size and saved-geometry normalization (Pipeline's
   separate 1400 px width force is retired). Review, SVD Img2Vid and Video Workflow scroll through the existing
