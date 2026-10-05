@@ -107,7 +107,10 @@ def test_a_manager_that_declares_a_profile_applies_exactly_that_command_and_keep
 
 def test_the_stablenew_managed_a1111_configuration_declares_the_canonical_profiles(tmp_path, monkeypatch):
     (tmp_path / "webui-user.bat").write_text("", encoding="utf-8")
-    monkeypatch.setattr("src.utils.config.ConfigManager.load_settings", lambda self: {"webui_workdir": str(tmp_path)})
+    monkeypatch.setattr(
+        "src.utils.config.ConfigManager.load_settings",
+        lambda self: {"webui_workdir": str(tmp_path), "webui_runtime_identity": "a1111_webui"},  # explicit rollback
+    )
     monkeypatch.delenv("STABLENEW_WEBUI_RUNTIME_IDENTITY", raising=False)
     monkeypatch.setattr("src.api.webui_process_manager._save_webui_cache", lambda *_a, **_k: None)
 
@@ -128,15 +131,35 @@ def test_a_configured_forge_identity_never_inherits_the_a1111_profile_commands(t
         lambda self: {"webui_workdir": str(tmp_path), "webui_runtime_identity": "forge_webui"},
     )
     monkeypatch.setattr("src.api.webui_process_manager._save_webui_cache", lambda *_a, **_k: None)
+    qualified = {
+        "runtime_identity": "forge_webui", "command": list(FORGE_QUALIFIED), "working_dir": r"C:\forge\source",
+        "env_overrides": {}, "endpoint": "http://127.0.0.1:7871", "startup_timeout_seconds": 180,
+    }
+    monkeypatch.setattr("src.utils.managed_forge_runtime.resolve_default_launch_profile", lambda **_k: qualified)
 
     config = build_default_webui_process_config()
 
     assert config is not None and config.runtime_identity == "forge_webui"
-    assert config.launch_profile_commands is None
+    assert config.command == FORGE_QUALIFIED and config.launch_profile_commands is None
     manager = WebUIProcessManager(config)
     before = _snapshot(manager)
     assert not manager.supports_launch_profile("sdxl_guarded") and manager.set_launch_profile("sdxl_guarded") is False
     assert _snapshot(manager) == before
+
+
+def test_a_forge_identity_without_its_managed_runtime_fails_closed_and_never_uses_the_a1111_workdir(tmp_path, monkeypatch):
+    from src.utils.managed_forge_runtime import ManagedForgeUnavailable
+
+    (tmp_path / "webui-user.bat").write_text("", encoding="utf-8")  # a perfectly good A1111 workdir
+    monkeypatch.setattr(
+        "src.utils.config.ConfigManager.load_settings",
+        lambda self: {"webui_workdir": str(tmp_path), "webui_runtime_identity": "forge_webui"},
+    )
+    monkeypatch.setattr("src.api.webui_process_manager._save_webui_cache", lambda *_a, **_k: None)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "no-forge-here"))  # no managed install under the default root
+
+    with pytest.raises(ManagedForgeUnavailable, match="not installed automatically"):
+        build_default_webui_process_config()
 
 
 @pytest.fixture

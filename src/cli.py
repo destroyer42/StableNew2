@@ -4,6 +4,7 @@ import argparse
 import logging
 from pathlib import Path
 
+from .api.webui_runtime_identity import A1111_DEFAULT_BASE_URL, resolve_effective_webui_base_url
 from .app.bootstrap import build_cli_kernel
 from .pipeline import VideoCreator
 from .pipeline.cli_njr_builder import build_cli_njr
@@ -60,8 +61,9 @@ def main():
     parser.add_argument(
         "--api-url",
         type=str,
-        default="http://127.0.0.1:7860",
-        help="SD WebUI API URL (default: http://127.0.0.1:7860)",
+        default=None,
+        help="SD WebUI API URL (default: the configured runtime's endpoint: managed Forge "
+        "http://127.0.0.1:7871, or http://127.0.0.1:7860 when a1111_webui is selected)",
     )
 
     parser.add_argument("--no-img2img", action="store_true", help="Skip img2img cleanup stage")
@@ -112,16 +114,15 @@ def main():
         config.setdefault("pipeline", {})["upscale_enabled"] = False
         logger.info("Upscale stage disabled")
 
-    # Modify config based on arguments
-    if args.api_url:
-        config["api"]["base_url"] = args.api_url
+    # An explicit --api-url wins; otherwise the identity-aware endpoint of the configured runtime.
+    api_url = args.api_url or resolve_effective_webui_base_url(config_manager.load_settings())
+    config["api"]["base_url"] = api_url
 
     # Initialize API client with port discovery
-    api_url = config["api"]["base_url"]
     logger.info("Connecting to SD WebUI API...")
 
     # Try to find the actual API port if using default
-    if api_url == "http://127.0.0.1:7860":
+    if api_url == A1111_DEFAULT_BASE_URL:  # port discovery is only for the default A1111 endpoint
         discovered_url = find_webui_api_port()
         if discovered_url:
             logger.info(f"Found WebUI API at {discovered_url}")

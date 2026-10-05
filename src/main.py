@@ -32,6 +32,7 @@ from .api.webui_process_manager import (
     WebUIProcessManager,
     build_default_webui_process_config,
 )
+from .api.webui_runtime_identity import effective_webui_base_url
 from .app_factory import build_v2_app
 from .utils import setup_logging
 from .utils.file_access_log_v2_5_2025_11_26 import FileAccessLogger
@@ -265,9 +266,7 @@ def bootstrap_comfy(config: dict[str, Any]) -> ComfyProcessManager | None:
 
 
 def _load_webui_config() -> dict[str, Any]:
-    cfg = {
-        "webui_base_url": os.getenv("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"),
-    }
+    cfg = {"webui_base_url": effective_webui_base_url()}
 
     proc_config = build_default_webui_process_config()
     if proc_config:
@@ -286,9 +285,7 @@ def _load_webui_config() -> dict[str, Any]:
                 proc_config.startup_timeout_seconds = float(timeout_override)
             except Exception:
                 pass
-        cfg["webui_base_url"] = str(
-            proc_config.base_url or cfg.get("webui_base_url") or "http://127.0.0.1:7860"
-        )
+        cfg["webui_base_url"] = str(proc_config.base_url or cfg["webui_base_url"])
         cfg["process_config"] = proc_config
     return cfg
 

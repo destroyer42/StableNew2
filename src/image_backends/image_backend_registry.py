@@ -45,7 +45,8 @@ class ImageBackendRegistry:
 def build_default_image_backend_registry() -> ImageBackendRegistry:
     registry = ImageBackendRegistry()
     registry.register(A1111WebUIImageBackend())
-    # Registered for explicit selection only; DEFAULT_IMAGE_BACKEND_ID stays a1111_webui and the
-    # runner never resolves a missing identity to Forge (PR-IMG-FORGE-100 qualification).
+    # Both identities are registered. New work defaults to Forge (NEW_IMAGE_BACKEND_DEFAULT_ID) while a record with no
+    # persisted identity still resolves to A1111 (LEGACY_MISSING_IMAGE_BACKEND_ID); the runner never falls back
+    # between them.
     registry.register(ForgeWebUIImageBackend())
     return registry

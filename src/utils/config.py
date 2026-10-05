@@ -181,6 +181,7 @@ class ConfigManager:
         self._default_preset_path = self.presets_dir / ".default_preset"
         self._settings_path = self.presets_dir / "settings.json"
         self._settings_cache: dict[str, Any] | None = None
+        self._settings_load_error: str | None = None
 
     def load_preset(self, name: str) -> dict[str, Any] | None:
         """
@@ -766,15 +767,30 @@ class ConfigManager:
         if self._settings_cache is not None:
             return self._settings_cache
         self._settings_cache = {}
+        self._settings_load_error = None
         if self._settings_path.exists():
             try:
                 text = self._settings_path.read_text(encoding="utf-8")
                 data = json.loads(text)
                 if isinstance(data, dict):
                     self._settings_cache = data
+                else:
+                    self._settings_load_error = "settings.json is not a JSON object"
             except Exception as exc:  # noqa: BLE001
+                self._settings_load_error = str(exc)
                 logger.warning("Failed to load engine settings: %s", exc)
         return self._settings_cache
+
+    @property
+    def settings_load_error(self) -> str | None:
+        """Why ``settings.json`` was unreadable on the last load (None when it was read or absent).
+
+        Most settings degrade to defaults; backend selection reads this to fail closed instead
+        (``src.api.webui_runtime_identity.load_backend_settings``).
+        """
+
+        self._load_settings()
+        return self._settings_load_error
 
     def load_settings(self) -> dict[str, Any]:
         defaults = self._default_settings()
@@ -787,6 +803,14 @@ class ConfigManager:
             prompt_optimizer = dict(defaults["prompt_optimizer"])
             prompt_optimizer.update(stored["prompt_optimizer"])
             merged["prompt_optimizer"] = prompt_optimizer
+        try:
+            # The endpoint is identity-aware (managed Forge 7871, A1111 7860): present the EFFECTIVE value so every
+            # reader, including the Engine Settings dialog, sees the endpoint StableNew will actually use.
+            from src.api.webui_runtime_identity import resolve_effective_webui_base_url
+
+            merged["webui_base_url"] = resolve_effective_webui_base_url(merged)
+        except ValueError:
+            pass  # an unrecognized identity is reported by backend/runtime selection (fail closed), not hidden here
         return merged
 
     def get_setting(self, key: str, default: Any = None) -> Any:
@@ -804,6 +828,7 @@ class ConfigManager:
             with open(self._settings_path, "w", encoding="utf-8") as fh:
                 json.dump(data, fh, indent=2, ensure_ascii=False)
             self._settings_cache = dict(data)
+            self._settings_load_error = None
             return True
         except Exception as exc:
             logger.error("Failed to persist engine settings: %s", exc)
@@ -813,11 +838,14 @@ class ConfigManager:
         from src.config import app_config
 
         return {
+            # The A1111 endpoint (the identity-aware default for the a1111_webui rollback). load_settings presents the
+            # EFFECTIVE endpoint: an unset/legacy value resolves to managed Forge's 7871 unless A1111 is selected.
             "webui_base_url": "http://127.0.0.1:7860",
-            # WebUI-family runtime identity (PR-IMG-FORGE-100): a1111_webui (default) or forge_webui.
-            "webui_runtime_identity": "a1111_webui",
-            # Managed Forge launch profile JSON (see docs/runbooks/managed_forge_runtime.md). Used only when
-            # webui_runtime_identity is forge_webui; empty keeps A1111 (the rollback) fully independent.
+            # webui_runtime_identity is intentionally ABSENT: unset means the product default, managed Forge
+            # (PR-IMG-FORGE-120); an explicit "a1111_webui" is the supported rollback.
+            # Optional advanced override of the managed Forge launch profile JSON (see
+            # docs/runbooks/managed_forge_runtime.md). Empty (the default) builds the canonical managed install's
+            # profile from config/managed_forge_runtime.json. Ignored for an explicit a1111_webui.
             "forge_runtime_profile_path": "",
             "webui_workdir": str(app_config.get_webui_workdir() or ""),
             "webui_autostart_enabled": app_config.is_webui_autostart_enabled(),

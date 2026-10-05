@@ -169,6 +169,14 @@ def _default_svd_service() -> Any:
     return SVDService()
 
 
+def _load_settings_mapping() -> Any:
+    """The settings backend/endpoint selection reads; unreadable settings fail closed (no endpoint is guessed)."""
+
+    from src.api.webui_runtime_identity import load_backend_settings
+
+    return load_backend_settings()
+
+
 def _configured_endpoint(setting_name: str, environment_name: str, default: str) -> str:
     """Read one existing configured endpoint without constructing or starting a manager."""
 
@@ -184,21 +192,21 @@ def _default_webui_endpoint_presence() -> bool:
     """Observe only the configured WebUI endpoint; never discover or mutate processes."""
 
     from src.api.healthcheck import probe_webui_endpoint
+    from src.api.webui_runtime_identity import resolve_effective_webui_base_url
 
-    base_url = _configured_endpoint(
-        "webui_base_url", "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
-    )
+    base_url = resolve_effective_webui_base_url(_load_settings_mapping())
     return probe_webui_endpoint(base_url, timeout=0.5) != "free"
 
 
 def _default_webui_endpoint_identity() -> str:
     """Read-only identity of the configured WebUI endpoint; called only when it is occupied."""
 
-    from src.api.webui_runtime_identity import probe_endpoint_runtime_identity
-
-    base_url = _configured_endpoint(
-        "webui_base_url", "STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860"
+    from src.api.webui_runtime_identity import (
+        probe_endpoint_runtime_identity,
+        resolve_effective_webui_base_url,
     )
+
+    base_url = resolve_effective_webui_base_url(_load_settings_mapping())
     return probe_endpoint_runtime_identity(base_url).identity
 
 

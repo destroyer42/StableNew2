@@ -6,7 +6,7 @@ import json
 import re
 from pathlib import Path
 
-from src.image_backends import DEFAULT_IMAGE_BACKEND_ID, FORGE_IMAGE_BACKEND_ID
+from src.image_backends import A1111_IMAGE_BACKEND_ID, FORGE_IMAGE_BACKEND_ID
 
 DESCRIPTOR = Path(__file__).resolve().parents[2] / "config" / "forge_qualification_runtime.json"
 SHA40 = re.compile(r"^[0-9a-f]{40}$")
@@ -16,10 +16,12 @@ def _load() -> dict:
     return json.loads(DESCRIPTOR.read_text(encoding="utf-8"))
 
 
-def test_descriptor_pins_backend_identity_and_keeps_a1111_the_default() -> None:
+def test_descriptor_pins_backend_identity_and_records_the_qualification_time_a1111_default() -> None:
+    # The descriptor is frozen qualification evidence: it records the default policy in force WHEN Forge was
+    # qualified (A1111). The product default was promoted afterwards (PR-IMG-FORGE-120); that does not rewrite evidence.
     data = _load()
     assert data["backend_id"] == FORGE_IMAGE_BACKEND_ID == "forge_webui"
-    assert data["default_image_backend_id"] == DEFAULT_IMAGE_BACKEND_ID == "a1111_webui"
+    assert data["default_image_backend_id"] == A1111_IMAGE_BACKEND_ID == "a1111_webui"
     assert data["backend_policy"]["historical_records_without_image_backend"].startswith(
         "resolve to a1111_webui"
     )

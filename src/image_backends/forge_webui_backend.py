@@ -1,11 +1,12 @@
-"""Forge WebUI image backend (PR-IMG-FORGE-100): explicit, non-default ``forge_webui`` identity.
+"""Forge WebUI image backend (PR-IMG-FORGE-100): the ``forge_webui`` identity, the new-work default (PR-IMG-FORGE-120).
 
 Forge shares StableNew's WebUI-family executor with A1111; the stage translation is inherited from
 ``WebUIFamilyImageBackend`` unchanged. What makes this a distinct backend is its durable identity,
 the ``forge_webui`` runtime-transition target (A1111 and Forge occupy one WebUI-family slot, so the
 other identity is released only when StableNew owns it), and the read-only runtime identity guard
 that requires a *positively identified* Forge endpoint before any generation dispatch. It never
-falls back to A1111 and is never selected for historical records without an image backend.
+falls back to A1111 and is never selected for historical records without an image backend (those resolve
+to A1111, ``LEGACY_MISSING_IMAGE_BACKEND_ID``); only newly constructed work defaults to it.
 
 Capabilities are exactly the four still-image stages StableNew's executor already drives. ControlNet
 is deliberately not a StableNew image stage.

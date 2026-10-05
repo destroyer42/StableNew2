@@ -1555,7 +1555,7 @@ class PipelineController(CorePipelineController):
                 self._pipeline_runner.set_status_callback(self._get_runtime_status_callback())
             return self._pipeline_runner
         runtime_ports = getattr(self, "_runtime_ports", None) or DefaultImageRuntimePorts()
-        api_client = runtime_ports.create_client(base_url="http://127.0.0.1:7860")
+        api_client = runtime_ports.create_client(base_url=DefaultImageRuntimePorts.base_url())
         return runtime_ports.create_runner(
             api_client=api_client,
             structured_logger=StructuredLogger(),

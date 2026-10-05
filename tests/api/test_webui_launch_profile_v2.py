@@ -13,6 +13,8 @@ def test_resolve_webui_launch_command_supports_guarded_profiles() -> None:
 
 
 def test_build_default_webui_process_config_carries_launch_profile(monkeypatch, tmp_path) -> None:
+    # The A1111 launch-profile contract belongs to the explicit A1111 rollback (managed Forge is the default).
+    monkeypatch.setenv("STABLENEW_WEBUI_RUNTIME_IDENTITY", "a1111_webui")
     monkeypatch.setattr("src.api.webui_process_manager._load_webui_cache", lambda: {})
     monkeypatch.setattr(
         "src.api.webui_process_manager.detect_default_webui_workdir", lambda *args, **kwargs: None

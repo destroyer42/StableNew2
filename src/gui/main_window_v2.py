@@ -1655,7 +1655,13 @@ def run_app(
         root = tk.Tk()
 
     if webui_manager is None:
-        proc_config = build_default_webui_process_config()
+        try:
+            proc_config = build_default_webui_process_config()
+        except (ValueError, RuntimeError) as exc:
+            # Fail closed: a configuration/setup problem (for example managed Forge not installed) is reported and no
+            # runtime is started or substituted; the connection controller surfaces the same error.
+            logger.error("WebUI runtime is not configured: %s", exc)
+            proc_config = None
         if proc_config:
             webui_manager = WebUIProcessManager(proc_config)
             if proc_config.autostart_enabled:

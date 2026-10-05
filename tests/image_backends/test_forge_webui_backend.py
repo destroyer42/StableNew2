@@ -22,8 +22,10 @@ from src.api.webui_runtime_identity import (
     WebUIRuntimeIdentityMismatch,
 )
 from src.image_backends import (
-    DEFAULT_IMAGE_BACKEND_ID,
+    A1111_IMAGE_BACKEND_ID,
     FORGE_IMAGE_BACKEND_ID,
+    LEGACY_MISSING_IMAGE_BACKEND_ID,
+    NEW_IMAGE_BACKEND_DEFAULT_ID,
     A1111WebUIImageBackend,
     ForgeWebUIImageBackend,
     ImageBackendRegistry,
@@ -93,11 +95,11 @@ def _runner(tmp_path: Path, observed: WebUIRuntimeIdentity | None, transitions: 
 # --------------------------------------------------------------------------------------------
 
 
-def test_forge_identity_is_durable_and_a1111_remains_the_default() -> None:
-    assert FORGE_IMAGE_BACKEND_ID == "forge_webui"
-    assert DEFAULT_IMAGE_BACKEND_ID == "a1111_webui"
-    assert ForgeWebUIImageBackend.backend_id == "forge_webui"
-    assert normalize_image_backend_options(None)["image"]["backend_id"] == "a1111_webui"
+def test_forge_is_the_new_work_default_and_a1111_the_historical_compatibility_identity() -> None:
+    assert FORGE_IMAGE_BACKEND_ID == NEW_IMAGE_BACKEND_DEFAULT_ID == "forge_webui"
+    assert A1111_IMAGE_BACKEND_ID == LEGACY_MISSING_IMAGE_BACKEND_ID == "a1111_webui"
+    assert ForgeWebUIImageBackend.backend_id == "forge_webui" and A1111WebUIImageBackend.backend_id == "a1111_webui"
+    assert normalize_image_backend_options(None)["image"]["backend_id"] == "forge_webui"
     assert (
         normalize_image_backend_options({"image": {"backend_id": "forge_webui"}})["image"][
             "backend_id"
@@ -106,7 +108,7 @@ def test_forge_identity_is_durable_and_a1111_remains_the_default() -> None:
     )
 
 
-def test_registry_contains_forge_without_making_it_the_default() -> None:
+def test_registry_contains_both_backends_and_historical_records_still_resolve_to_a1111() -> None:
     registry = build_default_image_backend_registry()
     assert registry.list_backend_ids() == ["a1111_webui", "forge_webui"]
     assert isinstance(registry.get("forge_webui"), ForgeWebUIImageBackend)
@@ -116,9 +118,15 @@ def test_registry_contains_forge_without_making_it_the_default() -> None:
     assert resolve_image_backend_id({"image": {"backend_id": "forge_webui"}}) == "forge_webui"
 
 
-def test_new_image_work_defaults_to_a1111_and_explicit_forge_survives_compilation() -> None:
+def test_new_image_work_defaults_to_forge_and_explicit_identities_survive_compilation() -> None:
     default_record = build_cli_njr(prompt="p", config={"txt2img": {}}, batch_size=1)
-    assert default_record.backend_options["image"]["backend_id"] == "a1111_webui"
+    assert default_record.backend_options["image"]["backend_id"] == "forge_webui"
+    a1111_record = build_cli_njr(
+        prompt="p",
+        config={"txt2img": {}, "backend_options": {"image": {"backend_id": "a1111_webui"}}},
+        batch_size=1,
+    )
+    assert a1111_record.backend_options["image"]["backend_id"] == "a1111_webui"  # an explicit identity is never rewritten
     forge_record = build_cli_njr(
         prompt="p",
         config={"txt2img": {}, "backend_options": {"image": {"backend_id": "forge_webui"}}},

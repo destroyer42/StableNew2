@@ -15,6 +15,7 @@ from src.api.webui_process_manager import (
     WebUIProcessManager,
     build_default_webui_process_config,
 )
+from src.api.webui_runtime_identity import effective_webui_base_url
 from src.config import app_config
 from src.utils import LogContext, log_with_ctx
 
@@ -43,9 +44,7 @@ class WebUIConnectionController:
     ) -> None:
         self._state = WebUIConnectionState.DISCONNECTED
         self._logger = logger or logging.getLogger(__name__)
-        self._base_url_provider = base_url_provider or (
-            lambda: app_config._env_default("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
-        )
+        self._base_url_provider = base_url_provider or effective_webui_base_url
         self._ready_callbacks: list[Callable[[], None]] = list(ready_callbacks or [])
         self._on_resources_updated: Callable[[dict[str, list[object]]], None] | None = None
         self._process_manager: WebUIProcessManager | None = None

@@ -4,6 +4,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
 
+import pytest
+
 from src.pipeline.cli_njr_builder import build_cli_njr
 from src.pipeline.pipeline_runner import PipelineRunner
 from src.utils.config import build_sampler_scheduler_payload
@@ -42,6 +44,17 @@ class _CapturingClient:
 
     def check_connection(self, **_kwargs):
         return True
+
+
+@pytest.fixture(autouse=True)
+def _explicit_a1111_compatibility_runtime(monkeypatch):
+    """These tests drive a deterministic fake A1111-style WebUI.
+
+    Managed Forge is the product default (PR-IMG-FORGE-120), so the compatibility backend under test is selected
+    explicitly, exactly as an operator on the A1111 rollback would; a fake cannot be positively identified as Forge.
+    """
+
+    monkeypatch.setenv("STABLENEW_WEBUI_RUNTIME_IDENTITY", "a1111_webui")
 
 
 def test_txt2img_config_passes_through_canonical_runner_path(tmp_path: Path) -> None:

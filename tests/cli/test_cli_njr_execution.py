@@ -106,6 +106,9 @@ class _FakeConfigManager:
     def get_default_config(self) -> dict[str, object]:
         return _base_config()
 
+    def load_settings(self) -> dict[str, object]:
+        return {}  # nothing configured: the CLI resolves the default (managed Forge) endpoint
+
 
 class _FakeClient:
     def __init__(self, *, base_url: str, timeout: int) -> None:

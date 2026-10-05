@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from typing import Any
 
+from src.api.webui_runtime_identity import load_backend_settings, resolve_effective_webui_base_url
 from src.app.optional_dependency_probes import (
     OptionalDependencySnapshot,
     build_optional_dependency_snapshot,
@@ -25,11 +25,8 @@ class ApplicationKernel:
 
 
 def _resolve_default_webui_base_url(config_manager: ConfigManager) -> str:
-    settings = config_manager.load_settings()
-    return str(settings.get("webui_base_url") or "").strip() or os.getenv(
-        "STABLENEW_WEBUI_BASE_URL",
-        "http://127.0.0.1:7860",
-    )
+    # Identity-aware: the explicit endpoint, else managed Forge's 7871 (or A1111's 7860 for the explicit rollback).
+    return resolve_effective_webui_base_url(load_backend_settings(config_manager))
 
 
 def build_application_kernel(

@@ -3,6 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from src.controller.app_controller import AppController
 from src.controller.pipeline_controller import PipelineController
 from src.controller.video_workflow_controller import VideoWorkflowController
@@ -66,15 +68,32 @@ class _WorkflowRegistryStub:
         return _stub_spec(workflow_version=workflow_version or "1.0.0")
 
 
-def test_pipeline_controller_uses_runtime_ports_for_runner_creation() -> None:
+@pytest.mark.parametrize(
+    ("settings", "expected_endpoint"),
+    [
+        ({}, "http://127.0.0.1:7871"),  # nothing configured: the managed Forge default endpoint
+        ({"webui_runtime_identity": "a1111_webui"}, "http://127.0.0.1:7860"),  # explicit A1111 rollback
+        ({"webui_runtime_identity": "a1111_webui", "webui_base_url": "http://127.0.0.1:7861"}, "http://127.0.0.1:7861"),
+    ],
+)
+def test_pipeline_controller_uses_runtime_ports_for_runner_creation(monkeypatch, settings, expected_endpoint) -> None:
+    import src.utils.config as config_module
+
+    class _Settings:
+        def load_settings(self):
+            return dict(settings)
+
+    monkeypatch.setattr(config_module, "ConfigManager", lambda *a, **k: _Settings())
+    monkeypatch.delenv("STABLENEW_WEBUI_RUNTIME_IDENTITY", raising=False)
+    monkeypatch.delenv("STABLENEW_WEBUI_BASE_URL", raising=False)
     runtime_ports = _RuntimePortsStub()
     controller = PipelineController(runtime_ports=runtime_ports)
 
     runner = controller._create_runtime_pipeline_runner()
 
-    assert runtime_ports.created_clients == ["http://127.0.0.1:7860"]
+    assert runtime_ports.created_clients == [expected_endpoint]
     assert runtime_ports.runner_calls
-    assert runner["api_client"] == {"base_url": "http://127.0.0.1:7860"}
+    assert runner["api_client"] == {"base_url": expected_endpoint}
 
 
 def test_app_controller_uses_runtime_ports_for_client_and_runner(monkeypatch) -> None:

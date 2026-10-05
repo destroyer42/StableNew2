@@ -18,6 +18,10 @@ Policy (:func:`assert_runtime_matches_backend`): a ``forge_webui`` backend requi
 identified* Forge; an ``a1111_webui`` backend rejects a positively identified Forge but stays
 tolerant of an endpoint it cannot classify (A1111-family forks keep working as before). The guard
 runs before any generation dispatch. Nothing here performs network or process work at import time.
+
+Configured identity (PR-IMG-FORGE-120): an unset ``webui_runtime_identity`` is the product default, managed Forge;
+an explicit ``a1111_webui`` is the supported rollback; an unrecognized value fails closed. The default endpoint is
+identity-aware (Forge ``127.0.0.1:7871``, A1111 ``127.0.0.1:7860``). There is no fallback between the two.
 """
 
 from __future__ import annotations
@@ -29,6 +33,13 @@ from typing import Any
 A1111_WEBUI_IDENTITY = "a1111_webui"
 FORGE_WEBUI_IDENTITY = "forge_webui"
 UNKNOWN_WEBUI_IDENTITY = "unknown"
+
+#: The runtime identity of NEW production work when nothing is configured (PR-IMG-FORGE-120): managed Forge.
+#: A1111 stays supported, but only as an explicit ``webui_runtime_identity`` rollback.
+DEFAULT_WEBUI_RUNTIME_IDENTITY = FORGE_WEBUI_IDENTITY
+
+#: A1111's default endpoint and the flat default every settings file written before the Forge promotion persisted.
+A1111_DEFAULT_BASE_URL = "http://127.0.0.1:7860"
 
 #: Image backend identities that share the single WebUI-family runtime slot.
 WEBUI_FAMILY_IDENTITIES = frozenset({A1111_WEBUI_IDENTITY, FORGE_WEBUI_IDENTITY})
@@ -70,6 +81,10 @@ class WebUIRuntimeIdentity:
 UNKNOWN_RUNTIME_IDENTITY = WebUIRuntimeIdentity()
 
 
+class WebUIRuntimeConfigurationError(ValueError):
+    """The configured WebUI runtime identity is unusable; configuration fails closed (never a silent A1111/Forge swap)."""
+
+
 class WebUIRuntimeIdentityMismatch(RuntimeError):
     """The connected endpoint cannot execute the requested image backend identity."""
 
@@ -86,40 +101,46 @@ class WebUIRuntimeIdentityMismatch(RuntimeError):
                 f"{backend_id} cannot run on the connected WebUI, which was classified "
                 f"'{observed.identity}'"
             )
+            if backend_id == A1111_WEBUI_IDENTITY and observed.is_forge:
+                reason += (
+                    " (ACTION REQUIRED: StableNew is configured for managed Forge, the product default. To run "
+                    "this A1111 job, such as a replay of work created before the Forge default, select the A1111 "
+                    "rollback explicitly with webui_runtime_identity = a1111_webui and restart StableNew)"
+                )
         super().__init__(
             f"WebUI runtime identity mismatch: {reason}. Generation was not dispatched; no backend "
             "fallback is performed."
         )
 
 
-def normalize_webui_runtime_identity(value: Any, *, default: str = A1111_WEBUI_IDENTITY) -> str:
+def normalize_webui_runtime_identity(value: Any, *, default: str = DEFAULT_WEBUI_RUNTIME_IDENTITY) -> str:
     """Return a known WebUI-family identity, or ``default`` for a missing/blank value.
 
-    An explicit but unrecognized value raises ``ValueError`` (never silently coerced).
+    An explicit but unrecognized value raises :class:`WebUIRuntimeConfigurationError` (never silently coerced).
     """
 
     text = str(value or "").strip()
     if not text:
         return default
     if text not in WEBUI_FAMILY_IDENTITIES:
-        raise ValueError(
-            f"Unknown WebUI runtime identity '{text}'; expected one of "
-            f"{sorted(WEBUI_FAMILY_IDENTITIES)}"
+        raise WebUIRuntimeConfigurationError(
+            f"Unknown WebUI runtime identity '{text}'; expected one of {sorted(WEBUI_FAMILY_IDENTITIES)}. "
+            "Fix webui_runtime_identity (or STABLENEW_WEBUI_RUNTIME_IDENTITY); no backend fallback is performed."
         )
     return text
 
 
 def resolve_configured_webui_runtime_identity(settings: Any = None) -> str:
-    """Return the WebUI-family identity StableNew is configured to run (default ``a1111_webui``).
+    """Return the WebUI-family identity StableNew is configured to run (default ``forge_webui``).
 
-    Reads the explicit ``webui_runtime_identity`` setting (``STABLENEW_WEBUI_RUNTIME_IDENTITY`` is
-    the environment fallback). The identity is configuration, never inferred from a model name or an
-    install folder. An unrecognized value is logged and degrades to the legacy A1111 default; the
-    runtime identity guard still rejects any forge_webui job before dispatch, so a typo cannot make
-    a Forge job run on A1111 (or vice versa).
+    Reads the explicit ``webui_runtime_identity`` setting (``STABLENEW_WEBUI_RUNTIME_IDENTITY`` is the
+    environment fallback). A missing/blank value selects the product default, managed Forge; an explicit
+    ``a1111_webui`` is the supported rollback and is never rewritten. The identity is configuration, never
+    inferred from a model name or an install folder. An unrecognized value raises
+    :class:`WebUIRuntimeConfigurationError`: configuration fails closed, there is no silent degradation to either
+    backend.
     """
 
-    import logging
     import os
 
     raw: Any = None
@@ -127,11 +148,83 @@ def resolve_configured_webui_runtime_identity(settings: Any = None) -> str:
         raw = settings.get("webui_runtime_identity")
     if not str(raw or "").strip():
         raw = os.environ.get("STABLENEW_WEBUI_RUNTIME_IDENTITY")
+    return normalize_webui_runtime_identity(raw)
+
+
+def load_backend_settings(config_manager: Any = None) -> Mapping[str, Any]:
+    """The settings backend/runtime selection reads, failing closed when they cannot be read.
+
+    ``ConfigManager.load_settings`` tolerates a corrupt ``settings.json`` (it logs and uses defaults) because most
+    settings are cosmetic. Backend selection is not: silently reading defaults could drop an explicit
+    ``webui_runtime_identity = a1111_webui`` rollback and run on Forge, or the reverse. An unreadable file or manager
+    therefore raises :class:`WebUIRuntimeConfigurationError`; nothing is selected and no generation is attempted.
+    """
+
     try:
-        return normalize_webui_runtime_identity(raw)
-    except ValueError as exc:
-        logging.getLogger(__name__).error("%s; using %s", exc, A1111_WEBUI_IDENTITY)
-        return A1111_WEBUI_IDENTITY
+        if config_manager is None:
+            from src.utils.config import ConfigManager
+
+            config_manager = ConfigManager()
+        settings = config_manager.load_settings()
+    except WebUIRuntimeConfigurationError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - any read failure is a configuration error here
+        raise WebUIRuntimeConfigurationError(
+            f"The StableNew settings could not be read ({exc}); the WebUI runtime was not selected and no backend "
+            "fallback is performed. Fix or remove the settings file."
+        ) from exc
+    load_error = getattr(config_manager, "settings_load_error", None)
+    if isinstance(load_error, str) and load_error:
+        raise WebUIRuntimeConfigurationError(
+            f"The StableNew settings file is unreadable ({load_error}); the WebUI runtime was not selected and no "
+            "backend fallback is performed. Fix or remove presets/settings.json."
+        )
+    return settings if isinstance(settings, Mapping) else {}
+
+
+def default_webui_base_url(identity: str) -> str:
+    """The identity-aware default endpoint: managed Forge ``127.0.0.1:7871`` (from its manifest), A1111 ``:7860``."""
+
+    if identity == FORGE_WEBUI_IDENTITY:
+        from src.utils.managed_forge_runtime import default_endpoint
+
+        return default_endpoint()
+    return A1111_DEFAULT_BASE_URL
+
+
+def explicit_webui_base_url(settings: Any = None, *, identity: str | None = None) -> str | None:
+    """The endpoint the operator explicitly chose for this identity, or ``None`` (use the identity default).
+
+    Precedence is unchanged: ``webui_base_url`` setting, then ``STABLENEW_WEBUI_BASE_URL``. For Forge, the A1111
+    default ``http://127.0.0.1:7860`` is not an explicit Forge endpoint: every settings file written before the
+    promotion persisted it as the flat default, so it carries no operator intent for Forge and resolves to the
+    Forge default. A genuinely different URL stays authoritative (and is validated against the managed runtime).
+    """
+
+    import os
+
+    resolved = identity or resolve_configured_webui_runtime_identity(settings)
+    value = ""
+    if isinstance(settings, Mapping):
+        value = str(settings.get("webui_base_url") or "").strip()
+    if resolved == FORGE_WEBUI_IDENTITY and value.rstrip("/") == A1111_DEFAULT_BASE_URL:
+        value = ""
+    if not value:
+        value = os.environ.get("STABLENEW_WEBUI_BASE_URL", "").strip()
+    return value or None
+
+
+def resolve_effective_webui_base_url(settings: Any = None, *, identity: str | None = None) -> str:
+    """The endpoint of the configured WebUI-family runtime: the explicit choice, else the identity default."""
+
+    resolved = identity or resolve_configured_webui_runtime_identity(settings)
+    return explicit_webui_base_url(settings, identity=resolved) or default_webui_base_url(resolved)
+
+
+def effective_webui_base_url() -> str:
+    """:func:`resolve_effective_webui_base_url` for callers that hold no settings (reads them strictly)."""
+
+    return resolve_effective_webui_base_url(load_backend_settings())
 
 
 def classify_runtime_identity(
@@ -240,18 +333,26 @@ def assert_runtime_matches_backend(backend_id: str, observed: WebUIRuntimeIdenti
 
 
 __all__ = [
+    "A1111_DEFAULT_BASE_URL",
     "A1111_WEBUI_IDENTITY",
+    "DEFAULT_WEBUI_RUNTIME_IDENTITY",
     "FORGE_WEBUI_IDENTITY",
     "UNKNOWN_RUNTIME_IDENTITY",
     "UNKNOWN_WEBUI_IDENTITY",
     "WEBUI_FAMILY_IDENTITIES",
+    "WebUIRuntimeConfigurationError",
     "WebUIRuntimeIdentity",
     "WebUIRuntimeIdentityMismatch",
     "assert_runtime_matches_backend",
     "classify_client_runtime",
     "classify_runtime_identity",
+    "default_webui_base_url",
+    "effective_webui_base_url",
+    "explicit_webui_base_url",
+    "load_backend_settings",
     "normalize_webui_runtime_identity",
     "probe_endpoint_runtime_identity",
     "probe_runtime_identity",
     "resolve_configured_webui_runtime_identity",
+    "resolve_effective_webui_base_url",
 ]
