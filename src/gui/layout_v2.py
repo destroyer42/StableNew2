@@ -3,6 +3,7 @@ from __future__ import annotations
 import tkinter as tk
 import weakref
 from collections.abc import Callable, Mapping, Sequence
+from tkinter import ttk
 
 from src.gui.zone_map_v2 import get_root_columns, get_root_rows
 
@@ -119,3 +120,45 @@ def apply_compact_label_wraps(root_widget: tk.Misc, compact: bool, wraplength_ca
                 widget.configure(wraplength=original)
                 changed += 1
     return changed
+
+
+_ACTIONABLE_CLASSES = (
+    ttk.Button,
+    ttk.Combobox,
+    ttk.Entry,
+    ttk.Spinbox,
+    ttk.Checkbutton,
+    ttk.Radiobutton,
+)
+
+
+def measure_horizontal_extent(content: tk.Misc, viewport_width: int) -> tuple[int, int]:
+    """(required_width, available_width) of ``content`` inside a viewport that never scrolls horizontally.
+
+    ``required_width`` is the rightmost edge of any mapped actionable control, measured from the content's left edge, so
+    a control wider than its viewport shows up as ``required_width > available_width``. Callers should
+    ``update_idletasks`` first so the geometry is realized.
+    """
+    origin = content.winfo_rootx()
+    required = 0
+    stack: list[tk.Misc] = [content]
+    while stack:
+        widget = stack.pop()
+        stack.extend(widget.winfo_children())
+        if isinstance(widget, _ACTIONABLE_CLASSES) and widget.winfo_ismapped() and widget.winfo_width() > 1:
+            required = max(required, widget.winfo_rootx() - origin + widget.winfo_width())
+    return required, int(viewport_width)
+
+
+def apply_compact_layout_hooks(root_widget: tk.Misc, compact: bool) -> int:
+    """Call ``set_compact_layout(compact)`` on every widget in the subtree that offers it (a presentation-only hook)."""
+    called = 0
+    stack: list[tk.Misc] = [root_widget]
+    while stack:
+        widget = stack.pop()
+        stack.extend(widget.winfo_children())
+        hook = getattr(widget, "set_compact_layout", None)
+        if callable(hook):
+            hook(compact)
+            called += 1
+    return called

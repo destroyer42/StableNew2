@@ -18,7 +18,10 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_two_pair_form_column_specs,
     get_two_pane_workspace_column_specs,
     get_visible_stage_order,
-    is_compact_pipeline_width,
+    pipeline_layout_fits,
+    select_compact_scale,
+    should_probe_normal_layout,
+    should_refit_compact,
 )
 
 
@@ -70,14 +73,44 @@ def test_workspace_column_specs_define_shared_surface_minimums() -> None:
 
 
 @pytest.mark.parametrize(
-    ("width", "compact"),
-    [(0, False), (1, False), (399, False), (1280, True), (1342, True), (1879, True), (1880, False), (2560, False)],
+    ("extents", "fits"),
+    [
+        ([], True),
+        ([(300, 400), (500, 500)], True),
+        ([(401, 400)], True),  # within the 1 px tolerance
+        ([(402, 400)], False),
+        ([(300, 400), (700, 560)], False),  # one overflowing surface is enough
+    ],
 )
-def test_compact_pipeline_breakpoint_ignores_unrealized_widths(width: int, compact: bool) -> None:
-    assert is_compact_pipeline_width(width) is compact
+def test_pipeline_layout_fit_is_decided_from_required_versus_available_width(extents, fits) -> None:
+    assert pipeline_layout_fits(extents) is fits
 
 
-def test_compact_minsize_scales_form_columns_and_leaves_small_ones() -> None:
-    assert get_compact_minsize(160) < 160
-    assert get_compact_minsize(88) < 88
-    assert get_compact_minsize(24) == 24
+def test_select_compact_scale_prefers_the_least_compact_scale_that_fits() -> None:
+    tried: list[float] = []
+
+    def fits_at(scale: float) -> bool:
+        tried.append(scale)
+        return scale <= 0.65
+
+    scale, fits = select_compact_scale(fits_at, (0.8, 0.7, 0.6, 0.5))
+    assert (scale, fits) == (0.6, True)
+    assert tried == [0.8, 0.7, 0.6]  # stops at the first fit, most generous scale first
+    assert select_compact_scale(lambda _scale: True, (0.8, 0.5)) == (0.8, True)
+    assert select_compact_scale(lambda _scale: False, (0.8, 0.5)) == (0.5, False)  # best effort: the smallest
+
+
+@pytest.mark.parametrize(
+    ("width", "unfit_width", "probe"),
+    [(1300, None, True), (1303, 1280, False), (1304, 1280, True), (900, 1280, False)],
+)
+def test_normal_layout_is_probed_again_only_after_the_window_has_grown(width, unfit_width, probe) -> None:
+    assert should_probe_normal_layout(width, unfit_width, step=24) is probe
+
+
+def test_compact_layout_refits_only_after_growth_and_compact_minsize_leaves_small_columns() -> None:
+    assert should_refit_compact(1330, 1300, step=24) is True
+    assert should_refit_compact(1310, 1300, step=24) is False
+    assert get_compact_minsize(160, 0.6) == 96
+    assert get_compact_minsize(88, 0.5) == 44
+    assert get_compact_minsize(24, 0.5) == 24

@@ -203,6 +203,8 @@ class ADetailerStageCardV2(BaseStageCardV2):
             command=self._sync_pass_states,
         )
         hand_pass_check.grid(row=1, column=3, sticky="w", pady=2)
+        self._hand_pass_label = hand_pass_label
+        self._hand_pass_check = hand_pass_check
         self._attach_setting_help(
             "hand_pass_enabled",
             ADETAILER_STAGE_HELP["hand_pass_enabled"],
@@ -231,6 +233,19 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self._build_hand_tab(hand_tab)
         self._build_prompt_tab(prompt_tab)
         self._sync_pass_states()
+
+    def set_compact_layout(self, compact: bool) -> None:
+        """Stack the Hand Pass toggle under the Face Pass one while the Pipeline is compact (PR-GUI-100).
+
+        The Face/Hand pair side by side has an irreducible natural width; reflowing it keeps both toggles unclipped.
+        Same widgets and variables, only their grid cells change, and normal mode restores the original cells.
+        """
+        if compact:
+            self._hand_pass_label.grid_configure(row=2, column=0)
+            self._hand_pass_check.grid_configure(row=2, column=1)
+        else:
+            self._hand_pass_label.grid_configure(row=1, column=2)
+            self._hand_pass_check.grid_configure(row=1, column=3)
 
     def _build_face_tab(self, parent: ttk.Frame) -> None:
         row = 0

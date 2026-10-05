@@ -89,29 +89,44 @@ form needs about 552 px of viewport (its four grid columns declare minimums of 8
 wrapped helper label and unwrapped "Blank or -1" hints cannot shrink) but the left column had 378 px; the stage cards
 needed about 500 px against 490 px. The old oversized window (never narrower than 1984 px) had hidden this.
 
-Repair, presentation only (no widget is moved, recreated or rebound, so no state, controller or scroll-ownership
-change):
+**Durable contract:** the Pipeline uses its normal three-column presentation when its current Tk-rendered layout fits,
+and otherwise the reversible compact presentation. The decision is made from measured geometry, never from a fixed pixel
+breakpoint. A first version of this repair used a fixed 1880 px breakpoint and a fixed 0.6 scale measured on Windows at
+100% scaling; the hosted Linux/Xvfb run proved both environment-dependent (different Tk font metrics clipped seven
+Base Generation controls at 1880/1896 px in normal mode, and the second ADetailer checkbutton in compact mode), so both
+constants were replaced.
 
-- `PIPELINE_COMPACT_BREAKPOINT_WIDTH = 1880` in `pipeline_layout_contract.py`: from 1880 px up the normal three-column
-  workspace is untouched (measured clean from about 1870 px; a 1920 px display's default window is 1896 px). Below it the
-  Pipeline tab switches to the compact presentation, in both directions as the window is resized.
-- Compact presentation: grid-column minimums of the left and stage forms are scaled to 60% (`layout_v2.
-  apply_compact_column_minsizes`, reversible, per-widget originals recorded), labels with wraps over 240 px are wrapped at
-  240 px or at their actual slot if narrower (`apply_compact_label_wraps`, reversible), and Base Generation wraps its
-  hint labels (`BaseGenerationPanelV2.set_compact_layout`).
-- `PipelineTabFrame._apply_responsive_layout` is driven by the tab's `<Configure>` and only acts when the compact state
-  changes.
+How it decides (presentation only: no widget is moved to another parent, recreated or rebound, so no state, controller
+or scroll-ownership change):
 
-| Pipeline, clipped actionable controls | before | after |
-| --- | --- | --- |
-| 1280 x 680 (minimum window) | 28 | 0 |
-| 1342 x 680 (1366 x 768 simulation) | 28 | 0 |
-| 1500 x 800 | not measured | 0 |
-| 1896 x 984 (1920 x 1080 default) | 0 | 0 |
+- **Fit measure** (`layout_v2.measure_horizontal_extent`, `pipeline_layout_contract.pipeline_layout_fits`): the rightmost
+  edge of any mapped actionable control in the left and stage surfaces against the width of its scroll viewport (1 px
+  tolerance). Geometry below `PIPELINE_MIN_REALIZED_WIDTH` (a not-yet-laid-out widget) and hidden tabs are ignored.
+- **Normal presentation** when it fits. Otherwise **compact presentation**: grid-column minimums of the left and stage
+  forms are scaled by the *largest* of `COMPACT_MINSIZE_SCALES` (0.8 ... 0.4) that makes the layout fit
+  (`select_compact_scale`), labels with wraps over 240 px are wrapped at 240 px or at their actual slot if narrower, and
+  widgets exposing `set_compact_layout(compact)` reflow their own cells: Base Generation wraps its hint labels, and the
+  ADetailer card stacks its Hand Pass toggle under the Face Pass one (the side-by-side pair has an irreducible natural
+  width). Normal mode restores every minimum, wrap and grid cell exactly.
+- **No oscillation** (`should_probe_normal_layout`, `should_refit_compact`): after the normal presentation fails to fit at
+  width W it is probed again only once the width has grown by `PIPELINE_PROBE_STEP` (24 px); a compact layout looks for
+  a less compact scale only after growth of the same step, and evaluation runs once per settled geometry (idle-coalesced).
+- `PipelineTabFrame._apply_responsive_layout` drives this; `normal_layout_fits()` reports, without changing the current
+  presentation, whether the normal layout fits right now.
+
+Measured on the Windows target (display scaling 100%): the normal presentation is kept at 1896 px and wider; compact is
+used at 1280 / 1342 / 1500 px (scale 0.7 / 0.8 / 0.8). Wider-font environments were emulated locally with Tk scaling 1.5,
+1.75 and 2.0 (the signature of the hosted failure): at 1896 px they select compact (scale 0.8) and still show no clipped
+control, and from about 2200 px they use the normal presentation.
+
+| Pipeline, clipped actionable controls | first candidate | fixed-breakpoint repair on hosted Linux | fit-driven |
+| --- | --- | --- | --- |
+| 1280 x 680 (minimum window) | 28 | 1 (ADetailer) | 0 |
+| 1342 x 680 (1366 x 768 simulation) | 28 | 1 (ADetailer) | 0 |
+| 1896 x 984 (1920 x 1080 default) | 0 | 7 (Base Generation) | 0 |
 
 Review, SVD and Video Workflow have 0 clipped controls at every width above and are unchanged. The viewport heights are
-unchanged (338 px for the Pipeline columns); wrapped captions only lengthen the scrollable content (left column 1440 to
-1598 px).
+unchanged (338 px for the Pipeline columns); wrapped captions only lengthen the scrollable content.
 
 ## Known limits (not repaired)
 
@@ -120,8 +135,10 @@ unchanged (338 px for the Pipeline columns); wrapped captions only lengthen the 
   stay outside the scroll regions. Everything is reachable; only a few rows are visible at once.
 - In the compact Pipeline, form controls are narrower (comboboxes shrink with the columns), and the Preview panel's
   field labels in the right column are cut off (non-actionable; the same panel is clean at the wide layout).
-- The breakpoint was measured at 100% display scaling; a different Windows scaling factor changes the pixel widths the
-  forms need.
+- Controls that become mapped after the last evaluation (for example a collapsed stage section opened later) are
+  measured at the next geometry change or tab map, not when they open.
+- In compact mode the narrowest comboboxes can show truncated values (for example Stage Model Override); the control
+  and its drop-down list stay operable.
 - The Review preview stays 620 px and some other `wraplength` values remain fixed.
 
 ## Validation
@@ -130,7 +147,8 @@ See the completion report for the exact commands and results. New automated cove
 (`tests/gui_v2/test_workspace_layout_resilience_v2.py`, `test_pipeline_layout_scroll_v2.py`,
 `test_main_window_persistence_regressions.py`, `test_window_layout_normalization_v2.py`): screen-fit and saved-geometry
 parametrized contract tests, a real-Tk reachability test per long-form tab at a laptop viewport, and a wheel-router test
-covering scoping, no stealing, combobox safety and cleanup. The responsive Pipeline repair adds a parametrized
-no-clipping test (1280, 1342, 1879, 1880 and 1896 px) and a breakpoint round-trip test (same widgets, values, column
-minimums, wraplengths and wheel-router frames after crossing the breakpoint both ways) to
-`test_pipeline_layout_scroll_v2.py`.
+covering scoping, no stealing, combobox safety and cleanup. The responsive Pipeline repair adds an environment-neutral
+real-Tk no-clipping test (1280, 1342, 1500 and 1896 px; the selected mode must agree with the measured fit, nothing is
+clipped, the ADetailer Hand Pass toggle is reachable) and a compact -> normal -> compact -> normal round-trip test (same
+widgets, values, wheel-router frames, and an exactly restored normal presentation) to `test_pipeline_layout_scroll_v2.py`,
+and pure tests of the fit, scale-selection and hysteresis helpers with synthetic widths to `test_pipeline_view_contracts.py`.

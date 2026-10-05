@@ -175,6 +175,10 @@ class ScrollableFrame(ttk.Frame):
             return False
         return first > 0.0 or last < 1.0
 
+    def viewport_width(self) -> int:
+        """Width of the visible region (the content never scrolls horizontally)."""
+        return int(self._canvas.winfo_width())
+
     def scroll_units(self, units: int) -> None:
         self._canvas.yview_scroll(int(units), "units")
 

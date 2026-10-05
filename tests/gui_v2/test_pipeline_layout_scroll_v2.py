@@ -285,13 +285,25 @@ def _responsive_snapshot(tab) -> dict[tuple[str, str], int]:
     return snapshot
 
 
-@pytest.mark.parametrize(
-    ("width", "compact"),
-    [(1280, True), (1342, True), (1879, True), (1880, False), (1896, False)],
-    ids=["min-window", "laptop-1366", "just-below-breakpoint", "breakpoint", "desktop-1920"],
-)
-def test_pipeline_controls_are_never_horizontally_clipped(width: int, compact: bool) -> None:
-    """Narrow windows compact the forms, wide ones keep the normal three columns; neither clips a control."""
+def _adetailer_hand_pass_check(tab):
+    return next(w._hand_pass_check for w in _descendants(tab) if hasattr(w, "_hand_pass_check"))
+
+
+def _assert_responsive_layout_is_sound(tab) -> None:
+    """Whatever presentation this Tk/font environment selects: it matches the measured fit and nothing is clipped."""
+    assert tab._compact_layout is (not tab.normal_layout_fits()), "mode must agree with the measured fit"
+    assert _horizontally_clipped_controls(tab) == []
+    for scroll in (tab.left_scroll, tab.stage_scroll, tab.right_scroll):
+        assert scroll.winfo_viewable()  # left, stage and right surfaces all stay reachable
+    hand_pass = _adetailer_hand_pass_check(tab)  # the control the hosted Linux runner clipped
+    assert hand_pass.winfo_ismapped()
+    cell = hand_pass.grid_info()
+    assert (int(cell["row"]), int(cell["column"])) == ((2, 1) if tab._compact_layout else (1, 3))
+
+
+@pytest.mark.parametrize("width", [1280, 1342, 1500, 1896], ids=["min-window", "laptop-1366", "mid", "desktop-1920"])
+def test_pipeline_controls_are_never_horizontally_clipped(width: int) -> None:
+    """The normal presentation is used when it fits, the compact one otherwise; neither clips a control."""
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -300,16 +312,13 @@ def test_pipeline_controls_are_never_horizontally_clipped(width: int, compact: b
 
     try:
         tab = _pipeline_tab_at_width(root, width)
-        assert tab._compact_layout is compact
-        assert _horizontally_clipped_controls(tab) == []
-        for scroll in (tab.left_scroll, tab.stage_scroll, tab.right_scroll):
-            assert scroll.winfo_viewable()  # left, stage and right surfaces all stay reachable
+        _assert_responsive_layout_is_sound(tab)
     finally:
         root.destroy()
 
 
 def test_pipeline_responsive_breakpoint_round_trip_is_lossless() -> None:
-    """Crossing the breakpoint both ways keeps the same widgets, values, column minimums and scroll ownership."""
+    """Compact -> normal -> compact -> normal keeps the same widgets, values, wheel routing and presentation."""
     try:
         root = tk.Tk()
     except tk.TclError as exc:
@@ -319,25 +328,27 @@ def test_pipeline_responsive_breakpoint_round_trip_is_lossless() -> None:
     try:
         from src.gui.widgets.scrollable_frame_v2 import _WheelRouter
 
-        tab = _pipeline_tab_at_width(root, 1896)
+        tab = _pipeline_tab_at_width(root, 2600)
         panel = tab.sidebar.get_base_generation_panel()
         panel.seed_var.set("12345")
         widgets = {str(w) for w in _descendants(tab)}
-        snapshot = _responsive_snapshot(tab)
         router_frames = _WheelRouter.for_widget(tab).frame_count
-        assert tab._compact_layout is False
+        assert tab._compact_layout is False  # 2600 px fits in any environment
+        normal_snapshot = _responsive_snapshot(tab)
 
-        for width in (1342, 1896, 1280, 1896):
+        for width in (1342, 2600, 1280, 2600):
             root.geometry(f"{width}x800+0+0")
             root.update()
             root.update()
-            assert tab._compact_layout is (width < 1880)
+            _assert_responsive_layout_is_sound(tab)
             assert {str(w) for w in _descendants(tab)} == widgets  # nothing orphaned, duplicated or rebuilt
             assert panel.seed_var.get() == "12345"
             assert _WheelRouter.for_widget(tab).frame_count == router_frames
-            assert _horizontally_clipped_controls(tab) == []
-
-        assert _responsive_snapshot(tab) == snapshot  # the normal layout is restored exactly
+            if width == 2600:
+                assert tab._compact_layout is False
+                assert _responsive_snapshot(tab) == normal_snapshot  # the normal layout is restored exactly
+            else:
+                assert tab._compact_layout is True  # 1280/1342 px never fit the normal forms
     finally:
         root.destroy()
 
