@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-04
+Updated: 2026-10-05
 
 ## Repository
 
@@ -81,6 +81,12 @@ Updated: 2026-10-04
   releases and on request (`full-census` label or `[full-census]` commit marker). No tests were deleted; a measured test and ownership
   census is in `docs/Subsystems/Testing/PR-DEVEX-CI-110_Risk_Proportionate_CI.md`. Codex review is on demand, not a mandatory stage
   (`docs/AGENT_OPERATING_MODEL.md`).
+  Parallel/sharded full census (PR-DEVEX-CENSUS-140, COMPLETE): a full census now executes as three deterministic whole-file hosted shards
+  (`sha256(repo-relative path) % 3`, each its own runner/process/Xvfb/JUnit) followed by an aggregate `full-suite` verdict that fails closed
+  unless every active test file is assigned exactly once and every shard passed; `required` and affected-lane routing are unchanged and no
+  test coverage was removed. Hosted evidence: 722 files, 5,093 JUnit records (5,046 passed / 47 skipped / 0 failed), parallel census wall =
+  slowest shard 134.8 s versus about 565.7 s serial. The supported local census is `python tools/ci/run_sharded_census.py` (two isolated
+  worker checkouts, 464 s on the owner's Windows workstation). See `docs/Subsystems/Testing/PR-DEVEX-CENSUS-140_Parallel_Sharded_Full_Census.md`.
 - WebUI startup / UI watchdog lifecycle (PR-RUNTIME-WEBUI-WATCHDOG-120): slow WebUI startup stays allowed within the existing bounded readiness contracts, and the UI-heartbeat watchdog observes Tk responsiveness only. The watchdog is attached after the main window (heartbeat source) exists; "never triggered" is an explicit `-inf` in the watchdog and diagnostics-bundle guard, so the first genuine stall triggers regardless of host uptime while repeat cooldowns are unchanged; the WebUI Launch/Retry/autoreconnect controls run their bounded connection work on a tracked thread and project the result on Tk (single-flight). No ownership, retry-policy, queue or runner change. See `docs/Subsystems/Runtime/PR-RUNTIME-WEBUI-WATCHDOG-120_WebUI_Startup_and_UI_Watchdog_Lifecycle.md`.
 - Deterministic test slimming (PR-DEVEX-TEST-SLIM-120 Phase B1, COMPLETE; hosted Python 3.14 CI green: `required` plus a full census of 4,993 passed / 47 skipped / 0 failed): the slowest unit/integration tests no longer wait on production backoff, loopback discovery, ambient presets or a pytest-only generation hook (the `PYTEST_CURRENT_TEST` branch in `QueueRunSubmissionService.start_run` is removed; `app_controller.py` ceiling 7782 -> 7731). `WebUIResourceService(client=None)` now explicitly means filesystem-only (omitted = API-first default client). No tests deleted; focused set 185 s -> 15 s, full-census pytest time about 643 s -> 503 s. The stale pre-HTTP-100 retry assertion in `tests/test_api_client.py` and an uptime-dependent watchdog test exposed by the speed-up were repaired test-side only. One cancellation test (`test_pr_harden_009_r1a`) was a local-only load-sensitive observation that did not reproduce in hosted CI. See `docs/Subsystems/Testing/PR-DEVEX-TEST-SLIM-120_Phase_B1_Deterministic_Test_Slimming.md`.
 - Pre-Forge execution and test truth (PR-TEST-TRUTH-210, current while its PR is open; bounded truth package, not
