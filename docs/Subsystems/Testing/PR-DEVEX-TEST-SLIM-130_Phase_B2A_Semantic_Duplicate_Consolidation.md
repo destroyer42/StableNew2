@@ -84,4 +84,7 @@ Observation (non-blocking): `tools/ci/validation_plan.py` routes top-level `test
 `tests/utils`, `tests/pipeline`, `tests/state` and `tests/controller`, which the core lane covers fully. A change confined to `src/gui/*` therefore no longer selects the removed
 top-level copy of `test_override_functionality`; this is a test-selection change, not lost coverage (the test mocks the stage panel and calls no `src/gui` code), and the full census still runs it.
 
-Hosted CI: pending.
+Hosted CI (Python 3.14, executable SHA `6f15491`): `required` passed (53 s); the full census, requested with the `full-census` label, passed with **5,023 passed, 47 skipped, 0 failed**
+in 565.7 s of pytest (job 9 min 57 s). That is 5,070 JUnit records = 5,068 runnable tests + the 2 documented collection-time skips, matching the local gate. The 40 local pipeline-runner failures
+(live external Comfy endpoint on the author's workstation) did not occur on the hosted runner, confirming they were environmental. This is the current-source integration result; it is not a speed
+comparison against the pre-change baseline (no hosted baseline census of that exact SHA exists, and runtime reduction was not an acceptance criterion).
