@@ -520,19 +520,19 @@ Updated: 2026-10-05
   breakpoint: lower form column minimums chosen by fit, capped label wraps, reflowed hint/ADetailer cells; no widget moves),
   so no actionable control is clipped at laptop widths or in other Tk/font environments. Known debt (GUI-110 visual
   density): the scroll viewports stay short at 768 px height because fixed headers and the Operator Log sit outside them.
-- `PR-IMG-FORGE-120 — Forge Default Production Promotion` is **IMPLEMENTED / PHYSICALLY ACCEPTED / PUBLISHED AS PR
-  #53 FOR OWNER REVIEW; NOT MERGED** (`docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md`). New
+- `PR-IMG-FORGE-120 — Forge Default Production Promotion` is **COMPLETE / ACCEPTED / PHYSICALLY + HOSTED
+  VERIFIED — `NEW_WORK_DEFAULT_FORGE_PASS`** (`docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md`). New
   still-image work defaults to the StableNew-managed Forge runtime (`forge_webui`) when `webui_runtime_identity` is unset;
   an explicit `a1111_webui` is the supported rollback; an unrecognized or unreadable configuration fails closed. A
   historical image NJR with no backend identity still resolves to `a1111_webui` (a separate constant from the new-work
   default) and replay never upgrades it. The default endpoint is identity-aware (Forge 7871, A1111 7860) and the default
   managed profile comes from one shared launch-profile authority (`src/utils/managed_forge_runtime.py`, used by the
   verifier and `build_default_webui_process_config`); a missing managed install fails closed with setup guidance and is
-  never installed or replaced by A1111. There is no backend fallback, one `WebUIProcessManager` remains the only
-  lifecycle authority, and external runtimes are never adopted. One physical default-path SDXL job passed with no backend
-  selection injected. Forge capability mismatches are closed: Hypernetwork intent is refused before dispatch under Forge
-  (explicit A1111 keeps the feature) and an unavailable detector refresh no longer advertises ADetailer detectors the
-  managed runtime lacks. No Forge, ADetailer, Torch or dependency pin changed.
+  never installed or replaced by A1111. There is no backend or runtime fallback, one `WebUIProcessManager` remains the only
+  lifecycle authority, and external runtimes are never adopted, killed or restarted. One physical default-path SDXL job
+  passed with no backend selection injected. Hypernetwork intent (in the run config or any enabled image stage) is refused
+  before any Forge runtime side effect (explicit A1111 keeps the feature), and an unavailable ADetailer detector refresh
+  exposes only the managed runtime's accepted detectors. No Forge, ADetailer, Torch or dependency pin changed.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

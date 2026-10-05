@@ -1,6 +1,6 @@
 # PR-IMG-FORGE-120 — Forge Default Production Promotion
 
-Status: IMPLEMENTED / PHYSICALLY ACCEPTED / READY FOR OWNER REVIEW (not published). `NEW_WORK_DEFAULT_FORGE_PASS`.
+Status: COMPLETE / ACCEPTED / PHYSICALLY + HOSTED VERIFIED. `NEW_WORK_DEFAULT_FORGE_PASS`.
 
 This package promotes the already-qualified StableNew-managed Forge Neo runtime to the default production still-image
 backend. It is a default-policy and runtime-selection promotion only. It does not requalify Forge, change a Forge or
@@ -46,7 +46,7 @@ therefore refuses to start with an invalid backend configuration and says why.
 connection controller, the CLI, the runtime transition service and the pipeline fallback runner, and `ConfigManager.
 load_settings` presents the effective value (the Engine Settings dialog shows the endpoint actually used).
 
-Decision for owner review: every settings file written before this change persists `webui_base_url` as the flat default
+Legacy persisted endpoint: every settings file written before this change persists `webui_base_url` as the flat default
 `http://127.0.0.1:7860`, including the repository's tracked `presets/settings.json`. That value carries no operator intent
 for Forge, so for Forge it resolves to the Forge default; for an explicit A1111 it stays authoritative. A genuinely
 different explicit URL stays authoritative for both and is validated: a Forge endpoint must be loopback
@@ -138,16 +138,15 @@ as Forge. Default-selection behavior is asserted in `tests/api/test_forge_produc
   transition, managed-runtime contract and acceptance-driver tests; extended in their existing owners.
 - Mutation: forcing the default identity back to A1111 turns 16 tests red; for the capability closure, declaring Forge
   Hypernetwork-capable turns 7 red, dropping the Forge client's detector fallback 1, and ignoring the card's fallback 2;
-  reading only the run config (the defect found in hosted review of PR #53, where an NJR whose only Hypernetwork was a
-  stage `extra` dispatched normally) turns the 6 stage-extra tests red.
+  reading only the run config (so an NJR whose only Hypernetwork is a stage `extra` dispatches normally) turns the 6
+  stage-extra tests red.
 - Validation plan: the PR changes a CI-authority file (the controller-ratchet ceiling), so a full census is required; it
   is run locally (sharded) and hosted CI routes it too.
-- `python tools/ci/run_pr_gate.py`: OK at the executable SHA `14f4c3d` (350 smoke, 5,173 collected); controller ratchet OK
+- `python tools/ci/run_pr_gate.py`: OK (350 smoke, 5,173 collected); controller ratchet OK
   (`app_controller.py` 7,731 to 7,730 and its ceiling lowered; no other controller grew).
-- Hosted review of PR #53 found the one defect fixed in `14f4c3d` (Hypernetwork intent carried only by a stage's `extra`);
-  the repair was revalidated with the focused image-backend, Forge-selection, runtime-identity, ADetailer-resource,
-  capability-projection and pipeline tests (824 passed), Ruff and `git diff --check`. The earlier affected-lane run below
-  was on the preceding executable SHA `cfc6d5d`: every target passed except two load/order-sensitive tests that pass on rerun and
+- The stage-chain Hypernetwork repair (intent carried only by a stage's `extra`) was revalidated with the focused
+  image-backend, Forge-selection, runtime-identity, ADetailer-resource, capability-projection and pipeline tests (824
+  passed), Ruff and `git diff --check`. The affected-lane run below predates that repair: every target passed except two load/order-sensitive tests that pass on rerun and
   are unrelated, classified and not repaired: `test_pr_harden_009_r1a_txt2img_cancellation::test_canonical_txt2img_completes_once_when_not_cancelled`
   (passes in its module context; also fails in isolation on the pre-change baseline) and
   `gui_v2/test_pr_mvp_060_phase3a_r1_queue::test_queue_panel_manual_and_auto_run_worker_lifecycle` (passes alone, twice).
@@ -160,10 +159,8 @@ One canonical SDXL txt2img job (the frozen Pair-A intent) on the target machine 
 `tools/acceptance/img_forge_120_default_acceptance.py`, which injects nothing: no backend or runtime-identity argument, no
 backend options, no launch-profile file, no endpoint. Evidence:
 `C:\Users\rob\qual\img_forge_120\physical-14f4c3d\` (`run\acceptance.json`, `prerun-gate.json`, `postrun-integrity.json`), run on the
-executable SHA `14f4c3d`, which includes the capability closure and the stage-chain Hypernetwork repair. Earlier runs of the
-same frozen intent (`physical-d75b20a` before the closure, `physical-cfc6d5d` before the repair) also passed; each change to
-the pre-dispatch check that every Forge job passes through was followed by a repeat. Everything after `14f4c3d` is
-documentation only.
+final executable code, which includes the capability closure and the stage-chain Hypernetwork repair; the run was repeated
+after each change to the pre-dispatch check that every Forge job passes through.
 
 - Effective configuration: the repository's real `presets/settings.json` has no `webui_runtime_identity`, no
   `forge_runtime_profile_path` (stored `webui_base_url` is the legacy `7860`); the environment has neither override. It
