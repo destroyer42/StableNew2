@@ -43,3 +43,37 @@ def test_preview_panel_prefers_v2_add_to_queue_handler(tk_root: tk.Tk) -> None:
 
     assert controller.v2_calls == 1
     assert controller.legacy_calls == 0
+
+
+@pytest.mark.gui
+def test_preview_panel_falls_back_to_legacy_add_to_queue_handler(tk_root: tk.Tk) -> None:
+    class _LegacyOnly:
+        def __init__(self) -> None:
+            self.legacy_calls = 0
+
+        def on_add_to_queue(self) -> None:
+            self.legacy_calls += 1
+
+    controller = _LegacyOnly()
+    panel = PreviewPanelV2(tk_root, controller=controller)
+
+    panel._on_add_to_queue()
+
+    assert controller.legacy_calls == 1
+
+
+@pytest.mark.gui
+def test_preview_panel_forwards_clear_draft_to_the_controller(tk_root: tk.Tk) -> None:
+    class _ClearController:
+        def __init__(self) -> None:
+            self.clear_calls = 0
+
+        def on_clear_draft(self) -> None:
+            self.clear_calls += 1
+
+    controller = _ClearController()
+    panel = PreviewPanelV2(tk_root, controller=controller)
+
+    panel._on_clear_draft()
+
+    assert controller.clear_calls == 1

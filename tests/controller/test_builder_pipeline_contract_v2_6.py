@@ -110,3 +110,26 @@ def test_no_pipeline_config_assembler_dependency():
         importlib.import_module("src.controller.pipeline_controller")
     except ModuleNotFoundError as e:
         assert "pipeline_config_assembler" not in str(e)
+
+
+def test_pack_entry_learning_metadata_submission_source_becomes_the_njr_intent_source(
+    pack_dir: Path,
+) -> None:
+    """The builder consumes ``PackJobEntry.learning_metadata["submission_source"]`` as the intent source."""
+    _make_pack_files(pack_dir, "pack1", "hello")
+    controller = PipelineController(config_manager=None)
+    controller._config_manager.packs_dir = pack_dir  # type: ignore[attr-defined]
+
+    default_entry = make_minimal_pack_job_entry(pack_id="pack1", prompt="hello")
+    learning_entry = make_minimal_pack_job_entry(pack_id="pack1", prompt="hello")
+    learning_entry.learning_metadata = {
+        "learning_enabled": True,
+        "submission_source": "learning_tab",
+    }
+
+    default_njr = controller._build_njrs_from_pack_bundle([default_entry])[0]
+    learning_njr = controller._build_njrs_from_pack_bundle([learning_entry])[0]
+
+    assert default_njr.intent_config["source"] == "add_to_queue"
+    assert learning_njr.intent_config["source"] == "learning_tab"
+    assert learning_njr.intent_config["prompt_source"] == "pack"

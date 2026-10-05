@@ -2,15 +2,10 @@ from __future__ import annotations
 
 from src.gui.learning_state import LearningVariant
 from src.gui.views.learning_plan_table import LearningPlanTable
-from tests.gui_v2.tk_test_utils import get_shared_tk_root
 
 
-def test_learning_plan_table_variant_numbering_and_stage() -> None:
-    root = get_shared_tk_root()
-    if root is None:
-        return
-
-    table = LearningPlanTable(root)
+def test_learning_plan_table_variant_numbering_and_stage(tk_root) -> None:
+    table = LearningPlanTable(tk_root)
     table.update_plan(
         [
             LearningVariant(
@@ -30,12 +25,8 @@ def test_learning_plan_table_variant_numbering_and_stage() -> None:
     assert first[2] == "img2img"
 
 
-def test_learning_plan_table_selection_callback_uses_row_index() -> None:
-    root = get_shared_tk_root()
-    if root is None:
-        return
-
-    table = LearningPlanTable(root)
+def test_learning_plan_table_selection_callback_uses_row_index(tk_root) -> None:
+    table = LearningPlanTable(tk_root)
     table.update_plan(
         [
             LearningVariant(
