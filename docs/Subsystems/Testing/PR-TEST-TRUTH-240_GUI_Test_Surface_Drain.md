@@ -73,8 +73,6 @@ model should change is a separate runtime question.
 
 ## Remaining work (separate packages)
 
-* **Collection-authority cleanup (follow-on C):** remove `--ignore=tests/gui`, the `run_collection_gate.py` exclusion, the truth-sync expectation, the
-  `validation_plan.py` mapping/domain target and the `tests/gui/README.md` placeholder, and update the canonical testing documentation. It touches `tools/ci`
-  and `pyproject.toml`, so the validation plan will select a full census.
+* **Collection-authority cleanup (follow-on C): resolved** by `PR-TEST-TRUTH-250_GUI_Collection_Authority_Closeout.md`, which removed `--ignore=tests/gui`, the collection-gate exclusion, the truth-sync expectation, the `validation_plan.py` mapping/target and the `tests/gui/README.md` placeholder.
 * **Dead production code (not touched):** `PipelineRunControlsV2`, `LearningController._build_variant_overrides` and
   `src/gui/views/learning_plan_table_v2.py` have no current callers and are candidates for a separate owner-approved cleanup.
