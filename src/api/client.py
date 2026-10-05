@@ -306,7 +306,9 @@ class SDWebUIClient:
         self._retry_callback = retry_callback
         self._session = self._build_http_session()
         self._options_lock = threading.Lock()
-        self._last_options_post_ts = 0.0
+        # "Never posted" is -inf, not 0.0: time.monotonic() is host uptime, so a 0.0 default would
+        # throttle the very first /options write on a host that booted less than the interval ago.
+        self._last_options_post_ts = float("-inf")
         self._options_min_interval_seconds = OPTIONS_POST_MIN_INTERVAL
         self._options_readiness_provider: Callable[[], bool] | None = None
         self._last_options_write_failure: str | None = None
