@@ -112,6 +112,15 @@ execution is explicitly authorized.
   head cancels the superseded run. Physical GPU/A1111/Forge/Comfy/SVD behavior is
   never claimed by hosted CI; it stays opt-in local acceptance. See
   `docs/Subsystems/Testing/PR-DEVEX-CI-110_Risk_Proportionate_CI.md`.
+  The full census executes in deterministic file-level shards (PR-DEVEX-CENSUS-140):
+  three independent `full-suite-shard` jobs (own runner, Python process, Xvfb and
+  JUnit) partition the active test files by `sha256(repo-relative path) % 3`, and the
+  aggregate `full-suite` job fails closed unless every active file is assigned to
+  exactly one shard, every shard artifact is present and every shard passed. The
+  required gate and affected-lane routing are unchanged, and census elapsed time means
+  the slowest shard's wall, not the sum of worker times. For a complete local census
+  run `python tools/ci/run_sharded_census.py` (two isolated worker checkouts by
+  default). See `docs/Subsystems/Testing/PR-DEVEX-CENSUS-140_Parallel_Sharded_Full_Census.md`.
 
 Use `python -m pytest -q <targets>` for focused changed behavior. Run
 real-backend acceptance only when the PR outcome requires it. Do not claim a

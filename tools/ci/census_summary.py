@@ -43,7 +43,8 @@ def summarize(xml_path: Path, *, top: int = 200) -> dict[str, Any]:
     for suite in suites:
         suite_wall += float(suite.get("time") or 0.0)
         for case in suite.iter("testcase"):
-            file = module_file_from_classname(case.get("classname") or "")
+            # A collection-time skip is recorded with an empty classname and the dotted module path as its name.
+            file = module_file_from_classname(case.get("classname") or case.get("name") or "")
             status = "passed"
             reason = ""
             for child in case:

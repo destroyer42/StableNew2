@@ -84,12 +84,13 @@ def test_legacy_journey_lane_is_retired_and_workflows_are_intentional() -> None:
 
 def test_full_suite_lane_is_informational_and_not_fail_fast() -> None:
     workflow = _read(".github/workflows/ci.yml")
-    full_suite = workflow[workflow.index("  full-suite:") :]
+    full_suite = workflow[workflow.index("  full-suite-shard:") :]
+    shards = _census_shards_module()
 
-    assert "continue-on-error: true" in full_suite
-    assert "--maxfail" not in full_suite
+    assert full_suite.count("continue-on-error: true") == 2  # the shard job and the aggregate verdict
+    assert "--maxfail" not in full_suite and "--maxfail" not in " ".join(shards.PYTEST_ARGS)
     assert "pytest-timeout" in full_suite
-    assert "--timeout" in full_suite
+    assert "--timeout=300" in shards.PYTEST_ARGS
 
 
 def _ci_section(start: str, end: str | None = None) -> str:
@@ -101,11 +102,21 @@ def _ci_section(start: str, end: str | None = None) -> str:
 def test_ci_is_python_312_only_with_no_version_matrix() -> None:
     workflow = _read(".github/workflows/ci.yml")
 
-    assert "matrix" not in workflow
-    assert "strategy:" not in workflow
+    # The only matrix is the census shard index (PR-DEVEX-CENSUS-140); there is never an interpreter matrix.
+    assert workflow.count("matrix:") == 1 and "shard: [0, 1, 2]" in workflow
+    assert "python-version: [" not in workflow
     assert "3.11" not in workflow
     assert "3.12" not in workflow and "3.13" not in workflow
-    assert workflow.count('python-version: "3.14"') == 3  # required + affected + full-suite
+    assert workflow.count('python-version: "3.14"') == 4  # required + affected + full-suite-shard + full-suite
+
+
+def test_census_shard_count_is_consistent_between_the_matrix_and_every_command() -> None:
+    section = _ci_section("  full-suite-shard:")
+
+    assert "shard: [0, 1, 2]" in section
+    assert "--shards 3" in section
+    assert "--shards 3" in _ci_section("  full-suite:")
+    assert "census_shards.py run-shard" in section and "census_shards.py verify" in _ci_section("  full-suite:")
 
 
 def test_ci_runs_once_per_pull_request_head_including_stacked_prs() -> None:
@@ -130,6 +141,7 @@ def test_ci_has_one_required_job_one_affected_lane_job_and_one_full_suite_job() 
     assert re.findall(r"^  ([a-z][a-z-]*):\s*$", jobs, flags=re.MULTILINE) == [
         "required",
         "affected",
+        "full-suite-shard",
         "full-suite",
     ]
     required = _ci_section("  required:", "  affected:")
@@ -137,16 +149,16 @@ def test_ci_has_one_required_job_one_affected_lane_job_and_one_full_suite_job() 
 
 
 def test_full_suite_reports_a_quiet_summary_with_failure_diagnostics() -> None:
-    full_suite = _ci_section("  full-suite:")
-    command = next(line for line in full_suite.splitlines() if "python -m pytest" in line)
-    flags = command.split()
+    flags = list(_census_shards_module().PYTEST_ARGS)  # the one place the census pytest flags live
 
     assert "-q" in flags  # concise green result
     assert not {"-v", "-vv", "-vvv", "--verbose"} & set(flags)  # no per-test success logging
     assert "-rfE" in flags  # failures and errors stay summarized
     assert "--tb=short" in flags
     assert "--timeout=300" in flags
-    assert "|" not in command and "/dev/null" not in command  # no hidden diagnostics
+    assert "junit_duration_report=total" in flags
+    source = _read("tools/ci/census_shards.py")
+    assert "/dev/null" not in source and "capture_output" not in source  # no hidden diagnostics
 
 
 def test_pytest_gates_share_one_quiet_runner_authority() -> None:
@@ -179,6 +191,20 @@ def test_python_314_is_the_sole_runtime_contract_across_current_authorities() ->
     for workflow in (ROOT / ".github/workflows").glob("*.yml"):
         text = workflow.read_text(encoding="utf-8")
         assert "3.11" not in text and "3.12" not in text, workflow.name
+
+
+def _census_shards_module():
+    import importlib.util
+    import sys
+
+    tools_ci = str(ROOT / "tools" / "ci")
+    if tools_ci not in sys.path:
+        sys.path.insert(0, tools_ci)
+    spec = importlib.util.spec_from_file_location("census_shards_authority", ROOT / "tools" / "ci" / "census_shards.py")
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _truth_module():

@@ -330,10 +330,11 @@ def test_docs_only_runs_no_python_environment_or_tests() -> None:
 
 
 def test_expensive_work_waits_for_the_required_gate_and_the_census_does_not_duplicate_the_lanes() -> None:
-    affected = WORKFLOW[WORKFLOW.index("  affected:"):WORKFLOW.index("  full-suite:")]
-    full = WORKFLOW[WORKFLOW.index("  full-suite:"):]
+    affected = WORKFLOW[WORKFLOW.index("  affected:"):WORKFLOW.index("  full-suite-shard:")]
+    full = WORKFLOW[WORKFLOW.index("  full-suite-shard:"):]  # the shard jobs plus the aggregate verdict
     assert "needs: required" in affected and "needs.required.outputs.run_affected == 'true'" in affected
     assert "needs: required" in full and "needs.required.outputs.full_census == 'true'" in full
+    assert full.count("needs.required.outputs.full_census == 'true'") == 2  # shards and aggregate both wait for it
     assert "full_census" not in affected and "run_affected" not in full
 
 
