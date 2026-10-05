@@ -530,7 +530,9 @@ Updated: 2026-10-05
   verifier and `build_default_webui_process_config`); a missing managed install fails closed with setup guidance and is
   never installed or replaced by A1111. There is no backend fallback, one `WebUIProcessManager` remains the only
   lifecycle authority, and external runtimes are never adopted. One physical default-path SDXL job passed with no backend
-  selection injected. No Forge, ADetailer, Torch or dependency pin changed.
+  selection injected. Forge capability mismatches are closed: Hypernetwork intent is refused before dispatch under Forge
+  (explicit A1111 keeps the feature) and an unavailable detector refresh no longer advertises ADetailer detectors the
+  managed runtime lacks. No Forge, ADetailer, Torch or dependency pin changed.
 - Exact branch/head state must be verified from GitHub before planning or executing work.
 
 `main` is the integrated v2.6 release baseline and now contains the accepted

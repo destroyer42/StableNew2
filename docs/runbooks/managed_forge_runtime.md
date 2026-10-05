@@ -197,6 +197,13 @@ The runtime identity guard still rejects a job whose backend does not match the 
 Known limitation (tracked separately, not a demonstrated Forge incompatibility): the Pair-D ADetailer -> upscale
 chain was qualified after the progress-watchdog and module-state repairs (see PR-IMG-FORGE-100, sections 24-29).
 
+### Forge limitations the application enforces
+
+- **Hypernetworks** are removed in the pinned Forge Neo. A job that names one is refused before dispatch with guidance to use
+  the A1111 rollback, and the Randomizer does not present the feature as usable under Forge.
+- **ADetailer detectors:** the managed runtime ships exactly `face_yolov8n.pt` and `hand_yolov8n.pt` (no MediaPipe). When the
+  endpoint's own detector list is unavailable, only those two are offered.
+
 ### Explicit A1111 rollback
 
 In `presets/settings.json`:

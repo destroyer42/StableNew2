@@ -80,6 +80,34 @@ endpoint is never adopted, killed, restarted or reconfigured, and an ambiguous g
 hardening: a failed Forge health check no longer runs the A1111 port-discovery fallback that could rebind the manager to
 whatever answers on 7860-7870.
 
+## Forge capability projection
+
+Making Forge the default must not expose controls the pinned Forge Neo cannot honor. Two mismatches are closed here.
+
+**Hypernetworks (the pinned Forge Neo removed them).** `ImageBackendCapabilities.supports_hypernetworks` is a typed
+capability: true for A1111, false for Forge.
+- Execution: `ForgeWebUIImageBackend.validate_njr_intent`, which the runner calls before any dispatch for every Forge job,
+  refuses any Hypernetwork intent (a stage or top-level `hypernetwork` that is not `None`, or a Randomizer sweep entry)
+  with `ForgeUnsupportedIntentError`: the runtime does not support Hypernetworks, generation was not dispatched, and
+  `webui_runtime_identity = a1111_webui` restores the feature. No generation request is sent (asserted for every stage).
+  Explicit A1111 keeps the feature unchanged.
+- Presentation: the Randomizer's Hypernetwork matrix row is projected through the same capability: under Forge it is
+  inactive, disabled, relabeled as unavailable, and contributes nothing to the plan even if forced on or loaded from a
+  saved config. Known pre-existing debt, not repaired here: `RandomizerPanelV2` cannot be constructed on `main` (a Tk
+  `-background` error on its preview `ttk.Treeview`) and the Pipeline tab does not mount it, so there is no live surface
+  presenting the row today; the projection is correct for when it is mounted and its logic is tested directly.
+
+**ADetailer detectors.** The managed runtime only guarantees the manifest's two YOLO detectors (`face_yolov8n.pt`,
+`hand_yolov8n.pt`; no MediaPipe).
+- `ForgeWebUIClient` no longer inherits the generic fallback list (yolov8s variants, person segmentation, MediaPipe): when
+  the endpoint's own detector list is unavailable it returns the managed runtime's accepted set; a list the endpoint does
+  return is shown as is.
+- The ADetailer stage card's static choices follow the configured backend, so an unavailable resource refresh can no longer
+  leave the combobox advertising detectors that are not installed. Explicit A1111 keeps the generic choices.
+- `accepted_detector_names()` in the shared managed-Forge module reads the manifest once and is the single source;
+  `src/image_backends/backend_capabilities.py` exposes capability facts to presentation layers. Those helpers are tolerant
+  (an unresolvable configuration yields the legacy A1111 presentation) because enforcement is separate and fails closed.
+
 ## Historical work and replay
 
 A historical NJR with no image backend resolves to A1111 and stays A1111 on replay. The application has one WebUI-family
@@ -104,8 +132,10 @@ as Forge. Default-selection behavior is asserted in `tests/api/test_forge_produc
 
 - Focused: image backend, Forge selection, runtime identity, process-manager profile ownership, runtime ports,
   transition, managed-runtime contract and acceptance-driver tests; extended in their existing owners.
-- Mutation: forcing the default identity back to A1111 turns 16 tests red.
-- Validation plan: lanes `core`, `image`, `gui`, `runtime`; no full census; 101 affected targets.
+- Mutation: forcing the default identity back to A1111 turns 16 tests red; for the capability closure, declaring Forge
+  Hypernetwork-capable turns 7 red, dropping the Forge client's detector fallback 1, and ignoring the card's fallback 2.
+- Validation plan: the PR changes a CI-authority file (the controller-ratchet ceiling), so a full census is required; it
+  is run locally (sharded) and hosted CI routes it too.
 - `python tools/ci/run_pr_gate.py`: OK at the executable SHA (350 smoke, 5,147 collected); controller ratchet OK
   (`app_controller.py` 7,731 to 7,730 and its ceiling lowered; no other controller grew).
 - Affected-lane run on the executable SHA: every target passed except two load/order-sensitive tests that pass on rerun and
@@ -139,6 +169,11 @@ backend options, no launch-profile file, no endpoint. Evidence:
   byte-identical before and after; the main checkout's status is unchanged.
 
 ## Known limits
+
+- A Forge job whose persisted config names a Hypernetwork now fails at the capability check (by design) rather than
+  attempting an `/options` write the runtime cannot honor.
+- ADetailer detector choices are validated by presentation only; a hand-edited config that names a detector the endpoint
+  lacks fails at the endpoint, as before.
 
 - A corrupt or invalid backend configuration stops application startup (by design: nothing may be guessed).
 - Some legacy direct-API helper paths in `AppController` now use the configured client; the GUI has no backend selector

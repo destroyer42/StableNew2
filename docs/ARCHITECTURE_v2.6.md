@@ -324,7 +324,9 @@ fallback between the backends and no dynamic per-job runtime switching (a mismat
 runtime identity guard). The default Forge runtime is the canonical managed install described by
 `config/managed_forge_runtime.json`, whose launch profile has one authority, `src/utils/managed_forge_runtime.py`. The
 default endpoint is identity-aware (Forge `127.0.0.1:7871`, A1111 `127.0.0.1:7860`). Installation stays an explicit operator
-action and external runtimes are never adopted, killed or restarted.
+action and external runtimes are never adopted, killed or restarted. Backend capabilities are typed on the adapter
+(`ImageBackendCapabilities`): Forge declares no Hypernetwork support, so such work is refused before dispatch and the
+UI does not present it, while the A1111 backend keeps it.
 
 A future `diffusers` image backend may host multiple model families. Ideogram 4
 is the first planned qualification target after PR-IMG-100, but Ideogram is a
