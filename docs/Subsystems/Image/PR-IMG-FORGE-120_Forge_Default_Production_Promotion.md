@@ -150,7 +150,9 @@ as Forge. Default-selection behavior is asserted in `tests/api/test_forge_produc
 One canonical SDXL txt2img job (the frozen Pair-A intent) on the target machine (RTX 4070 Ti), driven by
 `tools/acceptance/img_forge_120_default_acceptance.py`, which injects nothing: no backend or runtime-identity argument, no
 backend options, no launch-profile file, no endpoint. Evidence:
-`C:\Users\rob\qual\img_forge_120\physical-d75b20a\` (`run\acceptance.json`, `prerun-gate.json`, `postrun-integrity.json`).
+`C:\Users\rob\qual\img_forge_120\physical-cfc6d5d\` (`run\acceptance.json`, `prerun-gate.json`, `postrun-integrity.json`), run on the
+executable code that includes the capability closure. An earlier run of the same frozen intent on the pre-closure code
+(`physical-d75b20a`) also passed; the closure adds a pre-dispatch check to every Forge job, so the run was repeated.
 
 - Effective configuration: the repository's real `presets/settings.json` has no `webui_runtime_identity`, no
   `forge_runtime_profile_path` (stored `webui_base_url` is the legacy `7860`); the environment has neither override. It
@@ -158,11 +160,12 @@ backend options, no launch-profile file, no endpoint. Evidence:
 - New work: the production `build_cli_njr` produced `backend_options.image.backend_id = "forge_webui"` from the default alone.
 - Runtime: `build_default_webui_process_config()` produced the launch command; it equals the shared authority's output
   (command, working directory and environment), has no contract problems and no A1111 launcher, and the manager
-  (`WebUIProcessManager`) owned the process (ready in 37.9 s). The managed verifier was green before the run.
+  (`WebUIProcessManager`) owned the process (ready in 28.5 s). The managed verifier was green before the run.
 - Client and guard: `DefaultImageRuntimePorts()` built `ForgeWebUIClient` on the process endpoint and the runtime identity
   guard positively classified the endpoint `forge_webui`.
 - Path: `JobService.submit_njrs -> SQLite -> SingleNodeJobRunner -> PipelineController -> PipelineRunner.run_njr`; the job
-  `completed` in 18.4 s (peak VRAM 9,466 MiB), one artifact (`3dc7375c...`, 1,150,097 bytes).
+  `completed` in 15.3 s (peak VRAM 11,264 MiB), one artifact (`4f8ceff0...`, 1,150,097 bytes). Image quality and pixel
+identity are not under test in this promotion.
 - Identity evidence: SQLite NJR snapshot and the job result record `forge_webui`.
 - No fallback and no collateral: no other runtime was started; the managed tree exited and nothing listens afterwards; the
   owner's preset and PR-VID-193 files, the A1111 config files and source inventory, and the managed `config.json` are
