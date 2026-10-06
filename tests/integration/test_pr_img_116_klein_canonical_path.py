@@ -35,7 +35,9 @@ MODULES = [
     {"model_name": "flux2-vae.safetensors", "filename": "/data/models/VAE/flux2-vae.safetensors"},
     {"model_name": "sdxl_vae.safetensors", "filename": "/data/models/VAE/sdxl_vae.safetensors"},
 ]
-PROFILE = {"id": KLEIN_PROFILE_ID, "version": 1}
+PROFILE = {"id": KLEIN_PROFILE_ID, "version": 1}  # an explicit, persisted v1 reference
+#: what newly constructed work is stamped with since PR-IMG-117 (v1 records keep meaning exactly v1)
+PROFILE_NEW = {"id": KLEIN_PROFILE_ID, "version": 2}
 _STUB_IDENTITY = {"transformer": {"name": KLEIN, "verified": "sha256"}}
 
 
@@ -298,7 +300,7 @@ def test_review_klein_edit_is_one_img2img_nje_with_one_reference_and_lineage(tmp
     njr, source = _edit_njr(tmp_path)
     assert [s.stage_type for s in njr.stages] == ["img2img"]
     assert njr.input_image_paths == (str(source),)
-    assert njr.backend_options["image"] == {"model_profile": PROFILE, "backend_id": "forge_webui"}
+    assert njr.backend_options["image"] == {"model_profile": PROFILE_NEW, "backend_id": "forge_webui"}
     lineage = njr.provenance.metadata["reprocess"]["source_items"][0]["metadata"]
     assert lineage["parent_job_id"] == "parent-A"
     assert lineage[KLEIN_EDIT_METADATA_KEY]["source_image_sha256"] == hashlib.sha256(source.read_bytes()).hexdigest()
@@ -333,7 +335,7 @@ def test_an_arbitrary_review_image_needs_the_explicit_klein_selection(tmp_path: 
     assert job.sampler_name != "Euler" or job.steps != 4
     assert KLEIN_EDIT_METADATA_KEY not in job.provenance.metadata["reprocess"]["source_items"][0]["metadata"]
     # ... but the qualified model never silently becomes unrestricted Forge work: the profile is preserved.
-    assert job.backend_options["image"]["model_profile"] == PROFILE
+    assert job.backend_options["image"]["model_profile"] == PROFILE_NEW
 
 
 @pytest.mark.parametrize(
@@ -589,14 +591,14 @@ def _review_default_njr(tmp_path: Path, stages: list[str], *, model: str = KLEIN
 def test_build_reprocess_job_stamps_the_profile_from_the_resolved_klein_model(tmp_path: Path) -> None:
     source = _source_png(tmp_path)
     njr = ReprocessJobBuilder().build_reprocess_job([source], ["adetailer"], model=KLEIN, output_dir=str(tmp_path / "out"))
-    assert njr.backend_options["image"]["model_profile"] == {"id": "flux2_klein_4b_fp8", "version": 1}
+    assert njr.backend_options["image"]["model_profile"] == {"id": "flux2_klein_4b_fp8", "version": 2}
     assert njr.backend_options["image"]["backend_id"] == "forge_webui"
 
 
 @pytest.mark.parametrize("stages", [["adetailer"], ["upscale"], ["img2img", "adetailer"]])
 def test_review_default_reprocess_of_a_klein_artifact_keeps_the_profile_and_fails_before_dispatch(tmp_path: Path, stages: list[str]) -> None:
     njr = _review_default_njr(tmp_path, stages)
-    assert njr.backend_options["image"]["model_profile"] == {"id": "flux2_klein_4b_fp8", "version": 1}
+    assert njr.backend_options["image"]["model_profile"] == {"id": "flux2_klein_4b_fp8", "version": 2}
     transport = _transport()
     entry = _run(njr, transport)
     assert entry.status is JobStatus.FAILED and "FLUX.2 Klein 4B FP8" in str(entry.error_message)
@@ -628,7 +630,7 @@ def test_an_unmarked_klein_img2img_without_a_frozen_source_digest_is_refused_eve
 
 def test_the_explicit_klein_edit_path_is_unchanged_and_still_valid(tmp_path: Path) -> None:
     njr, _source = _edit_njr(tmp_path)
-    assert njr.backend_options["image"]["model_profile"] == PROFILE
+    assert njr.backend_options["image"]["model_profile"] == PROFILE_NEW
     entry = _run(njr, _transport())
     assert entry.status is JobStatus.COMPLETED, entry.error_message
 
@@ -651,7 +653,7 @@ def test_a_klein_model_on_a1111_keeps_its_profile_and_is_rejected_not_rerouted(t
 
     monkeypatch.setattr("src.image_backends.image_backend_types.configured_image_backend_id", lambda: "a1111_webui")
     njr = _review_default_njr(tmp_path, ["img2img"])
-    assert njr.backend_options["image"] == {"backend_id": "a1111_webui", "model_profile": PROFILE}  # profile preserved, backend not switched
+    assert njr.backend_options["image"] == {"backend_id": "a1111_webui", "model_profile": PROFILE_NEW}  # profile preserved, backend not switched
     transport = FakeWebUITransport(flavor="a1111", checkpoint=KLEIN)
     a1111 = SDWebUIClient(base_url="http://127.0.0.1:7860", options_write_enabled=True)
     a1111._session.request = transport  # type: ignore[method-assign]

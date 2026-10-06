@@ -48,6 +48,10 @@ class LoRAPickerPanel(ttk.Frame):
             tuple[str, tk.DoubleVar, ttk.Frame]
         ] = []  # (name, strength_var, frame)
         self._entry_widgets: dict[str, dict[str, object]] = {}
+        #: Model-specific per-LoRA notes (e.g. "not verified for FLUX.2 Klein 4B"); never removes a selection.
+        self._annotations: dict[str, str] = {}
+        #: Called whenever the selection changes (add/remove/strength/set/clear), after ``on_change_callback``.
+        self.selection_listener: Callable[[], None] | None = None
         # Initialize scanner
         self.scanner = get_lora_scanner(webui_root)
         self._content_visibility_mode = self._discover_content_visibility_mode()
@@ -172,6 +176,7 @@ class LoRAPickerPanel(ttk.Frame):
         # Notify change
         if self.on_change_callback:
             self.on_change_callback()
+        self._notify_selection()
 
     def _add_lora_entry(self, name: str, strength: float) -> None:
         """Add a LoRA entry widget to the list."""
@@ -229,6 +234,7 @@ class LoRAPickerPanel(ttk.Frame):
             strength_var.set(normalized)
             if self.on_change_callback:
                 self.on_change_callback()
+            self._notify_selection()
 
         slider = cast(Any, EnhancedSlider)(
             controls_row,
@@ -241,8 +247,15 @@ class LoRAPickerPanel(ttk.Frame):
         )
         slider.grid(row=0, column=0, sticky="ew", padx=(0, 6))
 
+        annotation_label = ttk.Label(
+            entry_frame, text="", justify="left", wraplength=self.NAME_WRAP_LENGTH, foreground="#e0a030"
+        )
+        annotation_label.grid(row=2, column=0, sticky="ew")
+        annotation_label.grid_remove()
+
         self._lora_entries.append((name, strength_var, entry_frame))
         self._entry_widgets[name] = {
+            "annotation_label": annotation_label,
             "frame": entry_frame,
             "name_row": name_row,
             "controls_row": controls_row,
@@ -253,6 +266,26 @@ class LoRAPickerPanel(ttk.Frame):
             "remove_button": remove_button,
         }
 
+    def _notify_selection(self) -> None:
+        listener = self.selection_listener
+        if listener is not None:
+            listener()
+
+    def set_annotations(self, annotations: dict[str, str]) -> None:
+        """Show a note under each named selected LoRA (empty clears all); selections are never changed."""
+
+        self._annotations = dict(annotations or {})
+        for name, widgets in self._entry_widgets.items():
+            label = widgets.get("annotation_label")
+            if label is None:
+                continue
+            text = self._annotations.get(name, "")
+            cast(Any, label).configure(text=f"⚠ {text}" if text and not text.startswith("verified") else text)
+            if text:
+                cast(Any, label).grid()
+            else:
+                cast(Any, label).grid_remove()
+
     def _remove_lora_entry(self, name: str) -> None:
         """Remove a LoRA entry from the list."""
         for i, (lora_name, _, frame) in enumerate(self._lora_entries):
@@ -262,6 +295,7 @@ class LoRAPickerPanel(ttk.Frame):
                 self._entry_widgets.pop(name, None)
                 if self.on_change_callback:
                     self.on_change_callback()
+                self._notify_selection()
                 break
 
     def get_loras(self) -> list[tuple[str, float]]:
@@ -279,6 +313,7 @@ class LoRAPickerPanel(ttk.Frame):
         # Add new
         for name, strength in loras:
             self._add_lora_entry(name, strength)
+        self._notify_selection()
 
     def clear(self) -> None:
         """Clear all LoRAs."""
@@ -289,6 +324,7 @@ class LoRAPickerPanel(ttk.Frame):
 
         if self.on_change_callback:
             self.on_change_callback()
+        self._notify_selection()
 
     def _show_keywords(self, lora_name: str) -> None:
         """Show keyword detection dialog for a LoRA."""

@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from src.image_backends.image_backend_types import FORGE_IMAGE_BACKEND_ID
@@ -80,6 +80,9 @@ class KleinProfile:
     #: whole latent is regenerated (denoise 1.0, resize mode 0).
     edit_denoising_strength: float
     min_total_ram_bytes: int
+    #: LoRAs the profile admits for text-to-image work. Version 1 (PR-IMG-116) admits none and keeps meaning
+    #: exactly that; version 2 (PR-IMG-117) admits exactly one explicitly Klein-4B-compatible adapter.
+    max_loras: int = 0
 
     @property
     def modules(self) -> tuple[KleinAsset, KleinAsset]:
@@ -142,13 +145,25 @@ KLEIN_PROFILE_V1 = KleinProfile(
     min_total_ram_bytes=MIN_TOTAL_RAM_BYTES,
 )
 
-_PROFILES: dict[tuple[str, int], KleinProfile] = {(KLEIN_PROFILE_ID, 1): KLEIN_PROFILE_V1}
+#: Version 2 (PR-IMG-117): identical assets, sampling, modes, geometry and host-RAM policy; the only envelope
+#: expansion is one explicitly FLUX.2 Klein 4B-compatible LoRA on text-to-image work (negative prompts, global
+#: terms, the optimizer and every other feature stay unsupported). Version 1 is never edited or upgraded.
+KLEIN_PROFILE_V2 = replace(KLEIN_PROFILE_V1, version=2, max_loras=1)
+
+_PROFILES: dict[tuple[str, int], KleinProfile] = {
+    (KLEIN_PROFILE_ID, 1): KLEIN_PROFILE_V1,
+    (KLEIN_PROFILE_ID, 2): KLEIN_PROFILE_V2,
+}
+
+#: The version newly constructed work is stamped with. It moves to a newer published version only after that
+#: version's physical qualification succeeds; persisted work keeps the version it froze.
+_LATEST_PROFILE = KLEIN_PROFILE_V2
 
 
 def latest_klein_profile() -> KleinProfile:
     """The version new work is constructed with (existing records keep the version they froze)."""
 
-    return KLEIN_PROFILE_V1
+    return _LATEST_PROFILE
 
 
 def klein_model_profile_reference() -> dict[str, Any]:
@@ -294,12 +309,14 @@ def detect_unsupported_features(
     execution_config: Mapping[str, Any] | None,
     *,
     positive_prompt: str = "",
+    lora_admitted: bool = False,
 ) -> list[str]:
     """Names of requested features outside the qualified Klein envelope (empty when none).
 
     The Klein compile policy switches the prompt optimizer off and clears negative text; whatever
     else is *enabled* here (hires fix, refiner, LoRA, ControlNet, aesthetic, hypernetwork) is a real
-    conflict and is rejected rather than ignored.
+    conflict and is rejected rather than ignored. ``lora_admitted`` (profile v2) leaves the LoRA decision to
+    ``forge_klein_lora.evaluate_klein_loras`` (count, weight, compatibility); it never makes LoRA unchecked.
     """
 
     config = execution_config if isinstance(execution_config, Mapping) else {}
@@ -317,10 +334,11 @@ def detect_unsupported_features(
         found.append("the prompt optimizer")
     if _truthy_section(config, "aesthetic", "enabled"):
         found.append("aesthetic embeddings")
-    if _truthy_section(config, "style_lora", "enabled") or config.get("lora_strengths"):
-        found.append("LoRA")
-    elif "<lora:" in str(positive_prompt or "").lower():
-        found.append("LoRA")
+    if not lora_admitted:
+        if _truthy_section(config, "style_lora", "enabled") or config.get("lora_strengths"):
+            found.append("LoRA")
+        elif "<lora:" in str(positive_prompt or "").lower():
+            found.append("LoRA")
     if any("controlnet" in str(key).lower() and config.get(key) for key in config):
         found.append("ControlNet")
     if str(txt2img.get("hypernetwork") or "none").strip().lower() not in {"", "none"}:
@@ -452,10 +470,12 @@ def klein_edit_config(*, width: int, height: int) -> dict[str, Any]:
     }
 
 
-def klein_provenance(profile: KleinProfile, *, mode: str) -> dict[str, Any]:
+def klein_provenance(
+    profile: KleinProfile, *, mode: str, lora: Mapping[str, Any] | None = None
+) -> dict[str, Any]:
     """Durable, machine-path-free evidence block recorded with the stage result."""
 
-    return {
+    evidence: dict[str, Any] = {
         "model_profile": profile.reference(),
         "backend_id": profile.backend_id,
         "mode": mode,
@@ -473,6 +493,9 @@ def klein_provenance(profile: KleinProfile, *, mode: str) -> dict[str, Any]:
         "steps": profile.steps,
         "cfg_scale": profile.cfg_scale,
     }
+    if lora is not None:
+        evidence["lora"] = dict(lora)
+    return evidence
 
 
 __all__ = [
@@ -481,6 +504,7 @@ __all__ = [
     "KLEIN_EDIT_METADATA_KEY",
     "KLEIN_PROFILE_ID",
     "KLEIN_PROFILE_V1",
+    "KLEIN_PROFILE_V2",
     "KLEIN_PROFILE_VERSION",
     "KleinAsset",
     "KleinProfile",

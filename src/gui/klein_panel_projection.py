@@ -53,7 +53,21 @@ class KleinPanelProjection:
         self._saved_helper = ""
         self._saved_values: dict[str, Any] = {}
         self._added_presets: list[str] = []
+        self._lora_provider: Callable[[], list[tuple[str, float]]] | None = None
+        self._lora_sink: Callable[[dict[str, str]], None] | None = None
+        self._lora_resolver: Any = None
         self.last_projection: KleinControlProjection = project_klein_controls(None, None)
+
+    def set_lora_integration(
+        self,
+        *,
+        provider: Callable[[], list[tuple[str, float]]],
+        sink: Callable[[dict[str, str]], None],
+        resolver: Any,
+    ) -> None:
+        """Connect the selected LoRAs (read) and their annotations (write); the decision stays in the projection."""
+
+        self._lora_provider, self._lora_sink, self._lora_resolver = provider, sink, resolver
 
     @property
     def active(self) -> bool:
@@ -65,12 +79,29 @@ class KleinPanelProjection:
             backend_id: str | None = self._backend_id_provider()
         except Exception:
             backend_id = None
-        projection = project_klein_controls(panel.model_var.get(), backend_id)
+        selected: list[tuple[str, float]] = []
+        if self._lora_provider is not None:
+            try:
+                selected = list(self._lora_provider())
+            except Exception:
+                logger.debug("Could not read the selected LoRAs", exc_info=True)
+        projection = project_klein_controls(
+            panel.model_var.get(),
+            backend_id,
+            selected_loras=selected,
+            lora_resolver=self._lora_resolver,
+        )
         self.last_projection = projection
         if projection.active:
             self._enter(projection)
         elif self._active:
             self._leave()
+        if self._lora_sink is not None:
+            try:
+                # Inactive Klein clears every annotation: an ordinary model shows the picker exactly as before.
+                self._lora_sink(dict(projection.lora_annotations))
+            except Exception:
+                logger.debug("Could not update the LoRA annotations", exc_info=True)
         return projection
 
     def _widget_state(self, name: str) -> str:
@@ -136,7 +167,10 @@ class KleinPanelProjection:
             self._set_state(name, "disabled")
         helper = getattr(panel, "_helper_label", None)
         if helper is not None:
-            text = projection.note + (f"\n{projection.blocking}" if projection.blocking else "")
+            text = projection.note
+            for extra in (projection.blocking, projection.lora_blocking):
+                if extra:
+                    text += f"\n{extra}"
             helper.configure(text=text)
 
     def _leave(self) -> None:

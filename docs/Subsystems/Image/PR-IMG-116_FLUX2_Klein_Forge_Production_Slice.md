@@ -7,6 +7,11 @@ forced. Execution Profile: Standard / substantial known-architecture PR (Claude 
 Canonical path (unchanged):
 `Intent -> Compiler -> immutable NJR -> JobService -> SQLite -> PipelineRunner.run_njr -> forge_webui -> Artifacts/History`.
 
+> **Historical semantics.** Everything below describes profile **version 1**, which is immutable: it means exactly this,
+> including that **every LoRA is rejected**, for any persisted or replayed v1 record. Newly constructed Klein work is stamped
+> version 2 since PR-IMG-117 (one qualified Klein-4B LoRA); see
+> `docs/Subsystems/Image/PR-IMG-117_FLUX2_Klein_LoRA_Qualification_and_Profile_v2.md`. Negative prompts remain unsupported in both.
+
 ## What is supported (profile `flux2_klein_4b_fp8` version 1)
 
 | | |

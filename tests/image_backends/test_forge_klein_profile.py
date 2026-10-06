@@ -79,7 +79,7 @@ def test_profile_resolves_from_the_persisted_reference_and_fails_closed_otherwis
     assert resolve_model_profile({"image": {"backend_id": "forge_webui"}}) is None
     assert resolve_model_profile(None) is None
     for bad in (
-        {"id": KLEIN_PROFILE_ID, "version": 2},
+        {"id": KLEIN_PROFILE_ID, "version": 3},
         {"id": "other", "version": 1},
         {"id": KLEIN_PROFILE_ID},
         "flux2_klein_4b_fp8",
@@ -94,7 +94,7 @@ def test_klein_is_identified_by_exact_transformer_name_only() -> None:
     for name in ("flux-2-klein-4b-fp8-bf16.safetensors", "flux-2-klein-9b-fp8.safetensors", "sdxl.safetensors", "", None):
         assert not is_klein_transformer_name(name)
     assert model_profile_for_model("sdxl.safetensors") is None
-    assert model_profile_for_model(KLEIN) == {"id": KLEIN_PROFILE_ID, "version": 1}
+    assert model_profile_for_model(KLEIN) == {"id": KLEIN_PROFILE_ID, "version": 2}  # new work is stamped v2 (PR-IMG-117)
 
 
 def test_the_qualified_envelope_is_accepted() -> None:
@@ -167,7 +167,7 @@ def test_compile_policy_freezes_the_distilled_semantics_for_klein_only() -> None
     assert frozen["pipeline"]["apply_global_negative_txt2img"] is False
     assert frozen["pipeline"]["apply_global_positive_txt2img"] is False
     assert (frozen["global_positive_prompt"], frozen["global_negative_prompt"]) == ("", "")
-    assert frozen["backend_options"]["image"]["model_profile"] == {"id": KLEIN_PROFILE_ID, "version": 1}
+    assert frozen["backend_options"]["image"]["model_profile"] == {"id": KLEIN_PROFILE_ID, "version": 2}
     # geometry, hires and LoRA are not owned by the policy: conflicts remain visible to the validators
     assert "width" not in t and "enable_hr" not in t
 
@@ -191,7 +191,7 @@ def test_edit_config_is_the_proven_img2img_semantics_with_one_reference_and_no_s
 
 def test_normalize_stamps_the_profile_only_for_klein_and_never_overwrites() -> None:
     stamped = normalize_image_backend_options(None, backend_id="forge_webui", model_name=KLEIN)
-    assert stamped["image"] == {"backend_id": "forge_webui", "model_profile": {"id": KLEIN_PROFILE_ID, "version": 1}}
+    assert stamped["image"] == {"backend_id": "forge_webui", "model_profile": {"id": KLEIN_PROFILE_ID, "version": 2}}
     plain = normalize_image_backend_options(None, backend_id="forge_webui", model_name="sdxl.safetensors")
     assert plain["image"] == {"backend_id": "forge_webui"}
     explicit = {"image": {"model_profile": {"id": KLEIN_PROFILE_ID, "version": 1}, "backend_id": "a1111_webui"}}

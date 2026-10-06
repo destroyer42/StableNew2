@@ -34,8 +34,17 @@ from pathlib import Path
 from typing import Any
 
 from src.api.forge_client import ForgeVAEError, module_set_key
-from src.image_backends.forge_klein_assets import verify_klein_assets
+from src.image_backends.forge_klein_assets import _active_manager, verify_klein_assets
+from src.image_backends.forge_klein_lora import (
+    KleinLoraDecision,
+    LoraResolver,
+    LoraTag,
+    RegistryLoraResolver,
+    evaluate_klein_loras,
+    observe_lora_consumption,
+)
 from src.image_backends.forge_klein_profile import (
+    EDIT_STAGE_CHAIN,
     KLEIN_EDIT_METADATA_KEY,
     MODE_SINGLE_REFERENCE_EDIT,
     KleinProfile,
@@ -146,9 +155,14 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         *,
         transition: RuntimeTransitionCoordinator | None = None,
         memory_probe: Callable[[], HostMemorySnapshot] | None = None,
+        lora_resolver: LoraResolver | None = None,
     ) -> None:
         super().__init__(transition=transition)
         self._memory_probe = memory_probe
+        self._lora_resolver = lora_resolver
+        self._lora_evidence: dict[
+            str | None, tuple[tuple[KleinLoraDecision, ...], tuple[LoraTag, ...]]
+        ] = {}
         self._readiness: dict[str | None, KleinReadiness] = {}
         self._identity: dict[str | None, dict[str, Any]] = {}
         self._verified_source: dict[str | None, dict[str, Any]] = {}
@@ -180,6 +194,35 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                 found.append(label)
         return found
 
+    def _resolver(self) -> LoraResolver:
+        if self._lora_resolver is None:
+            self._lora_resolver = RegistryLoraResolver()
+        return self._lora_resolver
+
+    def _lora_conflicts(
+        self,
+        profile: KleinProfile,
+        *,
+        stage_names: Any,
+        prompt: str,
+        config: Mapping[str, Any],
+        declared: Any = (),
+    ) -> tuple[list[str], tuple[KleinLoraDecision, ...], tuple[LoraTag, ...]]:
+        """Profile v2 only: the one-compatible-LoRA contract (v1 rejects every LoRA via the feature list)."""
+
+        if profile.max_loras <= 0:
+            return [], (), ()
+        problems, decisions, tags = evaluate_klein_loras(
+            max_loras=profile.max_loras,
+            prompt=prompt,
+            declared=tuple((str(tag.name), float(tag.weight)) for tag in declared or ()),
+            lora_strength_overrides=bool(config.get("lora_strengths")),
+            resolver=self._resolver(),
+        )
+        if tags and tuple(str(stage) for stage in stage_names) == EDIT_STAGE_CHAIN:
+            problems.append("a LoRA with a single-reference edit is not qualified (text-to-image only)")
+        return problems, decisions, tags
+
     def validate_njr_intent(self, njr: Any, stage_names: list[str]) -> None:
         backend_options = getattr(njr, "backend_options", None) or {}
         config = getattr(njr, "config", None) or {}
@@ -194,10 +237,22 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         profile = self._profile_for(backend_options)
         if profile is None:
             return
+        lora_problems, _decisions, _tags = self._lora_conflicts(
+            profile,
+            stage_names=stage_names,
+            prompt=str(njr.positive_prompt or ""),
+            config=config,
+            declared=getattr(njr, "lora_tags", ()),
+        )
         features = (
-            detect_unsupported_features(config, positive_prompt=str(njr.positive_prompt or ""))
+            detect_unsupported_features(
+                config,
+                positive_prompt=str(njr.positive_prompt or ""),
+                lora_admitted=profile.max_loras > 0,
+            )
             + self._vae_conflict(getattr(njr, "vae", None), profile)
             + self._global_term_conflicts(config)
+            + lora_problems
         )
         input_images = tuple(getattr(njr, "input_image_paths", ()) or ())
         mode = validate_klein_intent(
@@ -225,10 +280,21 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         profile = self._profile_for(request.backend_options)
         if profile is None:
             return
+        lora_problems, decisions, tags = self._lora_conflicts(
+            profile,
+            stage_names=(request.stage_name,),
+            prompt=request.prompt,
+            config=request.execution_config,
+        )
         features = (
-            detect_unsupported_features(request.execution_config, positive_prompt=request.prompt)
+            detect_unsupported_features(
+                request.execution_config,
+                positive_prompt=request.prompt,
+                lora_admitted=profile.max_loras > 0,
+            )
             + self._vae_conflict(request.selected_vae, profile)
             + self._global_term_conflicts(request.execution_config)
+            + lora_problems
         )
         if int(request.image_count or 1) != 1:
             features.append(f"image count {request.image_count}")
@@ -246,6 +312,75 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             negative_prompt=request.negative_prompt,
             unsupported_features=features,
         )
+        if tags:
+            self._lora_evidence[request.job_id] = (decisions, tags)
+
+    # ------------------------------------------------------------------ served-LoRA binding (PR-IMG-117)
+
+    def _assert_lora_served(self, pipeline: Any, request: ImageExecutionRequest) -> dict[str, Any]:
+        """Forge itself must list the admitted adapter, and serve the file the registry identified.
+
+        Read-only. The registry's SHA-256 identity is the only byte authority; this binds it to the file the
+        serving Forge reports (a same-named different file is refused), without a second hashing authority.
+        """
+
+        _decisions, tags = self._lora_evidence.get(request.job_id, ((), ()))
+        client = getattr(pipeline, "client", None)
+        lister = getattr(client, "get_loras", None)
+        if not callable(lister):
+            raise KleinProfileError(
+                "This Forge client cannot list LoRAs; refusing to dispatch a LoRA job without confirming "
+                "Forge serves the adapter."
+            )
+        listed = lister()
+        if not isinstance(listed, list):
+            raise KleinProfileError(
+                "Forge's LoRA listing could not be read; refusing to dispatch a LoRA job."
+            )
+        locator = getattr(self._resolver(), "locations_for", None)
+        served: dict[str, Any] = {}
+        for tag in tags:
+            key = tag.name.strip().lower()
+            entry = next(
+                (
+                    item
+                    for item in listed
+                    if key in {str(item.get("name") or "").lower(), str(item.get("alias") or "").lower()}
+                ),
+                None,
+            )
+            if entry is None:
+                raise KleinProfileError(
+                    f"Forge does not list the LoRA '{tag.name}'. Place the file where the managed Forge reads "
+                    "LoRAs (and restart or refresh Forge) before submitting."
+                )
+            forge_path = str(entry.get("path") or "")
+            bound = None
+            if forge_path and callable(locator):
+                wanted = {os.path.normcase(os.path.realpath(p)) for p in locator(tag.name)}
+                bound = os.path.normcase(os.path.realpath(forge_path)) in wanted
+                if not bound:
+                    raise KleinProfileError(
+                        f"Forge serves the LoRA '{tag.name}' from a different file than StableNew's local asset "
+                        "identity (same name, different path); refusing to dispatch."
+                    )
+            served[tag.name] = {"listed": True, "path_bound_to_registry_identity": bound}
+        return served
+
+    @staticmethod
+    def _lora_log_observation(tag: LoraTag) -> dict[str, Any]:
+        """Forge's own log line for applying the adapter, via the existing manager's output tail (never raises)."""
+
+        try:
+            manager = _active_manager()
+            tail = manager.get_recent_output_tail(max_lines=400) if manager is not None else {}
+            lines = str(tail.get("stdout_tail") or "").splitlines() + str(
+                tail.get("stderr_tail") or ""
+            ).splitlines()
+            return observe_lora_consumption(lines, tag.name)
+        except Exception:
+            logger.debug("Could not read Forge's LoRA log lines", exc_info=True)
+            return {"consumed": None, "source": "unavailable"}
 
     # ------------------------------------------------------------------ module baseline (D110)
 
@@ -335,6 +470,8 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         endpoint = str(getattr(getattr(pipeline, "client", None), "base_url", "") or "")
         self._identity[request.job_id] = verify_klein_assets(profile, endpoint=endpoint)
         self._assert_assets_listed(pipeline, profile)
+        if self._lora_evidence.get(request.job_id, ((), ()))[1]:
+            self._identity[request.job_id]["lora_served"] = self._assert_lora_served(pipeline, request)
         if request.stage_name == "img2img":
             self._verified_source[request.job_id] = self._verify_frozen_source(request)
 
@@ -454,6 +591,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                 self._identity,
                 self._verified_source,
                 self._module_baseline,
+                self._lora_evidence,
             ):
                 scratch.pop(request.job_id, None)
             raise
@@ -464,12 +602,20 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         readiness = self._readiness.pop(request.job_id, None)
         identity = self._identity.pop(request.job_id, None)
         verified_source = self._verified_source.pop(request.job_id, None)
+        lora_state = self._lora_evidence.pop(request.job_id, ((), ()))
         if profile is None or result is None:
             return result
         mode = (
             MODE_SINGLE_REFERENCE_EDIT if request.stage_name == "img2img" else request.stage_name
         )
-        evidence = klein_provenance(profile, mode=mode)
+        lora_block = self._lora_block(lora_state, identity)
+        if lora_block is not None and lora_block["observation"].get("consumed") is False:
+            raise KleinProfileError(
+                f"Forge did not apply the LoRA '{lora_block['name']}' to this model "
+                f"({lora_block['observation'].get('line', 'adapter keys did not match')}); the generated image "
+                "does not reflect the requested LoRA, so the job is failed rather than recorded as a LoRA result."
+            )
+        evidence = klein_provenance(profile, mode=mode, lora=lora_block)
         if readiness is not None:
             evidence["host_memory_before_dispatch"] = readiness.as_dict()
         evidence["observed"] = self._observe(pipeline)  # Forge's reported names: supplementary evidence
@@ -479,6 +625,30 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             evidence["source_image"] = verified_source
         result.backend_metadata["klein_profile"] = evidence
         return result
+
+    def _lora_block(
+        self,
+        lora_state: tuple[tuple[KleinLoraDecision, ...], tuple[LoraTag, ...]],
+        identity: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        """Machine-path-free LoRA evidence: logical name, weight, SHA-256, compatibility decision, observation."""
+
+        decisions, tags = lora_state
+        if not tags:
+            return None
+        tag, decision = tags[0], decisions[0]
+        return {
+            "name": tag.name,
+            "requested_weight": tag.weight,
+            "sha256": decision.sha256,
+            "compatibility": {
+                "status": decision.status.value,
+                "evidence_source": decision.evidence_source,
+                "evidence_raw_value": decision.evidence_raw_value,
+            },
+            "served": ((identity or {}).get("lora_served") or {}).get(tag.name),
+            "observation": self._lora_log_observation(tag),
+        }
 
     @staticmethod
     def _observe(pipeline: Any) -> dict[str, Any]:

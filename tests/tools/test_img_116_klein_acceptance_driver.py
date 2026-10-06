@@ -64,7 +64,7 @@ def test_smoke_a_is_compiled_by_the_production_builder_into_the_frozen_klein_int
     assert driver.run(args, driver.InjectedRuntime()) == driver.EXIT_DRY
     njr = _intent(args)["njr"]
     config = njr["workload"]["config"]
-    assert njr["workload"]["backend_options"]["image"] == {"backend_id": "forge_webui", "model_profile": {"id": "flux2_klein_4b_fp8", "version": 1}}
+    assert njr["workload"]["backend_options"]["image"] == {"backend_id": "forge_webui", "model_profile": {"id": "flux2_klein_4b_fp8", "version": 2}}
     assert (config["steps"], config["cfg_scale"], config["sampler_name"], config["scheduler"]) == (4, 1.0, "Euler", "Beta")
     assert (config["width"], config["height"], config["seed"]) == (768, 1024, 424242)
     assert njr["workload"]["negative_prompt"] == ""
@@ -100,7 +100,7 @@ def test_smoke_a_then_b_complete_end_to_end_with_fakes_one_dispatch_each(tmp_pat
     assert driver.run(args, driver.InjectedRuntime(), client=client) == driver.EXIT_COMPLETED
     report = json.loads((Path(args.reports_dir) / "acceptance.json").read_text(encoding="utf-8"))
     assert report["job"]["status"] == "completed"
-    assert report["job"]["klein_evidence"]["model_profile"]["version"] == 1
+    assert report["job"]["klein_evidence"]["model_profile"]["version"] == 2
     assert report["job"]["image_backend_id"] == "forge_webui"
     assert [p for _, p, _ in transport.generation_calls] == ["/sdapi/v1/txt2img"]
     assert report["pre_run_memory"]["available_gb"] > 0 and report["pre_run_memory"]["total_gb"] > 0

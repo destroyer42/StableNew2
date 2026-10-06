@@ -229,6 +229,12 @@ class AssetRegistry:
     def snapshot(self) -> AssetRegistrySnapshot:
         return self._snapshot
 
+    def cached_snapshot(self) -> AssetRegistrySnapshot:
+        """The last persisted snapshot, without scanning or hashing anything (safe on a UI thread)."""
+
+        self._load()
+        return self._snapshot
+
     def refresh(self, *, kinds: Iterable[AssetKind] | None = None) -> RefreshResult:
         self._load()
         selected = set(kinds) if kinds is not None else set(AssetKind)
