@@ -84,6 +84,24 @@ class FakeManager:
         return True
 
 
+class FakeClock:
+    """Deterministic time for the initial-identity settle: ``sleep`` advances ``now`` and never waits."""
+
+    def __init__(self) -> None:
+        self.now = 1000.0
+        self.sleeps: list[float] = []
+        self.on_sleep: Any = None
+
+    def __call__(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += seconds
+        if self.on_sleep is not None:
+            self.on_sleep(len(self.sleeps))
+
+
 class Probe:
     """Scripted identity probes; the last scripted observation repeats."""
 
@@ -104,10 +122,15 @@ class Probe:
 class Stack:
     """One owned manager, one client and one pipeline: the production shape, with a recording pipeline."""
 
-    def __init__(self, tmp_path: Path, *probe_script: WebUIRuntimeIdentity, manager: Any = "default") -> None:
+    def __init__(
+        self, tmp_path: Path, *probe_script: WebUIRuntimeIdentity, manager: Any = "default", **attestor_options: Any
+    ) -> None:
         self.manager = FakeManager() if manager == "default" else manager
         self.probe = Probe(*probe_script)
-        self.attestor = ManagedWebUIIdentityAttestor(manager_getter=lambda: self.manager)
+        self.clock = FakeClock()
+        self.attestor = ManagedWebUIIdentityAttestor(
+            manager_getter=lambda: self.manager, clock=self.clock, sleeper=self.clock.sleep, **attestor_options
+        )
         transition = Mock()
         transition.prepare_for.return_value = Mock(ready=True)
         self.forge = ForgeWebUIImageBackend(transition=transition, identity_attestor=self.attestor)

@@ -100,7 +100,9 @@ Updated: 2026-10-05
 - Managed Forge identity attestation (PR-RUNTIME-FORGE-IDENTITY-150, local branch): `forge_webui` stages still require a positively
   identified Forge before dispatch, but the exact StableNew-owned runtime session (manager, process, PID, readiness epoch,
   endpoint, ownership, liveness) that was already positively classified from real endpoint evidence may carry that proof across a
-  transient `unknown` re-probe. Any session change, a positive A1111 or contradicting evidence drops it; an external/unowned
+  transient `unknown` re-probe, and the first Forge stage of an owned session waits a bounded 8 s (0.5 s poll, session re-validated
+  before every probe, never through contradiction, never for external runtimes) for its first real positive classification. Any
+  session change, a positive A1111 or contradicting evidence drops it; an external/unowned
   endpoint can never use it; a never-proven session still rejects `unknown`; A1111 semantics are unchanged. It is in-memory only
   (never persisted) and the rejection now reports `source` and `gap` diagnostics. Physical managed-restart acceptance is not yet
   run. See `docs/Subsystems/Runtime/PR-RUNTIME-FORGE-IDENTITY-150_Managed_Forge_Identity_Attestation.md`.

@@ -25,12 +25,14 @@ from __future__ import annotations
 
 import logging
 import threading
+import time
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from src.api.webui_runtime_identity import (
     FORGE_WEBUI_IDENTITY,
+    UNKNOWN_WEBUI_IDENTITY,
     WebUIRuntimeIdentity,
     WebUIRuntimeIdentityMismatch,
     assert_runtime_matches_backend,
@@ -58,6 +60,24 @@ GAP_INDETERMINATE = "indeterminate"
 
 #: Gaps that are positive evidence *against* Forge, not merely missing evidence. They are never transient.
 CONTRADICTORY_GAPS = frozenset({GAP_CONFLICTING_VAE, GAP_OPTIONS_WITHOUT_FORGE_KEYS})
+
+#: Missing/incomplete/malformed evidence: the only gaps the initial-establishment settle may wait through.
+SETTLE_GAPS = frozenset({
+    GAP_COMPLETE_LOSS, GAP_OPTIONS_UNAVAILABLE, GAP_OPTIONS_MALFORMED, GAP_MODULES_UNAVAILABLE, GAP_MODULES_MALFORMED,
+})
+
+#: Initial identity-establishment settle (finite, seconds): general readiness can be proven a moment before the
+#: endpoint serves enough evidence (``/options``, ``/sd-modules``) to classify Forge. It runs only for an owned,
+#: still-current session with no valid attestation, until the first real positive classification. A probe that is
+#: already in flight is not interrupted, so the wall time can exceed the bound by at most one probe.
+INITIAL_IDENTITY_SETTLE_SECONDS = 8.0
+INITIAL_IDENTITY_POLL_SECONDS = 0.5
+
+SETTLE_ESTABLISHED = "initial_identity_established"
+SETTLE_TIMEOUT = "initial_identity_settle_timeout"
+SETTLE_CONTRADICTION = "initial_identity_settle_contradiction"
+SETTLE_SESSION_CHANGED = "initial_identity_settle_session_changed"
+SETTLE_STOPPED = "initial_identity_settle_ineligible_evidence"
 
 
 def identity_gap(observed: WebUIRuntimeIdentity) -> str | None:
@@ -129,6 +149,7 @@ class IdentityDecision:
     observed: WebUIRuntimeIdentity
     gap: str | None = None
     session: OwnedWebUISession | None = None
+    settle: IdentitySettleReport | None = None
 
     def describe(self) -> str:
         parts = [f"source={self.source}", f"observed={self.observed.identity}"]
@@ -136,7 +157,26 @@ class IdentityDecision:
             parts.append(f"gap={self.gap}")
         if self.session is not None:
             parts.append(self.session.describe())
+        if self.settle is not None:
+            parts.append(self.settle.describe())
         return ", ".join(parts)
+
+
+@dataclass(frozen=True)
+class IdentitySettleReport:
+    """What the bounded initial identity-establishment settle did (bounded facts, never payloads)."""
+
+    outcome: str
+    attempts: int
+    elapsed_seconds: float
+    bound_seconds: float
+    gap: str | None
+
+    def describe(self) -> str:
+        return (
+            f"initial_identity_settle={self.outcome} attempts={self.attempts} "
+            f"elapsed={self.elapsed_seconds:.2f}s bound={self.bound_seconds:.1f}s last_gap={self.gap}"
+        )
 
 
 def _default_manager() -> Any:
@@ -148,8 +188,20 @@ def _default_manager() -> Any:
 class ManagedWebUIIdentityAttestor:
     """Holds at most one Forge attestation, bound to one owned runtime session."""
 
-    def __init__(self, manager_getter: Callable[[], Any] | None = None) -> None:
+    def __init__(
+        self,
+        manager_getter: Callable[[], Any] | None = None,
+        *,
+        settle_seconds: float = INITIAL_IDENTITY_SETTLE_SECONDS,
+        poll_seconds: float = INITIAL_IDENTITY_POLL_SECONDS,
+        clock: Callable[[], float] = time.monotonic,
+        sleeper: Callable[[float], None] = time.sleep,
+    ) -> None:
         self._manager_getter = manager_getter or _default_manager
+        self._settle_seconds = max(0.0, float(settle_seconds))
+        self._poll_seconds = max(0.001, float(poll_seconds))
+        self._clock = clock
+        self._sleeper = sleeper
         self._lock = threading.Lock()
         self._attested: OwnedWebUISession | None = None
         self._reuse_logged = False
@@ -272,14 +324,92 @@ def verify_backend_runtime_identity(
     observed = classify_client_runtime(client)
     after = attestor.current_session(endpoint)
     decision = attestor.decide(backend_id, observed, before, after)
+    if backend_id == FORGE_WEBUI_IDENTITY and _settle_eligible(attestor, decision, after):
+        decision = _settle_initial_identity(client, attestor, decision, after)
     if record is not None:
         record(decision)  # before any raise, so a rejection is diagnosable too
     if backend_id != FORGE_WEBUI_IDENTITY:
         assert_runtime_matches_backend(backend_id, observed)
         return decision
     if not decision.allowed:
-        raise WebUIRuntimeIdentityMismatch(backend_id, observed, detail=decision.describe())
+        raise WebUIRuntimeIdentityMismatch(backend_id, decision.observed, detail=decision.describe())
     return decision
+
+
+def _settle_eligible(
+    attestor: ManagedWebUIIdentityAttestor, decision: IdentityDecision, anchor: OwnedWebUISession | None
+) -> bool:
+    """Whether a refused Forge stage may wait for the first real positive proof of this exact owned session.
+
+    Every condition is a current fact: an owned live session serving the client endpoint (``anchor`` is only ever
+    produced for that), declared ``forge_webui``, no valid attestation, a non-positive probe, and missing evidence
+    rather than contradiction. External/unowned endpoints have no ``anchor`` and therefore never settle.
+    """
+
+    return (
+        anchor is not None
+        and anchor.declared_identity == FORGE_WEBUI_IDENTITY
+        and not decision.allowed
+        and decision.source in (SOURCE_NO_ATTESTATION, SOURCE_SESSION_CHANGED)  # a dropped proof leaves none
+        and decision.observed.identity == UNKNOWN_WEBUI_IDENTITY
+        and decision.gap in SETTLE_GAPS
+        and attestor.attested_session() is None
+    )
+
+
+def _settle_initial_identity(
+    client: Any,
+    attestor: ManagedWebUIIdentityAttestor,
+    first: IdentityDecision,
+    anchor: OwnedWebUISession,
+) -> IdentityDecision:
+    """Wait, bounded, for the first positive Forge classification of ``anchor`` (never after one exists).
+
+    Before EVERY further probe the session facts are re-read; any change in manager, process, PID, endpoint,
+    readiness epoch, ownership or liveness aborts at once. Positive contradiction ends it at once. Only a real positive
+    classification can end it successfully; exhausting the bound leaves the original refusal in place. No generation
+    endpoint and none of the HTTP retry machinery is involved: it re-runs the same read-only identity probe.
+    """
+
+    endpoint = getattr(client, "base_url", None)
+    clock = attestor._clock
+    started = clock()
+    deadline = started + attestor._settle_seconds
+    attempts, gap, final = 1, first.gap, first
+    logger.info("[identity] initial_identity_settle begin: %s bound=%.1fs", anchor.describe(), attestor._settle_seconds)
+
+    def finish(outcome: str, decision: IdentityDecision) -> IdentityDecision:
+        report = IdentitySettleReport(outcome, attempts, max(0.0, clock() - started), attestor._settle_seconds, gap)
+        logger.info("[identity] %s %s", report.describe(), anchor.describe())
+        return replace(decision, settle=report)
+
+    while True:
+        now = clock()
+        if now >= deadline:
+            return finish(SETTLE_TIMEOUT, final)
+        attestor._sleeper(min(attestor._poll_seconds, deadline - now))
+        before = attestor.current_session(endpoint)
+        if before is None or not anchor.same_launch(before):
+            attestor.invalidate("the owned runtime session changed during the initial identity settle")
+            return finish(SETTLE_SESSION_CHANGED, replace(final, source=SOURCE_SESSION_CHANGED, session=before))
+        observed = classify_client_runtime(client)
+        attempts += 1
+        after = attestor.current_session(endpoint)
+        gap = identity_gap(observed)
+        if after is None or not anchor.same_launch(after):
+            attestor.invalidate("the owned runtime session changed during the initial identity settle")
+            return finish(
+                SETTLE_SESSION_CHANGED,
+                replace(final, source=SOURCE_SESSION_CHANGED, observed=observed, gap=gap, session=after),
+            )
+        decision = attestor.decide(FORGE_WEBUI_IDENTITY, observed, before, after)
+        if decision.allowed:
+            return finish(SETTLE_ESTABLISHED, decision)
+        if decision.source == SOURCE_CONTRADICTORY:
+            return finish(SETTLE_CONTRADICTION, decision)
+        if gap not in SETTLE_GAPS:
+            return finish(SETTLE_STOPPED, decision)
+        final = replace(first, observed=decision.observed, gap=gap)  # the original refusal, with the latest evidence
 
 
 _DEFAULT_ATTESTOR = ManagedWebUIIdentityAttestor()
@@ -293,6 +423,14 @@ def default_attestor() -> ManagedWebUIIdentityAttestor:
 
 __all__ = [
     "IdentityDecision",
+    "IdentitySettleReport",
+    "INITIAL_IDENTITY_POLL_SECONDS",
+    "INITIAL_IDENTITY_SETTLE_SECONDS",
+    "SETTLE_CONTRADICTION",
+    "SETTLE_ESTABLISHED",
+    "SETTLE_SESSION_CHANGED",
+    "SETTLE_STOPPED",
+    "SETTLE_TIMEOUT",
     "ManagedWebUIIdentityAttestor",
     "OwnedWebUISession",
     "SOURCE_CONTRADICTORY",

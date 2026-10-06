@@ -65,6 +65,39 @@ starts, stops, adopts or restarts a process; `RuntimeTransitionCoordinator` is u
 `assert_runtime_matches_backend`. Its observations only ever invalidate (or, for a positive Forge on an owned session, establish)
 the attestation.
 
+## Initial identity-establishment settle
+
+A first physical acceptance showed the other half of the same failure class: the owned managed Forge was READY (general
+readiness proven, epoch 1) but could not yet be positively classified (`/sd-modules` readable; `/options`, `/sd-vae` and
+`/cmd-flags` unavailable), and the first Forge stage would have been refused although the attestation had nothing to carry.
+The settle bridges only the gap between "general readiness proven" and "enough endpoint evidence to classify Forge". It does
+not weaken the rule that every managed session needs one real positive classification before any attestation exists.
+
+It runs, inside `verify_backend_runtime_identity`, only when ALL hold: the backend is `forge_webui`; the authoritative manager
+exists, owns the live process, declares `forge_webui`, serves the client's endpoint and has readiness epoch >= 1; the session has
+no valid attestation (never proven, or its proof was dropped by a restart); the live classification is `unknown`; and the gap is
+missing/incomplete/malformed evidence (`complete_endpoint_loss`, `options_unavailable|malformed`, `sd_modules_unavailable|malformed`).
+Positive A1111, an A1111-style `/sd-vae` list or readable `/options` without Forge keys are contradictions: they reject at once,
+never settle, and drop any stale proof.
+
+* **Bound:** `INITIAL_IDENTITY_SETTLE_SECONDS = 8.0`, polled every `INITIAL_IDENTITY_POLL_SECONDS = 0.5` (at most 16 further
+  probes); the last sleep is clamped to the remaining time. Clock and sleeper are injectable, so tests never wait. A probe already
+  in flight is not interrupted, so wall time can exceed the bound by at most one probe. It re-runs the same read-only identity
+  probe: no generation endpoint and none of the HTTP retry machinery is involved.
+* **Revalidation:** before every further probe, and again after it, the session facts (manager and process objects, PID, endpoint,
+  readiness epoch, ownership, liveness) are re-read; any change aborts at once as `session_changed` and discards even a positive
+  result that straddled the change. Only a real positive classification of the unchanged session ends the settle successfully and
+  establishes the attestation.
+* **Exhaustion** leaves the original refusal (`no_valid_attestation` or `session_changed`) in place; a manager declaration, ownership
+  or a healthy port never converts it into Forge.
+* **Never again:** once the session has an attestation, a transient `unknown` uses the same-session attestation and is not re-polled.
+  External/unowned endpoints and A1111 get no settle at all.
+
+`IdentityDecision.settle` (`IdentitySettleReport`) records `outcome` (`initial_identity_established`,
+`initial_identity_settle_timeout`, `initial_identity_settle_contradiction`, `initial_identity_settle_session_changed`,
+`initial_identity_settle_ineligible_evidence`), attempts, elapsed and bound seconds and the latest gap. It is logged once per settle
+and appended to a rejection message; no payloads are kept.
+
 ## Diagnostics
 
 `IdentityDecision` (`WebUIFamilyImageBackend.last_identity_decision`, and appended to a rejection message as
@@ -78,12 +111,15 @@ session; establishment and invalidation are logged once each.
 
 ## Not changed
 
-No retry or backoff was added (generation POSTs, `retry_policy_v2` and the identity GETs are untouched); no Forge/A1111 change;
+No generation retry, backoff or `retry_policy_v2` change (the only waiting is the bounded initial settle above); no Forge/A1111 change;
 no queue/SQLite/shutdown/GUI change; `WebUIProcessManager` gained no classifier and no new API (it already exposed every fact);
 no controller file was touched, so no ratchet ceiling moved.
 
 ## Validation
 
+`tests/api/test_managed_forge_initial_identity_settle.py` (38 deterministic fake-clock tests: unknown-unknown-Forge establishes once and
+dispatches only afterwards, exhaustion, contradiction, each session fact changing between attempts and during a probe, a restarted
+session settling on its own, external/A1111 getting zero settle, no re-poll after establishment, diagnostics) and
 `tests/api/test_managed_forge_identity_attestation.py` (45 deterministic tests: same-session reuse, first-unknown reject, restart/epoch,
 PID, process object, endpoint, client/manager endpoint mismatch, ownership loss, not running, manager replacement, no manager,
 raising manager, positive A1111, contradictory evidence, external endpoints with and without a prior owned attestation,
