@@ -3,6 +3,11 @@
 
 """Model Profiles & Style-Aware Defaults (V2-P1)
 
+Not to be confused with the *executable* image-model policy/profile authority: ``ModelProfile`` here is a learning/style
+prior (recommended defaults a Learning run may start from). What a model family may actually run, and which controls are
+fixed or unsupported, is owned by ``src/image_backends/model_policy.py`` and the immutable qualified profiles it
+projects (PR-IMG-130A). The two concepts are intentionally separate; this module is not a capability authority.
+
 This module defines the data structures and helpers used to represent
 **ModelProfiles** – structured sidecar "priors" that StableNewV2 uses to
 bootstrap good pipeline defaults for a given base model.

@@ -544,7 +544,7 @@ class MainWindowV2:
         return format_product_support_label(default_title, support.state)
 
     def _wire_klein_lora_projection(self) -> None:
-        """PR-IMG-117: connect the Prompt tab's LoRA picker to the Klein projection (no-op for other models).
+        """PR-IMG-117: connect the Prompt tab's LoRA picker to the model-policy projection (a no-op for unconstrained models).
 
         The projection reads the selected LoRAs and annotates them with the same compatibility decision the
         backend makes at admission, using the registry's persisted snapshot only (no scan, no hashing on the
@@ -553,7 +553,7 @@ class MainWindowV2:
 
         try:
             base_panel = getattr(self.sidebar_panel_v2, "base_generation_panel", None)
-            projection = getattr(base_panel, "_klein_projection", None)
+            projection = getattr(base_panel, "_model_policy_projection", None)
             picker = getattr(getattr(self, "prompt_tab", None), "lora_picker", None)
             if projection is None or picker is None:
                 return
