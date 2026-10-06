@@ -33,7 +33,6 @@ from src.queue.job_model import JobStatus
 from src.utils import StructuredLogger
 from src.utils.config import ConfigManager
 from tests.helpers.fake_webui_transport import TINY_PNG_B64, FakeWebUITransport
-from tests.helpers.global_prompt_isolation import real_global_prompt_store_untouched  # noqa: F401
 from tests.helpers.njr_queue_harness import run_njr_via_queue
 from tools.qualification.img_forge_100 import provenance, run
 

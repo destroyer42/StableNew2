@@ -31,7 +31,6 @@ from src.queue.job_repository import JobRepository
 from src.utils import process_inspector_v2 as inspector
 from src.utils.config import ConfigManager
 from tests.helpers.fake_webui_transport import FakeWebUITransport
-from tests.helpers.global_prompt_isolation import real_global_prompt_store_untouched  # noqa: F401
 from tools.acceptance import img_forge_100_acceptance as driver
 
 REPO_ROOT = Path(__file__).resolve().parents[2]

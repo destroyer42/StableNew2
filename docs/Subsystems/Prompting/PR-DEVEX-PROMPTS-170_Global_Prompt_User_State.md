@@ -50,16 +50,15 @@ qualification documents that mention them describe evidence of their time.
 
 - Tests that save prompt text inject `global_prompt_dir` explicitly, the same
   way PromptPack tests inject `packs_dir`.
-- A test module opts in to a leak check by importing
-  `tests/helpers/global_prompt_isolation.py::real_global_prompt_store_untouched`; it points the per-user data
-  roots at an empty temporary directory and fails the test if a default-resolved `ConfigManager` created the
-  store. No repository-wide fixture exists. Modules that build the whole GUI or run the executor's legacy
-  fallback construct a default `ConfigManager()` (`SidebarPanelV2.__init__`, `Pipeline.__init__`) and must set
-  `STABLENEW_GLOBAL_PROMPT_DIR` themselves.
-- `OperatorWorkspace.activate()` sets `STABLENEW_GLOBAL_PROMPT_DIR` to the
-  workspace-owned `global-prompts` directory, creates it, and restores the prior
-  environment exactly on exit, so no journey reads or writes the operator's real
-  store.
+- `tests/conftest.py::_isolate_global_prompt_user_state` is the single test-safety authority: it sets
+  `STABLENEW_GLOBAL_PROMPT_DIR` to a per-test temporary directory for every pytest test, so default-constructed
+  `ConfigManager()` call sites (`SidebarPanelV2.__init__`, the executor's legacy-fallback `Pipeline.__init__`)
+  can never reach the per-user store. A test that sets the variable itself, or injects `global_prompt_dir`, wins.
+  `tests/utils/test_config_manager_global_prompts.py` proves both directions: the redirection holds, and without
+  it a default manager resolves toward the user-data location.
+- `OperatorWorkspace.activate()` sets `STABLENEW_GLOBAL_PROMPT_DIR` to the workspace-owned `global-prompts`
+  directory, creates it, and restores the prior environment exactly on exit, so no journey reads or writes the
+  operator's real store.
 
 ## Acceptance
 
@@ -69,3 +68,9 @@ Deterministic proof lives in `tests/utils/test_global_prompt_paths.py`,
 `tests/tools/test_operator_journey_harness.py`. Real-filesystem acceptance on
 Windows used a temporary directory through `STABLENEW_GLOBAL_PROMPT_DIR`; no
 backend, GPU or generation is involved.
+
+## Known follow-up
+
+`SidebarPanelV2` and the executor `Pipeline` construct `ConfigManager()` directly (the latter only for the
+historical unfrozen-policy fallback). Injecting a manager into them would be a legitimate testability change but
+is not needed for safety, which the root test fixture provides.

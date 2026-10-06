@@ -13,7 +13,6 @@ from src.utils.config import (
     DEFAULT_GLOBAL_POSITIVE_PROMPT,
     ConfigManager,
 )
-from tests.helpers.global_prompt_isolation import real_global_prompt_store_untouched  # noqa: F401
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -138,6 +137,35 @@ def test_environment_override_redirects_the_default_constructed_manager(tmp_path
     assert manager.save_global_positive_prompt("env positive")
 
     assert (tmp_path / "from-env" / "global_positive.txt").read_text(encoding="utf-8") == "env positive"
+
+
+def test_root_fixture_redirects_a_default_manager_away_from_user_data(tmp_path, monkeypatch):
+    """Ordinary tests get a per-test store; the per-user data location is unreachable."""
+
+    fake_user_data = tmp_path / "fake-user-data"
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_user_data))
+    monkeypatch.setenv("XDG_DATA_HOME", str(fake_user_data))
+
+    manager = ConfigManager(presets_dir=tmp_path / "presets", packs_dir=tmp_path / "packs")
+
+    assert manager.global_prompt_dir == tmp_path / "GlobalPrompts"
+    manager.get_global_positive_prompt()
+    manager.get_global_negative_prompt()
+    assert not fake_user_data.exists()
+
+
+def test_without_the_override_a_default_manager_resolves_toward_user_data(tmp_path, monkeypatch):
+    """Negative proof: the redirection above is the only thing keeping tests off the user-data path."""
+
+    fake_user_data = tmp_path / "fake-user-data"
+    monkeypatch.setenv("LOCALAPPDATA", str(fake_user_data))
+    monkeypatch.setenv("XDG_DATA_HOME", str(fake_user_data))
+    monkeypatch.delenv("STABLENEW_GLOBAL_PROMPT_DIR", raising=False)
+
+    manager = ConfigManager(presets_dir=tmp_path / "presets", packs_dir=tmp_path / "packs")
+
+    assert manager.global_prompt_dir == fake_user_data / "StableNew" / "GlobalPrompts"
+    assert not fake_user_data.exists()  # resolving alone creates nothing
 
 
 def test_constructing_a_manager_does_not_create_the_prompt_store(tmp_path):
