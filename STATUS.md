@@ -97,6 +97,13 @@ Updated: 2026-10-05
   reports it and leaves SQLite open). It repairs the reproduced post-shutdown claim and `Cannot operate on a closed database`
   race; the fence is process-lifetime, never persisted. See
   `docs/Subsystems/Runtime/PR-RUNTIME-SHUTDOWN-140_Shutdown_Admission_and_Repository_Quiescence.md`.
+- Managed Forge identity attestation (PR-RUNTIME-FORGE-IDENTITY-150, local branch): `forge_webui` stages still require a positively
+  identified Forge before dispatch, but the exact StableNew-owned runtime session (manager, process, PID, readiness epoch,
+  endpoint, ownership, liveness) that was already positively classified from real endpoint evidence may carry that proof across a
+  transient `unknown` re-probe. Any session change, a positive A1111 or contradicting evidence drops it; an external/unowned
+  endpoint can never use it; a never-proven session still rejects `unknown`; A1111 semantics are unchanged. It is in-memory only
+  (never persisted) and the rejection now reports `source` and `gap` diagnostics. Physical managed-restart acceptance is not yet
+  run. See `docs/Subsystems/Runtime/PR-RUNTIME-FORGE-IDENTITY-150_Managed_Forge_Identity_Attestation.md`.
 - Risk-proportionate CI (PR-DEVEX-CI-110): the repository-owned `tools/ci/validation_plan.py` classifies the base-to-head change
   set into additive coarse lanes and the single PR-head workflow consumes it. Docs-only changes take a cheap path (no Python
   environment); every executable PR runs `required` (repository quality plus a small cross-boundary contract suite, 294 tests) and

@@ -50,6 +50,12 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/job_service_shutdown.py` -> `src/controller/app_controller_services/shutdown_coordinator.py`
   (sequencing; the repository closes only when quiescent) -> `tests/queue/test_shutdown_admission_fence_140.py`,
   `tests/controller/test_shutdown_quiescence_140.py`.
+- Managed Forge identity attestation (`PR-RUNTIME-FORGE-IDENTITY-150`,
+  `docs/Subsystems/Runtime/PR-RUNTIME-FORGE-IDENTITY-150_Managed_Forge_Identity_Attestation.md`):
+  `src/api/webui_runtime_identity.py` (endpoint classification + evidence) ->
+  `src/api/webui_identity_attestation.py` (owned-session attestation, `identity_gap`, decision source) ->
+  `src/image_backends/webui_family_backend.py` (the pre-dispatch guard) -> `tests/api/test_managed_forge_identity_attestation.py`.
+  `WebUIProcessManager` stays the only lifecycle/ownership authority and only exposes session facts.
 - GPU hard-crash evidence (observation only):
   `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`
   -> `src/utils/gpu_survivor_telemetry.py` ->

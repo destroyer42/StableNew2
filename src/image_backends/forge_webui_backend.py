@@ -34,6 +34,7 @@ from pathlib import Path
 from typing import Any
 
 from src.api.forge_client import ForgeVAEError, module_set_key
+from src.api.webui_identity_attestation import ManagedWebUIIdentityAttestor
 from src.image_backends.forge_klein_assets import _active_manager, verify_klein_assets
 from src.image_backends.forge_klein_lora import (
     KleinLoraDecision,
@@ -156,8 +157,9 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         transition: RuntimeTransitionCoordinator | None = None,
         memory_probe: Callable[[], HostMemorySnapshot] | None = None,
         lora_resolver: LoraResolver | None = None,
+        identity_attestor: ManagedWebUIIdentityAttestor | None = None,
     ) -> None:
-        super().__init__(transition=transition)
+        super().__init__(transition=transition, identity_attestor=identity_attestor)
         self._memory_probe = memory_probe
         self._lora_resolver = lora_resolver
         self._lora_evidence: dict[
