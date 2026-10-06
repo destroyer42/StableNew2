@@ -12,6 +12,7 @@ from src.api.webui_process_manager import (
     WebUIProcessConfig,
     WebUIProcessManager,
     WebUIStartupError,
+    clear_global_webui_process_manager,
     kill_orphaned_webui_processes_blocking_port,
 )
 from src.utils.process_container_v2 import NullProcessContainer
@@ -33,6 +34,14 @@ def _manager(monkeypatch, *, working_dir=None, base_url=None) -> WebUIProcessMan
     )
     manager._start_orphan_monitor = Mock()
     return manager
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_webui_manager():
+    """A started manager registers globally; never let one test's live double block the next test's start()."""
+    clear_global_webui_process_manager()
+    yield
+    clear_global_webui_process_manager()
 
 
 @pytest.mark.parametrize("working_dir", [None, r"C:\stable-diffusion-webui"])

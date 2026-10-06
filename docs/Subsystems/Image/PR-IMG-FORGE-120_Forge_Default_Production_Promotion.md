@@ -121,7 +121,8 @@ switching was added.
 
 ## A1111 rollback
 
-Set `webui_runtime_identity` to `a1111_webui` in `presets/settings.json`, and set `webui_base_url` to the A1111 endpoint or
+Choose **A1111 Compatibility** in Engine Settings (*WebUI -> Runtime*; restart required, no hot switching), or set
+`webui_runtime_identity` to `a1111_webui` in `presets/settings.json`, and set `webui_base_url` to the A1111 endpoint or
 remove it (an explicit A1111 with no URL uses `127.0.0.1:7860`). The A1111 path reads no Forge profile, needs no managed
 Forge install, and uses the existing `webui_workdir`, launch profile commands and cache. New work is then stamped
 `a1111_webui`. Rollback is configuration only.

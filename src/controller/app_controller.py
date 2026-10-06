@@ -5760,11 +5760,11 @@ class AppController:
         PR-HB-003: Spawns worker thread for resource refresh to avoid blocking
         the calling thread (which may be UI thread or connection thread).
         """
-        try:
-            if hasattr(self._api_client, "clear_startup_probe_grace"):
-                self._api_client.clear_startup_probe_grace()
-        except Exception:
-            pass
+        for reset in ("clear_startup_probe_grace", "clear_runtime_failure_state"):  # proven READY: drop stale state
+            try:
+                getattr(self._api_client, reset, lambda: None)()
+            except Exception:
+                pass
         self._append_log("[webui] READY received, refreshing resource lists asynchronously.")
 
         # PR-HB-003: Set operation label for diagnostics

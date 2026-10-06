@@ -9,6 +9,7 @@ import sys
 import time
 import traceback
 import webbrowser
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -30,7 +31,9 @@ from src.utils.single_instance import SingleInstanceLock
 from .api.webui_process_manager import (
     WebUIProcessConfig,
     WebUIProcessManager,
+    active_owned_webui_process_manager,
     build_default_webui_process_config,
+    wait_for_managed_startup,
 )
 from .api.webui_runtime_identity import effective_webui_base_url
 from .app_factory import build_v2_app
@@ -179,8 +182,15 @@ def _acquire_single_instance_lock() -> socket.socket | None:
     return sock
 
 
-def bootstrap_webui(config: dict[str, Any]) -> WebUIProcessManager | None:
-    """Bootstrap WebUI using the proper connection controller framework."""
+def bootstrap_webui(
+    config: dict[str, Any],
+    on_manager: Callable[[WebUIProcessManager], None] | None = None,
+) -> WebUIProcessManager | None:
+    """Bootstrap the managed WebUI lifecycle on the one active manager.
+
+    ``on_manager`` receives the manager as soon as it exists (before the process is started and before readiness is
+    awaited), so connection/status machinery observes it even if startup is slow, times out or the process exits.
+    """
 
     proc_config: WebUIProcessConfig | None = config.get("process_config")
     if proc_config is None and config.get("webui_command"):
@@ -200,11 +210,16 @@ def bootstrap_webui(config: dict[str, Any]) -> WebUIProcessManager | None:
             wait_for_webui_ready(base_url)
         return None
 
-    manager = WebUIProcessManager(proc_config)
+    manager = active_owned_webui_process_manager() or WebUIProcessManager(proc_config)
+    if on_manager is not None:
+        on_manager(manager)
     if proc_config.autostart_enabled:
         manager.start()
-    wait_for_webui_ready(
-        config.get("webui_base_url"), timeout=proc_config.startup_timeout_seconds, poll_interval=0.5
+    wait_for_managed_startup(
+        manager,
+        config.get("webui_base_url"),
+        timeout_s=proc_config.startup_timeout_seconds,
+        probe=wait_for_webui_ready,
     )
     return manager
 
@@ -333,11 +348,13 @@ def _async_bootstrap_webui(root: Any, app_state, window) -> None:
                 except Exception:
                     startup_timeout = 60.0
                 client.set_startup_probe_grace(min(max(startup_timeout / 3.0, 20.0), 30.0))
-            webui_manager = bootstrap_webui(config)
-            if webui_manager:
-                # Update the window with the WebUI manager
-                root.after(0, lambda: _update_window_webui_manager(window, webui_manager))
-                logging.debug("WebUI bootstrap completed asynchronously")
+            bootstrap_webui(
+                config,
+                on_manager=lambda manager: root.after(
+                    0, lambda: _update_window_webui_manager(window, manager)
+                ),
+            )
+            logging.debug("WebUI bootstrap completed asynchronously")
         except Exception as e:
             logging.warning(f"Async WebUI bootstrap failed: {e}")
 
@@ -421,6 +438,11 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
     controller = getattr(window, "app_controller", None)
     if controller:
         controller.webui_process_manager = webui_manager
+        attach = getattr(
+            getattr(controller, "webui_connection_controller", None), "attach_process_manager", None
+        )
+        if callable(attach):
+            attach(webui_manager)  # startup/recovery readiness epochs now reach the connection controller
 
     # Set up WebUI status monitoring using the proper framework
     if hasattr(window, "status_bar_v2") and window.status_bar_v2:
@@ -453,7 +475,7 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                 last_logged_state = None
                 consecutive_failures = 0
                 error_logged = False
-                base_generation_refreshed = False
+                refreshed_epoch = -1
                 # Single-flight guard. Only ever read or written on the Tk thread (operations start
                 # from Tk callbacks and finish through Tk-thread delivery), so no lock is needed.
                 connection_op_in_flight = False
@@ -514,11 +536,7 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
 
                 def update_status(log_changes: bool = True) -> None:
                     """Update the status panel with current connection state."""
-                    nonlocal \
-                        last_logged_state, \
-                        consecutive_failures, \
-                        error_logged, \
-                        base_generation_refreshed
+                    nonlocal last_logged_state, consecutive_failures, error_logged, refreshed_epoch
                     try:
                         state = connection_controller.get_state()
                         if state != last_logged_state and log_changes:
@@ -530,11 +548,6 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
                         else:
                             consecutive_failures = 0
                             error_logged = False
-                            if base_generation_refreshed and state in {
-                                WebUIConnectionState.DISCONNECTED,
-                                WebUIConnectionState.ERROR,
-                            }:
-                                base_generation_refreshed = False
 
                         if consecutive_failures >= 3 and not connection_op_in_flight:
 
@@ -566,19 +579,12 @@ def _update_window_webui_manager(window, webui_manager: WebUIProcessManager) -> 
 
                         sync_state(state)
                         last_logged_state = state
-                        if state == WebUIConnectionState.READY and not base_generation_refreshed:
-                            # Notify both the sidebar (UI) and the AppController so resources/dropdowns are refreshed
+                        ready_epoch = getattr(connection_controller, "ready_epoch", 0)
+                        if state == WebUIConnectionState.READY and ready_epoch != refreshed_epoch:
+                            # One sidebar refresh per readiness epoch. The AppController resource refresh is the
+                            # controller's own ready callback, so it is never triggered a second time here.
                             trigger_sidebar_refresh()
-                            try:
-                                controller = getattr(window, "app_controller", None)
-                                if controller and hasattr(controller, "on_webui_ready"):
-                                    try:
-                                        controller.on_webui_ready()
-                                    except Exception:
-                                        pass
-                            except Exception:
-                                pass
-                            base_generation_refreshed = True
+                            refreshed_epoch = ready_epoch
                     except Exception as e:
                         if not error_logged:
                             logging.warning(f"Status update failed: {e}")
