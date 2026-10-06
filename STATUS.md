@@ -20,6 +20,13 @@ Updated: 2026-10-05
   resolver `pip`) applied by `scripts/bootstrap_windows.ps1`; `tools/runtime/verify_runtime_pins.py`
   detects drift in bootstrap and `-CheckOnly`. Accepted direct stack: Torch/torchvision `+cu130`
   2.14.0/0.29.0, Diffusers 0.40.0, Transformers 5.17.0, Accelerate 1.15.0.
+- One-command Windows launch (PR-DEVEX-LAUNCH-180): `scripts\launch_stablenew.bat` (-> `launch_stablenew.ps1`) resolves
+  its own checkout, creates the repository `.venv` once through `scripts/bootstrap_windows.ps1 -SkipSvdReadiness` when it is
+  missing, reuses a healthy one with a single read-only check (`tools/runtime/check_launch_environment.py`: interpreter policy +
+  the exact pins, no pip), and always runs `.venv\Scripts\python.exe -m src.main`. An incomplete, unsupported or drifted
+  `.venv` fails with guidance and is never repaired or recreated implicitly. `-SkipSvdReadiness` skips only the native-SVD
+  capability checks (CUDA device, FFmpeg, cached SVD model); the default bootstrap verification is unchanged. The launcher
+  starts no WebUI/Comfy/SVD runtime. `launch_stablenew_advanced.bat` only forwards to it.
 - Restoration isolation (PR-POSTPROC-100, COMPLETE / ACCEPTED / INTEGRATED; PR #32): local face restoration/upscaling is an
   optional `-WithPostprocess` profile (`requirements-postprocess.txt`, a `# profile: postprocess`
   section of the constraints) behind StableNew-owned adapters in `src/video/restoration/`. RealESRGAN

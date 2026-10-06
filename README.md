@@ -38,18 +38,19 @@ typed source, not a universal job identity.
 
 ## Install and run
 
-Use standard (GIL) Python 3.14 in a virtual environment:
-
-For the canonical Windows native-SVD setup, use the
-[Windows runtime bootstrap runbook](docs/runbooks/windows_runtime_bootstrap.md)
-and its [`scripts/bootstrap_windows.ps1`](scripts/bootstrap_windows.ps1)
-helper.
+On Windows, one command starts StableNew from a checkout:
 
 ```text
-python -m venv .venv
-.venv\Scripts\python -m pip install -r requirements.txt
-.venv\Scripts\python -m src.main
+scripts\launch_stablenew.bat
 ```
+
+It finds the repository from its own location, creates the repository `.venv` on first run (standard-GIL
+Python 3.14 is required as the source), reuses a healthy `.venv`, and always starts
+`.venv\Scripts\python.exe -m src.main`; you never need to activate a venv. A broken or drifted `.venv` is
+reported, not silently rebuilt. For repair, rebuilds and advanced setup (native SVD, optional
+postprocess stack), use the
+[Windows runtime bootstrap runbook](docs/runbooks/windows_runtime_bootstrap.md) and its
+[`scripts/bootstrap_windows.ps1`](scripts/bootstrap_windows.ps1) helper.
 
 Image generation requires a configured Stable Diffusion WebUI. Native SVD XT
 video has additional dependencies in `requirements-svd.txt`; optional local face
