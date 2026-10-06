@@ -9,6 +9,7 @@ from src.pipeline.global_prompt_policy import (
 )
 from src.utils import StructuredLogger
 from src.utils.config import ConfigManager
+from tests.helpers.global_prompt_isolation import real_global_prompt_store_untouched  # noqa: F401
 
 
 def test_policy_freezes_text_and_all_existing_negative_stage_flags() -> None:

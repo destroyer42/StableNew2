@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from tests.helpers.global_prompt_isolation import real_global_prompt_store_untouched  # noqa: F401
 from tools.operator_journey import cli
 from tools.operator_journey.capture import FaultCapture
 from tools.operator_journey.evidence import FAIL, HOLD, PASS, JourneyEvidence

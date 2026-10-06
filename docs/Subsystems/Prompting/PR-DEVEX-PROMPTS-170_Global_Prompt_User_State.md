@@ -50,6 +50,12 @@ qualification documents that mention them describe evidence of their time.
 
 - Tests that save prompt text inject `global_prompt_dir` explicitly, the same
   way PromptPack tests inject `packs_dir`.
+- A test module opts in to a leak check by importing
+  `tests/helpers/global_prompt_isolation.py::real_global_prompt_store_untouched`; it points the per-user data
+  roots at an empty temporary directory and fails the test if a default-resolved `ConfigManager` created the
+  store. No repository-wide fixture exists. Modules that build the whole GUI or run the executor's legacy
+  fallback construct a default `ConfigManager()` (`SidebarPanelV2.__init__`, `Pipeline.__init__`) and must set
+  `STABLENEW_GLOBAL_PROMPT_DIR` themselves.
 - `OperatorWorkspace.activate()` sets `STABLENEW_GLOBAL_PROMPT_DIR` to the
   workspace-owned `global-prompts` directory, creates it, and restores the prior
   environment exactly on exit, so no journey reads or writes the operator's real

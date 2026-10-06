@@ -13,6 +13,7 @@ from src.utils.config import (
     DEFAULT_GLOBAL_POSITIVE_PROMPT,
     ConfigManager,
 )
+from tests.helpers.global_prompt_isolation import real_global_prompt_store_untouched  # noqa: F401
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
