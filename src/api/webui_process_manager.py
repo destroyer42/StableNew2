@@ -8,7 +8,7 @@ import subprocess
 import threading
 import time
 from collections import deque
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -95,11 +95,33 @@ class WebUIProcessConfig:
         return env
 
 
+@dataclass(frozen=True)
+class WebUIReadyEvent:
+    """One proven readiness epoch of the managed WebUI-family runtime (startup or owned restart)."""
+
+    epoch: int
+    source: str
+    pid: int | None
+    runtime_identity: str
+    endpoint: str
+
+
+#: Bounds for the diagnostics reported when the process exits before it becomes ready.
+STARTUP_DIAGNOSTIC_TAIL_LINES = 40
+STARTUP_DIAGNOSTIC_TAIL_CHARS = 4000
+#: One bounded readiness slice while an owned process boots; liveness is re-checked between slices.
+STARTUP_PROBE_SLICE_SECONDS = 5.0
+
+
 class WebUIProcessManager:
     """Owns the lifecycle of the external WebUI process."""
 
     def __init__(self, config: WebUIProcessConfig) -> None:
         self._config = config
+        self._ready_epoch = 0
+        self._last_ready_event: WebUIReadyEvent | None = None
+        self._ready_listeners: list[Callable[[WebUIReadyEvent], None]] = []
+        self._ready_lock = threading.Lock()
         self._process: subprocess.Popen | None = None
         self._owns_process = False
         self._launch_session_command: tuple[str, ...] | None = None
@@ -120,8 +142,99 @@ class WebUIProcessManager:
         self._orphan_monitor_stop = threading.Event()
         self._process_container: ProcessContainer | None = None
         self._init_process_container()
+        self._claim_global_registration()
+
+    def _claim_global_registration(self) -> None:
+        """Become the active manager unless another manager already owns a live process.
+
+        An unrelated or unowned manager must never displace the registration of the manager that owns the
+        running WebUI process; that would split lifecycle observation across two managers.
+        """
+
         global _GLOBAL_WEBUI_PROCESS_MANAGER
-        _GLOBAL_WEBUI_PROCESS_MANAGER = self
+        current = _GLOBAL_WEBUI_PROCESS_MANAGER
+        if current is None or current is self or not _manager_owns_live_process(current):
+            _GLOBAL_WEBUI_PROCESS_MANAGER = self
+
+    @property
+    def ready_epoch(self) -> int:
+        """How many times this manager has proven the runtime ready (0 until the first proof)."""
+        return self._ready_epoch
+
+    def add_ready_listener(self, listener: Callable[[WebUIReadyEvent], None]) -> None:
+        """Observe readiness epochs. A listener added after a proof receives the current epoch once."""
+
+        with self._ready_lock:
+            if listener in self._ready_listeners:
+                return
+            self._ready_listeners.append(listener)
+            catch_up = self._last_ready_event
+        if catch_up is not None:
+            self._deliver_ready(listener, catch_up)
+
+    def remove_ready_listener(self, listener: Callable[[WebUIReadyEvent], None]) -> None:
+        with self._ready_lock:
+            if listener in self._ready_listeners:
+                self._ready_listeners.remove(listener)
+
+    def mark_ready(self, *, source: str) -> WebUIReadyEvent:
+        """Record one proven-ready epoch: drop stale readiness backoff for the endpoint, then notify listeners.
+
+        Only callers that have actually proven readiness (startup probe, TRUE-READY after an owned restart)
+        may call this. It never touches process ownership, and a later real failure is recorded normally.
+        """
+
+        endpoint = self._configured_base_url()
+        try:
+            from src.api.healthcheck import clear_readiness_failure_state
+
+            clear_readiness_failure_state(endpoint)
+        except Exception:
+            logger.debug("Failed to clear stale readiness failure state", exc_info=True)
+        with self._ready_lock:
+            self._ready_epoch += 1
+            event = WebUIReadyEvent(
+                epoch=self._ready_epoch,
+                source=source,
+                pid=self._pid,
+                runtime_identity=self.runtime_identity,
+                endpoint=endpoint,
+            )
+            self._last_ready_event = event
+            listeners = list(self._ready_listeners)
+        for listener in listeners:
+            self._deliver_ready(listener, event)
+        return event
+
+    @staticmethod
+    def _deliver_ready(listener: Callable[[WebUIReadyEvent], None], event: WebUIReadyEvent) -> None:
+        try:
+            listener(event)
+        except Exception:
+            logger.debug("WebUI ready listener failed", exc_info=True)
+
+    def exit_diagnostics(self) -> dict[str, Any] | None:
+        """Truthful facts about a process that exited (``None`` while it is alive or was never started)."""
+
+        process = self._process
+        if process is None:
+            return None
+        try:
+            exit_code = process.poll()
+        except Exception:
+            return None
+        if exit_code is None:
+            return None
+        tails = self.get_recent_output_tail(max_lines=STARTUP_DIAGNOSTIC_TAIL_LINES)
+        return {
+            "pid": getattr(process, "pid", None),
+            "exit_code": exit_code,
+            "runtime_identity": self.runtime_identity,
+            "launch_profile": self.get_launch_profile(),
+            "endpoint": self._configured_base_url(),
+            "stdout_tail": str(tails.get("stdout_tail") or "")[-STARTUP_DIAGNOSTIC_TAIL_CHARS:],
+            "stderr_tail": str(tails.get("stderr_tail") or "")[-STARTUP_DIAGNOSTIC_TAIL_CHARS:],
+        }
 
     def _init_process_container(self) -> None:
         """Create an OS-level process container for deterministic WebUI lifecycle."""
@@ -362,6 +475,13 @@ class WebUIProcessManager:
                 "refusing to adopt or replace it"
             )
 
+        active = _GLOBAL_WEBUI_PROCESS_MANAGER
+        if active is not None and active is not self and _manager_owns_live_process(active):
+            raise WebUIStartupError(
+                f"Another WebUI process manager already owns a live managed WebUI process "
+                f"(pid={active.pid}); refusing to launch a duplicate"
+            )
+
         import logging
 
         ctx = LogContext(subsystem="api")
@@ -441,6 +561,7 @@ class WebUIProcessManager:
             self._pid = self._process.pid
             self._owns_process = True
             self._launch_session_command = tuple(self._config.command)
+            self._claim_global_registration()
             self._attach_pid_to_container(self._pid)
             self._start_time = time.time()
             launch_msg = format_launch_message(
@@ -578,9 +699,9 @@ class WebUIProcessManager:
         except Exception:
             logger.exception("Error calling stop_webui during stop()")
         finally:
-            # Clear global reference to allow cleanup
+            # Clear the global reference only if it is this manager's own registration
             self._teardown_process_container(terminate_owned=False)
-            clear_global_webui_process_manager()
+            clear_global_webui_process_manager(self)
 
     def is_running(self) -> bool:
         return self._process is not None and self._process.poll() is None
@@ -730,6 +851,7 @@ class WebUIProcessManager:
 
         for attempt_index in range(1, attempts + 1):
             ready = False
+            proven_ready = False
             try:
                 self.stop_webui()
             except Exception as exc:
@@ -779,6 +901,7 @@ class WebUIProcessManager:
                             get_stdout_tail=self.get_stdout_tail_text,
                         )
                         ready = True
+                        proven_ready = True
                         log_with_ctx(
                             logger,
                             logging.INFO,
@@ -844,6 +967,8 @@ class WebUIProcessManager:
                 },
             )
             if ready:
+                if proven_ready:
+                    self.mark_ready(source="restart")
                 return True
             if attempt_index < attempts:
                 delay_s = base_delay_s * (2 ** (attempt_index - 1)) if base_delay_s > 0 else 0.0
@@ -1390,7 +1515,83 @@ def get_global_webui_process_manager() -> WebUIProcessManager | None:
     return _GLOBAL_WEBUI_PROCESS_MANAGER
 
 
-def clear_global_webui_process_manager() -> None:
-    """Clear the global WebUI process manager reference (idempotent)."""
+def clear_global_webui_process_manager(manager: WebUIProcessManager | None = None) -> None:
+    """Clear the global WebUI process manager reference (idempotent).
+
+    With ``manager`` the reference is cleared only if it is that manager's own registration, so stopping an
+    unrelated manager can never drop the registration of the manager that owns the running process.
+    """
     global _GLOBAL_WEBUI_PROCESS_MANAGER
-    _GLOBAL_WEBUI_PROCESS_MANAGER = None
+    if manager is None or _GLOBAL_WEBUI_PROCESS_MANAGER is manager:
+        _GLOBAL_WEBUI_PROCESS_MANAGER = None
+
+
+def _manager_owns_live_process(manager: Any) -> bool:
+    try:
+        return bool(manager.owns_process and manager.is_running())
+    except Exception:
+        return False
+
+
+def active_owned_webui_process_manager() -> WebUIProcessManager | None:
+    """The registered manager if it owns a live process, else ``None`` (never a stale or unowned manager)."""
+
+    manager = _GLOBAL_WEBUI_PROCESS_MANAGER
+    return manager if manager is not None and _manager_owns_live_process(manager) else None
+
+
+def describe_startup_exit(diagnostics: Mapping[str, Any]) -> str:
+    """One bounded, operator-readable account of a process that exited before it became ready."""
+
+    parts = [
+        f"WebUI exited before it became ready (pid {diagnostics.get('pid')}, "
+        f"exit code {diagnostics.get('exit_code')}, runtime {diagnostics.get('runtime_identity')}, "
+        f"launch profile {diagnostics.get('launch_profile')}, endpoint {diagnostics.get('endpoint')})"
+    ]
+    for label, key in (("stderr", "stderr_tail"), ("stdout", "stdout_tail")):
+        tail = str(diagnostics.get(key) or "").strip()
+        if tail:
+            parts.append(f"{label} tail:\n{tail}")
+    return "\n".join(parts)
+
+
+def wait_for_managed_startup(
+    manager: WebUIProcessManager,
+    base_url: str,
+    *,
+    timeout_s: float,
+    probe: Callable[..., Any] | None = None,
+    slice_s: float = STARTUP_PROBE_SLICE_SECONDS,
+    poll_interval_s: float = 0.5,
+) -> None:
+    """Wait (bounded) for an owned runtime to become ready, then publish the readiness epoch.
+
+    The wait runs in short slices so a process that exits before readiness is reported with its PID, exit
+    code and output tail instead of after the full timeout. Connection refusals while the owned process boots
+    are expected, not failures, so readiness backoff recorded by a slice is cleared before the next one. A
+    slow startup is allowed up to ``timeout_s``; on timeout the manager keeps its truthful ownership.
+    """
+
+    if probe is None:
+        from src.api.healthcheck import wait_for_webui_ready as probe
+    from src.api.healthcheck import clear_readiness_failure_state
+
+    budget = max(float(timeout_s), 0.0)
+    deadline = time.monotonic() + budget
+    first = True
+    while True:
+        remaining = max(deadline - time.monotonic(), 0.0)
+        attempt_timeout = min(slice_s, budget if first else remaining)
+        first = False
+        try:
+            probe(base_url, timeout=attempt_timeout, poll_interval=poll_interval_s)
+        except Exception as exc:
+            diagnostics = manager.exit_diagnostics()
+            if diagnostics is not None:
+                raise WebUIStartupError(describe_startup_exit(diagnostics)) from exc
+            if time.monotonic() >= deadline:
+                raise
+            clear_readiness_failure_state(base_url)
+            continue
+        manager.mark_ready(source="startup")
+        return

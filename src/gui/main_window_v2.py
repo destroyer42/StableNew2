@@ -1409,10 +1409,13 @@ class MainWindowV2:
         dialog.transient(self.root)
 
         status = getattr(self.app_state, "webui_state", None)
+        # What is actually running (the active manager's identity); the dialog compares the selection to it.
+        running_identity = getattr(getattr(self, "webui_process_manager", None), "runtime_identity", None)
         panel = EngineSettingsDialog(
             dialog,
             config_manager=config_manager,
             status_text=status,
+            running_runtime_identity=running_identity if isinstance(running_identity, str) else None,
             content_visibility_mode=str(
                 getattr(getattr(self, "app_state", None), "content_visibility_mode", "nsfw")
                 or "nsfw"

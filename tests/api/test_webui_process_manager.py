@@ -4,8 +4,21 @@ from unittest import mock
 
 import pytest
 
-from src.api.webui_process_manager import WebUIProcessConfig, WebUIProcessManager, WebUIStartupError
+from src.api.webui_process_manager import (
+    WebUIProcessConfig,
+    WebUIProcessManager,
+    WebUIStartupError,
+    clear_global_webui_process_manager,
+)
 from tests.helpers.webui_mocks import DummyProcess
+
+
+@pytest.fixture(autouse=True)
+def _reset_global_webui_manager():
+    """A started manager registers globally; never let one test's live double block the next test's start()."""
+    clear_global_webui_process_manager()
+    yield
+    clear_global_webui_process_manager()
 
 
 def test_start_invokes_subprocess_with_config(monkeypatch):

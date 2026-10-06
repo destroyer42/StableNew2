@@ -13,6 +13,8 @@ import requests
 from src.api.healthcheck import WebUIHealthCheckTimeout, wait_for_webui_ready
 from src.api.webui_process_manager import (
     WebUIProcessManager,
+    WebUIReadyEvent,
+    active_owned_webui_process_manager,
     build_default_webui_process_config,
 )
 from src.api.webui_runtime_identity import effective_webui_base_url
@@ -49,6 +51,7 @@ class WebUIConnectionController:
         self._on_resources_updated: Callable[[dict[str, list[object]]], None] | None = None
         self._process_manager: WebUIProcessManager | None = None
         self._process_pid: int | None = None
+        self._ready_epoch = 0
         self._health_session = requests.Session()
         self._last_strict_check_ts: float | None = None
         self._last_strict_status = False
@@ -114,7 +117,35 @@ class WebUIConnectionController:
     def _set_state(self, state: WebUIConnectionState) -> None:
         self._state = state
 
+    @property
+    def ready_epoch(self) -> int:
+        """Incremented every time READY is announced (connect, startup proof or owned-restart recovery)."""
+        return self._ready_epoch
+
+    def attach_process_manager(self, manager: WebUIProcessManager) -> None:
+        """Observe the one active manager: its proven readiness epochs become READY events here."""
+
+        previous = self._process_manager
+        if previous is manager:
+            return
+        remove = getattr(previous, "remove_ready_listener", None)
+        if callable(remove):
+            remove(self._on_manager_ready)
+        self._process_manager = manager
+        add = getattr(manager, "add_ready_listener", None)
+        if callable(add):
+            add(self._on_manager_ready)
+
+    def _on_manager_ready(self, event: WebUIReadyEvent) -> None:
+        """A startup/restart proof from the owning manager: follow its PID, drop the stale verdict, announce READY."""
+
+        self._process_pid = event.pid
+        self._last_strict_check_ts = None
+        self._set_state(WebUIConnectionState.READY)
+        self._notify_ready()
+
     def _notify_ready(self) -> None:
+        self._ready_epoch += 1
         callbacks = list(self._ready_callbacks)
         for callback in callbacks:
             try:
@@ -204,11 +235,13 @@ class WebUIConnectionController:
         try:
             autostart_invoked = True
             autostart_started_at = time.monotonic()
-            proc_cfg = build_default_webui_process_config()
-            if proc_cfg is None:
-                raise RuntimeError("No WebUI process config available")
-            manager = WebUIProcessManager(proc_cfg)
-            self._process_manager = manager
+            manager = self._process_manager or active_owned_webui_process_manager()
+            if manager is None:
+                proc_cfg = build_default_webui_process_config()
+                if proc_cfg is None:
+                    raise RuntimeError("No WebUI process config available")
+                manager = WebUIProcessManager(proc_cfg)
+            self.attach_process_manager(manager)
             manager.start()
             self._process_pid = manager.pid
             autostart_elapsed_ms = (time.monotonic() - autostart_started_at) * 1000.0
@@ -344,12 +377,9 @@ class WebUIConnectionController:
         if pid is None:
             return False
         try:
-            alive = psutil.pid_exists(pid)
+            return psutil.pid_exists(pid)
         except Exception:
-            alive = False
-        if not alive:
-            self._process_manager = None
-        return alive
+            return False
 
     def is_port_listening(self, host: str, port: int) -> bool:
         """Probe the configured host/port using a short socket connect."""
