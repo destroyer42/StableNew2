@@ -43,6 +43,13 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/queue/job_history_store.py`, and `src/history/`.
 - Execution: `src/queue/single_node_runner.py`,
   `src/pipeline/pipeline_runner.py`, and `src/pipeline/executor.py`.
+- Shutdown admission fence and repository quiescence (`PR-RUNTIME-SHUTDOWN-140`,
+  `docs/Subsystems/Runtime/PR-RUNTIME-SHUTDOWN-140_Shutdown_Admission_and_Repository_Quiescence.md`):
+  `src/queue/job_queue.py` (`fence_dispatch`, the atomic claim boundary) ->
+  `src/queue/single_node_runner.py` (`begin_shutdown`, `is_quiescent`, `stop() -> bool`) ->
+  `src/controller/job_service_shutdown.py` -> `src/controller/app_controller_services/shutdown_coordinator.py`
+  (sequencing; the repository closes only when quiescent) -> `tests/queue/test_shutdown_admission_fence_140.py`,
+  `tests/controller/test_shutdown_quiescence_140.py`.
 - GPU hard-crash evidence (observation only):
   `docs/Subsystems/Runtime/DIAG-GPU-100_Hard_Crash_Correlation_and_Survivor_Telemetry.md`
   -> `src/utils/gpu_survivor_telemetry.py` ->

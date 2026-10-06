@@ -62,6 +62,7 @@ from src.config.app_config import (
     set_webui_workdir,
 )
 from src.contracts import PackJobEntry, PreviewRequest
+from src.controller.app_controller_services import shutdown_coordinator
 from src.controller.app_controller_services.application_runtime_coordinator import (
     ApplicationRuntimeCoordinator,
 )
@@ -719,18 +720,8 @@ class AppController:
         except Exception as e:
             logger.error(f"[controller] shutdown(): Error shutting down persistence worker: {e}")
 
-        logger.info("[controller] shutdown(): Closing job repository...")
-        if self.job_service:
-            history_store = getattr(self.job_service, "history_store", None)
-            close_store = getattr(history_store, "close", None) or getattr(
-                history_store, "shutdown", None
-            )
-            if callable(close_store):
-                try:
-                    close_store()
-                    logger.info("[controller] shutdown(): Job repository closed")
-                except Exception as e:
-                    logger.error(f"[controller] shutdown(): Error closing job repository: {e}")
+        logger.info("[controller] shutdown(): Closing job repository (only after queue quiescence)...")
+        shutdown_coordinator.close_repository_when_quiescent(self.job_service)
 
         # PR-THREAD-001: Join all tracked threads
         logger.info("[controller] shutdown(): Joining all tracked threads...")
@@ -4964,6 +4955,7 @@ class AppController:
                 purpose="Monitor shutdown progress",
             )
 
+        shutdown_coordinator.fence_queue_admission(getattr(self, "job_service", None))
         try:
             logger.info("[controller] Step 1/8: Cancelling active jobs...")
             self._cancel_active_jobs(label)
@@ -5121,16 +5113,8 @@ class AppController:
             except Exception:
                 logger.exception("Error stopping WebUI")
 
-    def _shutdown_job_service(self) -> None:
-        svc = getattr(self, "job_service", None)
-        if not svc:
-            return
-        # Call public stop() method for deterministic lifecycle management
-        if hasattr(svc, "stop"):
-            try:
-                svc.stop()
-            except Exception:
-                logger.exception("Error stopping job service")
+    def _shutdown_job_service(self) -> bool:
+        return shutdown_coordinator.quiesce_job_service(getattr(self, "job_service", None))
 
     def _shutdown_watchdog(self) -> None:
         # PR-SHUTDOWN-002: Increased default from 8s to 15s to reduce false alarms

@@ -45,6 +45,9 @@ class JobQueue:
         # projection step that follows them.  Lock order: _admission_lock, then _lock.
         self._admission_lock = Lock()
         self._paused = False
+        # Process-lifetime dispatch fence (PR-RUNTIME-SHUTDOWN-140). Never persisted: unlike ``_paused`` it
+        # must not survive the process, so jobs left QUEUED resume under the normal startup policy.
+        self._dispatch_fenced = False
         self._history_store = self._repository
         # PR-MEMORY-001: Bounded finalized jobs (max 100) using deque for FIFO eviction
         self._finalized_jobs_order: deque[str] = deque(maxlen=100)
@@ -95,9 +98,24 @@ class JobQueue:
                     heapq.heappush(self._queue, (-int(job.priority), self._counter, job.job_id))
         self._notify_state_listeners()
 
+    def fence_dispatch(self) -> None:
+        """Irreversibly refuse every new QUEUED -> RUNNING transition (application shutdown).
+
+        The flag is read and written under the same lock that makes ``claim_next_job`` and ``mark_running``
+        atomic with their durable transition, so a claim either completed before this returns or sees the
+        fence: there is no check-then-claim window. Nothing else changes: QUEUED jobs stay durably QUEUED,
+        the active job is untouched, and the persisted pause setting is not used.
+        """
+        with self._lock:
+            self._dispatch_fenced = True
+
+    def is_dispatch_fenced(self) -> bool:
+        with self._lock:
+            return self._dispatch_fenced
+
     def get_next_job(self) -> Job | None:
         with self._lock:
-            if self._paused:
+            if self._paused or self._dispatch_fenced:
                 return None
             while self._queue:
                 _, _, job_id = heapq.heappop(self._queue)
@@ -164,8 +182,9 @@ class JobQueue:
             self._update_status(running.job_id, JobStatus.CANCELLED, "cancelled")
         return running
 
-    def mark_running(self, job_id: str) -> None:
-        self._update_status(job_id, JobStatus.RUNNING)
+    def mark_running(self, job_id: str) -> Job | None:
+        """Move a job to RUNNING; ``None`` when unknown or when the dispatch fence refuses a QUEUED job."""
+        return self._update_status(job_id, JobStatus.RUNNING)
 
     def mark_completed(self, job_id: str, result: dict | None = None) -> None:
         self._update_status(job_id, JobStatus.COMPLETED, result=result)
@@ -240,6 +259,8 @@ class JobQueue:
             job = self._jobs.get(job_id)
             if job is None or (require_running and job.status != JobStatus.RUNNING):
                 return None
+            if status is JobStatus.RUNNING and self._dispatch_fenced and job.status is JobStatus.QUEUED:
+                return None
             transition_job = job
             if stage_checkpoints is not None:
                 execution_metadata = replace(
@@ -267,7 +288,7 @@ class JobQueue:
         """Atomically claim the next runnable job for the single-node worker."""
         claimed: Job | None = None
         with self._lock:
-            if self._paused:
+            if self._paused or self._dispatch_fenced:
                 return None
             while self._queue:
                 queue_item = heapq.heappop(self._queue)

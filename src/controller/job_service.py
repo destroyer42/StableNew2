@@ -12,7 +12,7 @@ from threading import Lock
 from typing import Any, Literal, Protocol
 
 from src.config.app_config import get_process_container_config, get_watchdog_config
-from src.controller import job_service_auto_run
+from src.controller import job_service_auto_run, job_service_shutdown
 from src.controller.job_history_service import JobHistoryService
 from src.controller.job_lifecycle_logger import JobLifecycleLogger
 from src.controller.job_service_dispatch import dispatch_next_now
@@ -954,28 +954,20 @@ class JobService:
     def run_next_now(self) -> bool:
         return dispatch_next_now(self, logger=logger)
 
-    def _stop_runner(self) -> None:
-        with self._runner_lock:
-            if not self._worker_started:
-                return
-            runner_type = type(self.runner).__name__
-            log_with_ctx(
-                logger,
-                logging.INFO,
-                "Queue worker stopping (runner=%s)",
-                ctx=LogContext(subsystem="job_service"),
-                extra_fields={"runner": runner_type},
-            )
-            self.runner.stop()
-            self._worker_started = False
+    def _stop_runner(self, timeout: float | None = None) -> bool:
+        return job_service_shutdown.stop_runner(self, timeout)
 
-    def stop(self) -> None:
-        """Stop queue worker thread and join with timeout (idempotent).
+    def begin_shutdown(self) -> None:
+        """Fence queue admission for application shutdown (terminal, idempotent; see job_service_shutdown)."""
+        job_service_shutdown.begin_shutdown(self)
 
-        This is the public lifecycle method for shutting down queue processing.
-        Safe to call multiple times.
-        """
-        self._stop_runner()
+    def is_quiescent(self) -> bool:
+        """True when no queue worker can still touch the repository."""
+        return job_service_shutdown.is_quiescent(self)
+
+    def stop(self, timeout: float | None = None) -> bool:
+        """Stop the queue worker (bounded, idempotent); True only once every worker has quiesced."""
+        return self._stop_runner(timeout)
 
     def _handle_job_status_change(self, job: Job, status: JobStatus) -> None:
         log_with_ctx(
