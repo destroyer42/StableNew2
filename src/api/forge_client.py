@@ -114,6 +114,33 @@ class ForgeWebUIClient(SDWebUIClient):
         logger.debug("Retrieved %s Forge VAE/text-encoder modules", len(modules))
         return modules
 
+    def get_loras(self) -> list[dict[str, Any]] | None:
+        """LoRAs the serving Forge lists (``GET /sdapi/v1/loras``): ``name``, ``alias``, ``path``.
+
+        Read-only evidence of what Forge itself will load; ``None`` when the listing cannot be read. It is never
+        an identity authority (``AssetRegistry`` is) and never refreshes or edits Forge's catalog.
+        """
+
+        endpoint = "/sdapi/v1/loras"
+        with self._request_context("get", endpoint, timeout=20) as response:
+            if response is None:
+                return None
+            try:
+                data = response.json()
+            except ValueError:
+                return None
+        if not isinstance(data, list):
+            return None
+        return [
+            {
+                "name": str(item.get("name") or ""),
+                "alias": str(item.get("alias") or ""),
+                "path": str(item.get("path") or ""),
+            }
+            for item in data
+            if isinstance(item, dict)
+        ]
+
     def _resolve_module_name(self, requested: str, *, noun: str = "VAE") -> str:
         """Map a requested module name onto an exact Forge module name, or raise."""
 

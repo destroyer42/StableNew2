@@ -55,3 +55,24 @@ def test_registry_handles_corrupt_cache_and_legacy_projections_do_not_write_old_
     assert EmbeddingScanner(str(webui), registry=registry).get_embedding_names() == ["negative"]
     assert not (tmp_path / "data" / "lora_cache.json").exists()
     assert not (tmp_path / "data" / "embedding_cache.json").exists()
+
+
+def test_cached_snapshot_reads_only_the_persisted_cache_and_never_scans_or_hashes(tmp_path: Path) -> None:
+    """PR-IMG-117: UI threads may read decisions from the last persisted snapshot without hashing anything."""
+
+    webui = tmp_path / "webui"
+    cache = tmp_path / "state" / "assets.json"
+    lora = webui / "models" / "Lora" / "one.safetensors"
+    _safe(lora, {"ss_base_model_version": "flux2_klein_4b"})
+
+    cold = AssetRegistry(webui, cache_path=cache)
+    assert cold.cached_snapshot().records == ()  # no cache yet: nothing is scanned or hashed
+    assert not cache.exists()
+
+    AssetRegistry(webui, cache_path=cache).refresh()
+    warm = AssetRegistry(webui, cache_path=cache)
+    (record,) = warm.cached_snapshot().records_for(AssetKind.LORA)
+    assert record.embedded_metadata["ss_base_model_version"] == "flux2_klein_4b"
+
+    _safe(webui / "models" / "Lora" / "added-later.safetensors")
+    assert len(warm.cached_snapshot().records_for(AssetKind.LORA)) == 1  # a new file is invisible until a refresh

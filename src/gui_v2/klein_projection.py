@@ -8,8 +8,10 @@ profile in ``src/image_backends/forge_klein_profile.py``; nothing here is a seco
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from collections.abc import Sequence
+from dataclasses import dataclass, field
 
+from src.image_backends.forge_klein_lora import LoraResolver, evaluate_klein_loras
 from src.image_backends.forge_klein_profile import (
     is_klein_transformer_name,
     latest_klein_profile,
@@ -29,6 +31,10 @@ class KleinControlProjection:
     note: str = ""
     #: Non-empty when the selection cannot run with the configured backend (shown, never auto-fixed).
     blocking: str = ""
+    #: Per selected LoRA: the same compatibility decision admission makes ("" key set = nothing selected).
+    lora_annotations: dict[str, str] = field(default_factory=dict)
+    #: Non-empty when the current LoRA selection would be rejected before generation (shown, never auto-removed).
+    lora_blocking: str = ""
 
 
 _INACTIVE = KleinControlProjection(active=False)
@@ -36,8 +42,44 @@ _INACTIVE = KleinControlProjection(active=False)
 _PRESET_LABELS = {(768, 1024): "768x1024 (3:4)", (1024, 1024): "1024x1024 (1:1)"}
 
 
+def _project_loras(
+    profile_max: int,
+    selected: Sequence[tuple[str, float]],
+    resolver: LoraResolver | None,
+) -> tuple[dict[str, str], str]:
+    """Annotate each selected LoRA with the admission decision; never remove or rewrite a selection."""
+
+    if not selected:
+        return {}, ""
+    prompt = " ".join(f"<lora:{name}:{weight:g}>" for name, weight in selected)
+    problems, decisions, _tags = evaluate_klein_loras(
+        max_loras=profile_max, prompt=prompt, resolver=resolver
+    )
+    annotations: dict[str, str] = {}
+    by_name = {decision.name: decision for decision in decisions}
+    for name, _weight in selected:
+        decision = by_name.get(name)
+        if decision is None:
+            continue
+        annotations[name] = (
+            "verified for FLUX.2 Klein 4B"
+            if decision.runnable
+            else f"not verified for FLUX.2 Klein 4B ({decision.status.value}): {decision.reason}"
+        )
+    blocking = (
+        "This LoRA selection would be rejected before generation: " + "; ".join(problems)
+        if problems
+        else ""
+    )
+    return annotations, blocking
+
+
 def project_klein_controls(
-    model_name: str | None, backend_id: str | None
+    model_name: str | None,
+    backend_id: str | None,
+    *,
+    selected_loras: Sequence[tuple[str, float]] = (),
+    lora_resolver: LoraResolver | None = None,
 ) -> KleinControlProjection:
     if not is_klein_transformer_name(model_name):
         return _INACTIVE
@@ -54,9 +96,22 @@ def project_klein_controls(
         )
     note = (
         f"{profile.display_name} uses fixed distilled settings ({profile.sampler}, {profile.scheduler}, "
-        f"{profile.steps} steps, CFG {profile.cfg_scale:g}), no negative prompt, and the qualified "
-        "768x1024 / 1024x1024 sizes only."
+        f"{profile.steps} steps, CFG {profile.cfg_scale:g}) and the qualified 768x1024 / 1024x1024 sizes "
+        "only. The qualified distilled path uses no standard negative prompt (CFG 1.0 ignores negative text), "
+        "so describe what you want positively instead."
     )
+    if profile.max_loras > 0:
+        note += (
+            f" Up to {profile.max_loras} LoRA is supported, and only one whose metadata explicitly names "
+            "FLUX.2 Klein 4B; other adapters are shown as not verified and are rejected before generation."
+        )
+    annotations, lora_blocking = (
+        _project_loras(profile.max_loras, selected_loras, lora_resolver)
+        if profile.max_loras > 0
+        else ({}, "")
+    )
+    if selected_loras and profile.max_loras <= 0:
+        lora_blocking = f"{profile.display_name} (profile v{profile.version}) does not support LoRAs."
     return KleinControlProjection(
         active=True,
         sampler=profile.sampler,
@@ -66,6 +121,8 @@ def project_klein_controls(
         presets=presets,
         note=note,
         blocking=blocking,
+        lora_annotations=annotations,
+        lora_blocking=lora_blocking,
     )
 
 

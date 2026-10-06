@@ -69,6 +69,7 @@ class FakeWebUITransport:
         block_generation_until_interrupt: bool = False,
         reject_generation_when: Callable[[dict[str, Any]], str | None] | None = None,
         ignore_module_writes: bool = False,
+        loras: list[dict[str, str]] | None = None,
     ) -> None:
         if flavor not in {"forge", "a1111"}:
             raise ValueError(flavor)
@@ -92,6 +93,7 @@ class FakeWebUITransport:
         # checkpoint meeting an incompatible persisted module set (HTTP 500, a *definite* error).
         self.reject_generation_when = reject_generation_when
         self.ignore_module_writes = ignore_module_writes  # a write that silently does not stick
+        self.loras = list(loras) if loras is not None else []  # GET /sdapi/v1/loras entries (name/alias/path)
         self.generation_module_state: list[list[str]] = []
         self.rejected_generations: list[str] = []
         self.generation_started = threading.Event()
@@ -136,6 +138,8 @@ class FakeWebUITransport:
             return FakeResponse(flags)
         if path == "/sdapi/v1/sd-modules":
             return FakeResponse(self.modules) if self.flavor == "forge" else FakeResponse({}, 404)
+        if path == "/sdapi/v1/loras":
+            return FakeResponse(list(self.loras))
         if path == "/sdapi/v1/sd-vae":
             if self.flavor == "a1111":
                 return FakeResponse(list(self.modules))

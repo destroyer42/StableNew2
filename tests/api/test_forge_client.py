@@ -245,3 +245,14 @@ def test_module_set_key_is_order_case_and_extension_insensitive() -> None:
 
     assert module_set_key(["/d/Qwen_3_4B.safetensors", "flux2-vae"]) == ["flux2-vae", "qwen_3_4b"]
     assert module_set_key(None) == [] and module_set_key(["", "  "]) == []
+
+
+def test_get_loras_reads_the_forge_listing_without_writing_anything() -> None:
+    """PR-IMG-117: read-only evidence of what the serving Forge will load (never an identity authority)."""
+
+    loras = [{"name": "style", "alias": "style", "path": "/x/Lora/style.safetensors", "metadata": {"a": 1}}]
+    transport = FakeWebUITransport(flavor="forge", loras=loras)
+    client = _client(transport)
+
+    assert client.get_loras() == [{"name": "style", "alias": "style", "path": "/x/Lora/style.safetensors"}]
+    assert [verb for verb, _path, _body in transport.calls if verb != "GET"] == []

@@ -442,6 +442,7 @@ class MainWindowV2:
         self.left_zone = getattr(self.pipeline_tab, "pack_loader_compat", None)
         self.right_zone = getattr(self.pipeline_tab, "preview_panel", None)
         self.sidebar_panel_v2 = getattr(self.pipeline_tab, "sidebar", None)
+        self._wire_klein_lora_projection()
         self.operator_readiness_service = self._build_operator_readiness_service()
         self._operator_readiness_window: tk.Toplevel | None = None
 
@@ -541,6 +542,32 @@ class MainWindowV2:
         if support is None:
             return default_title
         return format_product_support_label(default_title, support.state)
+
+    def _wire_klein_lora_projection(self) -> None:
+        """PR-IMG-117: connect the Prompt tab's LoRA picker to the Klein projection (no-op for other models).
+
+        The projection reads the selected LoRAs and annotates them with the same compatibility decision the
+        backend makes at admission, using the registry's persisted snapshot only (no scan, no hashing on the
+        Tk thread). A selection is never removed or rewritten.
+        """
+
+        try:
+            base_panel = getattr(self.sidebar_panel_v2, "base_generation_panel", None)
+            projection = getattr(base_panel, "_klein_projection", None)
+            picker = getattr(getattr(self, "prompt_tab", None), "lora_picker", None)
+            if projection is None or picker is None:
+                return
+            from src.image_backends.forge_klein_lora import RegistryLoraResolver
+
+            projection.set_lora_integration(
+                provider=picker.get_loras,
+                sink=picker.set_annotations,
+                resolver=RegistryLoraResolver(cache_only=True),
+            )
+            picker.selection_listener = projection.refresh
+            projection.refresh()
+        except Exception:
+            logger.debug("Klein LoRA projection wiring skipped", exc_info=True)
 
     def _build_operator_readiness_service(self) -> OperatorReadinessService:
         controller = getattr(self, "app_controller", None)
