@@ -19,6 +19,10 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/promptpacks/paths.py` resolves the per-user authority and
   `src/promptpacks/storage.py` owns the versioned JSON format; typed GUI editing remains in
   `src/gui/models/prompt_pack_model.py`.
+- Global Positive/Negative prompt text (per-user state): `src/prompting/global_prompt_paths.py` resolves the
+  directory (`%LOCALAPPDATA%\StableNew\GlobalPrompts`, `STABLENEW_GLOBAL_PROMPT_DIR` override) and
+  `src/utils/config.py::ConfigManager` is the persistence API; enabled flags stay in settings. Journeys isolate it
+  through `tools/operator_journey/workspace.py`.
 - PromptPack expansion/compilation: `src/pipeline/prompt_pack_job_builder.py`,
   `src/pipeline/prompt_pack_parser.py`, and `src/pipeline/resolution_layer.py`.
 - Matrix/randomization: `src/pipeline/config_variant_plan_v2.py`,

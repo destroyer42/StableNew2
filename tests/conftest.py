@@ -145,6 +145,19 @@ def _pin_host_runtime_autostart_off(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _isolate_global_prompt_user_state(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Pytest never reads or writes the operator's per-user Global Prompt store.
+
+    Many production call sites build a default ``ConfigManager()`` (``SidebarPanelV2``, the executor's legacy
+    fallback), which would resolve to ``%LOCALAPPDATA%\\StableNew\\GlobalPrompts`` and lazily create its files.
+    Redirect it through the production-supported override to a per-test directory (not created here). A test that
+    sets ``STABLENEW_GLOBAL_PROMPT_DIR`` itself, or injects ``global_prompt_dir``, still wins.
+    """
+
+    monkeypatch.setenv("STABLENEW_GLOBAL_PROMPT_DIR", str(tmp_path / "GlobalPrompts"))
+
+
+@pytest.fixture(autouse=True)
 def _mock_webui_discovery(monkeypatch, tmp_path: Path):
     """Prevent tests from launching or probing real WebUI services.
 

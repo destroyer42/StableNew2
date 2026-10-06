@@ -353,7 +353,60 @@ def test_isolation_is_installed_before_production_authorities_open_paths(tmp_pat
         workspace_paths.ui_state().write_text("{}", encoding="utf-8")
     assert spy.violations() == []
     assert (workspace.root / "state" / "jobs.sqlite3").is_file()
-    assert (workspace.presets_dir / "global_positive.txt").is_file()
+    assert (workspace.global_prompts_dir / "global_positive.txt").is_file()
+    assert not (workspace.presets_dir / "global_positive.txt").exists()
+
+
+def _snapshot_tree(root: Path) -> dict[str, bytes]:
+    return {str(p.relative_to(root)): p.read_bytes() for p in sorted(root.rglob("*")) if p.is_file()}
+
+
+def test_activation_redirects_global_prompts_into_the_workspace_and_restores_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The operator's real per-user GlobalPrompts store is unreachable from a journey."""
+
+    from src.utils.config import ConfigManager
+
+    real_local = tmp_path / "real-localappdata"
+    real_store = real_local / "StableNew" / "GlobalPrompts"
+    real_store.mkdir(parents=True)
+    (real_store / "global_positive.txt").write_bytes(b"REAL-USER-POSITIVE")
+    (real_store / "global_negative.txt").write_bytes(b"REAL-USER-NEGATIVE")
+    monkeypatch.setenv("LOCALAPPDATA", str(real_local))
+    monkeypatch.setenv("XDG_DATA_HOME", str(real_local))
+    monkeypatch.delenv("STABLENEW_GLOBAL_PROMPT_DIR", raising=False)
+    before = _snapshot_tree(real_local)
+
+    workspace = OperatorWorkspace(root=tmp_path / "ws", webui_base_url="http://127.0.0.1:1")
+    with workspace.activate():
+        import os
+
+        assert os.environ["STABLENEW_GLOBAL_PROMPT_DIR"] == str(workspace.global_prompts_dir)
+        assert workspace.global_prompts_dir.is_dir()
+        manager = ConfigManager()  # the constructor every GUI/controller call site uses
+        assert manager.global_prompt_dir == workspace.global_prompts_dir
+        assert manager.get_global_positive_prompt() == ""
+        assert manager.save_global_negative_state("journey negative", True)
+
+    assert (workspace.global_prompts_dir / "global_negative.txt").read_text("utf-8") == "journey negative"
+    assert "STABLENEW_GLOBAL_PROMPT_DIR" not in __import__("os").environ  # prior env restored exactly
+    assert _snapshot_tree(real_local) == before  # byte-identical, nothing added
+
+
+def test_activation_restores_a_preexisting_global_prompt_override(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import os
+
+    monkeypatch.setenv("STABLENEW_GLOBAL_PROMPT_DIR", str(tmp_path / "preexisting"))
+    workspace = OperatorWorkspace(root=tmp_path / "ws", webui_base_url="http://127.0.0.1:1")
+
+    with workspace.activate():
+        assert os.environ["STABLENEW_GLOBAL_PROMPT_DIR"] == str(workspace.global_prompts_dir)
+
+    assert os.environ["STABLENEW_GLOBAL_PROMPT_DIR"] == str(tmp_path / "preexisting")
+    assert not (tmp_path / "preexisting").exists()
 
 
 def test_importing_the_journey_does_not_import_state_capturing_app_modules() -> None:

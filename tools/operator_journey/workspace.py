@@ -25,6 +25,7 @@ _ENV_KEYS = (
     "STABLENEW_OUTPUT_DIR",
     "STABLENEW_WEBUI_BASE_URL",
     "STABLENEW_PROMPTPACK_DIR",
+    "STABLENEW_GLOBAL_PROMPT_DIR",
     "STABLENEW_INITIAL_RESOURCE_GRACE_SEC",
     "PYTEST_CURRENT_TEST",
     "STABLENEW_TEST_MODE",
@@ -132,6 +133,10 @@ class OperatorWorkspace:
         return self.root / "packs"
 
     @property
+    def global_prompts_dir(self) -> Path:
+        return self.root / "global-prompts"
+
+    @property
     def output_dir(self) -> Path:
         return self.root / "output"
 
@@ -147,6 +152,7 @@ class OperatorWorkspace:
         for directory in (
             self.presets_dir,
             self.packs_dir,
+            self.global_prompts_dir,
             self.output_dir,
             self.state_dir,
             self.records_path.parent,
@@ -166,7 +172,11 @@ class OperatorWorkspace:
     def config_manager(self) -> Any:
         from src.utils.config import ConfigManager
 
-        return ConfigManager(presets_dir=self.presets_dir, packs_dir=self.packs_dir)
+        return ConfigManager(
+            presets_dir=self.presets_dir,
+            packs_dir=self.packs_dir,
+            global_prompt_dir=self.global_prompts_dir,
+        )
 
     @contextmanager
     def activate(self) -> Iterator[OperatorWorkspace]:
@@ -192,6 +202,7 @@ class OperatorWorkspace:
                 "STABLENEW_OUTPUT_DIR": str(self.output_dir),
                 "STABLENEW_WEBUI_BASE_URL": self.webui_base_url,
                 "STABLENEW_PROMPTPACK_DIR": str(self.packs_dir),
+                "STABLENEW_GLOBAL_PROMPT_DIR": str(self.global_prompts_dir),
             }
         )
         if self.startup_grace_sec is not None:

@@ -169,13 +169,16 @@ stage-consistent `apply_global_negative_*` flags, with
 `global_prompt_policy_source = frozen_njr`).
 
 - The visible checkbox and text drive work compiled now; Save persists only the
-  cross-session default (text plus enabled state, via existing ConfigManager
-  settings). Defaults with nothing saved: Positive off, Negative on.
+  cross-session default through ConfigManager. Saved text lives in the per-user
+  `GlobalPrompts` directory (`%LOCALAPPDATA%\StableNew\GlobalPrompts` on Windows,
+  `STABLENEW_GLOBAL_PROMPT_DIR` override; never the repository `presets`
+  directory), and the enabled flags remain settings state. Defaults with nothing
+  saved: Positive off and empty, Negative on with the code-defined default text.
 - PromptPack, generic/manual and Learning compilation overlay the current
   policy onto the compiled config (Add-to-Job snapshots do not own it); Learning
   freezes it once into the experiment snapshot inherited by every variant.
-- The executor applies the frozen terms and does not read GUI state or mutable
-  global-prompt files for modern NJRs. Replay reuses the parent's frozen policy.
+- The executor applies the frozen terms and does not read GUI state or the mutable
+  GlobalPrompts files for modern NJRs. Replay reuses the parent's frozen policy.
 - Historical NJRs without frozen policy use an explicit
   `legacy_runtime_fallback`; replay of those is not bit-identical.
 

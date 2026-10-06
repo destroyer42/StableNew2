@@ -58,7 +58,11 @@ def frozen_matrix(tmp_path):
 def isolated_execution(monkeypatch, tmp_path):
     """Isolate mutable files, process/GPU observations, transitions and all HTTP in test fakes."""
     monkeypatch.chdir(tmp_path)
-    manager = ConfigManager(presets_dir=tmp_path / "presets", packs_dir=tmp_path / "packs")
+    manager = ConfigManager(
+        presets_dir=tmp_path / "presets",
+        packs_dir=tmp_path / "packs",
+        global_prompt_dir=tmp_path / "global-prompts",
+    )
     # Deliberately hostile runtime values must never leak into frozen prompts.
     manager.save_global_positive_state("MUTABLE runtime positive", True)
     manager.save_global_negative_state("MUTABLE runtime negative", True)
