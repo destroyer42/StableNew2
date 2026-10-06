@@ -96,6 +96,8 @@ class ModelPolicyPanelProjection:
         self._lora_provider: Callable[[], list[tuple[str, float]]] | None = None
         self._lora_sink: Callable[[dict[str, str]], None] | None = None
         self._lora_resolver: Any = None
+        #: Read-only observers of each projection (the Prompt tab); they never change the panel or the backend.
+        self._listeners: list[Callable[[ModelControlProjection], None]] = []
         self.last_projection: ModelControlProjection = project_model_selection(None, None)
 
     def set_lora_integration(
@@ -108,6 +110,12 @@ class ModelPolicyPanelProjection:
         """Connect the selected LoRAs (read) and their annotations (write); the decision stays in the projection."""
 
         self._lora_provider, self._lora_sink, self._lora_resolver = provider, sink, resolver
+
+    def add_listener(self, listener: Callable[[ModelControlProjection], None]) -> None:
+        """Observe every projection (read-only). The listener gets the current one immediately by the caller's choice."""
+
+        if listener not in self._listeners:
+            self._listeners.append(listener)
 
     @property
     def active(self) -> bool:
@@ -138,7 +146,7 @@ class ModelPolicyPanelProjection:
             else resolve_model_policy(model_name, family_lookup=self._family_lookup)
         )
         projection = project_model_controls(
-            policy, backend_id, selected_loras=selected, lora_resolver=self._lora_resolver
+            policy, backend_id, selected_loras=selected, lora_resolver=self._lora_resolver, model_name=str(model_name or "")
         )
         self.last_projection = projection
         key = projection.policy.policy_id
@@ -155,6 +163,11 @@ class ModelPolicyPanelProjection:
                 self._lora_sink(dict(projection.lora_annotations))
             except Exception:
                 logger.debug("Could not update the LoRA annotations", exc_info=True)
+        for listener in tuple(self._listeners):
+            try:
+                listener(projection)
+            except Exception:
+                logger.debug("A model projection listener failed", exc_info=True)
         return projection
 
     # -- draft state -------------------------------------------------------------------------------------------

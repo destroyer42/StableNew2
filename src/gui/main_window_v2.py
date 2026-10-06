@@ -443,6 +443,7 @@ class MainWindowV2:
         self.right_zone = getattr(self.pipeline_tab, "preview_panel", None)
         self.sidebar_panel_v2 = getattr(self.pipeline_tab, "sidebar", None)
         self._wire_klein_lora_projection()
+        self._wire_prompt_model_target()
         self.operator_readiness_service = self._build_operator_readiness_service()
         self._operator_readiness_window: tk.Toplevel | None = None
 
@@ -568,6 +569,20 @@ class MainWindowV2:
             projection.refresh()
         except Exception:
             logger.debug("Klein LoRA projection wiring skipped", exc_info=True)
+
+    def _wire_prompt_model_target(self) -> None:
+        """PR-IMG-130B: let the Prompt tab observe the selected model's policy projection (read-only; thin wiring)."""
+
+        try:
+            base_panel = getattr(self.sidebar_panel_v2, "base_generation_panel", None)
+            projection = getattr(base_panel, "_model_policy_projection", None)
+            prompt_tab = getattr(self, "prompt_tab", None)
+            if projection is None or prompt_tab is None:
+                return
+            projection.add_listener(prompt_tab.on_model_projection)
+            prompt_tab.on_model_projection(projection.last_projection)
+        except Exception:
+            logger.debug("Prompt model-target wiring skipped", exc_info=True)
 
     def _build_operator_readiness_service(self) -> OperatorReadinessService:
         controller = getattr(self, "app_controller", None)

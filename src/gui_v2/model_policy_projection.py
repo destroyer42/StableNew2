@@ -15,15 +15,15 @@ from dataclasses import dataclass, field
 from math import gcd
 from typing import Any
 
-from src.image_backends.forge_klein_lora import LoraResolver, evaluate_klein_loras
+from src.image_backends.forge_klein_lora import LoraResolver
 from src.image_backends.model_policy import (
-    LORA_POLICY_KLEIN_4B_EXPLICIT,
     VALUE_CONTROLS,
     ControlMode,
     FamilyLookup,
     ModelPolicy,
     resolve_model_policy,
 )
+from src.image_backends.model_policy_lora import assess_lora_selection
 
 _BACKEND_LABELS = {"forge_webui": "Forge WebUI", "a1111_webui": "A1111 WebUI"}
 
@@ -39,6 +39,8 @@ class ControlState:
 class ModelControlProjection:
     policy: ModelPolicy
     controls: Mapping[str, ControlState]
+    #: The selected checkpoint this projection was made for (read-only context for other panels, such as the Prompt tab).
+    model_name: str = ""
     #: Qualified resolution presets as (label, width, height); empty when geometry is unrestricted.
     presets: tuple[tuple[str, int, int], ...] = ()
     note: str = ""
@@ -64,42 +66,13 @@ def _preset_label(width: int, height: int) -> str:
     return f"{width}x{height} ({width // divisor}:{height // divisor})"
 
 
-def _project_klein_loras(
-    profile_max: int, selected: Sequence[tuple[str, float]], resolver: LoraResolver | None
-) -> tuple[dict[str, str], str]:
-    """Annotate each selected LoRA with the admission decision; never remove or rewrite a selection."""
-
-    if not selected:
-        return {}, ""
-    prompt = " ".join(f"<lora:{name}:{weight:g}>" for name, weight in selected)
-    problems, decisions, _tags = evaluate_klein_loras(max_loras=profile_max, prompt=prompt, resolver=resolver)
-    annotations: dict[str, str] = {}
-    by_name = {decision.name: decision for decision in decisions}
-    for name, _weight in selected:
-        decision = by_name.get(name)
-        if decision is None:
-            continue
-        annotations[name] = (
-            "verified for FLUX.2 Klein 4B"
-            if decision.runnable
-            else f"not verified for FLUX.2 Klein 4B ({decision.status.value}): {decision.reason}"
-        )
-    blocking = (
-        "This LoRA selection would be rejected before generation: " + "; ".join(problems) if problems else ""
-    )
-    return annotations, blocking
-
-
 def _project_loras(
     policy: ModelPolicy, selected: Sequence[tuple[str, float]], resolver: LoraResolver | None
 ) -> tuple[dict[str, str], str]:
-    lora = policy.feature("lora")
-    if lora.compatibility_policy == LORA_POLICY_KLEIN_4B_EXPLICIT and lora.supported:
-        return _project_klein_loras(int(lora.limit or 0), selected, resolver)
-    if selected and not lora.supported and policy.qualified:
-        version = (policy.profile_ref or {}).get("version")
-        return {}, f"{policy.display_name} (profile v{version}) does not support LoRAs."
-    return {}, ""
+    """The Base Generation LoRA annotations and blocking sentence (the decision is ``assess_lora_selection``)."""
+
+    assessment = assess_lora_selection(policy, selected, resolver)
+    return dict(assessment.annotations), assessment.blocking
 
 
 def project_model_controls(
@@ -108,6 +81,7 @@ def project_model_controls(
     *,
     selected_loras: Sequence[tuple[str, float]] = (),
     lora_resolver: LoraResolver | None = None,
+    model_name: str = "",
 ) -> ModelControlProjection:
     controls = {
         name: ControlState(policy.control(name).mode, policy.control(name).value) for name in VALUE_CONTROLS
@@ -127,6 +101,7 @@ def project_model_controls(
     return ModelControlProjection(
         policy=policy,
         controls=controls,
+        model_name=str(model_name or ""),
         presets=presets,
         note=policy.note,
         blocking=blocking,
@@ -150,6 +125,7 @@ def project_model_selection(
         backend_id,
         selected_loras=selected_loras,
         lora_resolver=lora_resolver,
+        model_name=str(model_name or ""),
     )
 
 
