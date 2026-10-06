@@ -10,7 +10,7 @@ import tkinter as tk
 
 from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
-from src.gui_v2.klein_projection import project_klein_controls
+from src.gui_v2.model_policy_projection import project_model_selection
 from src.image_backends.forge_klein_lora import (
     KleinLoraDecision,
     KleinLoraStatus,
@@ -34,14 +34,14 @@ def _resolver(table: dict[str, KleinLoraStatus]):
 
 
 def test_the_note_explains_the_empty_negative_and_the_one_lora_contract() -> None:
-    note = project_klein_controls(KLEIN, "forge_webui").note
+    note = project_model_selection(KLEIN, "forge_webui").note
 
     assert "no standard negative prompt" in note and "describe what you want positively" in note
     assert "Up to 1 LoRA" in note and "explicitly names FLUX.2 Klein 4B" in note
 
 
 def test_a_verified_lora_is_annotated_and_does_not_block() -> None:
-    projection = project_klein_controls(
+    projection = project_model_selection(
         KLEIN, "forge_webui", selected_loras=[("a", 0.8)], lora_resolver=_resolver({"a": KleinLoraStatus.COMPATIBLE})
     )
 
@@ -50,7 +50,7 @@ def test_a_verified_lora_is_annotated_and_does_not_block() -> None:
 
 
 def test_an_unverified_or_unknown_lora_is_labeled_not_hidden() -> None:
-    projection = project_klein_controls(
+    projection = project_model_selection(
         KLEIN,
         "forge_webui",
         selected_loras=[("generic", 0.8)],
@@ -59,12 +59,12 @@ def test_an_unverified_or_unknown_lora_is_labeled_not_hidden() -> None:
 
     assert projection.lora_annotations["generic"].startswith("not verified for FLUX.2 Klein 4B (unverified)")
     assert "rejected before generation" in projection.lora_blocking
-    unknown = project_klein_controls(KLEIN, "forge_webui", selected_loras=[("zzz", 1.0)], lora_resolver=_resolver({}))
+    unknown = project_model_selection(KLEIN, "forge_webui", selected_loras=[("zzz", 1.0)], lora_resolver=_resolver({}))
     assert "not verified for FLUX.2 Klein 4B" in unknown.lora_annotations["zzz"]
 
 
 def test_two_loras_block_with_the_admission_message() -> None:
-    projection = project_klein_controls(
+    projection = project_model_selection(
         KLEIN,
         "forge_webui",
         selected_loras=[("a", 0.8), ("b", 0.5)],
@@ -75,11 +75,11 @@ def test_two_loras_block_with_the_admission_message() -> None:
 
 
 def test_a_normal_model_ignores_the_lora_selection_entirely() -> None:
-    projection = project_klein_controls(
+    projection = project_model_selection(
         "sdxl.safetensors", "forge_webui", selected_loras=[("a", 0.8)], lora_resolver=_resolver({})
     )
 
-    assert not projection.active and projection.lora_annotations == {} and projection.lora_blocking == ""
+    assert not projection.constrained and projection.lora_annotations == {} and projection.lora_blocking == ""
 
 
 # --- panel + picker glue -----------------------------------------------------------------------
@@ -89,12 +89,12 @@ def _wired(tk_root: tk.Tk, tmp_path, table: dict[str, KleinLoraStatus]):
     panel = BaseGenerationPanelV2(
         tk_root, models=["sdxl.safetensors", KLEIN], samplers=["Euler", "Euler a"], include_vae=True
     )
-    panel._klein_projection._backend_id_provider = lambda: "forge_webui"
+    panel._model_policy_projection._backend_id_provider = lambda: "forge_webui"
     picker = LoRAPickerPanel(tk_root, webui_root=str(tmp_path))
-    panel._klein_projection.set_lora_integration(
+    panel._model_policy_projection.set_lora_integration(
         provider=picker.get_loras, sink=picker.set_annotations, resolver=_resolver(table)
     )
-    picker.selection_listener = panel._klein_projection.refresh
+    picker.selection_listener = panel._model_policy_projection.refresh
     return panel, picker
 
 

@@ -3,8 +3,8 @@ from __future__ import annotations
 from copy import deepcopy
 from uuid import uuid4
 
-from src.image_backends.forge_klein_profile import apply_klein_compile_policy
 from src.image_backends.image_backend_types import normalize_image_backend_options
+from src.image_backends.model_policy import apply_model_compile_policy
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
     extract_adaptive_refinement_intent,
@@ -82,7 +82,7 @@ def build_cli_njr(
     batch_size: int,
     run_name: str | None = None,
 ) -> NormalizedJobRecord:
-    full_config = apply_klein_compile_policy(deepcopy(config))
+    full_config = apply_model_compile_policy(deepcopy(config))
     txt2img = dict(full_config.get("txt2img", {}) or {})
     pipeline = dict(full_config.get("pipeline", {}) or {})
 

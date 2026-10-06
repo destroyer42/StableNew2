@@ -10,8 +10,8 @@ from typing import Any
 
 from src.config import app_config
 from src.gui.help_text.stage_setting_help_v2 import BASE_GENERATION_SETTING_HELP
-from src.gui.klein_panel_projection import KleinPanelProjection
 from src.gui.layout_v2 import configure_grid_columns
+from src.gui.model_policy_panel_projection import ModelPolicyPanelProjection
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import BODY_LABEL_STYLE, MUTED_LABEL_STYLE
 from src.gui.view_contracts.pipeline_layout_contract import (
@@ -158,10 +158,10 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         )
         self._sync_enabled = True
         self._attach_change_traces()
-        # PR-IMG-116: truthful FLUX.2 Klein controls (no-op for every other model).
-        self._klein_projection = KleinPanelProjection(self)
-        self.model_var.trace_add("write", lambda *_: self._klein_projection.refresh())
-        self._klein_projection.refresh()
+        # PR-IMG-130A: truthful model-policy controls (fixed/restricted/unsupported per selected model family).
+        self._model_policy_projection = ModelPolicyPanelProjection(self)
+        self.model_var.trace_add("write", lambda *_: self._model_policy_projection.refresh())
+        self._model_policy_projection.refresh()
 
     def _build_body(self, parent: ttk.Frame) -> None:
         self._configure_layout_columns(parent)

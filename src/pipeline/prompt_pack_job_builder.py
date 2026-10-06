@@ -12,8 +12,8 @@ from pathlib import Path
 from typing import Any, cast
 
 from src.contracts import PackJobEntry
-from src.image_backends.forge_klein_profile import apply_klein_compile_policy
 from src.image_backends.image_backend_types import normalize_image_backend_options
+from src.image_backends.model_policy import apply_model_compile_policy
 from src.pipeline import config_contract_v26
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
@@ -373,7 +373,7 @@ class PromptPackNormalizedJobBuilder:
                 )
             )
             self._resolved_config_cache[resolved_cache_key] = copy.deepcopy(cached_resolved)
-        merged_config = apply_klein_compile_policy(copy.deepcopy(cached_resolved))
+        merged_config = apply_model_compile_policy(copy.deepcopy(cached_resolved))
         stage_flags = self._normalize_stage_flags(
             merged_config.get("pipeline", {}), entry.stage_flags or {}
         )

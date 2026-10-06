@@ -12,32 +12,32 @@ from PIL import Image
 from src.gui.base_generation_panel_v2 import BaseGenerationPanelV2
 from src.gui.controllers.review_workflow_adapter import ReviewWorkflowAdapter
 from src.gui.views.review_tab_frame_v2 import ReviewTabFrame
-from src.gui_v2.klein_projection import project_klein_controls
+from src.gui_v2.model_policy_projection import project_model_selection
 from src.image_backends.forge_klein_profile import KLEIN_EDIT_METADATA_KEY
 
 KLEIN = "flux-2-klein-4b-fp8.safetensors"
 
 
 def test_projection_is_pure_and_klein_specific() -> None:
-    inactive = project_klein_controls("sdxl.safetensors", "forge_webui")
-    assert not inactive.active and inactive.note == "" and inactive.blocking == ""
-    active = project_klein_controls(KLEIN, "forge_webui")
-    assert active.active and active.blocking == ""
-    assert (active.sampler, active.scheduler, active.steps, active.cfg_scale) == ("Euler", "Beta", 4, 1.0)
+    inactive = project_model_selection("sdxl.safetensors", "forge_webui")
+    assert not inactive.constrained and inactive.note == "" and inactive.blocking == ""
+    active = project_model_selection(KLEIN, "forge_webui")
+    assert active.constrained and active.blocking == ""
+    assert tuple(active.state(name).value for name in ("sampler", "scheduler", "steps", "cfg_scale")) == ("Euler", "Beta", 4, 1.0)
     assert [(w, h) for _, w, h in active.presets] == [(768, 1024), (1024, 1024)]
     assert "fixed distilled settings" in active.note
 
 
 def test_projection_on_a1111_is_an_actionable_message_not_a_backend_switch() -> None:
-    projection = project_klein_controls(KLEIN, "a1111_webui")
-    assert projection.active
+    projection = project_model_selection(KLEIN, "a1111_webui")
+    assert projection.constrained
     assert "runs only on the Forge WebUI backend" in projection.blocking
     assert "will not switch backends" in projection.blocking
 
 
 def _panel(tk_root: tk.Tk, backend_id: str) -> BaseGenerationPanelV2:
     panel = BaseGenerationPanelV2(tk_root, models=["sdxl.safetensors", KLEIN], samplers=["Euler", "Euler a"], include_vae=True)
-    panel._klein_projection._backend_id_provider = lambda: backend_id
+    panel._model_policy_projection._backend_id_provider = lambda: backend_id
     return panel
 
 
@@ -106,7 +106,7 @@ def test_klein_to_sdxl_round_trip_restores_the_exact_previous_non_default_values
         assert _snapshot(panel) != before and panel.steps_var.get() == 4  # Klein values are in effect
         panel.model_var.set("sdxl.safetensors")
         assert _snapshot(panel) == before
-        assert panel._klein_projection._saved_values == {} and panel._klein_projection._saved_states == {}
+        assert panel._model_policy_projection._saved_states == {} and panel._model_policy_projection.drafts == {}
     finally:
         panel.destroy()
 
@@ -117,7 +117,7 @@ def test_repeated_refresh_while_klein_is_active_never_overwrites_the_snapshot(tk
         before = _configure_non_default_sdxl(panel)
         panel.model_var.set(KLEIN)
         for _ in range(3):
-            panel._klein_projection.refresh()
+            panel._model_policy_projection.refresh()
         panel.model_var.set(KLEIN)  # re-selecting Klein is not a new transition either
         panel.model_var.set("sdxl.safetensors")
         assert _snapshot(panel) == before
@@ -155,7 +155,7 @@ def test_other_models_never_activate_the_projection(tk_root: tk.Tk) -> None:
         panel.model_var.set("sdxl.safetensors")
         panel.steps_var.set(30)
         assert panel.steps_var.get() == 30
-        assert not panel._klein_projection.active
+        assert not panel._model_policy_projection.active
     finally:
         panel.destroy()
 

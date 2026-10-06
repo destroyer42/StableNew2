@@ -89,6 +89,15 @@ Updated: 2026-10-05
   compatibility evidence. The pinned managed Forge applied the adapter (80 keys, weight honored at 0.8 and 0.4, visible effect);
   one bounded three-job production acceptance passed. Multi-LoRA and LoRA with edit remain unqualified. See
   `docs/Subsystems/Image/PR-IMG-117_FLUX2_Klein_LoRA_Qualification_and_Profile_v2.md`.
+- Model-family capability registry (PR-IMG-130A, local branch): `src/image_backends/model_policy.py` is the one pure policy
+  layer that says, per selected model, which Base Generation controls are configurable, supported-but-fixed or unsupported
+  and which optional features are supported, with read-only prompt-dialect and Learning-variable hooks. It consults the exact
+  qualified Klein profile (v2 semantics unchanged, persisted v1/v2 NJRs keep their version) before any family inference, then
+  `AssetRegistry` evidence from the persisted snapshot only (no scan/hash on the Tk thread); SDXL keeps today's behavior and
+  unknown/conflicting evidence is never guessed as SDXL. The Base Generation panel is driven by that policy (no Klein-specific
+  GUI branch) and keeps per-family working values across any number of family switches; the compiler enters through
+  `apply_model_compile_policy`. No backend is ever switched, and prompt translation, Prompt-tab and Learning redesign remain
+  out of scope. See `docs/Subsystems/Image/PR-IMG-130A_Model_Family_Capability_Registry.md`.
 - Shutdown admission fence and repository quiescence (PR-RUNTIME-SHUTDOWN-140, local branch): once application shutdown begins
   (`AppController.shutdown_app`), `JobQueue.fence_dispatch()` atomically refuses every new QUEUED -> RUNNING transition (the
   claim, the Run Now handoff and any later start), so pending jobs stay durably QUEUED and resume under the unchanged startup
