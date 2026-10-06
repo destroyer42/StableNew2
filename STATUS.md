@@ -81,7 +81,7 @@ Updated: 2026-10-05
   (available RAM is evidence only). Assets install with `scripts/install_forge_klein_assets.ps1` into the managed Forge data
   tree. Two production smokes passed on the RTX 4070 Ti. A1111 is the explicit rollback; multi-reference is
   unsupported and tracked separately. See `docs/Subsystems/Image/PR-IMG-116_FLUX2_Klein_Forge_Production_Slice.md`.
-- FLUX.2 Klein 4B LoRA (PR-IMG-117, local branch): profile `flux2_klein_4b_fp8` **v2** adds exactly one LoRA whose embedded or
+- FLUX.2 Klein 4B LoRA (PR-IMG-117, COMPLETE / ACCEPTED / INTEGRATED; PR #58): profile `flux2_klein_4b_fp8` **v2** adds exactly one LoRA whose embedded or
   sidecar metadata explicitly names FLUX.2 Klein 4B (exact whole-value match through `AssetRegistry`; generic FLUX, unknown,
   SDXL/SD*, other FLUX variants and conflicts stay non-runnable) on text-to-image work; v1 stays immutable and keeps rejecting
   every LoRA, new work is stamped v2, negative prompts remain unsupported. Rejections happen before any generation POST; Forge
@@ -89,6 +89,14 @@ Updated: 2026-10-05
   compatibility evidence. The pinned managed Forge applied the adapter (80 keys, weight honored at 0.8 and 0.4, visible effect);
   one bounded three-job production acceptance passed. Multi-LoRA and LoRA with edit remain unqualified. See
   `docs/Subsystems/Image/PR-IMG-117_FLUX2_Klein_LoRA_Qualification_and_Profile_v2.md`.
+- Shutdown admission fence and repository quiescence (PR-RUNTIME-SHUTDOWN-140, local branch): once application shutdown begins
+  (`AppController.shutdown_app`), `JobQueue.fence_dispatch()` atomically refuses every new QUEUED -> RUNNING transition (the
+  claim, the Run Now handoff and any later start), so pending jobs stay durably QUEUED and resume under the unchanged startup
+  auto-run policy; the active job follows the existing cancellation semantics. `SingleNodeJobRunner.stop()` now returns whether
+  every worker thread has quiesced, and the shared `JobRepository` is closed only after verified quiescence (otherwise shutdown
+  reports it and leaves SQLite open). It repairs the reproduced post-shutdown claim and `Cannot operate on a closed database`
+  race; the fence is process-lifetime, never persisted. See
+  `docs/Subsystems/Runtime/PR-RUNTIME-SHUTDOWN-140_Shutdown_Admission_and_Repository_Quiescence.md`.
 - Risk-proportionate CI (PR-DEVEX-CI-110): the repository-owned `tools/ci/validation_plan.py` classifies the base-to-head change
   set into additive coarse lanes and the single PR-head workflow consumes it. Docs-only changes take a cheap path (no Python
   environment); every executable PR runs `required` (repository quality plus a small cross-boundary contract suite, 294 tests) and

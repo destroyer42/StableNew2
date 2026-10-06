@@ -8,6 +8,8 @@ from src.utils import LogContext, log_with_ctx
 
 def dispatch_next_now(service: Any, *, logger: logging.Logger) -> bool:
     """Dispatch one queued job when auto-run is disabled, otherwise start worker."""
+    if getattr(service, "_shutting_down", False):
+        return False  # PR-RUNTIME-SHUTDOWN-140: the shutdown fence is terminal; nothing new may start
     is_paused = getattr(service.job_queue, "is_paused", None)
     if callable(is_paused) and is_paused():
         log_with_ctx(

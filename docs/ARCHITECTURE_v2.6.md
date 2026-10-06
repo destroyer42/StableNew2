@@ -206,6 +206,12 @@ records. Its canonical MVP backend is SQLite.
   files directly.
 - Repository transactions own lifecycle transitions and durable results.
 - Queue workers operate in the StableNew process for MVP.
+- Application shutdown fences queue admission first: `JobQueue.fence_dispatch()` is checked under the lock that makes a
+  claim atomic with its durable transition, so no QUEUED job can newly acquire RUNNING ownership afterwards. The fence is
+  process-lifetime (never persisted); pending jobs stay durably QUEUED and resume under the startup auto-run policy.
+- The shared `JobRepository` is closed only after every queue worker has definitively quiesced
+  (`SingleNodeJobRunner.is_quiescent()`); a worker that cannot quiesce within the bound is reported and the repository
+  is left open rather than closed underneath it.
 
 On process restart, persisted `QUEUED` work remains runnable with its durable
 queue order. Persisted `RUNNING` work has an execution-outcome ambiguity because

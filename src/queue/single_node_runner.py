@@ -288,6 +288,11 @@ class SingleNodeJobRunner:
         self.poll_interval = poll_interval
         self._stop_event = threading.Event()
         self._worker: threading.Thread | None = None
+        # Every worker thread this runner has launched and not yet seen exit. ``_worker`` is only the latest;
+        # a worker that decided to retire can still be unwinding when its replacement starts, and the repository
+        # may be closed only once *none* of them is alive (PR-RUNTIME-SHUTDOWN-140).
+        self._workers: list[threading.Thread] = []
+        self._shutting_down = False
         self._on_status_change = on_status_change
         self._current_job: Job | None = None
         self._cancel_current = threading.Event()
@@ -377,7 +382,8 @@ class SingleNodeJobRunner:
 
     def _launch_worker(self, mode: str, job: Job | None = None) -> None:
         """Start a worker thread of ``mode``; the caller holds ``_lifecycle_lock``."""
-        self._stop_event.clear()
+        if not self._shutting_down:
+            self._stop_event.clear()
         self._worker_mode = mode
         self._worker_retiring = False
         self._continue_after_once = False
@@ -388,6 +394,8 @@ class SingleNodeJobRunner:
             daemon=False,
             name="QueueWorker" if mode == "continuous" else "QueueWorkerOnce",
         )
+        self._workers = [worker for worker in self._workers if worker.is_alive()]
+        self._workers.append(self._worker)
         self._worker.start()
 
     def start(self) -> None:
@@ -400,6 +408,8 @@ class SingleNodeJobRunner:
         PR-THREAD-001: Changed to non-daemon thread for clean shutdown.
         """
         with self._lifecycle_lock:
+            if self._shutting_down:
+                return
             worker = self._worker
             if worker and worker.is_alive() and not self._worker_retiring:
                 if self._worker_mode == "once":
@@ -414,7 +424,7 @@ class SingleNodeJobRunner:
     def run_next_once(self) -> bool:
         """Dispatch exactly the next queued job on a worker thread."""
         with self._lifecycle_lock:
-            if self.is_running() or self.job_queue.is_paused():
+            if self._shutting_down or self.is_running() or self.job_queue.is_paused():
                 return False
             job = self.job_queue.get_next_job()
             if job is None:
@@ -432,6 +442,7 @@ class SingleNodeJobRunner:
             with self._lifecycle_lock:
                 handoff = (
                     self._continue_after_once
+                    and not self._shutting_down
                     and not self._stop_event.is_set()
                     and self._can_continue_dispatching()
                 )
@@ -449,15 +460,40 @@ class SingleNodeJobRunner:
             # persisted FAILED, so keep draining and let the loop own later failures.
         self._worker_loop()
 
-    def stop(self) -> None:
-        """Stop the worker thread gracefully.
+    def begin_shutdown(self) -> None:
+        """Terminal admission fence for application shutdown (idempotent, cannot be undone).
 
-        PR-THREAD-001: Increased timeout from 2s to 10s for clean shutdown.
+        Fences the queue first (the atomic claim boundary), then retires dispatch: no new worker starts, a
+        one-shot worker does not hand off to continuous draining, and a running worker leaves its loop after the
+        job it already owns. That job is untouched here (cancellation stays with ``cancel_current``). QUEUED jobs
+        stay durably QUEUED and the user's auto-run preference is not read or changed.
+        """
+        # Deliberately lock-free: the safety property is the queue's atomic fence, and a worker holds
+        # ``_lifecycle_lock`` while it evaluates the dispatch policy, which must never be able to delay shutdown.
+        self.job_queue.fence_dispatch()
+        self._shutting_down = True
+        self._stop_event.set()
+
+    def is_quiescent(self) -> bool:
+        """True only when no worker thread this runner launched is alive (so none can touch the repository)."""
+        return not any(worker.is_alive() for worker in list(self._workers))
+
+    def stop(self, timeout: float = 10.0) -> bool:
+        """Ask the worker to stop and wait at most ``timeout`` seconds in total.
+
+        Returns whether every worker has definitively quiesced: ``True`` only when no worker thread is alive. A
+        join that merely returned at the timeout is not quiescence, so callers must use this result (or
+        ``is_quiescent()``) before closing anything the worker may still use.
+
+        PR-THREAD-001: the default stays 10s for clean shutdown.
         """
         self._stop_event.set()
-        if self._worker:
-            # PR-THREAD-001: Increased timeout for more reliable shutdown
-            self._worker.join(timeout=10.0)
+        deadline = time.monotonic() + max(0.0, float(timeout))
+        for worker in list(self._workers):
+            if worker is threading.current_thread():
+                continue
+            worker.join(timeout=max(0.0, deadline - time.monotonic()))
+        return self.is_quiescent()
 
     def _worker_loop(self) -> None:
         logger.debug("SingleNodeJobRunner worker loop started")
@@ -467,9 +503,9 @@ class SingleNodeJobRunner:
                 time.sleep(self.poll_interval)
                 continue
             with self._lifecycle_lock:
-                if not self._can_continue_dispatching():
+                if self._shutting_down or not self._can_continue_dispatching():
                     self._worker_retiring = True
-                    logger.debug("SingleNodeJobRunner retiring because auto-run is disabled")
+                    logger.debug("SingleNodeJobRunner retiring (auto-run disabled or shutting down)")
                     break
             self._cancel_current.clear()
             self._cancel_return_to_queue = False
@@ -660,7 +696,13 @@ class SingleNodeJobRunner:
         self._current_cancel_token = CancelToken()
         job._cancel_token = self._current_cancel_token
         self._current_job = job
-        self.job_queue.mark_running(job.job_id)
+        if self.job_queue.mark_running(job.job_id) is None and self._queue_dispatch_fenced():
+            # Shutdown fenced admission between the one-shot decision and its RUNNING transition: the job
+            # stays durably QUEUED for the next start.
+            job._cancel_token = None
+            self._current_cancel_token = None
+            self._current_job = None
+            return None
         self._notify(job, JobStatus.RUNNING)
         try:
             if self._cancel_current.is_set():
@@ -746,6 +788,10 @@ class SingleNodeJobRunner:
             self._current_cancel_token = None
             self._current_job = None
             self._cancel_return_to_queue = False
+
+    def _queue_dispatch_fenced(self) -> bool:
+        check = getattr(self.job_queue, "is_dispatch_fenced", None)
+        return callable(check) and check() is True
 
     def _notify(self, job: Job, status: JobStatus) -> None:
         if self._on_status_change:
