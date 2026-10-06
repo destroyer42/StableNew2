@@ -206,7 +206,14 @@ chain was qualified after the progress-watchdog and module-state repairs (see PR
 
 ### Explicit A1111 rollback
 
-In `presets/settings.json`:
+**Engine Settings:** choose **A1111 Compatibility** under *WebUI -> Runtime* (the product default is **Default -
+Managed Forge**) and save. The selection is persisted as `webui_runtime_identity` and takes effect only after StableNew
+is restarted: the running runtime is never stopped, adopted or hot-switched, and until you restart, new image jobs are
+refused before dispatch because the running runtime no longer matches the selection. The dialog shows the endpoint the
+existing identity-aware resolver will use (Forge `127.0.0.1:7871`, A1111 `127.0.0.1:7860`) and never writes an
+identity-default endpoint as an explicit URL, so switching back cannot inherit the other runtime's port.
+
+The equivalent manual edit, in `presets/settings.json`:
 
 ```json
 {

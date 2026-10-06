@@ -19,6 +19,11 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/promptpacks/paths.py` resolves the per-user authority and
   `src/promptpacks/storage.py` owns the versioned JSON format; typed GUI editing remains in
   `src/gui/models/prompt_pack_model.py`.
+- WebUI-family managed lifecycle (one active manager; startup, readiness epochs, owned restart, early-exit diagnostics):
+  `src/api/webui_process_manager.py` (`WebUIProcessManager`, `wait_for_managed_startup`, `WebUIReadyEvent`), observed by
+  `src/controller/webui_connection_controller.py` (`attach_process_manager`, `ready_epoch`) and wired in `src/main.py`;
+  readiness fans out to `AppController.on_webui_ready` (the one resource-refresh seam). The application-level runtime
+  selector lives in `src/gui/engine_settings_dialog.py` over `src/api/webui_runtime_identity.py`.
 - Global Positive/Negative prompt text (per-user state): `src/prompting/global_prompt_paths.py` resolves the
   directory (`%LOCALAPPDATA%\StableNew\GlobalPrompts`, `STABLENEW_GLOBAL_PROMPT_DIR` override) and
   `src/utils/config.py::ConfigManager` is the persistence API; enabled flags stay in settings. Journeys isolate it

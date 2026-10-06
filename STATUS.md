@@ -544,6 +544,15 @@ settings authority, and `presets/global_positive.txt` / `presets/global_negative
 and never read. Frozen NJR policy and execution are unchanged. See
 `docs/Subsystems/Prompting/PR-DEVEX-PROMPTS-170_Global_Prompt_User_State.md`.
 
+The WebUI-family runtime has one managed lifecycle (PR-RUNTIME-WEBUI-LIFECYCLE-130): startup, GUI connection,
+recovery and resource refresh observe the single active `WebUIProcessManager`. A manager cannot displace the registration
+of the manager that owns a live process or launch a duplicate; a proven TRUE-READY (startup, or an owned restart)
+publishes one readiness epoch that the connection controller turns into one READY event, so `AppController.on_webui_ready`
+refreshes resources once and stale readiness backoff is cleared; a process that exits before readiness is reported with
+its PID, identity, profile, exit code and a bounded output tail. Engine Settings exposes **Default - Managed Forge** /
+**A1111 Compatibility** as one restart-required application setting; native/Comfy work is not gated on the WebUI family.
+See `docs/Subsystems/Runtime/PR-RUNTIME-WEBUI-LIFECYCLE-130_WebUI_Lifecycle_Convergence.md`.
+
 The canonical documentation order is `AGENTS.md`, `STATUS.md`,
 `docs/CODEX_MAP.md`, the relevant architecture section, the relevant coding and
 testing section, the roadmap for sequencing, and Git history only when current
