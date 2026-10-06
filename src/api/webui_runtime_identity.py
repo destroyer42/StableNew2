@@ -88,9 +88,10 @@ class WebUIRuntimeConfigurationError(ValueError):
 class WebUIRuntimeIdentityMismatch(RuntimeError):
     """The connected endpoint cannot execute the requested image backend identity."""
 
-    def __init__(self, backend_id: str, observed: WebUIRuntimeIdentity) -> None:
+    def __init__(self, backend_id: str, observed: WebUIRuntimeIdentity, *, detail: str = "") -> None:
         self.backend_id = backend_id
         self.observed = observed
+        self.detail = detail
         if backend_id == FORGE_WEBUI_IDENTITY:
             reason = (
                 "forge_webui requires a positively identified Forge endpoint, but the connected "
@@ -110,6 +111,7 @@ class WebUIRuntimeIdentityMismatch(RuntimeError):
         super().__init__(
             f"WebUI runtime identity mismatch: {reason}. Generation was not dispatched; no backend "
             "fallback is performed."
+            + (f" [identity: {detail}]" if detail else "")
         )
 
 
@@ -227,6 +229,12 @@ def effective_webui_base_url() -> str:
     return resolve_effective_webui_base_url(load_backend_settings())
 
 
+def _endpoint_state(value: Any, well_formed: bool) -> str:
+    if value is None:
+        return "unavailable"
+    return "ok" if well_formed else "malformed"
+
+
 def classify_runtime_identity(
     cmd_flags: Any, sd_modules: Any, sd_vae: Any, *, options: Any = None,
 ) -> WebUIRuntimeIdentity:
@@ -245,8 +253,17 @@ def classify_runtime_identity(
         "forge_flag_present": bool(forge_flag),
         "options_readable": options_ok,
         "forge_option_keys": forge_options,
+        "any_forge_option": any_forge_option,
         "sd_modules_list": modules_ok,
         "sd_vae_list": vae_ok,
+        # Per endpoint: readable ("ok"), no usable response ("unavailable"), or a response of the wrong shape
+        # ("malformed"). Facts only, never raw payloads (an options body can carry paths and tokens).
+        "endpoint_state": {
+            "cmd_flags": _endpoint_state(cmd_flags, flags_ok),
+            "options": _endpoint_state(options, options_ok),
+            "sd_modules": _endpoint_state(sd_modules, modules_ok),
+            "sd_vae": _endpoint_state(sd_vae, vae_ok),
+        },
     }
     if options_ok and forge_options and modules_ok and sd_vae is None:
         return WebUIRuntimeIdentity(FORGE_WEBUI_IDENTITY, evidence)

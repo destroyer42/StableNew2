@@ -14,9 +14,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from src.api.webui_runtime_identity import (
-    assert_runtime_matches_backend,
-    classify_client_runtime,
+from src.api.webui_identity_attestation import (
+    IdentityDecision,
+    ManagedWebUIIdentityAttestor,
+    default_attestor,
+    verify_backend_runtime_identity,
 )
 from src.image_backends.forge_klein_profile import KleinProfileError, resolve_model_profile
 from src.image_backends.image_backend_types import (
@@ -38,8 +40,16 @@ class WebUIFamilyImageBackend:
     #: StableNew runtime-transition target claimed before dispatch (never a model/family name).
     transition_target: str
 
-    def __init__(self, *, transition: RuntimeTransitionCoordinator | None = None) -> None:
+    def __init__(
+        self,
+        *,
+        transition: RuntimeTransitionCoordinator | None = None,
+        identity_attestor: ManagedWebUIIdentityAttestor | None = None,
+    ) -> None:
         self._transition = transition or RuntimeTransitionCoordinator()
+        self._identity_attestor = identity_attestor or default_attestor()
+        #: Why the most recent identity guard allowed a stage (diagnostics; never an authority).
+        self.last_identity_decision: IdentityDecision | None = None
 
     @staticmethod
     def _stage_executor_config(request: ImageExecutionRequest) -> dict[str, Any]:
@@ -190,8 +200,12 @@ class WebUIFamilyImageBackend:
         if not transition.ready:
             raise RuntimeTransitionError(transition)
         # Read-only identity guard: reject a backend/endpoint mismatch before any generation POST.
-        assert_runtime_matches_backend(
-            self.backend_id, classify_client_runtime(getattr(pipeline, "client", None))
+        self.last_identity_decision = None
+        verify_backend_runtime_identity(
+            self.backend_id,
+            getattr(pipeline, "client", None),
+            self._identity_attestor,
+            record=lambda decision: setattr(self, "last_identity_decision", decision),
         )
         self._before_dispatch(pipeline, request)
 
