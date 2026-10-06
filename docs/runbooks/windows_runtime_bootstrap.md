@@ -18,6 +18,29 @@ the same installation or are available on `PATH`. StableNew resolves these
 through its existing production resolver; the repository does not bundle or
 install FFmpeg.
 
+## Launching StableNew
+
+Day to day, use the canonical launcher from the repository (no venv activation, any working directory):
+
+```powershell
+.\scripts\launch_stablenew.bat        # or launch_stablenew.ps1; arguments are forwarded to src.main
+```
+
+It always runs `<repo>\.venv\Scripts\python.exe -m src.main` and returns the application's exit code.
+
+- **No `.venv`:** it runs the bootstrap below once (`-SkipSvdReadiness`, see next section), then launches.
+  System Python is used only there, as the source for creating the venv.
+- **Healthy `.venv`:** one read-only check (interpreter policy and the exact pins from the constraints; no pip, no
+  install), then launch.
+- **Incomplete, unsupported or drifted `.venv`:** the launcher stops with guidance (exit 11) and changes
+  nothing; it never falls back to another Python. Diagnose with
+  `.\scripts\bootstrap_windows.ps1 -CheckOnly -SkipSvdReadiness`; recreate only deliberately with `-Recreate`.
+- Bootstrap failure exits 10; a folder that is not a StableNew checkout exits 12.
+- It starts, stops and selects no A1111, Forge, Comfy or SVD runtime; the application owns those.
+
+`launch_stablenew_advanced.bat` only forwards to `launch_stablenew.bat`;
+`scripts\create_desktop_shortcut.ps1` creates a shortcut to it.
+
 ## Bootstrap
 
 From the repository root, run:
@@ -44,6 +67,14 @@ packages:
 powershell -ExecutionPolicy Bypass -File .\scripts\bootstrap_windows.ps1 `
   -VenvPath .\.venv -CheckOnly
 ```
+
+### Core application check vs native-SVD readiness
+
+`-SkipSvdReadiness` (used by the launcher) runs the same interpreter validation, installs (when bootstrapping),
+`pip check` and exact-pin verification, then stops before the native-SVD capability checks (CUDA device,
+FFmpeg/ffprobe, cached SVD model). It installs exactly the same packages. An image-only operator can therefore launch
+StableNew without those SVD prerequisites; the application's own readiness panel still reports them. Without the
+switch the full native-SVD verification below is unchanged and remains the proof for SVD work.
 
 ## What the helper does
 

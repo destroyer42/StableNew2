@@ -6,7 +6,8 @@ param(
     [string]$PackageIndexUrl = "https://pypi.org/simple",
     [switch]$CheckOnly,
     [switch]$Recreate,
-    [switch]$WithPostprocess
+    [switch]$WithPostprocess,
+    [switch]$SkipSvdReadiness
 )
 
 Set-StrictMode -Version Latest
@@ -257,6 +258,18 @@ if ($CheckOnly) {
 # Both modes: the environment must match the exact known-good runtime (read-only checks).
 Assert-RuntimePins
 
+# General application launch (scripts/launch_stablenew.ps1) needs the exact core environment but not the
+# native-SVD prerequisites (CUDA device, FFmpeg/ffprobe, cached SVD model). -SkipSvdReadiness stops after the
+# identical interpreter, install, pip check and exact-pin checks above; it never installs fewer packages and
+# never weakens the default native-SVD verification below.
+$modeLabel = if ($CheckOnly) { 'check-only' } else { 'bootstrap' }
+if ($SkipSvdReadiness) {
+    Write-Host "Windows core application environment verification passed (native-SVD readiness skipped)."
+    Write-Host "Venv: $VenvPath"
+    Write-Host "Mode: $modeLabel"
+    exit 0
+}
+
 $verificationCode = @'
 import json
 import os
@@ -347,4 +360,4 @@ try {
 
 Write-Host "Windows native-SVD bootstrap verification passed."
 Write-Host "Venv: $VenvPath"
-Write-Host "Mode: $(if ($CheckOnly) { 'check-only' } else { 'bootstrap' })"
+Write-Host "Mode: $modeLabel"
