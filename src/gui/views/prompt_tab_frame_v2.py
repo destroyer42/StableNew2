@@ -25,6 +25,7 @@ from src.controller.content_visibility_resolver import (
 )
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.layout_v2 import configure_grid_columns
+from src.gui.prompt_adaptation_dialog import PromptAdaptationDialog
 from src.gui.prompt_target_presenter import NO_TARGET_LABEL, PromptTargetPresenter
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.scrolling import enable_mousewheel
@@ -47,6 +48,8 @@ from src.prompting.prompt_compatibility import (
     PromptTargetProjection,
     project_prompt_target,
 )
+from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
+from src.prompting.prompt_adaptation import PromptAdaptationInput, adapt_prompt_for_target
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.promptpacks.paths import resolve_prompt_pack_dir
@@ -112,6 +115,7 @@ class PromptTabFrame(ttk.Frame):
         self._prompt_optimizer_widgets: list[ttk.Widget] = []
         #: Cache-only LoRA admission resolver (the existing PR-IMG-117 evidence); tests may inject one.
         self.target_lora_resolver = None
+        self._adaptation_dialog: PromptAdaptationDialog | None = None
         self.target_banner_var = tk.StringVar(value=NO_TARGET_LABEL)
         self.target_detail_var = tk.StringVar(value="")
         self.negative_note_var = tk.StringVar(value="")
@@ -162,6 +166,7 @@ class PromptTabFrame(ttk.Frame):
             optimizer_note_var=self.optimizer_note_var,
             optimizer_widgets=lambda: tuple(self._prompt_optimizer_widgets),
             embedding_picker=lambda: getattr(self, "embedding_picker", None),
+            adapt_button=lambda: getattr(self, "adapt_button", None),
         )
         self.bind("<Map>", self._on_map, add="+")
         if self.app_state is not None and hasattr(self.app_state, "subscribe"):
@@ -335,6 +340,11 @@ class PromptTabFrame(ttk.Frame):
             header_frame, textvariable=self.target_banner_var, style=BODY_LABEL_STYLE
         )
         self.target_banner_label.pack(side="right")
+        self.adapt_button = ttk.Button(
+            header_frame, text="Adapt for Target…", command=self._open_adaptation_preview, state="disabled"
+        )
+        self.adapt_button.pack(side="right", padx=(0, 8))
+        attach_tooltip(self.adapt_button, "Preview how this prompt would be adapted for the selected model. Nothing is changed.")
         self.target_detail_label = ttk.Label(
             self.center_frame, textvariable=self.target_detail_var, wraplength=640, justify="left"
         )
@@ -1411,6 +1421,43 @@ class PromptTabFrame(ttk.Frame):
             except Exception:
                 logger.debug("Prompt target compatibility could not be projected", exc_info=True)
         presenter.apply(self._prompt_target)
+
+    # Explicit target adaptation preview (PR-IMG-130C) -----------------------
+    def _adaptation_input(self, state: PromptStateSnapshot) -> PromptAdaptationInput:
+        """The structured authoring material for the pure adapter (copied values; reads the cached style evidence only)."""
+
+        slot = self.workspace_state.get_current_slot()
+        style, _pending = self._cached_style_selection()
+        return PromptAdaptationInput(
+            positive_text=state.positive_text,
+            negative_text=state.negative_text,
+            positive_embeddings=tuple(normalize_embedding_entries(getattr(slot, "positive_embeddings", []))),
+            negative_embeddings=tuple(normalize_embedding_entries(getattr(slot, "negative_embeddings", []))),
+            loras=state.loras,
+            style_lora=state.style_lora,
+            style_trigger_phrase=str(style.trigger_phrase or "") if style is not None and style.applied else "",
+            style_lora_pending=state.style_lora_pending,
+            optimizer_enabled=state.optimizer_enabled,
+            global_negative_present=state.global_negative_present,
+        )
+
+    def _open_adaptation_preview(self) -> PromptAdaptationDialog | None:
+        """Open the read-only target-adaptation preview. Never edits, dirties or saves the PromptPack; never scans."""
+
+        projection, target = self._model_projection, self._prompt_target
+        if projection is None or target is None or not target.adaptation_available:
+            return None
+        state = self._snapshot_prompt_state()
+        source = self._adaptation_input(state)
+        plan = adapt_prompt_for_target(projection.policy, source, lora_resolver=self._target_resolver())
+        model = build_adaptation_preview(
+            plan, source, target_label=target.label,
+            positive_hidden=state.positive_hidden, negative_hidden=state.negative_hidden,
+        )
+        if self._adaptation_dialog is not None:
+            self._adaptation_dialog.close()
+        self._adaptation_dialog = PromptAdaptationDialog(self, model)
+        return self._adaptation_dialog
 
     def _build_prompt_optimizer_preview(self, positive_text: str, negative_text: str) -> list[str]:
         lines = ["", "━━━ PROMPT OPTIMIZER ━━━"]
