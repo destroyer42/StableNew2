@@ -19,12 +19,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from src.learning.model_capabilities import compatible_context, project_learning_capabilities
-from src.learning.model_policy_service import (
-    evidence_context,
-    recommendation_applicable,
-    resolve_policy,
-)
 from src.learning.value_identity import VariantValueError, canonical_value_key, plain_value
 
 logger = logging.getLogger(__name__)
@@ -122,7 +116,7 @@ class RecommendationEngine:
     def __init__(self, records_path: str | os.PathLike[str], *, policy_resolver=None) -> None:
         """Initialize with path to learning records JSONL file."""
         self.records_path = Path(records_path)
-        self._policy_resolver = policy_resolver or resolve_policy
+        self._policy_resolver = policy_resolver
         self._cache: dict[str, Any] | None = None
         self._cache_timestamp: float = 0.0
         self._cache_mtime: float = 0.0
@@ -808,6 +802,18 @@ class RecommendationEngine:
         target_capabilities=None,
     ) -> RecommendationSet:
         """Get recommendations for a specific prompt and stage combination."""
+        # Journeys import and may construct this engine before workspace activation.
+        # Canonical policy dependencies belong to recommendation execution, not import.
+        from src.learning.model_capabilities import (
+            compatible_context,
+            project_learning_capabilities,
+        )
+        from src.learning.model_policy_service import (
+            evidence_context,
+            recommendation_applicable,
+            resolve_policy,
+        )
+
         query_context = self._build_query_context(
             prompt_text,
             stage,
@@ -832,7 +838,8 @@ class RecommendationEngine:
             )
         scored_records = self._cache.get("scored_records", []) if self._cache else []
         stage_name = str(stage or "txt2img")
-        capabilities = target_capabilities or project_learning_capabilities(self._policy_resolver(model), model, stage_name)
+        resolver = self._policy_resolver or resolve_policy
+        capabilities = target_capabilities or project_learning_capabilities(resolver(model), model, stage_name)
         target_context = json.loads(capabilities.context_json)
         relevant_records = [
             record

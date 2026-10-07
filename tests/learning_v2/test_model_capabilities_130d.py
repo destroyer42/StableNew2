@@ -1,5 +1,9 @@
 import json
+import os
+import subprocess
+import sys
 from dataclasses import replace
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import Mock
 
@@ -24,6 +28,29 @@ from src.learning.model_capabilities import (
 )
 from src.learning.model_policy_service import compile_variant, validate_experiment
 from src.learning.recommendation_engine import RecommendationEngine
+
+
+def test_recommender_import_and_construction_do_not_load_production_policy(tmp_path):
+    code = (
+        "import sys; from src.learning.recommendation_engine import RecommendationEngine; "
+        "RecommendationEngine('unused.jsonl'); "
+        "RecommendationEngine('unused.jsonl', policy_resolver=lambda _: 1 / 0); "
+        "bad=[m for m in sys.modules if m.startswith(('src.gui','src.controller',"
+        "'src.app_factory','src.pipeline','src.image_backends','src.learning.model_capabilities',"
+        "'src.learning.model_policy_service'))]; print(bad); sys.exit(1 if bad else 0)"
+    )
+    environment = dict(
+        os.environ, PYTHONPATH=str(Path(__file__).resolve().parents[2]), PYTHONDONTWRITEBYTECODE="1"
+    )
+    result = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=tmp_path,
+        env=environment,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
 
 
 def sdxl(model="ordinary.safetensors"):

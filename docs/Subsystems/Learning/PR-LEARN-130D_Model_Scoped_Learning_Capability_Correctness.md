@@ -1,8 +1,8 @@
 # PR-LEARN-130D - Model-scoped Learning capability correctness
 
-State: **HOLD / local checkpoint, not accepted or PR-ready**. The package's
-third-failure-class stop condition applies. Publication and integration remain
-unauthorized.
+State: **READY FOR PUBLICATION** after clean local verification. Locally committed
+closeout only; publication and integration remain unauthorized. The earlier
+**HOLD** checkpoint is preserved below as the trigger for this bounded repair.
 
 ## Execution Profile + Model/Reasoning Recommendation
 
@@ -98,7 +98,7 @@ profile registry or capability qualification. Klein edit+LoRA, ADetailer and
 upscale remain unqualified. No machine-local registry state is frozen into the
 policy context. Historical ratings, experiments and executed NJRs are retained.
 
-## Local verification and stop finding
+## Earlier local verification and HOLD finding
 
 Three pre-edit deterministic reproductions failed as expected: Klein CFG
 preview was accepted, injected CFG application mutated the card, and fixed
@@ -137,14 +137,91 @@ contract. No execution, network or GPU behavior is implicated by this result.
 Earlier validation needed two distinct adjustments: ordinary-SDXL LoRA fixtures
 needed explicit model evidence, and the image filter had reached the independent
 video recommendation surface. Both are repaired. The import-boundary failure is
-the third distinct class, so implementation stops rather than extending repairs.
-Next owner-scoped work should restore the journey import boundary, obtain clean
-isolated collection and required-smoke verdicts, and recheck affected evidence.
-There is no publication recommendation until those blockers are resolved.
+the third distinct class, so implementation stopped at that checkpoint rather
+than extending repairs. Its HOLD called for owner-scoped import-boundary repair,
+clean isolated collection and required smoke, and affected evidence rechecks.
+The bounded continuation below resolves those pre-publication blockers.
 
 The optional Black formatter is unavailable; the existing Ruff formatter was
 used for new modules. No environment was installed or changed. Hosted Python
 3.14 CI and physical generation were not run.
+
+## Bounded import-boundary continuation
+
+The owner authorized one bounded repair pass on
+`learn/model-scoped-capabilities-130d`, starting from local checkpoint
+`4ca074b43866816f96ad8fdc668e33678d9fd020`. Fetched `origin/main` and the merge-base
+remain `79ddcc92401d44871d5bd30d00878ff0e5b20f9b`; the required worktree is
+`C:/Users/rob/projects/StableNew-main`. This continuation retains the Standard
+execution profile and GPT-6.1 Sol High / Sonnet 5.5 High recommendations, with the
+current Codex session preferred to retain branch and evidence context.
+
+The exact existing import-safety test failed before edits. A `builtins.__import__`
+trace proved the first new edge:
+
+`learning_lora_strength -> recommendation_engine -> model_capabilities`.
+
+`model_capabilities` requests canonical `src.image_backends.model_policy`, but
+Python first initializes `src.image_backends`. Its initializer imports
+`a1111_webui_backend -> image_backend_types -> src.pipeline.artifact_contract`.
+This package-initializer route reaches the prohibited pipeline modules before
+the requested policy module finishes loading. `model_policy_service` is another
+new eager dependency from the recommender. In-memory substitution of the exact
+`origin/main` recommender produced no prohibited modules; the checkpoint loaded
+`src.pipeline` and `src.pipeline.artifact_contract`. The first new edge is in the
+recommender, not in the already-import-light operator journey.
+
+Repair: keep RecommendationEngine import and construction light, retain the
+optional injected resolver without invoking it, and defer model-capability and
+model-policy-service imports plus default resolver selection to `recommend()`.
+Filtering, exact evidence scoping, admission and runtime semantics are unchanged.
+The existing harness contract is neither changed nor whitelisted. No controller,
+model policy, backend type, artifact contract or journey implementation is edited.
+
+Focused post-repair evidence: the exact failed test passes; a new deterministic
+subprocess regression proves engine import and both default/injected construction
+load no production policy/backend/pipeline modules and do not invoke a resolver.
+The journey harness plus affected capability, recommendation, apply, frozen/LoRA
+and Tk suites pass: **156 tests**. Intentional eager-policy-import restoration
+fails both import regressions; bypassing exact-profile evidence fails its scoped
+recommendation regression. Restored source passes all three targeted checks.
+The eight unaffected earlier guard mutations retain their unchanged-source
+evidence; the ninth (exact-profile scope) was rerun after this repair.
+
+Final verification ran sequentially with the entire repository unchanged during
+each command, including documentation. Only closeout documentation changed after
+both commands completed; production/test source retains the verified bytes.
+
+- Standalone required smoke: **PASS, 352 passed in 33.64s**; the wrapper confirmed
+  repository unchanged (55.1s total).
+- Canonical `python tools/ci/run_pr_gate.py`: **PR gate OK**, exit 0. Completeness
+  passed with 501 tracked Python source files; four controller ratchets passed
+  with no ceiling change; Ruff passed; mypy passed for ten source targets.
+- Gate isolated collection: **PASS, 5,639 tests collected in 3.09s**, repository
+  unchanged (24.5s total). This is collection evidence, not 5,639 executed tests.
+  The new subprocess regression accounts for the one-test increase. The earlier
+  5,638-test attempt remains invalid isolation evidence.
+- Gate required smoke: **PASS, 352 passed in 35.07s**, repository unchanged
+  (57.3s total).
+- Final scoped and aggregate whitespace checks: **PASS**. No unresolved blocking
+  in-scope finding remains; original 130D guards and authority boundaries remain.
+
+The continuation changes exactly four files: this report, `STATUS.md`,
+`src/learning/recommendation_engine.py`, and
+`tests/learning_v2/test_model_capabilities_130d.py`. The complete package still
+changes the sixteen files listed below. LearningController remains 3,989 physical
+lines (+18 from base), with no continuation controller edit or ceiling increase.
+Hosted Python 3.14 CI awaits separately authorized publication. Physical generation
+was not required or run; the optional Black-tooling limitation remains non-blocking
+because the existing Ruff formatter and canonical checks passed.
+
+Final branch: `learn/model-scoped-capabilities-130d`. Final HEAD is the local
+closeout commit containing this report, titled
+`fix(PR-LEARN-130D): defer recommendation policy imports until execution`, whose
+parent is `4ca074b43866816f96ad8fdc668e33678d9fd020`. Its exact SHA is supplied in
+the completion report and can be resolved with `git log -1 --format=%H --` followed
+by this report's path; a commit cannot embed its own hash. Publication is
+recommended, but no push, PR creation or integration is authorized or performed.
 
 ## Exact changed files
 
