@@ -90,7 +90,7 @@ including PR-LEARN-300 freezing/coherence/admission/LoRA tests. Exercise deliber
 negative mutations against the principal guards, then run the local PR gate
 once and `git diff --check`. Reuse unchanged physical/backend evidence; no real
 generation, GPU, WebUI, runtime lifecycle or environment installation is needed.
-Hosted CI is pending separate publication authorization.
+Hosted Python 3.14 CI validates the exact published head.
 
 ## Boundaries
 
@@ -212,7 +212,7 @@ The continuation changes exactly four files: this report, `STATUS.md`,
 `tests/learning_v2/test_model_capabilities_130d.py`. The complete package still
 changes the sixteen files listed below. LearningController remains 3,989 physical
 lines (+18 from base), with no continuation controller edit or ceiling increase.
-Hosted Python 3.14 CI awaits separately authorized publication. Physical generation
+At that pre-publication checkpoint, hosted Python 3.14 CI had not run. Physical generation
 was not required or run; the optional Black-tooling limitation remains non-blocking
 because the existing Ruff formatter and canonical checks passed.
 
