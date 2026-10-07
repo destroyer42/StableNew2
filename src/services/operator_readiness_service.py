@@ -452,12 +452,8 @@ class OperatorReadinessService:
                 "JobRepository execution_metadata",
             )
         try:
-            jobs = self._repository.list_job_models()
-            recovered = sum(
-                1
-                for job in jobs
-                if getattr(getattr(job, "execution_metadata", None), "last_control_action", None)
-                == "restart_interrupted_action_required"
+            recovered = self._repository.count_jobs_with_last_control_action(
+                "restart_interrupted_action_required"
             )
         except Exception as exc:
             return _unknown_record(
