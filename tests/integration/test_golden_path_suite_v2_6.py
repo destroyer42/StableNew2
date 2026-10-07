@@ -670,8 +670,14 @@ class TestGP10LearningIntegration:
             prompt_text="portrait photo",
         )
 
-        stage_cards = SimpleNamespace(txt2img_card=SimpleNamespace(cfg_var=_Var(7.0)))
+        stage_cards = SimpleNamespace(txt2img_card=SimpleNamespace(
+            cfg_var=_Var(7.0), steps_var=_Var(20), sampler_var=_Var("Euler a"),
+            scheduler_var=_Var("normal"), model_var=_Var("modelA.safetensors"), vae_var=_Var(""),
+        ))
         pipeline_controller = Mock()
+        pipeline_controller._app_state = SimpleNamespace(current_config=SimpleNamespace(
+            model_name="modelA.safetensors", vae_name="",
+        ))
         pipeline_controller.stage_cards_panel = stage_cards
         pipeline_controller.can_enqueue_learning_jobs.return_value = (True, "")
         pipeline_controller.get_preview_jobs.return_value = [object()]
@@ -708,6 +714,11 @@ class TestGP10LearningIntegration:
         controller.set_automation_mode("apply_with_confirm")
         assert controller.apply_recommendations_to_pipeline(recommendations) is True
         assert stage_cards.txt2img_card.cfg_var.get() == 8.0
+        for rec in recommendations.recommendations:
+            from src.gui_v2.recommendation_targets import recommendation_target
+
+            card, variable = recommendation_target("txt2img", rec.parameter_name)
+            assert getattr(getattr(stage_cards, card), variable).get() == rec.recommended_value
 
 
 # ============================================================================

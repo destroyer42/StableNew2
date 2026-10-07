@@ -2757,31 +2757,26 @@ class LearningController:
         rec_list = self._extract_rec_list(recommendations)
         if not validate_recommendation_apply(self, recommendations, stage_cards, rec_list):
             return False
-        self._automation_snapshot = {}
+        from src.gui_v2.recommendation_targets import prepare_recommendation_patch
 
-        applied = 0
-        for rec in rec_list:
-            if hasattr(rec, "parameter_name"):
-                param = rec.parameter_name
-                value = rec.recommended_value
-            elif isinstance(rec, dict):
-                param = rec.get("parameter", "")
-                value = rec.get("value")
-            else:
-                continue
-
-            if self._apply_single_recommendation(
+        try:
+            patch = prepare_recommendation_patch(
                 stage_cards,
-                param,
-                value,
-                snapshot=self._automation_snapshot,
-                target_stage=str(getattr(recommendations, "stage", "txt2img") or "txt2img"),
-            ):
-                applied += 1
-            else:
+                str(getattr(recommendations, "stage", "txt2img") or "txt2img"),
+                rec_list,
+            )
+        except Exception:
+            return False
+        self._automation_snapshot = {}
+        for target, _variable, _value, old_value in patch:
+            self._automation_snapshot.setdefault(target, old_value)
+        for _target, variable, value, _old_value in patch:
+            try:
+                variable.set(value)
+            except Exception:
                 self.rollback_last_recommendation_apply()
                 return False
-        if applied <= 0:
+        if not patch:
             return False
 
         if self._automation_mode == "auto_micro_experiment":
@@ -2853,36 +2848,12 @@ class LearningController:
         target_stage: str = "txt2img",
     ) -> bool:
         """Apply a single recommendation to stage cards."""
-        param_lower = param.lower().replace(" ", "_")
+        from src.gui_v2.recommendation_targets import recommendation_target
 
-        # Map parameter names to stage card attributes
-        param_map = {
-            "cfg_scale": ("txt2img_card", "cfg_var"),
-            "cfg": ("txt2img_card", "cfg_var"),
-            "steps": ("txt2img_card", "steps_var"),
-            "sampler": ("txt2img_card", "sampler_var"),
-            "scheduler": ("txt2img_card", "scheduler_var"),
-            "model": ("txt2img_card", "model_var"),
-            "model_name": ("txt2img_card", "model_var"),
-            "vae": ("txt2img_card", "vae_var"),
-            "width": ("txt2img_card", "width_var"),
-            "height": ("txt2img_card", "height_var"),
-            "clip_skip": ("txt2img_card", "clip_skip_var"),
-            "denoise_strength": ("img2img_card", "denoise_var"),
-            "denoising_strength": ("img2img_card", "denoise_var"),
-            "adetailer_denoise": ("adetailer_card", "denoise_var"),
-            "adetailer_steps": ("adetailer_card", "steps_var"),
-            "adetailer_cfg": ("adetailer_card", "cfg_var"),
-            "upscale_factor": ("upscale_card", "factor_var"),
-        }
-
-        mapping = param_map.get(param_lower)
+        mapping = recommendation_target(target_stage, param)
         if not mapping:
             return False
-
         card_name, var_name = mapping
-        if card_name == "txt2img_card" and target_stage in {"img2img", "adetailer"}:
-            card_name = f"{target_stage}_card"
 
         try:
             card = getattr(stage_cards, card_name, None)

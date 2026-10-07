@@ -70,7 +70,8 @@ def selected_model(config: dict, stage: str) -> str:
     local = config.get(stage) or {}
     base = config.get("txt2img") or {}
     return str(
-        local.get("model")
+        (local.get("adetailer_checkpoint_model") if stage == "adetailer" else None)
+        or local.get("model")
         or local.get("model_name")
         or base.get("model")
         or base.get("model_name")
@@ -307,11 +308,10 @@ def recommendation_applicable(capabilities, parameter):
 
 def validate_recommendation_apply(controller, recommendations, cards, rec_list):
     """Preflight the entire patch before any Tk variable mutation, including stale provenance."""
+    from src.gui_v2.recommendation_targets import checkpoint_for_stage
+
     stage = str(getattr(recommendations, "stage", "txt2img") or "txt2img")
-    card = getattr(cards, f"{stage}_card", None)
-    base_card = getattr(cards, "txt2img_card", None)
-    model_var = getattr(card, "model_var", None) or getattr(base_card, "model_var", None)
-    model = model_var.get() if model_var is not None else None
+    model = checkpoint_for_stage(cards, stage)
     capabilities = live_capabilities(
         controller, stage, model=model if isinstance(model, str) else None
     )

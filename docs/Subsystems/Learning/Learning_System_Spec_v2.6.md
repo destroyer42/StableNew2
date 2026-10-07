@@ -290,6 +290,16 @@ The Learning subsystem does not:
 ### 7.1 Recommendation application
 
 `suggest_only` is display-only and does not expose an enabled Apply action.
+`src/gui_v2/recommendation_targets.py` maps each stage/parameter to its executable
+operator control. ADetailer Model targets the checkpoint override, never its
+detector; Denoise Strength targets its own denoise variable. ADetailer/upscale VAE
+and inherited checkpoint selection use Base Generation (the txt2img card aliases
+those variables). Img2img uses its own CFG/steps/sampler/denoise controls and the
+inherited Base Generation scheduler/model/VAE. Upscale Factor targets its factor
+control. Every target and rollback value is resolved before any Tk mutation;
+missing or unrepresentable controls reject the complete patch without partial
+application. Unexpected setter failure restores the captured values.
+
 Manual application is confirmation-gated and affects only the current/new
 Pipeline draft intent; it never rewrites prior jobs, artifacts, or PromptPacks.
 

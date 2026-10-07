@@ -1,8 +1,8 @@
 # PR-LEARN-130D - Model-scoped Learning capability correctness
 
-State: **READY FOR PUBLICATION** after clean local verification. Locally committed
-closeout only; publication and integration remain unauthorized. The earlier
-**HOLD** checkpoint is preserved below as the trigger for this bounded repair.
+State: model-scoped Learning implemented and published as PR #63. The earlier
+**HOLD**, import-boundary repair and hosted-failure repair history are preserved
+below. Integration requires separate owner authorization.
 
 ## Execution Profile + Model/Reasoning Recommendation
 
@@ -22,8 +22,9 @@ snapshot. No controller ownership moves, no ratcheted `src/controller` source or
 ceiling changes, and no new compiler, family detector, LoRA resolver, queue,
 history, runner or process authority.
 
-LearningController grows from 3,971 to 3,989 physical lines (+18); the substantive
-policy logic is extracted. Contrary to the package's ratchet description, this
+LearningController is 3,960 physical lines (-11 from the 3,971-line base; -29
+from the earlier 3,989-line checkpoint). Policy and stage-target logic are
+extracted. Contrary to the package's ratchet description, this
 GUI controller is not listed in the current checked-in ceiling file, which
 governs four `src/controller` modules. No ceiling is raised.
 
@@ -215,15 +216,90 @@ Hosted Python 3.14 CI awaits separately authorized publication. Physical generat
 was not required or run; the optional Black-tooling limitation remains non-blocking
 because the existing Ruff formatter and canonical checks passed.
 
-Final branch: `learn/model-scoped-capabilities-130d`. Final HEAD is the local
-closeout commit containing this report, titled
-`fix(PR-LEARN-130D): defer recommendation policy imports until execution`, whose
-parent is `4ca074b43866816f96ad8fdc668e33678d9fd020`. Its exact SHA is supplied in
-the completion report and can be resolved with `git log -1 --format=%H --` followed
-by this report's path; a commit cannot embed its own hash. Publication is
-recommended, but no push, PR creation or integration is authorized or performed.
+At that closeout, the branch was `learn/model-scoped-capabilities-130d`, with HEAD
+`eeeb896ade118f8b695fa068eb6f47213c28337b` and parent
+`4ca074b43866816f96ad8fdc668e33678d9fd020`. The owner subsequently authorized its
+publication as PR #63; no integration was authorized or performed.
 
-## Exact changed files
+## Bounded repair of hosted failures on PR #63
+
+Starting head: `eeeb896ade118f8b695fa068eb6f47213c28337b`. Fetched `origin/main`
+and merge-base remain `79ddcc92401d44871d5bd30d00878ff0e5b20f9b`, with the same
+branch and worktree. Hosted run 37564017584 passed required CI but its affected
+lane reported 4,276 passed, 19 skipped and six failures. Four journey assertions
+share the unevidenced-model fixture root cause; GP10 and review/reprocess apply
+share the incomplete stage-card fixture/targeting class. The owner authorized
+these two classes, normal publication of the repair, and automatic hosted CI.
+
+Execution remains Standard, GPT-6.1 Sol High / Sonnet 5.5 High, retaining the
+current Codex session. Controller surface: delegate stage mapping and complete
+target preparation to the toolkit-neutral helper, with no authority movement
+or ceiling increase. Token-efficient validation: reproduce first; run target,
+affected Learning and canonical journey coverage; reuse unchanged 130B/policy
+evidence; freeze files for one canonical local gate; publish normally and obtain
+new-head hosted Python 3.14 evidence. No old workflow is manually rerun.
+
+Pre-edit reproduction failed all three selected targets: fake canonical journey,
+GP10 and review/reprocess application. The fixture repair persists declared SDXL
+embedded metadata using the existing AssetRegistry v2 cache schema, after
+workspace activation and before app/model-policy construction. Synthetic content
+identity is fixture data, not a real model hash. Existing checkpoint extensions
+are preserved. A process-local fixture WebUI root satisfies cache lookup's root
+requirement and is restored by OperatorWorkspace. No file discovery, model hashing
+or real registry writes occur. Fake mode declares its known fixture; the loopback
+real-path test explicitly selects `--fixture-sdxl`. Ordinary real mode seeds no
+family claim, so genuinely unclassified optional capabilities remain unavailable.
+The journey's direct recommendation query supplies its evidenced target model.
+
+Targeting follows current config/executor authority. ADetailer serializes its
+checkpoint override as `adetailer_checkpoint_model`; its detector remains
+`adetailer_model`. The executor prioritizes that checkpoint override and uses the
+NJR-selected VAE, so VAE application uses Base Generation's aliased txt2img VAE.
+Img2img has local CFG/steps/sampler/denoise controls but no scheduler selector;
+its inherited scheduler/checkpoint/VAE and upscale checkpoint/VAE use Base
+Generation. Upscale Factor uses the upscale control. A complete target/old-value
+plan is built before any setter runs; missing/unrepresentable controls reject
+the whole patch. Runtime setter failures retain the existing rollback path.
+The GP10/review doubles now include the real scalar control contract and assert
+every recommended value was applied, rather than weakening atomicity.
+
+Focused evidence:
+
+- Target/cache/GP10/review focused checks passed; real ADetailer serialization
+  verifies checkpoint, detector preservation, denoise and inherited VAE.
+- Affected Learning/130D, harness, target, GP10/review, 130A and PR-IMG-117 set:
+  **533 passed**. Final fixture suffix/unset-root and target checks: **13 passed**.
+- All four formerly failing journey tests: **4 passed in 137.46s**. Fake and
+  loopback cases each execute three independently persisted jobs through real
+  Tk, Learning, JobService, SQLite and runner; full review/rating/recommendation/
+  analytics succeeds. Seed-loss still produces the intended invalid-evidence
+  failure. Journey guards record no isolation violation or captured error.
+- Scoped Ruff: PASS. No canonical model-policy, backend, compiler, queue,
+  repository or runner production source changed during this repair.
+
+Final canonical local gate: **PR gate OK**, exit 0, after one invocation with all
+files frozen. Completeness passed with 502 tracked Python modules; all four
+controller ratchets, Ruff and ten-target mypy passed. Isolated collection:
+**5,652 collected in 4.09s**, repository unchanged (35.8s wrapper). Required smoke:
+**352 passed in 43.21s**, repository unchanged (75.5s wrapper). Collection is not
+a full-suite execution. Final scoped/aggregate whitespace checks pass. Only this
+closeout report changed after the gate; production/test source retains its
+verified bytes. New-head hosted CI is automatic after the authorized fast-forward
+push; its final result and exact repair HEAD are recorded in the completion
+report. Earlier HOLD/failed and invalid isolation attempts above remain historical
+evidence, not current passing verdicts.
+
+Exact repair scope: `STATUS.md`, `docs/CODEX_MAP.md`, this report,
+`Learning_System_Spec_v2.6.md`, `src/gui/controllers/learning_controller.py`,
+`src/gui_v2/recommendation_targets.py`, `src/learning/model_policy_service.py`,
+`tests/gui_v2/test_recommendation_targets_130d.py`,
+`tests/integration/test_golden_path_suite_v2_6.py`,
+`tests/integration/test_learning_review_recommendation_e2e.py`,
+`tests/tools/test_operator_journey_gui.py`,
+`tests/tools/test_operator_journey_model_evidence.py`, and
+`tools/operator_journey/{cli.py,fixtures.py,workspace.py,journeys/learning_lora_strength.py}`.
+
+## Original sixteen-file package scope
 
 - `STATUS.md`
 - `docs/CODEX_MAP.md`
