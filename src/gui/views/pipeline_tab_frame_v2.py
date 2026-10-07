@@ -300,6 +300,8 @@ class PipelineTabFrame(ttk.Frame):
                 self.app_state.subscribe("running_job", self._on_running_job_changed)
                 self.app_state.subscribe("runtime_status", self._on_runtime_status_changed)
                 self.app_state.subscribe("queue_status", self._on_queue_status_changed)
+                self.app_state.subscribe("is_queue_paused", self._on_queue_control_changed)
+                self.app_state.subscribe("auto_run_queue", self._on_queue_control_changed)
                 self.app_state.subscribe("history_items", self._on_history_items_changed)
                 self.app_state.subscribe("preview_jobs", self._on_preview_jobs_changed)
             except Exception:
@@ -673,6 +675,14 @@ class PipelineTabFrame(ttk.Frame):
             self._mark_hot_surface_dirty("queue")
 
         self._measure_callback("_on_queue_status_changed", _run)
+
+    def _on_queue_control_changed(self) -> None:
+        """Pause/auto-run changes alter the Queue panel's controls even when queue membership is unchanged."""
+
+        def _run() -> None:
+            self._mark_hot_surface_dirty("queue")
+
+        self._measure_callback("_on_queue_control_changed", _run)
 
     def _on_history_items_changed(self) -> None:
         def _run() -> None:

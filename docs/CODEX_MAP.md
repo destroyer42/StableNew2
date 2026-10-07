@@ -170,6 +170,7 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
 | SVD geometry/presets | `src/gui/views/svd_tab_frame_v2.py` -> `src/video/svd_target.py` -> `src/video/svd_service.py` -> `src/video/svd_models.py` |
 | `PR-SVD-100` folder batch | `svd_preprocess.py` -> `svd_controller.py` -> `svd_submission_service.py` -> `app_controller.py` -> `svd_tab_frame_v2.py` -> `JobService.submit_njrs` |
 | Queue/history recovery UX | `src/gui/panels_v2/queue_panel_v2.py` + `src/gui/job_history_panel_v2.py` -> `src/controller/job_history_service.py` / `src/controller/job_service.py` -> `src/queue/job_queue.py` -> `src/queue/job_repository.py` |
+| Queue Pause/Resume/Send Job control truth | `queue_panel_v2.py` buttons -> `AppController.on_pause_queue_v2` / `on_resume_queue_v2` / `on_queue_send_job_v2` (thin delegates; no direct `JobQueue` control) -> `PipelineController` -> `JobService.pause` / `resume` / `run_next_now` (`job_service_auto_run.retire_idle_runner_for_pause`: Pause never joins an active job) -> `JobQueue` (durable `queue_paused`, atomic claim refusal) -> `AppStateV2.is_queue_paused` / `auto_run_queue` -> `PipelineTabFrame` owns those subscriptions and marks the Queue surface dirty (`_on_queue_control_changed`); the managed `QueuePanelV2` does not subscribe itself; contracts: `tests/gui_v2/test_queue_pause_resume_journey_150.py`, `tests/controller/test_app_controller_queue_control_150.py`, `tests/controller/test_job_service_pause_active_job_150.py` |
 
 ## Controller decomposition
 

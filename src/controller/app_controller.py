@@ -3187,30 +3187,12 @@ class AppController:
         return 0
 
     def on_pause_queue_v2(self) -> None:
-        """Pause queue processing."""
-        if self.app_state:
-            self.app_state.set_is_queue_paused(True)
-        job_exec = getattr(getattr(self, "pipeline_controller", None), "_job_controller", None)
-        if job_exec and hasattr(job_exec, "set_queue_paused"):
-            job_exec.set_queue_paused(True)
-        if self.job_service:
-            queue = getattr(self.job_service, "job_queue", None)
-            if queue and hasattr(queue, "pause"):
-                queue.pause()
-        self._save_queue_state()
+        """Pause queue processing through the canonical JobService lifecycle."""
+        self.pipeline_controller.on_pause_queue_v2()
 
     def on_resume_queue_v2(self) -> None:
-        """Resume queue processing."""
-        if self.app_state:
-            self.app_state.set_is_queue_paused(False)
-        job_exec = getattr(getattr(self, "pipeline_controller", None), "_job_controller", None)
-        if job_exec and hasattr(job_exec, "set_queue_paused"):
-            job_exec.set_queue_paused(False)
-        if self.job_service:
-            queue = getattr(self.job_service, "job_queue", None)
-            if queue and hasattr(queue, "resume"):
-                queue.resume()
-        self._save_queue_state()
+        """Resume queue processing through the canonical JobService lifecycle."""
+        self.pipeline_controller.on_resume_queue_v2()
 
     def on_set_auto_run_v2(self, enabled: bool) -> None:
         """Set auto-run queue enabled/disabled."""
@@ -3267,25 +3249,12 @@ class AppController:
                 cancel_token.cancel()
         self._save_queue_state()
 
-    def on_queue_send_job_v2(self) -> None:
-        """Manually dispatch the next job from the queue.
+    def on_queue_send_job_v2(self) -> bool:
+        """Manually dispatch the top queued job through JobService; False when nothing was dispatched.
 
-        PR-GUI-F3: Send Job button - dispatches top of queue immediately.
-        Starts the runner to process queued jobs.
+        PR-GUI-F3: Send Job button. The durable queue (not the AppState projection) decides legality.
         """
-        if not self.job_service:
-            return
-        # Check if paused
-        is_paused = self.app_state.is_queue_paused if self.app_state else False
-        if is_paused:
-            self._append_log("[controller] Cannot send job - queue is paused")
-            return
-        # Start the runner to process queue
-        try:
-            self.job_service.run_next_now()
-            self._append_log("[controller] Queue worker started via Send Job")
-        except Exception as exc:
-            self._append_log(f"[controller] Failed to start queue worker: {exc!r}")
+        return bool(self.pipeline_controller.on_queue_send_job_v2())
 
     def refresh_job_history(self, limit: int | None = None) -> None:
         """Trigger a manual history refresh (exposed to GUI)."""
