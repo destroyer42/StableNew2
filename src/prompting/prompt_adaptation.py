@@ -217,7 +217,7 @@ def _flatten_weighted_attention(text: str) -> tuple[str, int]:
         spans = _protected_spans(text)
         count = 0
 
-        def flatten(match: re.Match[str]) -> str:
+        def flatten(match: re.Match[str], spans: list[tuple[int, int]] = spans) -> str:
             nonlocal count
             if _touches_protected(match.start(), match.end(), spans):
                 return match.group(0)

@@ -44,15 +44,15 @@ OK = KleinLoraStatus.COMPATIBLE
 
 
 def _sdxl_authored(**overrides) -> PromptAdaptationInput:
-    base = dict(
-        positive_text="masterpiece, (red dress:1.2), a lighthouse (at dusk) BREAK a quiet harbor",
-        negative_text="blurry, watermark",
-        positive_embeddings=(("pos_embed", 0.9),),
-        negative_embeddings=(("neg_embed", 0.7),),
-        loras=(("lora_a", 0.8),),
-        optimizer_enabled=True,
-        global_negative_present=True,
-    )
+    base = {
+        "positive_text": "masterpiece, (red dress:1.2), a lighthouse (at dusk) BREAK a quiet harbor",
+        "negative_text": "blurry, watermark",
+        "positive_embeddings": (("pos_embed", 0.9),),
+        "negative_embeddings": (("neg_embed", 0.7),),
+        "loras": (("lora_a", 0.8),),
+        "optimizer_enabled": True,
+        "global_negative_present": True,
+    }
     base.update(overrides)
     return PromptAdaptationInput(**base)
 

@@ -43,13 +43,13 @@ from src.gui.view_contracts.prompt_editor_contract import (
 from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
+from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
+from src.prompting.prompt_adaptation import PromptAdaptationInput, adapt_prompt_for_target
 from src.prompting.prompt_compatibility import (
     PromptStateSnapshot,
     PromptTargetProjection,
     project_prompt_target,
 )
-from src.gui_v2.prompt_adaptation_preview import build_adaptation_preview
-from src.prompting.prompt_adaptation import PromptAdaptationInput, adapt_prompt_for_target
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.promptpacks.paths import resolve_prompt_pack_dir
