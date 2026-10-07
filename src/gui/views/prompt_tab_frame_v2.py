@@ -11,6 +11,7 @@ LoRA/embedding pickers, and real-time preview.
 
 from __future__ import annotations
 
+import logging
 import tkinter as tk
 import tkinter.simpledialog
 from pathlib import Path
@@ -24,6 +25,7 @@ from src.controller.content_visibility_resolver import (
 )
 from src.gui.app_state_v2 import AppStateV2
 from src.gui.layout_v2 import configure_grid_columns
+from src.gui.prompt_target_presenter import NO_TARGET_LABEL, PromptTargetPresenter
 from src.gui.prompt_workspace_state import PromptWorkspaceState
 from src.gui.scrolling import enable_mousewheel
 from src.gui.theme_v2 import BODY_LABEL_STYLE, SURFACE_FRAME_STYLE
@@ -40,6 +42,11 @@ from src.gui.view_contracts.prompt_editor_contract import (
 from src.gui.widgets.embedding_picker_panel import EmbeddingPickerPanel
 from src.gui.widgets.lora_picker_panel import LoRAPickerPanel
 from src.gui.widgets.matrix_helper_widget import MatrixHelperDialog
+from src.prompting.prompt_compatibility import (
+    PromptStateSnapshot,
+    PromptTargetProjection,
+    project_prompt_target,
+)
 from src.prompting.prompt_optimizer_config import PromptOptimizerConfig
 from src.prompting.prompt_optimizer_service import PromptOptimizerService
 from src.promptpacks.paths import resolve_prompt_pack_dir
@@ -51,6 +58,8 @@ from src.utils.file_io import read_prompt_pack
 from src.utils.prompt_packs import PromptPackInfo, discover_packs
 from src.utils.prompt_templates import compose_prompt_text, list_prompt_templates
 from src.utils.prompt_txt_parser import parse_multi_slot_txt
+
+logger = logging.getLogger(__name__)
 
 
 class PromptTabFrame(ttk.Frame):
@@ -94,6 +103,19 @@ class PromptTabFrame(ttk.Frame):
         self._suppress_editor_change = False
         self._prompt_optimizer_guard = False
         self._prompt_optimizer_vars = self._build_prompt_optimizer_vars()
+        # PR-IMG-130B: read-only projection of the selected model's policy onto this tab (never authoring state).
+        self._model_projection = None
+        self._prompt_target: PromptTargetProjection | None = None
+        #: The last Style Consistency resolution made by the existing availability path (which may scan). The model-target
+        #: compatibility analysis reads only this snapshot and never resolves (so it can never initiate a scan).
+        self._style_resolution_cache: tuple[str, object] | None = None
+        self._prompt_optimizer_widgets: list[ttk.Widget] = []
+        #: Cache-only LoRA admission resolver (the existing PR-IMG-117 evidence); tests may inject one.
+        self.target_lora_resolver = None
+        self.target_banner_var = tk.StringVar(value=NO_TARGET_LABEL)
+        self.target_detail_var = tk.StringVar(value="")
+        self.negative_note_var = tk.StringVar(value="")
+        self.optimizer_note_var = tk.StringVar(value="")
         self._content_visibility_mode = self._read_content_visibility_mode()
 
         # Autocomplete for [[slot]] insertion
@@ -132,6 +154,15 @@ class PromptTabFrame(ttk.Frame):
         self._build_left_panel()
         self._build_center_panel()
         self._build_right_panel()
+        self._target_presenter = PromptTargetPresenter(
+            banner_var=self.target_banner_var,
+            detail_var=self.target_detail_var,
+            detail_label=self.target_detail_label,
+            negative_note_var=self.negative_note_var,
+            optimizer_note_var=self.optimizer_note_var,
+            optimizer_widgets=lambda: tuple(self._prompt_optimizer_widgets),
+            embedding_picker=lambda: getattr(self, "embedding_picker", None),
+        )
         self.bind("<Map>", self._on_map, add="+")
         if self.app_state is not None and hasattr(self.app_state, "subscribe"):
             self._content_visibility_listener = self._on_content_visibility_mode_subscription
@@ -300,6 +331,14 @@ class PromptTabFrame(ttk.Frame):
         header_frame.pack(fill="x", pady=(0, 4))
         self.pack_name_label = ttk.Label(header_frame, text="Editor", style=BODY_LABEL_STYLE)
         self.pack_name_label.pack(side="left")
+        self.target_banner_label = ttk.Label(
+            header_frame, textvariable=self.target_banner_var, style=BODY_LABEL_STYLE
+        )
+        self.target_banner_label.pack(side="right")
+        self.target_detail_label = ttk.Label(
+            self.center_frame, textvariable=self.target_detail_var, wraplength=640, justify="left"
+        )
+        self.target_detail_label.pack(fill="x", pady=(0, 4))
 
         # Notebook for Prompts vs Matrix tabs
         self.editor_notebook = ttk.Notebook(self.center_frame)
@@ -382,6 +421,9 @@ class PromptTabFrame(ttk.Frame):
         negative_header = ttk.Frame(self.prompts_tab)
         negative_header.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(0, 2))
         ttk.Label(negative_header, text="Negative Prompt", style=BODY_LABEL_STYLE).pack(side="left")
+        ttk.Label(
+            negative_header, textvariable=self.negative_note_var, wraplength=520, justify="left"
+        ).pack(side="left", padx=(8, 0))
 
         # Quick insert buttons frame (updated dynamically)
         self.negative_quick_insert_frame = ttk.Frame(negative_header)
@@ -730,14 +772,32 @@ class PromptTabFrame(ttk.Frame):
         model_name = str(preset_data.get("model") or preset_data.get("model_name") or "").strip()
         return model_name or None
 
+    def _style_selection_key(self) -> str:
+        style_config = self.workspace_state.get_pack_style_lora_config()
+        return repr((sorted((str(k), repr(v)) for k, v in style_config.items()), self._current_style_base_model()))
+
     def _resolve_selected_style_lora(self) -> ResolvedStyleLoRA | None:
+        """The existing Style Consistency availability resolution (may scan LoRA directories, unchanged behavior)."""
+
         style_config: dict[str, object] = self.workspace_state.get_pack_style_lora_config()
         if not style_config:
             return None
-        return self._style_lora_manager.resolve_selection(
+        resolved = self._style_lora_manager.resolve_selection(
             style_config,
             base_model=self._current_style_base_model(),
         )
+        self._style_resolution_cache = (self._style_selection_key(), resolved)
+        return resolved
+
+    def _cached_style_selection(self) -> tuple[ResolvedStyleLoRA | None, bool]:
+        """(resolution, pending) from the last availability resolution; never calls the manager (no scan)."""
+
+        if not self.workspace_state.get_pack_style_lora_config():
+            return None, False
+        cached = self._style_resolution_cache
+        if cached is not None and cached[0] == self._style_selection_key():
+            return cached[1], False  # type: ignore[return-value]
+        return None, True
 
     def _sync_style_lora_controls(self) -> None:
         style_config: dict[str, object] = self.workspace_state.get_pack_style_lora_config()
@@ -858,37 +918,46 @@ class PromptTabFrame(ttk.Frame):
         for index, (key, label) in enumerate(checkbox_specs):
             row = index // 2
             column = index % 2
-            ttk.Checkbutton(
+            checkbutton = ttk.Checkbutton(
                 parent,
                 text=label,
                 variable=self._prompt_optimizer_vars[key],
                 style="Dark.TCheckbutton",
                 command=self._on_prompt_optimizer_config_changed,
-            ).grid(row=row, column=column, sticky="w", padx=2, pady=2)
+            )
+            checkbutton.grid(row=row, column=column, sticky="w", padx=2, pady=2)
+            self._prompt_optimizer_widgets.append(checkbutton)
 
         threshold_row = (len(checkbox_specs) + 1) // 2
         ttk.Label(parent, text="Chunk Warn").grid(
             row=threshold_row, column=0, sticky="w", pady=(4, 2)
         )
-        ttk.Spinbox(
+        chunk_spin = ttk.Spinbox(
             parent,
             from_=1,
             to=64,
             textvariable=self._prompt_optimizer_vars["large_chunk_warning_threshold"],
             width=8,
             command=self._on_prompt_optimizer_config_changed,
-        ).grid(row=threshold_row, column=1, sticky="ew", pady=(4, 2))
+        )
+        chunk_spin.grid(row=threshold_row, column=1, sticky="ew", pady=(4, 2))
+        self._prompt_optimizer_widgets.append(chunk_spin)
         ttk.Label(parent, text="Anchor Min").grid(
             row=threshold_row + 1, column=0, sticky="w", pady=(2, 0)
         )
-        ttk.Spinbox(
+        anchor_spin = ttk.Spinbox(
             parent,
             from_=1,
             to=64,
             textvariable=self._prompt_optimizer_vars["subject_anchor_boost_min_chunk_count"],
             width=8,
             command=self._on_prompt_optimizer_config_changed,
-        ).grid(row=threshold_row + 1, column=1, sticky="ew", pady=(2, 0))
+        )
+        anchor_spin.grid(row=threshold_row + 1, column=1, sticky="ew", pady=(2, 0))
+        self._prompt_optimizer_widgets.append(anchor_spin)
+        ttk.Label(
+            parent, textvariable=self.optimizer_note_var, wraplength=300, justify="left"
+        ).grid(row=threshold_row + 2, column=0, columnspan=2, sticky="w", pady=(4, 0))
 
     def get_prompt_optimizer_config(self) -> dict[str, object]:
         return {
@@ -1127,8 +1196,12 @@ class PromptTabFrame(ttk.Frame):
         except Exception:
             pass
 
-    def _refresh_metadata(self) -> None:
-        """Refresh metadata/preview panel with full prompt preview."""
+    def _refresh_metadata(self, *, scan_style: bool = True) -> None:
+        """Refresh metadata/preview panel with full prompt preview.
+
+        ``scan_style=False`` (a model-target refresh) reuses the last Style Consistency resolution instead of resolving
+        it again, because resolving may scan LoRA directories and a model switch must never initiate that.
+        """
         pack = self.workspace_state.current_pack
         slot_index = self.workspace_state.get_current_slot_index()
         resolver = self._visibility_resolver()
@@ -1148,7 +1221,10 @@ class PromptTabFrame(ttk.Frame):
 
         # Build preview sections
         dirty = " (modified)" if self.workspace_state.dirty else ""
-        resolved_style_lora = self._resolve_selected_style_lora()
+        resolved_style_lora = (
+            self._resolve_selected_style_lora() if scan_style else self._cached_style_selection()[0]
+        )
+        self._refresh_target_compatibility()
         preview_lines = [
             f"Pack: {pack.name if pack else 'None'}{dirty}",
             f"Slot: {slot_index + 1}",
@@ -1245,8 +1321,13 @@ class PromptTabFrame(ttk.Frame):
             global_neg = getattr(self.app_state, "global_negative_prompt", "")
             if global_neg and global_neg.strip():
                 preview_lines.append("")
-                preview_lines.append("Global Negative (appended):")
-                preview_lines.append(f"  {global_neg.strip()}")
+                target = self._prompt_target
+                if target is not None and target.global_negative_note:
+                    # The target's policy disables global negatives: stored, shown as not applied, text not repeated.
+                    preview_lines.append(target.global_negative_note)
+                else:
+                    preview_lines.append("Global Negative (appended):")
+                    preview_lines.append(f"  {global_neg.strip()}")
 
         preview_lines.extend(
             [
@@ -1277,8 +1358,65 @@ class PromptTabFrame(ttk.Frame):
         self.meta_text.insert("1.0", "\n".join(preview_lines))
         self.meta_text.config(state="disabled")
 
+    # Model-aware prompt compatibility (PR-IMG-130B) -------------------------
+    def on_model_projection(self, projection) -> None:
+        """Receive the Base Generation model-policy projection (read-only context; never changes authoring state)."""
+
+        self._model_projection = projection
+        self._refresh_metadata(scan_style=False)
+
+    def _snapshot_prompt_state(self) -> PromptStateSnapshot:
+        slot = self.workspace_state.get_current_slot()
+        resolver = self._visibility_resolver()
+        subject = self._current_slot_visibility_subject()
+        positive = self.workspace_state.get_current_prompt_text()
+        negative = self.workspace_state.get_current_negative_text()
+        style, style_pending = self._cached_style_selection()
+        global_negative = getattr(getattr(self, "app_state", None), "global_negative_prompt", "")
+        return PromptStateSnapshot(
+            positive_text=positive,
+            negative_text=negative,
+            positive_hidden=bool(positive.strip()) and resolver.redact_text(positive, item=subject) == REDACTED_TEXT,
+            negative_hidden=bool(negative.strip()) and resolver.redact_text(negative, item=subject) == REDACTED_TEXT,
+            positive_embedding_count=len(normalize_embedding_entries(getattr(slot, "positive_embeddings", []))),
+            negative_embedding_count=len(normalize_embedding_entries(getattr(slot, "negative_embeddings", []))),
+            loras=tuple((str(name), float(weight)) for name, weight in getattr(slot, "loras", [])),
+            style_lora=(style.lora_name, float(style.weight)) if style is not None and style.applied else None,
+            optimizer_enabled=bool(self._prompt_optimizer_vars["enabled"].get()),
+            global_negative_present=bool(str(global_negative or "").strip()),
+            style_lora_pending=style_pending,
+        )
+
+    def _target_resolver(self):
+        if self.target_lora_resolver is None:
+            from src.image_backends.forge_klein_lora import RegistryLoraResolver
+
+            self.target_lora_resolver = RegistryLoraResolver(cache_only=True)
+        return self.target_lora_resolver
+
+    def _refresh_target_compatibility(self) -> None:
+        presenter = getattr(self, "_target_presenter", None)
+        if presenter is None:
+            return
+        projection = self._model_projection
+        self._prompt_target = None
+        if projection is not None:
+            try:
+                self._prompt_target = project_prompt_target(
+                    projection.policy,
+                    projection.model_name,
+                    self._snapshot_prompt_state(),
+                    lora_resolver=self._target_resolver(),
+                )
+            except Exception:
+                logger.debug("Prompt target compatibility could not be projected", exc_info=True)
+        presenter.apply(self._prompt_target)
+
     def _build_prompt_optimizer_preview(self, positive_text: str, negative_text: str) -> list[str]:
         lines = ["", "━━━ PROMPT OPTIMIZER ━━━"]
+        target = self._prompt_target
+        if target is not None and not target.optimizer_available:
+            return lines + [target.optimizer_note]
         try:
             config = PromptOptimizerConfig.from_dict(self.get_prompt_optimizer_config())
             service = PromptOptimizerService(config)

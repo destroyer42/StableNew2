@@ -89,7 +89,8 @@ Updated: 2026-10-05
   compatibility evidence. The pinned managed Forge applied the adapter (80 keys, weight honored at 0.8 and 0.4, visible effect);
   one bounded three-job production acceptance passed. Multi-LoRA and LoRA with edit remain unqualified. See
   `docs/Subsystems/Image/PR-IMG-117_FLUX2_Klein_LoRA_Qualification_and_Profile_v2.md`.
-- Model-family capability registry (PR-IMG-130A, local branch): `src/image_backends/model_policy.py` is the one pure policy
+- Model-aware Prompt compatibility (PR-IMG-130B, local branch): the Prompt tab shows its target (`Prompt Target: SDXL — <model>`, `FLUX.2 Klein 4B FP8 — profile v2`, or `Unclassified ... capabilities unverified`) and projects the selected model's `ModelPolicy` through `src/prompting/prompt_compatibility.py`: Klein guidance, unsupported negative-prompt/embedding/Prompt Optimizer presentation (controls made unavailable, existing text/selections/settings preserved and removable, nothing rewritten or deleted), exact LoRA admission including the applied Style Consistency LoRA, and advisory SDXL/A1111-syntax findings with stable codes. Awareness only: no prompt translation, no PromptPack change; the compiler/backend stay authoritative. See `docs/Subsystems/Image/PR-IMG-130B_Model_Aware_Prompt_Compatibility_UX.md`.
+- Model-family capability registry (PR-IMG-130A, COMPLETE / ACCEPTED / INTEGRATED; PR #61): `src/image_backends/model_policy.py` is the one pure policy
   layer that says, per selected model, which Base Generation controls are configurable, supported-but-fixed or unsupported
   and which optional features are supported, with read-only prompt-dialect and Learning-variable hooks. It consults the exact
   qualified Klein profile (v2 semantics unchanged, persisted v1/v2 NJRs keep their version) before any family inference, then
@@ -98,7 +99,7 @@ Updated: 2026-10-05
   GUI branch) and keeps per-family working values across any number of family switches; the compiler enters through
   `apply_model_compile_policy`. No backend is ever switched, and prompt translation, Prompt-tab and Learning redesign remain
   out of scope. See `docs/Subsystems/Image/PR-IMG-130A_Model_Family_Capability_Registry.md`.
-- Shutdown admission fence and repository quiescence (PR-RUNTIME-SHUTDOWN-140, local branch): once application shutdown begins
+- Shutdown admission fence and repository quiescence (PR-RUNTIME-SHUTDOWN-140, COMPLETE / ACCEPTED / INTEGRATED; PR #59): once application shutdown begins
   (`AppController.shutdown_app`), `JobQueue.fence_dispatch()` atomically refuses every new QUEUED -> RUNNING transition (the
   claim, the Run Now handoff and any later start), so pending jobs stay durably QUEUED and resume under the unchanged startup
   auto-run policy; the active job follows the existing cancellation semantics. `SingleNodeJobRunner.stop()` now returns whether
@@ -106,7 +107,7 @@ Updated: 2026-10-05
   reports it and leaves SQLite open). It repairs the reproduced post-shutdown claim and `Cannot operate on a closed database`
   race; the fence is process-lifetime, never persisted. See
   `docs/Subsystems/Runtime/PR-RUNTIME-SHUTDOWN-140_Shutdown_Admission_and_Repository_Quiescence.md`.
-- Managed Forge identity attestation (PR-RUNTIME-FORGE-IDENTITY-150, local branch): `forge_webui` stages still require a positively
+- Managed Forge identity attestation (PR-RUNTIME-FORGE-IDENTITY-150, COMPLETE / ACCEPTED / INTEGRATED; PR #60): `forge_webui` stages still require a positively
   identified Forge before dispatch, but the exact StableNew-owned runtime session (manager, process, PID, readiness epoch,
   endpoint, ownership, liveness) that was already positively classified from real endpoint evidence may carry that proof across a
   transient `unknown` re-probe, and the first Forge stage of an owned session waits a bounded 8 s (0.5 s poll, session re-validated

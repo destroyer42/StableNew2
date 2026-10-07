@@ -27,6 +27,9 @@ class EmbeddingPickerPanel(ttk.Frame):
 
         self.scanner = get_embedding_scanner(webui_root)
         self._available_embeddings: list[str] = []
+        #: Whether NEW entries may be added (a model policy may withdraw this; existing entries are never touched).
+        self._additions_allowed = True
+        self._add_controls: list[tk.Misc] = []
 
         self._build_ui()
         self.after(100, self._scan_embeddings)
@@ -42,6 +45,8 @@ class EmbeddingPickerPanel(ttk.Frame):
             width=10,
             command=self.refresh_embeddings,
         ).pack(side="right")
+        self.note_var = tk.StringVar(value="")
+        self.note_label = ttk.Label(self, textvariable=self.note_var, wraplength=300, justify="left")
 
         self._build_section(
             title="Positive",
@@ -75,7 +80,9 @@ class EmbeddingPickerPanel(ttk.Frame):
         combo.bind("<Return>", lambda e: add_callback())
         assign(combo)
 
-        ttk.Button(add_frame, text="Add", command=add_callback).pack(side="left")
+        add_button = ttk.Button(add_frame, text="Add", command=add_callback)
+        add_button.pack(side="left")
+        self._add_controls.extend([combo, add_button])
 
         list_frame = ttk.Frame(section, relief="sunken", borderwidth=1)
         list_frame.pack(fill="both", expand=True)
@@ -149,7 +156,32 @@ class EmbeddingPickerPanel(ttk.Frame):
                 self._notify_change()
                 return
 
+    @property
+    def additions_allowed(self) -> bool:
+        return self._additions_allowed
+
+    def set_additions_allowed(self, allowed: bool, note: str = "") -> None:
+        """Allow or withdraw NEW embeddings (a model-policy projection). Existing entries and their remove buttons are
+        never touched, so an unsupported selection stays visible and removable; nothing is deleted or rewritten."""
+
+        self._additions_allowed = bool(allowed)
+        for control in self._add_controls:
+            try:
+                if isinstance(control, ttk.Combobox):
+                    control.configure(state="readonly" if allowed else "disabled")
+                else:
+                    control.state(["!disabled"] if allowed else ["disabled"])
+            except Exception:
+                pass
+        self.note_var.set("" if allowed else note)
+        if allowed or not note:
+            self.note_label.pack_forget()
+        else:
+            self.note_label.pack(fill="x", padx=5, after=self.winfo_children()[0])
+
     def _on_add_positive(self) -> None:
+        if not self._additions_allowed:
+            return
         name = self.pos_entry.get().strip()
         if not name:
             return
@@ -163,6 +195,8 @@ class EmbeddingPickerPanel(ttk.Frame):
         self._notify_change()
 
     def _on_add_negative(self) -> None:
+        if not self._additions_allowed:
+            return
         name = self.neg_entry.get().strip()
         if not name:
             return
