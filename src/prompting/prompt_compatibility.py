@@ -63,11 +63,12 @@ _QUALITY_TAGS = (
 _QUALITY_PATTERN = re.compile(
     r"(?<![A-Za-z0-9])(" + "|".join(re.escape(tag) for tag in _QUALITY_TAGS) + r")(?![A-Za-z0-9])", re.IGNORECASE
 )
-#: Explicit attention weights such as ``(phrase:1.2)``; a bare parenthetical is ordinary prose.
-_WEIGHTED = re.compile(r"\(\s*[^()\n]{1,120}?\s*:\s*[-+]?\d+(?:\.\d+)?\s*\)")
-_BREAK = re.compile(r"(?<![A-Za-z0-9])BREAK(?![A-Za-z0-9])")  # the A1111 chunk separator is upper-case
+#: Explicit attention weights such as ``(phrase:1.2)``; a bare parenthetical is ordinary prose. Shared with the explicit
+#: adaptation engine (PR-IMG-130C) so detection and adaptation can never recognise different syntax.
+WEIGHTED_ATTENTION_PATTERN = re.compile(r"\(\s*(?P<inner>[^()\n]{1,120}?)\s*:\s*[-+]?\d+(?:\.\d+)?\s*\)")
+BREAK_SEPARATOR_PATTERN = re.compile(r"(?<![A-Za-z0-9])BREAK(?![A-Za-z0-9])")  # the A1111 chunk separator is upper-case
 #: Angle-bracket extra-network tokens (``<lora:...>`` and kin) and matrix ``[[slot]]`` markers are not prompt prose.
-_NON_PROSE = re.compile(r"<[^<>\n]*>|\[\[[^\[\]\n]*\]\]")
+NON_PROSE_PATTERN = re.compile(r"<[^<>\n]*>|\[\[[^\[\]\n]*\]\]")
 
 
 @dataclass(frozen=True, slots=True)
@@ -133,6 +134,8 @@ class PromptTargetProjection:
     embeddings_note: str = ""
     #: Set when a stored global negative is not applied for this target ("" otherwise); never contains the text.
     global_negative_note: str = ""
+    #: Whether the explicit target adaptation (PR-IMG-130C) has capability evidence to work from.
+    adaptation_available: bool = False
 
     @property
     def action_required(self) -> tuple[PromptFinding, ...]:
@@ -157,7 +160,7 @@ class PromptTargetProjection:
 
 
 def _strip_non_prose(text: str) -> str:
-    return _NON_PROSE.sub(" ", text or "")
+    return NON_PROSE_PATTERN.sub(" ", text or "")
 
 
 def detect_dialect_patterns(text: str) -> tuple[str, ...]:
@@ -165,9 +168,9 @@ def detect_dialect_patterns(text: str) -> tuple[str, ...]:
 
     prose = _strip_non_prose(text)
     found: list[str] = []
-    if _WEIGHTED.search(prose):
+    if WEIGHTED_ATTENTION_PATTERN.search(prose):
         found.append(DIALECT_WEIGHTED_ATTENTION)
-    if _BREAK.search(prose):
+    if BREAK_SEPARATOR_PATTERN.search(prose):
         found.append(DIALECT_BREAK_SEPARATOR)
     distinct = {match.group(1).lower() for match in _QUALITY_PATTERN.finditer(prose)}
     if len(distinct) >= QUALITY_TAG_THRESHOLD:
@@ -180,6 +183,13 @@ _DIALECT_MESSAGES = {
     DIALECT_BREAK_SEPARATOR: "the A1111 BREAK separator",
     DIALECT_QUALITY_BOILERPLATE: "a run of quality-tag boilerplate",
 }
+
+
+def target_is_unverified(policy: ModelPolicy) -> bool:
+    """``True`` when StableNew lacks capability evidence for this target (unknown/conflicting family or an unqualified
+    family label): nothing may be claimed or deterministically adapted for it."""
+
+    return policy.family == FAMILY_UNKNOWN or (not policy.qualified and policy.feature("lora").support is Support.UNVERIFIED)
 
 
 def target_label(policy: ModelPolicy, model_name: str | None) -> str:
@@ -203,7 +213,7 @@ def _guidance(policy: ModelPolicy) -> tuple[str, ...]:
             f"{policy.display_name} generally responds better to direct natural-language descriptions than to tag "
             "lists or weighted syntax. Your prompt is never rewritten."
         )
-    if policy.family == FAMILY_UNKNOWN or (not policy.qualified and policy.feature("lora").support is Support.UNVERIFIED):
+    if target_is_unverified(policy):
         lines.append("Capabilities for this model are unverified, so the Prompt tools behave as they always have.")
     return tuple(lines)
 
@@ -218,7 +228,7 @@ def project_prompt_target(
     """Describe the Prompt state against the selected model's policy. Pure; mutates nothing."""
 
     findings: list[PromptFinding] = []
-    if policy.family == FAMILY_UNKNOWN or (not policy.qualified and policy.feature("lora").support is Support.UNVERIFIED):
+    if target_is_unverified(policy):
         findings.append(PromptFinding(
             TARGET_UNVERIFIED, Severity.INFO, "target",
             "This model's capabilities are unverified; nothing is disabled and nothing is claimed.",
@@ -348,10 +358,12 @@ def project_prompt_target(
         optimizer_note=optimizer_note,
         embeddings_note=embeddings_note,
         global_negative_note=global_negative_note,
+        adaptation_available=not target_is_unverified(policy),
     )
 
 
 __all__ = [
+    "BREAK_SEPARATOR_PATTERN",
     "CONTENT_HIDDEN",
     "DIALECT_BREAK_SEPARATOR",
     "DIALECT_QUALITY_BOILERPLATE",
@@ -363,6 +375,7 @@ __all__ = [
     "LORA_NOT_VERIFIED",
     "LORA_UNSUPPORTED",
     "NEGATIVE_PROMPT_UNSUPPORTED",
+    "NON_PROSE_PATTERN",
     "OPTIMIZER_NOT_APPLIED",
     "PromptFinding",
     "PromptStateSnapshot",
@@ -370,7 +383,9 @@ __all__ = [
     "QUALITY_TAG_THRESHOLD",
     "Severity",
     "TARGET_UNVERIFIED",
+    "WEIGHTED_ATTENTION_PATTERN",
     "detect_dialect_patterns",
     "project_prompt_target",
+    "target_is_unverified",
     "target_label",
 ]

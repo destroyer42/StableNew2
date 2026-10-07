@@ -34,6 +34,7 @@ class PromptTargetPresenter:
         optimizer_note_var: tk.StringVar,
         optimizer_widgets: Callable[[], Sequence[Any]],
         embedding_picker: Callable[[], Any],
+        adapt_button: Callable[[], Any] | None = None,
     ) -> None:
         self._banner_var = banner_var
         self._detail_var = detail_var
@@ -42,6 +43,7 @@ class PromptTargetPresenter:
         self._optimizer_note_var = optimizer_note_var
         self._optimizer_widgets = optimizer_widgets
         self._embedding_picker = embedding_picker
+        self._adapt_button = adapt_button
         self.last: PromptTargetProjection | None = None
 
     def apply(self, projection: PromptTargetProjection | None) -> None:
@@ -53,6 +55,7 @@ class PromptTargetPresenter:
             self._optimizer_note_var.set("")
             self._set_optimizer_available(True)
             self._set_embedding_additions(True, "")
+            self._set_adapt_available(False)
             return
         self._banner_var.set(projection.label)
         # The "unverified" guidance line already says it; every other finding is listed, most urgent first.
@@ -63,6 +66,18 @@ class PromptTargetPresenter:
         self._optimizer_note_var.set(projection.optimizer_note)
         self._set_optimizer_available(projection.optimizer_available)
         self._set_embedding_additions(projection.embedding_additions_allowed, projection.embeddings_note)
+        self._set_adapt_available(projection.adaptation_available)
+
+    def _set_adapt_available(self, available: bool) -> None:
+        """Availability of the explicit "Adapt for Target" preview (a view of the projection; never a decision)."""
+
+        button = self._adapt_button() if self._adapt_button is not None else None
+        if button is None:
+            return
+        try:
+            button.state(["!disabled"] if available else ["disabled"])
+        except Exception:
+            logger.debug("Could not set the adapt button state", exc_info=True)
 
     def _show_detail(self, text: str, *, warn: bool) -> None:
         self._detail_var.set(text)
