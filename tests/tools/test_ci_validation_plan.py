@@ -255,6 +255,51 @@ def test_a_bounded_executable_pr_does_not_run_the_full_census_but_runs_its_lanes
     assert len(plan.affected_targets) < 200  # a lane selection, never the whole tree
 
 
+# --- controller-ratchet baseline (PR-DEVEX-CI-150) -------------------------------------------------------------
+
+
+BASELINE = "tools/ci/controller_surface_baseline.json"
+
+
+def test_a_baseline_only_change_runs_the_required_gate_and_its_ratchet_test_but_no_census() -> None:
+    plan = vp.classify([BASELINE])
+    assert not plan.full_census and not plan.full_census_reasons and not plan.docs_only
+    assert vp.LANE_FULL_CENSUS not in plan.lanes and vp.LANE_CI_AUTHORITY not in plan.lanes
+    assert vp.LANE_RATCHET_METADATA in plan.lanes
+    assert plan.run_affected and plan.affected_targets == ("tests/system/test_controller_surface_ratchet.py",)
+
+
+def test_source_plus_baseline_gets_normal_affected_lanes_and_no_census() -> None:
+    plan = vp.classify(["src/controller/app_controller.py", BASELINE])
+    assert not plan.full_census and plan.run_affected
+    assert vp.LANE_CORE in plan.lanes and vp.LANE_RATCHET_METADATA in plan.lanes
+    assert "tests/system/test_controller_surface_ratchet.py" in plan.affected_targets
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["tools/ci/validation_plan.py", ".github/workflows/ci.yml", "tests/conftest.py", "tests/helpers/njr_factory.py",
+     "pyproject.toml", "tools/ci/check_controller_surface.py", "tools/ci/census_shards.py"],
+)
+def test_real_ci_authority_changes_still_require_the_census_even_beside_the_baseline(path: str) -> None:
+    for files in ([path], [path, BASELINE]):
+        plan = vp.classify(files)
+        assert plan.full_census and vp.LANE_FULL_CENSUS in plan.lanes, files
+
+
+@pytest.mark.parametrize("path", ["tools/ci/controller_surface_baseline.json.bak", "tools/ci/other_baseline.json",
+                                  "tools/ci/controller_surface_baseline.py"])
+def test_the_exemption_is_one_exact_path_not_a_json_or_tools_ci_exemption(path: str) -> None:
+    assert vp.classify([path]).full_census
+
+
+def test_an_explicit_full_census_request_overrides_a_baseline_only_change() -> None:
+    forced = vp.full_census_request("pull_request", ["full-census"], "")
+    plan = vp.classify([BASELINE], force_full=forced)
+    assert plan.full_census and vp.LANE_FULL_CENSUS in plan.lanes and not plan.run_affected
+    assert vp.full_census_request("pull_request", [], "lower ceiling [full-census]")
+
+
 # --- escape hatches and periodic evidence ----------------------------------------------------------------------
 
 

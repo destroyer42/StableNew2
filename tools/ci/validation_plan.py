@@ -37,6 +37,7 @@ LANE_GUI = "gui"
 LANE_RUNTIME = "runtime"
 LANE_QUALIFICATION = "qualification_tools"
 LANE_CI_AUTHORITY = "ci_test_authority"
+LANE_RATCHET_METADATA = "controller_ratchet_metadata"
 LANE_FULL_CENSUS = "full_census_required"
 LANES = (
     LANE_DOCS_ONLY,
@@ -46,6 +47,7 @@ LANES = (
     LANE_GUI,
     LANE_RUNTIME,
     LANE_QUALIFICATION,
+    LANE_RATCHET_METADATA,
     LANE_CI_AUTHORITY,
     LANE_FULL_CENSUS,
 )
@@ -60,6 +62,11 @@ DOC_SUFFIXES = frozenset({".md", ".rst", ".txt", ".png", ".jpg", ".jpeg", ".gif"
 DOC_EXACT_PATHS = frozenset({"LICENSE", ".github/CODEOWNERS", "CODEOWNERS"})
 #: Trees where a ``.md``/``.txt`` file may be data consumed by code, so it is never assumed to be documentation.
 NON_DOC_TREES = ("src/", "tests/", "config/", "presets/", "packs/", "data/", "tools/ci/", ".github/workflows/", ".github/actions/")
+
+#: The controller-surface ratchet baseline is pure data consumed by the required gate's ``check_controller_surface``; it
+#: carries no routing, test or CI behavior. It is exempted by EXACT path (never by extension or tree), so lowering a ceiling
+#: with a shrinking controller does not force the full census, while every other ``tools/ci`` file still does.
+RATCHET_BASELINE_PATHS = frozenset({"tools/ci/controller_surface_baseline.json"})
 
 # Global / unbounded impact: dependency, interpreter, pytest, CI framework, shared test infrastructure, the policy itself.
 FULL_CENSUS_RULES: tuple[tuple[str, str], ...] = (
@@ -171,6 +178,7 @@ LANE_TARGETS: dict[str, tuple[str, ...]] = {
         "tests/system/test_runtime_*", "tests/app", "tests/safety",
     ),
     LANE_QUALIFICATION: ("tests/tools",),
+    LANE_RATCHET_METADATA: ("tests/system/test_controller_surface_ratchet.py",),
 }
 
 #: Source areas whose own tests are NOT in the core backbone; they are added when their source/tests change.
@@ -347,6 +355,12 @@ def classify(
             reasons[lane].append(path)
 
     for path in files:
+        if path in RATCHET_BASELINE_PATHS:
+            # Data for the required gate's ratchet check: no census, no docs-only cheap path, only the ratchet's own test.
+            executable = True
+            lanes.add(LANE_RATCHET_METADATA)
+            note(LANE_RATCHET_METADATA, path)
+            continue
         full_hit = next((reason for pattern, reason in FULL_CENSUS_RULES if _match(path, pattern)), None)
         if full_hit:
             executable = True

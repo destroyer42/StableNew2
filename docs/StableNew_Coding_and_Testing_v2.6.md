@@ -105,7 +105,11 @@ execution is explicitly authorized.
   suite in `tools/ci/run_required_smoke.py`), then only the affected lanes. Broad or
   unbounded changes (dependencies, pytest/CI configuration, shared test
   infrastructure, the validation policy itself, unknown impact) run the required gate
-  and then one full census, which subsumes the affected lanes. The full census also
+  and then one full census, which subsumes the affected lanes. The one exception inside
+  `tools/ci` is the controller-surface ratchet baseline
+  (`tools/ci/controller_surface_baseline.json`, exempted by exact path as data checked by the
+  required gate): lowering a ceiling runs the required gate plus its ratchet test, never a census.
+  The full census also
   runs on main Monday/Wednesday/Friday, on `workflow_dispatch`, before releases, and
   for any PR labelled `full-census` or whose head commit carries `[full-census]`.
   Branch pushes do not start a duplicate run, stacked PRs are covered, and a newer
