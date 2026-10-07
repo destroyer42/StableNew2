@@ -29,3 +29,14 @@ def set_auto_run_enabled(
         and service.job_queue.list_jobs(status_filter=JobStatus.QUEUED)
     ):
         service._ensure_runner_started()
+
+
+def retire_idle_runner_for_pause(service: JobService) -> None:
+    """Retire the worker on Pause only when it is idle.
+
+    ``JobQueue`` already refuses new claims atomically while paused, and the active job is never cancelled by
+    Pause. Joining a worker that is mid-job would block the caller for the whole stop timeout and leave a stop
+    request that a quick Resume cannot cancel, stranding the queue.
+    """
+    if not service.job_queue.list_jobs(status_filter=JobStatus.RUNNING):
+        service._stop_runner()  # noqa: SLF001 - JobService lifecycle helper owned by this boundary

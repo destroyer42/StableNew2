@@ -668,7 +668,7 @@ class JobService:
         pause_queue = getattr(self.job_queue, "pause", None)
         if callable(pause_queue):
             pause_queue()
-        self._stop_runner()
+        job_service_auto_run.retire_idle_runner_for_pause(self)
         self._set_queue_status("paused")
 
     def resume(self) -> None:
