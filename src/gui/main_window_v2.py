@@ -444,6 +444,7 @@ class MainWindowV2:
         self.sidebar_panel_v2 = getattr(self.pipeline_tab, "sidebar", None)
         self._wire_klein_lora_projection()
         self._wire_prompt_model_target()
+        self._wire_learning_model_target()
         self.operator_readiness_service = self._build_operator_readiness_service()
         self._operator_readiness_window: tk.Toplevel | None = None
 
@@ -583,6 +584,16 @@ class MainWindowV2:
             prompt_tab.on_model_projection(projection.last_projection)
         except Exception:
             logger.debug("Prompt model-target wiring skipped", exc_info=True)
+
+    def _wire_learning_model_target(self) -> None:
+        base = getattr(self.sidebar_panel_v2, "base_generation_panel", None)
+        projection = getattr(base, "_model_policy_projection", None)
+        panel = getattr(getattr(self, "learning_tab", None), "experiment_panel", None)
+        if projection is None or panel is None:
+            return
+        panel.learning_controller._learning_prompt_snapshot = self.prompt_tab._snapshot_prompt_state
+        projection.add_listener(panel.on_model_projection)
+        panel.on_model_projection(projection.last_projection)
 
     def _build_operator_readiness_service(self) -> OperatorReadinessService:
         controller = getattr(self, "app_controller", None)

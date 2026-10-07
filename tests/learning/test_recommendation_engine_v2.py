@@ -55,8 +55,8 @@ def test_recommendations_differ_by_stage_context(tmp_path) -> None:
     txt2img_sampler = txt2img.get_best_for_parameter("sampler")
     upscale_sampler = upscale.get_best_for_parameter("sampler")
     assert txt2img_sampler is not None
-    assert upscale_sampler is not None
-    assert txt2img_sampler.recommended_value != upscale_sampler.recommended_value
+    assert upscale_sampler is None  # Sampler is outside the upscale Learning stage contract.
+    assert txt2img_sampler.recommended_value == "Euler a"
 
 
 def test_confidence_rationale_is_exposed(tmp_path) -> None:

@@ -22,6 +22,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # Directories whose contents belong to the operator, never to a journey.
 _PROTECTED_DIRS = ("state", "data", "presets", "config", "packs")
 _ENV_KEYS = (
+    "STABLENEW_WEBUI_ROOT",
     "STABLENEW_OUTPUT_DIR",
     "STABLENEW_WEBUI_BASE_URL",
     "STABLENEW_PROMPTPACK_DIR",

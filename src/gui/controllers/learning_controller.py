@@ -69,6 +69,14 @@ from src.learning.lora_variant import (
     validate_executed_lora,
     validate_lora_variant,
 )
+from src.learning.model_policy_service import (
+    compile_variant,
+    frozen_definition,
+    negative_prompt_supported,
+    recommendation_query,
+    validate_experiment,
+    validate_recommendation_apply,
+)
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.resource_access import get_projected_resources
 from src.learning.stage_capabilities import get_stage_capability
@@ -612,6 +620,8 @@ class LearningController:
             negative_prompt = str(prompt_source["rendered_negative_prompt"])
             experiment.metadata.update(prompt_source)
         experiment.baseline_config = baseline
+        model_context = validate_experiment(self, experiment, baseline, experiment.values)
+        prompt_source.update(experiment.metadata)
         preserved_seed_policy = getattr(experiment, "metadata", {}).get("frozen_seed_policy")
         seed_policy = freeze_seed_policy(
             baseline,
@@ -635,6 +645,8 @@ class LearningController:
                 "seed_policy": seed_policy,
                 "experiment_timestamp": datetime.utcnow().strftime("%Y%m%d-%H%M%S"),
                 "prompt_source": prompt_source,
+                "input_image_path": experiment.input_image_path,
+                "model_policy_context": model_context,
             }
         )
 
@@ -986,9 +998,14 @@ class LearningController:
         # by build_plan on the next preview.
         snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
         snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
+        experiment = frozen_definition(experiment)
+        if snapshot and snapshot.get("model_policy_context") and variant.param_value not in experiment.values:
+            raise ValueError("Variant is outside the frozen experiment values")
         baseline = dict(snapshot.get("baseline_config") or experiment.baseline_config or {})
         if not baseline:
             baseline = self._get_baseline_config()
+        model_context = validate_experiment(self, experiment, baseline, [variant.param_value],
+                                            frozen_context=snapshot.get("model_policy_context"))
         if not has_frozen_global_prompt_policy(baseline):
             policy_getter = getattr(self.app_controller, "get_current_global_prompt_policy", None)
             policy = policy_getter() if callable(policy_getter) else None
@@ -1006,6 +1023,7 @@ class LearningController:
 
         final_config = copy.deepcopy(baseline)
         self._apply_variant_override_with_metadata(final_config, variant.param_value, experiment)
+        compile_variant(final_config, experiment)
         frozen_seed_policy = snapshot.get("seed_policy") if isinstance(snapshot, dict) else None
         if not isinstance(frozen_seed_policy, dict):
             # Compatibility for programmatic callers that construct a legacy
@@ -1028,6 +1046,8 @@ class LearningController:
                 "seed_policy": frozen_seed_policy,
                 "experiment_timestamp": datetime.utcnow().strftime("%Y%m%d-%H%M%S"),
                 "prompt_source": dict(getattr(experiment, "metadata", {}) or {}),
+                "input_image_path": experiment.input_image_path,
+                "model_policy_context": model_context,
             }
             snapshot_json = freeze_snapshot(snapshot)
             experiment.execution_snapshot_json = snapshot_json
@@ -1085,8 +1105,10 @@ class LearningController:
             or getattr(experiment, "metadata", {}).get("selected_prompt_negative_text", "")
             or ""
         )
-        if not negative_prompt and self.prompt_workspace_state:
+        if not snapshot_json and not negative_prompt and self.prompt_workspace_state:
             negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
+        if not negative_prompt_supported(self, final_config, experiment.stage):
+            negative_prompt = ""
 
         # PR-LEARN-011: Comprehensive logging of final config
         logger.info(f"[LearningController] Building NJR for variant {variant.param_value}")
@@ -2320,21 +2342,8 @@ class LearningController:
         return None
 
     def _recommendation_query_context(self) -> dict[str, Any]:
-        """Use known frozen model/geometry when querying evidence."""
-        experiment = self.learning_state.current_experiment
-        if experiment is None:
-            return {}
-        snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
-        snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
-        config = dict(snapshot.get("baseline_config") or experiment.baseline_config or {})
-        stage = config.get(str(experiment.stage or "txt2img"), config.get("txt2img", {}))
-        if not isinstance(stage, dict):
-            stage = {}
-        return {
-            "model": str(stage.get("model") or ""),
-            "width": stage.get("width"),
-            "height": stage.get("height"),
-        }
+        """Use known model/geometry and the effective capability intersection."""
+        return recommendation_query(self)
 
     def _update_variant_ratings(self) -> None:
         """Update all variant rows with their average ratings."""
@@ -2746,27 +2755,28 @@ class LearningController:
 
         # Extract recommendations
         rec_list = self._extract_rec_list(recommendations)
-        self._automation_snapshot = {}
+        if not validate_recommendation_apply(self, recommendations, stage_cards, rec_list):
+            return False
+        from src.gui_v2.recommendation_targets import prepare_recommendation_patch
 
-        applied = 0
-        for rec in rec_list:
-            if hasattr(rec, "parameter_name"):
-                param = rec.parameter_name
-                value = rec.recommended_value
-            elif isinstance(rec, dict):
-                param = rec.get("parameter", "")
-                value = rec.get("value")
-            else:
-                continue
-
-            if self._apply_single_recommendation(
+        try:
+            patch = prepare_recommendation_patch(
                 stage_cards,
-                param,
-                value,
-                snapshot=self._automation_snapshot,
-            ):
-                applied += 1
-        if applied <= 0:
+                str(getattr(recommendations, "stage", "txt2img") or "txt2img"),
+                rec_list,
+            )
+        except Exception:
+            return False
+        self._automation_snapshot = {}
+        for target, _variable, _value, old_value in patch:
+            self._automation_snapshot.setdefault(target, old_value)
+        for _target, variable, value, _old_value in patch:
+            try:
+                variable.set(value)
+            except Exception:
+                self.rollback_last_recommendation_apply()
+                return False
+        if not patch:
             return False
 
         if self._automation_mode == "auto_micro_experiment":
@@ -2835,35 +2845,14 @@ class LearningController:
         value: Any,
         *,
         snapshot: dict[tuple[str, str], Any] | None = None,
+        target_stage: str = "txt2img",
     ) -> bool:
         """Apply a single recommendation to stage cards."""
-        param_lower = param.lower().replace(" ", "_")
+        from src.gui_v2.recommendation_targets import recommendation_target
 
-        # Map parameter names to stage card attributes
-        param_map = {
-            "cfg_scale": ("txt2img_card", "cfg_var"),
-            "cfg": ("txt2img_card", "cfg_var"),
-            "steps": ("txt2img_card", "steps_var"),
-            "sampler": ("txt2img_card", "sampler_var"),
-            "scheduler": ("txt2img_card", "scheduler_var"),
-            "model": ("txt2img_card", "model_var"),
-            "model_name": ("txt2img_card", "model_var"),
-            "vae": ("txt2img_card", "vae_var"),
-            "width": ("txt2img_card", "width_var"),
-            "height": ("txt2img_card", "height_var"),
-            "clip_skip": ("txt2img_card", "clip_skip_var"),
-            "denoise_strength": ("img2img_card", "denoise_var"),
-            "denoising_strength": ("img2img_card", "denoise_var"),
-            "adetailer_denoise": ("adetailer_card", "denoise_var"),
-            "adetailer_steps": ("adetailer_card", "steps_var"),
-            "adetailer_cfg": ("adetailer_card", "cfg_var"),
-            "upscale_factor": ("upscale_card", "factor_var"),
-        }
-
-        mapping = param_map.get(param_lower)
+        mapping = recommendation_target(target_stage, param)
         if not mapping:
             return False
-
         card_name, var_name = mapping
 
         try:

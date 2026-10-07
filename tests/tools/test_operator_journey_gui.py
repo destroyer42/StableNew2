@@ -209,6 +209,7 @@ def test_real_backend_code_path_against_a_loopback_backend(tmp_path: Path) -> No
                 "tools.operator_journey",
                 "learning-lora-strength",
                 "--real-backend",
+                "--fixture-sdxl",
                 "--webui-url",
                 backend.base_url,
                 "--startup-grace",

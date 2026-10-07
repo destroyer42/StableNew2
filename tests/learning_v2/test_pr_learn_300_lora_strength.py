@@ -47,6 +47,12 @@ def _controller(prompt: str = PROMPT):
     controller = LearningController(
         learning_state=state, pipeline_controller=Mock(), app_controller=app
     )
+    from types import SimpleNamespace
+
+    from src.image_backends.model_policy import resolve_model_policy
+
+    controller._learning_policy_resolver = lambda name: resolve_model_policy(name, family_lookup=lambda _: SimpleNamespace(
+        status=SimpleNamespace(value="resolved"), family=SimpleNamespace(value="sdxl")))
     return controller, experiment
 
 

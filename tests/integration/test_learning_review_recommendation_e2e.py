@@ -65,8 +65,15 @@ def test_review_reprocess_feedback_to_recommendation_apply(tmp_path: Path) -> No
     assert submitted == 1
 
     writer = LearningRecordWriter(tmp_path / "data" / "learning" / "learning_records.jsonl")
-    stage_cards = SimpleNamespace(txt2img_card=SimpleNamespace(cfg_var=_DummyVar(6.0)))
+    stage_cards = SimpleNamespace(txt2img_card=SimpleNamespace(
+        cfg_var=_DummyVar(6.0), steps_var=_DummyVar(20), sampler_var=_DummyVar("Euler a"),
+        scheduler_var=_DummyVar("normal"), model_var=_DummyVar("modelA.safetensors"),
+        vae_var=_DummyVar(""),
+    ))
     pipeline_controller = Mock()
+    pipeline_controller._app_state = SimpleNamespace(current_config=SimpleNamespace(
+        model_name="modelA.safetensors", vae_name="",
+    ))
     pipeline_controller.stage_cards_panel = stage_cards
     pipeline_controller.can_enqueue_learning_jobs.return_value = (True, "")
     pipeline_controller.get_preview_jobs.return_value = [object()]
@@ -118,6 +125,11 @@ def test_review_reprocess_feedback_to_recommendation_apply(tmp_path: Path) -> No
     applied = learning_controller.apply_recommendations_to_pipeline(recommendations)
     assert applied is True
     assert stage_cards.txt2img_card.cfg_var.get() == 8.5
+    for rec in recommendations.recommendations:
+        from src.gui_v2.recommendation_targets import recommendation_target
+
+        card, variable = recommendation_target("txt2img", rec.parameter_name)
+        assert getattr(getattr(stage_cards, card), variable).get() == rec.recommended_value
 
     lines = writer.records_path.read_text(encoding="utf-8").splitlines()
     assert len(lines) >= 1

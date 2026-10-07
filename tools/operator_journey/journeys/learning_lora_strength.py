@@ -92,6 +92,9 @@ class JourneyConfig:
     height: int = 512
     show_window: bool = True
     fake_options: dict[str, Any] = field(default_factory=dict)
+    # Explicit declaration for the deterministic loopback fixture, never inferred
+    # from a URL or checkpoint name. Real operator checkpoints stay conservative.
+    fixture_sdxl: bool = False
     # How long to wait for StableNew to connect to WebUI (its normal startup takes
     # ~15-30 s) before the projection is considered unavailable.
     startup_wait: float | None = None
@@ -775,7 +778,9 @@ class _Journey:
             shown_params == ["lora_strength"] and self.config.lora_name in shown,
             f"review panel recommendation parameters={shown_params} text={shown[:300]!r}",
         )
-        engine_set = RecommendationEngine(self.ws.records_path).recommend(self.prompt, "txt2img")
+        engine_set = RecommendationEngine(self.ws.records_path).recommend(
+            self.prompt, "txt2img", model=self.ev.summary["model"]
+        )
         engine_params = {r.parameter_name: r.recommended_value for r in engine_set.recommendations}
         self.check(
             ph,
@@ -924,6 +929,10 @@ def run_journey(config: JourneyConfig) -> JourneyEvidence:
         evidence.summary["workspace"] = str(workspace.root)
         spy = AccessSpy(allowed=(workspace.root,))
         with workspace.activate(), spy:
+            if config.backend == "fake" or config.fixture_sdxl:
+                from tools.operator_journey.fixtures import seed_sdxl_checkpoint_evidence
+
+                seed_sdxl_checkpoint_evidence(workspace, model_base(info.active_checkpoint))
             _Journey(config, evidence, workspace, fake, info).run()
         after = probe_backend(url)
         evidence.summary["active_checkpoint_before"] = info.active_checkpoint

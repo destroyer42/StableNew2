@@ -55,6 +55,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="override StableNew's startup probe grace seconds (default: production timing)",
     )
     dev = parser.add_argument_group("harness development (fake backend)")
+    dev.add_argument(
+        "--fixture-sdxl",
+        action="store_true",
+        help="declare an SDXL loopback test fixture in the isolated AssetRegistry cache",
+    )
     dev.add_argument("--stop-after", choices=list(PHASES), default=None)
     dev.add_argument("--discard-workspace", action="store_true")
     dev.add_argument("--fake-startup-delay", type=float, default=0.0)
@@ -74,6 +79,7 @@ def config_from_args(args: argparse.Namespace) -> JourneyConfig:
         startup_grace_sec=args.startup_grace,
         stop_after=args.stop_after,
         discard_workspace=args.discard_workspace,
+        fixture_sdxl=args.fixture_sdxl,
     )
     if config.backend == "fake":
         config.fake_options = {

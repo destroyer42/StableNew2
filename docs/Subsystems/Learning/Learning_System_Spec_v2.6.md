@@ -1,7 +1,7 @@
 Learning_System_Spec_v2.6.md
 
 Status: Canonical subsystem reference
-Updated: 2026-09-16
+Updated: 2026-10-06
 
 0. Purpose
 
@@ -70,6 +70,14 @@ There is no Learning queue, runner, history, or process authority. A compile or
 validation failure admits no variant; after admission each NJR has the normal
 independent SQLite lifecycle.
 
+Preview also freezes path-free model identity, canonical policy id, family and
+evidence class, exact profile id/version when present, target stage and the
+applicable control/feature contract. Run independently validates that frozen
+contract; changing a live stage-card model does not reinterpret the experiment.
+The canonical model compile-policy seam runs after variable validation and
+override. If normalization erases the tested value or changes the frozen exact
+profile, the experiment is rejected before batch admission.
+
 3. Stage Capability Contract
 
 Learning is stage-aware.
@@ -85,8 +93,24 @@ Rules:
 
 - `txt2img` requires no input image.
 - `img2img`, `adetailer`, and `upscale` require an image source.
-- the UI must only surface variables that are valid for the selected stage.
+- the UI must only surface the intersection of stage-valid variables and
+  canonical model/profile-valid capabilities, including stage-local controls.
 - the controller must reject invalid stage and input combinations before job submission.
+
+Canonical `ModelPolicy` owns model applicability; Learning never detects model
+families or duplicates LoRA compatibility rules. Fixed/restricted controls are
+not controlled variables, and optional unverified features are not qualified.
+Model comparison requires compatible evidenced policy envelopes. Exact LoRA
+experiments require cache-only PR-IMG-117 admission evidence, the supported
+stage, and a runnable prompt/style selection within the profile's count limit.
+Old definitions stay loadable; invalid ones cannot execute new work.
+
+Image recommendation parameters use the same target projection. Exact-profile
+recommendations and automation eligibility require compatible frozen profile
+evidence; absent historical proof is not applicability. Immediately before any
+stage-card mutation, the whole recommendation patch is revalidated against the
+current model/stage policy. See
+`PR-LEARN-130D_Model_Scoped_Learning_Capability_Correctness.md`.
 
 4. Variable Types
 
@@ -266,6 +290,16 @@ The Learning subsystem does not:
 ### 7.1 Recommendation application
 
 `suggest_only` is display-only and does not expose an enabled Apply action.
+`src/gui_v2/recommendation_targets.py` maps each stage/parameter to its executable
+operator control. ADetailer Model targets the checkpoint override, never its
+detector; Denoise Strength targets its own denoise variable. ADetailer/upscale VAE
+and inherited checkpoint selection use Base Generation (the txt2img card aliases
+those variables). Img2img uses its own CFG/steps/sampler/denoise controls and the
+inherited Base Generation scheduler/model/VAE. Upscale Factor targets its factor
+control. Every target and rollback value is resolved before any Tk mutation;
+missing or unrepresentable controls reject the complete patch without partial
+application. Unexpected setter failure restores the captured values.
+
 Manual application is confirmation-gated and affects only the current/new
 Pipeline draft intent; it never rewrites prior jobs, artifacts, or PromptPacks.
 
