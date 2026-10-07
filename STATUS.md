@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-05
+Updated: 2026-10-06
 
 ## Repository
 
@@ -89,7 +89,8 @@ Updated: 2026-10-05
   compatibility evidence. The pinned managed Forge applied the adapter (80 keys, weight honored at 0.8 and 0.4, visible effect);
   one bounded three-job production acceptance passed. Multi-LoRA and LoRA with edit remain unqualified. See
   `docs/Subsystems/Image/PR-IMG-117_FLUX2_Klein_LoRA_Qualification_and_Profile_v2.md`.
-- Model-aware Prompt compatibility (PR-IMG-130B, local branch): the Prompt tab shows its target (`Prompt Target: SDXL — <model>`, `FLUX.2 Klein 4B FP8 — profile v2`, or `Unclassified ... capabilities unverified`) and projects the selected model's `ModelPolicy` through `src/prompting/prompt_compatibility.py`: Klein guidance, unsupported negative-prompt/embedding/Prompt Optimizer presentation (controls made unavailable, existing text/selections/settings preserved and removable, nothing rewritten or deleted), exact LoRA admission including the applied Style Consistency LoRA, and advisory SDXL/A1111-syntax findings with stable codes. Awareness only: no prompt translation, no PromptPack change; the compiler/backend stay authoritative. See `docs/Subsystems/Image/PR-IMG-130B_Model_Aware_Prompt_Compatibility_UX.md`.
+- Model-aware Prompt compatibility (PR-IMG-130B, COMPLETE / ACCEPTED / INTEGRATED; PR #62): the Prompt tab shows its target (`Prompt Target: SDXL — <model>`, `FLUX.2 Klein 4B FP8 — profile v2`, or `Unclassified ... capabilities unverified`) and projects the selected model's `ModelPolicy` through `src/prompting/prompt_compatibility.py`: Klein guidance, unsupported negative-prompt/embedding/Prompt Optimizer presentation (controls made unavailable, existing text/selections/settings preserved and removable, nothing rewritten or deleted), exact LoRA admission including the applied Style Consistency LoRA, and advisory SDXL/A1111-syntax findings with stable codes. Awareness only: no prompt translation, no PromptPack change; the compiler/backend stay authoritative. See `docs/Subsystems/Image/PR-IMG-130B_Model_Aware_Prompt_Compatibility_UX.md`.
+- Model-scoped Learning (PR-LEARN-130D, HOLD / local checkpoint; not accepted or integrated): implementation intersects stage metadata with canonical model/profile capability, freezes policy context, delegates compile policy and scopes recommendations/apply. Focused tests pass, but required smoke detects an import-boundary regression in the operator journey; the package's third-failure-class stop rule applies. Isolated collection also needs a clean rerun after a concurrent test edit invalidated its wrapper verdict. Publication is not recommended. See `docs/Subsystems/Learning/PR-LEARN-130D_Model_Scoped_Learning_Capability_Correctness.md`.
 - Model-family capability registry (PR-IMG-130A, COMPLETE / ACCEPTED / INTEGRATED; PR #61): `src/image_backends/model_policy.py` is the one pure policy
   layer that says, per selected model, which Base Generation controls are configurable, supported-but-fixed or unsupported
   and which optional features are supported, with read-only prompt-dialect and Learning-variable hooks. It consults the exact

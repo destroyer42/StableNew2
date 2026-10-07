@@ -19,6 +19,12 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from src.learning.model_capabilities import compatible_context, project_learning_capabilities
+from src.learning.model_policy_service import (
+    evidence_context,
+    recommendation_applicable,
+    resolve_policy,
+)
 from src.learning.value_identity import VariantValueError, canonical_value_key, plain_value
 
 logger = logging.getLogger(__name__)
@@ -94,6 +100,7 @@ class RecommendationSet:
     # PR-044: evidence provenance
     evidence_tier: str = EVIDENCE_TIER_NO_EVIDENCE
     automation_eligible: bool = False
+    model_policy_context: dict[str, Any] = field(default_factory=dict)
 
     def get_best_for_parameter(self, param_name: str) -> ParameterRecommendation | None:
         """Get the best recommendation for a specific parameter."""
@@ -112,9 +119,10 @@ class RecommendationEngine:
     for different prompts and pipeline stages.
     """
 
-    def __init__(self, records_path: str | os.PathLike[str]) -> None:
+    def __init__(self, records_path: str | os.PathLike[str], *, policy_resolver=None) -> None:
         """Initialize with path to learning records JSONL file."""
         self.records_path = Path(records_path)
+        self._policy_resolver = policy_resolver or resolve_policy
         self._cache: dict[str, Any] | None = None
         self._cache_timestamp: float = 0.0
         self._cache_mtime: float = 0.0
@@ -797,6 +805,7 @@ class RecommendationEngine:
         model: str = "",
         width: int | None = None,
         height: int | None = None,
+        target_capabilities=None,
     ) -> RecommendationSet:
         """Get recommendations for a specific prompt and stage combination."""
         query_context = self._build_query_context(
@@ -823,10 +832,18 @@ class RecommendationEngine:
             )
         scored_records = self._cache.get("scored_records", []) if self._cache else []
         stage_name = str(stage or "txt2img")
+        capabilities = target_capabilities or project_learning_capabilities(self._policy_resolver(model), model, stage_name)
+        target_context = json.loads(capabilities.context_json)
         relevant_records = [
             record
             for record in scored_records
             if str(record.get("stage", "") or "txt2img") == stage_name
+            and (not target_context["profile_ref"] or compatible_context(
+                target_context, evidence_context(record.get("metadata") or {})
+            ))
+            and (not target_context["profile_ref"] or recommendation_applicable(
+                capabilities, str(record.get("variable_under_test") or "")
+            ))
         ]
         experiment_records = [
             record
@@ -887,6 +904,9 @@ class RecommendationEngine:
         optimal_settings = self._compute_optimal_settings(
             evidence_records, query_context, prompt_text
         )
+        if stage_name in {"txt2img", "img2img", "adetailer", "upscale"}:
+            optimal_settings = {name: rec for name, rec in optimal_settings.items()
+                                if recommendation_applicable(capabilities, name)}
 
         # Create recommendation set with PR-044 tier provenance
         rec_set = RecommendationSet(
@@ -896,6 +916,7 @@ class RecommendationEngine:
             recommendations=list(optimal_settings.values()),
             evidence_tier=evidence_tier,
             automation_eligible=automation_eligible,
+            model_policy_context=target_context,
         )
 
         # Sort by confidence score (highest first)

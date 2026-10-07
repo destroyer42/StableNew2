@@ -5,10 +5,12 @@ from __future__ import annotations
 import json
 import logging
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
 
+from src.image_backends.model_policy import resolve_model_policy
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.value_identity import VariantValueError, canonical_value_key, plain_value
 
@@ -56,7 +58,9 @@ def _controlled(
 def _engine(tmp_path: Path, records: list[dict[str, Any]]) -> RecommendationEngine:
     path = tmp_path / "learning_records.jsonl"
     path.write_text("\n".join(json.dumps(r) for r in records) + "\n", encoding="utf-8")
-    return RecommendationEngine(path)
+    return RecommendationEngine(path, policy_resolver=lambda name: resolve_model_policy(name or "fixture.safetensors",
+        family_lookup=lambda _: SimpleNamespace(status=SimpleNamespace(value="resolved"),
+                                               family=SimpleNamespace(value="sdxl"))))
 
 
 def _by_name(engine: RecommendationEngine) -> dict[str, Any]:

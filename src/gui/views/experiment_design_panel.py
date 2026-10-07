@@ -10,6 +10,12 @@ from src.gui.models.prompt_metadata import build_prompt_metadata
 from src.gui.models.prompt_pack_model import PromptPackModel, PromptSlot
 from src.gui.ui_tokens import TOKENS
 from src.learning.experiment_naming import build_experiment_identity
+from src.learning.model_capabilities import (
+    compatible_context,
+    policy_context,
+    project_learning_capabilities,
+)
+from src.learning.model_policy_service import live_capabilities, resolve_policy
 from src.learning.resource_access import get_resource_choices, resolve_app_state
 from src.learning.stage_capabilities import (
     get_stage_capability,
@@ -40,6 +46,8 @@ class ExperimentDesignPanel(ttk.Frame):
         self._packs_dir = Path(packs_dir) if packs_dir is not None else None
         self._name_auto_generated = True
         self._description_auto_generated = True
+        self._target_policy = None
+        self._learning_capabilities = None
         self._suspend_identity_tracking = False
         self._prompt_pack_paths: dict[str, Path] = {}
         self._prompt_option_payloads: dict[str, dict[str, Any]] = {}
@@ -313,6 +321,10 @@ class ExperimentDesignPanel(ttk.Frame):
             foreground=TOKENS.colors.text_muted,
         )
         self.summary_label.grid(row=16, column=0, sticky="ew", pady=(0, 6))
+        self.model_target_var = tk.StringVar(value="Learning Target: awaiting model policy")
+        ttk.Label(self, textvariable=self.model_target_var, wraplength=360, justify="left").grid(
+            row=17, column=0, sticky="ew", pady=(0, 6)
+        )
         self._on_stage_changed()
         self._suggest_identity()
 
@@ -506,6 +518,12 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_build_preview(self) -> None:
         """Handle build preview button click."""
+        if self._learning_capabilities is not None:
+            try:
+                self._learning_capabilities.require(self.variable_var.get())
+            except ValueError as exc:
+                self.feedback_var.set(str(exc))
+                return
         if not self.learning_controller:
             self.feedback_var.set("Learning controller not available")
             return
@@ -606,6 +624,12 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_run_experiment(self) -> None:
         """Handle run experiment button click."""
+        if self._learning_capabilities is not None:
+            try:
+                self._learning_capabilities.require(self.variable_var.get())
+            except ValueError as exc:
+                self.feedback_var.set(str(exc))
+                return
         if not self.learning_controller:
             self.feedback_var.set("Learning controller not available")
             return
@@ -699,7 +723,11 @@ class ExperimentDesignPanel(ttk.Frame):
         from src.learning.variable_metadata import get_variable_metadata
 
         variable_name = self.variable_var.get()
+        self._update_policy_buttons()
         if not variable_name:
+            return
+        if self._learning_capabilities is not None and variable_name not in self._learning_capabilities.variables:
+            self.feedback_var.set(f"{variable_name} is unavailable for this model/stage.")
             return
 
         # Look up metadata
@@ -737,6 +765,53 @@ class ExperimentDesignPanel(ttk.Frame):
             self.variable_var.set("")
             self._show_range_widget()
         self._refresh_identity_preview()
+        if self._target_policy is not None:
+            self._refresh_model_capabilities()
+
+    def on_model_projection(self, projection) -> None:
+        """Observe the canonical policy; change only transient Learning presentation."""
+        self._target_policy = projection.policy
+        self._target_model = projection.model_name
+        self._refresh_model_capabilities()
+
+    def _refresh_model_capabilities(self) -> None:
+        policy = self._target_policy
+        stage = self.stage_var.get()
+        controller = self.learning_controller
+        if controller is not None and callable(getattr(controller, "_get_baseline_config", None)):
+            capability = live_capabilities(controller, stage, policy=policy, model=self._target_model)
+        else:
+            capability = project_learning_capabilities(policy, self._target_model, stage)
+        self._learning_capabilities = capability
+        stages = [s for s in list_supported_stages() if s in policy.stages and
+                  (s not in {"adetailer", "upscale"} or policy.feature(s, s).supported)]
+        self.stage_combo.configure(values=stages)
+        self.variable_combo.configure(values=capability.variables)
+        self.model_target_var.set(capability.target + ("\n" + capability.guidance if capability.guidance else ""))
+        if self.variable_var.get() and self.variable_var.get() not in capability.variables:
+            self.feedback_var.set(f"{self.variable_var.get()} is unavailable for this model/stage.")
+            self.variable_var.set("")
+        if not capability.stage_supported:
+            self.feedback_var.set("Selected stage is unavailable for this model.")
+        self._update_policy_buttons()
+        if self.variable_var.get() == "Model":
+            from src.learning.variable_metadata import get_variable_metadata
+            selected = {name for name, value in self.choice_vars.items() if value.get()}
+            self._populate_checklist(get_variable_metadata("Model"))
+            for name, value in self.choice_vars.items():
+                value.set(name in selected)
+        elif self.variable_var.get() == "LoRA Strength" and policy.qualified:
+            combo = getattr(self, "lora_selector_combo", None)
+            if combo is not None:
+                combo.configure(values=capability.lora_candidates)
+
+    def _update_policy_buttons(self) -> None:
+        capability = self._learning_capabilities
+        if capability is None:
+            return
+        valid = capability.stage_supported and self.variable_var.get() in capability.variables
+        self.build_button.configure(state="normal" if valid else "disabled")
+        self.run_button.configure(state="normal" if valid else "disabled")
 
     def _on_browse_input_image(self) -> None:
         selected = filedialog.askopenfilename(
@@ -793,6 +868,11 @@ class ExperimentDesignPanel(ttk.Frame):
         if meta.resource_key and self.learning_controller:
             choices, mapping = get_resource_choices(self.learning_controller, meta.resource_key)
             self._choice_display_map = dict(mapping)
+        if meta.name == "model" and self._target_policy is not None:
+            target = policy_context(self._target_policy, self._target_model, self.stage_var.get())
+            choices = [choice for choice in choices if compatible_context(target, policy_context(
+                resolve_policy(self._choice_display_map.get(choice, choice), self.learning_controller),
+                self._choice_display_map.get(choice, choice), self.stage_var.get()))]
 
         if not choices:
             # No choices available
@@ -863,6 +943,8 @@ class ExperimentDesignPanel(ttk.Frame):
     def _on_resources_updated(self, _resources: dict[str, list[Any]] | None = None) -> None:
         """Refresh the active resource checklist from the current projection."""
         from src.learning.variable_metadata import get_variable_metadata
+        if self._target_policy is not None:
+            self._refresh_model_capabilities()
 
         variable = self.variable_var.get().strip()
         if not variable:
@@ -1091,7 +1173,9 @@ class ExperimentDesignPanel(ttk.Frame):
                 loras = self.learning_controller._get_current_loras(
                     prompt_workspace_state_override=override
                 )
-                available_loras = [lora["name"] for lora in loras]
+                available_loras = [lora["name"] for lora in loras if self._learning_capabilities is None
+                                   or not self._target_policy.qualified
+                                   or lora["name"] in self._learning_capabilities.lora_candidates]
             except Exception:
                 pass
 
@@ -1112,6 +1196,7 @@ class ExperimentDesignPanel(ttk.Frame):
             state="readonly",
         )
         lora_combo.pack(fill="x")
+        self.lora_selector_combo = lora_combo
 
         if not available_loras:
             ttk.Label(
@@ -1190,7 +1275,9 @@ class ExperimentDesignPanel(ttk.Frame):
                 loras = self.learning_controller._get_current_loras(
                     prompt_workspace_state_override=override
                 )
-                available_loras = [lora["name"] for lora in loras]
+                available_loras = [lora["name"] for lora in loras if self._learning_capabilities is None
+                                   or not self._target_policy.qualified
+                                   or lora["name"] in self._learning_capabilities.lora_candidates]
             except Exception:
                 pass
 

@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
@@ -110,6 +110,8 @@ class FeaturePolicy:
     limit: int | None = None
     #: Reference to an existing, separately owned compatibility policy (LoRA); never a copy of its rules.
     compatibility_policy: str = ""
+    #: Empty means every model-supported stage; otherwise support is stage-local.
+    stages: tuple[str, ...] = ()
 
     @property
     def supported(self) -> bool:
@@ -145,12 +147,18 @@ class ModelPolicy:
     prompt_dialect: str = DIALECT_UNSPECIFIED
     #: Operator-facing explanation of fixed/unsupported behavior (policy-authored; the GUI only shows it).
     note: str = ""
+    stage_controls: Mapping[str, Mapping[str, ControlPolicy]] = field(default_factory=dict)
 
-    def control(self, name: str) -> ControlPolicy:
+    def control(self, name: str, stage: str | None = None) -> ControlPolicy:
+        if stage is not None and name in self.stage_controls.get(stage, {}):
+            return self.stage_controls[stage][name]
         return self.controls.get(name, _CONFIGURABLE)
 
-    def feature(self, name: str) -> FeaturePolicy:
-        return self.features.get(name, _UNVERIFIED)
+    def feature(self, name: str, stage: str | None = None) -> FeaturePolicy:
+        feature = self.features.get(name, _UNVERIFIED)
+        if stage is not None and feature.stages and stage not in feature.stages:
+            return _UNSUPPORTED
+        return feature
 
     @property
     def qualified(self) -> bool:
@@ -199,7 +207,8 @@ def policy_for_profile(profile: KleinProfile) -> ModelPolicy:
 
     fixed = ControlMode.FIXED
     lora = (
-        FeaturePolicy(Support.SUPPORTED, limit=profile.max_loras, compatibility_policy=LORA_POLICY_KLEIN_4B_EXPLICIT)
+        FeaturePolicy(Support.SUPPORTED, limit=profile.max_loras, compatibility_policy=LORA_POLICY_KLEIN_4B_EXPLICIT,
+                      stages=(STAGE_TXT2IMG,))
         if profile.max_loras > 0
         else _UNSUPPORTED
     )
@@ -239,6 +248,9 @@ def policy_for_profile(profile: KleinProfile) -> ModelPolicy:
         ),
         prompt_dialect=DIALECT_NATURAL_LANGUAGE,
         note=note,
+        stage_controls={STAGE_IMG2IMG: {
+            "denoise_strength": ControlPolicy(fixed, profile.edit_denoising_strength),
+        }},
     )
 
 
