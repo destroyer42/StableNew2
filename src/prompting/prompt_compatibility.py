@@ -63,9 +63,11 @@ _QUALITY_TAGS = (
 _QUALITY_PATTERN = re.compile(
     r"(?<![A-Za-z0-9])(" + "|".join(re.escape(tag) for tag in _QUALITY_TAGS) + r")(?![A-Za-z0-9])", re.IGNORECASE
 )
-#: Explicit attention weights such as ``(phrase:1.2)``; a bare parenthetical is ordinary prose. Shared with the explicit
-#: adaptation engine (PR-IMG-130C) so detection and adaptation can never recognise different syntax.
-WEIGHTED_ATTENTION_PATTERN = re.compile(r"\(\s*(?P<inner>[^()\n]{1,120}?)\s*:\s*[-+]?\d+(?:\.\d+)?\s*\)")
+#: Explicit attention weights such as ``(phrase:1.2)``; a bare parenthetical is ordinary prose. Shared with the adaptation
+#: engine (PR-IMG-130C/140) so detection and adaptation can never recognise different syntax. Deliberately conservative
+#: because automatic compilation acts on it: the weight must be a decimal written directly after the colon and the phrase
+#: may contain no colon, so key/value prose such as ``(ratio: 2)`` or ``(ratio:2)`` is never treated as a weight.
+WEIGHTED_ATTENTION_PATTERN = re.compile(r"\(\s*(?P<inner>[^()\n:]{1,120}?)\s*:(?P<weight>\d+\.\d+|\.\d+)\)")
 BREAK_SEPARATOR_PATTERN = re.compile(r"(?<![A-Za-z0-9])BREAK(?![A-Za-z0-9])")  # the A1111 chunk separator is upper-case
 #: Angle-bracket extra-network tokens (``<lora:...>`` and kin) and matrix ``[[slot]]`` markers are not prompt prose.
 NON_PROSE_PATTERN = re.compile(r"<[^<>\n]*>|\[\[[^\[\]\n]*\]\]")

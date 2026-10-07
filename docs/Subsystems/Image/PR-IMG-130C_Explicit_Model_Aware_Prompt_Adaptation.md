@@ -52,7 +52,7 @@ equivalents plus `style_lora_not_evaluated` and `style_trigger_dropped_with_lora
 `global_negative_not_applied`, `target_unverified_no_adaptation`. Effects: `rewritten`, `dropped`, `retained`, `not_applied`,
 `refused`.
 
-## Rules (v `130c.1`)
+## Rules (introduced as `130c.1`; the engine ruleset version is now `140.1`, see PR-PROMPT-140)
 
 * **Unknown / conflicting / unqualified targets** (`target_is_unverified(policy)`, the same predicate 130B uses): adaptation is
   unavailable, every field is the original, the single operation is `target_unverified_no_adaptation`. Nothing is guessed into SDXL
@@ -92,14 +92,15 @@ mode (counts only).
 
 ## Future compiler seam and recorded gap
 
-The later automatic-interpretation package (`PR-PROMPT-140`) should resolve Matrix/source into structured prompt intent, call
-`adapt_prompt_for_target` on those structured components, then render the target string and apply the existing model compile
-policy. **Not implemented here: automatic production PromptPack adaptation remains deferred to that package.**
+PR-PROMPT-140 now resolves Matrix/source into structured prompt intent, calls the engine's compile-safe `adapt_structured_prompt` (the same
+text, negative and embedding rules; LoRA handling is stricter there: only definitive facts delete and unverified evidence is preserved),
+renders the target strings and applies the existing model compile policy. This preview keeps its read-only projection semantics (it omits
+unverified LoRAs it cannot show as admitted). See `docs/Subsystems/PromptPacks/PR-PROMPT-140_Model_Adaptive_PromptPack_Compilation.md`.
 
-Recorded, not hidden: a slot LoRA's trigger phrase is part of the authored text, so the engine cannot drop it with the LoRA (only the
-Style Consistency trigger is structured); the preview says so when a LoRA is omitted. Inline `<lora:...>` tokens typed into text are
-untouched. Closing it requires adapting structured components before rendering. The `(phrase: 2)` recognizer is the 130B pattern, so
-a parenthetical such as "(ratio: 2)" is treated as weighted syntax by both detection and adaptation.
+Recorded: a slot LoRA's trigger phrase typed into the authored text is not LoRA-owned, so the preview cannot drop it with the LoRA (the
+compiler's structured actor/style triggers are dropped with their LoRA; PromptPack-row LoRA triggers are not tracked). Inline `<lora:...>`
+tokens typed into text are untouched. The weighted-attention recognizer shared with 130B was made conservative in PR-PROMPT-140: only a
+decimal weight written directly after the colon with a colon-free phrase counts, so "(ratio: 2)" is no longer treated as weighted syntax.
 
 ## Not changed / limits
 

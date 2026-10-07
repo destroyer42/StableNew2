@@ -12,9 +12,12 @@ from pathlib import Path
 from typing import Any, cast
 
 from src.contracts import PackJobEntry
+from src.image_backends.forge_klein_lora import LoraResolver
+from src.image_backends.forge_klein_profile import klein_selected
 from src.image_backends.image_backend_types import normalize_image_backend_options
-from src.image_backends.model_policy import apply_model_compile_policy
+from src.image_backends.model_policy import FamilyLookup, apply_model_compile_policy
 from src.pipeline import config_contract_v26
+from src.pipeline.compile_evidence import CompileEvidence
 from src.pipeline.config_contract_v26 import (
     canonicalize_intent_config,
     derive_backend_options,
@@ -39,7 +42,11 @@ from src.pipeline.job_models_v2 import (
     WorkloadKind,
 )
 from src.pipeline.prompt_pack_parser import PackRow
-from src.pipeline.resolution_layer import UnifiedConfigResolver, UnifiedPromptResolver
+from src.pipeline.resolution_layer import (
+    UnifiedConfigResolver,
+    UnifiedPromptResolver,
+    adapt_pack_intent,
+)
 from src.promptpacks.storage import load_prompt_pack_document, prompt_pack_rows
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
 from src.training.lora_manager import LoRAManager
@@ -60,6 +67,8 @@ _TXT2IMG_INACTIVE_HIRES_KEYS = (
     "hr_resize_y",
 )
 _DEFAULT_MATRIX_EXPANSION_LIMIT = 8
+#: Version of the adaptation manifest frozen into ``NJRProvenance.metadata['prompt_adaptation']``.
+PROMPT_ADAPTATION_CONTRACT = "prompt_adaptation/1"
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -93,6 +102,8 @@ class PromptPackNormalizedJobBuilder:
         packs_dir: Path | str | None = None,
         lora_manager: LoRAManager | None = None,
         style_lora_manager: StyleLoRAManager | None = None,
+        model_family_lookup: FamilyLookup | None = None,
+        lora_resolver: LoraResolver | None = None,
     ) -> None:
         self._config_manager = config_manager
         self._job_builder = job_builder
@@ -101,6 +112,8 @@ class PromptPackNormalizedJobBuilder:
         self._packs_dir = Path(packs_dir) if packs_dir is not None else config_manager.packs_dir
         self._lora_manager = lora_manager
         self._style_lora_manager = style_lora_manager
+        self._model_family_lookup = model_family_lookup
+        self._lora_resolver = lora_resolver
         self._pack_rows_cache: dict[tuple[Any, ...], list[PackRow]] = {}
         self._pack_metadata_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._pack_config_cache: dict[tuple[Any, ...], dict[str, Any] | None] = {}
@@ -114,6 +127,10 @@ class PromptPackNormalizedJobBuilder:
         )
         records: list[NormalizedJobRecord] = []
         entry_count = 0
+        # One bounded, read-only evidence context for the whole build: every Matrix variant and LoRA reuses it.
+        evidence = CompileEvidence(
+            family_lookup=self._model_family_lookup, lora_resolver=self._lora_resolver
+        )
         for entry in entries_list:
             entry_count += 1
             if not entry.pack_id:
@@ -131,6 +148,7 @@ class PromptPackNormalizedJobBuilder:
                     expanded_entry,
                     matrix_variant_index=matrix_variant_index,
                     matrix_variant_count=len(expanded_entries),
+                    evidence=evidence,
                 )
                 if jobs:
                     _logger.info(
@@ -346,7 +364,11 @@ class PromptPackNormalizedJobBuilder:
         *,
         matrix_variant_index: int = 0,
         matrix_variant_count: int = 1,
+        evidence: CompileEvidence | None = None,
     ) -> list[NormalizedJobRecord]:
+        evidence = evidence or CompileEvidence(
+            family_lookup=self._model_family_lookup, lora_resolver=self._lora_resolver
+        )
         pack_config = self._load_pack_config(entry.pack_id)
 
         # BUGFIX: Allow learning experiments without pack config if config_snapshot is provided
@@ -373,6 +395,9 @@ class PromptPackNormalizedJobBuilder:
                 )
             )
             self._resolved_config_cache[resolved_cache_key] = copy.deepcopy(cached_resolved)
+        # Source intent (what the operator configured) stays separate from the effective executable config: the model
+        # compile policy normalizes values (negative, global terms, optimizer) that the adaptation manifest must still see.
+        source_config = copy.deepcopy(cached_resolved)
         merged_config = apply_model_compile_policy(copy.deepcopy(cached_resolved))
         stage_flags = self._normalize_stage_flags(
             merged_config.get("pipeline", {}), entry.stage_flags or {}
@@ -387,12 +412,20 @@ class PromptPackNormalizedJobBuilder:
             resolved_actors,
             resolved_style_lora,
         )
-        prompt_resolution = self._resolve_prompt(
+        prompt_resolution, adaptation_plan = self._resolve_prompt(
             entry,
+            source_config,
             merged_config,
             resolved_actors,
             resolved_style_lora,
+            evidence,
         )
+        # Frozen, content-free adaptation evidence; the effective prompt/embeddings/LoRAs it describes are already in the NJR.
+        provenance_metadata = copy.deepcopy(record_metadata)
+        provenance_metadata["prompt_adaptation"] = {
+            "contract": PROMPT_ADAPTATION_CONTRACT,
+            **adaptation_plan.to_diagnostics(),
+        }
         config_for_builder = self._build_config_payload(
             entry,
             merged_config,
@@ -539,7 +572,7 @@ class PromptPackNormalizedJobBuilder:
                         aesthetic_weight=aesthetic_section.get("weight"),
                         aesthetic_text=aesthetic_section.get("text"),
                         aesthetic_embedding=aesthetic_section.get("embedding"),
-                        metadata=copy.deepcopy(record_metadata),
+                        metadata=copy.deepcopy(provenance_metadata),
                     ),
                 )
             )
@@ -548,10 +581,17 @@ class PromptPackNormalizedJobBuilder:
     def _resolve_prompt(
         self,
         entry: PackJobEntry,
+        source_config: dict[str, Any],
         config: dict[str, Any],
-        resolved_actors: list[dict[str, Any]] | None = None,
-        resolved_style_lora: dict[str, Any] | None = None,
-    ) -> Any:
+        resolved_actors: list[dict[str, Any]] | None,
+        resolved_style_lora: dict[str, Any] | None,
+        evidence: CompileEvidence,
+    ) -> tuple[Any, Any]:
+        """Structure the authored row from the *source* config, adapt it for the target policy, then render.
+
+        ``config`` is the effective (model-compile-policy) config; it receives the legacy global-prompt flag exactly as before.
+        """
+
         pack_rows = self._load_pack_rows(entry.pack_id)
         row_index = entry.pack_row_index or 0
         pack_row = None
@@ -569,18 +609,17 @@ class PromptPackNormalizedJobBuilder:
                 negative_phrases=(entry.negative_prompt_text or "",),
             )
         matrix_values = entry.matrix_slot_values or {}
-        pipeline_section = config.get("pipeline", {})
-        negative_prompt = config.get("txt2img", {}).get("negative_prompt", "")
-        is_frozen = has_frozen_global_prompt_policy(config)
+        pipeline_section = source_config.get("pipeline", {})
+        negative_prompt = source_config.get("txt2img", {}).get("negative_prompt", "")
         apply_global = pipeline_section.get("apply_global_negative_txt2img", True)
         global_negative = (
-            str(config.get("global_negative_prompt") or "")
-            if is_frozen
+            str(source_config.get("global_negative_prompt") or "")
+            if has_frozen_global_prompt_policy(source_config)
             else self._config_manager.get_global_negative_prompt()
         )
-        if not is_frozen:
+        if not has_frozen_global_prompt_policy(config):
             config["global_prompt_policy_source"] = "legacy_runtime_fallback"
-        return self._prompt_resolver.resolve_from_pack(
+        intent = self._prompt_resolver.resolve_intent(
             pack_row=pack_row,
             matrix_slot_values=matrix_values,
             actor_resolutions=resolved_actors,
@@ -588,6 +627,34 @@ class PromptPackNormalizedJobBuilder:
             pack_negative=negative_prompt,
             global_negative=global_negative,
             apply_global_negative=bool(apply_global),
+        )
+        adapted = adapt_pack_intent(
+            intent,
+            evidence.policy_for(self._selected_model_name(source_config)),
+            lora_resolver=evidence.lora_evidence,
+            optimizer_enabled=self._optimizer_enabled(source_config),
+        )
+        return self._prompt_resolver.render_intent(adapted.intent), adapted.plan
+
+    @staticmethod
+    def _selected_model_name(source_config: dict[str, Any]) -> str | None:
+        """The checkpoint the work targets: the qualified Klein selection if any, else the txt2img model."""
+
+        txt2img = _mapping_dict(source_config.get("txt2img"))
+        if klein_selected(source_config):
+            for container in (txt2img, source_config):
+                for key in ("model", "model_name", "sd_model_checkpoint", "base_model"):
+                    value = str(container.get(key) or "").strip()
+                    if value and klein_selected({"txt2img": {"model": value}}):
+                        return value
+        return str(txt2img.get("model") or source_config.get("model") or "").strip() or None
+
+    @staticmethod
+    def _optimizer_enabled(source_config: dict[str, Any]) -> bool:
+        txt2img = _mapping_dict(source_config.get("txt2img"))
+        return bool(
+            _mapping_dict(source_config.get("prompt_optimizer")).get("enabled")
+            or _mapping_dict(txt2img.get("prompt_optimizer")).get("enabled")
         )
 
     def _resolve_style_lora(self, merged_config: dict[str, Any]) -> dict[str, Any] | None:
