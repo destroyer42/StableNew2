@@ -48,6 +48,10 @@ generic read-only `add_listener` seam (`main_window_v2._wire_prompt_model_target
   cleared); Prompt Optimizer controls are disabled and the preview states it is not applied (stored settings untouched, restored
   exactly on switching back); embedding **additions** are refused while existing entries stay visible and removable, with an
   `action_required` finding while any are selected; LoRA findings come from the existing admission evidence.
+* **Global negative**: where the target's policy disables negative prompts, a stored non-empty global negative is kept exactly as set
+  but is shown as `Global Negative: stored but not applied for <model>.` instead of "appended" (the text is never repeated), with an
+  informational `global_negative_not_applied` finding (never `action_required`: the qualified compile policy deliberately disables
+  global terms). Where negatives are supported the preview is unchanged.
 * **Unknown / unqualified**: an informational unverified notice; every Prompt tool behaves as it always has.
 * **Templates and Matrix** stay available and unchanged; the analysis reads the current rendered prompt (template + free text) and
   does not expand Matrix values.
@@ -55,6 +59,10 @@ generic read-only `add_listener` seam (`main_window_v2._wire_prompt_model_target
   `(phrase:1.2)`, the upper-case A1111 `BREAK` separator, and a run of at least 3 distinct quality-tag boilerplate terms
   (`QUALITY_TAG_THRESHOLD`). `<lora:...>` tokens and `[[matrix]]` markers are not prose; a lone ordinary phrase never fires.
   Messages say the prompt is preserved; there is no "Adapt" action (a later package).
+* **No scan from a model switch**: the compatibility analysis and `on_model_projection` never resolve the Style Consistency selection
+  (resolving may scan LoRA directories). They read the last resolution recorded by the existing, separate Style Consistency availability
+  path (which keeps its behavior, including its scan). A selected style that has not been evaluated yet is reported as
+  `style_lora_not_evaluated` (informational, only for bounded/unsupported LoRA targets) rather than counted or silently treated as valid.
 * **Non-destructive**: a model switch never writes the pack (dirty flag unchanged) and never touches slot text, negative text,
   optimizer settings, embeddings, LoRAs, style selection, template or Matrix state.
 * **Content visibility**: findings are derived from the real stored text but are suppressed for content the visibility mode hides

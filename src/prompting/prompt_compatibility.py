@@ -44,6 +44,8 @@ CONTENT_HIDDEN = "content_hidden"
 NEGATIVE_PROMPT_UNSUPPORTED = "negative_prompt_unsupported"
 EMBEDDINGS_UNSUPPORTED = "embeddings_unsupported"
 OPTIMIZER_NOT_APPLIED = "prompt_optimizer_not_applied"
+GLOBAL_NEGATIVE_NOT_APPLIED = "global_negative_not_applied"
+STYLE_LORA_NOT_EVALUATED = "style_lora_not_evaluated"
 LORA_UNSUPPORTED = "lora_unsupported"
 LORA_COUNT_EXCEEDS_LIMIT = "lora_count_exceeds_limit"
 LORA_NOT_VERIFIED = "lora_not_verified"
@@ -103,11 +105,17 @@ class PromptStateSnapshot:
     style_lora: tuple[str, float] | None = None
     #: The stored Prompt Optimizer ``enabled`` setting (never modified by the analysis).
     optimizer_enabled: bool = False
+    #: Whether a non-empty global negative prompt is stored (only the fact, never its text).
+    global_negative_present: bool = False
+    #: A style LoRA is selected but its availability has not been evaluated yet, so it is not counted (the analysis
+    #: never triggers the scan that evaluation may need).
+    style_lora_pending: bool = False
 
 
 @dataclass(frozen=True, slots=True)
 class PromptTargetProjection:
     label: str
+    display_name: str
     family: str
     policy_id: str
     profile_ref: Mapping[str, Any] | None
@@ -123,6 +131,8 @@ class PromptTargetProjection:
     negative_note: str = ""
     optimizer_note: str = ""
     embeddings_note: str = ""
+    #: Set when a stored global negative is not applied for this target ("" otherwise); never contains the text.
+    global_negative_note: str = ""
 
     @property
     def action_required(self) -> tuple[PromptFinding, ...]:
@@ -234,6 +244,14 @@ def project_prompt_target(
                 "this model; the text is preserved and is not changed.",
             ))
 
+    global_negative_note = ""
+    if not negative_supported and state.global_negative_present:
+        global_negative_note = f"Global Negative: stored but not applied for {policy.display_name}."
+        findings.append(PromptFinding(
+            GLOBAL_NEGATIVE_NOT_APPLIED, Severity.INFO, "negative",
+            f"{global_negative_note} It is kept as you set it; the qualified profile deliberately disables global negative terms.",
+        ))
+
     embeddings = policy.feature("embeddings")
     additions_allowed = embeddings.support is not Support.UNSUPPORTED
     embeddings_note = ""
@@ -263,6 +281,17 @@ def project_prompt_target(
                 OPTIMIZER_NOT_APPLIED, Severity.INFO, "optimizer",
                 f"The Prompt Optimizer is enabled in your settings but is not applied for {policy.display_name}.",
             ))
+
+    lora_policy = policy.feature("lora")
+    style_matters = lora_policy.support is Support.UNSUPPORTED or (
+        lora_policy.support is Support.SUPPORTED and lora_policy.limit is not None
+    )  # only a bounded/unsupported LoRA envelope makes an unevaluated style LoRA relevant
+    if state.style_lora_pending and style_matters:
+        findings.append(PromptFinding(
+            STYLE_LORA_NOT_EVALUATED, Severity.INFO, "lora",
+            "A Style Consistency LoRA is selected but its availability has not been evaluated yet, so it is not counted "
+            "here until the style status refreshes.",
+        ))
 
     selected = list(state.loras)
     if state.style_lora is not None:
@@ -304,6 +333,7 @@ def project_prompt_target(
 
     return PromptTargetProjection(
         label=target_label(policy, model_name),
+        display_name=policy.display_name,
         family=policy.family,
         policy_id=policy.policy_id,
         profile_ref=policy.profile_ref,
@@ -317,6 +347,7 @@ def project_prompt_target(
         negative_note=negative_note,
         optimizer_note=optimizer_note,
         embeddings_note=embeddings_note,
+        global_negative_note=global_negative_note,
     )
 
 
@@ -326,6 +357,8 @@ __all__ = [
     "DIALECT_QUALITY_BOILERPLATE",
     "DIALECT_WEIGHTED_ATTENTION",
     "EMBEDDINGS_UNSUPPORTED",
+    "GLOBAL_NEGATIVE_NOT_APPLIED",
+    "STYLE_LORA_NOT_EVALUATED",
     "LORA_COUNT_EXCEEDS_LIMIT",
     "LORA_NOT_VERIFIED",
     "LORA_UNSUPPORTED",

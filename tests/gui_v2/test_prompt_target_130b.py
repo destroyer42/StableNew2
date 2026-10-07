@@ -215,7 +215,9 @@ def test_a_slot_lora_plus_an_applied_style_lora_is_not_presented_as_runnable(tab
     tab._refresh_editor()
     tab.target_lora_resolver = _resolver({"one_lora": KleinLoraStatus.COMPATIBLE, "style_lora": KleinLoraStatus.COMPATIBLE})
     style = SimpleNamespace(applied=True, lora_name="style_lora", weight=0.65, trigger_phrase="", display_name="S", warning="")
-    monkeypatch.setattr(tab, "_resolve_selected_style_lora", lambda: style)
+    monkeypatch.setattr(tab._style_lora_manager, "resolve_selection", lambda *a, **k: style)
+    tab.workspace_state.set_pack_style_lora_config({"enabled": True, "style_id": "s"})
+    tab._refresh_style_lora_status()  # the existing availability path resolves the style selection (and records it)
 
     tab.on_model_projection(_projection(KLEIN))
 
@@ -370,5 +372,113 @@ def test_the_prompt_tab_uses_the_cache_only_resolver_and_never_scans(tk_root: tk
     try:
         resolver = frame._target_resolver()
         assert isinstance(resolver, RegistryLoraResolver) and resolver._cache_only is True
+    finally:
+        frame.destroy()
+
+
+# --- review finding 1: a stored global negative is not presented as applied under a no-negative target ----------------------------------
+
+GLOBAL_NEG = "GLOBAL-NEGATIVE-SECRET-TEXT"
+
+
+def test_klein_does_not_present_a_stored_global_negative_as_appended(tk_root: tk.Tk, tmp_path: Path) -> None:
+    app_state = AppStateV2()
+    app_state.global_negative_prompt = GLOBAL_NEG
+    frame = PromptTabFrame(tk_root, app_state=app_state, packs_dir=tmp_path)
+    try:
+        frame.target_lora_resolver = _resolver({})
+        frame.on_model_projection(_projection(SDXL))
+        sdxl_preview = frame.meta_text.get("1.0", "end")
+        assert "Global Negative (appended):" in sdxl_preview and GLOBAL_NEG in sdxl_preview  # SDXL unchanged
+
+        frame.on_model_projection(_projection(KLEIN))
+        klein_preview = frame.meta_text.get("1.0", "end")
+        assert "Global Negative (appended)" not in klein_preview
+        assert "Global Negative: stored but not applied for FLUX.2 Klein 4B FP8." in klein_preview
+        assert GLOBAL_NEG not in klein_preview and GLOBAL_NEG not in _detail(frame)  # the text is never exposed
+        assert app_state.global_negative_prompt == GLOBAL_NEG  # stored exactly as it was
+
+        frame.on_model_projection(_projection(SDXL))
+        assert "Global Negative (appended):" in frame.meta_text.get("1.0", "end")
+    finally:
+        frame.destroy()
+
+
+def test_an_empty_global_negative_adds_nothing_under_klein(tk_root: tk.Tk, tmp_path: Path) -> None:
+    app_state = AppStateV2()
+    app_state.global_negative_prompt = "   "
+    frame = PromptTabFrame(tk_root, app_state=app_state, packs_dir=tmp_path)
+    try:
+        frame.target_lora_resolver = _resolver({})
+        frame.on_model_projection(_projection(KLEIN))
+
+        assert "Global Negative" not in frame.meta_text.get("1.0", "end")
+    finally:
+        frame.destroy()
+
+
+# --- review finding 2: the model-target refresh must not initiate an asset scan ---------------------------------------------------------
+
+
+def _cold_style_frame(tk_root: tk.Tk, tmp_path: Path, monkeypatch) -> tuple[PromptTabFrame, list[int]]:
+    import json
+
+    from src.training.style_lora_manager import StyleLoRAManager
+    from src.utils.lora_scanner import LoRAScanner
+
+    catalog = tmp_path / "style_loras.json"
+    catalog.write_text(
+        json.dumps({"styles": [{
+            "style_id": "plain_style", "display_name": "Plain Style", "trigger_phrase": "plain", "lora_name": "plain_style_lora", "weight": 0.65,
+        }]}),
+        encoding="utf-8",
+    )
+    scans: list[int] = []
+    monkeypatch.setattr(LoRAScanner, "scan_loras", lambda self, *a, **k: scans.append(1))
+    frame = PromptTabFrame(tk_root, packs_dir=tmp_path)
+    frame.target_lora_resolver = _resolver({"plain_style_lora": KleinLoraStatus.COMPATIBLE, "one_lora": KleinLoraStatus.COMPATIBLE})
+    frame._style_lora_manager = StyleLoRAManager(catalog_path=catalog, webui_root=tmp_path / "webui")  # cold: never resolved
+    frame.workspace_state.set_pack_style_lora_config({"enabled": True, "style_id": "plain_style"})
+    return frame, scans
+
+
+def test_a_model_target_refresh_never_initiates_a_lora_scan_for_a_cold_style_manager(tk_root: tk.Tk, tmp_path: Path, monkeypatch) -> None:
+    frame, scans = _cold_style_frame(tk_root, tmp_path, monkeypatch)
+    try:
+        frame.on_model_projection(_projection(KLEIN))
+        frame.on_model_projection(_projection(SDXL))
+        frame._refresh_target_compatibility()
+
+        assert scans == [], "the model-target path must not scan LoRA directories"
+    finally:
+        frame.destroy()
+
+
+def test_a_cold_style_selection_is_reported_as_not_yet_evaluated_not_silently_valid(tk_root: tk.Tk, tmp_path: Path, monkeypatch) -> None:
+    frame, scans = _cold_style_frame(tk_root, tmp_path, monkeypatch)
+    try:
+        frame.workspace_state.set_slot_loras(0, [("one_lora", 0.8)])  # state set directly: no availability refresh has run
+
+        frame.on_model_projection(_projection(KLEIN))
+
+        assert scans == []
+        assert "has not been evaluated yet" in _detail(frame)
+        assert "style_lora_not_evaluated" in frame._prompt_target.codes()
+        frame.on_model_projection(_projection(SDXL))
+        assert "style_lora_not_evaluated" not in frame._prompt_target.codes()  # not relevant to an unbounded LoRA target
+    finally:
+        frame.destroy()
+
+
+def test_the_existing_availability_path_still_scans_then_feeds_the_compatibility_snapshot(tk_root: tk.Tk, tmp_path: Path, monkeypatch) -> None:
+    frame, scans = _cold_style_frame(tk_root, tmp_path, monkeypatch)
+    try:
+        frame._sync_style_lora_controls()  # the separate, existing Style Consistency availability behavior
+
+        assert scans == [1]  # unchanged: this path (not the model-target path) may scan
+        assert "was not found" in frame.style_lora_status_var.get()
+        frame.on_model_projection(_projection(KLEIN))
+        assert scans == [1]  # the model projection reuses the recorded resolution
+        assert "has not been evaluated yet" not in _detail(frame)
     finally:
         frame.destroy()

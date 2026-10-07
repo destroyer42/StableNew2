@@ -106,6 +106,9 @@ class PromptTabFrame(ttk.Frame):
         # PR-IMG-130B: read-only projection of the selected model's policy onto this tab (never authoring state).
         self._model_projection = None
         self._prompt_target: PromptTargetProjection | None = None
+        #: The last Style Consistency resolution made by the existing availability path (which may scan). The model-target
+        #: compatibility analysis reads only this snapshot and never resolves (so it can never initiate a scan).
+        self._style_resolution_cache: tuple[str, object] | None = None
         self._prompt_optimizer_widgets: list[ttk.Widget] = []
         #: Cache-only LoRA admission resolver (the existing PR-IMG-117 evidence); tests may inject one.
         self.target_lora_resolver = None
@@ -769,14 +772,32 @@ class PromptTabFrame(ttk.Frame):
         model_name = str(preset_data.get("model") or preset_data.get("model_name") or "").strip()
         return model_name or None
 
+    def _style_selection_key(self) -> str:
+        style_config = self.workspace_state.get_pack_style_lora_config()
+        return repr((sorted((str(k), repr(v)) for k, v in style_config.items()), self._current_style_base_model()))
+
     def _resolve_selected_style_lora(self) -> ResolvedStyleLoRA | None:
+        """The existing Style Consistency availability resolution (may scan LoRA directories, unchanged behavior)."""
+
         style_config: dict[str, object] = self.workspace_state.get_pack_style_lora_config()
         if not style_config:
             return None
-        return self._style_lora_manager.resolve_selection(
+        resolved = self._style_lora_manager.resolve_selection(
             style_config,
             base_model=self._current_style_base_model(),
         )
+        self._style_resolution_cache = (self._style_selection_key(), resolved)
+        return resolved
+
+    def _cached_style_selection(self) -> tuple[ResolvedStyleLoRA | None, bool]:
+        """(resolution, pending) from the last availability resolution; never calls the manager (no scan)."""
+
+        if not self.workspace_state.get_pack_style_lora_config():
+            return None, False
+        cached = self._style_resolution_cache
+        if cached is not None and cached[0] == self._style_selection_key():
+            return cached[1], False  # type: ignore[return-value]
+        return None, True
 
     def _sync_style_lora_controls(self) -> None:
         style_config: dict[str, object] = self.workspace_state.get_pack_style_lora_config()
@@ -1175,8 +1196,12 @@ class PromptTabFrame(ttk.Frame):
         except Exception:
             pass
 
-    def _refresh_metadata(self) -> None:
-        """Refresh metadata/preview panel with full prompt preview."""
+    def _refresh_metadata(self, *, scan_style: bool = True) -> None:
+        """Refresh metadata/preview panel with full prompt preview.
+
+        ``scan_style=False`` (a model-target refresh) reuses the last Style Consistency resolution instead of resolving
+        it again, because resolving may scan LoRA directories and a model switch must never initiate that.
+        """
         pack = self.workspace_state.current_pack
         slot_index = self.workspace_state.get_current_slot_index()
         resolver = self._visibility_resolver()
@@ -1191,14 +1216,15 @@ class PromptTabFrame(ttk.Frame):
             self.meta_text.config(state="disabled")
             return
 
-        self._refresh_target_compatibility()
-
         # Get matrix config
         matrix_config = self.workspace_state.get_matrix_config()
 
         # Build preview sections
         dirty = " (modified)" if self.workspace_state.dirty else ""
-        resolved_style_lora = self._resolve_selected_style_lora()
+        resolved_style_lora = (
+            self._resolve_selected_style_lora() if scan_style else self._cached_style_selection()[0]
+        )
+        self._refresh_target_compatibility()
         preview_lines = [
             f"Pack: {pack.name if pack else 'None'}{dirty}",
             f"Slot: {slot_index + 1}",
@@ -1295,8 +1321,13 @@ class PromptTabFrame(ttk.Frame):
             global_neg = getattr(self.app_state, "global_negative_prompt", "")
             if global_neg and global_neg.strip():
                 preview_lines.append("")
-                preview_lines.append("Global Negative (appended):")
-                preview_lines.append(f"  {global_neg.strip()}")
+                target = self._prompt_target
+                if target is not None and target.global_negative_note:
+                    # The target's policy disables global negatives: stored, shown as not applied, text not repeated.
+                    preview_lines.append(target.global_negative_note)
+                else:
+                    preview_lines.append("Global Negative (appended):")
+                    preview_lines.append(f"  {global_neg.strip()}")
 
         preview_lines.extend(
             [
@@ -1332,7 +1363,7 @@ class PromptTabFrame(ttk.Frame):
         """Receive the Base Generation model-policy projection (read-only context; never changes authoring state)."""
 
         self._model_projection = projection
-        self._refresh_metadata()
+        self._refresh_metadata(scan_style=False)
 
     def _snapshot_prompt_state(self) -> PromptStateSnapshot:
         slot = self.workspace_state.get_current_slot()
@@ -1340,7 +1371,8 @@ class PromptTabFrame(ttk.Frame):
         subject = self._current_slot_visibility_subject()
         positive = self.workspace_state.get_current_prompt_text()
         negative = self.workspace_state.get_current_negative_text()
-        style = self._resolve_selected_style_lora()
+        style, style_pending = self._cached_style_selection()
+        global_negative = getattr(getattr(self, "app_state", None), "global_negative_prompt", "")
         return PromptStateSnapshot(
             positive_text=positive,
             negative_text=negative,
@@ -1351,6 +1383,8 @@ class PromptTabFrame(ttk.Frame):
             loras=tuple((str(name), float(weight)) for name, weight in getattr(slot, "loras", [])),
             style_lora=(style.lora_name, float(style.weight)) if style is not None and style.applied else None,
             optimizer_enabled=bool(self._prompt_optimizer_vars["enabled"].get()),
+            global_negative_present=bool(str(global_negative or "").strip()),
+            style_lora_pending=style_pending,
         )
 
     def _target_resolver(self):

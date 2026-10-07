@@ -305,3 +305,21 @@ def test_the_analysis_has_no_filename_or_klein_conditional() -> None:
 
     for banned in ("klein_4b_fp8.safetensors", "is_klein", "flux-2-klein", "klein_selected"):
         assert banned not in source, banned
+
+
+# --- review finding 1 (pure contract): a stored global negative under a no-negative target ----------------------------------------------
+
+
+def test_a_stored_global_negative_is_an_informational_finding_not_an_action_required_one() -> None:
+    projection = _project(_klein(), KLEIN, global_negative_present=True)
+
+    finding = next(f for f in projection.findings if f.code == pc.GLOBAL_NEGATIVE_NOT_APPLIED)
+    assert finding.severity is Severity.INFO and finding.scope == "negative"
+    assert "FLUX.2 Klein 4B FP8" in finding.message and "stored" in finding.message
+    assert projection.runnable_as_authored and projection.action_required == ()
+
+
+def test_a_global_negative_is_unremarkable_where_negative_prompts_are_supported_or_unverified() -> None:
+    assert _project(_sdxl(), SDXL, global_negative_present=True).findings == ()
+    assert _project(_unknown(), "mystery.safetensors", global_negative_present=True).codes() == (pc.TARGET_UNVERIFIED,)
+    assert _project(_klein(), KLEIN, global_negative_present=False).findings == ()
