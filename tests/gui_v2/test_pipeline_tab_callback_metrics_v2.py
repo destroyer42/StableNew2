@@ -261,6 +261,41 @@ def test_pipeline_tab_logs_projection_refresh_failures(caplog) -> None:
 
 
 @pytest.mark.gui
+def test_pipeline_tab_owns_queue_control_subscriptions(tk_root: tk.Tk) -> None:
+    """PR-RUNTIME-QUEUE-150: pause/auto-run changes reach the managed Queue panel through the tab's own listener."""
+    harness = GuiV2Harness(tk_root)
+    try:
+        state = harness.window.app_state
+        tab = harness.pipeline_tab
+
+        for key in ("is_queue_paused", "auto_run_queue"):
+            listeners = list(state._listeners.get(key, []))
+            assert any(getattr(listener, "__self__", None) is tab for listener in listeners), key
+            assert all(
+                type(getattr(listener, "__self__", None)).__name__ != "QueuePanelV2"
+                for listener in listeners
+            ), key
+    finally:
+        harness.cleanup()
+
+
+def test_pipeline_tab_queue_control_changes_mark_only_the_queue_surface_dirty() -> None:
+    tab = PipelineTabFrame.__new__(PipelineTabFrame)
+    tab._callback_metrics = {}
+    tab._hot_surface_dirty = set()
+    tab._hot_surface_flush_scheduled = False
+    tab._hot_surface_deferred_retry_count = 0
+    scheduled: list[tuple[int, object]] = []
+    tab.after = lambda delay_ms, fn: scheduled.append((delay_ms, fn))  # type: ignore[method-assign]
+
+    tab._on_queue_control_changed()
+
+    assert tab._hot_surface_dirty == {"queue"}
+    assert len(scheduled) == 1
+    assert scheduled[0][0] == PipelineTabFrame.HOT_SURFACE_FLUSH_DELAY_MS
+
+
+@pytest.mark.gui
 def test_pipeline_tab_owns_hot_surface_subscriptions(tk_root: tk.Tk) -> None:
     harness = GuiV2Harness(tk_root)
     try:
