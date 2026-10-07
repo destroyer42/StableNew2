@@ -56,7 +56,7 @@ generic read-only `add_listener` seam (`main_window_v2._wire_prompt_model_target
 * **Templates and Matrix** stay available and unchanged; the analysis reads the current rendered prompt (template + free text) and
   does not expand Matrix values.
 * **Dialect diagnostics** (natural-language targets only, advisory, never blocking): explicit weighted-attention syntax
-  `(phrase:1.2)`, the upper-case A1111 `BREAK` separator, and a run of at least 3 distinct quality-tag boilerplate terms
+  `(phrase:1.2)` (a decimal weight directly after the colon; key/value prose such as `(ratio: 2)` is not weighted syntax), the upper-case A1111 `BREAK` separator, and a run of at least 3 distinct quality-tag boilerplate terms
   (`QUALITY_TAG_THRESHOLD`). `<lora:...>` tokens and `[[matrix]]` markers are not prose; a lone ordinary phrase never fires.
   Messages say the prompt is preserved; the explicit read-only "Adapt for Target" preview is PR-IMG-130C.
 * **No scan from a model switch**: the compatibility analysis and `on_model_projection` never resolve the Style Consistency selection

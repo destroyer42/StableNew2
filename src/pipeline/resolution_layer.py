@@ -4,11 +4,23 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
+from src.image_backends.forge_klein_lora import LoraResolver
+from src.image_backends.model_policy import ModelPolicy
 from src.pipeline.prompt_pack_parser import PackRow
+from src.prompting.prompt_adaptation import (
+    KIND_ACTOR,
+    KIND_PACK,
+    KIND_STYLE,
+    LoraContribution,
+    PromptAdaptationPlan,
+    StructuredPromptInput,
+    TriggerContribution,
+    adapt_structured_prompt,
+)
 from src.utils.embedding_prompt_utils import render_embedding_reference
 from src.utils.prompt_pack_utils import resolve_matrix_slot_value
 
@@ -189,6 +201,269 @@ class ResolvedPipelineConfig:
         }
 
 
+@dataclass(frozen=True)
+class PackPromptIntent:
+    """Immutable, structured PromptPack prompt intent *before* any executable string exists (PR-PROMPT-140).
+
+    Matrix tokens are already expanded. Every contribution keeps its role and ownership, so a target-aware adaptation can
+    drop a LoRA together with the trigger phrase it structurally owns, and a negative-channel omission can drop every
+    negative component, all before :func:`render_pack_intent` produces the final strings. The render order is exactly
+    the historical one (positive: embeddings, triggers, quality, subject, LoRA tokens; negative: global, pack negative,
+    negative embeddings, negative phrases, safety).
+    """
+
+    quality: str
+    subject: str
+    positive_embeddings: tuple[tuple[str, float], ...] = ()
+    negative_embeddings: tuple[tuple[str, float], ...] = ()
+    #: Execution order, de-duplicated by name (first wins): actor LoRAs, PromptPack-row LoRAs, Style Consistency.
+    loras: tuple[LoraContribution, ...] = ()
+    #: Render order: distinct actor trigger phrases, then the Style Consistency trigger phrase.
+    triggers: tuple[TriggerContribution, ...] = ()
+    pack_negative: str = ""
+    global_negative: str = ""
+    apply_global_negative: bool = True
+    negative_phrases: tuple[str, ...] = ()
+    safety_negative: str = ""
+    #: ``False`` once a target's policy omitted the whole negative channel: nothing negative is rendered.
+    negative_channel: bool = True
+
+    @property
+    def global_negative_applied(self) -> bool:
+        return self.negative_channel and bool(self.apply_global_negative and self.global_negative)
+
+
+@dataclass(frozen=True)
+class AdaptedPackIntent:
+    """A target-adapted :class:`PackPromptIntent` and the content-free plan that explains it."""
+
+    intent: PackPromptIntent
+    plan: PromptAdaptationPlan
+
+
+def _substitute_matrix_tokens(template: str, slots: Mapping[str, str] | None) -> str:
+    if not template or not slots:
+        return template
+
+    def replace(match: re.Match[str]) -> str:
+        name = match.group(1)
+        resolved = resolve_matrix_slot_value(name, dict(slots))
+        return resolved if resolved is not None else match.group(0)
+
+    return MATRIX_TOKEN_RE.sub(replace, template)
+
+
+def _actor_lora_name(actor: Mapping[str, Any]) -> str:
+    lora_name = str(actor.get("lora_name") or "").strip()
+    if not lora_name:
+        lora_path = str(actor.get("lora_path") or "").strip()
+        lora_name = Path(lora_path).stem if lora_path else ""
+    return lora_name
+
+
+def _float_or_default(value: Any) -> float:
+    try:
+        return float(value or 1.0)
+    except (TypeError, ValueError):
+        return 1.0
+
+
+def resolve_pack_intent(
+    *,
+    pack_row: PackRow,
+    matrix_slot_values: Mapping[str, str] | None = None,
+    actor_resolutions: Iterable[Mapping[str, Any]] | None = None,
+    style_lora: Mapping[str, Any] | None = None,
+    pack_negative: str | None = None,
+    global_negative: str = "",
+    apply_global_negative: bool = True,
+    safety_negative: str = "",
+) -> PackPromptIntent:
+    """Structure the authored PromptPack row: Matrix expansion plus ownership, with no rendering."""
+
+    subject = _substitute_matrix_tokens(pack_row.subject_template, matrix_slot_values)
+    quality = _substitute_matrix_tokens(pack_row.quality_line, matrix_slot_values)
+    actors = list(actor_resolutions or [])
+
+    raw_loras: list[tuple[str, float, str]] = []
+    for actor in actors:
+        name = _actor_lora_name(actor)
+        if name:
+            raw_loras.append((name, _float_or_default(actor.get("weight")), KIND_ACTOR))
+    raw_loras.extend((name, weight, KIND_PACK) for name, weight in pack_row.lora_tags)
+    raw_loras.extend((name, weight, KIND_STYLE) for name, weight in _style_lora_tags(style_lora))
+    loras: list[LoraContribution] = []
+    seen: set[str] = set()
+    for raw_name, raw_weight, kind in raw_loras:
+        name = str(raw_name or "").strip()
+        if not name or name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        try:
+            weight = float(raw_weight)
+        except (TypeError, ValueError):
+            weight = 1.0
+        loras.append(LoraContribution(name, weight, kind))
+
+    # Distinct actor trigger phrases (case-insensitive), each owned by the actor LoRA(s) that carry it. A phrase that
+    # any LoRA-less actor also carries is not LoRA-owned (it must survive any LoRA omission).
+    phrases: dict[str, tuple[str, list[str], bool]] = {}
+    for actor in actors:
+        phrase = str(actor.get("trigger_phrase") or "").strip()
+        if not phrase:
+            continue
+        text, owners, unowned = phrases.get(phrase.lower(), (phrase, [], False))
+        lora_name = _actor_lora_name(actor)
+        if lora_name:
+            owners.append(lora_name)
+        else:
+            unowned = True
+        phrases[phrase.lower()] = (text, owners, unowned)
+    triggers = [
+        TriggerContribution(text, KIND_ACTOR, () if unowned else tuple(owners))
+        for text, owners, unowned in phrases.values()
+    ]
+    style_phrase = _style_trigger_phrase(style_lora)
+    if style_phrase:
+        style_tags = _style_lora_tags(style_lora)
+        triggers.append(TriggerContribution(style_phrase, KIND_STYLE, (style_tags[0][0],) if style_tags else ()))
+
+    return PackPromptIntent(
+        quality=quality,
+        subject=subject,
+        positive_embeddings=pack_row.embeddings,
+        negative_embeddings=pack_row.negative_embeddings,
+        loras=tuple(loras),
+        triggers=tuple(triggers),
+        pack_negative=pack_negative or "",
+        global_negative=global_negative or "",
+        apply_global_negative=bool(apply_global_negative),
+        negative_phrases=tuple(phrase for phrase in pack_row.negative_phrases if phrase),
+        safety_negative=safety_negative or "",
+    )
+
+
+def adapt_pack_intent(
+    intent: PackPromptIntent,
+    policy: ModelPolicy,
+    *,
+    lora_resolver: LoraResolver | None = None,
+    optimizer_enabled: bool = False,
+) -> AdaptedPackIntent:
+    """Run the one 130C rule implementation over the structured intent (compile-safe) and re-assemble it.
+
+    No rule lives here: this only maps components in and back out by role. The result is still a structured intent.
+    """
+
+    negative_slots: list[str] = []
+    negative_texts: list[str] = []
+    if intent.apply_global_negative and intent.global_negative:
+        negative_slots.append("global")
+        negative_texts.append(intent.global_negative.strip())
+    if intent.pack_negative:
+        negative_slots.append("pack")
+        negative_texts.append(intent.pack_negative.strip())
+    negative_slots.extend("phrase" for _ in intent.negative_phrases)
+    negative_texts.extend(intent.negative_phrases)
+    if intent.safety_negative:
+        negative_slots.append("safety")
+        negative_texts.append(intent.safety_negative)
+
+    result = adapt_structured_prompt(
+        policy,
+        StructuredPromptInput(
+            positive_prose=(intent.quality, intent.subject),
+            negative_prose=tuple(negative_texts),
+            positive_embeddings=intent.positive_embeddings,
+            negative_embeddings=intent.negative_embeddings,
+            loras=intent.loras,
+            triggers=intent.triggers,
+            optimizer_enabled=optimizer_enabled,
+            global_negative_present=bool(intent.apply_global_negative and intent.global_negative.strip()),
+        ),
+        lora_resolver=lora_resolver,
+    )
+    global_negative = intent.global_negative
+    pack_negative = intent.pack_negative
+    safety_negative = intent.safety_negative
+    phrases: list[str] = []
+    for slot, text in zip(negative_slots, result.negative_prose, strict=True):
+        if slot == "global":
+            global_negative = text
+        elif slot == "pack":
+            pack_negative = text
+        elif slot == "safety":
+            safety_negative = text
+        else:
+            phrases.append(text)
+    quality, subject = result.positive_prose
+    return AdaptedPackIntent(
+        replace(
+            intent,
+            quality=quality,
+            subject=subject,
+            positive_embeddings=result.positive_embeddings,
+            negative_embeddings=result.negative_embeddings,
+            loras=result.loras,
+            triggers=result.triggers,
+            pack_negative=pack_negative,
+            global_negative=global_negative,
+            negative_phrases=tuple(phrases),
+            safety_negative=safety_negative,
+            negative_channel=result.negative_channel,
+        ),
+        result.plan,
+    )
+
+
+def render_pack_intent(
+    intent: PackPromptIntent, *, max_preview_length: int = MAX_PREVIEW_PROMPT_LENGTH
+) -> PromptResolution:
+    """Render a (possibly adapted) structured intent to the executable strings, in the historical order."""
+
+    lora_tokens = " ".join(f"<lora:{lora.name}:{lora.weight}>" for lora in intent.loras)
+    positive_parts: list[str] = []
+    positive_parts.extend(render_embedding_reference(name, weight) for name, weight in intent.positive_embeddings)
+    if intent.triggers:
+        positive_parts.append(", ".join(trigger.text for trigger in intent.triggers))
+    if intent.quality:
+        positive_parts.append(intent.quality)
+    if intent.subject:
+        positive_parts.append(intent.subject)
+    if lora_tokens:
+        positive_parts.append(lora_tokens)
+    positive = " ".join(part for part in positive_parts if part).strip()
+
+    # BUGFIX: Ensure positive prompt is never empty - prevents negative becoming positive
+    if not positive:
+        positive = "professional photo, high quality"
+
+    negative_parts: list[str] = []
+    global_applied = intent.global_negative_applied
+    if intent.negative_channel:
+        if global_applied:
+            negative_parts.append(intent.global_negative.strip())
+        # Pack negative BEFORE the pack row's negative embeddings/phrases (historical order).
+        if intent.pack_negative:
+            negative_parts.append(intent.pack_negative.strip())
+        negative_parts.extend(render_embedding_reference(name, weight) for name, weight in intent.negative_embeddings)
+        negative_parts.extend(phrase for phrase in intent.negative_phrases if phrase)
+        if intent.safety_negative:
+            negative_parts.append(intent.safety_negative)
+    negative = ", ".join(part for part in negative_parts if part).strip()
+
+    return PromptResolution(
+        positive=positive,
+        negative=negative,
+        positive_preview=_truncate(positive, max_preview_length),
+        negative_preview=_truncate(negative, max_preview_length),
+        positive_embeddings=intent.positive_embeddings,
+        negative_embeddings=intent.negative_embeddings,
+        lora_tags=tuple((lora.name, lora.weight) for lora in intent.loras),
+        global_negative_applied=global_applied,
+    )
+
+
 class UnifiedPromptResolver:
     """Deterministic merger for GUI prompt inputs, pack prompts, and negatives."""
 
@@ -246,15 +521,7 @@ class UnifiedPromptResolver:
 
     @staticmethod
     def _substitute_matrix_tokens(template: str, slots: Mapping[str, str] | None) -> str:
-        if not template or not slots:
-            return template
-
-        def replace(match: re.Match[str]) -> str:
-            name = match.group(1)
-            resolved = resolve_matrix_slot_value(name, dict(slots))
-            return resolved if resolved is not None else match.group(0)
-
-        return MATRIX_TOKEN_RE.sub(replace, template)
+        return _substitute_matrix_tokens(template, slots)
 
     def resolve_from_pack(
         self,
@@ -267,74 +534,29 @@ class UnifiedPromptResolver:
         global_negative: str = "",
         apply_global_negative: bool = True,
     ) -> PromptResolution:
-        # Apply matrix token substitution to both quality_line and subject_template
-        subject = self._substitute_matrix_tokens(pack_row.subject_template, matrix_slot_values)
-        quality = self._substitute_matrix_tokens(pack_row.quality_line, matrix_slot_values)
+        """Compatibility wrapper: structure the row, then render it (no target adaptation)."""
 
-        actor_trigger_phrases = list(_actor_trigger_phrases(actor_resolutions))
-        style_trigger_phrase = _style_trigger_phrase(style_lora)
-        if style_trigger_phrase:
-            actor_trigger_phrases.append(style_trigger_phrase)
-        merged_lora_tags = _dedupe_lora_tags(
-            list(_actor_lora_tags(actor_resolutions))
-            + list(pack_row.lora_tags)
-            + list(_style_lora_tags(style_lora))
+        return render_pack_intent(
+            resolve_pack_intent(
+                pack_row=pack_row,
+                matrix_slot_values=matrix_slot_values,
+                actor_resolutions=actor_resolutions,
+                style_lora=style_lora,
+                pack_negative=pack_negative,
+                global_negative=global_negative,
+                apply_global_negative=apply_global_negative,
+                safety_negative=self._safety_negative,
+            ),
+            max_preview_length=self._max_preview_length,
         )
-        lora_tokens = " ".join(f"<lora:{name}:{weight}>" for name, weight in merged_lora_tags)
-        positive_parts: list[str] = []
-        # Render embeddings with weights
-        if pack_row.embeddings:
-            positive_parts.extend(
-                render_embedding_reference(name, weight) for name, weight in pack_row.embeddings
-            )
-        if actor_trigger_phrases:
-            positive_parts.append(", ".join(actor_trigger_phrases))
-        if quality:  # Use substituted quality_line
-            positive_parts.append(quality)
-        if subject:
-            positive_parts.append(subject)
-        if lora_tokens:
-            positive_parts.append(lora_tokens)
 
-        positive = " ".join(part for part in positive_parts if part).strip()
+    def resolve_intent(self, **kwargs: Any) -> PackPromptIntent:
+        """:func:`resolve_pack_intent` with this resolver's safety negative."""
 
-        # BUGFIX: Ensure positive prompt is never empty - prevents negative becoming positive
-        if not positive:
-            positive = "professional photo, high quality"
+        return resolve_pack_intent(safety_negative=self._safety_negative, **kwargs)
 
-        negative_parts = []
-        global_applied = False
-        if apply_global_negative and global_negative:
-            negative_parts.append(global_negative.strip())
-            global_applied = True
-        # Fix: Add pack_negative BEFORE pack row negative embeddings/phrases
-        if pack_negative:
-            negative_parts.append(pack_negative.strip())
-        # Fix: Wrap negative embeddings in <embedding:> syntax
-        if pack_row.negative_embeddings:
-            negative_parts.extend(
-                render_embedding_reference(name, weight)
-                for name, weight in pack_row.negative_embeddings
-            )
-        negative_parts.extend(phrase for phrase in pack_row.negative_phrases if phrase)
-        if self._safety_negative:
-            negative_parts.append(self._safety_negative)
-
-        negative = ", ".join(part for part in negative_parts if part).strip()
-
-        positive_preview = _truncate(positive, self._max_preview_length)
-        negative_preview = _truncate(negative, self._max_preview_length)
-
-        return PromptResolution(
-            positive=positive,
-            negative=negative,
-            positive_preview=positive_preview,
-            negative_preview=negative_preview,
-            positive_embeddings=pack_row.embeddings,
-            negative_embeddings=pack_row.negative_embeddings,
-            lora_tags=merged_lora_tags,
-            global_negative_applied=global_applied,
-        )
+    def render_intent(self, intent: PackPromptIntent) -> PromptResolution:
+        return render_pack_intent(intent, max_preview_length=self._max_preview_length)
 
 
 class UnifiedConfigResolver:
