@@ -2,9 +2,10 @@
 
 Date: 2026-10-07 (America/New_York)
 
-Disposition: **LOCALLY VERIFIED / READY FOR PUBLICATION REVIEW / UNPUBLISHED**.
-Deterministic contracts, two clean physical observations and the final local gate
-pass. Required hosted CI/integration are pending; publication is not authorized.
+Disposition: **PUBLISHED / HOSTED CI GREEN / awaiting integration**.
+[PR #64](https://github.com/destroyer42/StableNew2/pull/64) is published.
+Deterministic contracts, two clean physical observations, the final local gate
+and required hosted Python 3.14 CI pass. No integration or merge has occurred.
 
 ## Execution Profile + Model/Reasoning Recommendation
 
@@ -202,9 +203,36 @@ tests**, 3.11 s) and required smoke (**371 passed**, 40.67 s). Both isolation
 checks report repository unchanged. The complete log is `pr_gate.log` in the
 evidence directory. Final aggregate and staged whitespace checks passed.
 Subsequent edits are documentation only and do not invalidate source/runtime
-evidence. Required hosted Python 3.14 CI remains unrun; pushing/opening a PR
-needs separate authorization. Recommendation: ready for owner-authorized branch
-publication and required CI, with no local repair blocker.
+evidence. The separate hosted validation below confirms the accepted source.
+Recommendation: proceed with independent review and owner-authorized integration
+when appropriate; this documentation follow-up does not authorize merge.
+
+### Hosted validation and documentation evidence reuse
+
+[Workflow run 37618855054](https://github.com/destroyer42/StableNew2/actions/runs/37618855054)
+passed on accepted production/test head
+`efbcff51cc9f5bc9ae427a00a7aed486b9a1a480`:
+
+- `required`: SUCCESS on Python 3.14; hosted isolated collection **5,658**;
+  required positive-list **371 passed**.
+- `affected`: SUCCESS; **2,367 passed / 16 skipped**, with **one existing
+  intentional shutdown-thread warning** from
+  `test_clean_shutdown.py::TestRealWorldShutdownScenarios::test_shutdown_with_exception_in_thread`
+  (`PytestUnhandledThreadExceptionWarning`, `CrashingWorker`).
+- Controller ratchets, Ruff, mypy and checkout cleanliness: PASS.
+- `full-suite-shard` and `full-suite`: skipped by normal validation routing,
+  not failed or asserted as executed.
+
+Hosted collection/results are distinct from the local 5,675 collection and 371
+smoke results above. No production/test source has changed since the accepted
+head. This follow-up corrects only current publication/CI wording in `STATUS.md`
+and this report. Physical acceptance, the 76 focused tests, the full canonical
+local gate and full census are not rerun; only cheap documentation/whitespace
+checks are used. Normal hosted routing may reuse the prior green exact-source
+evidence for the docs-only delta.
+
+At the documentation evidence check, PR #64 was open and mergeable with no
+reviews, comments or review threads. Integration remains pending.
 
 Changed-file inventory:
 
@@ -214,7 +242,7 @@ Changed-file inventory:
 - `tests/services/test_operator_readiness_service.py`: narrow-call/semantic/error contracts.
 - This package report: acceptance and evidence.
 - `docs/CODEX_MAP.md`: the narrow repository projection seam and tests.
-- `STATUS.md`: locally verified/unpublished truth, without claiming integration.
+- `STATUS.md`: published/hosted-CI-green truth, without claiming integration.
 
 Retained debt: Python entrypoint version guard, optional Forge hypernetwork 404
 fail-fast, Learning fallback-log cleanup, duplicate diagnostics ZIP names and
