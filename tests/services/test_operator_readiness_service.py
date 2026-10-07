@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
@@ -14,28 +13,23 @@ from src.video.svd_capabilities import SVDPreflight
 from src.video.svd_config import SVDConfig
 
 
-@dataclass
-class _Metadata:
-    last_control_action: str | None = None
-
-
-@dataclass
-class _Job:
-    execution_metadata: _Metadata
-
-
 class _Repository:
-    def __init__(self, *, count: int = 0, jobs: list[_Job] | None = None) -> None:
+    def __init__(self, *, count: int = 0, interrupted_count: int = 0) -> None:
         self._count = count
-        self._jobs = list(jobs or [])
+        self._interrupted_count = interrupted_count
+        self.projection_actions: list[str] = []
         self.submission_calls = 0
         self.recovery_calls = 0
 
     def count(self) -> int:
         return self._count
 
-    def list_job_models(self) -> list[_Job]:
-        return list(self._jobs)
+    def count_jobs_with_last_control_action(self, action: str) -> int:
+        self.projection_actions.append(action)
+        return self._interrupted_count
+
+    def list_job_models(self):
+        raise AssertionError("Readiness must not hydrate persisted jobs")
 
     def submit(self, *_args, **_kwargs) -> None:
         self.submission_calls += 1
@@ -254,10 +248,7 @@ def test_promptpack_and_output_failures_are_projected_without_writes(tmp_path: P
 def test_collection_reads_recovery_metadata_without_queue_or_repository_mutation(
     tmp_path: Path,
 ) -> None:
-    repository = _Repository(
-        count=2,
-        jobs=[_Job(_Metadata("restart_interrupted_action_required")), _Job(_Metadata())],
-    )
+    repository = _Repository(count=2, interrupted_count=1)
     snapshot = _service(tmp_path, repository=repository).collect()
 
     storage = snapshot.record_for("job_storage")
@@ -269,3 +260,38 @@ def test_collection_reads_recovery_metadata_without_queue_or_repository_mutation
     assert "Replay Job intentionally" in recovery.operator_actions[0]
     assert repository.submission_calls == 0
     assert repository.recovery_calls == 0
+    assert repository.projection_actions == ["restart_interrupted_action_required"]
+
+
+@pytest.mark.parametrize("count", [0, 1, 3])
+def test_recovery_projection_preserves_count_state_and_text(tmp_path: Path, count: int) -> None:
+    repository = _Repository(count=10_926, interrupted_count=count)
+    record = _service(tmp_path, repository=repository).collect().record_for("queue_recovery")
+
+    assert repository.projection_actions == ["restart_interrupted_action_required"]
+    if count:
+        assert record.state is OperatorReadinessState.ACTION_REQUIRED
+        assert record.summary == (
+            f"{count} interrupted job{' requires' if count == 1 else 's require'} operator review."
+        )
+        assert record.blocking_reasons == ("INTERRUPTED_RESTART_ACTION_REQUIRED",)
+        assert "Replay Job intentionally" in record.operator_actions[0]
+    else:
+        assert record.state is OperatorReadinessState.OPTIONAL
+        assert record.summary == "No interrupted-restart action-required records are currently present."
+        assert record.blocking_reasons == ()
+
+
+def test_recovery_projection_failure_is_unknown_without_hydration_fallback(tmp_path: Path) -> None:
+    class FailingRepository(_Repository):
+        def count_jobs_with_last_control_action(self, action: str) -> int:
+            self.projection_actions.append(action)
+            raise RuntimeError("metadata query failed")
+
+    repository = FailingRepository()
+    record = _service(tmp_path, repository=repository).collect().record_for("queue_recovery")
+
+    assert record.state is OperatorReadinessState.UNKNOWN
+    assert "metadata query failed" in record.summary
+    assert repository.projection_actions == ["restart_interrupted_action_required"]
+    assert repository.submission_calls == repository.recovery_calls == 0

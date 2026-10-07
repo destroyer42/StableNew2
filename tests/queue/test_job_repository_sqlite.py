@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 from dataclasses import replace
 from pathlib import Path
@@ -295,3 +296,117 @@ def test_failed_transition_rolls_back_without_partial_state(tmp_path: Path) -> N
     assert persisted is not None
     assert persisted.status == JobStatus.QUEUED
     assert persisted.completed_at is None
+
+
+_RECOVERY_ACTION = "restart_interrupted_action_required"
+
+
+def _forbid_hydration(monkeypatch, repository: JobRepository) -> None:
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("Scalar recovery projection must not hydrate jobs/NJRs")
+
+    monkeypatch.setattr(repository, "_row_to_job", forbidden)
+    monkeypatch.setattr("src.utils.snapshot_builder_v2.normalized_job_from_snapshot", forbidden)
+
+
+def _metadata_only_authorizer(action, table, column, *_args):
+    if action == sqlite3.SQLITE_READ and table == "jobs" and column != "execution_metadata":
+        return sqlite3.SQLITE_DENY
+    return sqlite3.SQLITE_OK
+
+
+@pytest.mark.parametrize("count", [0, 1, 3])
+def test_control_action_count_is_exact_and_read_only(tmp_path: Path, monkeypatch, count: int) -> None:
+    with JobRepository(tmp_path / "jobs.sqlite3") as repository:
+        queue = JobQueue(repository=repository)
+        for index in range(count):
+            job = _job(f"recovered-{index}")
+            job.execution_metadata.last_control_action = _RECOVERY_ACTION
+            queue.submit(job)
+        queue.submit(_job("unrelated"))
+        before = [tuple(row) for row in repository._connection.execute("SELECT * FROM jobs")]
+        counts = {status: repository.count([status]) for status in JobStatus}
+        changes = repository._connection.total_changes
+        _forbid_hydration(monkeypatch, repository)
+        repository._connection.set_authorizer(_metadata_only_authorizer)
+        try:
+            assert repository.count_jobs_with_last_control_action(_RECOVERY_ACTION) == count
+        finally:
+            repository._connection.set_authorizer(None)
+        assert repository._connection.total_changes == changes
+        assert [tuple(row) for row in repository._connection.execute("SELECT * FROM jobs")] == before
+        assert {status: repository.count([status]) for status in JobStatus} == counts
+
+
+@pytest.mark.parametrize(
+    "metadata",
+    [
+        "", "null", "{}", "[]", '"restart_interrupted_action_required"',
+        '{"last_control_action":null}', '{"last_control_action":false}',
+        '{"last_control_action":123}', '{"last_control_action":"other_action"}',
+        '{"last_control_action":"restart_interrupted_action_required_suffix"}',
+        '{"note":"restart_interrupted_action_required"}',
+        '{"nested":{"last_control_action":"restart_interrupted_action_required"}}',
+        '[{"last_control_action":"restart_interrupted_action_required"}]',
+        '{"last_control_action":"restart_interrupted_action_required"',
+    ],
+)
+def test_control_action_count_excludes_missing_null_malformed_and_unrelated_metadata(
+    tmp_path: Path, monkeypatch, metadata: str,
+) -> None:
+    with JobRepository(tmp_path / "jobs.sqlite3") as repository:
+        JobQueue(repository=repository).submit(_job("metadata"))
+        repository._connection.execute(
+            "UPDATE jobs SET execution_metadata = ? WHERE job_id = ?", (metadata, "metadata")
+        )
+        _forbid_hydration(monkeypatch, repository)
+        assert repository.count_jobs_with_last_control_action(_RECOVERY_ACTION) == 0
+
+
+def test_control_action_count_empty_repository(tmp_path: Path, monkeypatch) -> None:
+    with JobRepository(tmp_path / "jobs.sqlite3") as repository:
+        _forbid_hydration(monkeypatch, repository)
+        assert repository.count_jobs_with_last_control_action(_RECOVERY_ACTION) == 0
+
+
+def test_control_action_count_at_workstation_scale_reads_only_metadata(
+    tmp_path: Path, monkeypatch,
+) -> None:
+    with JobRepository(tmp_path / "jobs.sqlite3") as repository:
+        JobQueue(repository=repository).submit(_job("template"))
+        template = dict(repository._connection.execute("SELECT * FROM jobs").fetchone())
+        columns = tuple(template)
+        rows = []
+        expected = 0
+        for index in range(10_925):
+            action = _RECOVERY_ACTION if index % 701 == 0 else "unrelated"
+            expected += action == _RECOVERY_ACTION
+            row = {
+                **template,
+                "job_id": f"scale-{index}",
+                "status": "queued" if index < 33 else "completed",
+                # Poison unrelated payloads so accidental reconstruction cannot be hidden.
+                "njr_snapshot": "not an NJR", "result_json": "not a result",
+                "artifact_references": "not artifacts",
+                "execution_metadata": json.dumps({"last_control_action": action}),
+            }
+            rows.append(tuple(row[column] for column in columns))
+        with repository.transaction() as connection:
+            connection.executemany(
+                f"INSERT INTO jobs ({','.join(columns)}) VALUES ({','.join('?' for _ in columns)})",
+                rows,
+            )
+        assert repository.count() == 10_926
+        assert repository.count([JobStatus.QUEUED]) == 34
+        changes = repository._connection.total_changes
+        queries = []
+        repository._connection.set_trace_callback(queries.append)
+        repository._connection.set_authorizer(_metadata_only_authorizer)
+        _forbid_hydration(monkeypatch, repository)
+        try:
+            assert repository.count_jobs_with_last_control_action(_RECOVERY_ACTION) == expected
+        finally:
+            repository._connection.set_authorizer(None)
+            repository._connection.set_trace_callback(None)
+        assert queries == ["SELECT execution_metadata FROM jobs"]
+        assert repository._connection.total_changes == changes

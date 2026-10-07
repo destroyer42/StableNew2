@@ -749,6 +749,17 @@ class JobRepository(JobHistoryStore):
         with self._lock:
             return int(self._connection.execute(sql, parameters).fetchone()["count"])
 
+    def count_jobs_with_last_control_action(self, action: str) -> int:
+        """Count exact execution-metadata actions without hydrating jobs or NJRs."""
+        with self._lock:
+            rows = self._connection.execute("SELECT execution_metadata FROM jobs").fetchall()
+        count = 0
+        for row in rows:
+            metadata = _json_loads(row["execution_metadata"], {})
+            if isinstance(metadata, dict) and metadata.get("last_control_action") == action:
+                count += 1
+        return count
+
     def identities(self) -> set[str]:
         with self._lock:
             rows = self._connection.execute("SELECT job_id FROM jobs").fetchall()
