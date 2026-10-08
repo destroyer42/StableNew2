@@ -78,6 +78,19 @@ The canonical model compile-policy seam runs after variable validation and
 override. If normalization erases the tested value or changes the frozen exact
 profile, the experiment is rejected before batch admission.
 
+New ordinary previews use `learning_executor_base/1` source evidence. Row/Matrix
+prompts are frozen as executor-base strings; global text and complete stage
+enablement are frozen separately in baseline config. The canonical executor
+applies globals once. Ordinary LoRA overrides keep workload and config prompts
+consistent. Ratings label base semantics and retain available final runtime
+readback separately; causality and recommendation rules are unchanged.
+
+Run refuses older Pack previews that may preapply enabled Global Negative, and
+saved previews missing frozen global policy, with **Rebuild Preview** guidance.
+It never rewrites saved execution semantics or reinterprets completed NJRs or
+replay. Safe complete-policy legacy previews remain usable unchanged. See
+`PR-LEARN-141_Ordinary_Global_Prompt_Correctness.md` for the precise legacy policy.
+
 ### 2.2 Explicit Model Comparison Study
 
 Snapshots without `study_type` retain `controlled_variable` behavior. The
