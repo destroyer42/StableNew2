@@ -95,8 +95,17 @@ adaptation evidence refuse preview; no runtime switching or geometry correction
 occurs. Fixed settings and effective prompt features may differ by target.
 
 The additive `learning_model_comparison/1` snapshot contract preserves exact
-profile/adaptation references, effective prompts/configuration, embeddings,
-LoRAs and shared evidence. Run validates frozen arms and constructs ordinary
+profile/adaptation references, target-adapted structured evidence, executor
+base prompts/configuration, frozen executor-owned Global Prompt policy,
+embeddings, LoRAs and shared evidence. Global-negative participation may remain
+in adaptation evidence, but base prompts do not preapply executor-owned terms.
+The canonical executor applies frozen globals; qualified Klein policy disables
+standard global/negative semantics. No mutable global source is read at Run.
+`prompt_semantics="executor_base_before_globals_and_optimizer"` distinguishes
+Preview inputs from literal backend strings. Ratings separately retain available
+executor `final_prompt` / `final_negative_prompt` in `runtime_prompt_readback`,
+including empty negatives, without inventing final strings when unavailable.
+Run validates frozen arms and constructs ordinary
 Learning NJRs without reopening source, reading live model evidence or
 rerunning adaptation. All arms compile before one atomic JobService admission.
 

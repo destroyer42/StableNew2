@@ -202,12 +202,12 @@ def test_target_adaptation_and_fixed_controls(tmp_path):
     )
     sdxl, klein = snapshot["model_comparison"]["arms"]
     assert not sdxl["prompt_adaptation"]["changed"]
-    assert "(red dress:1.2)" in sdxl["effective_positive_prompt"]
+    assert "(red dress:1.2)" in sdxl["executor_base_positive_prompt"]
     assert klein["prompt_adaptation"]["changed"]
-    assert "(red dress:1.2)" not in klein["effective_positive_prompt"]
-    assert "red dress" in klein["effective_positive_prompt"]
-    assert "(ratio: 2) (ratio:2)" in klein["effective_positive_prompt"]
-    assert klein["effective_negative_prompt"] == ""
+    assert "(red dress:1.2)" not in klein["executor_base_positive_prompt"]
+    assert "red dress" in klein["executor_base_positive_prompt"]
+    assert "(ratio: 2) (ratio:2)" in klein["executor_base_positive_prompt"]
+    assert klein["executor_base_negative_prompt"] == ""
     assert klein["effective_positive_embeddings"] == klein["effective_negative_embeddings"] == []
     assert sdxl["effective_lora_tags"] == [["row_prose", 0.8]]
     assert klein["effective_lora_tags"] == []
@@ -271,10 +271,10 @@ def test_run_freezes_source_rules_registry_live_cards_and_atomic_admission(tmp_p
     for index, record in enumerate(records):
         arm = snapshot["model_comparison"]["arms"][index]
         assert record.source.kind.value == "learning"
-        assert record.positive_prompt == arm["effective_positive_prompt"] == record.config["prompt"]
+        assert record.positive_prompt == arm["executor_base_positive_prompt"] == record.config["prompt"]
         assert (
             record.negative_prompt
-            == arm["effective_negative_prompt"]
+            == arm["executor_base_negative_prompt"]
             == record.config["negative_prompt"]
         )
         assert (
@@ -291,8 +291,8 @@ def test_run_freezes_source_rules_registry_live_cards_and_atomic_admission(tmp_p
 @pytest.mark.parametrize(
     "field",
     [
-        "effective_positive_prompt",
-        "effective_negative_prompt",
+        "executor_base_positive_prompt",
+        "executor_base_negative_prompt",
         "prompt_adaptation",
         "source_intent_sha256",
         "shared_geometry",
@@ -439,7 +439,7 @@ def test_ratings_persist_resume_review_and_cannot_recommend_models(tmp_path):
         assert metadata["causal_one_variable"] is False
         assert (
             row["base_config"]["prompt"]
-            == metadata["model_comparison"]["effective_positive_prompt"]
+            == metadata["model_comparison"]["executor_base_positive_prompt"]
         )
     assert controller._learning_record_writer.get_ratings_for_experiment(exp.experiment_id) == {
         "image-0.png": 5,
@@ -472,7 +472,7 @@ def test_disabled_negative_intent_is_retained_without_execution(tmp_path):
     assert source["apply_global_negative"] is False
     assert (
         "global negative"
-        not in snapshot["model_comparison"]["arms"][0]["effective_negative_prompt"]
+        not in snapshot["model_comparison"]["arms"][0]["executor_base_negative_prompt"]
     )
 
 

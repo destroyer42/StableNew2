@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import uuid
+from dataclasses import replace
 from datetime import datetime
 from typing import Any
 
@@ -18,6 +19,31 @@ CONTRACT = "learning_model_comparison/1"
 STUDY_TYPE = "model_comparison"
 COMPARISON_CLAIM = "target_envelope_preference"
 RECORD_KIND = "learning_model_comparison_rating"
+
+
+def executor_global_prompt_policy(config: dict) -> dict:
+    """Evidence projection of the canonical frozen config, without applying terms."""
+    from src.pipeline.global_prompt_policy import (
+        GLOBAL_NEGATIVE_STAGE_FLAGS,
+        GLOBAL_POSITIVE_STAGE_FLAG,
+        has_frozen_global_prompt_policy,
+    )
+
+    if not has_frozen_global_prompt_policy(config):
+        raise ValueError("Model Comparison requires a frozen executor global prompt policy")
+    return {
+        key: copy.deepcopy(config[key])
+        for key in (
+            "global_prompt_policy_source",
+            "global_positive_prompt",
+            "global_negative_prompt",
+        )
+    } | {
+        "pipeline": {
+            key: config["pipeline"][key]
+            for key in (GLOBAL_POSITIVE_STAGE_FLAG, *GLOBAL_NEGATIVE_STAGE_FLAGS)
+        }
+    }
 
 
 def digest(payload: Any) -> str:
@@ -208,7 +234,11 @@ def build_comparison_snapshot(
             raise ValueError(
                 f"Model Comparison arm {index + 1}: prompt adaptation evidence is incomplete; verify target/LoRA compatibility and rebuild preview"
             )
-        rendered = render_pack_intent(adapted.intent)
+        adapted_rendered = render_pack_intent(adapted.intent)
+        # Keep global participation in adaptation evidence, but leave application
+        # to the executor. This projection uses the canonical intent renderer;
+        # it neither parses prompts nor changes the frozen execution apply flags.
+        rendered = render_pack_intent(replace(adapted.intent, apply_global_negative=False))
         config = copy.deepcopy(baseline)
         for container in (config, config.setdefault("txt2img", {})):
             for key in ("model", "model_name", "sd_model_checkpoint", "base_model"):
@@ -252,8 +282,12 @@ def build_comparison_snapshot(
             "model_policy_context": policy_context(policy, model, "txt2img"),
             "prompt_adaptation": manifest,
             "effective_intent": pack_prompt_intent_to_dict(adapted.intent),
-            "effective_positive_prompt": rendered.positive,
-            "effective_negative_prompt": rendered.negative,
+            "adapted_positive_prompt": adapted_rendered.positive,
+            "adapted_negative_prompt": adapted_rendered.negative,
+            "executor_base_positive_prompt": rendered.positive,
+            "executor_base_negative_prompt": rendered.negative,
+            "executor_global_prompt_policy": executor_global_prompt_policy(config),
+            "prompt_semantics": "executor_base_before_globals_and_optimizer",
             "effective_positive_embeddings": list(rendered.positive_embeddings),
             "effective_negative_embeddings": list(rendered.negative_embeddings),
             "effective_lora_tags": list(rendered.lora_tags),
@@ -393,7 +427,21 @@ def frozen_arm(snapshot: dict, value: Any) -> dict:
             control = policy.control(name, "txt2img")
             if control.mode is ControlMode.FIXED and section.get(key) != control.value:
                 raise ValueError("Frozen effective settings differ from canonical fixed policy")
-        rendered = render_pack_intent(pack_prompt_intent_from_dict(arm["effective_intent"]))
+        effective_intent = pack_prompt_intent_from_dict(arm["effective_intent"])
+        adapted_rendered = render_pack_intent(effective_intent)
+        rendered = render_pack_intent(replace(effective_intent, apply_global_negative=False))
+        if (
+            arm.get("executor_global_prompt_policy") != executor_global_prompt_policy(config)
+            or arm.get("prompt_semantics") != "executor_base_before_globals_and_optimizer"
+            or arm.get("adapted_positive_prompt") != adapted_rendered.positive
+            or arm.get("adapted_negative_prompt") != adapted_rendered.negative
+        ):
+            raise ValueError("Frozen adapted/base/global prompt evidence mismatch")
+        if policy.feature("negative_prompt").support is Support.UNSUPPORTED and (
+            config["pipeline"]["apply_global_negative_txt2img"]
+            or config["pipeline"]["apply_global_positive_txt2img"]
+        ):
+            raise ValueError("Frozen target cannot execute standard global prompt semantics")
         if policy.feature("negative_prompt").support is Support.UNSUPPORTED and rendered.negative:
             raise ValueError("Frozen target cannot execute a negative channel")
         if policy.feature("embeddings").support is Support.UNSUPPORTED and (
@@ -404,8 +452,8 @@ def frozen_arm(snapshot: dict, value: Any) -> dict:
         if section.get("lora_strengths") != declarations:
             raise ValueError("Frozen LoRA declarations differ from execution")
         for key, actual in (
-            ("effective_positive_prompt", rendered.positive),
-            ("effective_negative_prompt", rendered.negative),
+            ("executor_base_positive_prompt", rendered.positive),
+            ("executor_base_negative_prompt", rendered.negative),
             (
                 "effective_positive_embeddings",
                 [list(item) for item in rendered.positive_embeddings],
@@ -437,14 +485,13 @@ def frozen_arm(snapshot: dict, value: Any) -> dict:
             for key in ("policy_id", "family", "evidence", "profile_ref")
         ):
             raise ValueError("Frozen adaptation target mismatch")
-        effective_intent = pack_prompt_intent_from_dict(arm["effective_intent"])
         expected_counts = {
             "positive_embeddings": len(rendered.positive_embeddings),
             "negative_embeddings": len(rendered.negative_embeddings),
             "loras": sum(lora.kind != "style" for lora in effective_intent.loras),
             "style_lora": sum(lora.kind == "style" for lora in effective_intent.loras),
             "negative_present": bool(
-                rendered.negative.strip()
+                adapted_rendered.negative.strip()
                 and (
                     effective_intent.pack_negative
                     or effective_intent.global_negative_applied
@@ -519,8 +566,8 @@ def materialize_njr(
         workload_kind=WorkloadKind.IMAGE,
         source=SourceDescriptor(kind=SourceKind.LEARNING, display_name=snapshot["display_name"]),
         workload=ImageWorkloadSpec(
-            positive_prompt=arm["effective_positive_prompt"],
-            negative_prompt=arm["effective_negative_prompt"],
+            positive_prompt=arm["executor_base_positive_prompt"],
+            negative_prompt=arm["executor_base_negative_prompt"],
             config=config,
             images_per_prompt=snapshot["images_per_value"],
             metadata=metadata,
@@ -568,7 +615,9 @@ def materialize_njr(
     return record
 
 
-def rating_classification(snapshot: dict, value: Any) -> dict:
+def rating_classification(
+    snapshot: dict, value: Any, execution_metadata: dict | None = None
+) -> dict:
     if snapshot.get("study_type") != STUDY_TYPE:
         return {"record_kind": "learning_experiment_rating"}
     arm = frozen_arm(snapshot, value)
@@ -579,7 +628,22 @@ def rating_classification(snapshot: dict, value: Any) -> dict:
         "causal_one_variable": False,
         "model_comparison": arm,
         "prompt_adaptation": arm["prompt_adaptation"],
+        "prompt_semantics": arm["prompt_semantics"],
+        "runtime_prompt_readback": dict(
+            (execution_metadata or {}).get("runtime_prompt_readback") or {}
+        ),
     }
+
+
+def runtime_prompt_readback(variant_payload: dict, metadata: dict) -> dict:
+    """Retain executor truth only when supplied, including an empty negative channel."""
+    readback = {}
+    for key in ("final_prompt", "final_negative_prompt"):
+        for source in (variant_payload, metadata):
+            if key in source and isinstance(source[key], str):
+                readback[key] = source[key]
+                break
+    return readback
 
 
 def preview_summary(snapshot: dict) -> str:

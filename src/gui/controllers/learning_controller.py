@@ -1830,6 +1830,9 @@ class LearningController:
                 reason = "" if controlled else "seed_vector_mismatch"
         # The tested variable must also have executed as requested, and every
         # comparable variant must have run in the same backend launch profile.
+        from src.learning.model_comparison import runtime_prompt_readback
+
+        prompt_readback = runtime_prompt_readback(variant_payload, metadata)
         final_prompt = variant_payload.get("final_prompt") or metadata.get("final_prompt")
         variable_reason = validate_executed_lora(
             getattr(variant, "executed_config", None), final_prompt
@@ -1850,6 +1853,7 @@ class LearningController:
             **dict(getattr(variant, "execution_metadata", {}) or {}),
             "variable_validation_reason": variable_reason or "valid",
             "executed_final_prompt": str(final_prompt or ""),
+            "runtime_prompt_readback": prompt_readback,
             "runtime_launch_profile": launch_profile,
             "requested_seed_policy": dict(policy or {}),
             "actual_all_seeds": actual_vector,
@@ -2186,7 +2190,9 @@ class LearningController:
         base_config = dict(executed_config or snapshot.get("baseline_config") or {})
         from src.learning.model_comparison import rating_classification
 
-        classification = rating_classification(snapshot, target_variant.param_value)
+        classification = rating_classification(
+            snapshot, target_variant.param_value, target_variant.execution_metadata
+        )
         base_config.update(
             {
                 "prompt": str(executed_config.get("prompt", snapshot.get("prompt_text") or experiment.prompt_text)),

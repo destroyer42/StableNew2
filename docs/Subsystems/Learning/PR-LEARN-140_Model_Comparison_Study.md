@@ -16,7 +16,8 @@ frozen-arm materialization to `src/learning/model_comparison.py`, stores the
 existing execution snapshot, coordinates ordinary atomic admission, and
 classifies ratings through the helper. Candidate eligibility, geometry/backend
 gates, adaptation and semantic consistency stay in the helper. The controller
-has 4,016 physical lines versus 3,960 at the authoritative base (+56). No
+also forwards existing executor final positive/negative readback into rating
+evidence. No global merge or prompt interpretation belongs in the controller. No
 `src/controller/*` surface or controller ceiling changes.
 
 ## Study meaning and mode isolation
@@ -110,19 +111,42 @@ Every arm freezes:
 - candidate index and path-free selected identity;
 - exact model policy context and profile reference;
 - the complete `prompt_adaptation/1` manifest, including its ruleset version;
-- effective structured intent, positive/negative strings, embeddings and LoRAs;
+- target-adapted structured `effective_intent`, `adapted_positive_prompt` and
+  `adapted_negative_prompt` evidence, with global-negative participation retained;
+- `executor_base_positive_prompt` and `executor_base_negative_prompt`, rendered
+  canonically without preapplying executor-owned global terms;
+- `executor_global_prompt_policy`, an evidence projection of the frozen config
+  texts, enablement flags and `frozen_njr` source marker;
+- retained effective embeddings and LoRAs;
 - effective executable configuration and backend options;
 - shared source digest, geometry, comparison claim and noncausal flag;
 - an integrity digest over the frozen arm payload.
 
 Run thaws and validates all arms, exact profile references, candidate mapping,
 source/arm digests, geometry, seed request, fixed controls, effective rendered
-prompt/provenance, backend options and manifest target/counts. It renders
+base prompt/provenance, frozen global policy, backend options and manifest
+target/counts. It renders
 already-frozen effective structure only to check internal consistency. It
 never reopens the PromptPack, recomputes Matrix, reruns adaptation, consults
 live registry evidence or substitutes a newer profile/ruleset. Source, model
 selector, stage-card, registry or rules changes require a rebuilt preview.
 Unknown frozen profile versions fail closed.
+
+Per `docs/ARCHITECTURE_v2.6.md`, the executor applies frozen Global Positive
+and Global Negative terms. Preview uses `render_pack_intent` on the adapted
+intent with global-negative participation disabled only for the executor base
+projection; it does not change the execution apply flags to compensate for
+preapplication. SDXL row negative `bad` with enabled frozen `GLOBAL` therefore
+dispatches `bad, GLOBAL` once. Qualified Klein compile policy still clears
+standard global terms/flags and the negative channel. No mutable global source
+is read after Preview, and shared merges/executor behavior are unchanged.
+
+These base strings are not literal final backend prompts. The arm and rating
+declare `prompt_semantics="executor_base_before_globals_and_optimizer"`.
+Executor globals and Prompt Optimizer may still affect dispatch. Runtime
+`final_prompt` / `final_negative_prompt` readback is retained separately in
+`runtime_prompt_readback` when supplied, including an empty negative string;
+missing readback remains absent rather than inferred from the Preview base.
 
 Materialization creates an ordinary immutable `SourceKind.LEARNING` NJR with
 the frozen image workload, stage, output plan and provenance. Only existing
@@ -134,7 +158,8 @@ runner, replay and backend ownership remain unchanged.
 ## Review and recommendation evidence
 
 The existing image-first review and rating flow identifies each model arm and
-persists effective execution truth. Comparison ratings use
+persists frozen executor inputs and available final runtime readback separately.
+Comparison ratings use
 `record_kind="learning_model_comparison_rating"`, preserve the explicit claim
 and `causal_one_variable=false`, and retain arm/adaptation evidence so review
 can explain target settings and prompt differences.
@@ -155,6 +180,12 @@ PR-PROMPT-140 and image 130A/B/C/117 evidence. Finish remaining
 PromptPack/Matrix/global-prompt and atomic admission regressions. Loopback
 operator-journey fixtures require a local context that permits sockets.
 
+For the bounded global ownership repair, first reproduce duplication through
+the real txt2img payload seam, then verify row/global-only/disabled negatives,
+positive ownership, Klein policy, frozen Run and persisted runtime readback.
+Kill the mutation that preapplies Global Negative while the executor flag
+remains enabled. Reuse exact-source evidence for unchanged adaptation rules.
+
 Deliberate mutations exercise mode isolation, unknown target handling, source
 reopening/adaptation/ruleset substitution during Run, geometry/backend changes,
 incomplete evidence, missing manifests, source-digest disagreement, fixed
@@ -169,6 +200,7 @@ Physical generation and environment changes are unnecessary.
 
 Primary regression ownership:
 `tests/learning_v2/test_model_comparison_140.py`,
+`tests/learning_v2/test_model_comparison_global_prompts_140.py`,
 `tests/gui_v2/test_model_comparison_design_140.py`, canonical structured/adaptation
 tests, `test_model_capabilities_130d.py`, and the existing operator-journey
 import-safety and atomic admission tests.
