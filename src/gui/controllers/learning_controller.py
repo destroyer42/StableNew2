@@ -53,7 +53,6 @@ from src.learning.experiment_execution import (
 )
 from src.learning.experiment_freeze import (
     apply_frozen_seed_policy,
-    freeze_prompt_pack_source,
     freeze_seed_policy,
     normalize_actual_seed_vector,
     seed_vector_matches,
@@ -76,6 +75,14 @@ from src.learning.model_policy_service import (
     recommendation_query,
     validate_experiment,
     validate_recommendation_apply,
+)
+from src.learning.ordinary_prompt_freeze import (
+    apply_executor_base_prompts,
+    freeze_ordinary_prompt_source,
+    freeze_preview_global_policy,
+    frozen_negative_prompt,
+    ordinary_rating_prompt_evidence,
+    validate_ordinary_prompt_snapshot,
 )
 from src.learning.recommendation_engine import RecommendationEngine
 from src.learning.resource_access import get_projected_resources
@@ -614,19 +621,12 @@ class LearningController:
         )
         if not negative_prompt and self.prompt_workspace_state:
             negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
-        pipeline_policy = dict(baseline.get("pipeline") or {})
-        prompt_source = freeze_prompt_pack_source(
-            dict(getattr(experiment, "metadata", {}) or {}),
-            global_negative=(
-                str(baseline.get("global_negative_prompt") or "")
-                if bool(pipeline_policy.get("apply_global_negative_txt2img", False))
-                else ""
-            ),
-        )
+        baseline = freeze_preview_global_policy(baseline)
+        prompt_source = freeze_ordinary_prompt_source(dict(experiment.metadata or {}))
         if str(prompt_source.get("prompt_source") or "") == "pack":
             experiment.prompt_text = str(prompt_source["rendered_positive_prompt"])
             negative_prompt = str(prompt_source["rendered_negative_prompt"])
-            experiment.metadata.update(prompt_source)
+        experiment.metadata.update(prompt_source)
         experiment.baseline_config = baseline
         model_context = validate_experiment(self, experiment, baseline, experiment.values)
         prompt_source.update(experiment.metadata)
@@ -1049,6 +1049,7 @@ class LearningController:
                 output_dir=self._resolve_learning_output_dir(snapshot.get("baseline_config") or {}),
                 filename_template=self._resolve_learning_filename_template(snapshot.get("baseline_config") or {}),
             )
+        validate_ordinary_prompt_snapshot(snapshot)
         if snapshot and snapshot.get("model_policy_context") and variant.param_value not in experiment.values:
             raise ValueError("Variant is outside the frozen experiment values")
         baseline = dict(snapshot.get("baseline_config") or experiment.baseline_config or {})
@@ -1061,6 +1062,7 @@ class LearningController:
             policy = policy_getter() if callable(policy_getter) else None
             if isinstance(policy, dict):
                 baseline = apply_global_prompt_policy(baseline, **policy)
+            baseline = freeze_preview_global_policy(baseline)
 
         # PR-LEARN-011: Validate baseline config
         is_valid, error_msg = self._validate_baseline_config(baseline)
@@ -1149,12 +1151,7 @@ class LearningController:
             prompt = "a test prompt"
 
         # Get negative prompt from experiment or current prompt workspace
-        negative_prompt = str(
-            snapshot.get("negative_prompt_text")
-            or getattr(experiment, "negative_prompt_text", "")
-            or getattr(experiment, "metadata", {}).get("selected_prompt_negative_text", "")
-            or ""
-        )
+        negative_prompt = frozen_negative_prompt(snapshot, experiment)
         if not snapshot_json and not negative_prompt and self.prompt_workspace_state:
             negative_prompt = self.prompt_workspace_state.get_current_negative_text() or ""
         if not negative_prompt_supported(self, final_config, experiment.stage):
@@ -1199,13 +1196,6 @@ class LearningController:
             variable_under_test=experiment.variable_under_test,
             variant_value=variant.param_value,
         )
-        learning_metadata = self._build_learning_metadata(
-            experiment=experiment,
-            variant=variant,
-            stage_name=stage_name,
-            final_config=final_config,
-        )
-        variant.executed_config = copy.deepcopy(final_config)
         selected_loras: dict[str, LoRATag] = {}
         for entry in list(getattr(experiment, "metadata", {}).get("selected_prompt_loras") or []):
             if not isinstance(entry, dict):
@@ -1235,6 +1225,11 @@ class LearningController:
             if lora_weight > 0:
                 selected_loras[lora_name] = LoRATag(name=lora_name, weight=lora_weight)
 
+        apply_executor_base_prompts(final_config, prompt, negative_prompt, stage_name)
+        learning_metadata = self._build_learning_metadata(
+            experiment=experiment, variant=variant, stage_name=stage_name, final_config=final_config,
+        )
+        variant.executed_config = copy.deepcopy(final_config)
         if stage_name != "txt2img":
             capability = get_stage_capability(stage_name)
             input_image_path = str(getattr(experiment, "input_image_path", "") or "").strip()
@@ -2229,6 +2224,7 @@ class LearningController:
                 "user_rating_raw": rating,
                 "user_notes": notes,
                 **classification,
+                **ordinary_rating_prompt_evidence(snapshot, target_variant.execution_metadata),
                 "rating_schema_version": 2,
                 "rating_context": context_flags,
                 "rating_details": subscores,
