@@ -120,3 +120,38 @@ replay, visibility and persisted evidence corruption at both backend boundaries.
 submission seams, cancellation, stale requests, Tk exclusion and production
 policy wiring. `tests/gui_v2/test_pack_lora_dialog_143.py` covers batch and
 independent Tk decisions with hidden identities.
+
+Modal regression coverage deliberately keeps another interpreter alive and
+uses the shared isolated `tk_root` fixture. Test callbacks have bounded cleanup;
+assertions and pytest timeout failures propagate after closing the modal wait.
+Invalid choices use a mocked error popup. This preserves real production review
+behavior while preventing automated tests from waiting for an operator.
+
+## Hosted validation repair
+
+Execution Profile + Model/Reasoning Recommendation: Narrow, known-root-cause
+test/CI repair; Codex GPT-6.1 Sol Medium or Claude Code Sonnet 5.5 Medium.
+Local/Desktop retains the Windows Tk reproduction context. Controller Surface
+Assessment: no production or controller changes. Token-Efficient Validation
+Plan: reconstruct the original affected targets, diagnose the GUI prefix with
+per-test output, prove browser dispatch and modal failures with bounded fixtures,
+run focused repaired seams, execute the original affected selection with a
+desktop-launch audit, reuse unchanged compiler evidence, then run the required
+gate once on settled source.
+
+The first batch-choice test formerly created a raw Tk root instead of using the
+isolated fixture. In a combined suite, selection variables bound to a surviving
+default interpreter while widgets belonged to the new interpreter. Acceptance
+read the unchanged variables and opened an error popup inside `wait_window`.
+Separately, the WebUI watchdog startup test omitted its existing browser mock;
+its successful fake launch reached the real desktop browser dispatcher.
+
+The repair changes tests and CI safeguards only. Browser-dispatch guards fail
+on unintended calls while expected launch behavior is asserted through the
+existing mock. The affected job retains the 300-second per-test limit using a
+thread timer, plus a 30-minute job deadline. The default Linux signal timer
+raises a pytest failure that Tk callback exception handling can catch; a bounded
+reproducer using the exact pytest-timeout 2.4.0 handler establishes this limitation.
+See [pytest-timeout's implementation](https://github.com/pytest-dev/pytest-timeout/blob/2.4.0/pytest_timeout.py).
+No model selection, compatibility, provenance, submission or runtime behavior
+changes in this repair.

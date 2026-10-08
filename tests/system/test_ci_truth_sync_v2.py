@@ -24,6 +24,15 @@ def test_ci_workflow_uses_named_required_smoke_script() -> None:
     assert "git diff --exit-code" in workflow
 
 
+def test_affected_ci_bounds_wall_time_and_uses_thread_test_timeout() -> None:
+    affected = _ci_section("  affected:", "  full-suite-shard:")
+    match = re.search(r"^    timeout-minutes: (\d+)$", affected, flags=re.MULTILINE)
+    assert match is not None
+    assert 5 < int(match.group(1)) <= 30
+    assert "--timeout=300" in affected
+    assert "--timeout-method=thread" in affected
+
+
 def test_pytest_has_one_strict_configuration_authority() -> None:
     pytest_ini = ROOT / "pytest.ini"
     pyproject = _read("pyproject.toml")
