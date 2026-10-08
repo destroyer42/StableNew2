@@ -9,17 +9,65 @@ from typing import TYPE_CHECKING, Any
 from src.learning.variable_selection_contract import resource_entry_internal
 
 if TYPE_CHECKING:
-    from src.assets import AssetRegistry
+    from src.assets import AssetRecord, AssetRegistry
+    from src.assets.registry import CheckpointInspection
     from src.pipeline.compile_evidence import CompileEvidence
 
 
-def _selection_path(model: str, entries: Sequence[Any], index: int) -> tuple[Path, dict[str, Any]]:
+def _model_label(model: str, index: int, show_names: bool) -> str:
+    # Runtime identities can include paths; diagnostics never include local paths.
+    name = model.replace("\\", "/").rsplit("/", 1)[-1].replace("\n", " ").replace("\r", " ")
+    return f"Model {index}: {name}" if show_names else f"Model {index}"
+
+
+def _require_supported_record(record: AssetRecord | CheckpointInspection, label: str) -> None:
+    """Study-only evidence completeness; canonical ModelPolicy still resolves targets."""
+    from src.assets.compatibility import (
+        CompatibilityStatus,
+        EvidenceConfidence,
+        ModelFamily,
+        embedded_metadata_field_present,
+        sidecar_metadata_field_present,
+    )
+
+    profile = record.compatibility
+    assert profile is not None
+    if profile.status is CompatibilityStatus.CONFLICTING:
+        reason = "conflicting family metadata/structural evidence; correct the conflicting evidence or select another checkpoint"
+    elif profile.structural_error:
+        reason = f"unreadable checkpoint metadata/structure: {profile.structural_error}; verify a complete supported local checkpoint"
+    elif profile.checkpoint_architecture in ("sdxl_refiner", "sdxl_inpaint"):
+        reason = f"{profile.checkpoint_architecture} is not an SDXL base txt2img envelope; select a standard SDXL base checkpoint"
+    elif profile.status is not CompatibilityStatus.RESOLVED or not any(
+        item.confidence in (EvidenceConfidence.METADATA, EvidenceConfidence.STRUCTURAL)
+        for item in profile.evidence
+    ):
+        if record.embedded_metadata_error or any(loc.sidecar_error for loc in record.locations):
+            reason = "unreadable checkpoint metadata; repair supported embedded/sidecar metadata"
+        elif embedded_metadata_field_present(record.embedded_metadata) or any(
+            sidecar_metadata_field_present(loc.sidecar_metadata) for loc in record.locations
+        ):
+            reason = "unclassified family metadata and unrecognized structure; supply authoritative supported base-model metadata or select a supported SDXL base checkpoint"
+        else:
+            reason = "family metadata missing and structure unrecognized; select a supported safetensors SDXL base checkpoint or supply authoritative metadata"
+    elif profile.family is not ModelFamily.SDXL:
+        reason = "family is not qualified for Model Comparison; select registry-evidenced SDXL or an exact qualified profile"
+    else:
+        return
+    raise ValueError(f"{label}: {reason}; rebuild Preview")
+
+
+def _selection_path(
+    model: str, entries: Sequence[Any], index: int, *, show_names: bool = True
+) -> tuple[Path, dict[str, Any]]:
     from src.image_backends.model_policy import _model_key
+
+    label = _model_label(model, index, show_names)
 
     matches = [entry for entry in entries if resource_entry_internal(entry) == model]
     if len(matches) != 1:
         raise ValueError(
-            f"Model {index}: ambiguous or outdated runtime identity; refresh model resources and reselect"
+            f"{label}: ambiguous or outdated runtime identity; refresh model resources and reselect"
         )
     entry = matches[0]
     raw = (
@@ -30,7 +78,7 @@ def _selection_path(model: str, entries: Sequence[Any], index: int) -> tuple[Pat
         path = Path(filename).expanduser()
         if not path.is_absolute():
             raise ValueError(
-                f"Model {index}: runtime checkpoint path is not absolute; expose an authoritative accessible local filename"
+                f"{label}: runtime checkpoint path is not absolute; expose an authoritative accessible local filename"
             )
         title = str(raw.get("title") or "").replace("\\", "/")
         if title.endswith("]") and " [" in title:
@@ -52,17 +100,17 @@ def _selection_path(model: str, entries: Sequence[Any], index: int) -> tuple[Pat
             title_matches and model.casefold() == flattened.casefold()
         ):
             raise ValueError(
-                f"Model {index}: runtime name and checkpoint filename disagree; refresh WebUI model resources"
+                f"{label}: runtime name and checkpoint filename disagree; refresh WebUI model resources"
             )
         if not path.is_file():
             raise ValueError(
-                f"Model {index}: served checkpoint is unavailable locally; check the WebUI model location/access or use a locally accessible checkpoint"
+                f"{label}: served checkpoint is unavailable locally; check the WebUI model location/access or use a locally accessible checkpoint"
             )
         return path.resolve(), raw
     # A familiar basename under the configured root is not proof that WebUI
     # serves that file. Filesystem discovery already supplies its exact path.
     raise ValueError(
-        f"Model {index}: exact served checkpoint filename is missing; refresh model resources, verify the WebUI root, and expose an accessible authoritative filename"
+        f"{label}: exact served checkpoint filename is missing; refresh model resources, verify the WebUI root, and expose an accessible authoritative filename"
     )
 
 
@@ -73,6 +121,7 @@ def prepare_comparison_evidence(
     registry: AssetRegistry | None = None,
     cancelled: Callable[[], bool] | None = None,
     progress: Callable[[str], None] | None = None,
+    show_names: bool = True,
 ) -> CompileEvidence:
     """Explicit Preview trigger: fingerprint selected files, hash only stale ones.
 
@@ -81,10 +130,6 @@ def prepare_comparison_evidence(
     every registry chunk. Returned CompileEvidence is one pinned cache context.
     """
     from src.assets import AssetKind, AssetRegistry
-    from src.assets.compatibility import (
-        embedded_metadata_field_present,
-        sidecar_metadata_field_present,
-    )
     from src.image_backends.forge_klein_lora import RegistryLoraResolver
     from src.image_backends.forge_klein_profile import is_klein_transformer_name
     from src.image_backends.model_policy import RegistryFamilyLookup
@@ -95,12 +140,30 @@ def prepare_comparison_evidence(
     registry = registry or AssetRegistry()
     paths, catalog = {}, {}
     for index, model in enumerate(models, 1):
-        paths[model], catalog[model] = _selection_path(model, resources, index)
+        paths[model], catalog[model] = _selection_path(
+            model, resources, index, show_names=show_names
+        )
     stale = [
         paths[model]
         for model in models
         if not is_klein_transformer_name(model) and not registry.checkpoint_is_current(paths[model])
     ]
+    # Inspect only selected stale headers before paying for byte identity. Warm
+    # evidence is pinned below without any header read or redundant hashing.
+    for index, model in enumerate(models, 1):
+        if paths[model] in stale:
+            if cancelled and cancelled():
+                raise InterruptedError("Checkpoint evidence refresh cancelled")
+            label = _model_label(model, index, show_names)
+            if progress:
+                progress(f"{label}: checking safetensors header and metadata")
+            try:
+                inspection = registry.inspect_checkpoint(paths[model])
+            except OSError:
+                raise ValueError(
+                    f"{label}: checkpoint header unavailable; verify local file access and retry Preview"
+                ) from None
+            _require_supported_record(inspection, label)
     if stale:
         if progress:
             progress(
@@ -110,7 +173,10 @@ def prepare_comparison_evidence(
         def reading(path: Path, read_bytes: int, total: int) -> None:
             if progress:
                 index = next(i for i, model in enumerate(models, 1) if paths[model] == path)
-                progress(f"Model {index}: checkpoint evidence {read_bytes * 100 // max(1, total)}%")
+                model = models[index - 1]
+                progress(
+                    f"{_model_label(model, index, show_names)}: SHA-256 identity {read_bytes * 100 // max(1, total)}%"
+                )
 
         try:
             registry.refresh(checkpoint_paths=stale, cancelled=cancelled, progress=reading)
@@ -122,7 +188,7 @@ def prepare_comparison_evidence(
                 None,
             )
             label = (
-                f"Model {failed_index}"
+                _model_label(models[failed_index - 1], failed_index, show_names)
                 if failed_index is not None
                 else "Selected checkpoint evidence"
             )
@@ -137,6 +203,7 @@ def prepare_comparison_evidence(
     )
     identities: dict[str, dict[str, Any]] = {}
     for index, model in enumerate(models, 1):
+        label = _model_label(model, index, show_names)
         policy = evidence.policy_for(model)
         if policy.qualified:
             identities[model] = {
@@ -154,7 +221,7 @@ def prepare_comparison_evidence(
         ]
         if len(records) != 1:
             raise ValueError(
-                f"Model {index}: checkpoint evidence missing; retry Preview to refresh the selected file"
+                f"{label}: checkpoint evidence missing; retry Preview to refresh the selected file"
             )
         record = records[0]
         # WebUI's legacy `hash` field is not a SHA-256 prefix. Only its explicit
@@ -162,30 +229,25 @@ def prepare_comparison_evidence(
         expected = str(catalog[model].get("sha256") or "").lower()
         if expected and (len(expected) < 8 or not record.sha256.startswith(expected)):
             raise ValueError(
-                f"Model {index}: WebUI hash disagrees with local checkpoint; refresh WebUI resources and verify the served file"
+                f"{label}: WebUI hash disagrees with local checkpoint; refresh WebUI resources and verify the served file"
             )
+        _require_supported_record(record, label)
         if policy.family != "sdxl" or policy.evidence != "registry_evidence":
-            if policy.evidence == "conflicting_evidence":
-                reason = (
-                    "conflicting family metadata; correct conflicting embedded/sidecar metadata"
-                )
-            elif policy.evidence == "unknown_evidence":
-                if record.embedded_metadata_error or any(
-                    location.sidecar_error for location in record.locations
-                ):
-                    reason = (
-                        "unreadable checkpoint metadata; repair supported embedded/sidecar metadata"
-                    )
-                elif embedded_metadata_field_present(record.embedded_metadata) or any(
-                    sidecar_metadata_field_present(location.sidecar_metadata)
-                    for location in record.locations
-                ):
-                    reason = "unclassified family metadata; supply authoritative supported base-model metadata"
-                else:
-                    reason = "family metadata missing; supply authoritative supported base-model metadata"
-            else:
-                reason = "family is not qualified for Model Comparison; select registry-evidenced SDXL or an exact qualified profile"
-            raise ValueError(f"Model {index}: {reason}; rebuild Preview")
-        identities[model] = {"authority": "asset_registry", "sha256": record.sha256}
+            raise ValueError(f"{label}: canonical target policy is unverified; rebuild Preview")
+        assert record.compatibility is not None
+        provenance = [
+            {"source": item.source, "confidence": item.confidence.value}
+            for item in record.compatibility.evidence
+            if item.confidence.value != "filename_hint"
+        ]
+        identities[model] = {
+            "authority": "asset_registry",
+            "sha256": record.sha256,
+            "family_evidence": provenance,
+            "checkpoint_structure": dict(record.structural_evidence),
+        }
+        if progress:
+            sources = ", ".join(dict.fromkeys(item["source"] for item in provenance))
+            progress(f"{label}: ready; SDXL evidence from {sources}")
     evidence.model_identities = identities
     return evidence

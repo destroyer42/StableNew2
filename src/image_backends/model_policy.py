@@ -320,6 +320,10 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
     status = getattr(getattr(compat, "status", None), "value", "")
     if status == "conflicting":
         return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_CONFLICTING)
+    if getattr(compat, "structural_error", None) or getattr(compat, "checkpoint_architecture", None) in (
+        "sdxl_refiner", "sdxl_inpaint"
+    ):
+        return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_UNKNOWN)
     family = getattr(compat, "family", None)
     if status != "resolved" or family is None:
         return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_UNKNOWN)
@@ -385,7 +389,9 @@ class RegistryFamilyLookup:
                 found.append(record.compatibility)
         if not found:
             return None
-        outcomes = {(item.status, item.family) for item in found}
+        outcomes = {(item.status, item.family,
+                     item.checkpoint_architecture in ("sdxl_refiner", "sdxl_inpaint"),
+                     bool(item.structural_error)) for item in found}
         if len(outcomes) > 1:
             return CompatibilityProfile(CompatibilityStatus.CONFLICTING, None, ())
         return found[0]

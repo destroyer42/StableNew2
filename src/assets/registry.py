@@ -7,15 +7,18 @@ import json
 import os
 import struct
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
 from src.assets.cache_lock import registry_cache_lock
+from src.assets.checkpoint_structure import STRUCTURE_CONTRACT, checkpoint_header_evidence
 from src.assets.compatibility import (
     CompatibilityProfile,
+    EvidenceConfidence,
     FamilyEvidence,
+    ModelFamily,
     embedded_metadata_evidence,
     embedded_metadata_field_present,
     filename_hint_evidence,
@@ -29,6 +32,11 @@ _EXTENSIONS = frozenset({".bin", ".ckpt", ".onnx", ".pt", ".pth", ".safetensors"
 _CHUNK = 1024 * 1024
 _CACHE_VERSION = 2
 _SUPPORTED_CACHE_VERSIONS = (1, 2)
+
+
+def _structure_is_current(entry: dict[str, Any]) -> bool:
+    structure = entry.get("structure")
+    return isinstance(structure, dict) and structure.get("contract") == STRUCTURE_CONTRACT
 
 
 class AssetKind(str, Enum):
@@ -67,6 +75,7 @@ class AssetRecord:
     metadata_provenance: str | None
     embedded_metadata_error: str | None = None
     compatibility: CompatibilityProfile | None = None
+    structural_evidence: dict[str, Any] = field(default_factory=dict)
 
     @property
     def kinds(self) -> tuple[AssetKind, ...]:
@@ -86,6 +95,17 @@ class RefreshResult:
     snapshot: AssetRegistrySnapshot
     hashes_computed: int
     hash_cache_hits: int
+
+
+@dataclass(frozen=True)
+class CheckpointInspection:
+    """Header-only evidence; deliberately carries no checkpoint byte identity."""
+
+    compatibility: CompatibilityProfile
+    embedded_metadata: dict[str, Any]
+    embedded_metadata_error: str | None
+    locations: tuple[AssetLocation, ...]
+    structural_evidence: dict[str, Any]
 
 
 def _safetensors_metadata(path: Path) -> tuple[dict[str, Any], str | None]:
@@ -290,6 +310,7 @@ class AssetRegistry:
             not cached
             or cached.get("kind") != AssetKind.CHECKPOINT.value
             or (cached.get("size"), cached.get("mtime_ns")) != (stat.st_size, stat.st_mtime_ns)
+            or not _structure_is_current(cached)
         ):
             return False
         for candidate in _sidecar_candidates(path):
@@ -300,6 +321,30 @@ class AssetRegistry:
                     and cached.get("sidecar_fingerprint") == fingerprint
                 )
         return cached.get("sidecar_path") is None
+
+    def inspect_checkpoint(self, path: Path) -> CheckpointInspection:
+        """Worker-only header/sidecar preflight, without byte identity.
+
+        Not persisted or exposed as executable identity. Unsupported candidates
+        are rejected before an expensive hash; refresh still owns byte identity.
+        """
+        self._load()
+        fields = checkpoint_header_evidence(path)
+        sidecar = _resolve_sidecar(path, None)
+        location = AssetLocation(
+            AssetKind.CHECKPOINT, path, path.parent, path.stem, path.stat().st_size,
+            Path(sidecar["sidecar_path"]) if sidecar["sidecar_path"] else None,
+            sidecar["sidecar_metadata"], sidecar["sidecar_provenance"], sidecar["sidecar_error"],
+        )
+        record = self._build_record(
+            "", [location], (fields["metadata"], "safetensors_header", fields["metadata_error"]),
+            fields["structure"],
+        )
+        assert record.compatibility is not None
+        return CheckpointInspection(
+            record.compatibility, record.embedded_metadata, record.embedded_metadata_error,
+            record.locations, record.structural_evidence,
+        )
 
     def _prepare_refresh(
         self,
@@ -350,9 +395,19 @@ class AssetRegistry:
                     and cached.get("kind") == kind.value
                 )
                 sidecar_fields = _resolve_sidecar(path, cached if model_valid else None)
+                header_fields = (
+                    checkpoint_header_evidence(path)
+                    if kind is AssetKind.CHECKPOINT and (
+                        not model_valid
+                        or cached is None
+                        or not _structure_is_current(cached)
+                    ) else None
+                )
                 if model_valid and cached is not None:
                     entry = dict(cached)
                     entry.update(sidecar_fields)
+                    if header_fields is not None:
+                        entry.update(header_fields)
                     next_entries[key] = entry
                     hits += 1
                     continue
@@ -366,11 +421,13 @@ class AssetRegistry:
                         read_bytes += len(chunk)
                         if progress:
                             progress(path, read_bytes, stat.st_size)
-                metadata, error = (
-                    _safetensors_metadata(path)
-                    if path.suffix.lower() == ".safetensors"
-                    else ({}, None)
-                )
+                if header_fields is not None:
+                    metadata, error = header_fields["metadata"], header_fields["metadata_error"]
+                else:
+                    metadata, error = (
+                        _safetensors_metadata(path)
+                        if path.suffix.lower() == ".safetensors" else ({}, None)
+                    )
                 entry = {
                     "path": key,
                     "root": str(root.resolve()),
@@ -384,6 +441,8 @@ class AssetRegistry:
                     "metadata_error": error,
                 }
                 entry.update(sidecar_fields)
+                if header_fields is not None:
+                    entry["structure"] = header_fields["structure"]
                 after = path.stat()
                 if (stat.st_size, stat.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
                     raise ValueError("Checkpoint changed during evidence refresh; retry Preview")
@@ -419,6 +478,7 @@ class AssetRegistry:
     def _make_snapshot(self) -> AssetRegistrySnapshot:
         grouped: dict[str, list[AssetLocation]] = {}
         content_metadata: dict[str, tuple[dict[str, Any], str | None, str | None]] = {}
+        structures: dict[str, dict[str, Any]] = {}
         for entry in self._entries.values():
             try:
                 digest = str(entry["sha256"])
@@ -442,6 +502,8 @@ class AssetRegistry:
             except (KeyError, TypeError, ValueError):
                 continue
             grouped.setdefault(digest, []).append(location)
+            if kind is AssetKind.CHECKPOINT and isinstance(entry.get("structure"), dict):
+                structures[digest] = entry["structure"]
             raw_metadata = entry.get("metadata")
             content_metadata.setdefault(
                 digest,
@@ -452,7 +514,7 @@ class AssetRegistry:
                 ),
             )
         records = tuple(
-            self._build_record(digest, locations, content_metadata[digest])
+            self._build_record(digest, locations, content_metadata[digest], structures.get(digest, {}))
             for digest, locations in sorted(grouped.items())
         )
         return AssetRegistrySnapshot(records)
@@ -462,12 +524,24 @@ class AssetRegistry:
         digest: str,
         locations: list[AssetLocation],
         content: tuple[dict[str, Any], str | None, str | None],
+        structure: dict[str, Any] | None = None,
     ) -> AssetRecord:
         ordered = tuple(sorted(locations, key=lambda item: str(item.path).lower()))
         metadata, provenance, metadata_error = content
 
         evidence: list[FamilyEvidence] = []
         evidence.extend(embedded_metadata_evidence(metadata))
+        structure = structure or {}
+        architecture = str(structure.get("architecture") or "unrecognized") if structure else None
+        structural_family = {
+            "sdxl_base": ModelFamily.SDXL, "sdxl_refiner": ModelFamily.SDXL,
+            "sdxl_inpaint": ModelFamily.SDXL, "sd1": ModelFamily.SD1, "sd2": ModelFamily.SD2,
+        }.get(architecture or "")
+        if structural_family is not None:
+            evidence.append(FamilyEvidence(
+                structural_family, "safetensors_structure", architecture or "",
+                EvidenceConfidence.STRUCTURAL,
+            ))
         for location in ordered:
             if location.sidecar_metadata:
                 evidence.extend(
@@ -488,6 +562,10 @@ class AssetRegistry:
         )
 
         profile = resolve_compatibility_profile(
-            tuple(evidence), metadata_field_present=metadata_field_present
+            tuple(evidence), metadata_field_present=metadata_field_present,
+            checkpoint_architecture=architecture,
         )
-        return AssetRecord(digest, ordered, metadata, provenance, metadata_error, profile)
+        profile = replace(
+            profile, checkpoint_architecture=architecture, structural_error=structure.get("error"),
+        )
+        return AssetRecord(digest, ordered, metadata, provenance, metadata_error, profile, structure)

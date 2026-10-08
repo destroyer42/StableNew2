@@ -659,8 +659,8 @@ def runtime_prompt_readback(variant_payload: dict, metadata: dict) -> dict:
     return readback
 
 
-def preview_summary(snapshot: dict) -> str:
-    """Content-free readiness: no prompt text, asset names or local paths."""
+def preview_summary(snapshot: dict, *, show_names: bool = False) -> str:
+    """Readiness without prompts/local paths; asset names are explicitly opt-in."""
     study = snapshot["model_comparison"]
     size = study["shared_geometry"]
     rows = [
@@ -670,7 +670,12 @@ def preview_summary(snapshot: dict) -> str:
         context = arm["model_policy_context"]
         profile = context.get("profile_ref")
         target = f"{profile['id']} v{profile['version']}" if profile else context["family"]
+        name = arm["selected_model"].replace("\\", "/").rsplit("/", 1)[-1]
+        label = f"Arm {arm['candidate_index'] + 1}: {name}" if show_names else f"Arm {arm['candidate_index'] + 1}"
+        identity = arm.get("checkpoint_evidence", {})
+        sources = list(dict.fromkeys(item["source"] for item in identity.get("family_evidence", [])))
+        provenance = ", ".join(sources) or identity.get("authority", "frozen policy")
         rows.append(
-            f"Arm {arm['candidate_index'] + 1}: {target}; ready; adaptation {'changes' if arm['prompt_adaptation']['changed'] else 'preserves'} source projection; shared {size['width']}x{size['height']} valid."
+            f"{label}: {target}; ready ({provenance}); adaptation {'changes' if arm['prompt_adaptation']['changed'] else 'preserves'} source projection; shared {size['width']}x{size['height']} valid."
         )
     return "\n".join(rows)

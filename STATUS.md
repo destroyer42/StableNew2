@@ -1,17 +1,22 @@
 # StableNew current state
 
-Updated: 2026-10-07
+Updated: 2026-10-08
 
 ## Repository
 
 - Model Comparison evidence readiness (PR-LEARN-142, local implementation;
-  owner/operator review and publication pending): Build Preview checks exact
+  independent review and publication pending): Build Preview checks exact
   served checkpoint identity and prepares missing/stale selected-file evidence
   off Tk through AssetRegistry, with progress, cancellation and single-flight
-  publication. Cache writers serialize and reload transactions. Path-free
+  publication. Metadata-free standard SDXL base safetensors are recognized from
+  bounded tensor-header signatures inside AssetRegistry; conflicting evidence,
+  refiners, unsupported formats and unrecognizable targets remain blocked.
+  Feedback names checkpoints and evidence sources, subject to content visibility.
+  Cache writers serialize and reload transactions. Path-free
   identity evidence is frozen with the arms; existing family qualification,
   frozen Run, global prompts, noncausal ratings and atomic admission remain
-  unchanged. No personal checkpoint scan or physical generation was performed.
+  unchanged. Authorized read-only installed SDXL-pair and SDXL/Klein Preview
+  checks passed using temporary state; no physical generation was performed.
   See `docs/Subsystems/Learning/PR-LEARN-142_Model_Comparison_Evidence_Readiness.md`.
 
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`

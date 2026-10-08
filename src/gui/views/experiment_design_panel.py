@@ -74,6 +74,8 @@ class ExperimentDesignPanel(ttk.Frame):
         self.rowconfigure(11, weight=1)  # Spacer
 
         self._build_ui()
+        if self._resource_state is not None and hasattr(self._resource_state, "subscribe"):
+            self._resource_state.subscribe("content_visibility_mode", self._on_comparison_visibility_changed)
 
     def _build_ui(self) -> None:
         """Build the experiment design UI."""
@@ -689,7 +691,8 @@ class ExperimentDesignPanel(ttk.Frame):
 
                     self.feedback_var.set("Model Comparison preview ready")
                     self.summary_var.set(preview_summary(thaw_snapshot(
-                        self.learning_controller.learning_state.current_experiment.execution_snapshot_json)))
+                        self.learning_controller.learning_state.current_experiment.execution_snapshot_json),
+                        show_names=self._comparison_show_names()))
                     self._update_policy_buttons()
             else:
                 self.feedback_var.set("Experiment definition updated successfully")
@@ -701,7 +704,31 @@ class ExperimentDesignPanel(ttk.Frame):
 
         return (self.study_type_var.get(), self.prompt_pack_var.get(), self.prompt_item_var.get(),
                 tuple(name for name, var in self.choice_vars.items() if var.get()),
-                repr(get_projected_resources(self.learning_controller).get("models", [])))
+                repr(get_projected_resources(self.learning_controller).get("models", [])),
+                self._comparison_show_names())
+
+    def _comparison_show_names(self):
+        from src.gui.content_visibility import (
+            ContentVisibilityMode,
+            normalize_content_visibility_mode,
+        )
+
+        state = self._resource_state
+        return normalize_content_visibility_mode(getattr(state, "content_visibility_mode", None)) is ContentVisibilityMode.NSFW
+
+    def _on_comparison_visibility_changed(self):
+        self._cancel_comparison_evidence()
+        if not self._is_model_comparison():
+            return
+        self.feedback_var.set("Content visibility changed; rebuild Preview if evidence work was interrupted")
+        experiment = self.learning_controller.learning_state.current_experiment
+        if experiment is not None and experiment.execution_snapshot_json:
+            from src.learning.experiment_execution import thaw_snapshot
+            from src.learning.model_comparison import preview_summary
+
+            snapshot = thaw_snapshot(experiment.execution_snapshot_json)
+            if snapshot.get("study_type") == "model_comparison":
+                self.summary_var.set(preview_summary(snapshot, show_names=self._comparison_show_names()))
 
     def _start_comparison_evidence(self, data):
         import copy
@@ -717,7 +744,8 @@ class ExperimentDesignPanel(ttk.Frame):
         self.cancel_evidence_button.configure(state="normal")
         self.cancel_evidence_button.grid()
         self._update_policy_buttons()
-        task = ComparisonEvidenceTask(lambda **kwargs: prepare(data["selected_models"], resources, **kwargs))
+        show_names = self._comparison_show_names()
+        task = ComparisonEvidenceTask(lambda **kwargs: prepare(data["selected_models"], resources, show_names=show_names, **kwargs))
         self._comparison_evidence_task = task
 
         def poll():
@@ -757,6 +785,8 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def destroy(self):
         self._cancel_comparison_evidence()
+        if self._resource_state is not None and hasattr(self._resource_state, "unsubscribe"):
+            self._resource_state.unsubscribe("content_visibility_mode", self._on_comparison_visibility_changed)
         poll_id = getattr(self, "_comparison_poll_id", None)
         if poll_id:
             self.after_cancel(poll_id)
