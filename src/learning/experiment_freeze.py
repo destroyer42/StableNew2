@@ -6,12 +6,20 @@ Build Preview and then reused by every immutable NJR in that experiment.
 
 from __future__ import annotations
 
+import hashlib
 import itertools
+import json
 import secrets
 from collections.abc import Callable, Mapping
 from typing import Any
 
-from src.pipeline.resolution_layer import MATRIX_TOKEN_RE, UnifiedPromptResolver
+from src.pipeline.resolution_layer import (
+    MATRIX_TOKEN_RE,
+    UnifiedPromptResolver,
+    pack_prompt_intent_to_dict,
+    render_pack_intent,
+    resolve_pack_intent,
+)
 from src.promptpacks.storage import (
     PromptPackFormatError,
     load_prompt_pack_document,
@@ -39,7 +47,8 @@ def describe_matrix_freeze(metadata: Mapping[str, Any]) -> str:
 
 
 def freeze_prompt_pack_source(
-    prompt_source: Mapping[str, Any], *, global_negative: str = ""
+    prompt_source: Mapping[str, Any], *, global_negative: str = "", structured: bool = False,
+    apply_global_negative: bool = True
 ) -> dict[str, Any]:
     """Resolve one PromptPack row and its first deterministic Matrix vector."""
     source = dict(prompt_source or {})
@@ -90,13 +99,21 @@ def freeze_prompt_pack_source(
         if any(not values for values in choices):
             raise ValueError("PromptPack Matrix contains an unresolved empty slot")
         vector = dict(zip(names, next(itertools.product(*choices)), strict=True))
-    resolution = UnifiedPromptResolver().resolve_from_pack(
+    resolver = resolve_pack_intent if structured else UnifiedPromptResolver().resolve_from_pack
+    resolved = resolver(
         pack_row=row,
         matrix_slot_values=vector,
-        pack_negative=str(source.get("selected_prompt_negative_text") or ""),
+        pack_negative="" if structured else str(source.get("selected_prompt_negative_text") or ""),
         global_negative=global_negative,
-        apply_global_negative=True,
+        apply_global_negative=apply_global_negative,
     )
+    resolution = render_pack_intent(resolved) if structured else resolved
+    if structured:
+        serialized = pack_prompt_intent_to_dict(resolved)
+        source["source_intent"] = serialized
+        source["source_intent_sha256"] = hashlib.sha256(
+            json.dumps(serialized, sort_keys=True, separators=(",", ":"), ensure_ascii=True, allow_nan=False).encode("utf-8")
+        ).hexdigest()
     total = 1
     for values in slots.values():
         total *= len(values)

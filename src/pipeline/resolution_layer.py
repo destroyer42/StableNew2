@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 from typing import Any
 
@@ -239,6 +240,32 @@ class AdaptedPackIntent:
 
     intent: PackPromptIntent
     plan: PromptAdaptationPlan
+
+
+PACK_PROMPT_INTENT_CONTRACT = "pack_prompt_intent/1"
+
+
+def pack_prompt_intent_to_dict(intent: PackPromptIntent) -> dict[str, Any]:
+    """JSON-safe, lossless data serialization; never resolves or adapts a prompt."""
+    return {"contract": PACK_PROMPT_INTENT_CONTRACT, **json.loads(json.dumps(asdict(intent), allow_nan=False))}
+
+
+def pack_prompt_intent_from_dict(payload: Mapping[str, Any]) -> PackPromptIntent:
+    """Restore the exact versioned structure without interpreting source text."""
+    data = dict(payload)
+    if data.pop("contract", None) != PACK_PROMPT_INTENT_CONTRACT:
+        raise ValueError("Unknown frozen PromptPack intent contract; rebuild preview")
+    if set(data) != {item.name for item in fields(PackPromptIntent)}:
+        raise ValueError("Malformed frozen PromptPack intent")
+    for key in ("positive_embeddings", "negative_embeddings"):
+        data[key] = tuple((name, weight) for name, weight in data[key])
+    data["loras"] = tuple(LoraContribution(**item) for item in data["loras"])
+    data["triggers"] = tuple(
+        TriggerContribution(item["text"], item["kind"], tuple(item["owners"]))
+        for item in data["triggers"]
+    )
+    data["negative_phrases"] = tuple(data["negative_phrases"])
+    return PackPromptIntent(**data)
 
 
 def _substitute_matrix_tokens(template: str, slots: Mapping[str, str] | None) -> str:

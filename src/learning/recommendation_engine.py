@@ -311,6 +311,9 @@ class RecommendationEngine:
 
         for record in records:
             metadata = record.get("metadata", {})
+            if (metadata.get("study_type") == "model_comparison" or
+                ((metadata.get("frozen_experiment") or {}).get("snapshot") or {}).get("study_type") == "model_comparison"):
+                continue
             record_kind = str(metadata.get("record_kind") or "").strip()
             if record_kind and record_kind not in {
                 "learning_experiment_rating",

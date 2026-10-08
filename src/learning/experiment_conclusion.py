@@ -7,7 +7,8 @@ from typing import Any
 
 
 def build_experiment_conclusion(
-    plan: list[Any], rating_details: dict[str, dict[str, Any]], review_drafts: dict[str, Any]
+    plan: list[Any], rating_details: dict[str, dict[str, Any]], review_drafts: dict[str, Any],
+    *, study_type: str = "controlled_variable"
 ) -> dict[str, Any]:
     """Summarize persisted sample evidence without creating a second rating."""
     rows: list[dict[str, Any]] = []
@@ -54,8 +55,12 @@ def build_experiment_conclusion(
         )
     eligible = controlled and len(rows) >= 2 and all(row["saved_count"] > 0 for row in rows)
     winner = max(rows, key=lambda row: row["average_overall"] or 0)["value"] if eligible else None
+    comparison = study_type == "model_comparison"
     return {
-        "controlled_valid": controlled,
+        "controlled_valid": controlled and not comparison,
+        "study_type": study_type,
+        "comparison_claim": "target_envelope_preference" if comparison else "controlled_variable",
+        "causal_one_variable": not comparison,
         "saved": saved_total,
         "draft": draft_total,
         "unrated": max(0, sample_total - saved_total - draft_total),
@@ -63,6 +68,9 @@ def build_experiment_conclusion(
         "best_value": winner,
         "sufficient_evidence": eligible,
         "message": (
+            (f"{winner} was preferred under its frozen target envelope; model-specific settings and prompt adaptation may differ."
+             if eligible else "Insufficient saved evidence for a target-envelope preference.")
+            if comparison else
             f"Highest-rated tested value: {winner}"
             if eligible
             else "Insufficient controlled saved evidence for a causal winner."

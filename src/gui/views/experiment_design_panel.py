@@ -99,7 +99,16 @@ class ExperimentDesignPanel(ttk.Frame):
         self.desc_var.trace_add("write", lambda *_: self._on_description_changed())
 
         # Target Stage
-        ttk.Label(self, text="Target Stage:").grid(row=5, column=0, sticky="w", pady=(0, 2))
+        study_frame = ttk.Frame(self)
+        study_frame.grid(row=5, column=0, sticky="ew", pady=(0, 2))
+        study_frame.columnconfigure(1, weight=1)
+        ttk.Label(study_frame, text="Study Type:").grid(row=0, column=0, sticky="w")
+        self.study_type_var = tk.StringVar(value="Controlled Variable")
+        self.study_type_combo = ttk.Combobox(study_frame, textvariable=self.study_type_var,
+                                             values=("Controlled Variable", "Model Comparison"), state="readonly")
+        self.study_type_combo.grid(row=0, column=1, sticky="ew", pady=(0, 6))
+        self.study_type_combo.bind("<<ComboboxSelected>>", lambda _e: self._on_study_type_changed())
+        ttk.Label(study_frame, text="Target Stage:").grid(row=1, column=0, sticky="w")
         self.stage_var = tk.StringVar(value="txt2img")
         self.stage_combo = ttk.Combobox(
             self,
@@ -127,7 +136,8 @@ class ExperimentDesignPanel(ttk.Frame):
         self.input_image_button.grid(row=0, column=1, sticky="e")
 
         # Variable Under Test
-        ttk.Label(self, text="Variable Under Test:").grid(row=8, column=0, sticky="w", pady=(0, 2))
+        self.variable_label = ttk.Label(self, text="Variable Under Test:")
+        self.variable_label.grid(row=8, column=0, sticky="w", pady=(0, 2))
         self.variable_var = tk.StringVar(value="")
         self.variable_combo = ttk.Combobox(
             self,
@@ -347,6 +357,40 @@ class ExperimentDesignPanel(ttk.Frame):
                 self._build_lora_mode_content()
         self._refresh_identity_preview()
 
+    def _is_model_comparison(self) -> bool:
+        return self.study_type_var.get() == "Model Comparison"
+
+    def _on_study_type_changed(self) -> None:
+        from src.learning.variable_metadata import get_variable_metadata
+
+        if self._is_model_comparison():
+            self._controlled_design = (self.stage_var.get(), self.variable_var.get(), self.prompt_source_var.get())
+            self.stage_var.set("txt2img")
+            self.stage_combo.configure(values=("txt2img",), state="disabled")
+            self.input_image_frame.grid_remove()
+            self.variable_label.grid_remove()
+            self.variable_combo.grid_remove()
+            self.variable_var.set("Model Comparison")
+            self.prompt_source_var.set("pack")
+            self.prompt_source_combo.configure(state="disabled")
+            self._on_prompt_source_changed()
+            self._show_checklist_widget(get_variable_metadata("Model"))
+            self.checklist_frame.configure(text="Models to Compare")
+            self.model_target_var.set("Target-envelope comparison: each model uses its own validated settings and prompt adaptation. Requested seed and geometry are shared; this is not one-variable causal evidence.")
+        else:
+            self.stage_combo.configure(values=list_supported_stages(), state="readonly")
+            self.prompt_source_combo.configure(state="readonly")
+            self.variable_label.grid()
+            self.variable_combo.grid()
+            stage, variable, source = getattr(self, "_controlled_design", ("txt2img", "", "pack"))
+            self.stage_var.set(stage)
+            self.variable_var.set(variable)
+            self.prompt_source_var.set(source)
+            self._on_stage_changed()
+            self._on_prompt_source_changed()
+            self._on_variable_changed()
+        self._update_policy_buttons()
+
     def _resolve_packs_dir(self) -> Path:
         if self._packs_dir is not None:
             return self._packs_dir
@@ -518,7 +562,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_build_preview(self) -> None:
         """Handle build preview button click."""
-        if self._learning_capabilities is not None:
+        if not self._is_model_comparison() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
@@ -530,6 +574,8 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Collect form data
         experiment_data = {
+            "study_type": "model_comparison" if self._is_model_comparison() else "controlled_variable",
+            "selected_models": [choice for choice, var in self.choice_vars.items() if var.get()] if self._is_model_comparison() else [],
             "name": self.name_var.get().strip(),
             "description": self.desc_var.get().strip(),
             "stage": self.stage_var.get(),
@@ -617,6 +663,14 @@ class ExperimentDesignPanel(ttk.Frame):
                 self.feedback_var.set(
                     guidance or "Experiment definition and plan built successfully"
                 )
+                if self._is_model_comparison():
+                    from src.learning.experiment_execution import thaw_snapshot
+                    from src.learning.model_comparison import preview_summary
+
+                    self.feedback_var.set("Model Comparison preview ready")
+                    self.summary_var.set(preview_summary(thaw_snapshot(
+                        self.learning_controller.learning_state.current_experiment.execution_snapshot_json)))
+                    self._update_policy_buttons()
             else:
                 self.feedback_var.set("Experiment definition updated successfully")
         except Exception as e:
@@ -624,7 +678,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_run_experiment(self) -> None:
         """Handle run experiment button click."""
-        if self._learning_capabilities is not None:
+        if not self._is_model_comparison() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
             except ValueError as exc:
@@ -649,6 +703,21 @@ class ExperimentDesignPanel(ttk.Frame):
 
         if not data["name"]:
             return "Experiment name is required"
+
+        if data.get("study_type") == "model_comparison":
+            from src.learning.model_comparison import candidate_models
+
+            if data.get("stage") != "txt2img":
+                return "Model Comparison supports txt2img only"
+            if data.get("prompt_source") != "pack" or not data.get("selected_prompt_pack_path"):
+                return "Model Comparison requires a selected PromptPack row"
+            if data.get("images_per_value", 0) < 1:
+                return "Images per variant must be at least 1"
+            try:
+                candidate_models(data.get("selected_models"))
+            except ValueError as exc:
+                return str(exc)
+            return None
 
         if not data["variable_under_test"]:
             return "Variable under test must be selected"
@@ -722,6 +791,9 @@ class ExperimentDesignPanel(ttk.Frame):
         """
         from src.learning.variable_metadata import get_variable_metadata
 
+        if self._is_model_comparison():
+            return
+
         variable_name = self.variable_var.get()
         self._update_policy_buttons()
         if not variable_name:
@@ -775,6 +847,9 @@ class ExperimentDesignPanel(ttk.Frame):
         self._refresh_model_capabilities()
 
     def _refresh_model_capabilities(self) -> None:
+        if self._is_model_comparison():
+            self._update_policy_buttons()
+            return
         policy = self._target_policy
         stage = self.stage_var.get()
         controller = self.learning_controller
@@ -806,6 +881,12 @@ class ExperimentDesignPanel(ttk.Frame):
                 combo.configure(values=capability.lora_candidates)
 
     def _update_policy_buttons(self) -> None:
+        if self._is_model_comparison():
+            valid = sum(bool(var.get()) for var in self.choice_vars.values()) >= 2
+            self.build_button.configure(state="normal" if valid else "disabled")
+            experiment = getattr(getattr(self.learning_controller, "learning_state", None), "current_experiment", None)
+            self.run_button.configure(state="normal" if getattr(experiment, "execution_snapshot_json", "") else "disabled")
+            return
         capability = self._learning_capabilities
         if capability is None:
             return
@@ -868,7 +949,7 @@ class ExperimentDesignPanel(ttk.Frame):
         if meta.resource_key and self.learning_controller:
             choices, mapping = get_resource_choices(self.learning_controller, meta.resource_key)
             self._choice_display_map = dict(mapping)
-        if meta.name == "model" and self._target_policy is not None:
+        if meta.name == "model" and self._target_policy is not None and not self._is_model_comparison():
             target = policy_context(self._target_policy, self._target_model, self.stage_var.get())
             choices = [choice for choice in choices if compatible_context(target, policy_context(
                 resolve_policy(self._choice_display_map.get(choice, choice), self.learning_controller),
@@ -943,6 +1024,12 @@ class ExperimentDesignPanel(ttk.Frame):
     def _on_resources_updated(self, _resources: dict[str, list[Any]] | None = None) -> None:
         """Refresh the active resource checklist from the current projection."""
         from src.learning.variable_metadata import get_variable_metadata
+        if self._is_model_comparison():
+            selected = {name for name, value in self.choice_vars.items() if value.get()}
+            self._populate_checklist(get_variable_metadata("Model"))
+            for name, value in self.choice_vars.items():
+                value.set(name in selected)
+            return
         if self._target_policy is not None:
             self._refresh_model_capabilities()
 
@@ -977,6 +1064,7 @@ class ExperimentDesignPanel(ttk.Frame):
         """Update the count label showing selected items."""
         count = sum(1 for var in self.choice_vars.values() if var.get())
         self.choice_count_var.set(f"{count} items selected")
+        self._update_policy_buttons()
 
     def _on_name_changed(self) -> None:
         if self._suspend_identity_tracking:
@@ -1371,6 +1459,9 @@ class ExperimentDesignPanel(ttk.Frame):
         self.lora_count_var.set(f"{count} LoRAs selected")
 
     def restore_state(self, experiment: Any) -> None:
+        from src.learning.model_comparison import study_type
+
+        self.study_type_var.set("Model Comparison" if study_type(experiment) == "model_comparison" else "Controlled Variable")
         self.name_var.set(str(getattr(experiment, "name", "") or ""))
         self.desc_var.set(str(getattr(experiment, "description", "") or ""))
         self.stage_var.set(str(getattr(experiment, "stage", "txt2img") or "txt2img"))
@@ -1404,7 +1495,9 @@ class ExperimentDesignPanel(ttk.Frame):
         if self.prompt_source_var.get() == "pack":
             self._on_prompt_source_changed()
         self._on_variable_changed()
-        selected_items = {str(item) for item in metadata.get("selected_items", [])}
+        if self._is_model_comparison():
+            self._on_study_type_changed()
+        selected_items = {str(item) for item in metadata.get("selected_models" if self._is_model_comparison() else "selected_items", [])}
         for item, var in self.choice_vars.items():
             var.set(item in selected_items)
         self._name_auto_generated = False

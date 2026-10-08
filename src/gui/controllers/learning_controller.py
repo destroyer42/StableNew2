@@ -226,6 +226,8 @@ class LearningController:
 
         # Build metadata dict with value specifications
         metadata = {
+            "study_type": experiment_data.get("study_type", "controlled_variable"),
+            "selected_models": list(experiment_data.get("selected_models", []) or []),
             # Numeric range params
             "start_value": experiment_data.get("start_value", 1.0),
             "end_value": experiment_data.get("end_value", 10.0),
@@ -570,6 +572,12 @@ class LearningController:
         """
         import logging
 
+        from src.learning.model_comparison import study_type
+
+        if study_type(experiment) == "model_comparison":
+            self._build_model_comparison_plan(experiment)
+            return
+
         from src.gui.learning_state import LearningVariant
 
         logger = logging.getLogger(__name__)
@@ -666,6 +674,38 @@ class LearningController:
         # Update the plan table if it exists
         if self._plan_table:
             self._update_plan_table()
+        self._set_workflow_state("planned")
+        self._notify_resume_state_changed()
+
+    def _build_model_comparison_plan(self, experiment: LearningExperiment) -> None:
+        from src.learning.model_comparison import build_comparison_snapshot
+        from src.pipeline.compile_evidence import CompileEvidence
+
+        if not experiment.experiment_id:
+            experiment.experiment_id = uuid.uuid4().hex
+        baseline = self._get_baseline_config() or dict(experiment.baseline_config or {})
+        getter = getattr(self.app_controller, "get_current_global_prompt_policy", None)
+        policy = getter() if callable(getter) else None
+        if isinstance(policy, dict):
+            baseline = apply_global_prompt_policy(baseline, **policy)
+        snapshot = build_comparison_snapshot(
+            experiment, baseline,
+            evidence=CompileEvidence(lora_resolver=getattr(self, "_learning_lora_resolver", None)),
+            policy_resolver=getattr(self, "_learning_policy_resolver", None),
+        )
+        experiment.execution_snapshot_json = freeze_snapshot(snapshot)
+        experiment.baseline_config = snapshot["baseline_config"]
+        experiment.prompt_text = snapshot["prompt_text"]
+        experiment.metadata.update(snapshot["prompt_source"])
+        experiment.variable_under_test = snapshot["variable_under_test"]
+        experiment.values = list(snapshot["variant_values"])
+        self.learning_state.current_experiment = experiment
+        self.load_existing_ratings()
+        self.learning_state.plan = [LearningVariant(
+            experiment_id=experiment.experiment_id, variant_id=f"{experiment.experiment_id}:{index}",
+            param_value=value, planned_images=snapshot["images_per_value"],
+        ) for index, value in enumerate(experiment.values)]
+        self._update_plan_table()
         self._set_workflow_state("planned")
         self._notify_resume_state_changed()
 
@@ -999,6 +1039,16 @@ class LearningController:
         snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
         snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
         experiment = frozen_definition(experiment)
+        from src.learning.model_comparison import materialize_njr, study_type
+
+        if study_type(experiment) == "model_comparison":
+            return materialize_njr(
+                snapshot, variant,
+                metadata_factory=lambda config: self._build_learning_metadata(
+                    experiment=experiment, variant=variant, stage_name="txt2img", final_config=config),
+                output_dir=self._resolve_learning_output_dir(snapshot.get("baseline_config") or {}),
+                filename_template=self._resolve_learning_filename_template(snapshot.get("baseline_config") or {}),
+            )
         if snapshot and snapshot.get("model_policy_context") and variant.param_value not in experiment.values:
             raise ValueError("Variant is outside the frozen experiment values")
         baseline = dict(snapshot.get("baseline_config") or experiment.baseline_config or {})
@@ -1780,6 +1830,9 @@ class LearningController:
                 reason = "" if controlled else "seed_vector_mismatch"
         # The tested variable must also have executed as requested, and every
         # comparable variant must have run in the same backend launch profile.
+        from src.learning.model_comparison import runtime_prompt_readback
+
+        prompt_readback = runtime_prompt_readback(variant_payload, metadata)
         final_prompt = variant_payload.get("final_prompt") or metadata.get("final_prompt")
         variable_reason = validate_executed_lora(
             getattr(variant, "executed_config", None), final_prompt
@@ -1800,6 +1853,7 @@ class LearningController:
             **dict(getattr(variant, "execution_metadata", {}) or {}),
             "variable_validation_reason": variable_reason or "valid",
             "executed_final_prompt": str(final_prompt or ""),
+            "runtime_prompt_readback": prompt_readback,
             "runtime_launch_profile": launch_profile,
             "requested_seed_policy": dict(policy or {}),
             "actual_all_seeds": actual_vector,
@@ -2086,10 +2140,13 @@ class LearningController:
             if self._learning_record_writer and experiment_id
             else {}
         )
+        from src.learning.model_comparison import study_type
+
         return build_experiment_conclusion(
             list(self.learning_state.plan or []),
             details,
             dict(self.learning_state.review_drafts or {}),
+            study_type=study_type(self.learning_state.current_experiment),
         )
 
     def on_job_completed(self, job_id: str, result: dict[str, Any]) -> None:
@@ -2131,10 +2188,15 @@ class LearningController:
         snapshot_json = str(getattr(experiment, "execution_snapshot_json", "") or "")
         snapshot = thaw_snapshot(snapshot_json) if snapshot_json else {}
         base_config = dict(executed_config or snapshot.get("baseline_config") or {})
+        from src.learning.model_comparison import rating_classification
+
+        classification = rating_classification(
+            snapshot, target_variant.param_value, target_variant.execution_metadata
+        )
         base_config.update(
             {
-                "prompt": str(snapshot.get("prompt_text") or experiment.prompt_text),
-                "negative_prompt": str(snapshot.get("negative_prompt_text") or ""),
+                "prompt": str(executed_config.get("prompt", snapshot.get("prompt_text") or experiment.prompt_text)),
+                "negative_prompt": str(executed_config.get("negative_prompt", snapshot.get("negative_prompt_text") or "")),
                 "stage": str(snapshot.get("stage") or experiment.stage),
                 experiment.variable_under_test.lower(): target_variant.param_value,
             }
@@ -2166,7 +2228,7 @@ class LearningController:
                 "user_rating": blended_rating,
                 "user_rating_raw": rating,
                 "user_notes": notes,
-                "record_kind": "learning_experiment_rating",
+                **classification,
                 "rating_schema_version": 2,
                 "rating_context": context_flags,
                 "rating_details": subscores,

@@ -1,7 +1,7 @@
 Learning_System_Spec_v2.6.md
 
 Status: Canonical subsystem reference
-Updated: 2026-10-06
+Updated: 2026-10-07
 
 0. Purpose
 
@@ -78,6 +78,43 @@ The canonical model compile-policy seam runs after variable validation and
 override. If normalization erases the tested value or changes the frozen exact
 profile, the experiment is rejected before batch admission.
 
+### 2.2 Explicit Model Comparison Study
+
+Snapshots without `study_type` retain `controlled_variable` behavior. The
+ordinary Model variable still requires compatible evidenced policy envelopes.
+`model_comparison` is a separate image txt2img, PromptPack-only study of at
+least two distinct registry-evidenced SDXL or exact qualified model targets.
+It freezes one row and the first canonical Matrix vector as a serialized
+`PackPromptIntent`, then freezes every effective arm during Build Preview
+using canonical model policy, structured prompt adaptation and compile policy.
+
+All arms share the source-intent digest, requested seed/subseed policy, sample
+count and exact geometry. The configured backend and geometry must already
+support every candidate. Unsupported execution features and incomplete
+adaptation evidence refuse preview; no runtime switching or geometry correction
+occurs. Fixed settings and effective prompt features may differ by target.
+
+The additive `learning_model_comparison/1` snapshot contract preserves exact
+profile/adaptation references, target-adapted structured evidence, executor
+base prompts/configuration, frozen executor-owned Global Prompt policy,
+embeddings, LoRAs and shared evidence. Global-negative participation may remain
+in adaptation evidence, but base prompts do not preapply executor-owned terms.
+The canonical executor applies frozen globals; qualified Klein policy disables
+standard global/negative semantics. No mutable global source is read at Run.
+`prompt_semantics="executor_base_before_globals_and_optimizer"` distinguishes
+Preview inputs from literal backend strings. Ratings separately retain available
+executor `final_prompt` / `final_negative_prompt` in `runtime_prompt_readback`,
+including empty negatives, without inventing final strings when unavailable.
+Run validates frozen arms and constructs ordinary
+Learning NJRs without reopening source, reading live model evidence or
+rerunning adaptation. All arms compile before one atomic JobService admission.
+
+The persisted claim is `target_envelope_preference` with
+`causal_one_variable=false`. Equal requested seeds do not mean identical latent
+noise across architectures. Existing review/rating UX is reused; conclusions
+describe preference under each frozen envelope. See
+`PR-LEARN-140_Model_Comparison_Study.md` for contract and bounded scope.
+
 3. Stage Capability Contract
 
 Learning is stage-aware.
@@ -100,7 +137,7 @@ Rules:
 Canonical `ModelPolicy` owns model applicability; Learning never detects model
 families or duplicates LoRA compatibility rules. Fixed/restricted controls are
 not controlled variables, and optional unverified features are not qualified.
-Model comparison requires compatible evidenced policy envelopes. Exact LoRA
+Controlled-variable Model experiments require compatible evidenced policy envelopes. Exact LoRA
 experiments require cache-only PR-IMG-117 admission evidence, the supported
 stage, and a runnable prompt/style selection within the profile's count limit.
 Old definitions stay loadable; invalid ones cannot execute new work.
@@ -211,6 +248,7 @@ Structured rating data must be persisted alongside the aggregate score.
 Current record typing:
 
 - `learning_experiment_rating`
+- `learning_model_comparison_rating` (target-envelope preference, noncausal)
 - `review_tab_feedback`
 
 Review-tab feedback and Learning experiment ratings are both stored as learning records, but they must remain semantically distinct.
@@ -231,6 +269,8 @@ Rules:
 - incomplete historical experiment rows remain readable but are excluded from
   recommendation inference
 - unsupported or unknown record kinds must be ignored
+- Model Comparison ratings and snapshots are excluded from ordinary parameter
+  recommendations and automatic Model selection
 - adaptive refinement context may weight or stratify recommendations, but it
   must not bypass existing evidence-tier protections
 
