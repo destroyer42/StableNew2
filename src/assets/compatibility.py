@@ -24,6 +24,7 @@ class ModelFamily(str, Enum):
 
 class EvidenceConfidence(str, Enum):
     METADATA = "metadata"
+    STRUCTURAL = "structural"
     FILENAME_HINT = "filename_hint"
 
 
@@ -51,6 +52,8 @@ class CompatibilityProfile:
     status: CompatibilityStatus
     family: ModelFamily | None
     evidence: tuple[FamilyEvidence, ...]
+    checkpoint_architecture: str | None = None
+    structural_error: str | None = None
 
 
 # Explicit, conservative tokens only, covering three realistic conventions
@@ -212,12 +215,15 @@ def filename_hint_evidence(filename: str, *, location: str) -> FamilyEvidence | 
 
 
 def resolve_compatibility_profile(
-    evidence: tuple[FamilyEvidence, ...], *, metadata_field_present: bool = False
+    evidence: tuple[FamilyEvidence, ...], *, metadata_field_present: bool = False,
+    checkpoint_architecture: str | None = None,
 ) -> CompatibilityProfile:
     """Resolve one profile from all gathered evidence without discarding any of it.
 
-    Metadata-tier evidence (embedded + sidecar) always outranks filename-hint
-    evidence. Within whichever tier is consulted, more than one distinct
+    Explicit metadata and structural evidence jointly outrank filename hints.
+    Structural recognition can resolve absent or unclassified metadata, but
+    cannot override a recognized conflicting family or base/refiner claim.
+    Within whichever tier is consulted, more than one distinct
     family is an explicit conflict, never a first-wins/last-wins pick.
 
     Filename hints are consulted only when no supported embedded/sidecar
@@ -228,8 +234,15 @@ def resolve_compatibility_profile(
     the weakest evidence tier.
     """
 
-    metadata_tier = tuple(item for item in evidence if item.confidence is EvidenceConfidence.METADATA)
+    metadata_tier = tuple(item for item in evidence if item.confidence in
+                          (EvidenceConfidence.METADATA, EvidenceConfidence.STRUCTURAL))
     if metadata_tier:
+        for item in metadata_tier:
+            if item.confidence is EvidenceConfidence.METADATA and item.family is ModelFamily.SDXL:
+                raw = item.raw_value.lower()
+                if ((checkpoint_architecture == "sdxl_base" and _contains_token(raw, "refiner"))
+                        or (checkpoint_architecture == "sdxl_refiner" and _contains_token(raw, "base"))):
+                    return CompatibilityProfile(CompatibilityStatus.CONFLICTING, None, evidence)
         families = {item.family for item in metadata_tier}
         if len(families) > 1:
             return CompatibilityProfile(CompatibilityStatus.CONFLICTING, None, evidence)

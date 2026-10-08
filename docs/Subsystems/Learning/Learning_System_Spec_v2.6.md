@@ -1,7 +1,7 @@
 Learning_System_Spec_v2.6.md
 
 Status: Canonical subsystem reference
-Updated: 2026-10-07
+Updated: 2026-10-08
 
 0. Purpose
 
@@ -106,6 +106,23 @@ least two distinct registry-evidenced SDXL or exact qualified model targets.
 It freezes one row and the first canonical Matrix vector as a serialized
 `PackPromptIntent`, then freezes every effective arm during Build Preview
 using canonical model policy, structured prompt adaptation and compile policy.
+
+Model Comparison Preview first checks evidence for the exact served checkpoint
+filenames retained by the resource projection (PR-LEARN-142). Missing/stale
+selected checkpoint evidence is refreshed through AssetRegistry in a cancellable
+worker, with visible progress and no directory scan or startup hashing. Runtime
+name/path ambiguity and inaccessible external files refuse Preview; cached
+basename evidence cannot substitute for the served file. Registry writers
+serialize and reload cache transactions across instances/processes. Existing
+family classification and exact qualification remain authoritative. Bounded
+safetensors tensor-header signatures can evidence metadata-free standard SDXL
+base checkpoints; recognized metadata/structure conflicts, refiners/inpaint,
+malformed headers, unsupported formats and filename-only targets refuse the
+study. Header-only family inspection precedes byte hashing; unchanged old cache
+entries gain structural evidence without rehashing. Checkpoint names, provenance
+and actionable status are shown subject to content visibility. Preview
+adds path-free `checkpoint_evidence` to arm integrity; Run uses that frozen
+evidence only. See `PR-LEARN-142_Model_Comparison_Evidence_Readiness.md`.
 
 All arms share the source-intent digest, requested seed/subseed policy, sample
 count and exact geometry. The configured backend and geometry must already

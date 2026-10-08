@@ -6,15 +6,19 @@ import hashlib
 import json
 import os
 import struct
-from collections.abc import Iterable
-from dataclasses import dataclass, field
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field, replace
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.assets.cache_lock import registry_cache_lock
+from src.assets.checkpoint_structure import STRUCTURE_CONTRACT, checkpoint_header_evidence
 from src.assets.compatibility import (
     CompatibilityProfile,
+    EvidenceConfidence,
     FamilyEvidence,
+    ModelFamily,
     embedded_metadata_evidence,
     embedded_metadata_field_present,
     filename_hint_evidence,
@@ -28,6 +32,11 @@ _EXTENSIONS = frozenset({".bin", ".ckpt", ".onnx", ".pt", ".pth", ".safetensors"
 _CHUNK = 1024 * 1024
 _CACHE_VERSION = 2
 _SUPPORTED_CACHE_VERSIONS = (1, 2)
+
+
+def _structure_is_current(entry: dict[str, Any]) -> bool:
+    structure = entry.get("structure")
+    return isinstance(structure, dict) and structure.get("contract") == STRUCTURE_CONTRACT
 
 
 class AssetKind(str, Enum):
@@ -66,6 +75,7 @@ class AssetRecord:
     metadata_provenance: str | None
     embedded_metadata_error: str | None = None
     compatibility: CompatibilityProfile | None = None
+    structural_evidence: dict[str, Any] = field(default_factory=dict)
 
     @property
     def kinds(self) -> tuple[AssetKind, ...]:
@@ -85,6 +95,17 @@ class RefreshResult:
     snapshot: AssetRegistrySnapshot
     hashes_computed: int
     hash_cache_hits: int
+
+
+@dataclass(frozen=True)
+class CheckpointInspection:
+    """Header-only evidence; deliberately carries no checkpoint byte identity."""
+
+    compatibility: CompatibilityProfile
+    embedded_metadata: dict[str, Any]
+    embedded_metadata_error: str | None
+    locations: tuple[AssetLocation, ...]
+    structural_evidence: dict[str, Any]
 
 
 def _safetensors_metadata(path: Path) -> tuple[dict[str, Any], str | None]:
@@ -235,24 +256,135 @@ class AssetRegistry:
         self._load()
         return self._snapshot
 
-    def refresh(self, *, kinds: Iterable[AssetKind] | None = None) -> RefreshResult:
+    def refresh(
+        self,
+        *,
+        kinds: Iterable[AssetKind] | None = None,
+        checkpoint_paths: Iterable[Path] | None = None,
+        cancelled: Callable[[], bool] | None = None,
+        progress: Callable[[Path, int, int], None] | None = None,
+    ) -> RefreshResult:
+        """Refresh selected kinds, or only exact served checkpoints (never scan in that mode).
+
+        Every writer reloads under the shared cache lock. A cancelled/failed
+        transaction publishes no partial snapshot, including across instances.
+        """
+        # Hash outside the writer lock: existing LoRA/embedding readers must
+        # not wait behind multi-GB checkpoint reads. Only cache commit is locked.
+        self._loaded = False
         self._load()
+        entries, computed, hits = self._prepare_refresh(
+            kinds, checkpoint_paths, cancelled, progress
+        )
+        with registry_cache_lock(self.cache_path, cancelled=cancelled):
+            self._loaded = False
+            self._load()
+            selected = set(kinds) if kinds is not None else set(AssetKind)
+            if checkpoint_paths is None:
+                self._entries = {
+                    key: value
+                    for key, value in self._entries.items()
+                    if value.get("kind") not in {item.value for item in selected}
+                }
+            for entry in entries.values():
+                stat = Path(entry["path"]).stat()
+                if (stat.st_size, stat.st_mtime_ns) != (entry["size"], entry["mtime_ns"]):
+                    raise ValueError("Asset changed before evidence publication; retry Preview")
+            if cancelled and cancelled():
+                raise InterruptedError("Checkpoint evidence refresh cancelled")
+            self._entries.update(entries)
+            self._snapshot = self._make_snapshot()
+            self._save()
+            return RefreshResult(self._snapshot, computed, hits)
+
+    def checkpoint_is_current(self, path: Path) -> bool:
+        """Worker-only fingerprint check of one exact path; no directory traversal or hash."""
+        self._load()
+        key = str(path.resolve())
+        cached = self._entries.get(key)
+        try:
+            stat = path.stat()
+        except OSError:
+            return False
+        if (
+            not cached
+            or cached.get("kind") != AssetKind.CHECKPOINT.value
+            or (cached.get("size"), cached.get("mtime_ns")) != (stat.st_size, stat.st_mtime_ns)
+            or not _structure_is_current(cached)
+        ):
+            return False
+        for candidate in _sidecar_candidates(path):
+            fingerprint = _sidecar_fingerprint(candidate)
+            if fingerprint is not None:
+                return (
+                    cached.get("sidecar_path") == str(candidate)
+                    and cached.get("sidecar_fingerprint") == fingerprint
+                )
+        return cached.get("sidecar_path") is None
+
+    def inspect_checkpoint(self, path: Path) -> CheckpointInspection:
+        """Worker-only header/sidecar preflight, without byte identity.
+
+        Not persisted or exposed as executable identity. Unsupported candidates
+        are rejected before an expensive hash; refresh still owns byte identity.
+        """
+        self._load()
+        fields = checkpoint_header_evidence(path)
+        sidecar = _resolve_sidecar(path, None)
+        location = AssetLocation(
+            AssetKind.CHECKPOINT, path, path.parent, path.stem, path.stat().st_size,
+            Path(sidecar["sidecar_path"]) if sidecar["sidecar_path"] else None,
+            sidecar["sidecar_metadata"], sidecar["sidecar_provenance"], sidecar["sidecar_error"],
+        )
+        record = self._build_record(
+            "", [location], (fields["metadata"], "safetensors_header", fields["metadata_error"]),
+            fields["structure"],
+        )
+        assert record.compatibility is not None
+        return CheckpointInspection(
+            record.compatibility, record.embedded_metadata, record.embedded_metadata_error,
+            record.locations, record.structural_evidence,
+        )
+
+    def _prepare_refresh(
+        self,
+        kinds: Iterable[AssetKind] | None,
+        checkpoint_paths: Iterable[Path] | None,
+        cancelled: Callable[[], bool] | None,
+        progress: Callable[[Path, int, int], None] | None,
+    ) -> tuple[dict[str, dict[str, Any]], int, int]:
         selected = set(kinds) if kinds is not None else set(AssetKind)
-        next_entries = {
-            key: value
-            for key, value in self._entries.items()
-            if value.get("kind") not in {item.value for item in selected}
-        }
+        next_entries: dict[str, dict[str, Any]] = {}
         computed = hits = 0
-        for kind, root in self.supported_roots():
-            if kind not in selected or not root.is_dir():
-                continue
-            paths = (
-                path
-                for path in root.rglob("*")
-                if path.is_file() and path.suffix.lower() in _EXTENSIONS
-            )
-            for path in sorted(paths, key=lambda item: str(item).lower()):
+        roots_and_paths: list[tuple[AssetKind, Path, Iterable[Path]]]
+        if checkpoint_paths is not None:
+            roots_and_paths = [
+                (AssetKind.CHECKPOINT, path.parent, (path,))
+                for path in sorted(set(checkpoint_paths), key=str)
+            ]
+        else:
+            roots_and_paths = [
+                (
+                    kind,
+                    root,
+                    sorted(
+                        (
+                            path
+                            for path in root.rglob("*")
+                            if path.is_file() and path.suffix.lower() in _EXTENSIONS
+                        ),
+                        key=str,
+                    ),
+                )
+                for kind, root in self.supported_roots()
+                if kind in selected and root.is_dir()
+            ]
+        for kind, root, paths in roots_and_paths:
+            for path in paths:
+                if cancelled and cancelled():
+                    raise InterruptedError("Checkpoint evidence refresh cancelled")
+                if path.suffix.lower() not in _EXTENSIONS:
+                    raise ValueError("Unsupported checkpoint file type")
                 key = str(path.resolve())
                 stat = path.stat()
                 cached = self._entries.get(key)
@@ -263,21 +395,39 @@ class AssetRegistry:
                     and cached.get("kind") == kind.value
                 )
                 sidecar_fields = _resolve_sidecar(path, cached if model_valid else None)
+                header_fields = (
+                    checkpoint_header_evidence(path)
+                    if kind is AssetKind.CHECKPOINT and (
+                        not model_valid
+                        or cached is None
+                        or not _structure_is_current(cached)
+                    ) else None
+                )
                 if model_valid and cached is not None:
                     entry = dict(cached)
                     entry.update(sidecar_fields)
+                    if header_fields is not None:
+                        entry.update(header_fields)
                     next_entries[key] = entry
                     hits += 1
                     continue
                 digest = hashlib.sha256()
+                read_bytes = 0
                 with path.open("rb") as stream:
                     for chunk in iter(lambda: stream.read(_CHUNK), b""):
+                        if cancelled and cancelled():
+                            raise InterruptedError("Checkpoint evidence refresh cancelled")
                         digest.update(chunk)
-                metadata, error = (
-                    _safetensors_metadata(path)
-                    if path.suffix.lower() == ".safetensors"
-                    else ({}, None)
-                )
+                        read_bytes += len(chunk)
+                        if progress:
+                            progress(path, read_bytes, stat.st_size)
+                if header_fields is not None:
+                    metadata, error = header_fields["metadata"], header_fields["metadata_error"]
+                else:
+                    metadata, error = (
+                        _safetensors_metadata(path)
+                        if path.suffix.lower() == ".safetensors" else ({}, None)
+                    )
                 entry = {
                     "path": key,
                     "root": str(root.resolve()),
@@ -291,12 +441,16 @@ class AssetRegistry:
                     "metadata_error": error,
                 }
                 entry.update(sidecar_fields)
+                if header_fields is not None:
+                    entry["structure"] = header_fields["structure"]
+                after = path.stat()
+                if (stat.st_size, stat.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                    raise ValueError("Checkpoint changed during evidence refresh; retry Preview")
                 next_entries[key] = entry
                 computed += 1
-        self._entries = next_entries
-        self._snapshot = self._make_snapshot()
-        self._save()
-        return RefreshResult(self._snapshot, computed, hits)
+        if cancelled and cancelled():
+            raise InterruptedError("Checkpoint evidence refresh cancelled")
+        return next_entries, computed, hits
 
     def _load(self) -> None:
         if self._loaded:
@@ -324,6 +478,7 @@ class AssetRegistry:
     def _make_snapshot(self) -> AssetRegistrySnapshot:
         grouped: dict[str, list[AssetLocation]] = {}
         content_metadata: dict[str, tuple[dict[str, Any], str | None, str | None]] = {}
+        structures: dict[str, dict[str, Any]] = {}
         for entry in self._entries.values():
             try:
                 digest = str(entry["sha256"])
@@ -347,6 +502,8 @@ class AssetRegistry:
             except (KeyError, TypeError, ValueError):
                 continue
             grouped.setdefault(digest, []).append(location)
+            if kind is AssetKind.CHECKPOINT and isinstance(entry.get("structure"), dict):
+                structures[digest] = entry["structure"]
             raw_metadata = entry.get("metadata")
             content_metadata.setdefault(
                 digest,
@@ -357,7 +514,7 @@ class AssetRegistry:
                 ),
             )
         records = tuple(
-            self._build_record(digest, locations, content_metadata[digest])
+            self._build_record(digest, locations, content_metadata[digest], structures.get(digest, {}))
             for digest, locations in sorted(grouped.items())
         )
         return AssetRegistrySnapshot(records)
@@ -367,16 +524,30 @@ class AssetRegistry:
         digest: str,
         locations: list[AssetLocation],
         content: tuple[dict[str, Any], str | None, str | None],
+        structure: dict[str, Any] | None = None,
     ) -> AssetRecord:
         ordered = tuple(sorted(locations, key=lambda item: str(item.path).lower()))
         metadata, provenance, metadata_error = content
 
         evidence: list[FamilyEvidence] = []
         evidence.extend(embedded_metadata_evidence(metadata))
+        structure = structure or {}
+        architecture = str(structure.get("architecture") or "unrecognized") if structure else None
+        structural_family = {
+            "sdxl_base": ModelFamily.SDXL, "sdxl_refiner": ModelFamily.SDXL,
+            "sdxl_inpaint": ModelFamily.SDXL, "sd1": ModelFamily.SD1, "sd2": ModelFamily.SD2,
+        }.get(architecture or "")
+        if structural_family is not None:
+            evidence.append(FamilyEvidence(
+                structural_family, "safetensors_structure", architecture or "",
+                EvidenceConfidence.STRUCTURAL,
+            ))
         for location in ordered:
             if location.sidecar_metadata:
                 evidence.extend(
-                    sidecar_metadata_evidence(location.sidecar_metadata, location=str(location.path))
+                    sidecar_metadata_evidence(
+                        location.sidecar_metadata, location=str(location.path)
+                    )
                 )
         for location in ordered:
             hint = filename_hint_evidence(location.display_name, location=str(location.path))
@@ -391,6 +562,10 @@ class AssetRegistry:
         )
 
         profile = resolve_compatibility_profile(
-            tuple(evidence), metadata_field_present=metadata_field_present
+            tuple(evidence), metadata_field_present=metadata_field_present,
+            checkpoint_architecture=architecture,
         )
-        return AssetRecord(digest, ordered, metadata, provenance, metadata_error, profile)
+        profile = replace(
+            profile, checkpoint_architecture=architecture, structural_error=structure.get("error"),
+        )
+        return AssetRecord(digest, ordered, metadata, provenance, metadata_error, profile, structure)

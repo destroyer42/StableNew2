@@ -320,6 +320,10 @@ def resolve_model_policy(model_name: str | None, *, family_lookup: FamilyLookup 
     status = getattr(getattr(compat, "status", None), "value", "")
     if status == "conflicting":
         return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_CONFLICTING)
+    if getattr(compat, "structural_error", None) or getattr(compat, "checkpoint_architecture", None) in (
+        "sdxl_refiner", "sdxl_inpaint"
+    ):
+        return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_UNKNOWN)
     family = getattr(compat, "family", None)
     if status != "resolved" or family is None:
         return _unverified_policy(FAMILY_UNKNOWN, EVIDENCE_UNKNOWN)
@@ -344,11 +348,14 @@ class RegistryFamilyLookup:
     """Family evidence from ``AssetRegistry``'s persisted snapshot only (no scan, no hashing; safe on a UI thread).
 
     A checkpoint is matched by file name. Names that match records with different compatibility outcomes are
-    reported as conflicting rather than resolved by picking one.
+    reported as conflicting rather than resolved by picking one. Model Comparison
+    readiness can instead bind runtime selections to exact served paths; that
+    bounded lookup never falls back to another file with the same basename.
     """
 
-    def __init__(self, registry: Any | None = None) -> None:
+    def __init__(self, registry: Any | None = None, *, model_paths: dict[str, Any] | None = None) -> None:
         self._registry = registry
+        self._model_paths = model_paths
 
     def _get_registry(self) -> Any:
         if self._registry is None:
@@ -362,7 +369,12 @@ class RegistryFamilyLookup:
         from src.assets.compatibility import CompatibilityProfile, CompatibilityStatus
 
         registry = self._get_registry()
-        if getattr(registry, "webui_root", None) is None:
+        if self._model_paths is None and getattr(registry, "webui_root", None) is None:
+            return None
+        from pathlib import Path
+
+        exact = self._model_paths.get(model_name) if self._model_paths is not None else None
+        if self._model_paths is not None and exact is None:
             return None
         key = _model_key(model_name)
         found = []
@@ -370,14 +382,16 @@ class RegistryFamilyLookup:
             if record.compatibility is None:
                 continue
             if any(
-                _model_key(location.path.name) == key
+                (location.path == Path(exact) if exact is not None else _model_key(location.path.name) == key)
                 for location in record.locations
                 if location.kind is AssetKind.CHECKPOINT
             ):
                 found.append(record.compatibility)
         if not found:
             return None
-        outcomes = {(item.status, item.family) for item in found}
+        outcomes = {(item.status, item.family,
+                     item.checkpoint_architecture in ("sdxl_refiner", "sdxl_inpaint"),
+                     bool(item.structural_error)) for item in found}
         if len(outcomes) > 1:
             return CompatibilityProfile(CompatibilityStatus.CONFLICTING, None, ())
         return found[0]

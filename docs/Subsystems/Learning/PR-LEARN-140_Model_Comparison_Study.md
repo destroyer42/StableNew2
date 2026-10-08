@@ -22,6 +22,14 @@ evidence. No global merge or prompt interpretation belongs in the controller. No
 
 ## Study meaning and mode isolation
 
+PR-LEARN-142 adds an explicit, cancellable checkpoint evidence-readiness step
+before the semantic freeze. It binds selected runtime resources to exact served
+files, refreshes only stale/missing selected checkpoint evidence off Tk through
+AssetRegistry, and freezes path-free identity evidence with each arm. Run still
+consumes only frozen Preview evidence. See
+`PR-LEARN-142_Model_Comparison_Evidence_Readiness.md` for the bounded lifecycle;
+the eligibility, adaptation and causal interpretation below are unchanged.
+
 `controlled_variable` is the backward-compatible default, including snapshots
 without `study_type`. Ordinary Variable Under Test = Model still requires the
 same compatible evidenced envelope through `compatible_context()`. Registry

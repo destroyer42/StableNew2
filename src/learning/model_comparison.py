@@ -280,6 +280,7 @@ def build_comparison_snapshot(
             "selected_model": policy_context(policy, model, "txt2img")["selected_model"],
             "source_intent_sha256": source_sha,
             "model_policy_context": policy_context(policy, model, "txt2img"),
+            "checkpoint_evidence": copy.deepcopy(getattr(evidence, "model_identities", {}).get(model, {})),
             "prompt_adaptation": manifest,
             "effective_intent": pack_prompt_intent_to_dict(adapted.intent),
             "adapted_positive_prompt": adapted_rendered.positive,
@@ -385,6 +386,18 @@ def frozen_arm(snapshot: dict, value: Any) -> dict:
         ):
             raise ValueError("Model Comparison must retain target-envelope interpretation")
         context = arm["model_policy_context"]
+        checkpoint = arm.get("checkpoint_evidence") or {}
+        if checkpoint:
+            authority = checkpoint.get("authority")
+            if authority == "exact_profile":
+                if checkpoint.get("profile_ref") != context.get("profile_ref"):
+                    raise ValueError("Frozen checkpoint profile evidence mismatch; rebuild preview")
+            elif authority == "asset_registry":
+                sha = checkpoint.get("sha256", "")
+                if context.get("evidence") != "registry_evidence" or not isinstance(sha, str) or len(sha) != 64 or any(c not in "0123456789abcdef" for c in sha):
+                    raise ValueError("Frozen checkpoint identity evidence is invalid; rebuild preview")
+            else:
+                raise ValueError("Frozen checkpoint identity authority is unknown; rebuild preview")
         policy = policy_from_context(context)
         _require_candidate(policy)
         config = arm["effective_config"]
@@ -646,8 +659,8 @@ def runtime_prompt_readback(variant_payload: dict, metadata: dict) -> dict:
     return readback
 
 
-def preview_summary(snapshot: dict) -> str:
-    """Content-free readiness: no prompt text, asset names or local paths."""
+def preview_summary(snapshot: dict, *, show_names: bool = False) -> str:
+    """Readiness without prompts/local paths; asset names are explicitly opt-in."""
     study = snapshot["model_comparison"]
     size = study["shared_geometry"]
     rows = [
@@ -657,7 +670,12 @@ def preview_summary(snapshot: dict) -> str:
         context = arm["model_policy_context"]
         profile = context.get("profile_ref")
         target = f"{profile['id']} v{profile['version']}" if profile else context["family"]
+        name = arm["selected_model"].replace("\\", "/").rsplit("/", 1)[-1]
+        label = f"Arm {arm['candidate_index'] + 1}: {name}" if show_names else f"Arm {arm['candidate_index'] + 1}"
+        identity = arm.get("checkpoint_evidence", {})
+        sources = list(dict.fromkeys(item["source"] for item in identity.get("family_evidence", [])))
+        provenance = ", ".join(sources) or identity.get("authority", "frozen policy")
         rows.append(
-            f"Arm {arm['candidate_index'] + 1}: {target}; ready; adaptation {'changes' if arm['prompt_adaptation']['changed'] else 'preserves'} source projection; shared {size['width']}x{size['height']} valid."
+            f"{label}: {target}; ready ({provenance}); adaptation {'changes' if arm['prompt_adaptation']['changed'] else 'preserves'} source projection; shared {size['width']}x{size['height']} valid."
         )
     return "\n".join(rows)

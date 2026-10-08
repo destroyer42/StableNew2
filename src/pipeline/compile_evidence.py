@@ -50,6 +50,7 @@ class CompileEvidence:
         self.lora_evidence = LoraEvidenceContext(lora_resolver or RegistryLoraResolver(registry, cache_only=True))
         self._policies: dict[str, ModelPolicy] = {}
         self.policy_lookups = 0
+        self.model_identities: dict[str, dict[str, Any]] = {}
 
     def policy_for(self, model_name: str | None) -> ModelPolicy:
         key = str(model_name or "").strip()

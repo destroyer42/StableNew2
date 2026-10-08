@@ -102,6 +102,7 @@ def test_successful_preview_enables_run_immediately(panel):
                 "arms": [
                     {
                         "candidate_index": 0,
+                        "selected_model": "first.safetensors",
                         "model_policy_context": {"family": "sdxl"},
                         "prompt_adaptation": {"changed": False},
                     }
