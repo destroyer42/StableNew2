@@ -33,6 +33,14 @@ safety negatives, empty fallback).
 
 ## Compile-safe semantics
 
+These generic compile-safe semantics remain the default compiler contract.
+Fresh GUI PromptPack submission additionally enables the explicit qualified
+Klein selection policy in PR-PROMPT-143: complete evidence preparation, only
+positively verified adapters, and operator review for multiple compatible
+candidates before NJR creation. That separate versioned selection contract
+does not relax Learning's completeness gate or rewrite replayed NJRs. See
+`PR-PROMPT-143_Klein_Compatible_LoRA_Selection.md`.
+
 Production adaptation deletes an authored component only on a **definitive** fact:
 
 * the policy says the feature is unsupported (negative channel, embeddings, LoRA);

@@ -969,6 +969,8 @@ class PreviewPanelV2(ttk.Frame):
         """Format details for a single NormalizedJobRecord."""
         lines = []
         lines.append(f"\nJob #{index}: {job.job_id}")
+        from src.gui_v2.pack_lora_selection_projection import selection_detail_lines
+        lines.extend(selection_detail_lines(job, visible=self._content_visibility_mode == "nsfw"))
 
         config = getattr(job, "config", {}) or {}
 

@@ -375,19 +375,9 @@ class PipelineController(CorePipelineController):
         return jobs
 
     def _get_prompt_pack_builder(self) -> PromptPackNormalizedJobBuilder | None:
-        if not self._config_manager or not getattr(self, "_job_builder", None):
-            return None
-        builder = getattr(self, "_prompt_pack_builder", None)
-        if builder is not None:
-            return builder
-        packs_dir = self._config_manager.packs_dir
-        builder = PromptPackNormalizedJobBuilder(
-            config_manager=self._config_manager,
-            job_builder=self._job_builder,
-            packs_dir=packs_dir,
-        )
-        self._prompt_pack_builder = builder
-        return builder
+        from src.controller.prompt_pack_preflight import get_prompt_pack_builder
+
+        return get_prompt_pack_builder(self)
 
     def _record_preview_build_timing(
         self,

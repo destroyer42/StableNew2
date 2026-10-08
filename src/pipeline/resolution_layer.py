@@ -376,6 +376,7 @@ def adapt_pack_intent(
     *,
     lora_resolver: LoraResolver | None = None,
     optimizer_enabled: bool = False,
+    lora_selection: Any = None,
 ) -> AdaptedPackIntent:
     """Run the one 130C rule implementation over the structured intent (compile-safe) and re-assemble it.
 
@@ -409,6 +410,7 @@ def adapt_pack_intent(
             global_negative_present=bool(intent.apply_global_negative and intent.global_negative.strip()),
         ),
         lora_resolver=lora_resolver,
+        lora_selection=lora_selection,
     )
     global_negative = intent.global_negative
     pack_negative = intent.pack_negative
