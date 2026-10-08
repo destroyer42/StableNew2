@@ -49,6 +49,9 @@ class ExperimentDesignPanel(ttk.Frame):
         self._target_policy = None
         self._learning_capabilities = None
         self._suspend_identity_tracking = False
+        self._comparison_readiness_busy = False
+        self._comparison_evidence_task = None
+        self._comparison_poll_id = None
         self._prompt_pack_paths: dict[str, Path] = {}
         self._prompt_option_payloads: dict[str, dict[str, Any]] = {}
         self._resource_state = resolve_app_state(self.learning_controller)
@@ -321,8 +324,14 @@ class ExperimentDesignPanel(ttk.Frame):
 
         # Feedback
         self.feedback_var = tk.StringVar(value="")
-        self.feedback_label = ttk.Label(self, textvariable=self.feedback_var, foreground="red")
+        self.feedback_label = ttk.Label(self, textvariable=self.feedback_var, foreground="red", wraplength=360)
         self.feedback_label.grid(row=15, column=0, sticky="w", pady=(0, 10))
+        self.cancel_evidence_button = ttk.Button(
+            button_frame, text="Cancel Evidence", state="disabled",
+            command=self._cancel_comparison_evidence,
+        )
+        self.cancel_evidence_button.grid(row=1, column=0, columnspan=2)
+        self.cancel_evidence_button.grid_remove()
         self.summary_var = tk.StringVar(value="")
         self.summary_label = ttk.Label(
             self,
@@ -361,6 +370,7 @@ class ExperimentDesignPanel(ttk.Frame):
         return self.study_type_var.get() == "Model Comparison"
 
     def _on_study_type_changed(self) -> None:
+        self._cancel_comparison_evidence()
         from src.learning.variable_metadata import get_variable_metadata
 
         if self._is_model_comparison():
@@ -562,6 +572,8 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_build_preview(self) -> None:
         """Handle build preview button click."""
+        if getattr(self, "_comparison_readiness_busy", False):
+            return
         if not self._is_model_comparison() and self._learning_capabilities is not None:
             try:
                 self._learning_capabilities.require(self.variable_var.get())
@@ -646,14 +658,22 @@ class ExperimentDesignPanel(ttk.Frame):
             self.feedback_var.set(f"Validation Error: {validation_error}")
             return
 
-        # Update controller
+        if self._is_model_comparison() and hasattr(self.learning_controller, "prepare_model_comparison_evidence"):
+            self._start_comparison_evidence(experiment_data)
+            return
+        self._apply_experiment_preview(experiment_data)
+
+    def _apply_experiment_preview(self, experiment_data, evidence=None) -> None:
+        # Evidence readiness has no permission to mutate the plan; only the Tk
+        # owner reaches this existing semantic freeze after selection checks.
         try:
             self.learning_controller.update_experiment_design(experiment_data)
 
             # Build the learning plan
             if self.learning_controller.learning_state.current_experiment:
+                args = {"comparison_evidence": evidence} if evidence is not None else {}
                 self.learning_controller.build_plan(
-                    self.learning_controller.learning_state.current_experiment
+                    self.learning_controller.learning_state.current_experiment, **args
                 )
                 from src.learning.experiment_freeze import describe_matrix_freeze
 
@@ -675,6 +695,72 @@ class ExperimentDesignPanel(ttk.Frame):
                 self.feedback_var.set("Experiment definition updated successfully")
         except Exception as e:
             self.feedback_var.set(f"Error updating experiment: {str(e)}")
+
+    def _comparison_selection(self):
+        from src.learning.resource_access import get_projected_resources
+
+        return (self.study_type_var.get(), self.prompt_pack_var.get(), self.prompt_item_var.get(),
+                tuple(name for name, var in self.choice_vars.items() if var.get()),
+                repr(get_projected_resources(self.learning_controller).get("models", [])))
+
+    def _start_comparison_evidence(self, data):
+        import copy
+
+        from src.gui.model_comparison_readiness import ComparisonEvidenceTask
+        from src.learning.resource_access import get_projected_resources
+
+        selection = self._comparison_selection()
+        resources = copy.deepcopy(get_projected_resources(self.learning_controller).get("models", []))
+        prepare = self.learning_controller.prepare_model_comparison_evidence
+        self._comparison_readiness_busy = True
+        self.feedback_var.set("Checking selected checkpoint evidence; first use may read multi-GB files. Cancel Evidence stops this work.")
+        self.cancel_evidence_button.configure(state="normal")
+        self.cancel_evidence_button.grid()
+        self._update_policy_buttons()
+        task = ComparisonEvidenceTask(lambda **kwargs: prepare(data["selected_models"], resources, **kwargs))
+        self._comparison_evidence_task = task
+
+        def poll():
+            import queue
+
+            if self._comparison_selection() != selection:
+                task.cancel()
+            try:
+                while True:
+                    kind, value = task.messages.get_nowait()
+                    if kind == "progress":
+                        if not task.cancelled():
+                            self.feedback_var.set(value)
+                        continue
+                    self._comparison_readiness_busy = False
+                    self._comparison_evidence_task = None
+                    self.cancel_evidence_button.configure(state="disabled")
+                    self.cancel_evidence_button.grid_remove()
+                    if task.cancelled():
+                        self.feedback_var.set("Evidence work cancelled, timed out, or selection changed; rebuild Preview")
+                    elif kind == "error":
+                        self.feedback_var.set(value)
+                    else:
+                        self._apply_experiment_preview(data, evidence=value)
+                    self._update_policy_buttons()
+                    self._comparison_poll_id = None
+                    return
+            except queue.Empty:
+                self._comparison_poll_id = self.after(50, poll)
+
+        self._comparison_poll_id = self.after(50, poll)
+
+    def _cancel_comparison_evidence(self):
+        task = getattr(self, "_comparison_evidence_task", None)
+        if task is not None:
+            task.cancel()
+
+    def destroy(self):
+        self._cancel_comparison_evidence()
+        poll_id = getattr(self, "_comparison_poll_id", None)
+        if poll_id:
+            self.after_cancel(poll_id)
+        super().destroy()
 
     def _on_run_experiment(self) -> None:
         """Handle run experiment button click."""
@@ -881,6 +967,10 @@ class ExperimentDesignPanel(ttk.Frame):
                 combo.configure(values=capability.lora_candidates)
 
     def _update_policy_buttons(self) -> None:
+        if getattr(self, "_comparison_readiness_busy", False):
+            self.build_button.configure(state="disabled")
+            self.run_button.configure(state="disabled")
+            return
         if self._is_model_comparison():
             valid = sum(bool(var.get()) for var in self.choice_vars.values()) >= 2
             self.build_button.configure(state="normal" if valid else "disabled")
@@ -1023,6 +1113,9 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _on_resources_updated(self, _resources: dict[str, list[Any]] | None = None) -> None:
         """Refresh the active resource checklist from the current projection."""
+        if not self.winfo_exists():
+            return
+        self._cancel_comparison_evidence()
         from src.learning.variable_metadata import get_variable_metadata
         if self._is_model_comparison():
             selected = {name for name, value in self.choice_vars.items() if value.get()}
@@ -1062,6 +1155,7 @@ class ExperimentDesignPanel(ttk.Frame):
 
     def _update_choice_count(self) -> None:
         """Update the count label showing selected items."""
+        self._cancel_comparison_evidence()
         count = sum(1 for var in self.choice_vars.values() if var.get())
         self.choice_count_var.set(f"{count} items selected")
         self._update_policy_buttons()

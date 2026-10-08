@@ -6,12 +6,13 @@ import hashlib
 import json
 import os
 import struct
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from src.assets.cache_lock import registry_cache_lock
 from src.assets.compatibility import (
     CompatibilityProfile,
     FamilyEvidence,
@@ -235,24 +236,110 @@ class AssetRegistry:
         self._load()
         return self._snapshot
 
-    def refresh(self, *, kinds: Iterable[AssetKind] | None = None) -> RefreshResult:
+    def refresh(
+        self,
+        *,
+        kinds: Iterable[AssetKind] | None = None,
+        checkpoint_paths: Iterable[Path] | None = None,
+        cancelled: Callable[[], bool] | None = None,
+        progress: Callable[[Path, int, int], None] | None = None,
+    ) -> RefreshResult:
+        """Refresh selected kinds, or only exact served checkpoints (never scan in that mode).
+
+        Every writer reloads under the shared cache lock. A cancelled/failed
+        transaction publishes no partial snapshot, including across instances.
+        """
+        # Hash outside the writer lock: existing LoRA/embedding readers must
+        # not wait behind multi-GB checkpoint reads. Only cache commit is locked.
+        self._loaded = False
         self._load()
+        entries, computed, hits = self._prepare_refresh(
+            kinds, checkpoint_paths, cancelled, progress
+        )
+        with registry_cache_lock(self.cache_path, cancelled=cancelled):
+            self._loaded = False
+            self._load()
+            selected = set(kinds) if kinds is not None else set(AssetKind)
+            if checkpoint_paths is None:
+                self._entries = {
+                    key: value
+                    for key, value in self._entries.items()
+                    if value.get("kind") not in {item.value for item in selected}
+                }
+            for entry in entries.values():
+                stat = Path(entry["path"]).stat()
+                if (stat.st_size, stat.st_mtime_ns) != (entry["size"], entry["mtime_ns"]):
+                    raise ValueError("Asset changed before evidence publication; retry Preview")
+            if cancelled and cancelled():
+                raise InterruptedError("Checkpoint evidence refresh cancelled")
+            self._entries.update(entries)
+            self._snapshot = self._make_snapshot()
+            self._save()
+            return RefreshResult(self._snapshot, computed, hits)
+
+    def checkpoint_is_current(self, path: Path) -> bool:
+        """Worker-only fingerprint check of one exact path; no directory traversal or hash."""
+        self._load()
+        key = str(path.resolve())
+        cached = self._entries.get(key)
+        try:
+            stat = path.stat()
+        except OSError:
+            return False
+        if (
+            not cached
+            or cached.get("kind") != AssetKind.CHECKPOINT.value
+            or (cached.get("size"), cached.get("mtime_ns")) != (stat.st_size, stat.st_mtime_ns)
+        ):
+            return False
+        for candidate in _sidecar_candidates(path):
+            fingerprint = _sidecar_fingerprint(candidate)
+            if fingerprint is not None:
+                return (
+                    cached.get("sidecar_path") == str(candidate)
+                    and cached.get("sidecar_fingerprint") == fingerprint
+                )
+        return cached.get("sidecar_path") is None
+
+    def _prepare_refresh(
+        self,
+        kinds: Iterable[AssetKind] | None,
+        checkpoint_paths: Iterable[Path] | None,
+        cancelled: Callable[[], bool] | None,
+        progress: Callable[[Path, int, int], None] | None,
+    ) -> tuple[dict[str, dict[str, Any]], int, int]:
         selected = set(kinds) if kinds is not None else set(AssetKind)
-        next_entries = {
-            key: value
-            for key, value in self._entries.items()
-            if value.get("kind") not in {item.value for item in selected}
-        }
+        next_entries: dict[str, dict[str, Any]] = {}
         computed = hits = 0
-        for kind, root in self.supported_roots():
-            if kind not in selected or not root.is_dir():
-                continue
-            paths = (
-                path
-                for path in root.rglob("*")
-                if path.is_file() and path.suffix.lower() in _EXTENSIONS
-            )
-            for path in sorted(paths, key=lambda item: str(item).lower()):
+        roots_and_paths: list[tuple[AssetKind, Path, Iterable[Path]]]
+        if checkpoint_paths is not None:
+            roots_and_paths = [
+                (AssetKind.CHECKPOINT, path.parent, (path,))
+                for path in sorted(set(checkpoint_paths), key=str)
+            ]
+        else:
+            roots_and_paths = [
+                (
+                    kind,
+                    root,
+                    sorted(
+                        (
+                            path
+                            for path in root.rglob("*")
+                            if path.is_file() and path.suffix.lower() in _EXTENSIONS
+                        ),
+                        key=str,
+                    ),
+                )
+                for kind, root in self.supported_roots()
+                if kind in selected and root.is_dir()
+            ]
+        for kind, root, paths in roots_and_paths:
+            for path in paths:
+                if cancelled and cancelled():
+                    raise InterruptedError("Checkpoint evidence refresh cancelled")
+                if path.suffix.lower() not in _EXTENSIONS:
+                    raise ValueError("Unsupported checkpoint file type")
                 key = str(path.resolve())
                 stat = path.stat()
                 cached = self._entries.get(key)
@@ -270,9 +357,15 @@ class AssetRegistry:
                     hits += 1
                     continue
                 digest = hashlib.sha256()
+                read_bytes = 0
                 with path.open("rb") as stream:
                     for chunk in iter(lambda: stream.read(_CHUNK), b""):
+                        if cancelled and cancelled():
+                            raise InterruptedError("Checkpoint evidence refresh cancelled")
                         digest.update(chunk)
+                        read_bytes += len(chunk)
+                        if progress:
+                            progress(path, read_bytes, stat.st_size)
                 metadata, error = (
                     _safetensors_metadata(path)
                     if path.suffix.lower() == ".safetensors"
@@ -291,12 +384,14 @@ class AssetRegistry:
                     "metadata_error": error,
                 }
                 entry.update(sidecar_fields)
+                after = path.stat()
+                if (stat.st_size, stat.st_mtime_ns) != (after.st_size, after.st_mtime_ns):
+                    raise ValueError("Checkpoint changed during evidence refresh; retry Preview")
                 next_entries[key] = entry
                 computed += 1
-        self._entries = next_entries
-        self._snapshot = self._make_snapshot()
-        self._save()
-        return RefreshResult(self._snapshot, computed, hits)
+        if cancelled and cancelled():
+            raise InterruptedError("Checkpoint evidence refresh cancelled")
+        return next_entries, computed, hits
 
     def _load(self) -> None:
         if self._loaded:
@@ -376,7 +471,9 @@ class AssetRegistry:
         for location in ordered:
             if location.sidecar_metadata:
                 evidence.extend(
-                    sidecar_metadata_evidence(location.sidecar_metadata, location=str(location.path))
+                    sidecar_metadata_evidence(
+                        location.sidecar_metadata, location=str(location.path)
+                    )
                 )
         for location in ordered:
             hint = filename_hint_evidence(location.display_name, location=str(location.path))

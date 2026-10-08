@@ -572,7 +572,12 @@ class LearningController:
         )
         return True, ""
 
-    def build_plan(self, experiment: LearningExperiment) -> None:
+    def prepare_model_comparison_evidence(self, models, resources, **kwargs):
+        from src.learning.model_evidence_readiness import prepare_comparison_evidence
+
+        return prepare_comparison_evidence(models, resources, **kwargs)
+
+    def build_plan(self, experiment: LearningExperiment, *, comparison_evidence=None) -> None:
         """Build a learning plan from experiment definition.
 
         PR-LEARN-020: Updated to use metadata-driven value generation.
@@ -582,7 +587,7 @@ class LearningController:
         from src.learning.model_comparison import study_type
 
         if study_type(experiment) == "model_comparison":
-            self._build_model_comparison_plan(experiment)
+            self._build_model_comparison_plan(experiment, evidence=comparison_evidence)
             return
 
         from src.gui.learning_state import LearningVariant
@@ -677,7 +682,7 @@ class LearningController:
         self._set_workflow_state("planned")
         self._notify_resume_state_changed()
 
-    def _build_model_comparison_plan(self, experiment: LearningExperiment) -> None:
+    def _build_model_comparison_plan(self, experiment: LearningExperiment, *, evidence=None) -> None:
         from src.learning.model_comparison import build_comparison_snapshot
         from src.pipeline.compile_evidence import CompileEvidence
 
@@ -690,7 +695,7 @@ class LearningController:
             baseline = apply_global_prompt_policy(baseline, **policy)
         snapshot = build_comparison_snapshot(
             experiment, baseline,
-            evidence=CompileEvidence(lora_resolver=getattr(self, "_learning_lora_resolver", None)),
+            evidence=evidence or CompileEvidence(lora_resolver=getattr(self, "_learning_lora_resolver", None)),
             policy_resolver=getattr(self, "_learning_policy_resolver", None),
         )
         experiment.execution_snapshot_json = freeze_snapshot(snapshot)

@@ -4,6 +4,16 @@ Updated: 2026-10-07
 
 ## Repository
 
+- Model Comparison evidence readiness (PR-LEARN-142, local implementation;
+  owner/operator review and publication pending): Build Preview checks exact
+  served checkpoint identity and prepares missing/stale selected-file evidence
+  off Tk through AssetRegistry, with progress, cancellation and single-flight
+  publication. Cache writers serialize and reload transactions. Path-free
+  identity evidence is frozen with the arms; existing family qualification,
+  frozen Run, global prompts, noncausal ratings and atomic admission remain
+  unchanged. No personal checkpoint scan or physical generation was performed.
+  See `docs/Subsystems/Learning/PR-LEARN-142_Model_Comparison_Evidence_Readiness.md`.
+
 - Authoritative remote: `https://github.com/destroyer42/StableNew2.git`
 - Default/release baseline: `main`
 - Current release baseline: `main` (v2.6 MVP/release proof integrated)
