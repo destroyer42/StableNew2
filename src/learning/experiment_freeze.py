@@ -48,9 +48,13 @@ def describe_matrix_freeze(metadata: Mapping[str, Any]) -> str:
 
 def freeze_prompt_pack_source(
     prompt_source: Mapping[str, Any], *, global_negative: str = "", structured: bool = False,
-    apply_global_negative: bool = True
+    apply_global_negative: bool = True, include_selected_negative: bool = True
 ) -> dict[str, Any]:
-    """Resolve one PromptPack row and its first deterministic Matrix vector."""
+    """Resolve one row/vector; selected negative can be an independent input.
+
+    Ordinary Learning disables that input because its UI text projects the row
+    already loaded here. Preserve the selected metadata for display either way.
+    """
     source = dict(prompt_source or {})
     if str(source.get("prompt_source") or "") != "pack":
         return source
@@ -103,7 +107,10 @@ def freeze_prompt_pack_source(
     resolved = resolver(
         pack_row=row,
         matrix_slot_values=vector,
-        pack_negative="" if structured else str(source.get("selected_prompt_negative_text") or ""),
+        pack_negative=(
+            str(source.get("selected_prompt_negative_text") or "")
+            if include_selected_negative and not structured else ""
+        ),
         global_negative=global_negative,
         apply_global_negative=apply_global_negative,
     )

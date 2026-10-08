@@ -32,10 +32,12 @@ def freeze_preview_global_policy(config: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def freeze_ordinary_prompt_source(metadata: Mapping[str, Any]) -> dict[str, Any]:
-    """Use the canonical resolver without preapplying executor-owned globals."""
+    """Resolve the row once; selected negative is its display projection."""
     from src.learning.experiment_freeze import freeze_prompt_pack_source
 
-    source = freeze_prompt_pack_source(metadata, apply_global_negative=False)
+    source = freeze_prompt_pack_source(
+        metadata, apply_global_negative=False, include_selected_negative=False
+    )
     source.update(executor_base_contract=BASE_CONTRACT, prompt_semantics=PROMPT_SEMANTICS)
     return source
 

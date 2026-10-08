@@ -85,6 +85,12 @@ applies globals once. Ordinary LoRA overrides keep workload and config prompts
 consistent. Ratings label base semantics and retain available final runtime
 readback separately; causality and recommendation rules are unchanged.
 
+The selected PromptPack slot negative is display metadata for the canonical
+row, not an additional negative input. Ordinary source freeze renders row
+phrases and negative embeddings once, retaining selected metadata for display.
+Independent negative inputs supported by the shared resolver remain distinct;
+already-frozen duplicate row strings are preserved until explicit rebuild.
+
 Run refuses older Pack previews that may preapply enabled Global Negative, and
 saved previews missing frozen global policy, with **Rebuild Preview** guidance.
 It never rewrites saved execution semantics or reinterprets completed NJRs or

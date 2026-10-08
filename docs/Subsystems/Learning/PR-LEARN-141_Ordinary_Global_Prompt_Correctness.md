@@ -7,6 +7,10 @@ High; Claude Code Sonnet 5.5 High. Retain the current Local/Desktop session for
 exact worktree, Tk and accepted-context continuity. Expected total successful
 work cost favors the known architecture and focused evidence over escalation.
 
+The final row-negative ownership follow-up is Narrow: Codex GPT-6.1 Sol Medium;
+Claude Code Sonnet 5.5 Medium/High, retaining the current host and exact-source
+evidence. It changes only the Learning source-freeze input contract.
+
 ## Controller Surface Assessment
 
 `LearningController` delegates ordinary source/global freeze, saved-preview
@@ -14,6 +18,7 @@ validation, config/base consistency and rating evidence to
 `src/learning/ordinary_prompt_freeze.py`. It coordinates existing policy/LoRA
 validation, snapshots and admission. Physical lines decrease from 4,022 to
 4,018. No `src/controller/*` surface or ratchet ceiling changes.
+The row-negative repair adds no controller changes or responsibilities.
 
 ## Global prompt ownership
 
@@ -68,6 +73,10 @@ preview validation and retain exact immutable workloads and frozen/legacy
 global policy, including historical behavior. No migration or retroactive
 correction occurs.
 
+Previously frozen previews with duplicate row negatives keep their exact
+frozen base when otherwise admissible. Explicit Rebuild Preview adopts row
+ownership once; Run does not deduplicate or reinterpret saved strings.
+
 ## Preserved boundaries
 
 Model Comparison's planner, arm contract, evidence and SDXL/Klein behavior are
@@ -77,17 +86,22 @@ executor/global merges, backend, queue, repository and replay are unchanged.
 All variants compile before one existing atomic `JobService.submit_njrs` call;
 one failure admits none.
 
-## Separate existing row-negative duplication
+## Canonical row-negative ownership
 
 The Experiment Design UI supplies its selected row negative as
-`selected_prompt_negative_text`. The existing ordinary source resolver then
-receives that same text as `pack_negative` alongside the row's own negative
-phrases. With `bad` in both inputs, the old resolver renders
-`GLOBAL, bad, bad`; this repair preserves the authored base `bad, bad` and the
-executor dispatches `bad, bad, GLOBAL`. Global Negative is applied once, but
-the selected row contribution remains duplicated. A separate source-ownership
-repair should address that existing behavior; PR-LEARN-141 does not normalize
-or remove authored negative terms.
+`selected_prompt_negative_text`, including the slot's rendered negative
+embeddings. This is a display projection of the canonical PromptPack row,
+not an independent authored source. Ordinary Learning passes
+`include_selected_negative=False` to `freeze_prompt_pack_source`, so the
+canonical row supplies its negative phrases and embeddings once. Selected
+metadata remains unchanged for display. A `bad` row now freezes base `bad` and
+dispatches `bad, GLOBAL` with enabled Global Negative.
+
+The shared freeze helper keeps its default behavior for independently supplied
+negative contributions; Model Comparison's structured path remains unchanged.
+Multiple distinct phrases, deliberately repeated authored phrases, embedding
+weights and canonical ordering are preserved. No substring removal or text
+deduplication occurs.
 
 ## Token-Efficient Validation Plan
 
@@ -98,6 +112,13 @@ multi-variant policy, LoRA tokens, stage flags/img2img dispatch, saved-preview
 rebuild/no rewrite, historical replay and ordinary rating readback. Run affected
 Learning, PromptPack/Matrix/globals, 130D, 140 and import-safety regressions;
 retain exact-source evidence for unchanged authorities.
+
+Trace real panel PromptPack selection and Preview through controller update,
+canonical row/resolver, NJR and executor payload with stand-in Tk widgets only.
+Cover empty/single/multiple/repeated negatives, embeddings, global enabled and
+disabled, independent inputs, frozen UI metadata, legacy preservation and
+atomic submission. Kill restoring the selected display text as an extra
+resolver contribution; restore source byte-for-byte before final checks.
 
 Kill preapplication while executor apply remains enabled; restore exact bytes
 and rerun focused contracts. Run scoped Ruff/mypy and `git diff --check`, then

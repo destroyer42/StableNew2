@@ -3,7 +3,7 @@
 import copy
 import json
 from dataclasses import replace
-from types import SimpleNamespace
+from types import MethodType, SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
@@ -13,6 +13,142 @@ from src.learning.ordinary_prompt_freeze import BASE_CONTRACT
 from src.pipeline.global_prompt_policy import apply_global_prompt_policy
 from tests.learning_v2.test_model_comparison_140 import baseline, controller_for, experiment, policy
 from tests.learning_v2.test_model_comparison_global_prompts_140 import dispatch
+
+
+def selected_ui_plan(tmp_path, *, negative="bad", embeddings=(), enabled=True):
+    """Real panel selection/Preview and controller; only Tk widgets are stand-ins."""
+    from src.gui.controllers.learning_controller import LearningController
+    from src.gui.learning_state import LearningState
+    from src.gui.views.experiment_design_panel import ExperimentDesignPanel
+
+    experiment(tmp_path)
+    path = tmp_path / "pack.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data["pack_data"]["slots"][0].update(
+        text="cat", negative=negative, positive_embeddings=[], negative_embeddings=list(embeddings)
+    )
+    path.write_text(json.dumps(data), encoding="utf-8")
+    authored = path.read_bytes()
+    config = apply_global_prompt_policy(
+        baseline(), positive_enabled=True, positive_text="POSITIVE",
+        negative_enabled=enabled, negative_text="GLOBAL",
+    )
+    config["prompt_optimizer"] = {"enabled": False}
+    controller = LearningController(learning_state=LearningState())
+    controller._get_baseline_config = lambda: copy.deepcopy(config)
+    controller._learning_policy_resolver = policy
+    panel = SimpleNamespace(
+        learning_controller=controller, _learning_capabilities=None, choice_vars={},
+        _prompt_pack_paths={"study": path}, feedback_var=Mock(),
+        _render_slot_positive_prompt=ExperimentDesignPanel._render_slot_positive_prompt,
+        _render_slot_negative_prompt=ExperimentDesignPanel._render_slot_negative_prompt,
+    )
+    for name, value in {
+        "study_type": "Controlled Variable", "name": "selected row", "desc": "",
+        "stage": "txt2img", "input_image": "", "variable": "CFG Scale",
+        "start": 6, "end": 7, "step": 1, "images": 1,
+        "prompt_source": "pack", "prompt_pack": "study",
+    }.items():
+        setattr(panel, f"{name}_var", SimpleNamespace(get=lambda value=value: value))
+    for name in (
+        "_load_prompt_payloads_for_pack", "_get_selected_prompt_payload",
+        "_on_build_preview", "_validate_experiment_data", "_is_model_comparison",
+    ):
+        setattr(panel, name, MethodType(getattr(ExperimentDesignPanel, name), panel))
+    rows = panel._load_prompt_payloads_for_pack(path)
+    panel._prompt_option_payloads = {rows[0]["label"]: rows[0]}
+    panel.prompt_item_var = SimpleNamespace(get=lambda: rows[0]["label"])
+    panel._on_build_preview()
+    assert not panel.feedback_var.set.call_args.args[0].startswith(("Error", "Validation Error"))
+    assert controller.learning_state.plan, "Real UI Preview did not build ordinary variants"
+    assert path.read_bytes() == authored
+    return controller.learning_state.current_experiment, controller, rows[0]
+
+
+@pytest.mark.parametrize("enabled", [False, True])
+@pytest.mark.parametrize(
+    "negative,embeddings,base",
+    [
+        ("", [], ""),
+        ("bad", [], "bad"),
+        ("bad, ugly\nwrong", [], "bad, ugly, wrong"),
+        ("bad, bad", [], "bad, bad"),
+        ("", [["negative_embed", 0.7]], "(<embedding:negative_embed>:0.7)"),
+        ("bad, wrong", [["negative_embed", 1]], "<embedding:negative_embed>, bad, wrong"),
+    ],
+)
+def test_ui_selected_row_negative_owned_once_at_dispatch(
+    tmp_path, monkeypatch, negative, embeddings, base, enabled
+):
+    exp, controller, selected = selected_ui_plan(
+        tmp_path, negative=negative, embeddings=embeddings, enabled=enabled
+    )
+    snapshot = thaw_snapshot(exp.execution_snapshot_json)
+    assert snapshot["prompt_source"]["selected_prompt_negative_text"] == selected["negative_prompt_text"]
+    record = controller._build_variant_njr(controller.learning_state.plan[0], exp)
+    payload = dispatch(record, tmp_path, monkeypatch)
+    expected = ", ".join(part for part in (base, "GLOBAL" if enabled else "") if part)
+    assert payload["negative_prompt"] == expected, (
+        f"UI selected negative={selected['negative_prompt_text']!r}; "
+        f"frozen base={record.negative_prompt!r}; backend={payload['negative_prompt']!r}"
+    )
+    assert snapshot["negative_prompt_text"] == record.negative_prompt == base
+    assert record.config["negative_prompt"] == record.config["txt2img"]["negative_prompt"] == base
+    assert payload["prompt"] == "POSITIVE, cat"
+
+
+def test_independent_pack_negative_contribution_remains_distinct(tmp_path):
+    from src.learning.experiment_freeze import freeze_prompt_pack_source
+
+    exp, _, _ = selected_ui_plan(tmp_path)
+    metadata = {**exp.metadata, "selected_prompt_negative_text": "independent"}
+    before = copy.deepcopy(metadata)
+    # The shared helper's default still supports an independently authored input.
+    source = freeze_prompt_pack_source(metadata, apply_global_negative=False)
+    assert source["rendered_negative_prompt"] == "independent, bad"
+    assert metadata == before
+
+
+def test_ui_frozen_source_and_atomic_run_use_preview_base(tmp_path, monkeypatch):
+    from src.learning.execution_controller import LearningExecutionController
+
+    exp, controller, _ = selected_ui_plan(tmp_path)
+    before = exp.execution_snapshot_json
+    (tmp_path / "pack.json").write_text("changed after preview", encoding="utf-8")
+    exp.metadata["selected_prompt_negative_text"] = "changed display"
+    for target in (
+        "src.learning.experiment_freeze.load_prompt_pack_document",
+        "src.gui.controllers.learning_controller.freeze_ordinary_prompt_source",
+    ):
+        monkeypatch.setattr(target, lambda *a, **kw: pytest.fail("Run reopened source"))
+    service = SimpleNamespace(
+        submit_njrs=Mock(side_effect=lambda records, policy: [r.job_id for r in records])
+    )
+    controller.pipeline_controller = object()
+    controller.execution_controller = LearningExecutionController(controller.learning_state, service)
+    controller.run_plan()
+    assert service.submit_njrs.call_count == 1
+    records = service.submit_njrs.call_args.args[0]
+    assert len(records) == 2
+    assert all(dispatch(r, tmp_path, monkeypatch)["negative_prompt"] == "bad, GLOBAL" for r in records)
+    assert exp.execution_snapshot_json == before
+
+
+def test_existing_frozen_row_duplication_is_not_reinterpreted(tmp_path, monkeypatch):
+    exp, controller, _ = selected_ui_plan(tmp_path)
+    snapshot = thaw_snapshot(exp.execution_snapshot_json)
+    snapshot["negative_prompt_text"] = "bad, bad"
+    snapshot["prompt_source"]["rendered_negative_prompt"] = "bad, bad"
+    exp.execution_snapshot_json = freeze_snapshot(snapshot)
+    before = exp.execution_snapshot_json
+    monkeypatch.setattr(
+        "src.learning.experiment_freeze.load_prompt_pack_document",
+        lambda *a: pytest.fail("Saved preview reopened source"),
+    )
+    restored = type(exp).from_dict(exp.to_dict())
+    record = controller._build_variant_njr(controller.learning_state.plan[0], restored)
+    assert dispatch(record, tmp_path, monkeypatch)["negative_prompt"] == "bad, bad, GLOBAL"
+    assert restored.execution_snapshot_json == exp.execution_snapshot_json == before
 
 
 def ordinary_plan(
