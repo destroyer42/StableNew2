@@ -1,6 +1,7 @@
 """Conservative structural family evidence and header-only cache upgrades."""
 
 import json
+import math
 import struct
 
 import pytest
@@ -10,6 +11,47 @@ from src.assets.checkpoint_structure import checkpoint_header_evidence
 from src.image_backends.model_policy import resolve_model_policy
 from src.learning.model_evidence_readiness import prepare_comparison_evidence
 from tests.assets.checkpoint_fixtures import checkpoint, tensor_checkpoint
+
+
+@pytest.mark.parametrize("shape", [[2**64, 2], [2**63, 2**63], [2] * 64, [2] * 100_000])
+def test_impossible_shapes_reject_before_unbounded_multiplication(tmp_path, monkeypatch, shape):
+    header = {"tensor": {"shape": shape, "dtype": "F16", "data_offsets": [0, 8]}}
+    encoded = json.dumps(header).encode()
+    path = tmp_path / "malicious.safetensors"
+    path.write_bytes(struct.pack("<Q", len(encoded)) + encoded + bytes(8))
+    # Deterministically detect the unsafe operation without executing a large product.
+    monkeypatch.setattr(math, "prod", lambda *_: pytest.fail("unbounded shape product"))
+    evidence = checkpoint_header_evidence(path)
+    assert evidence["structure"]["error"]
+    assert evidence["structure"]["architecture"] == "unrecognized"
+
+
+@pytest.mark.parametrize("shape", [[1] * 65, [0] + [1] * 64, [0, 2**64]])
+def test_excessively_complex_or_oversized_zero_shapes_rejected(tmp_path, shape):
+    extent = 0 if 0 in shape else 2
+    header = {"tensor": {"shape": shape, "dtype": "F16", "data_offsets": [0, extent]}}
+    encoded = json.dumps(header).encode()
+    path = tmp_path / "complex.safetensors"
+    path.write_bytes(struct.pack("<Q", len(encoded)) + encoded + bytes(extent))
+    assert checkpoint_header_evidence(path)["structure"]["error"]
+
+
+@pytest.mark.parametrize("shape,extent", [([], 2), ([1] * 64, 2), ([0, 2**63], 0), ([3, 4], 24)])
+def test_valid_bounded_tensor_shapes_preserved(tmp_path, shape, extent):
+    header = {"tensor": {"shape": shape, "dtype": "F16", "data_offsets": [0, extent]}}
+    encoded = json.dumps(header).encode()
+    path = tmp_path / "valid.safetensors"
+    path.write_bytes(struct.pack("<Q", len(encoded)) + encoded + bytes(extent))
+    assert checkpoint_header_evidence(path)["structure"]["error"] is None
+
+
+@pytest.mark.parametrize("shape,extent", [([], 0), ([0, 3], 2), ([2], 3), ([-1], 0), ([True], 2)])
+def test_invalid_tensor_counts_remain_fail_closed(tmp_path, shape, extent):
+    header = {"tensor": {"shape": shape, "dtype": "F16", "data_offsets": [0, extent]}}
+    encoded = json.dumps(header).encode()
+    path = tmp_path / "invalid.safetensors"
+    path.write_bytes(struct.pack("<Q", len(encoded)) + encoded + bytes(extent))
+    assert checkpoint_header_evidence(path)["structure"]["error"]
 
 
 def test_structure_without_metadata_is_registry_evidence(tmp_path):

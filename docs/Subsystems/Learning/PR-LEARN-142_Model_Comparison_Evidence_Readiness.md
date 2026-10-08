@@ -84,7 +84,20 @@ corroborated against bounded installed headers. No ComfyUI import, state-dict
 loading, model-family resolver or competing scanner is used in StableNew.
 Headers are capped at 64 MiB; duplicate keys, malformed descriptors, unknown
 dtypes, invalid shapes/offsets, gaps/overlaps and truncated payload extents
-refuse admission. No tensor values are read or executed.
+refuse admission. Tensor shapes are limited to 64 axes with unsigned 64-bit
+dimensions. After validating the descriptor's extent, element counts use a
+division threshold before each multiplication, so intermediate products never
+exceed the declared element count. Valid zero-sized tensors are handled before
+multiplication; scalars retain a single element. Excessively complex or oversized
+shapes fail closed without growing arbitrary-precision products. No tensor
+values are read or executed.
+
+This parser security repair is Narrow known-root-cause work: recommended Codex
+GPT-6.1 Sol Medium or Claude Code Sonnet 5.5 Medium/High, on Local/Desktop with
+isolated gate validation. It touches no controller or compatibility policy.
+Validate deterministic rejection before unsafe multiplication, rank/dimension
+bounds, scalar/zero-sized tensors and existing SDXL classification; reuse
+unchanged broader evidence, then run scoped static checks and the isolated gate.
 
 ## Transactions and lifecycle
 

@@ -7,13 +7,15 @@ qualification. Only the standard LDM SDXL base layout is admitted here.
 from __future__ import annotations
 
 import json
-import math
 import struct
 from pathlib import Path
 from typing import Any
 
 STRUCTURE_CONTRACT = "checkpoint_structure/1"
 _MAX_HEADER = 64 * 1024 * 1024
+# Inspection supports ordinary tensor ranks without allowing adversarial work.
+_MAX_TENSOR_RANK = 64
+_MAX_DIMENSION = (1 << 64) - 1
 _DTYPE_BYTES = {
     "BOOL": 1,
     "U8": 1,
@@ -40,6 +42,21 @@ def _unique_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
             raise ValueError("duplicate header key")
         result[key] = value
     return result
+
+
+def _shape_matches_extent(shape: list[int], extent: int, dtype_bytes: int) -> bool:
+    """Keep every intermediate element count within the declared byte extent."""
+    if extent % dtype_bytes:
+        return False
+    max_elements = extent // dtype_bytes
+    if 0 in shape:
+        return max_elements == 0
+    count = 1
+    for dimension in shape:
+        if count > max_elements // dimension:
+            return False
+        count *= dimension
+    return count == max_elements
 
 
 def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
@@ -86,7 +103,8 @@ def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
             dtype = _DTYPE_BYTES.get(dtype_name) if isinstance(dtype_name, str) else None
             if (
                 not isinstance(shape, list)
-                or any(type(dim) is not int or dim < 0 for dim in shape)
+                or len(shape) > _MAX_TENSOR_RANK
+                or any(type(dim) is not int or not 0 <= dim <= _MAX_DIMENSION for dim in shape)
                 or not isinstance(offsets, list)
                 or len(offsets) != 2
                 or any(type(offset) is not int for offset in offsets)
@@ -94,7 +112,9 @@ def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
             ):
                 raise ValueError("invalid shape, dtype or offsets")
             start, end = offsets
-            if not 0 <= start <= end <= payload_size or end - start != math.prod(shape) * dtype:
+            if not 0 <= start <= end <= payload_size or not _shape_matches_extent(
+                shape, end - start, dtype
+            ):
                 raise ValueError("tensor extent disagrees with shape or file size")
             intervals.append((start, end))
             shapes[name] = shape
