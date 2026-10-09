@@ -155,13 +155,18 @@ class ThumbnailWidget(ttk.Frame):
         )
 
         def _load() -> None:
-            from src.utils.image_utils import load_image_thumbnail
+            failed = False
+            try:
+                from src.utils.image_utils import load_image_thumbnail
 
-            thumb = load_image_thumbnail(path, decode_size)
+                thumb = load_image_thumbnail(path, decode_size)
+            except Exception as exc:  # an unexpected decode failure must still complete the request
+                logger.warning("Thumbnail decode failed unexpectedly (%s)", type(exc).__name__)
+                thumb, failed = None, True
 
             # Schedule UI update on main thread
             try:
-                self.after(0, lambda: self._on_image_loaded(thumb, request_id, key))
+                self.after(0, lambda: self._on_image_loaded(thumb, request_id, key, failed=failed))
             except (RuntimeError, tk.TclError) as e:
                 # Widget or Tk root was torn down while the background load completed.
                 logger.debug(
@@ -173,19 +178,29 @@ class ThumbnailWidget(ttk.Frame):
         # PR-THREAD-001: Use ThreadRegistry for thumbnail loading
         from src.utils.thread_registry import get_thread_registry
 
-        registry = get_thread_registry()
-        self._load_thread = registry.spawn(
-            target=_load,
-            name=f"Thumbnail-Loader-{id(self)}",
-            daemon=False,
-            purpose="Load and cache thumbnail image asynchronously",
-        )
+        try:
+            registry = get_thread_registry()
+            self._load_thread = registry.spawn(
+                target=_load,
+                name=f"Thumbnail-Loader-{id(self)}",
+                daemon=False,
+                purpose="Load and cache thumbnail image asynchronously",
+            )
+        except Exception as exc:
+            # No worker exists, so nothing will ever complete this request: release only *this* request's
+            # marker (a newer selection owns its own) and show a neutral state. The selected/openable path stays.
+            logger.warning("Thumbnail worker could not start (%s)", type(exc).__name__)
+            if self._request_id == request_id and self._inflight_path == key:
+                self._inflight_path = None
+                self._show_placeholder("Preview unavailable")
 
     def _on_image_loaded(
         self,
         image: Image.Image | None,
         request_id: int | None = None,
         path: str | None = None,
+        *,
+        failed: bool = False,
     ) -> None:
         """Handle async image load completion; superseded or post-destroy results are dropped."""
         if request_id is not None:
@@ -201,7 +216,7 @@ class ThumbnailWidget(ttk.Frame):
         except tk.TclError:
             return
         if image is None:
-            self._show_placeholder("Not found")
+            self._show_placeholder("Preview unavailable" if failed else "Not found")
         else:
             self.set_image(image)
 

@@ -4,8 +4,8 @@ Updated: 2026-10-09
 
 ## Repository
 
-- Focused operator workspace (PR-GUI-110, local implementation and measured acceptance; hosted CI and
-  independent review pending): presentation only, on top of PR-GUI-100. The Operator Log is compact by
+- Focused operator workspace (PR-GUI-110, COMPLETE / ACCEPTED / INTEGRATED; PR #75, hosted `required` and GUI
+  `affected` lanes passed, independent review found no blocker): presentation only, on top of PR-GUI-100. The Operator Log is compact by
   default (one header row with a warning/error summary; details, filters and Crash Bundle on demand) and
   never resizes the root window; collapsed tab overviews and action explainers are one header row; the Review
   preview and metadata fit the pane's real width (async, coalesced, stale-safe); the SVD `Animate Image` and
@@ -14,7 +14,10 @@ Updated: 2026-10-09
   preview labels and narrow comboboxes stay readable/inspectable. At the 1366 x 768 simulation the usable
   scroll viewport grew from 158/239/223 px to 354/366/336 px (Review/SVD/Video). No generation, queue, NJR,
   runtime or dependency behavior changed. See
-  `docs/Subsystems/GUI/PR-GUI-110_Focused_Operator_Workspace.md`.
+  `docs/Subsystems/GUI/PR-GUI-110_Focused_Operator_Workspace.md`. Follow-up PR-GUI-111 (local; hosted CI and
+  review pending) makes thumbnail requests recoverable after a worker-start or decode failure and shows a combobox
+  tooltip on keyboard focus only for truncated values
+  (`docs/Subsystems/GUI/PR-GUI-111_Thumbnail_Recovery_and_Tooltip_Correctness.md`).
 
 - YuNet face observations (PR-REFINE-150, COMPLETE / ACCEPTED / INTEGRATED; PR #73): Adaptive
   Refinement's `opencv` intent uses the repository-owned, hash-verified YuNet CPU model on existing core
