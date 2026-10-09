@@ -178,6 +178,11 @@ fake owner managers, and never read or write the owner's real data.
 
 ## Skips and retired tests
 
+The [optional-capability contract](Subsystems/Testing/Optional_Capability_Contract_v2.6.md)
+defines base Linux, video I/O, PowerShell and Windows integration obligations.
+Reports identify enabled profiles and unsupported capabilities; dependency
+absence must not be confused with a passing optional profile.
+
 Active deterministic test suites must not preserve removed architecture or
 deferred/unimplemented product behavior through unconditional permanent skips.
 Obsolete tests are retired, current behavior is tested against its current

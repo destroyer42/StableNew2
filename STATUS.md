@@ -1,6 +1,6 @@
 # StableNew current state
 
-Updated: 2026-10-08
+Updated: 2026-10-09
 
 ## Repository
 
@@ -13,6 +13,11 @@ Updated: 2026-10-08
   selection/adaptation evidence freezes before NJR creation and atomic admission.
   Backend qualification rechecks the frozen adapter identity without reselection.
   SDXL, generic compile-safe adaptation, Learning and replay retain their contracts.
+  Test isolation removes the personal pose-video prerequisite and inherited
+  PowerShell module paths. Optional-capability qualification is explicit in
+  `docs/Subsystems/Testing/Optional_Capability_Contract_v2.6.md`; the existing
+  Windows OpenCV cascade incompatibility remains a separate blocker, with pins
+  unchanged. These local repairs are not yet a hosted-CI or integration verdict.
   See `docs/Subsystems/PromptPacks/PR-PROMPT-143_Klein_Compatible_LoRA_Selection.md`.
 
 - Model Comparison evidence readiness (PR-LEARN-142, COMPLETE / ACCEPTED /
