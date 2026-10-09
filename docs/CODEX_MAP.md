@@ -104,6 +104,11 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `resolution_layer.py`. Controlled-variable policy compatibility is unchanged.
 - Artifacts and replay: `src/pipeline/artifact_contract.py`,
   `src/pipeline/result_contract_v26.py`, and `src/pipeline/replay_engine.py`.
+- Adaptive Refinement CPU face observations: `src/refinement/detectors/opencv_face_detector.py`
+  (YuNet on pinned core OpenCV; verified offline asset in `src/refinement/assets/`)
+  -> `subject_scale_policy_service.py` -> `quality_metrics.py` -> Learning context.
+  See `docs/Subsystems/Image/PR-REFINE-150_YuNet_Face_Detection.md`; detector errors
+  are unknown observations, distinct from successful no-face results.
 
 ## Start here by task
 

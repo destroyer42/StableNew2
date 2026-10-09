@@ -63,6 +63,13 @@ Every test must be deterministic for fixed inputs. Use temporary state,
 artifact, cache, and output roots. Do not use real networks, WebUI, models,
 GPUs, persistent user data, or GUI displays in the required gate.
 
+Adaptive Refinement's YuNet contracts use mocked native inference for required
+geometry/failure tests, plus a repository-asset hash/license test. Native CPU
+inference requires the declared core OpenCV/NumPy capability; an absent optional
+capability is reported explicitly. Offline real-photo qualification uses the
+separate `tools/qualification/refine150/qualify_cpu.py` driver and caller-owned
+reference images. See `docs/Subsystems/Image/PR-REFINE-150_YuNet_Face_Detection.md`.
+
 GUI modal tests use the isolated `tk_root` fixture so masterless Tk variables
 and widgets share one Tcl interpreter, even when another test keeps a root alive.
 Scheduled callback failures must close the modal wait and reach pytest; error

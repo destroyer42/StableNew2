@@ -4,9 +4,17 @@ Updated: 2026-10-09
 
 ## Repository
 
-- Klein-compatible PromptPack LoRA selection (PR-PROMPT-143, open PR #72;
-  functional evidence accepted, local test/CI repairs awaiting final review and
-  hosted validation): fresh GUI PromptPack preflight prepares
+- YuNet face observations (PR-REFINE-150, local implementation; independent
+  review/publication pending): Adaptive Refinement's `opencv` intent uses the
+  repository-owned, hash-verified YuNet CPU model on existing core OpenCV 5.
+  Observations identify YuNet separately from historical Haar and preserve
+  unavailable/error/timeout status and nullable Learning `face_detected` rather
+  than claiming no faces from unqualified evidence. Runtime pins,
+  CodeFormer dependencies, NJRs and submission authority are unchanged. See
+  `docs/Subsystems/Image/PR-REFINE-150_YuNet_Face_Detection.md`.
+
+- Klein-compatible PromptPack LoRA selection (PR-PROMPT-143, COMPLETE / ACCEPTED /
+  INTEGRATED; PR #72): fresh GUI PromptPack preflight prepares
   exact registry evidence off Tk and automatically chooses zero or one verified
   adapter. Multiple compatible adapters require one batch operator decision.
   Structured source, authored weights and trigger ownership are preserved;
@@ -16,8 +24,8 @@ Updated: 2026-10-09
   Test isolation removes the personal pose-video prerequisite and inherited
   PowerShell module paths. Optional-capability qualification is explicit in
   `docs/Subsystems/Testing/Optional_Capability_Contract_v2.6.md`; the existing
-  Windows OpenCV cascade incompatibility remains a separate blocker, with pins
-  unchanged. These local repairs are not yet a hosted-CI or integration verdict.
+  Windows OpenCV cascade incompatibility is addressed separately by the local
+  PR-REFINE-150 YuNet implementation; runtime pins remain unchanged.
   See `docs/Subsystems/PromptPacks/PR-PROMPT-143_Klein_Compatible_LoRA_Selection.md`.
 
 - Model Comparison evidence readiness (PR-LEARN-142, COMPLETE / ACCEPTED /

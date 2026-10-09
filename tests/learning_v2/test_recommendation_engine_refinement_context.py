@@ -12,6 +12,22 @@ def _write(path: Path, records: list[dict]) -> None:
             handle.write(json.dumps(record) + "\n")
 
 
+def test_learning_context_distinguishes_yunet_from_historical_opencv(tmp_path: Path) -> None:
+    engine = RecommendationEngine(tmp_path / "missing.jsonl")
+    context = engine._build_query_context(
+        "portrait",
+        "txt2img",
+        {
+            "detector_id": "opencv_yunet",
+            "detector_algorithm_version": "yunet_2026may/1",
+            "detection_status": "available",
+        },
+    )
+    assert context["refinement_detector_id"] == "opencv_yunet"
+    assert context["refinement_detector_algorithm_version"] == "yunet_2026may/1"
+    assert context["refinement_detection_status"] == "available"
+
+
 def _record(*, sampler: str, rating: int, policy_id: str, scale_band: str) -> dict:
     return {
         "timestamp": "2026-03-20T12:00:00",
