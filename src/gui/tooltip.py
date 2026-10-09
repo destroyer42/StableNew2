@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
+from tkinter import font as tkfont
 from tkinter import ttk
 
 
@@ -15,6 +17,8 @@ class Tooltip:
         self.delay_ms = delay_ms
         self._window: tk.Toplevel | None = None
         self._after_id: str | None = None
+        # PR-GUI-110: a combobox too narrow to show its value shows the whole value here (hover or focus).
+        self.value_provider: Callable[[], str] | None = None
 
         widget.bind("<Enter>", self._schedule, add="+")
         widget.bind("<Leave>", self._hide, add="+")
@@ -25,9 +29,20 @@ class Tooltip:
             self.widget.after_cancel(self._after_id)
         self._after_id = self.widget.after(self.delay_ms, self._show)
 
+    def _display_text(self) -> str:
+        text = self.text
+        if self.value_provider is not None:
+            value = str(self.value_provider() or "")
+            if value and value_is_truncated(self.widget, value):
+                text = f"{value}\n\n{text}" if text else value
+        return text
+
     def _show(self) -> None:
         self.widget.update_idletasks()
         if self._window:
+            return
+        text = self._display_text()
+        if not text:
             return
         self._window = tw = tk.Toplevel(self.widget)
         tw.withdraw()
@@ -35,7 +50,7 @@ class Tooltip:
         tw.attributes("-topmost", True)
         label = ttk.Label(
             tw,
-            text=self.text,
+            text=text,
             background="#222",
             foreground="#fff",
             relief="solid",
@@ -73,3 +88,41 @@ def attach_tooltip(widget: tk.Widget, text: str, *, delay_ms: int = 500) -> Tool
     except Exception:
         pass
     return tooltip
+
+
+def value_is_truncated(widget: tk.Widget, value: str, *, padding: int = 28) -> bool:
+    """Whether ``value`` is wider than ``widget`` can display (arrow/border ``padding`` reserved)."""
+    try:
+        font = tkfont.Font(root=widget, font=str(widget.cget("font")) or "TkTextFont")
+    except tk.TclError:
+        font = tkfont.nametofont("TkTextFont")
+    return int(font.measure(value)) + padding > int(widget.winfo_width())
+
+
+def install_full_value_tooltips(root_widget: tk.Misc) -> int:
+    """Make every ``ttk.Combobox`` under ``root_widget`` show its full value when it cannot fit.
+
+    Idempotent and presentation-only: it reads the widget's current value and never changes it. Returns the
+    number of comboboxes newly covered.
+    """
+    newly = 0
+    stack: list[tk.Misc] = [root_widget]
+    while stack:
+        widget = stack.pop()
+        stack.extend(widget.winfo_children())
+        if not isinstance(widget, ttk.Combobox) or getattr(widget, "_full_value_tooltip", False):
+            continue
+        tooltip = getattr(widget, "tooltip", None)
+        if not isinstance(tooltip, Tooltip):
+            tooltip = Tooltip(widget, "")
+            try:
+                setattr(widget, "tooltip", tooltip)  # noqa: B010 - same attribute attach_tooltip sets
+            except Exception:
+                pass
+        tooltip.value_provider = widget.get
+        widget.bind("<FocusIn>", tooltip._schedule, add="+")
+        widget.bind("<FocusOut>", tooltip._hide, add="+")
+        widget.bind("<<ComboboxSelected>>", tooltip._hide, add="+")
+        widget._full_value_tooltip = True  # type: ignore[attr-defined]
+        newly += 1
+    return newly

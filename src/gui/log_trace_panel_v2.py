@@ -10,7 +10,14 @@ from datetime import datetime
 from tkinter import ttk
 from typing import Any
 
-from src.gui.theme_v2 import BACKGROUND_ELEVATED, TEXT_PRIMARY
+from src.gui.theme_v2 import (
+    ASWF_ERROR_RED,
+    BACKGROUND_ELEVATED,
+    HIGHLIGHT_WARNING,
+    TEXT_PRIMARY,
+)
+from src.gui.tooltip import attach_tooltip
+from src.gui.view_contracts.workspace_density_contract import severity_counts, severity_summary
 from src.utils import InMemoryLogHandler
 from src.utils.logger import normalize_log_message
 
@@ -27,8 +34,13 @@ class LogTracePanelV2(ttk.Frame):
         *args: Any,
         on_generate_bundle: Callable[[], None] | None = None,
         audience: str = "trace",
+        initially_expanded: bool | None = None,
         **kwargs: Any,
     ):
+        """``initially_expanded`` defaults to compact for the Operator Log (PR-GUI-110: a one-row header with a
+        warning/error summary; details, filters and Crash Bundle stay one click away) and expanded for the
+        Trace Log."""
+
         super().__init__(master, *args, **kwargs)
         self._log_handler = log_handler
         self._audience = audience
@@ -39,12 +51,17 @@ class LogTracePanelV2(ttk.Frame):
         self._event_filter = tk.StringVar(value="")
         self._stage_filter = tk.StringVar(value="")
         self._auto_scroll = tk.BooleanVar(value=True)
-        self._last_body_height = 0
+        self._refresh_job: str | None = None
         self._last_rendered_lines: tuple[tuple[str, str], ...] = ()
         self._last_log_version = -1
         self._last_filter_signature: tuple[str, str, str, str, str] | None = None
         self._render_entry_limit = 150 if audience == "operator" else 300
         self._deferred_refresh_id: str | None = None
+        self._severity_version = -1
+        self._severity_counts: tuple[int, int] = (0, 0)
+        self._start_expanded = (
+            bool(initially_expanded) if initially_expanded is not None else audience != "operator"
+        )
         self._refresh_metrics: dict[str, int | float] = {
             "count": 0,
             "total_ms": 0.0,
@@ -76,9 +93,12 @@ class LogTracePanelV2(ttk.Frame):
         )
         self._toggle_btn.pack(side=tk.LEFT)
 
-        ttk.Label(header, text="Level:").pack(side=tk.LEFT, padx=(8, 2))
+        # Filters and auto-scroll belong to the details view: they are mapped only while it is expanded.
+        self._filter_bar = ttk.Frame(header)
+        filters = self._filter_bar
+        ttk.Label(filters, text="Level:").pack(side=tk.LEFT, padx=(8, 2))
         self._level_combo = ttk.Combobox(
-            header,
+            filters,
             textvariable=self._level_filter,
             values=["ALL", "INFO+", "WARN+", "ERROR"],
             state="readonly",
@@ -88,30 +108,30 @@ class LogTracePanelV2(ttk.Frame):
         self._level_combo.bind("<<ComboboxSelected>>", lambda *_: self.refresh(force=True))
 
         if audience == "trace":
-            ttk.Label(header, text="Subsystem:").pack(side=tk.LEFT, padx=(8, 2))
+            ttk.Label(filters, text="Subsystem:").pack(side=tk.LEFT, padx=(8, 2))
             self._subsystem_entry = ttk.Entry(
-                header,
+                filters,
                 textvariable=self._subsystem_filter,
                 width=12,
             )
             self._subsystem_entry.pack(side=tk.LEFT)
-            ttk.Label(header, text="Stage:").pack(side=tk.LEFT, padx=(8, 2))
+            ttk.Label(filters, text="Stage:").pack(side=tk.LEFT, padx=(8, 2))
             self._stage_entry = ttk.Entry(
-                header,
+                filters,
                 textvariable=self._stage_filter,
                 width=10,
             )
             self._stage_entry.pack(side=tk.LEFT)
-            ttk.Label(header, text="Event:").pack(side=tk.LEFT, padx=(8, 2))
+            ttk.Label(filters, text="Event:").pack(side=tk.LEFT, padx=(8, 2))
             self._event_entry = ttk.Entry(
-                header,
+                filters,
                 textvariable=self._event_filter,
                 width=16,
             )
             self._event_entry.pack(side=tk.LEFT)
-            ttk.Label(header, text="Job ID:").pack(side=tk.LEFT, padx=(8, 2))
+            ttk.Label(filters, text="Job ID:").pack(side=tk.LEFT, padx=(8, 2))
             self._job_entry = ttk.Entry(
-                header,
+                filters,
                 textvariable=self._job_filter,
                 width=14,
             )
@@ -122,11 +142,20 @@ class LogTracePanelV2(ttk.Frame):
             self._job_filter.trace_add("write", lambda *_: self.refresh(force=True))
 
         self._scroll_check = ttk.Checkbutton(
-            header,
+            filters,
             text="Auto-scroll",
             variable=self._auto_scroll,
         )
         self._scroll_check.pack(side=tk.LEFT, padx=(8, 0))
+
+        # Compact, truthful severity indicator from the same log handler; it never hides or dismisses entries.
+        self._severity_label = ttk.Label(header, text="", cursor="hand2")
+        self._severity_label.pack(side=tk.LEFT, padx=(10, 0))
+        self._severity_label.bind("<Button-1>", lambda _event: self.show(), add="+")
+        self._severity_tooltip = attach_tooltip(
+            self._severity_label,
+            "Warnings and errors currently held in the log buffer. Click to open the details.",
+        )
 
         self._bundle_button: ttk.Button | None = None
         if on_generate_bundle:
@@ -166,55 +195,45 @@ class LogTracePanelV2(ttk.Frame):
         self._log_text.configure(yscrollcommand=scrollbar.set)
 
         self.refresh()
+        self._refresh_severity()
         self._schedule_refresh()
-        self._set_expanded(True, initial=True)
+        self._set_expanded(self._start_expanded, initial=True)
 
     def _set_expanded(self, expanded: bool, *, initial: bool = False) -> None:
+        # PR-GUI-110: expanding or collapsing only maps/unmaps this panel's own body; it never resizes the
+        # application window (the window stays bounded by the screen-aware geometry contract).
         if expanded == self._expanded.get():
             return
         if expanded:
+            self._filter_bar.pack(side=tk.LEFT, before=self._severity_label)
             self._body.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
             self._toggle_btn.config(text="Details ^")
-            self._body.update_idletasks()
-            body_height = max(self._body.winfo_reqheight(), 0)
-            self._last_body_height = body_height
-            if not initial and body_height:
-                self._adjust_window_height(body_height)
             if not initial:
                 self.refresh(force=True)
         else:
             self._body.pack_forget()
+            self._filter_bar.pack_forget()
             self._toggle_btn.config(text="Details v")
-            if not initial and self._last_body_height:
-                self._adjust_window_height(-self._last_body_height)
         self._expanded.set(expanded)
 
-    def _adjust_window_height(self, delta: int) -> None:
-        if delta == 0:
-            return
-        toplevel = self.winfo_toplevel()
-        if toplevel is None:
-            return
-        toplevel.update_idletasks()
-        geom = toplevel.geometry()
-        if not geom:
-            return
-        parts = geom.split("+")
-        size = parts[0]
-        extra = parts[1:]
-        if "x" not in size:
-            return
-        width_str, height_str = size.split("x", 1)
+    def is_expanded(self) -> bool:
+        return bool(self._expanded.get())
+
+    def _refresh_severity(self) -> None:
+        """Update the compact warning/error summary; one entry scan per log change, none when unchanged."""
+
         try:
-            width = int(width_str)
-            height = int(height_str)
-        except ValueError:
+            version = self._log_handler.get_version()
+            if version != self._severity_version:
+                self._severity_version = version
+                self._severity_counts = severity_counts(self._log_handler.get_entries())
+            warnings, errors = self._severity_counts
+            self._severity_label.configure(
+                text=severity_summary(warnings, errors),
+                foreground=ASWF_ERROR_RED if errors else HIGHLIGHT_WARNING,
+            )
+        except tk.TclError:
             return
-        new_height = max(200, height + delta)
-        new_geom = f"{width}x{new_height}"
-        if extra:
-            new_geom += "".join(f"+{part}" for part in extra)
-        toplevel.geometry(new_geom)
 
     def _on_toggle(self) -> None:
         self._set_expanded(not self._expanded.get())
@@ -424,6 +443,8 @@ class LogTracePanelV2(ttk.Frame):
             "audience": self._audience,
             "expanded": bool(self._expanded.get()),
             "line_count": len(self._last_rendered_lines),
+            "warning_count": int(self._severity_counts[0]),
+            "error_count": int(self._severity_counts[1]),
             "render_limit": int(self._render_entry_limit),
             "count": count,
             "avg_ms": round(total_ms / count, 3) if count else 0.0,
@@ -451,6 +472,7 @@ class LogTracePanelV2(ttk.Frame):
         def _run() -> None:
             self._deferred_refresh_id = None
             self.refresh()
+            self._refresh_severity()
 
         self._deferred_refresh_id = self.after(max(0, int(delay_ms)), _run)
 
@@ -629,10 +651,23 @@ class LogTracePanelV2(ttk.Frame):
         return not any(token in message for token in noisy_tokens)
 
     def _schedule_refresh(self) -> None:
-        self.after(1000, self._do_refresh)
+        self._refresh_job = self.after(1000, self._do_refresh)
+
+    def destroy(self) -> None:
+        for attr in ("_refresh_job", "_deferred_refresh_id"):
+            job = getattr(self, attr, None)
+            if job is not None:
+                try:
+                    self.after_cancel(job)
+                except tk.TclError:
+                    pass
+                setattr(self, attr, None)
+        super().destroy()
 
     def _do_refresh(self) -> None:
+        self._refresh_job = None
         self.refresh()
+        self._refresh_severity()
         self._schedule_refresh()
 
     def show(self) -> None:

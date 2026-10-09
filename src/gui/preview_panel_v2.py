@@ -32,6 +32,10 @@ from src.gui.theme_v2 import (
     TEXT_PRIMARY,
 )
 from src.gui.utils.display_helpers import format_seed_display
+from src.gui.view_contracts.workspace_density_contract import (
+    RESIZE_COALESCE_MS,
+    preview_panel_stacked,
+)
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.pipeline.job_models_v2 import JobUiSummary, NormalizedJobRecord, UnifiedJobSummary
 from src.state.workspace_paths import workspace_paths
@@ -91,12 +95,16 @@ class PreviewPanelV2(ttk.Frame):
         self.details_button.pack(side=tk.RIGHT)
 
         # PR-GUI-LAYOUT-002: Two-column layout with thumbnail on right
+        # PR-GUI-110: the thumbnail column exists only while previews are on, and stacks under the job info when the
+        # panel is too narrow to keep the field labels readable beside it (see _sync_preview_layout).
         self.body = ttk.Frame(self, style=SURFACE_FRAME_STYLE)
         self.body.pack(fill=tk.BOTH, expand=True)
         self.body.columnconfigure(0, weight=1)  # Left column expands
         self.body.columnconfigure(1, weight=0)  # Right column fixed
+        self._layout_job: str | None = None
+        self.body.bind("<Configure>", self._schedule_preview_layout, add="+")
 
-        # Right column: Thumbnail + checkbox
+        # Right column: Thumbnail
         right_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
         right_frame.grid(row=0, column=1, sticky="ne", padx=(8, 0))
         self.thumbnail_frame = right_frame
@@ -109,21 +117,22 @@ class PreviewPanelV2(ttk.Frame):
         )
         self.thumbnail.pack(anchor="ne")
 
-        # Checkbox to enable/disable preview thumbnails
+        # Checkbox to enable/disable preview thumbnails (in the header so it never costs a column)
         # PR-PREVIEW-001: Default to False
         self._show_preview_var = tk.BooleanVar(value=False)
         self.preview_checkbox = ttk.Checkbutton(
-            right_frame,
+            header_frame,
             text="Show preview thumbnails",
             variable=self._show_preview_var,
             command=self._on_preview_checkbox_changed,
             style="Dark.TCheckbutton",
         )
-        self.preview_checkbox.pack(anchor="ne", pady=(4, 0))
+        self.preview_checkbox.pack(side=tk.RIGHT, padx=(0, 8))
 
         # Left column: Job info + prompts + settings
         left_frame = ttk.Frame(self.body, style=SURFACE_FRAME_STYLE)
         left_frame.grid(row=0, column=0, sticky="nsew")
+        self._left_frame = left_frame
 
         self.job_count_label = ttk.Label(
             left_frame, text="No job selected", style=STATUS_LABEL_STYLE
@@ -233,6 +242,50 @@ class PreviewPanelV2(ttk.Frame):
 
         # PR-PERSIST-001: Restore saved state
         self.restore_state()
+        self._sync_preview_layout()
+
+    # -- PR-GUI-110: presentation-only thumbnail placement ------------------------------------------------------------
+
+    def _preview_label_min_width(self) -> int:
+        """Width the field labels need beside the thumbnail, from the real font (scaling-independent)."""
+        from tkinter import font as tkfont
+
+        try:
+            return int(tkfont.nametofont("TkDefaultFont").measure("Sampler: DPM++ 2M Karras")) + 24
+        except tk.TclError:
+            return 240
+
+    def _schedule_preview_layout(self, _event: tk.Event | None = None) -> None:
+        if self._layout_job is not None:
+            return
+        try:
+            self._layout_job = self.after(RESIZE_COALESCE_MS, self._sync_preview_layout)
+        except tk.TclError:
+            self._layout_job = None
+
+    def _sync_preview_layout(self) -> None:
+        """Hide the thumbnail column while previews are off; stack it under the info when the panel is narrow."""
+        self._layout_job = None
+        try:
+            if not self.winfo_exists():
+                return
+            left, right = self._left_frame, self.thumbnail_frame
+            if not self._show_preview_var.get():
+                right.grid_remove()
+                left.grid(row=0, column=0, columnspan=2, sticky="nsew")
+                return
+            if preview_panel_stacked(
+                self.body.winfo_width(),
+                thumbnail_edge=300,
+                label_min=self._preview_label_min_width(),
+            ):
+                left.grid(row=0, column=0, columnspan=2, sticky="nsew")
+                right.grid(row=1, column=0, columnspan=2, sticky="w", padx=0, pady=(8, 0))
+            else:
+                left.grid(row=0, column=0, columnspan=1, sticky="nsew")
+                right.grid(row=0, column=1, columnspan=1, sticky="ne", padx=(8, 0), pady=0)
+        except tk.TclError:
+            return
 
     def _dispatch_to_ui(self, fn: Callable[[], None]) -> bool:
         """Run panel updates on the Tk main thread when invoked off-thread."""
@@ -1437,6 +1490,8 @@ class PreviewPanelV2(ttk.Frame):
                     # This would require storing it in the pack model
                     pass
 
+        self._sync_preview_layout()
+
         # PR-PERSIST-001: Save state on checkbox change
         self.save_state()
 
@@ -1478,6 +1533,7 @@ class PreviewPanelV2(ttk.Frame):
 
             show_preview = bool(state.get("show_preview", False))
             self._show_preview_var.set(show_preview)
+            self._sync_preview_layout()
             logger.debug("Restored preview panel state")
         except Exception as e:
             logger.warning(f"Failed to restore preview panel state: {e}")
@@ -1488,4 +1544,11 @@ class PreviewPanelV2(ttk.Frame):
             self.save_state()
         except Exception:
             pass
+        layout_job = getattr(self, "_layout_job", None)
+        if layout_job is not None:
+            try:
+                self.after_cancel(layout_job)
+            except tk.TclError:
+                pass
+            self._layout_job = None
         super().destroy()

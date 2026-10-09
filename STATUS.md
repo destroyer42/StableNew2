@@ -4,13 +4,26 @@ Updated: 2026-10-09
 
 ## Repository
 
-- YuNet face observations (PR-REFINE-150, local implementation; independent
-  review/publication pending): Adaptive Refinement's `opencv` intent uses the
-  repository-owned, hash-verified YuNet CPU model on existing core OpenCV 5.
-  Observations identify YuNet separately from historical Haar and preserve
+- Focused operator workspace (PR-GUI-110, local implementation and measured acceptance; hosted CI and
+  independent review pending): presentation only, on top of PR-GUI-100. The Operator Log is compact by
+  default (one header row with a warning/error summary; details, filters and Crash Bundle on demand) and
+  never resizes the root window; collapsed tab overviews and action explainers are one header row; the Review
+  preview and metadata fit the pane's real width (async, coalesced, stale-safe); the SVD `Animate Image` and
+  Video Workflow `Queue Video Workflow` actions (and the experimental opt-in) sit in the fixed header;
+  Advanced Conditioning and effective settings are collapsible with truthful collapsed headers; the Pipeline
+  preview labels and narrow comboboxes stay readable/inspectable. At the 1366 x 768 simulation the usable
+  scroll viewport grew from 158/239/223 px to 354/366/336 px (Review/SVD/Video). No generation, queue, NJR,
+  runtime or dependency behavior changed. See
+  `docs/Subsystems/GUI/PR-GUI-110_Focused_Operator_Workspace.md`.
+
+- YuNet face observations (PR-REFINE-150, COMPLETE / ACCEPTED / INTEGRATED; PR #73): Adaptive
+  Refinement's `opencv` intent uses the repository-owned, hash-verified YuNet CPU model on existing core
+  OpenCV 5. Observations identify YuNet separately from historical Haar and preserve
   unavailable/error/timeout status and nullable Learning `face_detected` rather
-  than claiming no faces from unqualified evidence. Runtime pins,
-  CodeFormer dependencies, NJRs and submission authority are unchanged. See
+  than claiming no faces from unqualified evidence; malformed detector output fails the inference. Runtime
+  pins, CodeFormer dependencies, NJRs and submission authority are unchanged. Hosted `required` and the
+  GUI `affected` lane passed. Known debt: runner timeout/error fallbacks drop the YuNet detector identity
+  (status and nullable `face_detected` are preserved). See
   `docs/Subsystems/Image/PR-REFINE-150_YuNet_Face_Detection.md`.
 
 - Klein-compatible PromptPack LoRA selection (PR-PROMPT-143, COMPLETE / ACCEPTED /
@@ -24,8 +37,8 @@ Updated: 2026-10-09
   Test isolation removes the personal pose-video prerequisite and inherited
   PowerShell module paths. Optional-capability qualification is explicit in
   `docs/Subsystems/Testing/Optional_Capability_Contract_v2.6.md`; the existing
-  Windows OpenCV cascade incompatibility is addressed separately by the local
-  PR-REFINE-150 YuNet implementation; runtime pins remain unchanged.
+  Windows OpenCV cascade incompatibility was resolved by the integrated
+  PR-REFINE-150 YuNet detector; runtime pins remain unchanged.
   See `docs/Subsystems/PromptPacks/PR-PROMPT-143_Klein_Compatible_LoRA_Selection.md`.
 
 - Model Comparison evidence readiness (PR-LEARN-142, COMPLETE / ACCEPTED /
@@ -605,8 +618,8 @@ Updated: 2026-10-09
   queue, backend, NJR, runtime or persistence behavior changed. The Pipeline uses its normal three-column presentation
   when its current Tk-rendered layout fits and otherwise a reversible compact presentation (measured fit, not a fixed pixel
   breakpoint: lower form column minimums chosen by fit, capped label wraps, reflowed hint/ADetailer cells; no widget moves),
-  so no actionable control is clipped at laptop widths or in other Tk/font environments. Known debt (GUI-110 visual
-  density): the scroll viewports stay short at 768 px height because fixed headers and the Operator Log sit outside them.
+  so no actionable control is clipped at laptop widths or in other Tk/font environments. The visual-density debt it
+  recorded (short scroll viewports at 768 px height) is repaired by PR-GUI-110.
 - `PR-IMG-FORGE-120 — Forge Default Production Promotion` is **COMPLETE / ACCEPTED / PHYSICALLY + HOSTED
   VERIFIED — `NEW_WORK_DEFAULT_FORGE_PASS`** (`docs/Subsystems/Image/PR-IMG-FORGE-120_Forge_Default_Production_Promotion.md`). New
   still-image work defaults to the StableNew-managed Forge runtime (`forge_webui`) when `webui_runtime_identity` is unset;

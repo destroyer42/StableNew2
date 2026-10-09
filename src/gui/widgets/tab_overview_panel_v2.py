@@ -6,6 +6,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.theme_v2 import BODY_LABEL_STYLE, HEADING_LABEL_STYLE, MUTED_LABEL_STYLE
+from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 
 
 @dataclass(frozen=True, slots=True)
@@ -175,7 +176,7 @@ class TabOverviewPanel(ttk.Frame):
         wraplength: int = 920,
         **kwargs: object,
     ) -> None:
-        super().__init__(master, style="Panel.TFrame", padding=8, **kwargs)
+        super().__init__(master, style="Panel.TFrame", padding=(8, 4), **kwargs)
         self.content = content
         self._app_state = app_state
         self._manual_expanded = bool(expanded)
@@ -212,6 +213,7 @@ class TabOverviewPanel(ttk.Frame):
             wraplength=wraplength,
         )
         self.summary_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        self.toggle_button.bind("<Return>", self._on_return_key, add="+")
 
         self.details_frame = ttk.Frame(self, style="Panel.TFrame")
         self.details_label = ttk.Label(
@@ -222,6 +224,9 @@ class TabOverviewPanel(ttk.Frame):
             wraplength=wraplength,
         )
         self.details_label.grid(row=0, column=0, sticky="ew")
+        # The configured wraplength is the maximum; narrower windows wrap to the panel's real width.
+        bind_wraplength(self.summary_label, maximum=wraplength)
+        bind_wraplength(self.details_label, maximum=wraplength)
 
         if self._app_state is not None and hasattr(self._app_state, "subscribe"):
             try:
@@ -229,6 +234,10 @@ class TabOverviewPanel(ttk.Frame):
             except Exception:
                 pass
         self._sync_details()
+
+    def _on_return_key(self, _event: tk.Event) -> str:
+        self.toggle_button.invoke()
+        return "break"
 
     def toggle_details(self) -> None:
         if self._help_mode_enabled:
@@ -252,12 +261,15 @@ class TabOverviewPanel(ttk.Frame):
         self._sync_details()
 
     def _sync_details(self) -> None:
+        # PR-GUI-110: collapsed is one header row; the summary and details are the disclosed content.
         if self.is_expanded():
+            self.summary_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
             self.details_frame.grid(row=2, column=0, sticky="ew", pady=(8, 0))
             if self._help_mode_enabled:
                 self.toggle_button.configure(text="Help Mode On", state="disabled")
             else:
                 self.toggle_button.configure(text="Hide Guidance", state="normal")
         else:
+            self.summary_label.grid_remove()
             self.details_frame.grid_remove()
             self.toggle_button.configure(text="Show Guidance", state="normal")

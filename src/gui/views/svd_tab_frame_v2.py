@@ -16,6 +16,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_two_pane_workspace_column_specs,
 )
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
@@ -279,8 +280,30 @@ class SVDTabFrameV2(ttk.Frame):
             command=self._on_browse_folder,
         ).grid(row=1, column=4, sticky="w", padx=(0, 6), pady=(6, 0))
 
-        self.status_label = ttk.Label(header, text="", style="Dark.TLabel")
-        self.status_label.grid(row=2, column=0, columnspan=6, sticky="w", pady=(6, 0))
+        # PR-GUI-110: the primary submission action lives in the fixed header, not at the bottom of the scrolling
+        # settings; it is the same widget with the same callback and the same legal enabled states.
+        self.animate_btn = ttk.Button(
+            header,
+            text="Animate Image",
+            style="Primary.TButton",
+            command=self._on_submit,
+        )
+        self.animate_btn.grid(row=1, column=5, sticky="w", pady=(6, 0))
+        self.animate_tooltip = attach_tooltip(
+            self.animate_btn,
+            "Queue a native SVD animation job using the source image and settings shown here.",
+        )
+
+        # Status and admission rows are mapped only while they have something to say (admission only when it
+        # blocks or warns: "ready" is the absence of an action-required message).
+        self.status_label = ttk.Label(header, text="", style="Dark.TLabel", justify="left")
+        self.status_label.grid(row=2, column=0, columnspan=6, sticky="ew", pady=(6, 0))
+        self.status_label.grid_remove()
+        bind_wraplength(self.status_label)
+        self.admission_label = ttk.Label(header, text="", style="Dark.TLabel", justify="left")
+        self.admission_label.grid(row=3, column=0, columnspan=6, sticky="ew", pady=(4, 0))
+        self.admission_label.grid_remove()
+        bind_wraplength(self.admission_label)
 
     def _build_body(self, model_options: list[str]) -> None:
         # PR-GUI-100: the settings workspace is taller than many viewports; it scrolls instead of growing the window.
@@ -328,14 +351,6 @@ class SVDTabFrameV2(ttk.Frame):
             wraplength=520,
         )
         self.summary_label.grid(row=1, column=0, sticky="nw", pady=(10, 0))
-        self.admission_label = ttk.Label(
-            help_frame,
-            text="",
-            style="Dark.TLabel",
-            justify="left",
-            wraplength=520,
-        )
-        self.admission_label.grid(row=2, column=0, sticky="nw", pady=(10, 0))
         self.capabilities_label = ttk.Label(
             help_frame,
             text="",
@@ -642,18 +657,6 @@ class SVDTabFrameV2(ttk.Frame):
         ).grid(row=row, column=0, columnspan=2, sticky="ew", pady=(0, 12))
         row += 1
 
-        self.animate_btn = ttk.Button(
-            settings,
-            text="Animate Image",
-            style="Primary.TButton",
-            command=self._on_submit,
-        )
-        self.animate_btn.grid(row=row, column=0, columnspan=2, sticky="ew")
-        self.animate_tooltip = attach_tooltip(
-            self.animate_btn,
-            "Queue a native SVD animation job using the source image and settings shown here.",
-        )
-
         recent = ttk.LabelFrame(
             body, text="Recent SVD Outputs", style="Dark.TLabelframe", padding=8
         )
@@ -930,6 +933,16 @@ class SVDTabFrameV2(ttk.Frame):
         except Exception as exc:
             self._folder_batch_preview = {"error": str(exc)}
 
+    def _sync_admission_visibility(self, message: str) -> None:
+        """Show the admission line only when it is action-required (blocked or warning), never hide it then."""
+        actionable = bool(message) and message != "SVD admission: ready"
+        grid = getattr(self.admission_label, "grid", None)
+        remove = getattr(self.admission_label, "grid_remove", None)
+        if actionable and callable(grid):
+            grid()
+        elif not actionable and callable(remove):
+            remove()
+
     def _update_submission_action(self) -> None:
         if not hasattr(self, "animate_btn"):
             return
@@ -1117,9 +1130,11 @@ class SVDTabFrameV2(ttk.Frame):
             if warnings:
                 message += " | " + "; ".join(warnings)
             self.admission_label.configure(text=message)
+            self._sync_admission_visibility(message)
             self.animate_btn.configure(state="normal" if available else "disabled")
         else:
             self.admission_label.configure(text="")
+            self._sync_admission_visibility("")
             self.animate_btn.configure(state="normal")
         parts: list[str] = []
         for key in ("codeformer", "realesrgan", "rife", "gfpgan"):
@@ -1283,6 +1298,10 @@ class SVDTabFrameV2(ttk.Frame):
         self._status_text = message
         try:
             self.status_label.configure(text=message)
+            if message:
+                self.status_label.grid()
+            else:
+                self.status_label.grid_remove()
         except Exception:
             pass
 

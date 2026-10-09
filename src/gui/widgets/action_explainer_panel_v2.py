@@ -6,6 +6,7 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.theme_v2 import BODY_LABEL_STYLE, HEADING_LABEL_STYLE, MUTED_LABEL_STYLE
+from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,9 +30,14 @@ class ActionExplainerPanel(ttk.Frame):
         app_state: Any | None = None,
         expanded: bool = False,
         wraplength: int = 880,
+        summary_when_collapsed: bool = False,
         **kwargs: object,
     ) -> None:
-        super().__init__(master, style="Panel.TFrame", padding=8, **kwargs)
+        """``summary_when_collapsed`` is for content whose summary carries a safety-critical notice that must
+        stay visible; ordinary workflow guidance collapses to a single header row (PR-GUI-110)."""
+
+        super().__init__(master, style="Panel.TFrame", padding=(8, 4), **kwargs)
+        self._summary_when_collapsed = bool(summary_when_collapsed)
         self.content = content
         self._app_state = app_state
         self._manual_expanded = bool(expanded)
@@ -67,6 +73,7 @@ class ActionExplainerPanel(ttk.Frame):
             wraplength=wraplength,
         )
         self.summary_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        self.toggle_button.bind("<Return>", self._on_return_key, add="+")
 
         self.details_frame = ttk.Frame(self, style="Panel.TFrame")
         self.details_label = ttk.Label(
@@ -77,6 +84,9 @@ class ActionExplainerPanel(ttk.Frame):
             wraplength=wraplength,
         )
         self.details_label.grid(row=0, column=0, sticky="ew")
+        # The configured wraplength is the maximum; narrower windows wrap to the panel's real width.
+        bind_wraplength(self.summary_label, maximum=wraplength)
+        bind_wraplength(self.details_label, maximum=wraplength)
 
         if self._app_state is not None and hasattr(self._app_state, "subscribe"):
             try:
@@ -84,6 +94,10 @@ class ActionExplainerPanel(ttk.Frame):
             except Exception:
                 pass
         self._sync_details()
+
+    def _on_return_key(self, _event: tk.Event) -> str:
+        self.toggle_button.invoke()
+        return "break"
 
     def toggle_details(self) -> None:
         if self._help_mode_enabled:
@@ -107,7 +121,12 @@ class ActionExplainerPanel(ttk.Frame):
         self._sync_details()
 
     def _sync_details(self) -> None:
-        if self.is_expanded():
+        expanded = self.is_expanded()
+        if expanded or self._summary_when_collapsed:
+            self.summary_label.grid(row=1, column=0, sticky="ew", pady=(6, 0))
+        else:
+            self.summary_label.grid_remove()
+        if expanded:
             self.details_frame.grid(row=2, column=0, sticky="ew", pady=(6, 0))
             if self._help_mode_enabled:
                 self.toggle_button.configure(text="Help Mode On", state="disabled")

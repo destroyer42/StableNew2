@@ -148,6 +148,8 @@ is skipped by the validation plan as expected.
   and its drop-down list stay operable.
 - The Review preview stays 620 px and some other `wraplength` values remain fixed.
 
+Update: PR-GUI-110 (`docs/Subsystems/GUI/PR-GUI-110_Focused_Operator_Workspace.md`) repairs the cramped viewports, the cut-off compact-Pipeline preview labels, the fixed 620 px Review preview and wraps, and the inspectability of narrow comboboxes recorded above.
+
 ## Validation
 
 See the completion report for the exact commands and results. New automated coverage extends existing owners
