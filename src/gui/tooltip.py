@@ -29,6 +29,14 @@ class Tooltip:
             self.widget.after_cancel(self._after_id)
         self._after_id = self.widget.after(self.delay_ms, self._show)
 
+    def _schedule_for_focus(self, event: tk.Event | None) -> None:
+        """Keyboard focus shows a tooltip only when the full value would add information (it is truncated)."""
+        if self.value_provider is None:
+            return
+        value = str(self.value_provider() or "")
+        if value and value_is_truncated(self.widget, value):
+            self._schedule(event)
+
     def _display_text(self) -> str:
         text = self.text
         if self.value_provider is not None:
@@ -120,7 +128,7 @@ def install_full_value_tooltips(root_widget: tk.Misc) -> int:
             except Exception:
                 pass
         tooltip.value_provider = widget.get
-        widget.bind("<FocusIn>", tooltip._schedule, add="+")
+        widget.bind("<FocusIn>", tooltip._schedule_for_focus, add="+")
         widget.bind("<FocusOut>", tooltip._hide, add="+")
         widget.bind("<<ComboboxSelected>>", tooltip._hide, add="+")
         widget._full_value_tooltip = True  # type: ignore[attr-defined]

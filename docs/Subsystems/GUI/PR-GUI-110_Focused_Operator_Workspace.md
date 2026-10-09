@@ -1,6 +1,7 @@
 # PR-GUI-110 — Focused Operator Workspace
 
-Status: local implementation and measured acceptance complete; hosted CI and independent review pending.
+Status: COMPLETE / ACCEPTED / INTEGRATED (PR #75; hosted `required` and GUI `affected` lanes passed; independent review found no
+blocking finding). Follow-up corrections: `PR-GUI-111_Thumbnail_Recovery_and_Tooltip_Correctness.md`.
 
 Builds on PR-GUI-100. Presentation only: no generation, queue, NJR, compiler, JobService, `PipelineRunner.run_njr`, runtime
 manager, PromptPack, Learning, reprocess, model, backend or dependency behavior changed. GUI remains intent and projection.
