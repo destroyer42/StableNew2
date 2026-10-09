@@ -184,11 +184,12 @@ jobs:
         printf '%s\n' "$AFFECTED_TARGETS" > affected-targets.txt
         cat affected-targets.txt
 
+    # Tk callbacks can catch the signal-mode failure; the thread timer exits the test process.
+    # The action passes the first `run:` line to xvfb-run, so it must be the executable.
     - name: Run the affected lanes (Xvfb)
       uses: GabrielBB/xvfb-action@v1
       with:
         run: |
-          # Tk callbacks can catch the signal-mode failure; the thread timer exits the test process.
           python -m pytest -q -rfE --tb=short --timeout=300 --timeout-method=thread @affected-targets.txt
 
   # Informational gate: the broader configured suite (headless-safe GUI v2, fake-backend integration, tools,
