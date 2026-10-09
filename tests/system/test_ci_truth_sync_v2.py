@@ -102,6 +102,19 @@ def test_full_suite_lane_is_informational_and_not_fail_fast() -> None:
     assert "--timeout=300" in shards.PYTEST_ARGS
 
 
+def test_xvfb_action_commands_start_with_the_executable_not_a_comment() -> None:
+    """xvfb-action hands the first `run:` line to xvfb-run; a leading comment exits 127."""
+    workflow = _read(".github/workflows/ci.yml")
+    blocks = re.findall(
+        r"uses: GabrielBB/xvfb-action@v1\n\s+with:\n\s+run: \|\n((?:\s{10,}.*\n?)+)", workflow
+    )
+    assert len(blocks) >= 2
+    for block in blocks:
+        first = next(line.strip() for line in block.splitlines() if line.strip())
+        assert first.startswith("python "), first
+    assert "python -m pytest" in _ci_section("  affected:", "  full-suite-shard:")
+
+
 def _ci_section(start: str, end: str | None = None) -> str:
     workflow = _read(".github/workflows/ci.yml")
     begin = workflow.index(start)
