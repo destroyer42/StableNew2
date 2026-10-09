@@ -79,10 +79,11 @@ def test_inherited_module_path_cannot_change_installer_verification(
         )
     monkeypatch.setenv("PSModulePath", str(modules))
     run = subprocess.run
+    observed_module_paths: list[str] = []
 
     def isolated_run(*args, **kwargs):
-        assert kwargs["env"]["PSModulePath"] == str(Path(SHELL).resolve().parent / "Modules")
-        assert kwargs["env"]["PSModulePath"] != os.environ["PSModulePath"]
+        # Assert after return so pytest failure locals cannot dump the full env.
+        observed_module_paths.append(kwargs.get("env", {}).get("PSModulePath", ""))
         return run(*args, **kwargs)
 
     monkeypatch.setattr(subprocess, "run", isolated_run)
@@ -92,6 +93,7 @@ def test_inherited_module_path_cannot_change_installer_verification(
         # A fresh tree is necessary because this refusal precedes all mutation.
         {**world, "install": world["root"] / "refusal"},
     )
+    assert observed_module_paths == [str(Path(SHELL).resolve().parent / "Modules")] * 2
     assert os.environ["PSModulePath"] == str(modules)
 
 
