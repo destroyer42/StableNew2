@@ -130,26 +130,33 @@ class OpenCvFaceDetector(SubjectDetector):
                 if len(row) != 15:
                     raise ValueError("malformed YuNet output")
                 x, y, w, h, confidence = (float(row[index]) for index in (0, 1, 2, 3, 14))
-                if not all(math.isfinite(value) for value in (x, y, w, h, confidence)):
-                    continue
-                if not self._score_threshold <= confidence <= 1 or w <= 0 or h <= 0:
-                    continue
+                # Nonempty output with unusable geometry/score is not evidence of absence.
+                if (
+                    not all(math.isfinite(value) for value in (x, y, w, h, confidence))
+                    or w <= 0
+                    or h <= 0
+                    or not 0 <= confidence <= 1
+                ):
+                    raise ValueError("malformed YuNet detection row")
+                if confidence < self._score_threshold:
+                    continue  # Valid detection below the declared threshold.
                 # YuNet coordinates are in its input frame; use actual rounded resize dimensions.
                 left = max(0, min(width, math.floor(x * width / input_width)))
                 top = max(0, min(height, math.floor(y * height / input_height)))
                 right = max(0, min(width, math.ceil((x + w) * width / input_width)))
                 bottom = max(0, min(height, math.ceil((y + h) * height / input_height)))
-                if right > left and bottom > top:
-                    detections.append(
-                        {
-                            "x": left,
-                            "y": top,
-                            "w": right - left,
-                            "h": bottom - top,
-                            "confidence": confidence,
-                            "source": "yunet",
-                        }
-                    )
+                if right <= left or bottom <= top:
+                    raise ValueError("YuNet detection outside the input image")
+                detections.append(
+                    {
+                        "x": left,
+                        "y": top,
+                        "w": right - left,
+                        "h": bottom - top,
+                        "confidence": confidence,
+                        "source": "yunet",
+                    }
+                )
             return self._dedupe(detections)
         except Exception as exc:
             raise RuntimeError(

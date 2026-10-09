@@ -66,9 +66,6 @@ def test_threshold_clipping_empty_and_deterministic_order(fake_cv):
             _row(40, 20, 10, 10),
             _row(20, 20, 10, 10),
             _row(0, 0, 90, 70, 0.59),
-            _row(101, 5, 20, 20),
-            _row(10, 10, -5, 10),
-            _row(0, 0, 5, 5, float("nan")),
         ]
     )
     detector = module.OpenCvFaceDetector()
@@ -82,6 +79,60 @@ def test_threshold_clipping_empty_and_deterministic_order(fake_cv):
     assert detector.detect_faces(Path("faces.png")) == detections
     model.detect = lambda image: (1, None)
     assert detector.detect_faces(Path("empty.png")) == ()
+
+
+def _assess_through_learning(tmp_path):
+    assessment = SubjectScalePolicyService(detector=module.OpenCvFaceDetector()).assess(
+        tmp_path / "image.png"
+    )
+    context = build_refinement_learning_context(
+        {"decision_bundle": {"observation": {"subject_assessment": assessment}}}
+    )
+    return assessment, context
+
+
+@pytest.mark.parametrize(
+    "bad_row",
+    [
+        _row(float("nan"), 5, 20, 20),
+        _row(5, float("inf"), 20, 20),
+        _row(5, 5, float("nan"), 20),
+        _row(5, 5, 20, float("-inf")),
+        _row(5, 5, 20, 20, float("nan")),
+        _row(5, 5, 0, 20),
+        _row(5, 5, -5, 20),
+        _row(5, 5, 20, 0),
+        _row(5, 5, 20, 20, 1.01),
+        _row(5, 5, 20, 20, -0.1),
+        _row(101, 5, 20, 20),
+        _row(5, 81, 20, 20),
+        _row(-30, 5, 20, 20),
+    ],
+)
+@pytest.mark.parametrize("with_valid_row", [False, True])
+def test_malformed_nonempty_output_is_unknown_not_no_face(
+    fake_cv, tmp_path, bad_row, with_valid_row
+):
+    _, _, rows, _, _ = fake_cv
+    rows.extend([_row(10, 10, 30, 30), bad_row] if with_valid_row else [bad_row])
+    with pytest.raises(RuntimeError, match="YuNet inference failed"):
+        module.OpenCvFaceDetector().detect_faces(Path("input.png"))
+    assessment, context = _assess_through_learning(tmp_path)
+    assert assessment["detection_status"] == "error"
+    assert assessment["scale_band"] == "unknown"
+    assert context["face_detected"] is None
+    assert context["detection_status"] == "error"
+
+
+def test_empty_and_low_confidence_inference_remain_confirmed_negative(fake_cv, tmp_path):
+    _, model, rows, _, _ = fake_cv
+    for output in (None, [], [_row(10, 10, 30, 30, 0.59), _row(0, 0, 5, 5, 0.0)]):
+        rows[:] = output or []
+        model.detect = lambda image, output=output: (1, output)
+        assessment, context = _assess_through_learning(tmp_path)
+        assert assessment["detection_status"] == "available"
+        assert assessment["scale_band"] == "no_face"
+        assert context["face_detected"] is False
 
 
 @pytest.mark.parametrize("failure", ["missing", "corrupt", "oversized"])

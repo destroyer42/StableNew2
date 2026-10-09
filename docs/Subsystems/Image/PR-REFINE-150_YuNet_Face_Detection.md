@@ -55,7 +55,10 @@ Input is BGR in raw raster orientation, matching Pillow dimensions used by the
 subject-scale service. Inputs exceeding a 1,280-pixel edge are resized with their
 aspect ratio preserved. Box coordinates are projected with the actual rounded
 input dimensions, outward rounded, and clipped to the original image bounds.
-Degenerate, nonfinite and below-threshold boxes are rejected. Defaults: score
+Valid detections below the score threshold are filtered. Any nonempty row with
+nonfinite or degenerate geometry, a score outside [0, 1], or no area inside the
+image is malformed output: the whole inference fails (`error`, `face_detected` null)
+rather than becoming a confirmed no-face result. Defaults: score
 0.6, native NMS 0.3, top-k 5,000; the existing 0.35 overlap suppression remains.
 Largest-area-first ordering preserves the primary-subject convention, followed
 by confidence and coordinates to resolve ties deterministically. Landmarks are
