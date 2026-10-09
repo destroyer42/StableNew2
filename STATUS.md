@@ -1,11 +1,27 @@
 # StableNew current state
 
-Updated: 2026-10-08
+Updated: 2026-10-09
 
 ## Repository
 
-- Model Comparison evidence readiness (PR-LEARN-142, local implementation;
-  independent review and publication pending): Build Preview checks exact
+- Klein-compatible PromptPack LoRA selection (PR-PROMPT-143, open PR #72;
+  functional evidence accepted, local test/CI repairs awaiting final review and
+  hosted validation): fresh GUI PromptPack preflight prepares
+  exact registry evidence off Tk and automatically chooses zero or one verified
+  adapter. Multiple compatible adapters require one batch operator decision.
+  Structured source, authored weights and trigger ownership are preserved;
+  selection/adaptation evidence freezes before NJR creation and atomic admission.
+  Backend qualification rechecks the frozen adapter identity without reselection.
+  SDXL, generic compile-safe adaptation, Learning and replay retain their contracts.
+  Test isolation removes the personal pose-video prerequisite and inherited
+  PowerShell module paths. Optional-capability qualification is explicit in
+  `docs/Subsystems/Testing/Optional_Capability_Contract_v2.6.md`; the existing
+  Windows OpenCV cascade incompatibility remains a separate blocker, with pins
+  unchanged. These local repairs are not yet a hosted-CI or integration verdict.
+  See `docs/Subsystems/PromptPacks/PR-PROMPT-143_Klein_Compatible_LoRA_Selection.md`.
+
+- Model Comparison evidence readiness (PR-LEARN-142, COMPLETE / ACCEPTED /
+  INTEGRATED; PR #71): Build Preview checks exact
   served checkpoint identity and prepares missing/stale selected-file evidence
   off Tk through AssetRegistry, with progress, cancellation and single-flight
   publication. Metadata-free standard SDXL base safetensors are recognized from

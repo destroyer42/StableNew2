@@ -6,6 +6,10 @@ only (no refresh, no scan, no hashing, no network), the registry is created lazi
 resolved once per distinct model name and each LoRA name is looked up once however many Matrix variants or LoRAs the build
 has. When the snapshot cannot decide, the answer is "unverified" - never a guess - and the backend's fail-closed admission
 (which refreshes) stays final. Tests and callers may inject both lookups.
+
+Explicit fresh selection may call ``prepare_lora_selection`` before adaptation.
+That bounded background seam prepares complete LoRA evidence once through the
+existing registry; generic compilation and Learning do not call it.
 """
 
 from __future__ import annotations
@@ -46,11 +50,24 @@ class _LazyRegistry:
 class CompileEvidence:
     def __init__(self, *, family_lookup: FamilyLookup | None = None, lora_resolver: LoraResolver | None = None) -> None:
         registry = _LazyRegistry()
+        self._registry = registry
+        self._injected_lora_resolver = lora_resolver is not None
+        self._selection_prepared = False
         self._family_lookup: FamilyLookup = family_lookup or RegistryFamilyLookup(registry)
         self.lora_evidence = LoraEvidenceContext(lora_resolver or RegistryLoraResolver(registry, cache_only=True))
         self._policies: dict[str, ModelPolicy] = {}
         self.policy_lookups = 0
         self.model_identities: dict[str, dict[str, Any]] = {}
+
+    def prepare_lora_selection(self, *, cancelled: Any = None) -> None:
+        """One complete registry assessment before explicit fresh selection."""
+        if self._selection_prepared:
+            return
+        if not self._injected_lora_resolver:
+            from src.prompting.pack_lora_evidence import prepare_selection_evidence
+
+            self.lora_evidence = prepare_selection_evidence(self._registry._get(), cancelled=cancelled)
+        self._selection_prepared = True
 
     def policy_for(self, model_name: str | None) -> ModelPolicy:
         key = str(model_name or "").strip()

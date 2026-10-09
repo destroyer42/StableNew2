@@ -8,6 +8,7 @@ import json
 import logging
 import random
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -43,9 +44,19 @@ from src.pipeline.job_models_v2 import (
 )
 from src.pipeline.prompt_pack_parser import PackRow
 from src.pipeline.resolution_layer import (
+    PackPromptIntent,
     UnifiedConfigResolver,
     UnifiedPromptResolver,
     adapt_pack_intent,
+)
+from src.prompting.pack_lora_selection import (
+    SELECTION_METADATA_KEY,
+    KleinLoraAssessment,
+    KleinLoraSelection,
+    KleinSelectionError,
+    SelectionChoice,
+    applies,
+    assess_target_loras,
 )
 from src.promptpacks.storage import load_prompt_pack_document, prompt_pack_rows
 from src.randomizer import RandomizationPlanV2, RandomizationSeedMode
@@ -69,6 +80,21 @@ _TXT2IMG_INACTIVE_HIRES_KEYS = (
 _DEFAULT_MATRIX_EXPANSION_LIMIT = 8
 #: Version of the adaptation manifest frozen into ``NJRProvenance.metadata['prompt_adaptation']``.
 PROMPT_ADAPTATION_CONTRACT = "prompt_adaptation/1"
+
+
+@dataclass
+class _PreparedPrompt:
+    entry: PackJobEntry
+    matrix_index: int
+    matrix_count: int
+    source_config: dict[str, Any]
+    config: dict[str, Any]
+    stages: list[StageConfig]
+    metadata: dict[str, Any]
+    style: dict[str, Any] | None
+    intent: PackPromptIntent
+    revision: Any = None
+    selection: KleinLoraSelection | None = None
 
 
 def _mapping_dict(value: Any) -> dict[str, Any]:
@@ -104,6 +130,8 @@ class PromptPackNormalizedJobBuilder:
         style_lora_manager: StyleLoRAManager | None = None,
         model_family_lookup: FamilyLookup | None = None,
         lora_resolver: LoraResolver | None = None,
+        lora_selection_policy: bool = False,
+        selection_review: Any = None,
     ) -> None:
         self._config_manager = config_manager
         self._job_builder = job_builder
@@ -114,6 +142,8 @@ class PromptPackNormalizedJobBuilder:
         self._style_lora_manager = style_lora_manager
         self._model_family_lookup = model_family_lookup
         self._lora_resolver = lora_resolver
+        self._lora_selection_policy = lora_selection_policy
+        self._selection_review = selection_review
         self._pack_rows_cache: dict[tuple[Any, ...], list[PackRow]] = {}
         self._pack_metadata_cache: dict[tuple[Any, ...], dict[str, Any]] = {}
         self._pack_config_cache: dict[tuple[Any, ...], dict[str, Any] | None] = {}
@@ -121,11 +151,15 @@ class PromptPackNormalizedJobBuilder:
 
     def build_jobs(self, entries: Iterable[PackJobEntry]) -> list[NormalizedJobRecord]:
         # Convert to list to avoid consuming iterator and to enable length check
-        entries_list = list(entries)
+        entries_list = copy.deepcopy(list(entries))
+        review = self._selection_review
+        if hasattr(review, "begin"):
+            review = review.begin(entries_list)
         _logger.info(
             f"[PromptPackNormalizedJobBuilder] build_jobs() called with {len(entries_list)} entries"
         )
         records: list[NormalizedJobRecord] = []
+        prepared: list[_PreparedPrompt] = []
         entry_count = 0
         # One bounded, read-only evidence context for the whole build: every Matrix variant and LoRA reuses it.
         evidence = CompileEvidence(
@@ -144,17 +178,51 @@ class PromptPackNormalizedJobBuilder:
             )
 
             for matrix_variant_index, expanded_entry in enumerate(expanded_entries):
-                jobs = self._build_jobs_for_entry(
+                prompt = self._prepare_entry(
                     expanded_entry,
                     matrix_variant_index=matrix_variant_index,
                     matrix_variant_count=len(expanded_entries),
                     evidence=evidence,
                 )
-                if jobs:
-                    _logger.info(
-                        f"[PromptPackNormalizedJobBuilder] Expanded entry produced {len(jobs)} NJR(s)"
-                    )
-                    records.extend(jobs)
+                if prompt is not None:
+                    prepared.append(prompt)
+
+        assessments: list[KleinLoraAssessment] = []
+        targets: list[_PreparedPrompt] = []
+        if self._lora_selection_policy:
+            for prompt in prepared:
+                policy = evidence.policy_for(self._selected_model_name(prompt.source_config))
+                if applies(policy):
+                    if hasattr(review, "validate"):
+                        review.validate()
+                    if prompt.intent.loras:
+                        if not assessments and hasattr(review, "notify"):
+                            review.notify("Preparing exact PromptPack LoRA evidence in the background...")
+                        evidence.prepare_lora_selection(cancelled=getattr(review, "cancelled", None))
+                    assessments.append(assess_target_loras(
+                        policy, prompt.intent.loras, evidence.lora_evidence,
+                        label=f"{prompt.entry.pack_name or prompt.entry.pack_id} / row {prompt.entry.pack_row_index or 0} / variant {prompt.matrix_index + 1}",
+                    ))
+                    targets.append(prompt)
+        choices = [SelectionChoice("auto") for _ in assessments]
+        if any(item.requires_choice for item in assessments):
+            if review is None:
+                raise KleinSelectionError("Multiple verified Klein LoRAs require batch operator selection before admission")
+            choices = review(assessments)
+            if choices is None:
+                raise KleinSelectionError("Klein LoRA selection cancelled; no jobs admitted")
+        if len(choices) != len(assessments):
+            raise KleinSelectionError("Incomplete batch Klein LoRA decisions; no jobs admitted")
+        for prompt, assessment, choice in zip(targets, assessments, choices, strict=True):
+            prompt.selection = assessment.choose(choice)
+        if assessments and hasattr(review, "validate"):
+            review.validate()
+        # All evidence and operator decisions are complete before the first NJR exists.
+        for prompt in prepared:
+            records.extend(self._build_jobs_for_entry(prompt.entry, evidence=evidence, prepared=prompt))
+
+        if assessments and hasattr(review, "validate"):
+            review.validate()
 
         _logger.info(f"[PromptPackNormalizedJobBuilder] Total NJRs generated: {len(records)}")
         return records
@@ -358,14 +426,14 @@ class PromptPackNormalizedJobBuilder:
         values.reverse()
         return tuple(values)
 
-    def _build_jobs_for_entry(
+    def _prepare_entry(
         self,
         entry: PackJobEntry,
         *,
         matrix_variant_index: int = 0,
         matrix_variant_count: int = 1,
         evidence: CompileEvidence | None = None,
-    ) -> list[NormalizedJobRecord]:
+    ) -> _PreparedPrompt | None:
         evidence = evidence or CompileEvidence(
             family_lookup=self._model_family_lookup, lora_resolver=self._lora_resolver
         )
@@ -379,7 +447,7 @@ class PromptPackNormalizedJobBuilder:
                 pack_config = {}  # Empty pack_config, will use runtime_params from config_snapshot
             else:
                 _logger.error("Missing config for pack '%s', skipping entry", entry.pack_id)
-                return []
+                return None
 
         runtime_params = dict(entry.config_snapshot or {})
         resolved_cache_key = (
@@ -402,7 +470,6 @@ class PromptPackNormalizedJobBuilder:
         stage_flags = self._normalize_stage_flags(
             merged_config.get("pipeline", {}), entry.stage_flags or {}
         )
-        randomizer_metadata = entry.randomizer_metadata or {}
 
         stage_chain = self._build_stage_chain(merged_config, stage_flags)
         resolved_actors = self._resolve_entry_actors(entry, merged_config)
@@ -412,14 +479,47 @@ class PromptPackNormalizedJobBuilder:
             resolved_actors,
             resolved_style_lora,
         )
-        prompt_resolution, adaptation_plan = self._resolve_prompt(
+        intent = self._resolve_source_intent(
             entry,
             source_config,
             merged_config,
             resolved_actors,
             resolved_style_lora,
-            evidence,
         )
+        return _PreparedPrompt(entry, matrix_variant_index, matrix_variant_count, source_config,
+                               merged_config, stage_chain, record_metadata, resolved_style_lora, intent, pack_config.get("version"))
+
+    def _build_jobs_for_entry(
+        self, entry: PackJobEntry, *, matrix_variant_index: int = 0, matrix_variant_count: int = 1,
+        evidence: CompileEvidence | None = None, prepared: _PreparedPrompt | None = None,
+    ) -> list[NormalizedJobRecord]:
+        evidence = evidence or CompileEvidence(family_lookup=self._model_family_lookup, lora_resolver=self._lora_resolver)
+        prepared = prepared or self._prepare_entry(entry, matrix_variant_index=matrix_variant_index,
+                                                  matrix_variant_count=matrix_variant_count, evidence=evidence)
+        if prepared is None:
+            return []
+        merged_config, record_metadata, resolved_style_lora = prepared.config, prepared.metadata, prepared.style
+        stage_chain = prepared.stages
+        matrix_variant_index, matrix_variant_count = prepared.matrix_index, prepared.matrix_count
+        randomizer_metadata = entry.randomizer_metadata or {}
+        pack_config = {"version": prepared.revision}
+        adapted = adapt_pack_intent(
+            prepared.intent, evidence.policy_for(self._selected_model_name(prepared.source_config)),
+            lora_resolver=evidence.lora_evidence, optimizer_enabled=self._optimizer_enabled(prepared.source_config),
+            lora_selection=prepared.selection,
+        )
+        prompt_resolution, adaptation_plan = self._prompt_resolver.render_intent(adapted.intent), adapted.plan
+        if prepared.selection is not None:
+            # Source actor/style metadata is evidence, never effective LoRA participation.
+            record_metadata = copy.deepcopy(record_metadata)
+            record_metadata[SELECTION_METADATA_KEY] = prepared.selection.to_dict()
+            from src.pipeline.resolution_layer import pack_prompt_intent_to_dict
+            record_metadata["source_prompt_intent"] = pack_prompt_intent_to_dict(prepared.intent)
+            if "actors" in record_metadata:
+                record_metadata["source_actors"] = record_metadata.pop("actors")
+            if resolved_style_lora and not any(lora.kind == "style" for lora in adapted.intent.loras):
+                resolved_style_lora = {**resolved_style_lora, "applied": False}
+                record_metadata["style_lora"] = resolved_style_lora
         # Frozen, content-free adaptation evidence; the effective prompt/embeddings/LoRAs it describes are already in the NJR.
         provenance_metadata = copy.deepcopy(record_metadata)
         provenance_metadata["prompt_adaptation"] = {
@@ -578,16 +678,15 @@ class PromptPackNormalizedJobBuilder:
             )
         return finalized_jobs
 
-    def _resolve_prompt(
+    def _resolve_source_intent(
         self,
         entry: PackJobEntry,
         source_config: dict[str, Any],
         config: dict[str, Any],
         resolved_actors: list[dict[str, Any]] | None,
         resolved_style_lora: dict[str, Any] | None,
-        evidence: CompileEvidence,
-    ) -> tuple[Any, Any]:
-        """Structure the authored row from the *source* config, adapt it for the target policy, then render.
+    ) -> PackPromptIntent:
+        """Freeze structured authored intent before target adaptation and operator review.
 
         ``config`` is the effective (model-compile-policy) config; it receives the legacy global-prompt flag exactly as before.
         """
@@ -628,13 +727,7 @@ class PromptPackNormalizedJobBuilder:
             global_negative=global_negative,
             apply_global_negative=bool(apply_global),
         )
-        adapted = adapt_pack_intent(
-            intent,
-            evidence.policy_for(self._selected_model_name(source_config)),
-            lora_resolver=evidence.lora_evidence,
-            optimizer_enabled=self._optimizer_enabled(source_config),
-        )
-        return self._prompt_resolver.render_intent(adapted.intent), adapted.plan
+        return intent
 
     @staticmethod
     def _selected_model_name(source_config: dict[str, Any]) -> str | None:
@@ -1078,7 +1171,7 @@ class PromptPackNormalizedJobBuilder:
             else:
                 loaded = self._config_manager.load_pack_config(pack_id)
             self._pack_config_cache[cache_key] = copy.deepcopy(loaded)
-            return loaded
+            return cast(dict[str, Any] | None, loaded)
         except Exception as exc:
             _logger.error("Failed to load pack config for '%s': %s", pack_id, exc)
             return None

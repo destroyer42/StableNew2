@@ -23,6 +23,17 @@ from src.services.watchdog_system_v2 import SystemWatchdogV2
 WAIT_S = 10.0  # generous upper bound for thread hand-offs; never a sleep
 
 
+@pytest.fixture(autouse=True)
+def no_external_browser(monkeypatch):
+    """A missing open_tab injection must fail without launching a host browser."""
+    import webbrowser
+
+    dispatch = mock.Mock(return_value=False)
+    monkeypatch.setattr(webbrowser, "open", dispatch)
+    yield
+    dispatch.assert_not_called()
+
+
 class FakePanel:
     def __init__(self) -> None:
         self.launch_callback = None
@@ -242,7 +253,7 @@ def test_periodic_autoreconnect_runs_off_tk_and_is_single_flight(open_tab) -> No
     assert window.webui_panel.states[-1] is WebUIConnectionState.READY
 
 
-def test_long_webui_startup_is_not_a_ui_stall_but_a_frozen_heartbeat_is() -> None:
+def test_long_webui_startup_is_not_a_ui_stall_but_a_frozen_heartbeat_is(open_tab) -> None:
     """The Tk thread keeps beating while WebUI start takes >10 s; a frozen Tk loop still triggers.
 
     Time is simulated: the Tk thread advances a fake clock in 250 ms heartbeat ticks (the real
@@ -296,6 +307,7 @@ def test_long_webui_startup_is_not_a_ui_stall_but_a_frozen_heartbeat_is() -> Non
         controller.release.set()
         window.pump()
         assert window.webui_panel.states[-1] is WebUIConnectionState.READY
+        open_tab.assert_called_once_with("http://127.0.0.1:7860")
 
         # A genuinely frozen Tk loop (no heartbeat) is still caught.
         now.value += SystemWatchdogV2.UI_STALL_S + 1.0

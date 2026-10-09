@@ -63,6 +63,15 @@ Every test must be deterministic for fixed inputs. Use temporary state,
 artifact, cache, and output roots. Do not use real networks, WebUI, models,
 GPUs, persistent user data, or GUI displays in the required gate.
 
+GUI modal tests use the isolated `tk_root` fixture so masterless Tk variables
+and widgets share one Tcl interpreter, even when another test keeps a root alive.
+Scheduled callback failures must close the modal wait and reach pytest; error
+popups and desktop browser/viewer dispatch must be mocked at the owning test seam.
+Tk can catch pytest's signal-mode timeout exception inside a callback. The
+affected job therefore keeps its 300-second per-test budget with a thread timer
+and adds a 30-minute job deadline. A timed-out thread timer terminates the test
+process with failure; it does not convert a stall into a skipped or passing test.
+
 ## Standard gate
 
 Run targeted tests first, then:
@@ -130,6 +139,12 @@ Use `python -m pytest -q <targets>` for focused changed behavior. Run
 real-backend acceptance only when the PR outcome requires it. Do not claim a
 full green suite when environment-dependent tests were not executed.
 
+Affected-routing efficiency debt: broad directory targets can coexist with
+individual files already inside those directories. Coverage and routing stay
+unchanged; target compaction belongs to a separate DEVEX package. CI-authority
+changes still select the full census, which subsumes affected coverage, rather
+than silently bypassing the normal policy to force an affected job.
+
 Evidence reuse: exact-SHA green focused or required evidence remains reusable
 while the relevant source is unchanged. A docs-only commit does not require
 repeating real GPU/WebUI acceptance or other expensive runtime checks. Run the
@@ -162,6 +177,11 @@ state: PromptPacks via `STABLENEW_PROMPTPACK_DIR`/injected `packs_dir`, runtime 
 fake owner managers, and never read or write the owner's real data.
 
 ## Skips and retired tests
+
+The [optional-capability contract](Subsystems/Testing/Optional_Capability_Contract_v2.6.md)
+defines base Linux, video I/O, PowerShell and Windows integration obligations.
+Reports identify enabled profiles and unsupported capabilities; dependency
+absence must not be confused with a passing optional profile.
 
 Active deterministic test suites must not preserve removed architecture or
 deferred/unimplemented product behavior through unconditional permanent skips.

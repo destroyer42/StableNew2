@@ -42,6 +42,7 @@ from src.image_backends.forge_klein_lora import (
     LoraTag,
     RegistryLoraResolver,
     evaluate_klein_loras,
+    frozen_selection_problems,
     observe_lora_consumption,
 )
 from src.image_backends.forge_klein_profile import (
@@ -97,6 +98,11 @@ def _sha256_file(path: Path) -> str:
 
 class ForgeUnsupportedIntentError(ValueError):
     """The job asks for something the Forge runtime cannot do; refused before any dispatch."""
+
+
+def _selection_from_config(config: Mapping[str, Any]) -> Any:
+    metadata = config.get("metadata")
+    return metadata.get("klein_lora_selection") if isinstance(metadata, Mapping) else None
 
 
 _HYPERNETWORK_SECTIONS = ("txt2img", "img2img", "adetailer", "upscale")  # the image stages, as config sections and stage types
@@ -236,8 +242,12 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
                 f"requests: {', '.join(hypernetworks)}. Generation was not dispatched. Remove the hypernetwork, or "
                 "select the A1111 compatibility runtime (webui_runtime_identity = a1111_webui) to use it."
             )
+        # NJR.extra_metadata is the canonical JSON projection of frozen provenance.
+        selection = getattr(njr, "extra_metadata", {}).get("klein_lora_selection")
         profile = self._profile_for(backend_options)
         if profile is None:
+            if selection is not None or _selection_from_config(config) is not None:
+                raise ForgeUnsupportedIntentError("Frozen Klein selection requires an exact execution profile; rebuild Preview")
             return
         lora_problems, _decisions, _tags = self._lora_conflicts(
             profile,
@@ -246,6 +256,12 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             config=config,
             declared=getattr(njr, "lora_tags", ()),
         )
+        if selection != _selection_from_config(config):
+            lora_problems.append("frozen Klein selection config/provenance differs; rebuild Preview")
+        lora_problems.extend(frozen_selection_problems(
+            selection,
+            dict(backend_options.get("image", {}).get("model_profile") or {}), _decisions, _tags,
+        ))
         features = (
             detect_unsupported_features(
                 config,
@@ -281,6 +297,8 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
     def _validate_request(self, request: ImageExecutionRequest) -> None:
         profile = self._profile_for(request.backend_options)
         if profile is None:
+            if _selection_from_config(request.execution_config) is not None:
+                raise ForgeUnsupportedIntentError("Frozen Klein selection requires an exact execution profile; rebuild Preview")
             return
         lora_problems, decisions, tags = self._lora_conflicts(
             profile,
@@ -288,6 +306,10 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
             prompt=request.prompt,
             config=request.execution_config,
         )
+        lora_problems.extend(frozen_selection_problems(
+            _selection_from_config(request.execution_config),
+            dict(request.backend_options.get("image", {}).get("model_profile") or {}), decisions, tags,
+        ))
         features = (
             detect_unsupported_features(
                 request.execution_config,
