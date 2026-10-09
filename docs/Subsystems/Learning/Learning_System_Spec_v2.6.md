@@ -323,6 +323,9 @@ Allowed fields are compact scalar or short-string values such as:
 - `policy_id`
 - `policy_ids`
 - `detector_id`
+- `detector_algorithm_version`
+- `detector_model_sha256`
+- `detection_status`
 - `scale_band`
 - `pose_band`
 - `face_detected`
@@ -344,6 +347,14 @@ Rules:
 
 - these learning-facing values must be mapped from the canonical runtime
   `adaptive_refinement` carrier, not renamed into a parallel schema
+- `face_detected` is nullable: `True` requires an available, successful assessment
+  with a positive detection count and a qualified face scale; `False` requires
+  successful zero detections with `scale_band="no_face"`. Unavailable, error,
+  timeout, missing, unknown or inconsistent assessments yield `None` (JSON
+  `null`), never a confirmed negative. Count or scale alone cannot establish
+  success. Historical records are not rewritten or reinterpreted.
+- detector identity, version, model SHA and status remain distinct from policy
+  `algorithm_version` and survive decision-bundle/LearningRecord serialization
 - image crops, detector frames, and other large binary artifacts remain
   forbidden
 - recommendation queries may include refinement context, but resulting

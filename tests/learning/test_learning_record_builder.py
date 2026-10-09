@@ -2,13 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass, field
 from pathlib import Path
+
+import pytest
 
 from src.learning.learning_record import LearningRecord
 from src.learning.learning_record_builder import build_learning_record
 from src.pipeline.pipeline_runner import PipelineRunResult
 from src.pipeline.stage_sequencer import StageConfig, StageExecution, StageExecutionPlan
+from src.refinement.detectors.opencv_face_detector import MODEL_SHA256
+from src.refinement.refinement_policy_models import RefinementDecisionBundle
 
 
 def _run_result_stub(run_id: str = "run-123") -> PipelineRunResult:
@@ -137,6 +142,7 @@ def test_learning_record_builder_includes_compact_adaptive_refinement_metadata(t
                     "scale_band": "small",
                     "pose_band": "profile",
                     "detection_count": 1,
+                    "detection_status": "available",
                     "face_area_ratio": 0.14,
                 }
             },
@@ -165,6 +171,53 @@ def test_learning_record_builder_includes_compact_adaptive_refinement_metadata(t
     assert refinement["prompt_patch_ops"] == "add_positive"
     assert refinement["applied_override_keys"] == "upscale_steps"
     assert refinement["image_decision_count"] == 2
+
+
+@pytest.mark.parametrize(
+    ("status", "count", "band", "expected"),
+    [
+        ("available", 1, "small", True),
+        ("available", 0, "no_face", False),
+        ("unavailable", 0, "unknown", None),
+        ("error", 0, "unknown", None),
+        ("timeout", 0, "unknown", None),
+    ],
+)
+def test_refinement_bundle_to_learning_record_json_preserves_tristate_and_provenance(
+    status: str, count: int, band: str, expected: bool | None
+) -> None:
+    assessment = {
+        "detection_status": status,
+        "detection_count": count,
+        "scale_band": band,
+        "detector_id": "opencv_yunet",
+        "detector_algorithm_version": "yunet_2026may/1",
+        "detector_model_sha256": MODEL_SHA256,
+    }
+    bundle = RefinementDecisionBundle(
+        algorithm_version="v1",
+        mode="observe",
+        detector_id="opencv_yunet",
+        observation={"subject_assessment": assessment},
+    )
+    restored_bundle = RefinementDecisionBundle.from_dict(json.loads(json.dumps(bundle.to_dict())))
+    assert restored_bundle.observation["subject_assessment"] == assessment
+    result = _run_result_stub("tri-state")
+    result.metadata["adaptive_refinement"] = {"decision_bundle": restored_bundle.to_dict()}
+    cfg = MinimalLearningConfig(
+        prompt="portrait", model="m", sampler="Euler", width=512, height=512,
+        steps=20, cfg_scale=7.5,
+    )
+    record = build_learning_record(cfg, result)
+    restored_record = LearningRecord.from_json(record.to_json())
+    for stored in (record, restored_record):
+        context = stored.metadata["adaptive_refinement"]
+        assert context["face_detected"] is expected
+        assert context["detection_status"] == status
+        assert context["detector_id"] == "opencv_yunet"
+        assert context["detector_algorithm_version"] == "yunet_2026may/1"
+        assert context["detector_model_sha256"] == MODEL_SHA256
+        assert context["algorithm_version"] == "v1"
 
 
 def test_learning_record_builder_includes_compact_secondary_motion_metadata() -> None:

@@ -89,10 +89,17 @@ def build_refinement_learning_context(
 
     face_count = _safe_int(subject_assessment.get("detection_count"))
     face_area_ratio = _safe_float(subject_assessment.get("face_area_ratio"))
-    face_detected = bool(
-        (face_count or 0) > 0
-        or str(subject_assessment.get("scale_band") or "") in {"micro", "small", "medium", "large"}
-    )
+    # Counts and scale bands qualify only a completed, successful assessment.
+    # Missing/failed or internally inconsistent evidence is not a confirmed negative.
+    face_detected: bool | None = None
+    if subject_assessment.get("detection_status") == "available":
+        scale_band = subject_assessment.get("scale_band")
+        if face_count == 0 and scale_band == "no_face":
+            face_detected = False
+        elif face_count is not None and face_count > 0 and scale_band in (
+            "micro", "small", "medium", "large"
+        ):
+            face_detected = True
     sharpness_variance = None
     if output_paths:
         sharpness_variance = compute_image_sharpness_variance(output_paths[0])

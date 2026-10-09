@@ -6,6 +6,7 @@ import pytest
 from PIL import Image
 
 from src.refinement.detectors.base_detector import SubjectDetector
+from src.refinement.quality_metrics import build_refinement_learning_context
 from src.refinement.subject_scale_policy_service import (
     SubjectScalePolicyConfig,
     SubjectScalePolicyService,
@@ -72,6 +73,10 @@ def test_subject_scale_policy_service_assigns_scale_band_from_detection_size(
     assert assessment["face_area_ratio"] == 0.04
     assert assessment["scale_band"] == "large"
     assert assessment["algorithm_version"] == "v1"
+    context = build_refinement_learning_context(
+        {"decision_bundle": {"observation": {"subject_assessment": assessment}}}
+    )
+    assert context["face_detected"] is True
 
 
 @pytest.mark.parametrize(
@@ -111,6 +116,10 @@ def test_unavailable_detector_is_unknown_not_no_face(tmp_path: Path) -> None:
     assert assessment["detection_status"] == "unavailable"
     assert "no_face_detected" not in assessment["notes"]
     assert "restore repository asset" in assessment["notes"][0]
+    context = build_refinement_learning_context(
+        {"decision_bundle": {"observation": {"subject_assessment": assessment}}}
+    )
+    assert context["face_detected"] is None
 
 
 def test_inference_error_preserves_detector_identity(tmp_path: Path) -> None:
@@ -127,3 +136,17 @@ def test_inference_error_preserves_detector_identity(tmp_path: Path) -> None:
     assert assessment["detector_id"] == "opencv_yunet"
     assert assessment["detector_algorithm_version"] == "yunet_2026may/1"
     assert "no_face_detected" not in assessment["notes"]
+    context = build_refinement_learning_context(
+        {"decision_bundle": {"observation": {"subject_assessment": assessment}}}
+    )
+    assert context["face_detected"] is None
+
+
+def test_successful_empty_detector_is_confirmed_negative(tmp_path: Path) -> None:
+    assessment = SubjectScalePolicyService(detector=_FixedDetector([])).assess(tmp_path / "empty.png")
+    assert assessment["detection_status"] == "available"
+    assert assessment["scale_band"] == "no_face"
+    context = build_refinement_learning_context(
+        {"decision_bundle": {"observation": {"subject_assessment": assessment}}}
+    )
+    assert context["face_detected"] is False

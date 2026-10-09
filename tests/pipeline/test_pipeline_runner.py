@@ -12,6 +12,7 @@ from src.pipeline.job_models_v2 import (
     migrate_legacy_njr,
 )
 from src.pipeline.pipeline_runner import PipelineRunner, PipelineRunResult, normalize_run_result
+from src.refinement.quality_metrics import build_refinement_learning_context
 from src.refinement.subject_scale_policy_service import SubjectScalePolicyService
 from src.services.runtime_transition_service import RuntimeTransitionCoordinator
 from src.video import VideoBackendCapabilities, VideoBackendRegistry, VideoExecutionResult
@@ -342,6 +343,10 @@ def test_collect_refinement_assessments_times_out_to_null_fallback(tmp_path: Pat
     assert assessments[0]["notes"] == ["detector_timeout_fell_back_to_null"]
     assert assessments[0]["scale_band"] == "unknown"
     assert assessments[0]["detection_status"] == "timeout"
+    context = build_refinement_learning_context(
+        {"decision_bundle": {"observation": {"image_assessments": assessments}}}
+    )
+    assert context["face_detected"] is None
 
 
 def test_refinement_unavailable_yunet_is_not_no_face(monkeypatch, tmp_path: Path) -> None:

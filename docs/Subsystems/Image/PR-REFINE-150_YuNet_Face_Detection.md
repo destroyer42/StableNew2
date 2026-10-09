@@ -16,6 +16,12 @@ run real-photo CPU checks and affected OpenCV/refinement/Learning regressions,
 then scoped lint/type/security checks and one final local PR gate. Reuse unchanged
 generation, restoration and PromptPack evidence; no physical generation required.
 
+Final tri-state repair/integration is Narrow: Codex GPT-6.1 Sol Medium / Claude
+Code Sonnet 5.5 Medium, existing Local/Desktop host. No controller changes.
+Validate status-qualified Learning projection and actual bundle/record JSON
+roundtrips, affected refinement/Learning tests and the prescribed final gate;
+reuse unchanged detector, CPU, asset and dependency qualification.
+
 ## Ownership and dependency contract
 
 The owner-selected implementation retains `opencv-python==5.0.0.93`, NumPy
@@ -65,8 +71,12 @@ preserved in runner metadata. Adaptive Refinement retains existing policies and
 prompt intent; observations explain which evidence was available for a decision.
 
 The compact Learning context preserves detector identity/version, model SHA and
-detection status. Unknown scale is not evidence that a face was detected. The
-RecommendationEngine's lightweight normalization preserves detector version and
+detection status. `face_detected=True` requires successful available assessment,
+positive count and a qualified face scale; `False` requires successful zero
+detections and `no_face`. Unavailable, error, timeout, missing, unknown and
+inconsistent assessments yield `None`, preserved as JSON `null`. Legacy records
+are not rewritten; missing status is insufficient for a new qualified summary.
+The RecommendationEngine's lightweight normalization preserves detector version and
 status; no pipeline import or recommendation policy change is introduced.
 
 The immutable NJR, queue-first JobService admission, replay envelopes and

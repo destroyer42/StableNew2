@@ -6,6 +6,8 @@ from types import SimpleNamespace
 import pytest
 
 from src.refinement.detectors import opencv_face_detector as module
+from src.refinement.quality_metrics import build_refinement_learning_context
+from src.refinement.subject_scale_policy_service import SubjectScalePolicyService
 
 
 def _row(x, y, w, h, score=0.9):
@@ -89,8 +91,16 @@ def test_model_asset_fails_closed_before_native_load(fake_cv, tmp_path, failure)
         path.write_bytes(b"x" * 229738)
     elif failure == "oversized":
         path.write_bytes(b"x" * 229739)
-    with pytest.raises(RuntimeError, match="YuNet model.*restore.*repository"):
+    with pytest.raises(RuntimeError, match="YuNet model.*restore.*repository") as failure_info:
         module.OpenCvFaceDetector(model_path=path)
+    assessment = SubjectScalePolicyService(unavailable_reason=str(failure_info.value)).assess(
+        tmp_path / "image.png"
+    )
+    context = build_refinement_learning_context(
+        {"decision_bundle": {"observation": {"subject_assessment": assessment}}}
+    )
+    assert context["detection_status"] == "unavailable"
+    assert context["face_detected"] is None
     assert not fake_cv[4]
 
 

@@ -142,6 +142,7 @@ def test_pipeline_runner_emits_compact_refinement_learning_context(tmp_path):
                     "scale_band": "small",
                     "pose_band": "profile",
                     "detection_count": 1,
+                    "detection_status": "available",
                     "face_area_ratio": 0.2,
                 }
             },
