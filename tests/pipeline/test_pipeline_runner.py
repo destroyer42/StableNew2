@@ -2,6 +2,8 @@ from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
 
+import pytest
+
 from src.pipeline.job_models_v2 import (
     NormalizedJobRecord,
     SourceDescriptor,
@@ -15,6 +17,17 @@ from src.services.runtime_transition_service import RuntimeTransitionCoordinator
 from src.video import VideoBackendCapabilities, VideoBackendRegistry, VideoExecutionResult
 from src.video.assembly_models import AssembledVideoResult, ExportReadyOutputBundle
 from src.video.svd_native_backend import SVDNativeVideoBackend
+
+
+@pytest.fixture(autouse=True)
+def isolated_runtime_endpoints(monkeypatch):
+    # These runner tests use fake executors. A live operator Forge endpoint must
+    # never affect their refinement observations or trigger runtime interaction.
+    from src.api import healthcheck
+    from src.video import comfy_healthcheck
+
+    monkeypatch.setattr(healthcheck, "probe_webui_endpoint", lambda *a, **k: "free")
+    monkeypatch.setattr(comfy_healthcheck, "probe_comfy_endpoint", lambda *a, **k: "free")
 
 
 def _record_from_legacy_kwargs(**values: object) -> NormalizedJobRecord:
@@ -327,6 +340,35 @@ def test_collect_refinement_assessments_times_out_to_null_fallback(tmp_path: Pat
     assert assessments[0]["detector_id"] == "null"
     assert assessments[0]["image_path"] == str(output_path)
     assert assessments[0]["notes"] == ["detector_timeout_fell_back_to_null"]
+    assert assessments[0]["scale_band"] == "unknown"
+    assert assessments[0]["detection_status"] == "timeout"
+
+
+def test_refinement_unavailable_yunet_is_not_no_face(monkeypatch, tmp_path: Path) -> None:
+    import src.refinement.detectors.opencv_face_detector as detector_module
+
+    def unavailable():
+        raise RuntimeError("YuNet model missing; restore repository asset")
+
+    monkeypatch.setattr(detector_module, "OpenCvFaceDetector", unavailable)
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    service, notes = runner._resolve_refinement_policy_service("opencv")
+    assessment = service.assess(tmp_path / "output.png")
+    assert "restore repository asset" in notes[-1]
+    assert assessment["scale_band"] == "unknown"
+    assert assessment["detection_status"] == "unavailable"
+
+
+def test_refinement_unexpected_assessment_error_is_unknown(tmp_path: Path) -> None:
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    service = Mock()
+    service.assess.side_effect = RuntimeError("unexpected failure")
+    assessments, notes = runner._collect_refinement_assessments(
+        service=service, output_paths=[str(tmp_path / "output.png")],
+    )
+    assert assessments[0]["scale_band"] == "unknown"
+    assert assessments[0]["detection_status"] == "error"
+    assert notes == ["detector_error_fell_back_to_null"]
 
 
 def test_run_njr_executes_train_lora_and_returns_weight_artifact(tmp_path: Path) -> None:

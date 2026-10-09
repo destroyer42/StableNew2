@@ -29,7 +29,6 @@ def test_subject_scale_policy_service_builds_observation_bundle_with_null_detect
     assert bundle["observation"]["prompt_intent"]["intent_band"] == "portrait"
     assert bundle["observation"]["subject_assessment"]["notes"] == [
         "assessment_unavailable",
-        "no_face_detected",
     ]
     assert bundle["observation"]["stage_chain"] == ["txt2img", "adetailer"]
 
@@ -101,3 +100,30 @@ def test_subject_scale_policy_service_uses_versioned_threshold_bands(
 
     assert assessment["scale_band"] == expected_band
     assert assessment["algorithm_version"] == "v1"
+
+
+def test_unavailable_detector_is_unknown_not_no_face(tmp_path: Path) -> None:
+    service = SubjectScalePolicyService(
+        unavailable_reason="YuNet model missing; restore repository asset"
+    )
+    assessment = service.assess(tmp_path / "image.png")
+    assert assessment["scale_band"] == "unknown"
+    assert assessment["detection_status"] == "unavailable"
+    assert "no_face_detected" not in assessment["notes"]
+    assert "restore repository asset" in assessment["notes"][0]
+
+
+def test_inference_error_preserves_detector_identity(tmp_path: Path) -> None:
+    class BrokenDetector:
+        detector_id = "opencv_yunet"
+        algorithm_version = "yunet_2026may/1"
+
+        def detect_faces(self, path):
+            raise RuntimeError("YuNet inference failed")
+
+    assessment = SubjectScalePolicyService(detector=BrokenDetector()).assess(tmp_path / "image.png")
+    assert assessment["scale_band"] == "unknown"
+    assert assessment["detection_status"] == "error"
+    assert assessment["detector_id"] == "opencv_yunet"
+    assert assessment["detector_algorithm_version"] == "yunet_2026may/1"
+    assert "no_face_detected" not in assessment["notes"]

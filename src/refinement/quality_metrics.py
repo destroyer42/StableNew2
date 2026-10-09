@@ -40,7 +40,7 @@ def compute_image_sharpness_variance(image_path: str | Path | None) -> float | N
     if not image_path:
         return None
     try:
-        import cv2  # type: ignore
+        import cv2
     except Exception:
         return None
     try:
@@ -91,7 +91,7 @@ def build_refinement_learning_context(
     face_area_ratio = _safe_float(subject_assessment.get("face_area_ratio"))
     face_detected = bool(
         (face_count or 0) > 0
-        or str(subject_assessment.get("scale_band") or "") not in {"", "no_face"}
+        or str(subject_assessment.get("scale_band") or "") in {"micro", "small", "medium", "large"}
     )
     sharpness_variance = None
     if output_paths:
@@ -109,6 +109,11 @@ def build_refinement_learning_context(
         "detector_id": str(
             decision_bundle.get("detector_id") or subject_assessment.get("detector_id") or ""
         ),
+        "detector_algorithm_version": str(
+            subject_assessment.get("detector_algorithm_version") or ""
+        ),
+        "detector_model_sha256": str(subject_assessment.get("detector_model_sha256") or ""),
+        "detection_status": str(subject_assessment.get("detection_status") or ""),
         "scale_band": str(subject_assessment.get("scale_band") or ""),
         "pose_band": str(subject_assessment.get("pose_band") or ""),
         "face_detected": face_detected,

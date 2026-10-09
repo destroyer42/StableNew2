@@ -26,21 +26,35 @@ class SubjectScalePolicyService:
         detector: SubjectDetector | None = None,
         registry: RefinementPolicyRegistry | None = None,
         cfg: SubjectScalePolicyConfig | None = None,
+        unavailable_reason: str | None = None,
     ) -> None:
         self._detector = detector or NullDetector()
         self._registry = registry or NoOpRefinementPolicyRegistry()
         self._cfg = cfg or SubjectScalePolicyConfig()
+        self._unavailable_reason = unavailable_reason
 
     def assess(self, image_path: Path | None = None) -> dict[str, Any]:
-        detections = self._detector.detect_faces(image_path) if image_path is not None else ()
-        notes = ["assessment_unavailable"] if image_path is None else []
+        status = "available"
+        notes: list[str] = []
+        detections: tuple[dict[str, Any], ...] = ()
+        if self._unavailable_reason or image_path is None:
+            status = "unavailable"
+            notes.append(self._unavailable_reason or "assessment_unavailable")
+        else:
+            try:
+                detections = self._detector.detect_faces(image_path)
+            except Exception as exc:
+                status = "error"
+                notes.append(f"detector_error: {exc}")
         image_w: int | None = None
         image_h: int | None = None
         face_area_ratio: float | None = None
         face_height_ratio: float | None = None
         face_width_ratio: float | None = None
         scale_band = "unknown"
-        if not detections:
+        if status != "available":
+            pass  # Unavailable/error observations remain unknown, never confirmed no-face.
+        elif not detections:
             notes.append("no_face_detected")
             scale_band = "no_face"
         elif image_path is not None:
@@ -65,6 +79,9 @@ class SubjectScalePolicyService:
         return {
             "detector_id": self._detector.detector_id,
             "algorithm_version": self._cfg.algorithm_version,
+            "detector_algorithm_version": getattr(self._detector, "algorithm_version", "unknown"),
+            "detector_model_sha256": getattr(self._detector, "model_sha256", ""),
+            "detection_status": status,
             "image_path": str(image_path) if image_path is not None else None,
             "image_width": image_w,
             "image_height": image_h,

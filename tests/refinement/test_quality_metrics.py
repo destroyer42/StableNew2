@@ -58,3 +58,24 @@ def test_build_refinement_learning_context_extracts_compact_scalar_summary() -> 
 
 def test_compute_image_sharpness_variance_returns_none_when_missing_path() -> None:
     assert compute_image_sharpness_variance(Path("missing-file.png")) is None
+
+
+def test_unknown_detection_does_not_claim_a_face_and_preserves_yunet_version() -> None:
+    context = build_refinement_learning_context(
+        {
+            "decision_bundle": {
+                "observation": {
+                    "subject_assessment": {
+                        "scale_band": "unknown",
+                        "detection_status": "error",
+                        "detection_count": 0,
+                        "detector_id": "opencv_yunet",
+                        "detector_algorithm_version": "yunet_2026may/1",
+                    },
+                }
+            }
+        }
+    )
+    assert context["face_detected"] is False
+    assert context["detection_status"] == "error"
+    assert context["detector_algorithm_version"] == "yunet_2026may/1"

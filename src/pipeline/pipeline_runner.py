@@ -2319,9 +2319,10 @@ class PipelineRunner:
             from src.refinement.detectors.opencv_face_detector import OpenCvFaceDetector
 
             return SubjectScalePolicyService(detector=OpenCvFaceDetector()), notes
-        except Exception:
+        except Exception as exc:
             notes.append("opencv_requested_but_unavailable_fell_back_to_null")
-            return SubjectScalePolicyService(), notes
+            notes.append(str(exc))
+            return SubjectScalePolicyService(unavailable_reason=str(exc)), notes
 
     def _collect_refinement_assessments(
         self,
@@ -2352,7 +2353,8 @@ class PipelineRunner:
                     "face_area_ratio": None,
                     "face_height_ratio": None,
                     "face_width_ratio": None,
-                    "scale_band": "no_face",
+                    "scale_band": "unknown",
+                    "detection_status": "timeout",
                     "pose_band": "unknown",
                     "notes": ["detector_timeout_fell_back_to_null"],
                 }
@@ -2375,7 +2377,8 @@ class PipelineRunner:
                     "face_area_ratio": None,
                     "face_height_ratio": None,
                     "face_width_ratio": None,
-                    "scale_band": "no_face",
+                    "scale_band": "unknown",
+                    "detection_status": "error",
                     "pose_band": "unknown",
                     "notes": ["detector_error_fell_back_to_null"],
                 }

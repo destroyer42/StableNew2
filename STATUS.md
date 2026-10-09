@@ -4,6 +4,14 @@ Updated: 2026-10-08
 
 ## Repository
 
+- YuNet face observations (PR-REFINE-150, local implementation; independent
+  review/publication pending): Adaptive Refinement's `opencv` intent uses the
+  repository-owned, hash-verified YuNet CPU model on existing core OpenCV 5.
+  Observations identify YuNet separately from historical Haar and preserve
+  unavailable/error/timeout status rather than claiming no faces. Runtime pins,
+  CodeFormer dependencies, NJRs and submission authority are unchanged. See
+  `docs/Subsystems/Image/PR-REFINE-150_YuNet_Face_Detection.md`.
+
 - Model Comparison evidence readiness (PR-LEARN-142, local implementation;
   independent review and publication pending): Build Preview checks exact
   served checkpoint identity and prepares missing/stale selected-file evidence
