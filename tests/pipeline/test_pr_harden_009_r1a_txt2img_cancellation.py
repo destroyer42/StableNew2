@@ -184,8 +184,23 @@ def test_canonical_txt2img_cancel_interrupts_once_and_persists_cancelled(
 def test_canonical_txt2img_completes_once_when_not_cancelled(monkeypatch, tmp_path: Path) -> None:
     client = _BlockingTxt2ImgClient(release_immediately=True)
     pipeline_runner = _build_pipeline_runner(monkeypatch, tmp_path, client)
+    readiness_checks = []
+
+    def check_ready_before_dispatch():
+        # Readiness belongs before the POST, never a second wait after success.
+        readiness_checks.append(client.post_count)
+        assert client.post_count == 0
+
+    monkeypatch.setattr(pipeline_runner._pipeline, "_ensure_webui_true_ready", check_ready_before_dispatch)
     repository = JobRepository(tmp_path / "jobs.sqlite3")
     queue = JobQueue(repository=repository)
+    terminal = threading.Event()
+    terminal_statuses = []
+
+    def on_status_change(_job, status):
+        if status in {JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED}:
+            terminal_statuses.append(status)
+            terminal.set()
 
     def run_job(job):
         return pipeline_runner.run_njr(
@@ -193,17 +208,23 @@ def test_canonical_txt2img_completes_once_when_not_cancelled(monkeypatch, tmp_pa
             cancel_token=job._cancel_token,
         ).to_dict()
 
-    runner = SingleNodeJobRunner(queue, run_job, poll_interval=0.01)
+    runner = SingleNodeJobRunner(
+        queue, run_job, poll_interval=0.01, on_status_change=on_status_change
+    )
     service = JobService(queue, runner)
     service.auto_run_enabled = True
     record = _build_record(tmp_path, job_id="r1a-complete")
 
     try:
         service.submit_njrs([record])
-        assert _wait_until(
-            lambda: (job := repository.get_job_model(record.job_id)) is not None
-            and job.status is JobStatus.COMPLETED
-        )
+        # Synchronize with durable publication, not cancellation's 2-second budget.
+        # This bound detects a stuck test worker; it is not a product latency SLA.
+        assert terminal.wait(timeout=10.0), "queue worker did not publish a terminal result"
+        assert terminal_statuses == [JobStatus.COMPLETED]
+        persisted = repository.get_job_model(record.job_id)
+        assert persisted is not None and persisted.status is JobStatus.COMPLETED
+        assert persisted.result is not None
+        assert readiness_checks == [0]
         assert client.post_count == 1
         assert client.interrupt_count == 0
     finally:

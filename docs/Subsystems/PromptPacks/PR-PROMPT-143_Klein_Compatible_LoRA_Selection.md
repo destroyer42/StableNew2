@@ -137,7 +137,9 @@ Plan: reconstruct the original affected targets, diagnose the GUI prefix with
 per-test output, prove browser dispatch and modal failures with bounded fixtures,
 run focused repaired seams, execute the original affected selection with a
 desktop-launch audit, reuse unchanged compiler evidence, then run the required
-gate once on settled source.
+gate once on settled source. Because CI configuration changes trigger the
+full-census rule, final closeout also runs the canonical isolated sharded census;
+the broad affected selection is not a substitute or a routing exception.
 
 The first batch-choice test formerly created a raw Tk root instead of using the
 isolated fixture. In a combined suite, selection variables bound to a surviving
@@ -155,3 +157,20 @@ reproducer using the exact pytest-timeout 2.4.0 handler establishes this limitat
 See [pytest-timeout's implementation](https://github.com/pytest-dev/pytest-timeout/blob/2.4.0/pytest_timeout.py).
 No model selection, compatibility, provenance, submission or runtime behavior
 changes in this repair.
+
+The successful txt2img control synchronizes on the queue's terminal notification
+and checks durable completion, one generation, no interrupt, and readiness only
+before dispatch. Its bounded synchronization timeout detects a stuck test worker;
+the cancellation test separately retains its two-second responsiveness contract.
+Successful generation, artifact writing and SQLite publication have no such
+two-second latency requirement.
+
+Forge ownership tests execute the unchanged bootstrap function in temporary
+fixtures. Their harness captures the raw exception message with a nonzero exit
+instead of matching PowerShell's width-dependent decorated error display. The
+incomplete-install assertion requires the exact refusal and rebuild guidance;
+unowned files and partial owned files remain protected until explicit recreate.
+
+The affected planner's directory targets overlap individual files and select
+over 5,200 cases. This remains separate Phase B/test-slimming debt; this repair
+does not remove targets or reduce validation coverage.

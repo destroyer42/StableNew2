@@ -5,7 +5,8 @@ Updated: 2026-10-08
 ## Repository
 
 - Klein-compatible PromptPack LoRA selection (PR-PROMPT-143, open PR #72;
-  functional evidence accepted, hosted affected-lane repair review pending): fresh GUI PromptPack preflight prepares
+  functional evidence accepted, local test/CI repairs awaiting final review and
+  hosted validation): fresh GUI PromptPack preflight prepares
   exact registry evidence off Tk and automatically chooses zero or one verified
   adapter. Multiple compatible adapters require one batch operator decision.
   Structured source, authored weights and trigger ownership are preserved;
