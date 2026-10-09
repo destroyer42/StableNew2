@@ -99,6 +99,7 @@ def test_operator_panel_suppresses_debug_trace_noise() -> None:
     root = tk.Tk()
     root.withdraw()
     panel = LogTracePanelV2(root, handler, audience="operator")
+    panel.show()  # PR-GUI-110: the Operator Log is compact until the details are requested
     filtered = panel._apply_filter(handler.get_entries())
     assert len(filtered) == 1
     assert (panel._get_payload(filtered[0]) or {}).get("event") == "stage_started"

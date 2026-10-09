@@ -43,12 +43,11 @@ Child processes receive only the selected shell's bundled module path; parent
 environment is untouched. Linux pwsh symlinks are resolved before finding modules.
 Missing bundled modules fail explicitly. Hash/refusal behavior is not mocked.
 
-## Separate OpenCV qualification blocker
+## OpenCV cascade blocker (resolved)
 
-The existing Windows ML constraint pins `opencv-python==5.0.0.93`. The observed
-installation imports but lacks `cv2.CascadeClassifier`, preventing the unchanged
-detector from constructing. Two tests fail before behavior assertions. This
-predates PR #72 and is not fixed by these fixtures or Linux migration. Keep pins
-unchanged; separately qualify a compatible dependency build before claiming the
-optional detector profile supported. Base Linux qualification cannot erase this
-Windows blocker.
+The Windows ML constraint pins `opencv-python==5.0.0.93`, whose installation imports but lacks
+`cv2.CascadeClassifier`; the formerly unchanged Haar detector could not construct and two tests failed before
+behavior assertions. PR-REFINE-150 (integrated, PR #73) retired that detector: Adaptive Refinement's `opencv`
+intent uses the repository-owned, hash-verified YuNet model through `cv2.FaceDetectorYN` on the same pinned
+core wheel (CPU only), and a missing or corrupt model fails explicitly instead of becoming a no-face result. No
+dependency pin changed. See `docs/Subsystems/Image/PR-REFINE-150_YuNet_Face_Detection.md`.

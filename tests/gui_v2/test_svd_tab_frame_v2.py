@@ -101,7 +101,9 @@ def test_svd_tab_help_sections_use_distinct_rows(tk_root: tk.Tk) -> None:
     tab = SVDTabFrameV2(tk_root)
     try:
         assert int(tab.summary_label.grid_info()["row"]) == 1
-        assert int(tab.admission_label.grid_info()["row"]) == 2
+        # PR-GUI-110: the admission line lives in the fixed header and is mapped only when action-required.
+        assert str(tab.admission_label.master) == str(tab.animate_btn.master)
+        assert not tab.admission_label.winfo_manager()
         assert int(tab.capabilities_label.grid_info()["row"]) == 3
         assert int(tab.workflow_help_panel.grid_info()["row"]) == 4
     finally:

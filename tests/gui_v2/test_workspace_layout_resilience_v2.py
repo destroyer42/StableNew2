@@ -147,8 +147,10 @@ def test_saved_geometry_is_normalized_for_the_current_screen(saved, expected) ->
     ("tab_factory", "scroll_attr", "last_control_attr"),
     [
         (ReviewTabFrame, "_workspace_scroll", "reprocess_all_button"),
-        (SVDTabFrameV2, "_body_scroll", "animate_btn"),
-        (VideoWorkflowTabFrameV2, "_body_scroll", "queue_workflow_button"),
+        # PR-GUI-110: the primary submit actions left the scroll region; the lowest scrolled control is now the
+        # Recent SVD Outputs action / the Video Workflow negative prompt.
+        (SVDTabFrameV2, "_body_scroll", "open_manifest_btn"),
+        (VideoWorkflowTabFrameV2, "_body_scroll", "negative_prompt_text"),
     ],
     ids=["review", "svd", "video_workflow"],
 )
@@ -165,7 +167,7 @@ def test_long_form_tabs_reach_their_lowest_control_on_a_laptop_viewport(
         scroll = getattr(tab, scroll_attr)
         control = getattr(tab, last_control_attr)
 
-        assert scroll.has_scroll_overflow(), "the workspace must scroll instead of growing the window"
+        # A workspace may fit entirely (collapsed sections); when it does not it must scroll, never grow the window.
         assert tk_root.winfo_height() <= layout.screen_height - SCREEN_MARGIN_HEIGHT
 
         scroll._canvas.yview_moveto(1.0)

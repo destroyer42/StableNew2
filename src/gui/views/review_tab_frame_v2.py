@@ -31,6 +31,7 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_two_pane_workspace_column_specs,
 )
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
@@ -207,7 +208,8 @@ class ReviewTabFrame(ttk.Frame):
             text=self._default_workflow_hint,
             style="Dark.TLabel",
         )
-        self.workflow_hint_label.grid(row=1, column=0, columnspan=5, sticky="w", pady=(6, 0))
+        self.workflow_hint_label.grid(row=1, column=0, columnspan=6, sticky="ew", pady=(6, 0))
+        bind_wraplength(self.workflow_hint_label)
         self.action_help_panel = ActionExplainerPanel(
             header,
             content=build_review_action_guidance(),
@@ -298,10 +300,15 @@ class ReviewTabFrame(ttk.Frame):
             command=self._open_metadata_inspector,
         ).pack(side="left", padx=(6, 0))
 
+        # PR-GUI-110: 620 px is the maximum, not an assumption; the preview fits the pane's real width.
         self.preview = ThumbnailWidget(
-            right, width=620, height=620, placeholder_text="Select an image"
+            right,
+            width=620,
+            height=620,
+            placeholder_text="Select an image",
+            responsive=True,
         )
-        self.preview.grid(row=1, column=0, sticky="n", pady=(0, 8))
+        self.preview.grid(row=1, column=0, sticky="ew", pady=(0, 8))
         self.preview._canvas.bind("<Double-Button-1>", lambda _event: self._open_compare_viewer())
 
         self.meta_label = ttk.Label(
@@ -309,9 +316,9 @@ class ReviewTabFrame(ttk.Frame):
             text="Metadata: n/a",
             style="Dark.TLabel",
             justify="left",
-            wraplength=620,
         )
         self.meta_label.grid(row=2, column=0, sticky="ew")
+        bind_wraplength(self.meta_label)
 
         prior_review_box = ttk.LabelFrame(
             right,
@@ -321,13 +328,14 @@ class ReviewTabFrame(ttk.Frame):
         )
         prior_review_box.grid(row=3, column=0, sticky="ew", pady=(8, 0))
         prior_review_box.columnconfigure(0, weight=1)
-        ttk.Label(
+        prior_review_label = ttk.Label(
             prior_review_box,
             textvariable=self._prior_review_summary_var,
             style="Dark.TLabel",
             justify="left",
-            wraplength=620,
-        ).grid(row=0, column=0, sticky="ew")
+        )
+        prior_review_label.grid(row=0, column=0, sticky="ew")
+        bind_wraplength(prior_review_label)
 
     def _build_controls(self) -> None:
         controls = ttk.Frame(self._workspace_scroll.inner, style="Panel.TFrame")
@@ -456,18 +464,18 @@ class ReviewTabFrame(ttk.Frame):
             text="Before: (select an image)",
             style="Dark.TLabel",
             justify="left",
-            wraplength=520,
         )
         self.diff_before_label.grid(row=0, column=0, sticky="ew", pady=(0, 4))
+        bind_wraplength(self.diff_before_label)
 
         self.diff_after_label = ttk.Label(
             diff_box,
             text="After: (no changes)",
             style="Dark.TLabel",
             justify="left",
-            wraplength=520,
         )
         self.diff_after_label.grid(row=1, column=0, sticky="ew")
+        bind_wraplength(self.diff_after_label)
 
         run_box = ttk.LabelFrame(
             controls,
@@ -505,13 +513,14 @@ class ReviewTabFrame(ttk.Frame):
         )
         effective_box.grid(row=3, column=0, sticky="ew", pady=(0, 8))
         effective_box.columnconfigure(0, weight=1)
-        ttk.Label(
+        effective_label = ttk.Label(
             effective_box,
             textvariable=self._effective_settings_var,
             style="Dark.TLabel",
             justify="left",
-            wraplength=520,
-        ).grid(row=0, column=0, sticky="ew")
+        )
+        effective_label.grid(row=0, column=0, sticky="ew")
+        bind_wraplength(effective_label)
 
         batch_row = ttk.Frame(run_box, style="Panel.TFrame")
         batch_row.grid(row=4, column=0, sticky="ew", pady=(0, 8))
@@ -653,9 +662,9 @@ class ReviewTabFrame(ttk.Frame):
         )
         subscores = ttk.Frame(feedback_box, style="Panel.TFrame")
         subscores.grid(row=6, column=1, sticky="w", pady=(8, 4))
+        # PR-GUI-110: two pairs per row (not three) so the row still fits a narrow pane at increased Tk scaling.
         subscores.columnconfigure(1, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
         subscores.columnconfigure(3, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
-        subscores.columnconfigure(5, minsize=PRIMARY_CONTROL_MIN_WIDTH // 3)
         ttk.Label(subscores, text="Anatomy", style="Dark.TLabel").grid(row=0, column=0, sticky="w")
         ttk.Spinbox(
             subscores,
@@ -677,9 +686,9 @@ class ReviewTabFrame(ttk.Frame):
             textvariable=self.composition_rating_var,
             width=4,
             style="Dark.TSpinbox",
-        ).grid(row=0, column=3, sticky="w", padx=(6, 12))
+        ).grid(row=0, column=3, sticky="w", padx=(6, 0))
         ttk.Label(subscores, text="Prompt Fit", style="Dark.TLabel").grid(
-            row=0, column=4, sticky="w"
+            row=1, column=0, sticky="w", pady=(4, 0)
         )
         ttk.Spinbox(
             subscores,
@@ -689,7 +698,7 @@ class ReviewTabFrame(ttk.Frame):
             textvariable=self.prompt_adherence_rating_var,
             width=4,
             style="Dark.TSpinbox",
-        ).grid(row=0, column=5, sticky="w", padx=(6, 0))
+        ).grid(row=1, column=1, sticky="w", padx=(6, 12), pady=(4, 0))
 
     def _selected_stages(self) -> list[str]:
         stages: list[str] = []

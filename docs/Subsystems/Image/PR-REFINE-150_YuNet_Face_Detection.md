@@ -1,6 +1,6 @@
 # PR-REFINE-150 — YuNet on existing core OpenCV
 
-Status: local implementation and CPU qualification; independent review/publication pending.
+Status: COMPLETE / ACCEPTED / INTEGRATED (PR #73, merged to `main`; hosted `required` and GUI `affected` lanes passed).
 
 ## Execution profile and validation
 

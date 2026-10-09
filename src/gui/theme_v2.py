@@ -278,7 +278,29 @@ def _configure_entry_styles(style: ttk.Style) -> None:
         "Dark.TButton",
         background=[("active", BACKGROUND_DARK)],
         foreground=[("disabled", TEXT_MUTED)],
+        bordercolor=[("focus", ACCENT_GOLD)],  # PR-GUI-110: keyboard focus is visible, not a 1 px grey ring
     )
+
+    # PR-GUI-110: collapsible-section headers (left aligned; the accent variant marks non-default hidden content).
+    for disclosure_style, disclosure_foreground in (
+        ("Disclosure.TButton", design_system.Colors.TEXT_PRIMARY),
+        ("DisclosureActive.TButton", ACCENT_GOLD),
+    ):
+        style.configure(
+            disclosure_style,
+            background=BACKGROUND_ELEVATED,
+            foreground=disclosure_foreground,
+            bordercolor=BORDER_SUBTLE,
+            focusthickness=1,
+            anchor="w",
+            padding=(6, 2),
+        )
+        style.map(
+            disclosure_style,
+            background=[("active", BACKGROUND_DARK)],
+            foreground=[("disabled", TEXT_MUTED)],
+            bordercolor=[("focus", ACCENT_GOLD)],
+        )
 
     # PR-GUI-DARKMODE-002: LabelFrame styles for dark mode
     style.configure(

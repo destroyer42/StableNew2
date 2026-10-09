@@ -16,9 +16,12 @@ from src.gui.view_contracts.video_workspace_contract import (
     format_workflow_capability_label,
     summarize_video_workflow_source,
 )
+from src.gui.view_contracts.workspace_density_contract import changed_value_count
 from src.gui.views.video_workflow_controls_panel_v2 import WorkflowControlsPanel
 from src.gui.views.video_workflow_experiment_panel_v2 import WorkflowExperimentPanel
 from src.gui.widgets.action_explainer_panel_v2 import ActionExplainerPanel
+from src.gui.widgets.disclosure_section_v2 import DisclosureSection
+from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.state.output_routing import (
@@ -116,6 +119,17 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         self.controlnet_guidance_end_var = tk.StringVar(
             value=str(controlnet_defaults.get("guidance_end") or 1.0)
         )
+        # Baseline for the collapsed Advanced Conditioning header: operator edits are compared to these.
+        self._conditioning_defaults = {
+            "camera_preset": self.camera_preset_var.get(),
+            "camera_strength": self.camera_strength_var.get(),
+            "depth_mode": self.depth_mode_var.get(),
+            "depth_path": self.depth_path_var.get(),
+            "controlnet_model": self.controlnet_model_var.get(),
+            "controlnet_weight": self.controlnet_weight_var.get(),
+            "controlnet_guidance_start": self.controlnet_guidance_start_var.get(),
+            "controlnet_guidance_end": self.controlnet_guidance_end_var.get(),
+        }
         self.output_route_var = tk.StringVar(
             value=str(defaults.get("output_route") or OUTPUT_ROUTE_REPROCESS)
         )
@@ -255,16 +269,54 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self.use_latest_output_button,
             "Load the newest compatible image output into this workflow tab. This prepares the source input only; it does not queue the workflow yet.",
         )
-        ttk.Label(header, textvariable=self.status_var, style="Dark.TLabel").grid(
-            row=1, column=0, columnspan=4, sticky="w", pady=(6, 0)
+        # PR-GUI-110: the primary action, its experimental opt-in and the status share one fixed row above the
+        # scrolling form. It is the same button and callback as before, just never scrolled out of view.
+        action_bar = ttk.Frame(header, style="Panel.TFrame")
+        action_bar.grid(row=1, column=0, columnspan=4, sticky="ew", pady=(6, 0))
+        self._action_bar = action_bar
+        self.queue_workflow_button = ttk.Button(
+            action_bar,
+            text="Queue Video Workflow",
+            style="Primary.TButton",
+            command=self._on_submit,
         )
+        self.queue_workflow_button.pack(side="left")
+        self.queue_workflow_tooltip = attach_tooltip(
+            self.queue_workflow_button,
+            "Queue a workflow-driven video job using the selected workflow, anchors, prompts, and route shown in this tab.",
+        )
+        self.status_label = ttk.Label(
+            action_bar, textvariable=self.status_var, style="Dark.TLabel", justify="left"
+        )
+        self.status_label.pack(side="left", fill="x", expand=True, padx=(12, 0))
+        bind_wraplength(self.status_label)
+        self.experimental_opt_in_check = ttk.Checkbutton(
+            action_bar,
+            text="Enable experimental workflow for this job",
+            variable=self.experimental_opt_in_var,
+        )
+        # Packed next to the button only while an experimental workflow is selected
+        # (see _apply_workflow_capabilities).
         self.visibility_banner = ttk.Label(header, text="", style="Dark.TLabel")
-        ttk.Label(header, textvariable=self.source_summary_var, style="Muted.TLabel").grid(
-            row=2, column=0, columnspan=4, sticky="w", pady=(4, 0)
+        self.source_summary_label = ttk.Label(
+            header, textvariable=self.source_summary_var, style="Muted.TLabel", justify="left"
         )
-        ttk.Label(header, textvariable=self.effective_settings_var, style="Muted.TLabel").grid(
-            row=3, column=0, columnspan=4, sticky="w", pady=(2, 0)
+        self.source_summary_label.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        bind_wraplength(self.source_summary_label)
+        # The effective-settings string repeats what the form below shows, so it is disclosed on demand.
+        self.effective_settings_section = DisclosureSection(header, title="Effective settings")
+        self.effective_settings_section.grid(
+            row=3, column=0, columnspan=4, sticky="ew", pady=(2, 0)
         )
+        self.effective_settings_section.body.columnconfigure(0, weight=1)
+        self.effective_settings_label = ttk.Label(
+            self.effective_settings_section.body,
+            textvariable=self.effective_settings_var,
+            style="Muted.TLabel",
+            justify="left",
+        )
+        self.effective_settings_label.grid(row=0, column=0, sticky="ew")
+        bind_wraplength(self.effective_settings_label)
 
     def _build_body(self) -> None:
         # PR-GUI-100: the workflow body keeps growing with workflow controls; it scrolls instead of growing the window.
@@ -400,9 +452,12 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             values=_OUTPUT_ROUTES,
             help_key="output_route",
         )
-        conditioning_frame = ttk.LabelFrame(body, text="Advanced Conditioning", padding=8)
+        # PR-GUI-110: collapsible; every control and value stays alive while collapsed, and a collapsed header
+        # that hides non-default values says so (see _refresh_conditioning_status).
+        self.conditioning_section = DisclosureSection(body, title="Advanced Conditioning")
+        self.conditioning_section.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(6, 6))
+        conditioning_frame = self.conditioning_section.body
         self.conditioning_frame = conditioning_frame
-        conditioning_frame.grid(row=6, column=0, columnspan=4, sticky="ew", pady=(6, 6))
         configure_grid_columns(
             conditioning_frame,
             build_form_column_specs(
@@ -542,26 +597,6 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
         )
         self.experiment_panel.grid(row=11, column=0, columnspan=4, sticky="ew", pady=(0, 6))
         self.experiment_panel.grid_remove()
-
-        submit_frame = ttk.Frame(body, style="Panel.TFrame")
-        submit_frame.grid(row=12, column=0, columnspan=4, sticky="ew", pady=(10, 0))
-        self.queue_workflow_button = ttk.Button(
-            submit_frame,
-            text="Queue Video Workflow",
-            style="Primary.TButton",
-            command=self._on_submit,
-        )
-        self.queue_workflow_button.pack(side="left")
-        self.experimental_opt_in_check = ttk.Checkbutton(
-            submit_frame,
-            text="Enable experimental workflow for this job",
-            variable=self.experimental_opt_in_var,
-        )
-        # Shown only while an experimental workflow is selected (see _apply_workflow_capabilities).
-        self.queue_workflow_tooltip = attach_tooltip(
-            self.queue_workflow_button,
-            "Queue a workflow-driven video job using the selected workflow, anchors, prompts, and route shown in this tab.",
-        )
 
     def _add_labeled_entry(
         self,
@@ -813,7 +848,9 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
             self._refresh_conditioning_controls_state()
         experimental = bool(workflow_meta.get("experimental"))
         if experimental:
-            self.experimental_opt_in_check.pack(side="left", padx=(12, 0))
+            self.experimental_opt_in_check.pack(
+                side="left", padx=(12, 0), before=self.status_label
+            )
         else:
             self.experimental_opt_in_check.pack_forget()
             self.experimental_opt_in_var.set(False)
@@ -945,7 +982,41 @@ class VideoWorkflowTabFrameV2(ttk.Frame):
                     f"submitted target={target['width']}x{target['height']}"
                 )
         self.effective_settings_var.set("Effective settings: " + " | ".join(effective_parts))
+        self.effective_settings_section.set_status(" | ".join(effective_parts[:2])[:72])
+        self._refresh_conditioning_status(workflow_meta)
         self._invalidate_experiment_preview()
+
+    def _refresh_conditioning_status(self, workflow_meta: dict[str, Any]) -> None:
+        """Collapsed-header hint: say so when hidden conditioning is active or edited from its default."""
+
+        visible = dict(workflow_meta.get("form_visibility") or {})
+        if visible and not (visible.get("camera_intent") or visible.get("depth_conditioning")):
+            self.conditioning_section.set_status("not used by this workflow")
+            return
+        current = {
+            "camera_preset": self.camera_preset_var.get(),
+            "camera_strength": self.camera_strength_var.get(),
+            "depth_mode": self.depth_mode_var.get(),
+            "depth_path": self.depth_path_var.get(),
+            "controlnet_model": self.controlnet_model_var.get(),
+            "controlnet_weight": self.controlnet_weight_var.get(),
+            "controlnet_guidance_start": self.controlnet_guidance_start_var.get(),
+            "controlnet_guidance_end": self.controlnet_guidance_end_var.get(),
+        }
+        active: list[str] = []
+        camera = self.camera_preset_var.get().strip() or "none"
+        depth = self.depth_mode_var.get().strip() or "none"
+        if camera != "none":
+            active.append(f"camera={camera}")
+        if depth != "none":
+            active.append(f"depth={depth}")
+        changed = changed_value_count(current, self._conditioning_defaults)
+        if active:
+            self.conditioning_section.set_status("active: " + ", ".join(active), active=True)
+        elif changed:
+            self.conditioning_section.set_status(f"{changed} edited (inactive)", active=True)
+        else:
+            self.conditioning_section.set_status("")
 
     def _experiment_controller(self) -> Any:
         getter = getattr(self.app_controller, "get_video_workflow_controller", None)

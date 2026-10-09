@@ -21,7 +21,7 @@ from src.gui.panels_v2.running_job_panel_v2 import RunningJobPanelV2
 from src.gui.preview_panel_v2 import PreviewPanelV2
 from src.gui.sidebar_panel_v2 import SidebarPanelV2
 from src.gui.theme_v2 import CARD_FRAME_STYLE, SURFACE_FRAME_STYLE
-from src.gui.tooltip import attach_tooltip
+from src.gui.tooltip import attach_tooltip, install_full_value_tooltips
 from src.gui.view_contracts.pipeline_layout_contract import (
     COMPACT_LABEL_WRAPLENGTH_CAP,
     COMPACT_MINSIZE_SCALES,
@@ -375,6 +375,7 @@ class PipelineTabFrame(ttk.Frame):
             if not self.winfo_exists() or not self.winfo_viewable():
                 return  # a hidden tab is evaluated when it maps
             self._apply_responsive_layout(self.winfo_width())
+            install_full_value_tooltips(self)  # narrow comboboxes keep their selected model/checkpoint inspectable
         except tk.TclError:
             return
 
