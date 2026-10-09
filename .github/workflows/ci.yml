@@ -154,6 +154,7 @@ jobs:
     needs: required
     if: needs.required.outputs.run_affected == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     continue-on-error: true
 
     steps:
@@ -187,7 +188,8 @@ jobs:
       uses: GabrielBB/xvfb-action@v1
       with:
         run: |
-          python -m pytest -q -rfE --tb=short --timeout=300 @affected-targets.txt
+          # Tk callbacks can catch the signal-mode failure; the thread timer exits the test process.
+          python -m pytest -q -rfE --tb=short --timeout=300 --timeout-method=thread @affected-targets.txt
 
   # Informational gate: the broader configured suite (headless-safe GUI v2, fake-backend integration, tools,
   # video). PR-DEVEX-CENSUS-140: the census runs as THREE independent file-level shards (separate runner, Python

@@ -573,7 +573,7 @@ def _select_compile_loras(
     for position, lora in enumerate(loras):
         codes = _lora_codes(lora.kind)
         scope = SCOPE_STYLE if lora.kind == KIND_STYLE else SCOPE_LORA
-        details: dict[str, Any] = {"index": position, "kind": lora.kind}
+        details = {"index": position, "kind": lora.kind}
         assessment = assess_lora_selection(policy, [(lora.name, lora.weight)], lora_resolver)
         status = assessment.statuses.get(lora.name) if assessment.exact else STATUS_COMPATIBLE
         if status == STATUS_INCOMPATIBLE:
@@ -603,6 +603,7 @@ def adapt_structured_prompt(
     source: StructuredPromptInput,
     *,
     lora_resolver: LoraResolver | None = None,
+    lora_selection: Any = None,
 ) -> StructuredAdaptation:
     """Compile-safe adaptation of structured PromptPack intent for ``policy``. Pure; ``source`` is never modified.
 
@@ -707,7 +708,19 @@ def adapt_structured_prompt(
     if not channel:
         neg_emb = ()  # the whole channel is omitted: nothing may be rendered into it
 
-    retained, uncertain = _select_compile_loras(policy, source.loras, lora_resolver, operations)
+    if lora_selection is None:
+        retained, uncertain = _select_compile_loras(policy, source.loras, lora_resolver, operations)
+    else:
+        lora_selection.validate(policy, source.loras)
+        retained, uncertain = lora_selection.selected, 0
+        for position, lora in enumerate(source.loras):
+            decision = lora_selection.assessment.decisions[position]
+            operations.append(AdaptationOperation(
+                "lora_retained_explicit_selection" if position == lora_selection.index else "lora_omitted_explicit_selection",
+                SCOPE_STYLE if lora.kind == KIND_STYLE else SCOPE_LORA,
+                EFFECT_RETAINED if position == lora_selection.index else EFFECT_DROPPED,
+                {"index": position, "kind": lora.kind, "status": decision.status.value},
+            ))
     kept = {lora.name.lower() for lora in retained}
     triggers: list[TriggerContribution] = []
     for position, trigger in enumerate(source.triggers):

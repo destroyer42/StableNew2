@@ -150,8 +150,10 @@ def classify_klein_lora(name: str, record: Any) -> KleinLoraDecision:
         return KleinLoraDecision(name, kind, reason, source, raw, sha256)
 
     if klein and (other_flux or resolved_other or registry_conflict):
+        if resolved_other:
+            assert family is not None
         contradicting = (
-            other_flux[0][1] if other_flux else (family.value if resolved_other else "conflicting registry evidence")
+            other_flux[0][1] if other_flux else (getattr(family, "value", "") if resolved_other else "conflicting registry evidence")
         )
         return decision(
             KleinLoraStatus.CONFLICTING,
@@ -164,6 +166,7 @@ def classify_klein_lora(name: str, record: Any) -> KleinLoraDecision:
             KleinLoraStatus.CONFLICTING, "its metadata names more than one model family"
         )
     if resolved_other and not klein:
+        assert family is not None
         return decision(
             KleinLoraStatus.INCOMPATIBLE,
             f"its metadata resolves to the {family.value} family, not FLUX.2 Klein 4B",
@@ -333,6 +336,32 @@ def evaluate_klein_loras(
                 f"LoRA '{tag.name}' is not verified for FLUX.2 Klein 4B ({decision.status.value}): {decision.reason}"
             )
     return problems, tuple(decisions), tags
+
+
+def frozen_selection_problems(manifest: Any, profile_ref: Mapping[str, Any],
+                              decisions: Sequence[KleinLoraDecision], tags: Sequence[LoraTag]) -> list[str]:
+    """Check the chosen frozen adapter against this boundary's refreshed exact evidence."""
+    if manifest is None:
+        return []  # Historical and non-selection NJRs preserve existing qualification.
+    if not isinstance(manifest, Mapping) or manifest.get("contract") != "klein_lora_selection/1":
+        return ["unknown frozen Klein selection contract; rebuild Preview"]
+    if not isinstance(manifest.get("profile_ref"), Mapping) or dict(manifest["profile_ref"]) != dict(profile_ref):
+        return ["frozen Klein selection profile differs from execution profile"]
+    from src.prompting.pack_lora_selection import selection_manifest_is_consistent
+
+    if manifest.get("policy_id") != profile_ref.get("id") or not selection_manifest_is_consistent(manifest):
+        return ["frozen Klein selection evidence is inconsistent; rebuild Preview"]
+    selected = manifest.get("selected")
+    if selected is None:
+        return ["frozen Klein selection requests no adapter but prompt contains LoRA tags"] if tags else []
+    if not isinstance(selected, Mapping) or len(tags) != 1 or len(decisions) != 1:
+        return ["frozen Klein selection disagrees with effective LoRA count"]
+    tag, decision = tags[0], decisions[0]
+    if (selected.get("name") != tag.name or selected.get("weight") != tag.weight
+            or not decision.runnable or not selected.get("sha256")
+            or selected.get("sha256") != decision.sha256):
+        return ["frozen selected LoRA identity/weight differs from refreshed evidence; rebuild Preview"]
+    return []
 
 
 # Forge's console handler wraps and right-pads each record (``[LORA] Loaded <file>  networks.py :: INFO`` then

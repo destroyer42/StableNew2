@@ -643,7 +643,7 @@ def _install_dir(tmp_path: Path) -> Path:
 
 
 def _says(stderr: str, phrase: str) -> bool:
-    return re.sub(r"\s+", "", phrase) in re.sub(r"\s+", "", stderr)
+    return phrase in stderr
 
 
 def _run_claim(tmp_path: Path, *, recreate: bool, fail_marker: bool = False) -> subprocess.CompletedProcess[str]:
@@ -665,7 +665,12 @@ def _run_claim(tmp_path: Path, *, recreate: bool, fail_marker: bool = False) -> 
             f"$ForgeRevision = '{FORGE_SHA}'; $AdetailerRevision = '{ADETAILER_SHA}'; $pythonMinor = '3.13'; $ConstraintsPath = 'c/constraints.txt'",
             marker_function,
             _function_block(script, "Initialize-OwnedInstallDir"),
-            "Initialize-OwnedInstallDir",
+            # Capture execution truth, not PowerShell's width/version-dependent
+            # error presentation. Preserve refusal as a nonzero process exit.
+            "try { Initialize-OwnedInstallDir } catch {",
+            "    [Console]::Error.WriteLine($_.Exception.Message)",
+            "    exit 1",
+            "}",
         ]
     )
     path = tmp_path / "harness.ps1"
@@ -718,7 +723,8 @@ def test_a_failed_partial_owned_install_is_reported_incomplete_and_rebuilt_by_re
     (install / "source" / "half-fetched.txt").write_text("partial", encoding="utf-8")
 
     plain = _run_claim(tmp_path, recreate=False)
-    assert plain.returncode != 0 and _says(plain.stderr, "incomplete StableNew-managed install")
+    expected = f"'{install}' is an incomplete StableNew-managed install. Pass -Recreate to rebuild it."
+    assert plain.returncode == 1 and plain.stderr.strip() == expected
     assert (install / "source" / "half-fetched.txt").exists()
 
     rebuilt = _run_claim(tmp_path, recreate=True)

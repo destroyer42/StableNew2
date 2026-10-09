@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -46,11 +47,54 @@ def _run(world: dict[str, Path], *extra: str, source: Path | None = None) -> sub
             "-InstallDir", str(world["install"]), "-ManifestPath", str(world["manifest"])]
     if source is not False:
         args += ["-SourceDir", str(source or world["source"])]
-    return subprocess.run([*args, *extra], capture_output=True, text=True, timeout=120)
+    # Use only the selected shell's bundled modules, never an inherited PS7/PS5
+    # mix or user modules. Resolve Linux's /usr/bin/pwsh symlink to its PSHOME.
+    assert SHELL is not None
+    modules = Path(SHELL).resolve().parent / "Modules"
+    assert modules.is_dir(), f"Selected PowerShell has no bundled modules: {modules}"
+    env = dict(os.environ, PSModulePath=str(modules))
+    return subprocess.run([*args, *extra], capture_output=True, text=True, timeout=120, env=env)
 
 
 def _dest(world: dict[str, Path], name: str) -> Path:
     return world["install"] / "data" / "models" / FILES[name][0] / name
+
+
+@pytest.mark.parametrize("contamination", ["missing", "shadow"])
+def test_inherited_module_path_cannot_change_installer_verification(
+    world, monkeypatch: pytest.MonkeyPatch, contamination: str,
+) -> None:
+    modules = world["root"] / "foreign-modules"
+    if contamination == "shadow":
+        utility = modules / "Microsoft.PowerShell.Utility" / "99.0.0"
+        utility.mkdir(parents=True)
+        (utility / "Microsoft.PowerShell.Utility.psm1").write_text(
+            "function Get-FileHash { throw 'foreign hash implementation' }\n"
+            "Export-ModuleMember -Function Get-FileHash\n", encoding="utf-8",
+        )
+        (utility / "Microsoft.PowerShell.Utility.psd1").write_text(
+            "@{ RootModule='Microsoft.PowerShell.Utility.psm1'; ModuleVersion='99.0.0'; "
+            "GUID='ddcda594-8099-4b35-9bc1-0d4ca12554e0'; FunctionsToExport=@('Get-FileHash') }",
+            encoding="utf-8",
+        )
+    monkeypatch.setenv("PSModulePath", str(modules))
+    run = subprocess.run
+    observed_module_paths: list[str] = []
+
+    def isolated_run(*args, **kwargs):
+        # Assert after return so pytest failure locals cannot dump the full env.
+        observed_module_paths.append(kwargs.get("env", {}).get("PSModulePath", ""))
+        return run(*args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", isolated_run)
+    test_installs_the_three_exact_files_into_the_managed_data_model_tree(world)
+    (world["root"] / "refusal" / "data").mkdir(parents=True)
+    test_wrong_source_hash_is_rejected_before_any_mutation(
+        # A fresh tree is necessary because this refusal precedes all mutation.
+        {**world, "install": world["root"] / "refusal"},
+    )
+    assert observed_module_paths == [str(Path(SHELL).resolve().parent / "Modules")] * 2
+    assert os.environ["PSModulePath"] == str(modules)
 
 
 def test_installs_the_three_exact_files_into_the_managed_data_model_tree(world) -> None:

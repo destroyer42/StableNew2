@@ -85,14 +85,52 @@ def test_pose_asset_temporal_indices_equal_vid170_case_c() -> None:
 
 
 @requires_cv2
-def test_pose_asset_480x832_preserves_native_resolution_no_crop(tmp_path: Path) -> None:
+@requires_numpy
+@pytest.mark.parametrize("personal_asset_present", [False, True])
+def test_pose_asset_480x832_preserves_native_resolution_no_crop(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, personal_asset_present: bool,
+) -> None:
+    import cv2
+    import numpy as np
+
+    # Neither a missing nor an unrelated personal qualification asset may be read.
+    monkeypatch.chdir(tmp_path)
+    personal = Path("reports/vid110/inputs/pose_user.mp4")
+    if personal_asset_present:
+        personal.parent.mkdir(parents=True)
+        personal.write_bytes(b"not the test source")
+    else:
+        assert not personal.exists()
+    source = tmp_path / "synthetic-source.mp4"
+    writer = cv2.VideoWriter(str(source), cv2.VideoWriter_fourcc(*"mp4v"), 24.0, (480, 832))
+    assert writer.isOpened(), "Optional video capability requires an mp4v encoder"
+    try:
+        for index in range(49):
+            frame = np.full((832, 480, 3), index * 4, dtype=np.uint8)
+            frame[:, :80] = (240, 40, 80)
+            frame[-80:, :] = (40, 220, 120)
+            writer.write(frame)
+    finally:
+        writer.release()
+    source_bytes = source.read_bytes()
+    source_frames = pose_asset_480x832.read_frames(source)
+    assert len(source_frames) == 49
     target, indices, dims = pose_asset_480x832.adapt_pose_video_native(
+        source=source,
         target=tmp_path / "pose_480x832.mp4"
     )
     assert target.exists() and target.stat().st_size > 0
     assert dims == (480, 832)
     assert len(indices) == 13
     assert indices == sample_indices(49, 13)
+    decoded = pose_asset_480x832.read_frames(target)
+    assert len(decoded) == 13
+    for frame, index in zip(decoded, indices, strict=True):
+        assert frame.shape == (832, 480, 3)
+        # Lossy encoding tolerance; asymmetric edge bands expose cropping/resizing.
+        assert np.abs(frame.astype(float) - source_frames[index].astype(float)).mean() < 8
+    assert source.read_bytes() == source_bytes
+    assert personal.exists() == personal_asset_present
 
 
 # --- external-runtime refusal / dry-run -----------------------------------------------------------

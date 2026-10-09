@@ -6,6 +6,6 @@
     "src/controller/app_controller.py": 7683,
     "src/controller/job_history_service.py": 647,
     "src/controller/job_service.py": 1237,
-    "src/controller/pipeline_controller.py": 1785
+    "src/controller/pipeline_controller.py": 1775
   }
 }
