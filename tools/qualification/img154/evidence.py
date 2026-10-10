@@ -144,6 +144,29 @@ class DurableJsonlWriter:
             self.path.unlink()
             self.dropped_files += 1
 
+    def append_exclusive(self, record: Mapping[str, Any]) -> int:
+        """Create the stream with its first record, atomically: ``FileExistsError`` when another caller created it first.
+
+        ``O_EXCL`` creation is the supported cross-process claim mechanism (``CreateFile(CREATE_NEW)`` on Windows): exactly one
+        caller can ever create a given path, whatever the working directory, process or workspace that caller came from.
+        """
+
+        line = self._line(record)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+        if hasattr(os, "O_BINARY"):
+            flags |= os.O_BINARY
+        try:
+            descriptor = os.open(self.path, flags, 0o600)
+        except OSError:
+            self._seq -= 1
+            raise
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(line)
+            stream.flush()
+            self._sync(stream.fileno())
+        return self._seq
+
     def append(self, record: Mapping[str, Any]) -> int:
         line = self._line(record)
         self.path.parent.mkdir(parents=True, exist_ok=True)
@@ -328,22 +351,54 @@ class FileLedgerStore:
         if (
             torn
             or corrupt
+            or not records
             or any(
                 record.get("schema") != EVIDENCE_SCHEMA or record.get("seq") != index
                 for index, record in enumerate(records, start=1)
             )
         ):
-            raise OSError("ledger is torn, corrupt or discontinuous; ambiguous, not repaired")
+            # A file that exists but holds no complete record is a claimed-and-interrupted ledger, never a clean one.
+            raise OSError(
+                "ledger is torn, corrupt, empty or discontinuous; ambiguous, not repaired"
+            )
         return records
 
     def append(self, record: dict[str, Any]) -> None:
         self._writer.append(record)
 
 
+#: Lifecycle stages of ONE claimed case (PR-IMG-MODELS-154B), in the only order they may be recorded. ``claimed`` is the
+#: ``attempt`` record itself; ``terminal_evidence`` may follow any open stage because a case can end anywhere. Every
+#: ``*_attempted`` record and ``generation_dispatched`` is written BEFORE the action it announces.
+LEDGER_STAGES = (
+    "claimed",
+    "managed_start_attempted",
+    "startup_observed",
+    "selection_attempted",
+    "selection_confirmed",
+    "generation_dispatched",
+    "terminal_evidence",
+)
+
+
+def stage_order_ok(history: Sequence[str], stage: str) -> bool:
+    """``stage`` may follow ``history`` (which starts at ``claimed``): the next stage, or ``terminal_evidence``."""
+
+    if stage not in LEDGER_STAGES[1:] or not history or history[0] != "claimed":
+        return False
+    if history[-1] == "terminal_evidence":
+        return False
+    if stage == "terminal_evidence":
+        return True
+    return len(history) < len(LEDGER_STAGES) - 1 and LEDGER_STAGES[len(history)] == stage
+
+
 class DispatchLedger:
     """Records the INTENT to attempt before anything is sent, so an interrupted attempt stays ambiguous and is never replayed.
 
-    Phase A only exercises this contract against fakes: there is no network or process code in this package.
+    Attempts are claimed with the store's atomic ``claim`` when it has one (a per-case exclusive-create store does), so two
+    processes can never both record an attempt there; a plain ``FileLedgerStore`` keeps the 154A check-then-append and still
+    needs the single-instance lock. PR-154B adds ordered lifecycle ``stage`` records between the attempt and its outcome.
     """
 
     def __init__(self, store: LedgerStore) -> None:
@@ -356,6 +411,7 @@ class DispatchLedger:
             history = self._store.read()
             attempts: dict[str, dict[str, Any]] = {}
             outcomes: set[str] = set()
+            stages: dict[str, list[str]] = {}
             for record in history:
                 key = record["attempt_identity"]
                 if record["kind"] == "attempt":
@@ -376,6 +432,18 @@ class DispatchLedger:
                     ):
                         return "unknown"
                     attempts[key] = record
+                    stages[key] = ["claimed"]
+                elif record["kind"] == "stage":
+                    if (
+                        key not in attempts
+                        or key in outcomes
+                        or record["manifest_digest"] != attempts[key]["manifest_digest"]
+                        or not isinstance(record["stage"], str)
+                        or not isinstance(record.get("facts", {}), dict)
+                        or not stage_order_ok(stages[key], record["stage"])
+                    ):
+                        return "unknown"
+                    stages[key].append(record["stage"])
                 elif record["kind"] == "outcome":
                     if (
                         key not in attempts
@@ -400,21 +468,69 @@ class DispatchLedger:
             state, "unknown"
         )
 
-    def record_attempt(self, manifest: QualificationManifest) -> None:
+    def stage_history(self, manifest: QualificationManifest) -> tuple[str, ...] | None:
+        """Recorded stages of the case (``claimed`` first), ``()`` before any attempt, ``None`` when the ledger is unknown."""
+
+        if self.state(manifest) == "unknown":
+            return None
+        identity = manifest.attempt_identity()
+        history: list[str] = []
+        for record in self._store.read():
+            if record.get("attempt_identity") != identity:
+                continue
+            if record.get("kind") == "attempt":
+                history.append("claimed")
+            elif record.get("kind") == "stage":
+                history.append(str(record.get("stage")))
+        return tuple(history)
+
+    def record_stage(
+        self, manifest: QualificationManifest, stage: str, facts: Mapping[str, Any] | None = None
+    ) -> None:
+        """Append the next lifecycle stage of the open attempt; an out-of-order, repeated or unverifiable stage is refused."""
+
+        if self.state(manifest) != "ambiguous":
+            raise LedgerRefusal("a stage can only extend a recorded, unresolved attempt")
+        history = self.stage_history(manifest) or ()
+        if not stage_order_ok(history, stage):
+            raise LedgerRefusal(f"stage {stage!r} is not the next stage after {history[-1:]!r}")
+        try:
+            self._store.append(
+                {
+                    "kind": "stage",
+                    "attempt_identity": manifest.attempt_identity(),
+                    "manifest_digest": manifest.digest(),
+                    "stage": stage,
+                    "facts": dict(facts or {}),
+                }
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            raise LedgerRefusal(
+                f"stage record could not be made durable ({type(exc).__name__})"
+            ) from exc
+
+    def record_attempt(
+        self, manifest: QualificationManifest, *, claimant: Mapping[str, Any] | None = None
+    ) -> None:
         state = self.state(manifest)
         if state != "none":
             raise LedgerRefusal(
                 f"attempt refused: ledger state is {state!r}; there is no retry or replay"
             )
-        self._store.append(
-            {
-                "kind": "attempt",
-                "attempt_identity": manifest.attempt_identity(),
-                "manifest_digest": manifest.digest(),
-                "request_digest": manifest.request_digest(),
-                "manifest": manifest.as_dict(),
-            }
-        )
+        record: dict[str, Any] = {
+            "kind": "attempt",
+            "attempt_identity": manifest.attempt_identity(),
+            "manifest_digest": manifest.digest(),
+            "request_digest": manifest.request_digest(),
+            "manifest": manifest.as_dict(),
+        }
+        if claimant is not None:
+            record["claimant"] = dict(claimant)
+        claim = getattr(self._store, "claim", None)
+        try:
+            (claim or self._store.append)(record)
+        except FileExistsError as exc:
+            raise LedgerRefusal("attempt refused: another process claimed this case first") from exc
 
     def record_outcome(self, manifest: QualificationManifest, outcome: str) -> None:
         if self.state(manifest) != "ambiguous":

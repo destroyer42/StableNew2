@@ -12,6 +12,7 @@ authorizes anything (``PreflightResult.is_current``).
 
 from __future__ import annotations
 
+import statistics
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -74,6 +75,10 @@ ESSENTIAL_TELEMETRY = (
 PROVISIONAL = "provisional"
 BASELINE_RELATIVE = "baseline_relative"
 
+#: The only acquisition path whose quiescent windows may validate a baseline: the in-process native sampler of PR-154B.
+#: An operator assertion, a number typed on a command line or a single reading never does.
+BASELINE_PROVIDER = "native_sampler"
+
 
 @dataclass(frozen=True)
 class Threshold:
@@ -108,8 +113,201 @@ class Threshold:
 
 
 @dataclass(frozen=True)
+class BaselinePolicy:
+    """What makes a window of samples a validated quiescent baseline. PROVISIONAL harness judgment, not a measured limit."""
+
+    min_samples: int = 20
+    min_window_s: float = 20.0
+    max_age_s: float = 60.0
+    max_gap_s: float = 3.0
+    max_vram_spread_bytes: float = 128 * MIB
+    max_shared_spread_bytes: float = 128 * MIB
+    max_utilization_percent: float = 15.0
+    status: str = PROVISIONAL
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "status": self.status,
+            "min_samples": self.min_samples,
+            "min_window_s": self.min_window_s,
+            "max_age_s": self.max_age_s,
+            "max_gap_s": self.max_gap_s,
+            "max_vram_spread_mib": self.max_vram_spread_bytes / MIB,
+            "max_shared_spread_mib": self.max_shared_spread_bytes / MIB,
+            "max_utilization_percent": self.max_utilization_percent,
+            "provider": BASELINE_PROVIDER,
+        }
+
+
+@dataclass(frozen=True)
+class BaselineSample:
+    """One quiescent-window reading. ``None`` means the value was not obtained (never zero)."""
+
+    mono_s: float
+    vram_used_bytes: float | None
+    shared_vram_bytes: float | None
+    gpu_utilization_percent: float | None
+
+
+@dataclass(frozen=True)
+class QuiescentBaselineEvidence:
+    """A window of samples taken by the harness's own sampler, bound to one device and one boot."""
+
+    samples: tuple[BaselineSample, ...] = ()
+    device_id: str | None = None
+    boot_id: str | None = None
+    acquired_by: str = "unspecified"
+    competing_runtime_free: bool | None = None
+
+
+@dataclass(frozen=True)
+class ValidatedBaseline:
+    vram_used_bytes: float
+    shared_vram_bytes: float
+    device_id: str
+    boot_id: str
+    samples: int
+    window_s: float
+    age_s: float
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            "vram_used_mib": round(self.vram_used_bytes / MIB, 1),
+            "shared_vram_mib": round(self.shared_vram_bytes / MIB, 1),
+            "samples": self.samples,
+            "window_s": round(self.window_s, 1),
+            "age_s": round(self.age_s, 1),
+            "bound_to_device_and_boot": True,
+        }
+
+
+def validate_quiescent_baseline(
+    evidence: QuiescentBaselineEvidence | None,
+    *,
+    now_mono_s: float,
+    launch_device_id: str | None,
+    launch_boot_id: str | None,
+    policy: BaselinePolicy | None = None,
+) -> tuple[ValidatedBaseline | None, list[Finding]]:
+    """Pure. A baseline is usable only when its provenance, device, boot, density, freshness and quiet are all proven."""
+
+    rules = policy or BaselinePolicy()
+    findings: list[Finding] = []
+    if evidence is None:
+        return None, [
+            Finding(
+                "VRAM_BASELINE_UNVERIFIED",
+                "inconclusive",
+                "no quiescent baseline window was acquired",
+            )
+        ]
+
+    def refuse(code: str, detail: str) -> None:
+        findings.append(Finding(code, "refuse", detail))
+
+    def unproven(code: str, detail: str) -> None:
+        findings.append(Finding(code, "inconclusive", detail))
+
+    if evidence.acquired_by != BASELINE_PROVIDER:
+        unproven(
+            "BASELINE_PROVENANCE_UNVERIFIED",
+            "the window was not acquired by the harness's own native sampler",
+        )
+    if not evidence.device_id or not launch_device_id:
+        unproven(
+            "BASELINE_DEVICE_UNKNOWN", "the baseline or the launch reading has no device identity"
+        )
+    elif evidence.device_id != launch_device_id:
+        refuse(
+            "BASELINE_DEVICE_MISMATCH",
+            "the baseline was taken on a different GPU than the launch reading",
+        )
+    if not evidence.boot_id or not launch_boot_id:
+        unproven("BASELINE_BOOT_UNKNOWN", "the baseline or the launch reading has no boot identity")
+    elif evidence.boot_id != launch_boot_id:
+        refuse("BASELINE_BOOT_MISMATCH", "the baseline was taken in a different boot session")
+    if evidence.competing_runtime_free is not True:
+        if evidence.competing_runtime_free is False:
+            refuse(
+                "BASELINE_COMPETING_RUNTIME",
+                "a model runtime was present during the quiescent window",
+            )
+        else:
+            unproven(
+                "BASELINE_COMPETING_RUNTIME_UNKNOWN",
+                "runtime absence during the window was not established",
+            )
+    if not valid_time(now_mono_s):
+        unproven("BASELINE_CLOCK_INVALID", "freshness cannot be assessed")
+        return None, findings
+    times = [item.mono_s for item in evidence.samples]
+    if any(not valid_time(t) for t in times) or any(
+        b <= a for a, b in zip(times, times[1:], strict=False)
+    ):
+        refuse(
+            "BASELINE_SAMPLE_ORDER_INVALID", "sample times are invalid or not strictly increasing"
+        )
+        return None, findings
+    if len(times) < rules.min_samples:
+        unproven("BASELINE_TOO_FEW_SAMPLES", f"{len(times)} samples, {rules.min_samples} required")
+    window = (times[-1] - times[0]) if len(times) >= 2 else 0.0
+    if window < rules.min_window_s:
+        unproven("BASELINE_WINDOW_TOO_SHORT", "the window is shorter than the required duration")
+    if times:
+        age = now_mono_s - times[-1]
+        if age < 0 or age > rules.max_age_s:
+            refuse("BASELINE_STALE", "the baseline window ended too long ago (or in the future)")
+    else:
+        age = float("nan")
+    if any(b - a > rules.max_gap_s for a, b in zip(times, times[1:], strict=False)):
+        unproven("BASELINE_GAP", "the window has a sampling gap")
+    raw = {
+        "VRAM": [s.vram_used_bytes for s in evidence.samples],
+        "SHARED": [s.shared_vram_bytes for s in evidence.samples],
+        "UTILIZATION": [s.gpu_utilization_percent for s in evidence.samples],
+    }
+    series: dict[str, list[float]] = {}
+    for name, values in raw.items():
+        numbers = [
+            float(v)
+            for v in values
+            if isinstance(v, int | float) and not isinstance(v, bool) and v >= 0 and v == v
+        ]
+        if len(numbers) != len(values):
+            unproven(
+                f"BASELINE_{name}_INCOMPLETE",
+                f"{name.lower()} readings are missing, invalid or negative",
+            )
+        series[name] = numbers
+    if findings:
+        return None, findings
+    used, shared, util = series["VRAM"], series["SHARED"], series["UTILIZATION"]
+    if max(used) - min(used) > rules.max_vram_spread_bytes:
+        refuse("BASELINE_NOT_QUIESCENT", "dedicated VRAM varied too much across the window")
+    if max(shared) - min(shared) > rules.max_shared_spread_bytes:
+        refuse("BASELINE_NOT_QUIESCENT", "shared GPU memory varied too much across the window")
+    if max(util) > rules.max_utilization_percent:
+        refuse("BASELINE_NOT_QUIESCENT", "the GPU was not idle during the window")
+    if findings:
+        return None, findings
+    return (
+        ValidatedBaseline(
+            float(statistics.median(used)),
+            float(statistics.median(shared)),
+            str(evidence.device_id),
+            str(evidence.boot_id),
+            len(times),
+            window,
+            age,
+        ),
+        findings,
+    )
+
+
+@dataclass(frozen=True)
 class PreflightPolicy:
     revision: str = POLICY_REVISION
+    baseline: BaselinePolicy = BaselinePolicy()
     #: Provisional: one read-only probe pass takes several seconds (PowerShell start-up); a later launch re-measures anyway.
     max_observation_age_s: float = 30.0
     commit_headroom: Threshold = Threshold(
@@ -170,6 +368,7 @@ class PreflightPolicy:
                 self.vram_over_baseline.as_dict(),
                 self.evidence_free.as_dict(),
             ],
+            "baseline_validation": self.baseline.as_dict(),
             "all_thresholds_proven": False,
             "equality_edge": "minimums pass at exact equality (>=); the VRAM maximum passes at exact equality (<=)",
         }
@@ -190,6 +389,10 @@ class PreflightInputs:
     residual_gpu_risk_accepted: bool | None = None
     evidence_dir_valid: bool | None = None
     ledger_state: str | None = None  # "none" | "dispatched" | "ambiguous" | "unknown"
+    #: PR-154B: a window acquired by the harness's native sampler, and the device/boot of the launch reading it must match.
+    quiescent_baseline: QuiescentBaselineEvidence | None = None
+    launch_device_id: str | None = None
+    launch_boot_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -329,11 +532,29 @@ def _resource_findings(
                     "used exceeds total or total is zero",
                 )
             )
-    if base_why:
+    if inputs.quiescent_baseline is not None:
+        validated, baseline_findings = validate_quiescent_baseline(
+            inputs.quiescent_baseline,
+            now_mono_s=now,
+            launch_device_id=inputs.launch_device_id,
+            launch_boot_id=inputs.launch_boot_id,
+            policy=policy.baseline,
+        )
+        findings.extend(baseline_findings)
+        if validated is not None and used is not None:
+            delta = max(0.0, used - validated.vram_used_bytes)
+            measurements["vram_quiescent_baseline_mib"] = round(validated.vram_used_bytes / MIB)
+            measurements["vram_over_baseline_mib"] = round(delta / MIB)
+            if not policy.vram_over_baseline.passes(delta):
+                refuse(
+                    "VRAM_OVER_QUIESCENT_BASELINE",
+                    "dedicated VRAM exceeds the validated quiescent baseline by more than the provisional margin",
+                )
+    elif base_why:
         inconclusive("VRAM_BASELINE", base_why)
     else:
-        # Phase A has no independently validated device/boot-bound quiescent evidence.
-        # A numeric observation, even freshly timestamped, cannot establish that provenance.
+        # Without a window acquired by the harness's own sampler there is no independently validated device/boot-bound
+        # quiescent evidence. A numeric observation, even freshly timestamped, cannot establish that provenance.
         inconclusive("VRAM_BASELINE", "unverified")
 
     evidence_free, why = _numeric(inputs, "evidence_volume_free_bytes", "bytes", now, policy)
