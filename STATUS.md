@@ -4,6 +4,15 @@ Updated: 2026-10-09
 
 ## Repository
 
+- Installed model readiness (PR-IMG-MODELS-150, local implementation; hosted CI and review pending): header-only
+  component evidence distinguishes a dependency-bearing FLUX-style transformer, Qwen3 text encoders and FLUX VAEs, and a
+  pure readiness projection separates file presence, identity, header-required dependencies, Forge's catalog, Forge's live
+  module selection and exact-profile qualification. A positively identified, unqualified multi-component checkpoint (the
+  Klein Base 9B) is refused before any module write or generation POST, so the generic D110 normalization can no longer strip
+  its encoder/VAE; SDXL, the qualified Klein 4B profiles and A1111 are unchanged and unverifiable evidence preserves the
+  generic path. A read-only `Check readiness` line on Base Generation runs explicitly on a worker. No GPU, generation,
+  profile, runner, queue or controller change. See `docs/Subsystems/Image/PR-IMG-MODELS-150_Installed_Model_Readiness.md`.
+
 - Focused operator workspace (PR-GUI-110, COMPLETE / ACCEPTED / INTEGRATED; PR #75, hosted `required` and GUI
   `affected` lanes passed, independent review found no blocker): presentation only, on top of PR-GUI-100. The Operator Log is compact by
   default (one header row with a warning/error summary; details, filters and Crash Bundle on demand) and

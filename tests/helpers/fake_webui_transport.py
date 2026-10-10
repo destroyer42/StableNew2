@@ -70,6 +70,8 @@ class FakeWebUITransport:
         reject_generation_when: Callable[[dict[str, Any]], str | None] | None = None,
         ignore_module_writes: bool = False,
         loras: list[dict[str, str]] | None = None,
+        checkpoint_files: dict[str, str] | None = None,
+        models_listing_status: int = 200,
     ) -> None:
         if flavor not in {"forge", "a1111"}:
             raise ValueError(flavor)
@@ -94,6 +96,10 @@ class FakeWebUITransport:
         self.reject_generation_when = reject_generation_when
         self.ignore_module_writes = ignore_module_writes  # a write that silently does not stick
         self.loras = list(loras) if loras is not None else []  # GET /sdapi/v1/loras entries (name/alias/path)
+        # title -> local file served for that checkpoint (``GET /sd-models`` reports it as ``filename``, like Forge);
+        # ``models_listing_status`` != 200 simulates an unreadable listing.
+        self.checkpoint_files = dict(checkpoint_files or {})
+        self.models_listing_status = models_listing_status
         self.generation_module_state: list[list[str]] = []
         self.rejected_generations: list[str] = []
         self.generation_started = threading.Event()
@@ -147,6 +153,15 @@ class FakeWebUITransport:
         if path == "/sdapi/v1/options":
             return FakeResponse(dict(self.options))
         if path == "/sdapi/v1/sd-models":
+            if self.models_listing_status != 200:
+                return FakeResponse({}, self.models_listing_status)
+            if self.checkpoint_files:
+                return FakeResponse(
+                    [
+                        {"title": title, "model_name": title.rsplit(".", 1)[0], "filename": filename}
+                        for title, filename in self.checkpoint_files.items()
+                    ]
+                )
             return FakeResponse(
                 [{"title": self.options["sd_model_checkpoint"], "model_name": "sdxl"}]
             )

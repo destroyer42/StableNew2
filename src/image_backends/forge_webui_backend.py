@@ -35,6 +35,7 @@ from typing import Any
 
 from src.api.forge_client import ForgeVAEError, module_set_key
 from src.api.webui_identity_attestation import ManagedWebUIIdentityAttestor
+from src.assets.component_evidence import ComponentEvidence, inspect_component_file
 from src.image_backends.forge_klein_assets import _active_manager, verify_klein_assets
 from src.image_backends.forge_klein_lora import (
     KleinLoraDecision,
@@ -70,6 +71,8 @@ from src.image_backends.image_backend_types import (
     ImageExecutionResult,
     resolve_image_backend_id,
 )
+from src.image_backends.model_readiness import ModelReadiness
+from src.image_backends.model_readiness_probe import probe_model_readiness
 from src.image_backends.webui_family_backend import WebUIFamilyImageBackend
 from src.services.runtime_transition_service import (
     RUNTIME_FORGE_WEBUI,
@@ -98,6 +101,19 @@ def _sha256_file(path: Path) -> str:
 
 class ForgeUnsupportedIntentError(ValueError):
     """The job asks for something the Forge runtime cannot do; refused before any dispatch."""
+
+
+class ForgeUnqualifiedModelError(ForgeUnsupportedIntentError):
+    """A positively identified multi-component checkpoint without a qualified profile (PR-IMG-MODELS-150).
+
+    Raised before any module write or generation POST. ``readiness`` carries the path-free evidence record.
+    """
+
+    def __init__(self, readiness: ModelReadiness) -> None:
+        self.readiness = readiness
+        super().__init__(
+            f"{readiness.summary()} Generation was not dispatched and the Forge module selection was not changed."
+        )
 
 
 def _selection_from_config(config: Mapping[str, Any]) -> Any:
@@ -175,6 +191,8 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         self._identity: dict[str | None, dict[str, Any]] = {}
         self._verified_source: dict[str | None, dict[str, Any]] = {}
         self._module_baseline: dict[str | None, dict[str, Any]] = {}
+        #: (path, size, mtime_ns) -> header evidence; a replaced file is re-read, an unchanged one is not.
+        self._component_cache: dict[tuple[str, int, int], ComponentEvidence] = {}
 
     # ------------------------------------------------------------------ profile validation
 
@@ -451,6 +469,7 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         desired = [requested_vae] if requested_vae else []
         event: dict[str, Any] = {
             "stage": request.stage_name,
+            "job_id": request.job_id,  # attribution: this write (if any) is StableNew's, for this job/stage
             "observed_before": list(observed),
             "required": desired,
             "applied": False,
@@ -458,8 +477,9 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         if not observed or module_set_key(observed) == module_set_key(desired):
             return event
         logger.warning(
-            "[forge/module-baseline] stage=%s endpoint reports persistent modules %s; selecting %s "
-            "before any model load",
+            "[forge/module-baseline] job=%s stage=%s endpoint reports persistent modules %s; selecting %s "
+            "before any model load (a StableNew-issued write)",
+            request.job_id,
             request.stage_name,
             observed,
             desired or "Automatic (no modules)",
@@ -479,10 +499,53 @@ class ForgeWebUIImageBackend(WebUIFamilyImageBackend):
         event["observed_after"] = list(after)
         return event
 
+    # ------------------------------------------------------------------ dependency admission (PR-IMG-MODELS-150)
+
+    def _component_evidence(self, filename: str) -> ComponentEvidence | None:
+        """Header-only evidence for one served file, cached by its fingerprint; None when it cannot be stat-ed."""
+
+        path = Path(filename)
+        try:
+            stat = path.stat()
+        except OSError:
+            return None
+        key = (str(path), stat.st_size, stat.st_mtime_ns)
+        cached = self._component_cache.get(key)
+        if cached is None:
+            cached = self._component_cache[key] = inspect_component_file(path)
+        return cached
+
+    def _dependency_gate(self, pipeline: Any, request: ImageExecutionRequest) -> None:
+        """Refuse a positively identified, unqualified multi-component checkpoint before anything is written.
+
+        Read-only (``probe_model_readiness``: GET /sd-models, a bounded safetensors header and, only when a refusal is
+        certain, GET /sd-modules and GET /options). It runs before the module baseline normalization (which would
+        otherwise clear the very modules such a model needs) and before any generation POST. Unknown, unreadable or
+        ambiguous evidence is "unverified": the previously supported generic behavior is preserved exactly. The exact
+        Klein 4B checkpoint name is exempt (it keeps its profile path, or its prior generic path without one).
+        """
+
+        model_name = str(request.selected_model or "").strip()
+        if not model_name or is_klein_transformer_name(model_name):
+            return
+        readiness = probe_model_readiness(
+            getattr(pipeline, "client", None), model_name, evidence=self._component_evidence
+        )
+        if readiness.blocks_dispatch:
+            logger.warning(
+                "[forge/dependency-gate] job=%s stage=%s refused before any module write or generation POST: %s (%s)",
+                request.job_id,
+                request.stage_name,
+                readiness.label,
+                readiness.reason_code,
+            )
+            raise ForgeUnqualifiedModelError(readiness)
+
     def _before_dispatch(self, pipeline: Any, request: ImageExecutionRequest) -> None:
         profile = self._profile_for(request.backend_options)
         if profile is None:
             if request.stage_name in self.capabilities.stage_types:
+                self._dependency_gate(pipeline, request)
                 self._module_baseline[request.job_id] = self._normalize_module_baseline(
                     pipeline, request
                 )
