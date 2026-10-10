@@ -47,6 +47,10 @@ logger = logging.getLogger(__name__)
 class PipelineTabFrame(ttk.Frame):
     """Layout scaffold for the Pipeline tab."""
 
+    #: The Pipeline's fit-driven compact presentation (PR-GUI-100) caps and restores label wraps exactly, so
+    #: width-following wraps (``bind_wraplength``) must not alter labels inside it.
+    manages_label_wraps = True
+
     DEFAULT_COLUMN_WIDTH = design_system.Spacing.XL * 40  # ~640
     MIN_COLUMN_WIDTH = design_system.Spacing.XL * 25  # ~400
     LOGGING_ROW_MIN_HEIGHT = design_system.Spacing.XL * 10

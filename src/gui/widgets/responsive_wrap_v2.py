@@ -30,10 +30,20 @@ def bind_wraplength(
 
     job: list[str | None] = [None]
 
+    def owned_elsewhere() -> bool:
+        """A surface that manages its own label wraps (the Pipeline's compact contract) opts out of this one."""
+
+        node: tk.Misc | None = label
+        while node is not None:
+            if getattr(node, "manages_label_wraps", False):
+                return True
+            node = getattr(node, "master", None)
+        return False
+
     def apply() -> None:
         job[0] = None
         try:
-            if not label.winfo_exists():
+            if not label.winfo_exists() or owned_elsewhere():
                 return
             width = wrap_width(label.winfo_width(), margin=0, minimum=minimum, maximum=maximum)
             if label.winfo_width() > 1 and int(str(label.cget("wraplength") or 0)) != width:
