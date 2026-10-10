@@ -29,6 +29,8 @@ from src.api.client import (
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
 from src.config import app_config
+from src.pipeline.adetailer_contract import schema_issues
+from src.pipeline.adetailer_effectiveness import build_effectiveness, response_infotexts
 from src.pipeline.animatediff_models import (
     AnimateDiffConfig,
     attach_animatediff_to_payload,
@@ -3666,14 +3668,13 @@ class Pipeline:
 
         # DEBUG: Log ADetailer config received
         logger.debug(
-            "ADETAILER CONFIG RECEIVED: model=%s, steps=%s, denoise=%s, cfg=%s, sampler=%s, confidence=%s, mask_feather=%s",
+            "ADETAILER CONFIG RECEIVED: model=%s, steps=%s, denoise=%s, cfg=%s, sampler=%s, confidence=%s",
             config.get("adetailer_model", "NOT_SET"),
             config.get("adetailer_steps", "NOT_SET"),
             config.get("adetailer_denoise", "NOT_SET"),
             config.get("adetailer_cfg", "NOT_SET"),
             config.get("adetailer_sampler", "NOT_SET"),
             config.get("adetailer_confidence", "NOT_SET"),
-            config.get("adetailer_mask_feather", "NOT_SET"),
         )
         logger.debug(
             "ADETAILER PROMPTS RECEIVED: positive='%s', negative='%s'",
@@ -3840,6 +3841,47 @@ class Pipeline:
                 pass_args["ad_inpaint_width"] = payload_width
                 pass_args["ad_inpaint_height"] = payload_height
                 pass_args["ad_scheduler"] = "Use same scheduler"
+
+        requested_passes = [
+            (label, pass_args)
+            for label, pass_args in (("face", face_args), ("hands", hand_args))
+            if pass_args.get("ad_tab_enable")
+        ]
+        rejected = {
+            label: schema_issues(pass_args)
+            for label, pass_args in requested_passes
+            if schema_issues(pass_args)
+        }
+        if rejected:
+            # The extension drops a pass whose arguments fail its schema without any error, so a requested pass would
+            # silently not run (and a lone pass would leave a plain img2img). Fail closed instead of dispatching.
+            logger.error(
+                "[adetailer/contract] refusing to dispatch: requested pass argument(s) rejected by the pinned ADetailer-Neo schema: %s",
+                json.dumps(rejected, sort_keys=True),
+            )
+            return None
+        if not requested_passes:
+            # With no pass requested the extension is a no-op, but WebUI would still run the stage's img2img over the
+            # whole image. Send nothing and pass the input through unchanged.
+            reason = "face and hand passes are both off"
+            logger.info("[adetailer/no-pass] %s; no request sent, input passes through unchanged", reason)
+            return {
+                "name": Path(input_image_path).stem,
+                "stage": "adetailer",
+                "skipped": True,
+                "skip_reason": reason,
+                "input_image": str(input_image_path),
+                "path": str(input_image_path),
+                "adetailer_effectiveness": build_effectiveness(
+                    face_args=face_args,
+                    hand_args=hand_args,
+                    request_completed=False,
+                    input_image=input_image_path,
+                    output_image=None,
+                    dispatched=False,
+                    skipped_reason=reason,
+                ),
+            }
 
         payload = {
             "init_images": [init_image],
@@ -4117,6 +4159,20 @@ class Pipeline:
             response["images"] = []
         actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
         if actual_path:
+            try:
+                # Detection, execution, observable change and (unreviewed) improvement are recorded separately; the
+                # comparison is the image sent to ADetailer against the image it returned, never a later stage's output.
+                metadata["adetailer_effectiveness"] = build_effectiveness(
+                    face_args=face_args,
+                    hand_args=hand_args,
+                    request_completed=True,
+                    input_image=input_image_path,
+                    output_image=actual_path,
+                    infotexts=response_infotexts(response),
+                    adaptive_refinement=adaptive_refinement or None,
+                )
+            except Exception as exc:  # noqa: BLE001 - evidence must never fail a completed stage
+                logger.warning("[adetailer/effectiveness] evidence unavailable: %s", exc)
             # Save manifest in manifests/ subfolder (datetime/pack_name structure)
             manifest_dir = Path(run_dir) / "manifests"
             # Use actual image stem (includes _copy suffix if collision occurred)

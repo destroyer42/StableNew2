@@ -8,7 +8,7 @@ def test_pr_008_adetailer_card_defaults(tk_root) -> None:
         card = ADetailerStageCardV2(tk_root)
 
         assert card.enable_face_pass_var.get() is True
-        assert card.enable_hands_pass_var.get() is False
+        assert card.enable_hands_pass_var.get() is True  # PR-REFINE-160: fresh cards enable both passes
         assert card.face_model_var.get() == "face_yolov8n.pt"
         assert card.hands_model_var.get() == "hand_yolov8n.pt"
         assert card.face_padding_var.get() == 32

@@ -221,9 +221,17 @@ class PipelineRunner:
             "ad_inpaint_width": "ad_inpaint_width",
             "ad_inpaint_height": "ad_inpaint_height",
         }
+        # The backend flattens the stage's ``extra`` over its top-level keys, so an explicit (e.g. GUI-authored) face
+        # value in ``extra`` would silently defeat the adaptive policy. Apply the override to both, on a copy of ``extra``.
+        extra = config_dict.get("extra")
+        adjusted_extra = dict(extra) if isinstance(extra, Mapping) else None
         for source_key, target_key in mapped_keys.items():
             if source_key in applied_overrides:
                 config_dict[target_key] = applied_overrides[source_key]
+                if adjusted_extra is not None:
+                    adjusted_extra[target_key] = applied_overrides[source_key]
+        if adjusted_extra is not None:
+            config_dict["extra"] = adjusted_extra
         return config_dict
 
     @staticmethod

@@ -51,7 +51,9 @@ def test_adetailer_card_offers_only_the_accepted_detectors_under_forge_even_when
             assert _values(card._face_model_combo) == ACCEPTED_FACE
             assert _values(card._hands_model_combo) == ACCEPTED_HAND
         card.apply_webui_resources({"adetailer_models": ["face_yolov8n.pt", "hand_yolov8n.pt"]})  # a real list is shown
-        assert _values(card._face_model_combo) == ["face_yolov8n.pt", "hand_yolov8n.pt"]
+        # PR-REFINE-160: each selector lists only its own kind of detector
+        assert _values(card._face_model_combo) == ["face_yolov8n.pt"]
+        assert _values(card._hands_model_combo) == ["hand_yolov8n.pt"]
         shown = set(_values(card._face_model_combo)) | set(_values(card._hands_model_combo))
         assert not shown & GENERIC
     finally:
