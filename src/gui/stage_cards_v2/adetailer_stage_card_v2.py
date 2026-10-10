@@ -23,6 +23,15 @@ from src.gui.view_contracts.pipeline_layout_contract import (
     get_two_pair_form_column_specs,
 )
 from src.image_backends.backend_capabilities import configured_adetailer_detector_fallbacks
+from src.pipeline.adetailer_contract import (
+    FRESH_PASS_DEFAULTS,
+    MASK_FILTER_METHODS,
+    MASK_MERGE_MODES,
+    UNSUPPORTED_CONFIG_KEYS,
+    detector_status,
+    schema_issues,
+    split_detectors,
+)
 
 
 class ADetailerStageCardV2(BaseStageCardV2):
@@ -41,23 +50,28 @@ class ADetailerStageCardV2(BaseStageCardV2):
         "Polyexponential",
         "SGM Uniform",
     ]
-    MASK_FILTER_OPTIONS = ["Area", "largest", "all"]
-    MASK_MERGE_OPTIONS = ["None", "Merge", "Merge and Invert"]
+    MASK_FILTER_OPTIONS = list(MASK_FILTER_METHODS)
+    MASK_MERGE_OPTIONS = list(MASK_MERGE_MODES)
     STAGE_MODEL_INHERIT = "Inherit Base Generation"
 
     def __init__(self, master: tk.Misc, *, theme: Any | None = None, **kwargs: Any) -> None:
         # Under Forge the generic detector lists are not installed: offer only the managed runtime's accepted set.
         forge_fallbacks = configured_adetailer_detector_fallbacks()
+        self._forge_detectors = forge_fallbacks is not None
+        self._available_face_detectors: list[str] | None = None
+        self._available_hand_detectors: list[str] | None = None
         if forge_fallbacks is not None:
             self.MODEL_OPTIONS, self.HAND_MODEL_OPTIONS = list(forge_fallbacks[0]), list(forge_fallbacks[1])
         self.stage_model_override_var = tk.StringVar(value="")
 
-        self.enable_face_pass_var = tk.BooleanVar(value=True)
+        # Fresh-configuration defaults. Loading a saved dict never applies them to a flag the dict omits.
+        self.enable_face_pass_var = tk.BooleanVar(value=FRESH_PASS_DEFAULTS["enable_face_pass"])
+        self._legacy_unsupported: dict[str, Any] = {}
+        self._detector_options_known = False
         self.model_var = tk.StringVar(value=self.MODEL_OPTIONS[0])
         self.face_model_var = self.model_var
         self.confidence_var = tk.DoubleVar(value=0.35)
         self.face_confidence_var = self.confidence_var
-        self.max_detections_var = tk.IntVar(value=8)
         self.mask_blur_var = tk.IntVar(value=6)
         self.face_mask_blur_var = self.mask_blur_var
         self.merge_var = tk.StringVar(value="None")
@@ -94,10 +108,8 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.face_mask_max_ratio_var = self.mask_max_ratio_var
         self.dilate_erode_var = tk.IntVar(value=4)
         self.face_dilate_erode_var = self.dilate_erode_var
-        self.mask_feather_var = tk.IntVar(value=4)
-        self.face_mask_feather_var = self.mask_feather_var
 
-        self.enable_hands_pass_var = tk.BooleanVar(value=False)
+        self.enable_hands_pass_var = tk.BooleanVar(value=FRESH_PASS_DEFAULTS["enable_hands_pass"])
         self.hands_model_var = tk.StringVar(value=self.HAND_MODEL_OPTIONS[0])
         self.hands_confidence_var = tk.DoubleVar(value=0.30)
         self.hands_steps_var = tk.IntVar(value=12)
@@ -122,7 +134,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.hands_mask_max_ratio_var = tk.DoubleVar(value=1.0)
         self.hands_dilate_erode_var = tk.IntVar(value=6)
         self.hands_mask_blur_var = tk.IntVar(value=4)
-        self.hands_mask_feather_var = tk.IntVar(value=4)
         self.hands_merge_var = tk.StringVar(value="None")
 
         self._model_combo: ttk.Combobox | None = None
@@ -217,6 +228,12 @@ class ADetailerStageCardV2(BaseStageCardV2):
             hand_pass_check,
         )
 
+        summary = ttk.Label(
+            overall, text="", style=BODY_LABEL_STYLE, wraplength=460, justify="left"
+        )
+        summary.grid(row=2, column=0, columnspan=4, sticky="ew", pady=(4, 0))
+        self._effective_summary_label = summary
+
         notebook = ttk.Notebook(parent)
         notebook.grid(row=2, column=0, sticky="nsew")
         self._notebook = notebook
@@ -237,6 +254,15 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self._build_face_tab(face_tab)
         self._build_hand_tab(hand_tab)
         self._build_prompt_tab(prompt_tab)
+        for variable in (
+            self.face_model_var,
+            self.hands_model_var,
+            self.face_mask_filter_method_var,
+            self.hands_mask_filter_method_var,
+            self.face_merge_var,
+            self.hands_merge_var,
+        ):
+            variable.trace_add("write", lambda *_: self._refresh_effective_summary())
         self._sync_pass_states()
 
     def set_compact_layout(self, compact: bool) -> None:
@@ -291,14 +317,12 @@ class ADetailerStageCardV2(BaseStageCardV2):
         for label, variable, start, end, increment, help_key in (
             ("Confidence", self.face_confidence_var, 0.0, 1.0, 0.01, "confidence"),
             ("Steps", self.face_steps_var, 1, 150, 1, "steps"),
-            ("CFG", self.face_cfg_var, 1.0, 30.0, 0.1, "cfg"),
+            ("CFG", self.face_cfg_var, 1.0, 24.0, 0.1, "cfg"),
             ("Denoising", self.face_denoise_var, 0.0, 1.0, 0.01, "denoising"),
             ("Padding", self.face_padding_var, 0, 256, 1, "padding"),
             ("Mask Blur", self.face_mask_blur_var, 0, 64, 1, "mask_blur"),
-            ("Mask Feather", self.face_mask_feather_var, 0, 64, 1, "mask_feather"),
             ("Dilate / Erode", self.face_dilate_erode_var, -64, 64, 1, "dilate_erode"),
-            ("Max Detections", self.max_detections_var, 1, 32, 1, "max_detections"),
-            ("Mask Max-K", self.face_mask_k_largest_var, 1, 16, 1, "mask_max_k"),
+            ("Retained Masks (Top-K)", self.face_mask_k_largest_var, 0, 16, 1, "mask_max_k"),
             ("Mask Min Ratio", self.face_mask_min_ratio_var, 0.0, 1.0, 0.001, "mask_min_ratio"),
             ("Mask Max Ratio", self.face_mask_max_ratio_var, 0.0, 1.0, 0.001, "mask_max_ratio"),
             ("Inpaint Width", self.face_inpaint_width_var, 64, 4096, 64, "inpaint_width"),
@@ -397,13 +421,12 @@ class ADetailerStageCardV2(BaseStageCardV2):
         for label, variable, start, end, increment, help_key in (
             ("Confidence", self.hands_confidence_var, 0.0, 1.0, 0.01, "confidence"),
             ("Steps", self.hands_steps_var, 1, 150, 1, "steps"),
-            ("CFG", self.hands_cfg_var, 1.0, 30.0, 0.1, "cfg"),
+            ("CFG", self.hands_cfg_var, 1.0, 24.0, 0.1, "cfg"),
             ("Denoising", self.hands_denoise_var, 0.0, 1.0, 0.01, "denoising"),
             ("Padding", self.hands_padding_var, 0, 256, 1, "padding"),
             ("Mask Blur", self.hands_mask_blur_var, 0, 64, 1, "mask_blur"),
-            ("Mask Feather", self.hands_mask_feather_var, 0, 64, 1, "mask_feather"),
             ("Dilate / Erode", self.hands_dilate_erode_var, -64, 64, 1, "dilate_erode"),
-            ("Mask Max-K", self.hands_mask_k_largest_var, 1, 16, 1, "mask_max_k"),
+            ("Retained Masks (Top-K)", self.hands_mask_k_largest_var, 0, 16, 1, "mask_max_k"),
             ("Mask Min Ratio", self.hands_mask_min_ratio_var, 0.0, 1.0, 0.001, "mask_min_ratio"),
             ("Mask Max Ratio", self.hands_mask_max_ratio_var, 0.0, 1.0, 0.001, "mask_max_ratio"),
             ("Inpaint Width", self.hands_inpaint_width_var, 64, 4096, 64, "inpaint_width"),
@@ -585,6 +608,51 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self._set_widgets_enabled(self._face_prompt_widgets, bool(self.enable_face_pass_var.get()))
         self._set_widgets_enabled(self._hand_widgets, bool(self.enable_hands_pass_var.get()))
         self._set_widgets_enabled(self._hand_prompt_widgets, bool(self.enable_hands_pass_var.get()))
+        self._refresh_effective_summary()
+
+    def _pass_argument_view(self, hands: bool) -> dict[str, Any]:
+        """The few displayed values the pinned schema can reject (for the projection only; not a second authority)."""
+        prefix = "hands" if hands else "face"
+        try:
+            return {
+                "ad_mask_filter_method": getattr(self, f"{prefix}_mask_filter_method_var").get(),
+                "ad_mask_merge_invert": getattr(self, f"{prefix}_merge_var").get(),
+                "ad_cfg_scale": getattr(self, f"{prefix}_cfg_var").get(),
+                "ad_steps": getattr(self, f"{prefix}_steps_var").get(),
+                "ad_confidence": getattr(self, f"{prefix}_confidence_var").get(),
+            }
+        except (tk.TclError, ValueError):
+            return {}
+
+    def effective_summary(self) -> str:
+        """Which passes will run and with which detector, as projected from the card's own variables."""
+        lines: list[str] = []
+        for label, enabled_var, model_var, role, available, hands in (
+            ("Face", self.enable_face_pass_var, self.face_model_var, "face", self._available_face_detectors, False),
+            ("Hand", self.enable_hands_pass_var, self.hands_model_var, "hand", self._available_hand_detectors, True),
+        ):
+            if not enabled_var.get():
+                lines.append(f"{label} pass: off")
+                continue
+            name = str(model_var.get() or "")
+            status = detector_status(name, available, role)
+            note = {
+                "unavailable": " - not installed; it is kept, not substituted",
+                "wrong_role": f" - not a {role} detector",
+            }.get(status, "")
+            lines.append(f"{label} pass: on, detector {name or '(none)'}{note}")
+            for issue in schema_issues(self._pass_argument_view(hands)):
+                lines.append(f"  ! {label} pass setting the extension would reject: {issue}")
+        return "\n".join(lines)
+
+    def _refresh_effective_summary(self) -> None:
+        label = getattr(self, "_effective_summary_label", None)
+        if label is None:
+            return
+        try:
+            label.configure(text=self.effective_summary())
+        except tk.TclError:
+            pass
 
     def _set_widgets_enabled(self, widgets: Iterable[tk.Widget], enabled: bool) -> None:
         for widget in widgets:
@@ -632,7 +700,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.face_confidence_var.set(
             float(cfg.get("adetailer_confidence", cfg.get("ad_confidence", 0.35)))
         )
-        self.max_detections_var.set(int(cfg.get("max_detections", 8)))
+        self._legacy_unsupported = {
+            key: cfg[key] for key in sorted(UNSUPPORTED_CONFIG_KEYS) if key in cfg
+        }  # kept so saved data round-trips; never shown as effective, never transmitted by the executor
         self.face_mask_blur_var.set(int(cfg.get("mask_blur", cfg.get("ad_mask_blur", 6))))
         self.face_merge_var.set(
             str(cfg.get("ad_mask_merge_invert") or cfg.get("mask_merge_mode") or "None")
@@ -674,14 +744,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.face_dilate_erode_var.set(
             int(cfg.get("ad_dilate_erode", cfg.get("mask_dilate_erode", 4)))
         )
-        self.face_mask_feather_var.set(
-            int(
-                cfg.get(
-                    "ad_mask_feather", cfg.get("adetailer_mask_feather", cfg.get("mask_feather", 4))
-                )
-            )
-        )
 
+        # A saved configuration that omits the flag keeps its historical meaning (hand pass off); only an
+        # explicit value is honored. The fresh-configuration default lives in the variable's initial value.
         self.enable_hands_pass_var.set(
             bool(cfg.get("enable_hands_pass", cfg.get("ad_hands_enabled", False)))
         )
@@ -717,19 +782,17 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.hands_mask_max_ratio_var.set(float(cfg.get("ad_hands_mask_max_ratio", 1.0)))
         self.hands_dilate_erode_var.set(int(cfg.get("ad_hands_dilate_erode", 6)))
         self.hands_mask_blur_var.set(int(cfg.get("ad_hands_mask_blur", 4)))
-        self.hands_mask_feather_var.set(int(cfg.get("ad_hands_mask_feather", 4)))
         self.hands_merge_var.set(str(cfg.get("ad_hands_mask_merge_invert", "None")))
         self._sync_pass_states()
 
     def to_config_dict(self) -> dict[str, Any]:
-        return {
+        config = {
             "adetailer_checkpoint_model": self._normalize_stage_model_override(
                 self.stage_model_override_var.get()
             ),
             "adetailer_model": self.face_model_var.get(),
             "adetailer_confidence": self.face_confidence_var.get(),
             "ad_confidence": self.face_confidence_var.get(),
-            "max_detections": self.max_detections_var.get(),
             "mask_blur": self.face_mask_blur_var.get(),
             "ad_mask_blur": self.face_mask_blur_var.get(),
             "mask_merge_mode": self.face_merge_var.get(),
@@ -764,9 +827,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
             "ad_mask_max_ratio": self.face_mask_max_ratio_var.get(),
             "mask_dilate_erode": self.face_dilate_erode_var.get(),
             "ad_dilate_erode": self.face_dilate_erode_var.get(),
-            "mask_feather": self.face_mask_feather_var.get(),
-            "ad_mask_feather": self.face_mask_feather_var.get(),
-            "adetailer_mask_feather": self.face_mask_feather_var.get(),
             "enable_face_pass": self.enable_face_pass_var.get(),
             "adetailer_hands_model": self.hands_model_var.get(),
             "hands_model": self.hands_model_var.get(),
@@ -779,7 +839,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
             "ad_hands_mask_max_ratio": self.hands_mask_max_ratio_var.get(),
             "ad_hands_dilate_erode": self.hands_dilate_erode_var.get(),
             "ad_hands_mask_blur": self.hands_mask_blur_var.get(),
-            "ad_hands_mask_feather": self.hands_mask_feather_var.get(),
             "ad_hands_mask_merge_invert": self.hands_merge_var.get(),
             "ad_hands_padding": self.hands_padding_var.get(),
             "ad_hands_inpaint_only_masked": self.hands_inpaint_masked_var.get(),
@@ -796,6 +855,8 @@ class ADetailerStageCardV2(BaseStageCardV2):
             "adetailer_hands_prompt": self.hands_prompt_var.get(),
             "adetailer_hands_negative_prompt": self.hands_negative_var.get(),
         }
+        config.update(self._legacy_unsupported)
+        return config
 
     def watchable_vars(self) -> Iterable[tk.Variable]:
         return [
@@ -803,7 +864,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
             self.enable_face_pass_var,
             self.model_var,
             self.confidence_var,
-            self.max_detections_var,
             self.mask_blur_var,
             self.merge_var,
             self.steps_var,
@@ -823,7 +883,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
             self.mask_min_ratio_var,
             self.mask_max_ratio_var,
             self.dilate_erode_var,
-            self.mask_feather_var,
             self.enable_hands_pass_var,
             self.hands_model_var,
             self.hands_confidence_var,
@@ -845,7 +904,6 @@ class ADetailerStageCardV2(BaseStageCardV2):
             self.hands_mask_max_ratio_var,
             self.hands_dilate_erode_var,
             self.hands_mask_blur_var,
-            self.hands_mask_feather_var,
             self.hands_merge_var,
         ]
 
@@ -862,12 +920,21 @@ class ADetailerStageCardV2(BaseStageCardV2):
                 checkpoint_models.append(str(name))
         samplers = [str(v) for v in (resources.get("samplers") or []) if str(v).strip()]
 
-        self._configure_combo(self._face_model_combo, detector_models, self.face_model_var)
-        self._configure_combo(
-            self._hands_model_combo,
-            detector_models or self.HAND_MODEL_OPTIONS,
-            self.hands_model_var,
-        )
+        usable = [
+            name
+            for name in detector_models
+            # ADetailer-Neo's MediaPipe detectors are not part of the managed Forge runtime, so they are never offered there.
+            if not (self._forge_detectors and name.lower().startswith("mediapipe"))
+        ]
+        face_options, hand_options = split_detectors(usable)
+        known = bool(usable)
+        face_options = face_options or list(self.MODEL_OPTIONS)
+        hand_options = hand_options or list(self.HAND_MODEL_OPTIONS)
+        known = known or self._forge_detectors  # the runtime's accepted set is itself a known list
+        self._available_face_detectors = face_options if known else None
+        self._available_hand_detectors = hand_options if known else None
+        self._configure_combo(self._face_model_combo, face_options, self.face_model_var, keep_current=True)
+        self._configure_combo(self._hands_model_combo, hand_options, self.hands_model_var, keep_current=True)
         self._configure_combo(self._sampler_combo, samplers, self.face_sampler_var)
         self._configure_combo(self._hand_sampler_combo, samplers, self.hands_sampler_var)
 
@@ -884,18 +951,28 @@ class ADetailerStageCardV2(BaseStageCardV2):
             )
 
     def _configure_combo(
-        self, combo: ttk.Combobox | None, values: Iterable[str], variable: tk.StringVar
+        self,
+        combo: ttk.Combobox | None,
+        values: Iterable[str],
+        variable: tk.StringVar,
+        *,
+        keep_current: bool = False,
     ) -> None:
         if combo is None:
             return
         cleaned = [str(value) for value in values if str(value).strip()]
         existing = list(combo.cget("values"))
         final_values = cleaned or existing
+        current_value = variable.get()
+        if keep_current and current_value and current_value not in final_values:
+            # An unavailable saved selection stays visible and unchanged; the projection reports it, nothing replaces it.
+            final_values = [*final_values, current_value]
         combo.configure(values=tuple(final_values), state="readonly", style=DARK_COMBOBOX_STYLE)
-        if final_values:
+        if final_values and not keep_current:
             current = variable.get()
             if current not in final_values:
                 variable.set(final_values[0])
+        self._refresh_effective_summary()
 
     def apply_resource_update(self, resources: dict[str, Any] | None) -> None:
         self.apply_webui_resources(resources)

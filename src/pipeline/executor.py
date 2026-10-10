@@ -29,6 +29,8 @@ from src.api.client import (
 from src.api.types import GenerateError, GenerateErrorCode
 from src.api.webui_process_manager import get_global_webui_process_manager
 from src.config import app_config
+from src.pipeline.adetailer_contract import schema_issues
+from src.pipeline.adetailer_effectiveness import build_effectiveness, response_infotexts
 from src.pipeline.animatediff_models import (
     AnimateDiffConfig,
     attach_animatediff_to_payload,
@@ -3666,14 +3668,13 @@ class Pipeline:
 
         # DEBUG: Log ADetailer config received
         logger.debug(
-            "ADETAILER CONFIG RECEIVED: model=%s, steps=%s, denoise=%s, cfg=%s, sampler=%s, confidence=%s, mask_feather=%s",
+            "ADETAILER CONFIG RECEIVED: model=%s, steps=%s, denoise=%s, cfg=%s, sampler=%s, confidence=%s",
             config.get("adetailer_model", "NOT_SET"),
             config.get("adetailer_steps", "NOT_SET"),
             config.get("adetailer_denoise", "NOT_SET"),
             config.get("adetailer_cfg", "NOT_SET"),
             config.get("adetailer_sampler", "NOT_SET"),
             config.get("adetailer_confidence", "NOT_SET"),
-            config.get("adetailer_mask_feather", "NOT_SET"),
         )
         logger.debug(
             "ADETAILER PROMPTS RECEIVED: positive='%s', negative='%s'",
@@ -3927,6 +3928,14 @@ class Pipeline:
             json.dumps(adetailer_args_payload, ensure_ascii=False, sort_keys=True),
         )
         for pass_label, pass_args in (("face", face_args), ("hands", hand_args)):
+            if pass_args.get("ad_tab_enable"):
+                # The pinned extension drops a pass whose arguments fail its schema silently; make that visible.
+                for issue in schema_issues(pass_args):
+                    logger.warning(
+                        "[adetailer/contract] %s pass argument rejected by the pinned schema (the extension would drop the pass): %s",
+                        pass_label,
+                        issue,
+                    )
             if bool(pass_args.get("ad_use_inpaint_width_height")) and (
                 int(pass_args.get("ad_inpaint_width") or payload_width) != payload_width
                 or int(pass_args.get("ad_inpaint_height") or payload_height) != payload_height
@@ -4117,6 +4126,20 @@ class Pipeline:
             response["images"] = []
         actual_path = self._coerce_saved_path(actual_path, fallback=image_path)
         if actual_path:
+            try:
+                # Detection, execution, observable change and (unreviewed) improvement are recorded separately; the
+                # comparison is the image sent to ADetailer against the image it returned, never a later stage's output.
+                metadata["adetailer_effectiveness"] = build_effectiveness(
+                    face_args=face_args,
+                    hand_args=hand_args,
+                    request_completed=True,
+                    input_image=input_image_path,
+                    output_image=actual_path,
+                    infotexts=response_infotexts(response),
+                    adaptive_refinement=adaptive_refinement or None,
+                )
+            except Exception as exc:  # noqa: BLE001 - evidence must never fail a completed stage
+                logger.warning("[adetailer/effectiveness] evidence unavailable: %s", exc)
             # Save manifest in manifests/ subfolder (datetime/pack_name structure)
             manifest_dir = Path(run_dir) / "manifests"
             # Use actual image stem (includes _copy suffix if collision occurred)

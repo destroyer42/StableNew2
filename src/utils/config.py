@@ -365,7 +365,6 @@ class ConfigManager:
                 "adetailer_enabled": False,
                 "adetailer_model": "face_yolov8n.pt",
                 "adetailer_confidence": 0.3,
-                "adetailer_mask_feather": 4,
                 "adetailer_sampler": "DPM++ 2M",
                 "adetailer_scheduler": "inherit",
                 "adetailer_steps": 28,

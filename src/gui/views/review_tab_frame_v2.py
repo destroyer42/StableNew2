@@ -36,6 +36,12 @@ from src.gui.widgets.scrollable_frame_v2 import ScrollableFrame
 from src.gui.widgets.tab_overview_panel_v2 import TabOverviewPanel, get_tab_overview_content
 from src.gui.widgets.thumbnail_widget_v2 import ThumbnailWidget
 from src.queue.job_history_store import JobHistoryEntry
+from src.review.adetailer_outcome import (
+    OUTCOME_LABELS,
+    AdetailerPair,
+    build_review_context,
+    resolve_adetailer_pair,
+)
 from src.utils.image_metadata import (
     extract_embedded_metadata,
     resolve_model_vae_fields,
@@ -92,6 +98,11 @@ class ReviewTabFrame(ttk.Frame):
         self.batch_size_var = tk.IntVar(value=1)
         self.rating_var = tk.IntVar(value=3)
         self.anatomy_rating_var = tk.IntVar(value=3)
+        # PR-REFINE-160: optional per-region before/after judgment of an ADetailer output (default: unreviewed).
+        self.adetailer_face_outcome_var = tk.StringVar(value=OUTCOME_LABELS["unreviewed"])
+        self.adetailer_hands_outcome_var = tk.StringVar(value=OUTCOME_LABELS["unreviewed"])
+        self.adetailer_outcome_note_var = tk.StringVar(value="")
+        self._adetailer_pair: AdetailerPair | None = None
         self.composition_rating_var = tk.IntVar(value=3)
         self.prompt_adherence_rating_var = tk.IntVar(value=3)
         self.quality_var = tk.StringVar(value="okay")
@@ -293,6 +304,14 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TButton",
             command=self._open_latest_derived_compare,
         ).pack(side="left", padx=(6, 0))
+        self._adetailer_compare_button = ttk.Button(
+            preview_actions,
+            text="ADetailer Before/After",
+            style="Dark.TButton",
+            command=self._open_adetailer_compare,
+            state="disabled",
+        )
+        self._adetailer_compare_button.pack(side="left", padx=(6, 0))
         ttk.Button(
             preview_actions,
             text="Inspect Metadata",
@@ -687,6 +706,35 @@ class ReviewTabFrame(ttk.Frame):
             width=4,
             style="Dark.TSpinbox",
         ).grid(row=0, column=3, sticky="w", padx=(6, 0))
+        outcome = ttk.Frame(feedback_box, style="Panel.TFrame")
+        outcome.grid(row=10, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        outcome.columnconfigure(1, weight=1)
+        ttk.Label(outcome, text="ADetailer outcome (optional)", style="Dark.TLabel").grid(
+            row=0, column=0, columnspan=2, sticky="w"
+        )
+        self._adetailer_outcome_widgets: list[tk.Widget] = []
+        for row, (label, variable) in enumerate(
+            (("Face", self.adetailer_face_outcome_var), ("Hands", self.adetailer_hands_outcome_var)), start=1
+        ):
+            ttk.Label(outcome, text=label, style="Dark.TLabel").grid(row=row, column=0, sticky="w", padx=(0, 6), pady=(2, 0))
+            combo = ttk.Combobox(
+                outcome,
+                textvariable=variable,
+                values=list(OUTCOME_LABELS.values()),
+                state="disabled",
+                style="Dark.TCombobox",
+                width=14,
+            )
+            combo.grid(row=row, column=1, sticky="w", pady=(2, 0))
+            self._adetailer_outcome_widgets.append(combo)
+        note = ttk.Entry(outcome, textvariable=self.adetailer_outcome_note_var, state="disabled")
+        note.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(2, 0))
+        self._adetailer_outcome_widgets.append(note)
+        attach_tooltip(
+            outcome,
+            "Available for an ADetailer output whose source image is verified. Judge the before/after by region; this is a "
+            "post-ADetailer assessment, not an attribution to one pass, and it does not change the overall rating.",
+        )
         ttk.Label(subscores, text="Prompt Fit", style="Dark.TLabel").grid(
             row=1, column=0, sticky="w", pady=(4, 0)
         )
@@ -828,8 +876,33 @@ class ReviewTabFrame(ttk.Frame):
             return
         self._show_image(self._image_index_by_row[idx])
 
+    def _refresh_adetailer_pair(self, path: Path) -> None:
+        """Enable the before/after tools only for an ADetailer output whose source image is verified."""
+        self._adetailer_pair = resolve_adetailer_pair(path)
+        enabled = self._adetailer_pair is not None
+        self.adetailer_face_outcome_var.set(OUTCOME_LABELS["unreviewed"])
+        self.adetailer_hands_outcome_var.set(OUTCOME_LABELS["unreviewed"])
+        self.adetailer_outcome_note_var.set("")
+        for widget in self._adetailer_outcome_widgets:
+            widget.configure(state=("readonly" if isinstance(widget, ttk.Combobox) else "normal") if enabled else "disabled")
+        self._adetailer_compare_button.configure(state="normal" if enabled else "disabled")
+
+    def _open_adetailer_compare(self) -> None:
+        pair = self._adetailer_pair
+        if pair is None:
+            messagebox.showinfo("ADetailer Before/After", "No verified ADetailer source image for the selected image.")
+            return
+        self._compare_mode = "single"
+        self._render_compare_viewer(
+            pair.source,
+            secondary_path=pair.output,
+            title_prefix="ADetailer Before / After",
+            labels=("Before (sent to ADetailer)", "After (ADetailer output)"),
+        )
+
     def _show_image(self, path: Path) -> None:
         self._selected_image_path = path
+        self._refresh_adetailer_pair(path)
         self.preview.set_image_from_path(path)
         self._refresh_prior_review_summary(path)
         result = extract_embedded_metadata(path)
@@ -1083,6 +1156,7 @@ class ReviewTabFrame(ttk.Frame):
         *,
         secondary_path: Path | None = None,
         title_prefix: str = "Large Compare",
+        labels: tuple[str, str] = ("Source", "Latest derived"),
     ) -> None:
         try:
             with Image.open(image_path) as image:
@@ -1143,9 +1217,9 @@ class ReviewTabFrame(ttk.Frame):
             style="Dark.TLabel",
         ).pack(side="left", padx=(12, 0))
 
-        compare_label = f"Source: {image_path.name}"
+        compare_label = f"{labels[0]}: {image_path.name}"
         if secondary_path is not None:
-            compare_label += f"    Latest derived: {secondary_path.name}"
+            compare_label += f"    {labels[1]}: {secondary_path.name}"
         ttk.Label(
             frame,
             text=compare_label,
@@ -1780,7 +1854,7 @@ class ReviewTabFrame(ttk.Frame):
         metadata = extract_embedded_metadata(image_path)
         if metadata.status != "ok" or not isinstance(metadata.payload, dict):
             return None
-        return self._workflow_adapter.build_feedback_payload(
+        payload = self._workflow_adapter.build_feedback_payload(
             image_path=image_path,
             metadata_payload=metadata.payload,
             rating=int(self.rating_var.get()),
@@ -1795,3 +1869,14 @@ class ReviewTabFrame(ttk.Frame):
             composition_rating=int(self.composition_rating_var.get()),
             prompt_adherence_rating=int(self.prompt_adherence_rating_var.get()),
         )
+        # Only the image currently shown (with its verified source) can carry the optional before/after judgment.
+        if self._adetailer_pair is not None and image_path == self._selected_image_path:
+            context = build_review_context(
+                self._adetailer_pair,
+                face=self.adetailer_face_outcome_var.get(),
+                hands=self.adetailer_hands_outcome_var.get(),
+                note=self.adetailer_outcome_note_var.get(),
+            )
+            if context:
+                payload["context"] = context
+        return payload

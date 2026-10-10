@@ -4,6 +4,17 @@ Updated: 2026-10-10
 
 ## Repository
 
+- ADetailer control truth and effectiveness evidence (PR-REFINE-160, LOCAL; hosted CI and review pending): new ADetailer cards
+  default Face and Hand passes on (saved/historical configurations that omit the flag keep their meaning; the overall stage flag is
+  untouched). The GUI no longer offers Max Detections or Mask Feather (the pinned ADetailer-Neo `af228eba` has no such arguments),
+  Mask Max-K is "Retained Masks (Top-K)", Mask Filter offers only Area/Confidence, face and hand detector lists are separated and an
+  unavailable saved detector is flagged, never substituted. A defect that let explicit GUI-authored `extra` values defeat Adaptive
+  Refinement's face policy is fixed. Each ADetailer stage manifest records `stablenew.adetailer-effectiveness.v1`: Forge detection is
+  `unknown` (the extension reports detections only as console text), per-pass execution acknowledgement, a bounded input-vs-output pixel
+  comparison, and visual improvement `unreviewed` until an operator judges it in the Review tab's existing before/after viewer and feedback
+  record. No detector, backend, controller, queue or runner change. See
+  `docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md`.
+
 - Z-Image-Turbo FP8-scaled feasibility (PR-IMG-MODELS-153, read-only phase complete; local, hosted CI and review pending):
   verdict `ELIGIBLE_FOR_OWNER_AUTHORIZATION`, which is **conditional eligibility only** (no source, identity or hard-resource
   disproof found), not confirmation of hardware fit. The exact installed stack (FP8-scaled transformer with a complete
