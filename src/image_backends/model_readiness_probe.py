@@ -76,13 +76,17 @@ def probe_model_readiness(
     model_name: str,
     *,
     evidence: EvidenceReader | None = None,
-    qualified_profile: bool = False,
+    profile_available: bool = False,
+    profile_verified: bool = False,
 ) -> ModelReadiness:
     """One read-only readiness verdict for ``model_name`` against the endpoint behind ``client``."""
 
     name = str(model_name or "").strip()
-    if qualified_profile:
-        return assess_model_readiness(name, checkpoint=None, catalog=None, selected=None, qualified_profile=True)
+    if profile_available:
+        return assess_model_readiness(
+            name, checkpoint=None, catalog=None, selected=None,
+            profile_available=True, profile_verified=profile_verified,
+        )
     read = evidence or _default_reader
     files = served_checkpoint_files(client, name) if name else None
     if not files:
@@ -101,8 +105,14 @@ def probe_model_readiness(
     catalog: list[CatalogModule] | None = None
     selected: list[str] | None = None
     try:
-        listing = getattr(client, "get_vae_models", None)
-        modules = listing() if callable(listing) else None
+        # The tri-state catalog read: ``[]`` is an answer ("Forge lists nothing"), ``None`` a failed/blocked read. A client
+        # without it can only offer the legacy list whose ``[]`` is ambiguous, so that is treated as unreadable.
+        tri_state = getattr(client, "get_module_catalog", None)
+        if callable(tri_state):
+            modules = tri_state()
+        else:
+            legacy = getattr(client, "get_vae_models", None)
+            modules = (legacy() or None) if callable(legacy) else None
         if isinstance(modules, list):
             catalog = []
             for item in modules:

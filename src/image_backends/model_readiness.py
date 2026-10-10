@@ -32,7 +32,10 @@ UNQUALIFIED_STATUS = "unqualified"
 
 
 class ReadinessStatus(str, Enum):
+    #: An exact profile exists AND its assets/runtime were verified by the caller (never from a name match alone).
     QUALIFIED = "qualified"
+    #: An exact versioned profile exists for this checkpoint name; assets, runtime and hardware are NOT verified here.
+    PROFILE_AVAILABLE = "profile_available"
     #: A self-contained or unrecognized checkpoint: nothing here claims it needs auxiliary files.
     NOT_DEPENDENCY_BEARING = "not_dependency_bearing"
     DEPENDENCIES_INCOMPLETE = "dependencies_incomplete"
@@ -44,6 +47,7 @@ class ReadinessStatus(str, Enum):
 
 STATUS_LABELS: Mapping[ReadinessStatus, str] = {
     ReadinessStatus.QUALIFIED: "Qualified",
+    ReadinessStatus.PROFILE_AVAILABLE: "Exact profile available \u2014 assets and runtime not verified here",
     ReadinessStatus.NOT_DEPENDENCY_BEARING: "No auxiliary dependencies identified",
     ReadinessStatus.DEPENDENCIES_INCOMPLETE: "Discovered — dependencies incomplete",
     ReadinessStatus.DEPENDENCIES_PRESENT_NOT_SELECTED: "Discovered — dependencies present but not selected",
@@ -195,25 +199,40 @@ def assess_model_readiness(
     checkpoint: ComponentEvidence | None,
     catalog: Sequence[CatalogModule] | None,
     selected: Sequence[str] | None,
-    qualified_profile: bool = False,
+    profile_available: bool = False,
+    profile_verified: bool = False,
     observed_at: float | None = None,
 ) -> ModelReadiness:
     """Combine header evidence, the Forge catalog and the live selection into one readiness verdict.
 
-    ``catalog``/``selected`` are ``None`` when Forge could not be read (unavailable, never empty). A qualified exact
-    profile short-circuits to ``QUALIFIED``; every other dependency-bearing checkpoint is, by definition, unqualified.
+    ``catalog``/``selected`` are ``None`` when Forge could not be read (unavailable, never empty); an empty list means
+    Forge answered with no entries. An exact profile whose name matched is only ``PROFILE_AVAILABLE`` (a name proves
+    nothing about bytes or the runtime); ``QUALIFIED`` needs the caller to also pass ``profile_verified`` from the
+    existing byte verification. Every other dependency-bearing checkpoint is, by definition, unqualified.
     """
 
     stamp = time.time() if observed_at is None else observed_at
-    if qualified_profile:
+    if profile_available and profile_verified:
         return ModelReadiness(
             model_name,
             ReadinessStatus.QUALIFIED,
-            "exact_profile",
-            ("An exact versioned StableNew execution profile qualifies this checkpoint.",),
+            "exact_profile_verified",
+            ("An exact versioned StableNew execution profile qualifies this checkpoint and its assets were verified.",),
             qualified=True,
             evidence_type="exact_profile",
             qualification_status=QUALIFIED_STATUS,
+            observed_at=stamp,
+        )
+    if profile_available:
+        return ModelReadiness(
+            model_name,
+            ReadinessStatus.PROFILE_AVAILABLE,
+            "exact_profile_name_match",
+            (
+                "An exact versioned StableNew profile exists for this checkpoint name. Its asset bytes, the runtime "
+                "and the hardware are verified at dispatch, not here.",
+            ),
+            evidence_type="exact_profile_name",
             observed_at=stamp,
         )
     if checkpoint is None:

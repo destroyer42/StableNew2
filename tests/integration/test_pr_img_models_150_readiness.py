@@ -452,7 +452,12 @@ def _catalog(models, *keys):
 
 def test_readiness_labels_cover_the_required_operator_vocabulary(models) -> None:
     full = _catalog(models, "qwen8", "vae")
-    assert _ready(models, catalog=full, selected=[], qualified_profile=True).status is ReadinessStatus.QUALIFIED
+    assert _ready(models, catalog=full, selected=[], profile_available=True).status is (
+        ReadinessStatus.PROFILE_AVAILABLE  # an exact profile exists; nothing verified assets or the runtime
+    )
+    assert _ready(models, catalog=full, selected=[], profile_available=True, profile_verified=True).status is (
+        ReadinessStatus.QUALIFIED
+    )
     assert _ready(models, catalog=full, selected=["qwen_3_8b.safetensors", "flux2-vae.safetensors"]).status is (
         ReadinessStatus.SELECTED_UNQUALIFIED
     )
@@ -485,3 +490,132 @@ def test_a_structural_match_never_reads_as_executable(models) -> None:
     assert readiness.qualified is False and readiness.qualification_status == "unqualified"
     assert "not proof that the model loads" in readiness.summary()
     assert "PR-IMG-MODELS-151" in readiness.summary()  # the physical qualification prerequisite is named
+
+
+# ------------------------------------------------------------------------------------------- final repairs (PR #77)
+
+
+def _nested(depth: int) -> bytes:
+    body = b'{"a":' * depth + b"1" + b"}" * depth
+    return struct.pack("<Q", len(body)) + body
+
+
+def test_deeply_nested_header_json_is_bounded_unrecognized_evidence_not_a_recursion_error(tmp_path: Path) -> None:
+    from src.assets.checkpoint_structure import checkpoint_header_evidence
+
+    target = tmp_path / "nested.safetensors"
+    target.write_bytes(_nested(200_000))
+
+    evidence = inspect_component_file(target)
+    assert evidence.error and evidence.role == "unrecognized" and not evidence.dependency_bearing
+    assert str(tmp_path) not in evidence.error  # path-free
+
+    structural = checkpoint_header_evidence(target)  # the shared parser boundary: the registry path is covered too
+    assert structural["structure"]["architecture"] == "unrecognized" and structural["structure"]["error"]
+    assert str(tmp_path) not in json.dumps(structural, default=str)
+
+
+def test_the_header_bounds_still_reject_oversized_and_duplicate_headers(tmp_path: Path) -> None:
+    oversized = tmp_path / "big.safetensors"
+    oversized.write_bytes(struct.pack("<Q", (64 * 1024 * 1024) + 1) + b"{}")
+    assert inspect_component_file(oversized).error
+    duplicate = tmp_path / "dup.safetensors"
+    body = b'{"a":{"dtype":"F32","shape":[1],"data_offsets":[0,4]},"a":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}}'
+    duplicate.write_bytes(struct.pack("<Q", len(body)) + body + bytes(4))
+    assert inspect_component_file(duplicate).error
+
+
+def test_a_successful_empty_catalog_means_absent_but_a_failed_catalog_read_means_unavailable(
+    models, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    empty = _forge(models, selected=("qwen8", "vae"), catalog=())  # Forge answered: it lists no modules at all
+    entry = _run(_njr(job_id="m150-empty-catalog"), empty)
+    assert entry.status is JobStatus.FAILED and _posts(empty) == []
+    assert "Discovered \u2014 dependencies incomplete" in str(entry.error_message)
+    assert "Not found in Forge's module catalog" in str(entry.error_message)
+
+    # A failed catalog read is exercised at the probe: the runtime identity guard (which also lists /sd-modules) would
+    # refuse such an endpoint before the gate in a full job. The probe is exactly what the gate and the UI both use.
+    from src.image_backends.model_readiness_probe import probe_model_readiness
+
+    failed = _forge(models, selected=("qwen8", "vae"), modules_listing_status=500)  # the read failed: unknown, not absent
+    readiness = probe_model_readiness(_client(failed), NINE_B)
+    assert readiness.status is ReadinessStatus.UNAVAILABLE_OR_STALE and readiness.catalog_names is None
+    assert readiness.blocks_dispatch is True  # still refused: the checkpoint itself is positively identified
+    assert "module catalog could not be read" in readiness.summary()
+    assert "Not found in Forge's module catalog" not in readiness.summary()  # never reported as absent
+    assert _posts(failed) == []  # reading is all it did
+
+    # A cooldown / startup-grace / unreadable catalog read is the case where the legacy list silently became [].
+    blocked = _forge(models, selected=("qwen8", "vae"))
+    monkeypatch.setattr(ForgeWebUIClient, "_resource_endpoint_on_cooldown", lambda self, endpoint: endpoint.endswith("sd-modules"))
+    again = probe_model_readiness(_client(blocked), NINE_B)
+    assert again.status is ReadinessStatus.UNAVAILABLE_OR_STALE and again.catalog_names is None  # never "absent"
+    assert again.blocks_dispatch is True
+
+
+def test_the_module_catalog_contract_for_other_callers_is_unchanged(models, monkeypatch: pytest.MonkeyPatch) -> None:
+    ok = _client(_forge(models, catalog=("qwen8",)))
+    assert [m["model_name"] for m in ok.get_vae_models()] == ["qwen_3_8b.safetensors"]
+    assert [m["model_name"] for m in _client(_forge(models, catalog=("qwen8",))).get_module_catalog()] == [
+        "qwen_3_8b.safetensors"
+    ]
+    assert _client(_forge(models, catalog=())).get_module_catalog() == []  # an answer: Forge lists nothing
+    assert _client(_forge(models, catalog=())).get_vae_models() == []
+
+    blocked = _client(_forge(models, catalog=("qwen8",)))
+    monkeypatch.setattr(ForgeWebUIClient, "_resource_endpoint_on_cooldown", lambda self, endpoint: True)
+    assert blocked.get_vae_models() == []  # the legacy list keeps its [] for a cooldown / startup-grace / failed read ...
+    assert blocked.get_module_catalog() is None  # ... while the tri-state read reports it as not readable
+
+
+def test_a_klein_4b_name_is_profile_available_not_qualified_and_nothing_is_hashed() -> None:
+    from src.image_backends.model_readiness_probe import probe_model_readiness
+
+    readiness = probe_model_readiness(None, "flux-2-klein-4b-fp8.safetensors", profile_available=True)
+    assert readiness.status is ReadinessStatus.PROFILE_AVAILABLE and readiness.qualified is False
+    assert readiness.blocks_dispatch is False
+    assert "not verified here" in readiness.summary()  # byte verification stays at dispatch, never claimed here
+    verified = probe_model_readiness(None, "flux-2-klein-4b-fp8.safetensors", profile_available=True, profile_verified=True)
+    assert verified.status is ReadinessStatus.QUALIFIED and verified.qualified is True
+
+
+def test_the_exact_klein_4b_name_is_exempt_from_the_gate_even_on_a_dependency_bearing_file(models) -> None:
+    klein = "flux-2-klein-4b-fp8.safetensors"
+    transport = _forge(models, checkpoint=klein, selected=("qwen8", "vae"))
+    transport.checkpoint_files = {klein: str(models["nine_b"])}  # structurally dependency-bearing, but the exact name
+    transport.reject_generation_when = None
+    entry = _run(_njr(model=klein, job_id="m150-klein-name"), transport)
+    assert "was not dispatched" not in str(entry.error_message)  # the gate never fires for the exact Klein name
+    assert "multi-component" not in str(entry.error_message)
+
+
+def test_an_unqualified_model_in_a_later_stage_is_refused_before_that_stage_writes_anything(models) -> None:
+    """Per-stage gating at the backend boundary: a safe first stage passes, the 9B second stage never reaches a write."""
+
+    from pathlib import Path as _Path
+    from types import SimpleNamespace
+
+    from src.image_backends.forge_webui_backend import (
+        ForgeUnqualifiedModelError,
+        ForgeWebUIImageBackend,
+    )
+    from src.image_backends.image_backend_types import ImageExecutionRequest
+
+    transport = _forge(models, checkpoint=SDXL, selected=())
+    pipeline = SimpleNamespace(client=_client(transport))
+    backend = ForgeWebUIImageBackend()
+
+    def request(stage: str, model: str) -> ImageExecutionRequest:
+        return ImageExecutionRequest(
+            backend_id="forge_webui", stage_name=stage, stage_config={}, output_dir=_Path("."),
+            selected_model=model, job_id="m150-later", backend_options={"image": {"backend_id": "forge_webui"}},
+        )
+
+    backend._before_dispatch(pipeline, request("txt2img", SDXL))  # an ordinary first stage is admitted
+    with pytest.raises(ForgeUnqualifiedModelError):
+        backend._before_dispatch(pipeline, request("adetailer", NINE_B))  # a later stage with the 9B is refused
+    with pytest.raises(ForgeUnqualifiedModelError):
+        backend._before_dispatch(pipeline, request("img2img", NINE_B))
+    assert _posts(transport) == []  # nothing mutating happened at any stage
+    assert _module_writes(transport) == [] and transport.generation_calls == []

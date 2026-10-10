@@ -38,7 +38,7 @@ class ModelReadinessPresenter:
         self._panel = panel
         self._controller = controller
         self._probe = probe or (
-            lambda client, model: probe_model_readiness(client, model, qualified_profile=is_klein_transformer_name(model))
+            lambda client, model: probe_model_readiness(client, model, profile_available=is_klein_transformer_name(model))
         )
         self._request_id = 0
         self._shown_model = ""

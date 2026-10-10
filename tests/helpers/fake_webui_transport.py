@@ -72,6 +72,7 @@ class FakeWebUITransport:
         loras: list[dict[str, str]] | None = None,
         checkpoint_files: dict[str, str] | None = None,
         models_listing_status: int = 200,
+        modules_listing_status: int = 200,
     ) -> None:
         if flavor not in {"forge", "a1111"}:
             raise ValueError(flavor)
@@ -100,6 +101,7 @@ class FakeWebUITransport:
         # ``models_listing_status`` != 200 simulates an unreadable listing.
         self.checkpoint_files = dict(checkpoint_files or {})
         self.models_listing_status = models_listing_status
+        self.modules_listing_status = modules_listing_status  # != 200: GET /sd-modules fails (Forge only)
         self.generation_module_state: list[list[str]] = []
         self.rejected_generations: list[str] = []
         self.generation_started = threading.Event()
@@ -143,6 +145,8 @@ class FakeWebUITransport:
                 flags.update({"forge_ref_a1111_home": None, "forge_ref_comfy_home": None})
             return FakeResponse(flags)
         if path == "/sdapi/v1/sd-modules":
+            if self.flavor == "forge" and self.modules_listing_status != 200:
+                return FakeResponse({}, self.modules_listing_status)
             return FakeResponse(self.modules) if self.flavor == "forge" else FakeResponse({}, 404)
         if path == "/sdapi/v1/loras":
             return FakeResponse(list(self.loras))

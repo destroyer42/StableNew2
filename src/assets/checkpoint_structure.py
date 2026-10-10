@@ -76,7 +76,11 @@ def read_tensor_table(path: Path) -> tuple[dict[str, list[int]], dict[str, str],
         encoded = stream.read(size)
     if len(encoded) != size:
         raise ValueError("truncated header")
-    header = json.loads(encoded, object_pairs_hook=_unique_object)
+    try:
+        header = json.loads(encoded, object_pairs_hook=_unique_object)
+    except RecursionError:
+        # Pathologically nested JSON exhausts the decoder's stack: a malformed header, not a resource failure to leak.
+        raise ValueError("header nesting is too deep") from None
     if not isinstance(header, dict):
         raise ValueError("header is not an object")
     metadata = header.pop("__metadata__", {})

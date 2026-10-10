@@ -23,21 +23,32 @@ a bounded safetensors header says whether a file is a dependency-bearing FLUX-st
 requires: text-encoder hidden size = `txt_in` input / 3, VAE latent channels = transformer input channels / 4), a Qwen3 text
 encoder (hidden size, layers, dtype, quantized or not, size label only for the exact known dimensions), a FLUX-family VAE
 (latent channels, native vs Diffusers key format), or a self-contained bundle. Identification is by bytes, never by file
-name. A structural match is not a load proof and F16, BF16, FP8/FP4 and quantized files are never interchangeable.
-Malformed, truncated, duplicate-key or bad-offset headers yield an error and no evidence. Diagnostics carry no paths.
+name. A structural match is not a load proof. What matching *enforces* is limited to the structural requirement (hidden
+size / latent channels) and quantization (a quantized encoder never satisfies the plain-dtype requirement); the dtype
+(F16 vs BF16 vs F32) and, for VAEs, the native vs Diffusers key format are recorded facts, not match criteria, so an F16
+and a BF16 encoder of the same structure both match and remain distinct files that only byte identity can separate.
+Malformed, truncated, duplicate-key, bad-offset, oversized or pathologically nested (stack-exhausting) headers yield an
+error and no evidence, at the shared parser (`read_tensor_table`), so the registry's structural path is equally covered.
+A malformed header no longer returns the file's `__metadata__` alongside the error. Diagnostics carry no paths.
 
 **Readiness projection** (`src/image_backends/model_readiness.py`, pure; evidence gathering in `model_readiness_probe.py`):
 keeps file presence, structural identity, header-required dependencies, Forge's *catalog* (`/sd-modules`), Forge's *live
 selection* (`/options` `forge_additional_modules`), exact-profile qualification and hardware qualification apart. Statuses:
-`Qualified`, `No auxiliary dependencies identified`, `Discovered — dependencies incomplete`, `Discovered — dependencies
+`Qualified` (an exact profile whose assets were verified by the caller; never from a name match), `Exact profile available
+— assets and runtime not verified here` (what the read-only check shows for the Klein 4B name: byte verification, runtime
+and hardware are dispatch-time facts), `No auxiliary dependencies identified`, `Discovered — dependencies incomplete`, `Discovered — dependencies
 present but not selected`, `Discovered — selected but execution unqualified`, `Unknown/conflicting`, `Unavailable/stale`.
-A failed or unreadable Forge read is unavailable, never an empty list or "ready"; duplicate catalog names are a conflict.
+A failed, cooldown-blocked, startup-grace or unreadable Forge read is unavailable, never an empty list or "ready"; only a
+successful answer with no entries means "dependencies absent" (the Forge client's new `get_module_catalog()` is that
+tri-state read, and `get_vae_models()` keeps its historical `[]` contract on top of it). Duplicate catalog names are a
+conflict.
 The durable record (`ModelReadiness.as_dict`) names the checkpoint, evidence type, architecture, requirements, listed and
 selected module basenames, `qualification_status`, `reason_code`, `selection_source` and the epoch of the live read.
 
 **Dependency gate** (`ForgeWebUIImageBackend._dependency_gate`, called first in `_before_dispatch` for work without an exact
-profile): reads only (`GET /sd-models`, one bounded header, and — only when a refusal is certain — `/sd-modules` and
-`/options`) and raises `ForgeUnqualifiedModelError` for a *positively identified* dependency-bearing, unqualified
+profile): reads only (`GET /sd-models` and one bounded header for the served checkpoint and — only when that header proves a
+dependency-bearing transformer, i.e. a refusal is certain — `/sd-modules`, `/options` and a bounded header of each catalog
+file, cached by fingerprint) and raises `ForgeUnqualifiedModelError` for a *positively identified* dependency-bearing, unqualified
 checkpoint, before the baseline normalization, any `/options` write and any generation POST (every stage of a chain is
 gated). The operator's live Forge selection is never adopted as an NJR dependency contract and never altered. Unknown,
 unreadable, missing or ambiguous served-file evidence is "unverified": previously supported generic behavior is preserved
@@ -60,7 +71,7 @@ destroyed widget. It never hashes, scans, writes to Forge or changes a control.
 | `text_encoder/qwen_3_8b_fp8mixed`, `_fp4mixed` | Qwen3 hidden 4096, quantized (scales, F8/U8) | not interchangeable with the plain encoder |
 | `text_encoder/qwen3_4b_2964436.safetensors` | Qwen3 hidden 2560 (4B class) | mismatches the 9B (the profiled Klein 4B encoder class) |
 | `VAE/flux2-vae.safetensors` | latent channels 32, native keys, F32, batch-norm stats | structural match |
-| `VAE/diffusion_pytorch_model (2).safetensors` | latent channels 32, **Diffusers** key format, BF16 | structural match in shape; format differs from `flux2-vae`; unclassified for Forge loading |
+| `VAE/diffusion_pytorch_model (2).safetensors` | latent channels 32, **Diffusers** key format, BF16 | counts as a structural match (latent channels) by the current logic, but its format differs from `flux2-vae` and it is unclassified for Forge loading; the key format is not a match criterion |
 | `VAE/flux1AE_v10`, `sdxl_vae` | 16 / 4 latent channels | mismatch |
 | `juggernautZ_v10*_pruned_fp8.safetensors` | no recognized signature | unclassified (not gated, not claimed) |
 
