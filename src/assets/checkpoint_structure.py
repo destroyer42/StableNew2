@@ -7,6 +7,7 @@ qualification. Only the standard LDM SDXL base layout is admitted here.
 from __future__ import annotations
 
 import json
+import re
 import struct
 from pathlib import Path
 from typing import Any
@@ -122,6 +123,66 @@ def read_tensor_table(path: Path) -> tuple[dict[str, list[int]], dict[str, str],
     return shapes, dtypes, metadata
 
 
+def classify_checkpoint_shapes(shapes: dict[str, list[int]]) -> tuple[str, str | None]:
+    """``(architecture, error)`` of an LDM-layout UNet checkpoint from tensor shapes alone.
+
+    The one SD1.x / SD2.x / SDXL (base, inpainting, refiner) classifier; ``unrecognized`` when the shapes do not match a
+    known envelope. A partial or contradictory SDXL marker set is reported as an error, never blessed.
+    """
+
+    prefix = "model.diffusion_model."
+
+    def matches(name: str, shape: list[int]) -> bool:
+        return shapes.get(prefix + name) == shape
+
+    architecture = "unrecognized"
+    base = (
+        matches("label_emb.0.0.weight", [1280, 2816])
+        and matches("input_blocks.4.1.transformer_blocks.0.attn2.to_k.weight", [640, 2048])
+        and matches("input_blocks.7.1.transformer_blocks.9.attn2.to_k.weight", [1280, 2048])
+        and matches("out.2.weight", [4, 320, 3, 3])
+    )
+    if base and matches("input_blocks.0.0.weight", [320, 4, 3, 3]):
+        architecture = "sdxl_base"
+    elif base and matches("input_blocks.0.0.weight", [320, 9, 3, 3]):
+        architecture = "sdxl_inpaint"
+    elif (
+        matches("input_blocks.0.0.weight", [384, 4, 3, 3])
+        and matches("label_emb.0.0.weight", [1536, 2560])
+        and matches("input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight", [384, 1280])
+        and matches("out.2.weight", [4, 384, 3, 3])
+    ):
+        architecture = "sdxl_refiner"
+    elif (
+        matches("input_blocks.0.0.weight", [320, 4, 3, 3])
+        and matches("out.2.weight", [4, 320, 3, 3])
+        and prefix + "label_emb.0.0.weight" not in shapes
+    ):
+        for context, candidate in ((768, "sd1"), (1024, "sd2")):
+            if matches("input_blocks.4.1.transformer_blocks.0.attn2.to_k.weight", [640, context]):
+                architecture = candidate
+    # Partial or contradictory SDXL marker sets cannot be blessed by a descriptive label when tensor dimensions
+    # contradict that envelope.
+    error = None
+    if architecture == "unrecognized" and shapes.get(prefix + "label_emb.0.0.weight") in ([1280, 2816], [1536, 2560]):
+        error = "incomplete or contradictory SDXL tensor signature"
+    return architecture, error
+
+
+def checkpoint_variant_from_metadata(metadata: dict[str, Any]) -> str | None:
+    """A distinct SDXL-family subtype that only embedded metadata can establish (currently ``turbo``).
+
+    The tensor layout of an SDXL Turbo checkpoint equals ordinary SDXL, so the subtype rests on declared metadata
+    (``modelspec.architecture``/``implementation``/``title``) and is reported as such, never inferred from a filename.
+    """
+
+    for key in ("modelspec.architecture", "modelspec.implementation", "modelspec.title", "ss_base_model_version"):
+        value = str(metadata.get(key) or "").lower()
+        if re.search(r"(^|[^a-z0-9])turbo($|[^a-z0-9])", value):
+            return "turbo"
+    return None
+
+
 def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
     """Read at most a bounded JSON header, validating descriptors against file size.
 
@@ -140,44 +201,9 @@ def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
         return {"structure": structure, "metadata": metadata, "metadata_error": None}
     try:
         shapes, _dtypes, metadata = read_tensor_table(path)
-        prefix = "model.diffusion_model."
-
-        def matches(name: str, shape: list[int]) -> bool:
-            return shapes.get(prefix + name) == shape
-
-        base = (
-            matches("label_emb.0.0.weight", [1280, 2816])
-            and matches("input_blocks.4.1.transformer_blocks.0.attn2.to_k.weight", [640, 2048])
-            and matches("input_blocks.7.1.transformer_blocks.9.attn2.to_k.weight", [1280, 2048])
-            and matches("out.2.weight", [4, 320, 3, 3])
-        )
-        if base and matches("input_blocks.0.0.weight", [320, 4, 3, 3]):
-            structure["architecture"] = "sdxl_base"
-        elif base and matches("input_blocks.0.0.weight", [320, 9, 3, 3]):
-            structure["architecture"] = "sdxl_inpaint"
-        elif (
-            matches("input_blocks.0.0.weight", [384, 4, 3, 3])
-            and matches("label_emb.0.0.weight", [1536, 2560])
-            and matches("input_blocks.1.1.transformer_blocks.0.attn2.to_k.weight", [384, 1280])
-            and matches("out.2.weight", [4, 384, 3, 3])
-        ):
-            structure["architecture"] = "sdxl_refiner"
-        elif (
-            matches("input_blocks.0.0.weight", [320, 4, 3, 3])
-            and matches("out.2.weight", [4, 320, 3, 3])
-            and prefix + "label_emb.0.0.weight" not in shapes
-        ):
-            for context, architecture in ((768, "sd1"), (1024, "sd2")):
-                if matches(
-                    "input_blocks.4.1.transformer_blocks.0.attn2.to_k.weight", [640, context]
-                ):
-                    structure["architecture"] = architecture
-        # Partial or contradictory SDXL marker sets cannot be blessed by a
-        # descriptive label when tensor dimensions contradict that envelope.
-        if structure["architecture"] == "unrecognized" and shapes.get(
-            prefix + "label_emb.0.0.weight"
-        ) in ([1280, 2816], [1536, 2560]):
-            structure["error"] = "incomplete or contradictory SDXL tensor signature"
+        structure["architecture"], error = classify_checkpoint_shapes(shapes)
+        if error:
+            structure["error"] = error
     except (OSError, ValueError, TypeError, UnicodeDecodeError, struct.error):
         # Diagnostic intentionally omits local paths and raw authored metadata.
         structure["error"] = "malformed or truncated safetensors header/tensor descriptors"

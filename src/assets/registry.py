@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import struct
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field, replace
@@ -26,6 +27,7 @@ from src.assets.compatibility import (
     sidecar_metadata_evidence,
     sidecar_metadata_field_present,
 )
+from src.assets.observation import ObservationRoot, ObservationScan, ScanLimits, observe_roots
 from src.state.workspace_paths import workspace_paths
 
 _EXTENSIONS = frozenset({".bin", ".ckpt", ".onnx", ".pt", ".pth", ".safetensors"})
@@ -244,6 +246,68 @@ class AssetRegistry:
             (AssetKind.CONTROLNET, models / "ControlNet"),
             (AssetKind.BLIP, models / "BLIP"),
             (AssetKind.ADETAILER, models / "adetailer"),
+        )
+
+    def observation_roots(self) -> tuple[ObservationRoot, ...]:
+        """Roots the header-only observational inventory covers (a superset of ``supported_roots``).
+
+        Text encoders, transformer packages and ``models/embeddings`` are *observation-only*: they are deliberately not
+        ``AssetKind`` members, so the hashing ``refresh()`` path never reads them and no second identity set appears.
+        """
+
+        if self.webui_root is None:
+            return ()
+        models = self.webui_root / "models"
+        layout = (
+            ("checkpoint", models / "Stable-diffusion", "models/Stable-diffusion"),
+            ("text_encoder", models / "text_encoder", "models/text_encoder"),
+            ("text_encoder", models / "text_encoders", "models/text_encoders"),
+            ("transformer", models / "transformer", "models/transformer"),
+            ("vae", models / "VAE", "models/VAE"),
+            ("lora", models / "Lora", "models/Lora"),
+            ("lora", models / "LyCORIS", "models/LyCORIS"),
+            ("embedding", self.webui_root / "embeddings", "embeddings"),
+            ("embedding", models / "embeddings", "models/embeddings"),
+        )
+        return tuple(ObservationRoot(kind, path, label) for kind, path, label in layout)
+
+    def verified_sha256(self, path: Path) -> str | None:
+        """The cached SHA-256 of one exact file, only while its size/mtime fingerprint still matches; never hashes."""
+
+        self._load()
+        cached = self._entries.get(str(path.resolve()))
+        try:
+            stat = path.stat()
+        except OSError:
+            return None
+        digest = cached.get("sha256") if cached else None
+        if (
+            cached
+            and (cached.get("size"), cached.get("mtime_ns")) == (stat.st_size, stat.st_mtime_ns)
+            and isinstance(digest, str)
+            and re.fullmatch(r"[0-9a-f]{64}", digest)
+        ):
+            return digest
+        return None
+
+    def observe(
+        self,
+        *,
+        limits: ScanLimits | None = None,
+        cancelled: Callable[[], bool] | None = None,
+    ) -> ObservationScan:
+        """Provisional, header-only inventory of every observation root: no hashing and no cache write.
+
+        Identity stays ``pending`` unless the existing hash cache already holds a fingerprint-validated SHA-256.
+        """
+
+        self._loaded = False  # read the persisted cache as it is now, not a stale in-memory copy
+        self._load()
+        return observe_roots(
+            self.observation_roots(),
+            limits=limits,
+            cancelled=cancelled,
+            identity_lookup=lambda path, _size, _mtime: self.verified_sha256(path),
         )
 
     @property
