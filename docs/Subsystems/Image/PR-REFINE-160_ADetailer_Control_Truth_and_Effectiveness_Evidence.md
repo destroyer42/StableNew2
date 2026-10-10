@@ -1,6 +1,6 @@
 # PR-REFINE-160 — Forge ADetailer control truth, default hand correction and effectiveness evidence
 
-Status: LOCAL IMPLEMENTATION COMPLETE; hosted CI and review pending. Class: Standard, cross-file. Claude Code Sonnet 5.5 High /
+Status: COMPLETE / ACCEPTED (PR #81; hosted `required` and `affected` passed, independent reviews found no blocker). Class: Standard, cross-file. Claude Code Sonnet 5.5 High /
 Codex GPT-6.1 Sol High, Windows Local/Desktop. No GPU generation, model load, Forge launch or backend change was part of this
 package.
 
@@ -29,8 +29,8 @@ Read from the managed runtime's extension source and the frozen schema fixture
 * The overall ADetailer stage flag is untouched. Explicit saved `true`/`false` values are honored. A saved or historical configuration that
   **omits** the hand flag keeps its historical meaning (hand pass off): the default is not merged into saved configs, the executor fallback is
   unchanged, and immutable NJR snapshots replay with their frozen values (tested through `to_queue_snapshot`/`from_dict`).
-* Not changed, deliberately: `src/utils/config.py` default template (it is merged *under* saved configs and would silently enable hands
-  there); the curation face-triage builder (it copies a source configuration, so it is historical); and the **Photo Optimize** and **Review
+* Not changed, deliberately: the `src/utils/config.py` default template gains **no** pass defaults (it is merged *under* saved configs and
+  would silently enable hands there); its only edit is removing the unsupported `adetailer_mask_feather` default; the curation face-triage builder (it copies a source configuration, so it is historical); and the **Photo Optimize** and **Review
   reprocess** paths. Those are wired: they author their own face-only ADetailer configuration (`AppController._build_reprocess_config`,
   `ReprocessJobBuilder`) with no pass toggles, so their hand pass stays off exactly as before. Giving them a hand pass changes the work those
   workflows perform with no operator control, and would grow a ratcheted controller; that is an **owner product decision**, not made here.
@@ -42,13 +42,16 @@ Read from the managed runtime's extension source and the frozen schema fixture
 ## Dispatch rules (fail closed)
 
 * **No pass requested.** If neither pass is requested the extension is a no-op, but WebUI would still run the stage's whole-image img2img at the
-  stage denoise strength. The executor therefore sends **no request**, passes the input image through unchanged, and records
+  stage denoise strength. The executor therefore sends **no generation POST**, passes the input image through unchanged, and records
   `dispatched: false` with the reason; the card projection says "No correction will run".
 * **Schema-rejected pass.** The extension drops a pass whose arguments fail its schema without any error. A requested pass the pinned schema
   would reject (for example a saved `largest` mask filter or CFG above 24) is refused before dispatch with an error naming the issue, rather
   than running a degraded or plain-img2img request. Frozen NJRs are not rewritten, so a historical job with such a value is refused too; a value
   on a disabled pass is ignored.
 * **Legacy filter values.** When the card loads `largest`/`all` (never accepted by the extension) it shows `Area` with a visible note.
+* **Scope of "no request".** Both guards run after the stage-start event, the pressure and runtime-admission checks and, on the default
+  (non-request-local) path, a model/VAE synchronization. "No request" therefore means **no generation POST**: those preliminary checks and
+  a model/VAE sync (normally a read, because the model already matches) can still happen for a stage that is then skipped or refused.
 
 ## Control truth
 
@@ -60,7 +63,8 @@ Read from the managed runtime's extension source and the frozen schema fixture
 * Face and hand detector lists are separated by detector kind. Under Forge MediaPipe and body/person models are never offered; a saved
   selection that is not in the list is **kept and flagged, never substituted**. A one-line projection on the card shows which passes are on,
   their detectors, unavailable or wrong-kind detectors and any setting the schema would reject.
-* The executor logs `[adetailer/contract]` warnings for a pass argument the pinned schema rejects (it does not block historical replays).
+* The executor **refuses** (fail closed, `[adetailer/contract]` error, no generation POST) a requested pass whose arguments the pinned schema
+  rejects, including on replay of a frozen job; the job ends as a failed run (the specific reason is in the log, not the job result).
 
 ## Adaptive Refinement (YuNet) fidelity
 

@@ -4,7 +4,7 @@ Updated: 2026-10-10
 
 ## Repository
 
-- ADetailer control truth and effectiveness evidence (PR-REFINE-160, LOCAL; hosted CI and review pending): new ADetailer cards
+- ADetailer control truth and effectiveness evidence (PR-REFINE-160, COMPLETE / ACCEPTED; PR #81, hosted `required` and `affected` passed, independent reviews found no blocker): new ADetailer cards
   default Face and Hand passes on (saved/historical configurations that omit the flag keep their meaning; the overall stage flag is
   untouched). The GUI no longer offers Max Detections or Mask Feather (the pinned ADetailer-Neo `af228eba` has no such arguments),
   Mask Max-K is "Retained Masks (Top-K)", Mask Filter offers only Area/Confidence, face and hand detector lists are separated and an
@@ -12,8 +12,9 @@ Updated: 2026-10-10
   Refinement's face policy is fixed. Each ADetailer stage manifest records `stablenew.adetailer-effectiveness.v1`: Forge detection is
   `unknown` (the extension reports detections only as console text), per-pass execution acknowledgement, a bounded input-vs-output pixel
   comparison, and visual improvement `unreviewed` until an operator judges it in the Review tab's existing before/after viewer and feedback
-  record. A requested pass the pinned schema would silently drop, and a stage with both passes off, no longer reach Forge as a degraded or plain
-  whole-image img2img request. No detector, backend, controller or queue change (one static helper in the runner has a small precedence fix). See
+  record. A requested pass the pinned schema would silently drop is refused (including on frozen-job replay), and a stage with both passes off sends no
+  generation POST (preliminary runtime checks and a model/VAE sync can still occur), so neither reaches Forge as a degraded or plain whole-image
+  img2img request. No detector, backend, controller or queue change (one static helper in the runner has a small precedence fix). See
   `docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md`.
 
 - Z-Image-Turbo FP8-scaled feasibility (PR-IMG-MODELS-153, read-only phase complete; local, hosted CI and review pending):
