@@ -95,9 +95,10 @@ RESIDUAL_RISKS = (
         "text": "Encoder, transformer and VAE phases are not shown to be observable through the pinned Forge API.",
     },
     {
-        "id": "REQUEST_SEMANTICS_UNRECONCILED",
-        "class": "unproven",
-        "text": "Model card guidance 0.0 versus the pinned UI preset CFG 1.0 / shift 9.0 is not reconciled at the payload level.",
+        "id": "REQUEST_SEMANTICS_SOURCE_READING_ONLY",
+        "class": "partially_mitigated",
+        "text": "PR-IMG-MODELS-154B reconciled the payload against the pinned Forge source (CFG 1.0 is no guidance; shift travels as "
+        "distilled_cfg_scale). It is a source reading, never exercised physically: image quality and timing are unknown.",
     },
     {
         "id": "PROVENANCE_UNVERIFIED",
@@ -113,7 +114,7 @@ RESIDUAL_RISKS = (
 
 PHASE_B_CHECKLIST = (
     "Separate owner authorization for PR-IMG-MODELS-154B and independent review of this package.",
-    "Reconcile the txt2img payload meaning (guidance, shift, scheduler) against the pinned runtime source.",
+    "Re-verify the reconciled txt2img payload semantics (img154b request anchors) against the managed Forge source at preflight.",
     "Re-measure every preflight counter immediately before dispatch; an old assessment authorizes nothing.",
     "Verify the three SERVED files (size and full SHA-256) at the isolated forge-data/models paths, not the downloads.",
     "Single case, one frozen request, no retry and no replay; the ledger attempt is recorded BEFORE any send.",

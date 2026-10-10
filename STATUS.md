@@ -4,8 +4,24 @@ Updated: 2026-10-10
 
 ## Repository
 
-- Z-Image-Turbo FP8-scaled safety preparation (PR-IMG-MODELS-154A, `PASS_PREPARATION_ONLY`; local branch, hosted CI and
-  independent review pending; focused S1-S8 safety repair): pure, fake-driven contracts in `tools/qualification/img154/` for a later, separately authorized
+- Z-Image-Turbo FP8-scaled controlled physical-qualification harness (PR-IMG-MODELS-154B, `HARNESS_VALIDATED_NO_PHYSICAL_RUN`;
+  local branch `img/models-154b-zimage-controlled-qualification-harness`, hosted CI and independent review pending): an isolated,
+  disabled-by-default, one-case harness in `tools/qualification/img154b/` (not a production execution path; no `src/` change).
+  The 154A request semantics are reconciled against the pinned Forge source: the frozen sampling values are unchanged, but
+  the model card's guidance 0.0 is `cfg_scale 1.0` there (0.0 would send the unconditional prediction) and shift travels as
+  `distilled_cfg_scale` (a `shift` key is silently dropped and the default 3.5 would apply); anchors are re-verified against the
+  managed source at preflight. Built: an immutable payload, atomic `O_EXCL` no-retry dispatch fence with ordered durable stages,
+  copy-based isolated layout and served-file proof, a manager-owned lifecycle adapter (no kill/signal authority), a native ~1 Hz
+  sampler (NVML, PDH, DXGI adapter map, exact commit bytes) feeding the 154A monitor, harness-acquired quiescent baselines,
+  exact-case owner authorization (never written by the package), a one-case coordinator and an eight-class adjudication. A
+  read-only live preflight on this workstation was refused as expected (isolated files not materialized; commit headroom
+  26.6 GiB < 37 GiB; available RAM 16.1 GiB < 20 GiB); thresholds were not relaxed. No Forge was started, no model loaded or
+  selected and nothing generated; the physical run needs a separate explicit owner authorization and acceptance of the
+  unresolved DIAG-GPU-130 risk. See
+  `docs/Subsystems/Image/PR-IMG-MODELS-154B_ZImage_Turbo_Controlled_Physical_Qualification.md`.
+
+- Z-Image-Turbo FP8-scaled safety preparation (PR-IMG-MODELS-154A, `PASS_PREPARATION_ONLY`; integrated as PR #82;
+  focused S1-S8 safety repair): pure, fake-driven contracts in `tools/qualification/img154/` for a later, separately authorized
   physical qualification: a frozen **proposed** exact-candidate and intent manifest (three files by bytes and full SHA-256, Forge
   pin `d70373eb`), served-file proof that a source match cannot satisfy, isolation/port/ownership validation, a fail-closed preflight
   evaluator (`REFUSED_*`/`INCONCLUSIVE`/`PREPARED_FOR_OWNER_REVIEW`, never go/safe), an injected-sample monitor state machine that
@@ -17,7 +33,8 @@ Updated: 2026-10-10
   now has bounded unknown-data escalation, freshness rejects non-finite times, live hashing precedes resource collection, unverified
   VRAM baselines remain inconclusive, and attempt identity survives policy changes. No new physical or live probe was run in the repair.
   The package has no launch, model-selection, request or termination path (source-guard tested) and changes no production
-  behavior. Physical qualification (PR-IMG-MODELS-154B) is neither authorized nor implemented. See
+  behavior. The 154A work is integrated (PR #82 merged to `main` at `c9634b4c`; the hosted verdict is not restated here).
+  PR-IMG-MODELS-154B (above) added the gated harness; physical qualification itself is still not authorized or run. See
   `docs/Subsystems/Image/PR-IMG-MODELS-154A_ZImage_Turbo_Safety_Preparation.md`.
 
 - ADetailer control truth and effectiveness evidence (PR-REFINE-160, COMPLETE / ACCEPTED; PR #81, hosted `required` and `affected` passed, independent reviews found no blocker): new ADetailer cards

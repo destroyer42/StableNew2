@@ -15,18 +15,23 @@ from typing import Any
 from .core import Finding, digest, is_hex_digest
 
 MANIFEST_SCHEMA = "stablenew.img154.manifest.v1"
-POLICY_REVISION = "img154a-preflight-policy-r1"
+POLICY_REVISION = "img154b-preflight-policy-r1"
 STOP_POLICY_REVISION = "img154a-stop-policy-r1"
-EVIDENCE_CONTRACT_REVISION = "img154a-evidence-contract-r1"
+EVIDENCE_CONTRACT_REVISION = "img154b-evidence-contract-r1"
 OPERATOR_PREFLIGHT_REVISION = "img154a-operator-preflight-r1"
 
 FORGE_PIN = "d70373ebcf1a96d210b78cd6f77196459e783e2a"
 FORGE_MARKER_STATUS_OK = "verified"
 
-#: Intent semantics that were NOT reconciled against the pinned runtime. A physical request may not be accepted until a
-#: package proves the pinned API payload meaning of each (PR-153: the model card says guidance 0.0; the pinned Forge UI
-#: preset reports CFG 1.0 with shift 9.0; neither is assumed equivalent).
-UNRECONCILED_INTENT_FIELDS = ("cfg_scale", "shift", "scheduler")
+#: Intent fields whose pinned-API meaning is NOT reconciled. PR-IMG-MODELS-154A left all three open (the model card says
+#: guidance 0.0, the pinned UI preset says CFG 1.0 / shift 9.0). PR-IMG-MODELS-154B reconciled them against the pinned source
+#: (``tools/qualification/img154b/request.py``): the sampling VALUES are unchanged, only their API encoding is (CFG 1.0 is the
+#: pinned no-guidance setting; shift travels as ``distilled_cfg_scale``; ``scheduler`` is a request key whose Beta parameters
+#: are server options). The anchors are re-verified against the managed source at preflight, so this stays an empty tuple only
+#: while that verification holds.
+UNRECONCILED_INTENT_FIELDS: tuple[str, ...] = ()
+
+SEMANTICS_STATUS_RECONCILED = "reconciled_pinned_forge_source"
 
 
 @dataclass(frozen=True)
@@ -89,7 +94,7 @@ FORBIDDEN_REQUEST_KEYS = (
 
 @dataclass(frozen=True)
 class FrozenIntent:
-    """One txt2img, one image. Sampling values are PROVISIONAL (see ``UNRECONCILED_INTENT_FIELDS``)."""
+    """One txt2img, one image. The sampling values are frozen; their API encoding is reconciled in PR-154B."""
 
     workflow: str = "txt2img"
     width: int = 1024
@@ -108,7 +113,7 @@ class FrozenIntent:
     )
     automatic_retry: bool = False
     automatic_replay: bool = False
-    semantics_status: str = "provisional_unreconciled"
+    semantics_status: str = SEMANTICS_STATUS_RECONCILED
 
     def request_fields(self) -> dict[str, Any]:
         return {

@@ -134,10 +134,15 @@ def test_t01_manifest_filenames_and_pin_match_the_accepted_pr153_evidence():
     assert plan.assets["text_encoder"].sha256 == img153.IMG115_ENCODER_SHA256
 
 
-def test_t01_manifest_is_a_proposal_and_marks_unreconciled_intent_fields():
+def test_t01_manifest_is_a_proposal_and_its_sampling_values_are_unchanged_by_the_154b_reconciliation():
     data = mf.build_manifest().as_dict()
     assert data["status"] == "PROPOSED_NOT_APPLIED"
-    assert set(data["unreconciled_intent_fields"]) == {"cfg_scale", "shift", "scheduler"}
+    # PR-154B reconciled the API ENCODING of these values against the pinned source; the values themselves are frozen.
+    assert data["intent_semantics_status"] == "reconciled_pinned_forge_source"
+    assert data["unreconciled_intent_fields"] == []
+    frozen = data["intent"]
+    assert (frozen["cfg_scale"], frozen["shift"], frozen["scheduler"]) == (1.0, 9.0, "Beta")
+    assert (frozen["sampler_name"], frozen["steps"], frozen["seed"]) == ("Euler", 9, 424254)
     assert data["intent"]["width"] == data["intent"]["height"] == 1024
     assert data["intent"]["batch_size"] == data["intent"]["n_iter"] == 1
     assert all(
