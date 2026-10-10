@@ -1,6 +1,6 @@
 # PR-IMG-MODELS-151 — Pinned Forge exact-model feasibility (FLUX.2 Klein Base 9B BF16)
 
-Status: READ-ONLY FEASIBILITY PHASE COMPLETE; local implementation, hosted CI and review pending.
+Status: COMPLETE / ACCEPTED / INTEGRATED (PR #78, merged to `main` at `814aa64e`); the verdict below is unchanged.
 
 **Verdict: `NO_GO_RESOURCE_RISK`.** The package closes here: no model was loaded, no generation was run, Forge was not
 launched, and no physical qualification is proposed for this candidate on this workstation.

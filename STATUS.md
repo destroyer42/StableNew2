@@ -1,10 +1,24 @@
 # StableNew current state
 
-Updated: 2026-10-09
+Updated: 2026-10-10
 
 ## Repository
 
-- Klein Base 9B feasibility (PR-IMG-MODELS-151, read-only phase complete; local, hosted CI and review pending):
+- Single-authority asset inventory and model-bundle discovery (PR-IMG-MODELS-152, LOCAL; hosted CI and review pending): a
+  bounded, cancellable, header-only **observational tier** inside the existing asset subsystem
+  (`AssetRegistry.observe()` -> `src/assets/observation.py`) discovers checkpoints, text encoders, transformer packages, VAEs,
+  LoRAs, GGUF candidates and both embedding roots without hashing, loading or writing the hash cache. Observations carry no
+  SHA-256 (`IdentityStatus` is `pending` unless the existing fingerprint-validated cache already holds one); `AssetRecord`,
+  `refresh()` and the cache are unchanged. Diffusers shard indexes are validated and grouped into one logical package before any
+  pairing. Classification is conservative (SD1.x vs SDXL vs inpaint/refiner from the one shape classifier, Turbo only from
+  embedded metadata, full dtype histograms, FLUX.2/Z-Image/Qwen-Image transformers, Qwen3 encoders, FLUX/Qwen-Image VAEs by
+  family and key layout, GGUF container, LoRA/embedding tensor signatures). `src/assets/bundles.py` projects advisory
+  `possible/incompatible/missing/unknown/conflicting` relationships and separated readiness dimensions (never `ready`/`qualified`);
+  `tools/asset_topology_report.py` is the opt-in, redacted-by-default JSON/console report with an explicit GET-only
+  `--forge-url` reconciliation. Nothing becomes executable: no profile, admission, selection, NJR, queue or runner change.
+  See `docs/Subsystems/Image/PR-IMG-MODELS-152_Asset_Topology_and_Bundle_Discovery.md`.
+
+- Klein Base 9B feasibility (PR-IMG-MODELS-151, COMPLETE / ACCEPTED / INTEGRATED; PR #78 merged to `main` at `814aa64e`):
   verdict `NO_GO_RESOURCE_RISK`. A read-only qualification evaluator (`tools/qualification/img151/`) measured the exact
   candidate (transformer 18.2 GB BF16, plain BF16 Qwen3-8B 16.4 GB, FLUX.2 VAE; byte-identical to the cached downloads, equality
   with the official weights unverified) and this host (34.1 GB RAM, 12 GB RTX 4070 Ti): even the best-case resident footprint
