@@ -291,6 +291,26 @@ def test_bind_wraplength_follows_the_allotted_width_and_cleans_up(laptop_root: t
         _settle(laptop_root, 120)
 
 
+def test_bind_wraplength_leaves_labels_inside_a_wrap_managing_surface_alone(laptop_root: tk.Tk) -> None:
+    """The Pipeline owns its label wraps (compact round trip); a width-following wrap would break exact restore."""
+
+    from tkinter import ttk
+
+    owner = ttk.Frame(laptop_root)
+    owner.manages_label_wraps = True  # type: ignore[attr-defined]
+    owner.pack(fill="x")
+    owner.columnconfigure(0, weight=1)
+    label = ttk.Label(owner, text="word " * 200, wraplength=880)
+    label.grid(row=0, column=0, sticky="ew")
+    bind_wraplength(label, maximum=880)
+    try:
+        laptop_root.geometry("700x600+0+0")
+        _settle(laptop_root, 200)
+        assert int(str(label.cget("wraplength"))) == 880  # unchanged by the allotted width
+    finally:
+        owner.destroy()
+
+
 # --- Scope C: responsive Review preview -----------------------------------------------------------------------------
 
 

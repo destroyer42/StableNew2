@@ -59,6 +59,69 @@ def _shape_matches_extent(shape: list[int], extent: int, dtype_bytes: int) -> bo
     return count == max_elements
 
 
+def read_tensor_table(path: Path) -> tuple[dict[str, list[int]], dict[str, str], dict[str, Any]]:
+    """Validated ``(shapes, dtypes, metadata)`` of a safetensors file from its bounded JSON header only.
+
+    Reads at most ``_MAX_HEADER`` bytes after the 8-byte length; never a weight, a hash or a scan. Raises
+    ``ValueError`` for anything malformed (invalid length/JSON/descriptors, tensor data gaps, overlaps or a shape that
+    disagrees with its byte extent). This is the one header parser; structural and component evidence both use it.
+    """
+    with path.open("rb") as stream:
+        raw = stream.read(8)
+        if len(raw) != 8:
+            raise ValueError("truncated header length")
+        size = struct.unpack("<Q", raw)[0]
+        if not 0 < size <= _MAX_HEADER:
+            raise ValueError("invalid or oversized header length")
+        encoded = stream.read(size)
+    if len(encoded) != size:
+        raise ValueError("truncated header")
+    try:
+        header = json.loads(encoded, object_pairs_hook=_unique_object)
+    except RecursionError:
+        # Pathologically nested JSON exhausts the decoder's stack: a malformed header, not a resource failure to leak.
+        raise ValueError("header nesting is too deep") from None
+    if not isinstance(header, dict):
+        raise ValueError("header is not an object")
+    metadata = header.pop("__metadata__", {})
+    if not isinstance(metadata, dict):
+        raise ValueError("metadata is not an object")
+    payload_size = path.stat().st_size - 8 - size
+    intervals = []
+    shapes: dict[str, list[int]] = {}
+    dtypes: dict[str, str] = {}
+    for name, tensor in header.items():
+        if not isinstance(tensor, dict):
+            raise ValueError("invalid tensor descriptor")
+        shape, offsets = tensor.get("shape"), tensor.get("data_offsets")
+        dtype_name = tensor.get("dtype")
+        dtype = _DTYPE_BYTES.get(dtype_name) if isinstance(dtype_name, str) else None
+        if (
+            not isinstance(shape, list)
+            or len(shape) > _MAX_TENSOR_RANK
+            or any(type(dim) is not int or not 0 <= dim <= _MAX_DIMENSION for dim in shape)
+            or not isinstance(offsets, list)
+            or len(offsets) != 2
+            or any(type(offset) is not int for offset in offsets)
+            or dtype is None
+        ):
+            raise ValueError("invalid shape, dtype or offsets")
+        start, end = offsets
+        if not 0 <= start <= end <= payload_size or not _shape_matches_extent(shape, end - start, dtype):
+            raise ValueError("tensor extent disagrees with shape or file size")
+        intervals.append((start, end))
+        shapes[name] = shape
+        dtypes[name] = str(dtype_name)
+    previous = 0
+    for start, end in sorted(intervals):
+        if start != previous:
+            raise ValueError("tensor data has gaps or overlaps")
+        previous = end
+    if intervals and previous != payload_size:
+        raise ValueError("tensor data does not cover payload")
+    return shapes, dtypes, metadata
+
+
 def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
     """Read at most a bounded JSON header, validating descriptors against file size.
 
@@ -76,55 +139,7 @@ def checkpoint_header_evidence(path: Path) -> dict[str, Any]:
         structure["error"] = "unsupported checkpoint format for structural recognition"
         return {"structure": structure, "metadata": metadata, "metadata_error": None}
     try:
-        with path.open("rb") as stream:
-            raw = stream.read(8)
-            if len(raw) != 8:
-                raise ValueError("truncated header length")
-            size = struct.unpack("<Q", raw)[0]
-            if not 0 < size <= _MAX_HEADER:
-                raise ValueError("invalid or oversized header length")
-            encoded = stream.read(size)
-        if len(encoded) != size:
-            raise ValueError("truncated header")
-        header = json.loads(encoded, object_pairs_hook=_unique_object)
-        if not isinstance(header, dict):
-            raise ValueError("header is not an object")
-        metadata = header.pop("__metadata__", {})
-        if not isinstance(metadata, dict):
-            raise ValueError("metadata is not an object")
-        payload_size = path.stat().st_size - 8 - size
-        intervals = []
-        shapes = {}
-        for name, tensor in header.items():
-            if not isinstance(tensor, dict):
-                raise ValueError("invalid tensor descriptor")
-            shape, offsets = tensor.get("shape"), tensor.get("data_offsets")
-            dtype_name = tensor.get("dtype")
-            dtype = _DTYPE_BYTES.get(dtype_name) if isinstance(dtype_name, str) else None
-            if (
-                not isinstance(shape, list)
-                or len(shape) > _MAX_TENSOR_RANK
-                or any(type(dim) is not int or not 0 <= dim <= _MAX_DIMENSION for dim in shape)
-                or not isinstance(offsets, list)
-                or len(offsets) != 2
-                or any(type(offset) is not int for offset in offsets)
-                or dtype is None
-            ):
-                raise ValueError("invalid shape, dtype or offsets")
-            start, end = offsets
-            if not 0 <= start <= end <= payload_size or not _shape_matches_extent(
-                shape, end - start, dtype
-            ):
-                raise ValueError("tensor extent disagrees with shape or file size")
-            intervals.append((start, end))
-            shapes[name] = shape
-        previous = 0
-        for start, end in sorted(intervals):
-            if start != previous:
-                raise ValueError("tensor data has gaps or overlaps")
-            previous = end
-        if intervals and previous != payload_size:
-            raise ValueError("tensor data does not cover payload")
+        shapes, _dtypes, metadata = read_tensor_table(path)
         prefix = "model.diffusion_model."
 
         def matches(name: str, shape: list[int]) -> bool:

@@ -12,6 +12,7 @@ from src.config import app_config
 from src.gui.help_text.stage_setting_help_v2 import BASE_GENERATION_SETTING_HELP
 from src.gui.layout_v2 import configure_grid_columns
 from src.gui.model_policy_panel_projection import ModelPolicyPanelProjection
+from src.gui.model_readiness_presenter import ModelReadinessPresenter
 from src.gui.stage_cards_v2.base_stage_card_v2 import BaseStageCardV2
 from src.gui.theme_v2 import BODY_LABEL_STYLE, MUTED_LABEL_STYLE
 from src.gui.view_contracts.pipeline_layout_contract import (
@@ -162,6 +163,8 @@ class BaseGenerationPanelV2(BaseStageCardV2):
         self._model_policy_projection = ModelPolicyPanelProjection(self)
         self.model_var.trace_add("write", lambda *_: self._model_policy_projection.refresh())
         self._model_policy_projection.refresh()
+        # PR-IMG-MODELS-150: explicit, read-only, background readiness check (nothing runs until the button is pressed).
+        self._model_readiness = ModelReadinessPresenter(self, self.body_frame, controller=self._controller)
 
     def _build_body(self, parent: ttk.Frame) -> None:
         self._configure_layout_columns(parent)

@@ -91,28 +91,38 @@ class ForgeWebUIClient(SDWebUIClient):
 
         return list(accepted_detector_names())
 
-    def get_vae_models(self) -> list[dict[str, Any]]:
+    def get_module_catalog(self) -> list[dict[str, Any]] | None:
+        """Forge's ``/sd-modules`` catalog: ``None`` when it could not be read, a list (possibly empty) when Forge answered.
+
+        The tri-state lets readiness tell "Forge lists no modules" from "the read failed, was in startup grace or on
+        cooldown". ``get_vae_models`` keeps its historical contract (``[]`` on any failure) on top of this one read.
+        """
+
         endpoint = SD_MODULES_ENDPOINT
         if self._resource_endpoint_startup_grace_active(endpoint):
-            return []
+            return None
         if self._resource_endpoint_on_cooldown(endpoint):
-            return []
+            return None
 
         with self._request_context("get", endpoint, timeout=10) as response:
             if response is None:
                 self._mark_resource_endpoint_failed(endpoint)
-                return []
+                return None
             try:
                 data = response.json()
             except ValueError as exc:
                 logger.error("Failed to parse Forge module response: %s", exc)
                 self._mark_resource_endpoint_failed(endpoint)
-                return []
+                return None
 
         self._clear_resource_endpoint_failure(endpoint)
         modules = normalize_sd_modules(data)
         logger.debug("Retrieved %s Forge VAE/text-encoder modules", len(modules))
         return modules
+
+    def get_vae_models(self) -> list[dict[str, Any]]:
+        catalog = self.get_module_catalog()
+        return catalog if catalog is not None else []
 
     def get_loras(self) -> list[dict[str, Any]] | None:
         """LoRAs the serving Forge lists (``GET /sdapi/v1/loras``): ``name``, ``alias``, ``path``.
