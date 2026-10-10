@@ -3842,6 +3842,47 @@ class Pipeline:
                 pass_args["ad_inpaint_height"] = payload_height
                 pass_args["ad_scheduler"] = "Use same scheduler"
 
+        requested_passes = [
+            (label, pass_args)
+            for label, pass_args in (("face", face_args), ("hands", hand_args))
+            if pass_args.get("ad_tab_enable")
+        ]
+        rejected = {
+            label: schema_issues(pass_args)
+            for label, pass_args in requested_passes
+            if schema_issues(pass_args)
+        }
+        if rejected:
+            # The extension drops a pass whose arguments fail its schema without any error, so a requested pass would
+            # silently not run (and a lone pass would leave a plain img2img). Fail closed instead of dispatching.
+            logger.error(
+                "[adetailer/contract] refusing to dispatch: requested pass argument(s) rejected by the pinned ADetailer-Neo schema: %s",
+                json.dumps(rejected, sort_keys=True),
+            )
+            return None
+        if not requested_passes:
+            # With no pass requested the extension is a no-op, but WebUI would still run the stage's img2img over the
+            # whole image. Send nothing and pass the input through unchanged.
+            reason = "face and hand passes are both off"
+            logger.info("[adetailer/no-pass] %s; no request sent, input passes through unchanged", reason)
+            return {
+                "name": Path(input_image_path).stem,
+                "stage": "adetailer",
+                "skipped": True,
+                "skip_reason": reason,
+                "input_image": str(input_image_path),
+                "path": str(input_image_path),
+                "adetailer_effectiveness": build_effectiveness(
+                    face_args=face_args,
+                    hand_args=hand_args,
+                    request_completed=False,
+                    input_image=input_image_path,
+                    output_image=None,
+                    dispatched=False,
+                    skipped_reason=reason,
+                ),
+            }
+
         payload = {
             "init_images": [init_image],
             "prompt": final_prompt,
@@ -3928,14 +3969,6 @@ class Pipeline:
             json.dumps(adetailer_args_payload, ensure_ascii=False, sort_keys=True),
         )
         for pass_label, pass_args in (("face", face_args), ("hands", hand_args)):
-            if pass_args.get("ad_tab_enable"):
-                # The pinned extension drops a pass whose arguments fail its schema silently; make that visible.
-                for issue in schema_issues(pass_args):
-                    logger.warning(
-                        "[adetailer/contract] %s pass argument rejected by the pinned schema (the extension would drop the pass): %s",
-                        pass_label,
-                        issue,
-                    )
             if bool(pass_args.get("ad_use_inpaint_width_height")) and (
                 int(pass_args.get("ad_inpaint_width") or payload_width) != payload_width
                 or int(pass_args.get("ad_inpaint_height") or payload_height) != payload_height

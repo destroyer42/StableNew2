@@ -346,14 +346,99 @@ def test_a_legacy_configuration_that_omits_the_hand_flag_keeps_its_historical_me
     assert face["ad_tab_enable"] is True and hands["ad_tab_enable"] is False
 
 
-@pytest.mark.parametrize(
-    ("face", "hands"), [(True, True), (True, False), (False, True), (False, False)]
-)
+@pytest.mark.parametrize(("face", "hands"), [(True, True), (True, False), (False, True)])
 def test_explicit_pass_flags_are_honored_independently(tmp_path, face, hands):
     _result, face_args, hand_args = run(
         tmp_path, {"enable_face_pass": face, "enable_hands_pass": hands}
     )
     assert (face_args["ad_tab_enable"], hand_args["ad_tab_enable"]) == (face, hands)
+
+
+def dispatch(tmp_path, config):
+    """Run run_adetailer and return (result, the generation mock) without assuming a request was sent."""
+
+    client = Mock()
+    client.get_current_model.return_value = "model"
+    client.get_current_vae.return_value = "Automatic"
+    pipeline = Pipeline(client, Mock())
+    source = png(tmp_path / "in.png")
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["r"], "info": "{}"}
+        ) as generate,
+        patch(
+            "src.pipeline.executor.save_image_from_base64",
+            side_effect=lambda _b, path, **_k: png(Path(path)),
+        ),
+    ):
+        result = pipeline.run_adetailer(
+            source,
+            "prompt",
+            "negative",
+            {"adetailer_enabled": True, "seed": 7, **config},
+            tmp_path / "out",
+            "case",
+        )
+    return result, generate, source
+
+
+def test_both_passes_off_sends_no_request_and_passes_the_input_through_unchanged(tmp_path):
+    before = (tmp_path / "in.png").exists()
+    result, generate, source = dispatch(
+        tmp_path, {"enable_face_pass": False, "enable_hands_pass": False}
+    )
+    assert (
+        before is False and generate.call_count == 0
+    )  # no img2img POST, so no whole-image regeneration
+    assert result["skipped"] is True and result["path"] == str(source) == result["input_image"]
+    evidence = result["adetailer_effectiveness"]
+    assert evidence["execution"]["request"] == {
+        "dispatched": False,
+        "completed": False,
+        "passes_in_one_request": True,
+        "skipped_reason": "face and hand passes are both off",
+    }
+    assert evidence["image_change"]["status"] == "not_comparable"
+    assert evidence["execution"]["face"]["requested_enabled"] is False
+    assert evidence["improvement_claimed"] is False
+
+
+def test_a_legacy_config_that_omits_both_flags_still_defaults_face_on_so_a_request_is_sent(
+    tmp_path,
+):
+    result, generate, _source = dispatch(tmp_path, {})
+    assert generate.call_count == 1 and "skipped" not in result
+
+
+@pytest.mark.parametrize(
+    "config",
+    [
+        {"enable_face_pass": True, "ad_mask_filter_method": "largest"},
+        {"enable_face_pass": True, "enable_hands_pass": True, "ad_hands_mask_filter_method": "all"},
+        {"enable_face_pass": True, "adetailer_cfg": 30.0},
+    ],
+    ids=["face_largest", "hands_all_with_face_valid", "cfg_over_schema_max"],
+)
+def test_a_requested_pass_the_schema_would_silently_drop_is_refused_before_dispatch(
+    tmp_path, caplog, config
+):
+    with caplog.at_level(logging.ERROR):
+        result, generate, _source = dispatch(tmp_path, config)
+    assert result is None and generate.call_count == 0
+    assert any("[adetailer/contract]" in rec.message for rec in caplog.records)
+
+
+def test_an_invalid_value_on_a_disabled_pass_does_not_block_the_enabled_one(tmp_path):
+    result, generate, _source = dispatch(
+        tmp_path,
+        {
+            "enable_face_pass": True,
+            "enable_hands_pass": False,
+            "ad_hands_mask_filter_method": "all",
+        },
+    )
+    assert generate.call_count == 1 and result is not None
 
 
 def test_both_passes_keep_independent_settings_and_unsupported_gui_fields_are_never_transmitted(
@@ -425,16 +510,6 @@ def test_both_passes_keep_independent_settings_and_unsupported_gui_fields_are_ne
         13,
         4.5,
         6.5,
-    )
-
-
-def test_a_value_the_pinned_schema_rejects_is_logged_because_the_extension_would_drop_the_pass(
-    tmp_path, caplog
-):
-    with caplog.at_level(logging.WARNING):
-        run(tmp_path, {"enable_face_pass": True, "ad_mask_filter_method": "largest"})
-    assert any(
-        "[adetailer/contract]" in rec.message and "largest" in rec.message for rec in caplog.records
     )
 
 

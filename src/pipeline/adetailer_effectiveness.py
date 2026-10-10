@@ -70,7 +70,11 @@ def compare_images(before: Path | str | None, after: Path | str | None) -> dict[
         "changed_pixel_fraction": None,
         "mean_abs_difference": None,
         "size": None,
-        "attribution": "combined_post_adetailer; not attributable to a single pass; not a quality measure",
+        "attribution": (
+            "combined_post_adetailer; not attributable to a single pass; not a quality measure; the stage also runs a "
+            "whole-image img2img pass at its own denoise strength (the extension's skip-img2img is off), so a "
+            "difference is expected and is not evidence of a correction"
+        ),
     }
     if not before or not after:
         result["reason"] = "missing input or output image reference"
@@ -228,6 +232,8 @@ def build_effectiveness(
     output_image: Path | str | None,
     infotexts: Sequence[str] | None = None,
     adaptive_refinement: Mapping[str, Any] | None = None,
+    dispatched: bool = True,
+    skipped_reason: str | None = None,
 ) -> dict[str, Any]:
     """The whole evidence record for one completed ADetailer stage (visual review always starts ``unreviewed``)."""
 
@@ -258,9 +264,10 @@ def build_effectiveness(
         },
         "execution": {
             "request": {
-                "dispatched": True,
+                "dispatched": bool(dispatched),
                 "completed": bool(request_completed),
                 "passes_in_one_request": True,
+                "skipped_reason": skipped_reason,
             },
             "face": face,
             "hands": hands,
@@ -269,7 +276,19 @@ def build_effectiveness(
                 "acknowledgement is the extension echoing accepted settings, not a detection"
             ),
         },
-        "image_change": compare_images(input_image, output_image),
+        "image_change": (
+            compare_images(input_image, output_image)
+            if dispatched
+            else {
+                "method": IMAGE_DIFF_METHOD,
+                "status": "not_comparable",
+                "reason": "no ADetailer request was sent, so there is no output to compare",
+                "identical": None,
+                "changed_pixel_fraction": None,
+                "mean_abs_difference": None,
+                "size": None,
+            }
+        ),
         "visual_review": {
             "face": "unreviewed",
             "hands": "unreviewed",

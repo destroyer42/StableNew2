@@ -29,9 +29,26 @@ Read from the managed runtime's extension source and the frozen schema fixture
 * The overall ADetailer stage flag is untouched. Explicit saved `true`/`false` values are honored. A saved or historical configuration that
   **omits** the hand flag keeps its historical meaning (hand pass off): the default is not merged into saved configs, the executor fallback is
   unchanged, and immutable NJR snapshots replay with their frozen values (tested through `to_queue_snapshot`/`from_dict`).
-* Not changed: `src/utils/config.py` default template (it is merged *under* saved configs and would silently enable hands there), the
-  curation face-triage builder (a face-specific workflow), the Photo Optimize tab and the legacy `adetailer_config_panel` (not wired).
+* Not changed, deliberately: `src/utils/config.py` default template (it is merged *under* saved configs and would silently enable hands
+  there); the curation face-triage builder (it copies a source configuration, so it is historical); and the **Photo Optimize** and **Review
+  reprocess** paths. Those are wired: they author their own face-only ADetailer configuration (`AppController._build_reprocess_config`,
+  `ReprocessJobBuilder`) with no pass toggles, so their hand pass stays off exactly as before. Giving them a hand pass changes the work those
+  workflows perform with no operator control, and would grow a ratcheted controller; that is an **owner product decision**, not made here.
   Unsupported model profiles (qualified Klein) still refuse ADetailer.
+* A card loaded from an empty or absent `adetailer` section stays in its fresh state (hands on); a saved configuration with an `adetailer`
+  section that omits the flag loads as hands off. Known debt: a legacy pack with the stage enabled but no `adetailer` section would show the
+  fresh state and export explicit values on its next GUI submit.
+
+## Dispatch rules (fail closed)
+
+* **No pass requested.** If neither pass is requested the extension is a no-op, but WebUI would still run the stage's whole-image img2img at the
+  stage denoise strength. The executor therefore sends **no request**, passes the input image through unchanged, and records
+  `dispatched: false` with the reason; the card projection says "No correction will run".
+* **Schema-rejected pass.** The extension drops a pass whose arguments fail its schema without any error. A requested pass the pinned schema
+  would reject (for example a saved `largest` mask filter or CFG above 24) is refused before dispatch with an error naming the issue, rather
+  than running a degraded or plain-img2img request. Frozen NJRs are not rewritten, so a historical job with such a value is refused too; a value
+  on a disabled pass is ignored.
+* **Legacy filter values.** When the card loads `largest`/`all` (never accepted by the extension) it shows `Area` with a visible note.
 
 ## Control truth
 
@@ -67,7 +84,9 @@ NJR is never modified). Four categories, never conflated:
    Combined, not per pass; not a quality measure.
 4. **Visual improvement** — `unreviewed` until an operator judges it.
 
-`improvement_claimed` is always false. Prompts are not copied into the record.
+`improvement_claimed` is always false. Prompts are not copied into the record. `acknowledged_by_extension` means the extension echoed that
+pass's accepted settings when the request was prepared; it is not proof the pass ran or detected anything. The image-change record states that
+the stage's own whole-image img2img pass makes a difference expected.
 
 ## Operator review (existing Review tab and feedback record)
 
@@ -76,7 +95,9 @@ output), the Review tab enables an **ADetailer Before/After** button (the existi
 **Hands** judgments — Unreviewed (default), Improved, Unchanged, Worsened, Uncertain — plus a short note. The judgment rides in
 `feedback["context"]` of the existing `save_review_feedback` call (`review_context` in the Learning record and the stamped portable
 metadata), labelled a post-ADetailer assessment by region with operator provenance and the reviewed pair. The overall 1-5 rating stays the
-operator's own input; no numeric quality is derived and nothing is promoted into Learning recommendations. Only the displayed image carries
+operator's own input and is still required: a judgment-only save writes the default rating and sub-scores into the same Learning feedback
+record the Review tab already writes (the recommender does not read the judgment). No numeric quality is derived from the judgment. Undo
+removes the Learning line only; the stamped portable review metadata on the image is unchanged (pre-existing behavior). Only the displayed image carries
 a judgment (batch saves never inherit it), and the prompt-redaction policy is unchanged.
 
 ## Tests
@@ -89,14 +110,15 @@ a judgment (batch saves never inherit it), and the prompt-redaction policy is un
 
 * Forge detection counts are unknown by construction; the infotext acknowledgement is not a detection. No reviewed improvement exists until an
   operator provides one; there is no controlled per-pass attribution.
-* The effectiveness record lives in the manifest JSON (not the PNG); the Review tab reads the optional record only when the manifest sits beside
-  the output.
-* Invalid historical values (for example a saved `largest` filter) are flagged, not rewritten, so such a saved pass is still dropped by the extension.
+* The effectiveness record lives in the manifest JSON (not the PNG). `review/adetailer_outcome.load_effectiveness` can read it, but no GUI
+  surface shows it yet.
+* A frozen job whose requested pass carries a schema-invalid value is refused rather than repaired; it needs a new job.
+* The infotext regex was checked against the extension source, not a captured Forge response.
 
 ## Controller surface assessment
 
-No controller was touched: `AppController`, `PipelineController` and `PipelineRunner`'s size is unchanged apart from a nine-line precedence fix in a
-static helper of `PipelineRunner`; the controller-surface ratchet is unchanged. New logic is in small pure modules
+No controller was touched: `AppController` and `PipelineController` are line-for-line unchanged; `PipelineRunner` grew by eight lines (the precedence
+fix in a static helper) and `executor.py` by about sixty (evidence, guard); the controller-surface ratchet is unchanged. New logic is in small pure modules
 (`adetailer_contract`, `adetailer_effectiveness`, `review/adetailer_outcome`).
 
 ## Optional operator acceptance procedure (not executed; needs separate approval)

@@ -61,12 +61,16 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self._available_face_detectors: list[str] | None = None
         self._available_hand_detectors: list[str] | None = None
         if forge_fallbacks is not None:
-            self.MODEL_OPTIONS, self.HAND_MODEL_OPTIONS = list(forge_fallbacks[0]), list(forge_fallbacks[1])
+            self.MODEL_OPTIONS, self.HAND_MODEL_OPTIONS = (
+                list(forge_fallbacks[0]),
+                list(forge_fallbacks[1]),
+            )
         self.stage_model_override_var = tk.StringVar(value="")
 
         # Fresh-configuration defaults. Loading a saved dict never applies them to a flag the dict omits.
         self.enable_face_pass_var = tk.BooleanVar(value=FRESH_PASS_DEFAULTS["enable_face_pass"])
         self._legacy_unsupported: dict[str, Any] = {}
+        self._legacy_notes: list[str] = []
         self._detector_options_known = False
         self.model_var = tk.StringVar(value=self.MODEL_OPTIONS[0])
         self.face_model_var = self.model_var
@@ -627,9 +631,27 @@ class ADetailerStageCardV2(BaseStageCardV2):
     def effective_summary(self) -> str:
         """Which passes will run and with which detector, as projected from the card's own variables."""
         lines: list[str] = []
+        if not (self.enable_face_pass_var.get() or self.enable_hands_pass_var.get()):
+            lines.append(
+                "No correction will run: both passes are off, so ADetailer sends no request."
+            )
         for label, enabled_var, model_var, role, available, hands in (
-            ("Face", self.enable_face_pass_var, self.face_model_var, "face", self._available_face_detectors, False),
-            ("Hand", self.enable_hands_pass_var, self.hands_model_var, "hand", self._available_hand_detectors, True),
+            (
+                "Face",
+                self.enable_face_pass_var,
+                self.face_model_var,
+                "face",
+                self._available_face_detectors,
+                False,
+            ),
+            (
+                "Hand",
+                self.enable_hands_pass_var,
+                self.hands_model_var,
+                "hand",
+                self._available_hand_detectors,
+                True,
+            ),
         ):
             if not enabled_var.get():
                 lines.append(f"{label} pass: off")
@@ -643,6 +665,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
             lines.append(f"{label} pass: on, detector {name or '(none)'}{note}")
             for issue in schema_issues(self._pass_argument_view(hands)):
                 lines.append(f"  ! {label} pass setting the extension would reject: {issue}")
+        lines.extend(f"Note: {note}" for note in self._legacy_notes)
         return "\n".join(lines)
 
     def _refresh_effective_summary(self) -> None:
@@ -666,6 +689,19 @@ class ADetailerStageCardV2(BaseStageCardV2):
             except Exception:
                 pass
 
+    def _supported_filter(self, value: object, label: str) -> str:
+        """Legacy GUI values (largest/all) were never accepted by the extension, which dropped the pass silently.
+
+        Loading one shows the schema's ``Area`` instead and says so in the projection; nothing else is reinterpreted.
+        """
+        text = str(value or "Area")
+        if text in MASK_FILTER_METHODS:
+            return text
+        self._legacy_notes.append(
+            f"{label} mask filter {text!r} was never supported by the extension; shown as 'Area'"
+        )
+        return "Area"
+
     @classmethod
     def _normalize_scheduler_value(cls, value: object) -> str:
         raw = str(value or "").strip()
@@ -687,6 +723,7 @@ class ADetailerStageCardV2(BaseStageCardV2):
         if not cfg:
             return
 
+        self._legacy_notes = []
         self.stage_model_override_var.set(
             self._normalize_stage_model_override(
                 cfg.get("adetailer_checkpoint_model") or cfg.get("sd_model_checkpoint")
@@ -730,7 +767,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.face_inpaint_width_var.set(int(cfg.get("ad_inpaint_width", 1024)))
         self.face_inpaint_height_var.set(int(cfg.get("ad_inpaint_height", 1024)))
         self.face_mask_filter_method_var.set(
-            str(cfg.get("ad_mask_filter_method") or cfg.get("mask_filter_method") or "Area")
+            self._supported_filter(
+                cfg.get("ad_mask_filter_method") or cfg.get("mask_filter_method") or "Area", "Face"
+            )
         )
         self.face_mask_k_largest_var.set(
             int(cfg.get("ad_mask_k_largest", cfg.get("mask_k_largest", 3)))
@@ -776,7 +815,9 @@ class ADetailerStageCardV2(BaseStageCardV2):
         self.hands_use_inpaint_wh_var.set(bool(cfg.get("ad_hands_use_inpaint_width_height", False)))
         self.hands_inpaint_width_var.set(int(cfg.get("ad_hands_inpaint_width", 1024)))
         self.hands_inpaint_height_var.set(int(cfg.get("ad_hands_inpaint_height", 1024)))
-        self.hands_mask_filter_method_var.set(str(cfg.get("ad_hands_mask_filter_method", "Area")))
+        self.hands_mask_filter_method_var.set(
+            self._supported_filter(cfg.get("ad_hands_mask_filter_method", "Area"), "Hand")
+        )
         self.hands_mask_k_largest_var.set(int(cfg.get("ad_hands_mask_k", 6)))
         self.hands_mask_min_ratio_var.set(float(cfg.get("ad_hands_mask_min_ratio", 0.003)))
         self.hands_mask_max_ratio_var.set(float(cfg.get("ad_hands_mask_max_ratio", 1.0)))
@@ -933,8 +974,12 @@ class ADetailerStageCardV2(BaseStageCardV2):
         known = known or self._forge_detectors  # the runtime's accepted set is itself a known list
         self._available_face_detectors = face_options if known else None
         self._available_hand_detectors = hand_options if known else None
-        self._configure_combo(self._face_model_combo, face_options, self.face_model_var, keep_current=True)
-        self._configure_combo(self._hands_model_combo, hand_options, self.hands_model_var, keep_current=True)
+        self._configure_combo(
+            self._face_model_combo, face_options, self.face_model_var, keep_current=True
+        )
+        self._configure_combo(
+            self._hands_model_combo, hand_options, self.hands_model_var, keep_current=True
+        )
         self._configure_combo(self._sampler_combo, samplers, self.face_sampler_var)
         self._configure_combo(self._hand_sampler_combo, samplers, self.hands_sampler_var)
 

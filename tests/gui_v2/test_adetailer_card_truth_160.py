@@ -205,3 +205,38 @@ def test_the_effective_summary_reports_pass_enablement_detectors_and_rejected_se
     )  # a legacy value the pinned extension would reject
     assert "ad_mask_filter_method" in card.effective_summary()
     assert "Face pass:" in str(card._effective_summary_label.cget("text"))
+
+
+@pytest.mark.gui
+def test_legacy_filter_values_the_extension_never_accepted_are_shown_as_area_with_a_visible_note(
+    tk_root, monkeypatch
+):
+    card = make(tk_root, monkeypatch)
+    card.load_from_dict(
+        {
+            "ad_mask_filter_method": "largest",
+            "ad_hands_mask_filter_method": "all",
+            "enable_hands_pass": True,
+        }
+    )
+    exported = card.to_config_dict()
+    assert (
+        exported["ad_mask_filter_method"] == "Area"
+        and exported["ad_hands_mask_filter_method"] == "Area"
+    )
+    summary = card.effective_summary()
+    assert "Face mask filter 'largest' was never supported" in summary
+    assert "Hand mask filter 'all' was never supported" in summary
+    card.load_from_dict({"ad_mask_filter_method": "Confidence"})
+    assert "Note:" not in card.effective_summary()  # supported values carry no note
+
+
+@pytest.mark.gui
+def test_the_projection_says_no_correction_will_run_when_both_passes_are_off(tk_root, monkeypatch):
+    card = make(tk_root, monkeypatch)
+    card.enable_face_pass_var.set(False)
+    card.enable_hands_pass_var.set(False)
+    card._sync_pass_states()
+    assert "No correction will run" in card.effective_summary()
+    card.enable_hands_pass_var.set(True)
+    assert "No correction will run" not in card.effective_summary()

@@ -296,3 +296,44 @@ def test_an_unavailable_yunet_changes_nothing_and_is_not_a_confirmed_no_face(tmp
     )
     assert record_ev["detection"]["stablenew_yunet"]["face_detected"] is None
     assert record_ev["detection"]["stablenew_yunet"]["status"] == "unknown"
+
+
+def test_both_passes_off_in_a_frozen_job_sends_no_request_and_keeps_the_input_image(tmp_path):
+    settings = {**FROZEN_SETTINGS, "enable_face_pass": False, "enable_hands_pass": False}
+    record, source = _record(tmp_path, settings)
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    client = Mock()
+    client.get_current_model.return_value = "model"
+    client.get_current_vae.return_value = "Automatic"
+    pipeline = Pipeline(client, Mock())
+    runner._pipeline = pipeline
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["r"]}
+        ) as generate,
+    ):
+        result = runner.run_njr(_roundtrip(record), cancel_token=None)
+    assert generate.call_count == 0  # no whole-image img2img was requested
+    assert result.success is True
+    assert result.variants[0]["skipped"] is True and result.variants[0]["path"] == str(source)
+    assert (
+        result.variants[0]["adetailer_effectiveness"]["execution"]["request"]["dispatched"] is False
+    )
+
+
+def test_a_frozen_job_whose_requested_pass_the_schema_rejects_is_refused_not_silently_degraded(
+    tmp_path,
+):
+    record, _source = _record(tmp_path, {**FROZEN_SETTINGS, "ad_mask_filter_method": "largest"})
+    runner = PipelineRunner(Mock(), Mock(), runs_base_dir=str(tmp_path / "runs"))
+    pipeline = Pipeline(Mock(), Mock())
+    runner._pipeline = pipeline
+    with (
+        patch.object(pipeline, "_load_image_base64", return_value="b64"),
+        patch.object(
+            pipeline, "_generate_images_with_progress", return_value={"images": ["r"]}
+        ) as generate,
+    ):
+        runner.run_njr(_roundtrip(record), cancel_token=None)
+    assert generate.call_count == 0
