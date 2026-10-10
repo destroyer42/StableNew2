@@ -162,7 +162,7 @@ def test_exact_stack_with_verified_bytes_and_pin_support_is_eligible_with_stated
         report.candidate["transformer_scales"]["matched_scales"] == 4
         and report.candidate["forge_detectable"] is True
     )
-    assert "stop" in report.next_recommendation.lower()
+    assert "conditional eligibility" in report.next_recommendation.lower()
 
 
 def test_an_encoder_with_the_img115_digest_is_noted_as_a_same_bytes_baseline(tree):
@@ -348,7 +348,7 @@ def test_projection_beyond_commit_capacity_is_a_resource_no_go(tree):
     report = verdict(real_sizes(candidate(tree)), telemetry=tight)
     assert (
         report.verdict == f.NO_GO_RESOURCE_RISK
-        and "HOST_PEAK_PROJECTION_EXCEEDS_COMMIT_CAPACITY" in report.reason_codes
+        and "HOST_PEAK_PROJECTION_EXCEEDS_POLICY_COMMIT_LIMIT" in report.reason_codes
     )
 
 
@@ -367,14 +367,17 @@ def test_a_momentary_low_headroom_is_a_launch_precondition_not_a_verdict_input(t
         report.verdict == f.ELIGIBLE
         and "CURRENT_COMMIT_HEADROOM_BELOW_PROJECTION" in report.reason_codes
     )
-    assert any("Commit headroom" in item for item in report.preconditions)
+    assert any("commit headroom" in item.lower() for item in report.future_package_inputs)
 
 
 def test_thin_vram_margin_is_reported_without_overstating(tree):
     tight = dataclasses.replace(GOOD_TELEMETRY, vram_total_bytes=int(11.6 * GIB))
     report = verdict(real_sizes(candidate(tree)), telemetry=tight)
-    assert "VRAM_MARGIN_THIN_IN_UPPER_PROJECTION" in report.reason_codes
-    assert report.estimated["vram_peak_low_bytes"] < report.estimated["vram_peak_high_bytes"]
+    assert "VRAM_MARGIN_THIN_IN_ADDITIVE_BOUND" in report.reason_codes
+    assert (
+        report.estimated["vram_documented_img115_peak_bytes"]
+        < report.estimated["vram_additive_bound_bytes"]
+    )
 
 
 @pytest.mark.parametrize(
@@ -392,7 +395,9 @@ def test_missing_telemetry_is_inconclusive_never_a_go(tree, missing):
 def test_a_listening_endpoint_is_a_precondition(tree):
     live = dataclasses.replace(GOOD_TELEMETRY, forge_endpoint_listening=True)
     report = verdict(real_sizes(candidate(tree)), telemetry=live)
-    assert "FORGE_ENDPOINT_ALREADY_LISTENING" in report.reason_codes and report.preconditions
+    assert (
+        "FORGE_ENDPOINT_ALREADY_LISTENING" in report.reason_codes and report.future_package_inputs
+    )
 
 
 # ------------------------------------------------------------------------------------------------ verdict precedence

@@ -4,13 +4,14 @@ Updated: 2026-10-10
 
 ## Repository
 
-- Z-Image-Turbo FP8-scaled feasibility (PR-IMG-MODELS-153, read-only phase complete; local, publication and review pending):
-  verdict `ELIGIBLE_FOR_OWNER_AUTHORIZATION` for one controlled physical qualification of the exact installed stack
-  (FP8-scaled transformer, a Qwen3 4B encoder byte-identical to the PR-IMG-115 one, FLUX.1 AE), with stated preconditions and
-  evidence gaps. Header evidence shows a complete `scaled_fp8` marker + per-layer `scale_weight` convention that the pinned Forge
-  (`d70373eb`) converts and loads in source; the weights (13.5 GiB) fit physical RAM and the host-peak analogues from the
-  PR-IMG-115 baseline fit the quiesced commit capacity, while VRAM margin is thin in the upper analogue. No model load,
-  generation, Forge launch or production change; nothing becomes executable. See
+- Z-Image-Turbo FP8-scaled feasibility (PR-IMG-MODELS-153, read-only phase complete; local, hosted CI and review pending):
+  verdict `ELIGIBLE_FOR_OWNER_AUTHORIZATION`, which is **conditional eligibility only** (no source, identity or hard-resource
+  disproof found), not confirmation of hardware fit. The exact installed stack (FP8-scaled transformer with a complete
+  `scaled_fp8` marker + per-layer `scale_weight` convention, a Qwen3 4B encoder byte-identical to the PR-IMG-115 one, FLUX.1 AE)
+  is supported by the pinned Forge (`d70373eb`) in source only. Open risks stay explicit: both Forge-tree private-commit
+  analogues from the single PR-IMG-115 baseline exceed usable physical RAM (paging expected), the VRAM additive bound is thin, and
+  the unresolved DIAG-GPU-130 context remains. No executable preflight gate or abort threshold exists; a separate physical
+  package must define them. No model load, generation, Forge launch or production change. See
   `docs/Subsystems/Image/PR-IMG-MODELS-153_ZImage_Turbo_FP8_Feasibility.md`.
 
 - Single-authority asset inventory and model-bundle discovery (PR-IMG-MODELS-152, COMPLETE / ACCEPTED / INTEGRATED; PR #79 merged to `main` at `6bb2be58`): a

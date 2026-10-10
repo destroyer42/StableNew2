@@ -78,6 +78,18 @@ SCALE_KEY_RE = re.compile(r"\.scale_weight$")
 
 CORE_TOPOLOGY_KEYS = ("cap_embedder.1.weight", "noise_refiner.0.attention.k_norm.weight")
 
+#: What a separate physical-qualification package must define before any dispatch. PR-IMG-MODELS-153 implements none of it:
+#: there are no executable abort thresholds, no process termination and no GPU telemetry harness here.
+FUTURE_PACKAGE_REQUIREMENTS = (
+    "A separate explicit owner authorization and a separate physical-qualification package; nothing in PR-IMG-MODELS-153 authorizes dispatch.",
+    "Measurable preflight conditions, defined by that package and measured at launch (commit headroom, available RAM, VRAM in use, pagefile state, process list, no other endpoint).",
+    "Instrumentation and phase markers defined and tested by that package; this evaluator implements none.",
+    "Abort criteria split into operator stop conditions and automatic thresholds that are reliably enforceable; only the latter may be described as enforced, and only after the package implements and tests them.",
+    "Fault-event checks (WHEA, Kernel-Power, LiveKernel; DIAG-GPU-130) defined for before and after.",
+    "Safe lifecycle ownership through the managed process manager: a single case, no retry, replay or parameter tuning.",
+    "A black-screen, driver-level hang or hard restart cannot be guaranteed recoverable by a software watchdog; that residual risk is the owner's decision.",
+)
+
 
 # ---------------------------------------------------------------------------------------------------- data model
 
@@ -162,6 +174,9 @@ class Assumptions:
 
     host_reserve_bytes: int = 4 * GIB
     vram_activation_reserve_bytes: int = int(2.5 * GIB)
+    vram_thin_margin_fraction: float = (
+        0.95  # additive VRAM bound above this share of the card is flagged thin
+    )
 
 
 @dataclass(frozen=True)
@@ -176,7 +191,7 @@ class FeasibilityReport:
     pin: Mapping[str, Any] = field(default_factory=dict)
     context: Mapping[str, Any] = field(default_factory=dict)
     evidence_gaps: tuple[str, ...] = ()
-    preconditions: tuple[str, ...] = ()
+    future_package_inputs: tuple[str, ...] = ()
 
     @property
     def reason_codes(self) -> tuple[str, ...]:
@@ -188,7 +203,8 @@ class FeasibilityReport:
             "reason_codes": list(self.reason_codes),
             "findings": [asdict(item) for item in self.findings],
             "evidence_gaps": list(self.evidence_gaps),
-            "preconditions_for_any_future_qualification": list(self.preconditions),
+            "future_package_inputs_not_gates": list(self.future_package_inputs),
+            "future_physical_package_requirements": list(FUTURE_PACKAGE_REQUIREMENTS),
             "next_recommendation": self.next_recommendation,
             "measured": dict(self.measured),
             "estimated": dict(self.estimated),
@@ -203,69 +219,131 @@ class FeasibilityReport:
 # ---------------------------------------------------------------------------------------------------- header analysis
 
 
+def _elements(shape: Sequence[int]) -> int:
+    count = 1
+    for dim in shape:
+        count *= dim
+    return count
+
+
 def analyze_scales(
     shapes: Mapping[str, list[int]], dtypes: Mapping[str, str], metadata: Mapping[str, Any]
 ) -> ScaleAnalysis:
-    """Classify the FP8 scale convention from tensor names/dtypes only; anything unrecognized stays ``unknown``."""
+    """Classify the FP8 scale convention from tensor names, dtypes and shapes; anything unrecognized stays ``unknown``.
 
-    fp8 = [
-        name
-        for name, dtype in dtypes.items()
-        if dtype in ("F8_E4M3", "F8_E5M2") and len(shapes.get(name, [])) >= 2
-    ]
-    marker = next((name for name in shapes if name.endswith("scaled_fp8")), None)
-    scale_names = {name for name in shapes if SCALE_KEY_RE.search(name)}
-    comfy_quant = [name for name in shapes if name.endswith(".comfy_quant")]
-    other = tuple(sorted({d for d in dtypes.values() if d in ("U8", "I8", "F8_E5M2")}))
+    Mirrors the pinned converter's contract (``backend/state_dict.convert_quantization``): one ``*scaled_fp8`` marker whose
+    key prefix every converted layer must share, one scalar F32 ``<layer>.scale_weight`` per FP8 ``<layer>.weight``, and
+    nothing else quantized. Placements the converter would not convert (a prefix the layers do not carry, several markers,
+    non-scalar or non-F32 scales, FP8 tensors that are not 2-D ``.weight`` tensors, ``scale_input``) are ``unknown``.
+    """
+
     notes: list[str] = []
-    layers = {name[: -len(".weight")] for name in fp8 if name.endswith(".weight")}
+    fp8_all = [n for n, d in dtypes.items() if d in ("F8_E4M3", "F8_E5M2")]
+    markers = sorted(n for n in shapes if n.endswith("scaled_fp8"))
+    marker_set = set(markers)
+    scale_names = {n for n in shapes if n.endswith(".scale_weight")}
+    comfy_quant = {n for n in shapes if n.endswith(".comfy_quant")}
+    weight_scales = {n for n in shapes if n.endswith(".weight_scale")}
+    scale_inputs = [n for n in shapes if n.endswith((".scale_input", ".input_scale"))]
+    fp8_weights = [
+        n for n in fp8_all if n not in marker_set and n.endswith(".weight") and len(shapes[n]) >= 2
+    ]
+    stray_fp8 = [n for n in fp8_all if n not in marker_set and n not in set(fp8_weights)]
+    other = tuple(
+        sorted(
+            {d for n, d in dtypes.items() if d in ("U8", "I8", "F8_E5M2") and n not in comfy_quant}
+        )
+    )
+    layers = {n[: -len(".weight")] for n in fp8_weights}
     matched = sum(1 for layer in layers if f"{layer}.scale_weight" in scale_names)
     without = len(layers) - matched
-    orphan_scales = sum(
-        1 for name in scale_names if f"{name[: -len('.scale_weight')]}.weight" not in set(fp8)
-    )
+    orphan_scales = sum(1 for n in scale_names if n[: -len(".scale_weight")] not in layers)
+    marker_elements = _elements(shapes[markers[0]]) if markers else None
     if "_quantization_metadata" in metadata:
         notes.append("embedded _quantization_metadata present")
-    if not fp8 and not scale_names and not comfy_quant:
-        convention = "none"
-    elif comfy_quant:
-        convention = "comfy_quant_per_layer"
-    elif (
-        marker
-        and scale_names
-        and matched == len(layers)
-        and not orphan_scales
-        and not other
-        and "_quantization_metadata" not in metadata
-    ):
-        convention = "comfy_scaled_fp8_marker"
+    if stray_fp8:
+        notes.append(f"{len(stray_fp8)} FP8 tensor(s) are not 2-D .weight tensors")
+    if other:
+        notes.append("additional quantized dtypes are present: " + ", ".join(other))
+    if scale_inputs:
+        notes.append("scale_input/input_scale tensors are outside the supported contract")
+
+    def result(convention: str) -> ScaleAnalysis:
+        return ScaleAnalysis(
+            convention,
+            len(layers),
+            matched,
+            without,
+            orphan_scales,
+            bool(markers),
+            marker_elements,
+            other,
+            tuple(notes),
+        )
+
+    if not fp8_all and not scale_names and not comfy_quant and not markers:
+        return result("none")
+    if comfy_quant:
+        covered = {n[: -len(".comfy_quant")] for n in comfy_quant}
+        scaled = {n[: -len(".weight_scale")] for n in weight_scales}
+        ok = (
+            bool(layers)
+            and covered == layers
+            and scaled == layers
+            and not markers
+            and not scale_names
+            and not stray_fp8
+            and not scale_inputs
+            and "_quantization_metadata" not in metadata
+            and all(dtypes[n] == "U8" for n in comfy_quant)
+            and all(dtypes[n] == "F32" and _elements(shapes[n]) == 1 for n in weight_scales)
+            and not (set(other) - {"U8"})
+        )
+        if not ok:
+            notes.append(
+                "per-layer comfy_quant records do not cover every FP8 weight with a scalar F32 weight_scale"
+            )
+        return result("comfy_quant_per_layer" if ok else "unknown")
+    if len(markers) != 1:
+        notes.append(
+            "no scaled_fp8 marker"
+            if not markers
+            else f"{len(markers)} scaled_fp8 markers (the converter uses one)"
+        )
     else:
-        convention = "unknown"
-        if fp8 and not scale_names:
-            notes.append("FP8 weights without any recognized scale tensors")
+        prefix = markers[0][: -len("scaled_fp8")]
+        if marker_elements != 2:
+            notes.append(
+                f"marker has {marker_elements} element(s); only the 2-element marker is in the supported contract"
+            )
+        if not all(n.startswith(prefix) for n in [*fp8_weights, *scale_names]):
+            notes.append(
+                f"marker prefix {prefix!r} is not shared by every converted layer (the converter skips others)"
+            )
         if without:
             notes.append(f"{without} FP8 weight(s) lack a matching .scale_weight")
         if orphan_scales:
             notes.append(f"{orphan_scales} scale tensor(s) without a matching FP8 weight")
-        if other:
-            notes.append("additional quantized dtypes are present: " + ", ".join(other))
-    marker_elements = None
-    if marker:
-        count = 1
-        for dim in shapes[marker]:
-            count *= dim
-        marker_elements = count
-    return ScaleAnalysis(
-        convention,
-        len(layers),
-        matched,
-        without,
-        orphan_scales,
-        marker is not None,
-        marker_elements,
-        other,
-        tuple(notes),
-    )
+        bad_scales = [n for n in scale_names if dtypes[n] != "F32" or _elements(shapes[n]) != 1]
+        if bad_scales:
+            notes.append(f"{len(bad_scales)} scale tensor(s) are not scalar F32")
+        if (
+            marker_elements == 2
+            and all(n.startswith(prefix) for n in [*fp8_weights, *scale_names])
+            and layers
+            and not without
+            and not orphan_scales
+            and not bad_scales
+            and not stray_fp8
+            and not other
+            and not scale_inputs
+            and not weight_scales
+            and "_quantization_metadata" not in metadata
+        ):
+            return result("comfy_scaled_fp8_marker")
+    if fp8_all and not scale_names and not markers:
+        notes.append("FP8 weights without any recognized scale tensors")
+    return result("unknown")
 
 
 def inspect_transformer(path: Path) -> ZImageFacts:
@@ -432,7 +510,7 @@ def evaluate(
     inconclusive: list[Finding] = []
     identity: list[Finding] = []
     gaps: list[str] = []
-    preconditions: list[str] = []
+    future_inputs: list[str] = []
     t, e, v, z = candidate.transformer, candidate.text_encoder, candidate.vae, candidate.zimage
 
     # -- 1. exact files and dependency relationships (measured) -------------------------------------------------------
@@ -755,8 +833,10 @@ def evaluate(
                     "PIN_CONVERTS_SCALED_FP8",
                     MEASURED,
                     "backend/state_dict.py converts a scaled_fp8 marker plus .scale_weight into weight_scale + comfy_quant records "
-                    "(float8_e4m3fn); backend/quant_ops.py implements that layer. FP8 compute needs compute capability >= 8.9; the "
-                    "RTX 4070 Ti is Ada (8.9, documented), and a lack of FP8 compute falls back to full-precision matmul.",
+                    "(float8_e4m3fn); backend/quant_ops.py implements that layer. A 2-element marker sets "
+                    "full_precision_matrix_mult, which in backend/operations_mixed_precision.py disables the quantized-matmul branch "
+                    "(_use_quantized is False), so for this exact file FP8 tensor-core compute is not expected and the GPU's compute "
+                    "capability does not select the execution path. This is a source reading; it has not been exercised by a load.",
                 )
             )
         if pin.preset:
@@ -821,56 +901,84 @@ def evaluate(
         and telemetry.total_ram_bytes is not None
         and telemetry.pagefile_allocated_bytes is not None
     ):
-        capacity = (
-            telemetry.total_ram_bytes
-            + telemetry.pagefile_allocated_bytes
-            - policy.host_reserve_bytes
-        )
-        estimated["quiesced_commit_capacity_bytes"] = capacity
+        # Terms kept apart: principal weight residency (best case above), process-private commit (the analogues below),
+        # usable physical RAM (RAM - reserve), the system commit limit (RAM + allocated pagefile), the policy-adjusted
+        # commit limit (that minus the declared reserve; an *assumed* reserve, not a measured quiesced host state) and the
+        # momentary commit headroom (a workload-dependent reading).
+        usable = telemetry.total_ram_bytes - policy.host_reserve_bytes
+        system_limit = telemetry.total_ram_bytes + telemetry.pagefile_allocated_bytes
+        policy_limit = system_limit - policy.host_reserve_bytes
+        estimated["system_commit_limit_bytes"] = system_limit
+        estimated["host_reserve_bytes"] = policy.host_reserve_bytes
+        estimated["policy_commit_limit_bytes"] = policy_limit
         low, high = (
             estimated["host_peak_projection_low_bytes"],
             estimated["host_peak_projection_high_bytes"],
         )
-        if low > capacity:
+        estimated["projected_paging_pressure_low_bytes"] = max(0, low - usable)
+        estimated["projected_paging_pressure_high_bytes"] = max(0, high - usable)
+        if low > policy_limit:
             nogo_resource.append(
                 Finding(
-                    "HOST_PEAK_PROJECTION_EXCEEDS_COMMIT_CAPACITY",
+                    "HOST_PEAK_PROJECTION_EXCEEDS_POLICY_COMMIT_LIMIT",
                     ESTIMATED,
-                    f"Even the optimistic analogue of the PR-IMG-115 Forge-tree peak ({_gib(low)} GiB) exceeds the quiesced commit "
-                    f"capacity ({_gib(capacity)} GiB = RAM + pagefile - reserve).",
+                    f"Even the optimistic analogue of the PR-IMG-115 Forge-tree private commit ({_gib(low)} GiB) exceeds the "
+                    f"policy-adjusted commit limit ({_gib(policy_limit)} GiB = RAM + pagefile - {_gib(policy.host_reserve_bytes)} GiB reserve).",
                     True,
                 )
             )
-        elif high > capacity:
+        elif high > policy_limit:
             findings.append(
                 Finding(
-                    "HOST_PEAK_UPPER_PROJECTION_EXCEEDS_CAPACITY",
+                    "HOST_PEAK_UPPER_PROJECTION_EXCEEDS_POLICY_COMMIT_LIMIT",
                     ESTIMATED,
-                    f"The pessimistic projection ({_gib(high)} GiB) exceeds the quiesced commit capacity "
-                    f"({_gib(capacity)} GiB); the optimistic one ({_gib(low)} GiB) fits.",
+                    f"The pessimistic analogue ({_gib(high)} GiB) exceeds the policy-adjusted commit limit "
+                    f"({_gib(policy_limit)} GiB); the optimistic one ({_gib(low)} GiB) does not.",
                 )
             )
         else:
             findings.append(
                 Finding(
-                    "HOST_PEAK_PROJECTIONS_FIT_QUIESCED_CAPACITY",
+                    "HOST_PEAK_PROJECTIONS_WITHIN_POLICY_COMMIT_LIMIT",
                     ESTIMATED,
-                    f"Both crude analogues of the PR-IMG-115 tree peak ({_gib(low)}-{_gib(high)} GiB, from {_gib(base_peak)} GiB at "
-                    f"{_gib(base_weights)} GiB of weights) fit the quiesced commit capacity ({_gib(capacity)} GiB). This is a range "
-                    "from one baseline, not a peak-memory claim.",
+                    f"Both analogues of the PR-IMG-115 Forge-tree private commit ({_gib(low)}-{_gib(high)} GiB, from {_gib(base_peak)} GiB at "
+                    f"{_gib(base_weights)} GiB of weights) are below the policy-adjusted commit limit ({_gib(policy_limit)} GiB = RAM "
+                    f"{_gib(telemetry.total_ram_bytes)} + allocated pagefile {_gib(telemetry.pagefile_allocated_bytes)} - "
+                    f"{_gib(policy.host_reserve_bytes)} GiB assumed reserve). This is a theoretical ceiling from one baseline: it is not "
+                    "measured free headroom and does not demonstrate that the stack fits.",
                 )
             )
+        over = [
+            name for name, value in (("optimistic", low), ("pessimistic", high)) if value > usable
+        ]
+        if over:
+            findings.append(
+                Finding(
+                    "HOST_PEAK_PROJECTION_EXCEEDS_USABLE_PHYSICAL",
+                    ESTIMATED,
+                    f"The {' and '.join(over)} analogue(s) of Forge-tree private commit ({_gib(low)}-{_gib(high)} GiB) exceed the "
+                    f"{_gib(usable)} GiB of usable physical RAM (RAM - reserve): about {_gib(estimated['projected_paging_pressure_low_bytes'])}-"
+                    f"{_gib(estimated['projected_paging_pressure_high_bytes'])} GiB would be paged, against "
+                    f"{_gib(telemetry.pagefile_allocated_bytes)} GiB of allocated pagefile. Heavy paging is the expected case, not an "
+                    f"edge case: PR-IMG-115 already drove available RAM to {IMG115_BASELINE['min_host_ram_available_gb']} GB at "
+                    f"{IMG115_BASELINE['forge_tree_private_peak_gib']} GiB.",
+                )
+            )
+            gaps.append(
+                "host memory pressure: projected private commit exceeds usable physical RAM, so paging is expected"
+            )
         if telemetry.commit_headroom_bytes is not None and telemetry.commit_headroom_bytes < high:
-            preconditions.append(
-                f"Commit headroom measured at launch must be at least {_gib(high)} GiB (it was {_gib(telemetry.commit_headroom_bytes)} "
-                "GiB during this measurement, with the development session running); close competing workloads first."
+            future_inputs.append(
+                f"Momentary commit headroom was {_gib(telemetry.commit_headroom_bytes)} GiB (measured, with the development session "
+                f"running) against a pessimistic analogue of {_gib(high)} GiB; the future package must measure it at launch and define "
+                "the condition."
             )
             findings.append(
                 Finding(
                     "CURRENT_COMMIT_HEADROOM_BELOW_PROJECTION",
                     MEASURED,
-                    f"Commit headroom right now is {_gib(telemetry.commit_headroom_bytes)} GiB, below the projection; it is a momentary, "
-                    "workload-dependent reading and is therefore a launch precondition, not a verdict input.",
+                    f"Commit headroom right now is {_gib(telemetry.commit_headroom_bytes)} GiB, below the pessimistic analogue; it is a "
+                    "momentary, workload-dependent reading and is therefore an input to a future preflight, not a verdict input.",
                 )
             )
         elif telemetry.commit_headroom_bytes is None:
@@ -883,49 +991,71 @@ def evaluate(
                 )
             )
     if t.size_bytes and telemetry.vram_total_bytes is not None:
-        resident_limit = telemetry.vram_total_bytes - policy.vram_activation_reserve_bytes
+        total_v = telemetry.vram_total_bytes
+        resident_limit = total_v - policy.vram_activation_reserve_bytes
         estimated["vram_resident_limit_bytes"] = resident_limit
         if t.size_bytes > resident_limit:
             nogo_resource.append(
                 Finding(
                     "VRAM_TRANSFORMER_EXCEEDS_DEDICATED",
                     ESTIMATED,
-                    f"The FP8 transformer ({_gib(t.size_bytes)} GiB) cannot be resident in {_gib(telemetry.vram_total_bytes)} GiB.",
+                    f"The FP8 transformer ({_gib(t.size_bytes)} GiB) cannot be resident in {_gib(total_v)} GiB.",
                     True,
                 )
             )
-        base_vram = int(cast("int", IMG115_BASELINE["dedicated_vram_peak_mib"]) * 1024 * 1024)
+        documented = int(cast("int", IMG115_BASELINE["dedicated_vram_peak_mib"]) * 1024 * 1024)
         delta = max(0, t.size_bytes - 4_070_624_520)  # Klein 4B FP8 transformer in the baseline
-        estimated["vram_peak_low_bytes"] = (
-            base_vram  # text-encoder phase unchanged (identical encoder bytes)
+        bound = documented + delta
+        estimated["vram_documented_img115_peak_bytes"] = (
+            documented  # documented; phase and desktop share not recorded
         )
-        estimated["vram_peak_high_bytes"] = (
-            base_vram + delta
-        )  # denoise phase grows by the larger FP8 transformer
-        high_v = estimated["vram_peak_high_bytes"]
-        if estimated["vram_peak_low_bytes"] > telemetry.vram_total_bytes:
+        estimated["vram_additive_bound_bytes"] = (
+            bound  # derived: documented peak + larger transformer, conservative
+        )
+        if documented > total_v:
             nogo_resource.append(
                 Finding(
-                    "VRAM_PEAK_PROJECTION_EXCEEDS_DEDICATED",
+                    "VRAM_DOCUMENTED_PEAK_EXCEEDS_DEDICATED",
                     ESTIMATED,
-                    "Even the optimistic dedicated-VRAM analogue exceeds the card.",
+                    f"The documented PR-IMG-115 dedicated-VRAM peak ({_gib(documented)} GiB) alone exceeds this card ({_gib(total_v)} GiB).",
                     True,
                 )
             )
-        elif high_v > telemetry.vram_total_bytes * 0.95:
+        elif bound > total_v:
             findings.append(
                 Finding(
-                    "VRAM_MARGIN_THIN_IN_UPPER_PROJECTION",
+                    "VRAM_ADDITIVE_BOUND_EXCEEDS_DEDICATED",
                     ESTIMATED,
-                    f"Dedicated VRAM analogue {_gib(base_vram)}-{_gib(high_v)} GiB against {_gib(telemetry.vram_total_bytes)} GiB "
-                    "(totals include the desktop's share); the upper bound leaves little margin. Pinned Forge's own "
-                    f"memory_usage_factor for Z-Image is {pin.zimage_memory_factor} versus 14.6 for Klein 4B (documented in source), "
-                    "which points to smaller activations, but is not a measurement.",
+                    f"The derived additive bound ({_gib(bound)} GiB = documented PR-IMG-115 peak {_gib(documented)} GiB + "
+                    f"{_gib(delta)} GiB larger FP8 transformer) exceeds the card ({_gib(total_v)} GiB). The bound is conservative: "
+                    "the record does not attribute the peak to a phase, so it may stack a text-encoder-phase peak on a denoise-phase delta.",
                 )
             )
-            preconditions.append(
-                "Dedicated VRAM in use before launch should be at or below the PR-IMG-115 level (about 2 GiB of desktop use)."
+        elif bound > total_v * policy.vram_thin_margin_fraction:
+            findings.append(
+                Finding(
+                    "VRAM_MARGIN_THIN_IN_ADDITIVE_BOUND",
+                    ESTIMATED,
+                    f"The derived additive bound ({_gib(bound)} GiB = documented PR-IMG-115 peak {_gib(documented)} GiB + "
+                    f"{_gib(delta)} GiB larger FP8 transformer) is above {int(policy.vram_thin_margin_fraction * 100)}% of the card "
+                    f"({_gib(total_v)} GiB). The PR-IMG-115 peak has no established phase attribution, so this is a conservative bound, "
+                    f"not a denoise-phase figure. Pinned Forge's memory_usage_factor for Z-Image is {pin.zimage_memory_factor} versus "
+                    "14.6 for Klein 4B (documented in source), which points to smaller activations but is not a measurement.",
+                )
             )
+        if telemetry.vram_used_bytes is not None:
+            findings.append(
+                Finding(
+                    "CURRENT_VRAM_UTILIZATION_RECORDED",
+                    MEASURED,
+                    f"{_gib(telemetry.vram_used_bytes)} GiB of {_gib(total_v)} GiB dedicated VRAM was in use at measurement time "
+                    "(desktop and other processes). PR-IMG-115 does not record its desktop share, so no historical baseline is assumed.",
+                )
+            )
+        future_inputs.append(
+            "Dedicated VRAM in use before launch must be measured and recorded; the PR-IMG-115 record does not state the desktop's "
+            "share, so the future package must define the condition from fresh measurements."
+        )
     if telemetry.forge_endpoint_listening:
         findings.append(
             Finding(
@@ -934,8 +1064,8 @@ def evaluate(
                 "A Forge-class endpoint is already listening; a qualification could not own its lifecycle.",
             )
         )
-        preconditions.append(
-            "No other Forge/WebUI endpoint may be listening; the qualification owns the only managed lifecycle."
+        future_inputs.append(
+            "No other Forge/WebUI endpoint should be listening; the future package must establish sole lifecycle ownership."
         )
     if telemetry.available_ram_bytes is not None:
         findings.append(
@@ -987,9 +1117,18 @@ def evaluate(
     else:
         verdict = ELIGIBLE
         nxt = (
-            "Stop and obtain a separate explicit owner authorization for one controlled physical qualification of this exact "
-            "stack on a quiesced host, with the stated preconditions and abort thresholds. No profile or production change "
-            "follows from this verdict."
+            "Conditional eligibility only: a separate explicit owner decision may consider one controlled physical qualification. "
+            "This is not confirmation that the stack fits this hardware. A separate physical-qualification package must first "
+            "define measurable preflight conditions, instrumentation, abort criteria, fault-event checks and safe lifecycle "
+            "ownership (see future_physical_package_requirements). No profile or production change follows from this verdict."
+        )
+        findings.append(
+            Finding(
+                "ELIGIBILITY_IS_CONDITIONAL",
+                DOCUMENTED,
+                "ELIGIBLE_FOR_OWNER_AUTHORIZATION means no source-level, identity or hard-resource disproof was found; it does not "
+                "confirm hardware fit, and the open host-memory and VRAM risks above remain.",
+            )
         )
 
     findings = [*missing, *nogo_pin, *nogo_resource, *inconclusive, *identity, *findings]
@@ -1022,7 +1161,7 @@ def evaluate(
         asdict(pin),
         {"known_gpu_risk": dict(KNOWN_GPU_RISK_CONTEXT)},
         tuple(dict.fromkeys(gaps)),
-        tuple(dict.fromkeys(preconditions)),
+        tuple(dict.fromkeys(future_inputs)),
     )
 
 
