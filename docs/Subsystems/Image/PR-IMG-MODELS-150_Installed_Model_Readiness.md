@@ -1,7 +1,8 @@
 # PR-IMG-MODELS-150 — Installed Model Readiness and Forge Module-State Preflight
 
-Status: local implementation complete; hosted CI and independent review pending. No GPU, no generation, no model or Forge
-configuration change, no new production profile.
+Status: COMPLETE / ACCEPTED / INTEGRATED (PR #77; hosted `required` and the full three-shard census passed; independent review
+found no blocker). No GPU, no generation, no model or Forge configuration change, no new production profile. The 151
+feasibility evaluation of the 9B candidate is `PR-IMG-MODELS-151_Klein_Base_9B_Feasibility.md` (`NO_GO_RESOURCE_RISK`).
 
 Execution profile: Standard cross-cutting readiness/diagnostic change; Claude Code Sonnet 5.5 High / Codex GPT-6.1 Sol High,
 Windows Local/Desktop (read-only inspection of the installed roots). Controller Surface Assessment: no controller or
