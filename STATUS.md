@@ -4,6 +4,22 @@ Updated: 2026-10-10
 
 ## Repository
 
+- Z-Image-Turbo FP8-scaled safety preparation (PR-IMG-MODELS-154A, `PASS_PREPARATION_ONLY`; local branch, hosted CI and
+  independent review pending; focused S1-S8 safety repair): pure, fake-driven contracts in `tools/qualification/img154/` for a later, separately authorized
+  physical qualification: a frozen **proposed** exact-candidate and intent manifest (three files by bytes and full SHA-256, Forge
+  pin `d70373eb`), served-file proof that a source match cannot satisfy, isolation/port/ownership validation, a fail-closed preflight
+  evaluator (`REFUSED_*`/`INCONCLUSIVE`/`PREPARED_FOR_OWNER_REVIEW`, never go/safe), an injected-sample monitor state machine that
+  only requests an owner stop, redacted fsync-per-record evidence, a no-replay dispatch ledger and an operator packet. An opt-in
+  read-only probe confirmed every essential Windows counter is obtainable without elevation; every numeric limit stays
+  **provisional** (37 GiB commit headroom needs a near-idle desktop, about 12.8 GiB commit total) and no stop rule is enforceable.
+  Preparation implementation PASS is separate from host `REFUSED`/`INCONCLUSIVE`, neither acceptable for physical qualification.
+  The first saved probe was stale; the subsequent fresh probe supplied the reported resource refusals. Missing/violating alternation
+  now has bounded unknown-data escalation, freshness rejects non-finite times, live hashing precedes resource collection, unverified
+  VRAM baselines remain inconclusive, and attempt identity survives policy changes. No new physical or live probe was run in the repair.
+  The package has no launch, model-selection, request or termination path (source-guard tested) and changes no production
+  behavior. Physical qualification (PR-IMG-MODELS-154B) is neither authorized nor implemented. See
+  `docs/Subsystems/Image/PR-IMG-MODELS-154A_ZImage_Turbo_Safety_Preparation.md`.
+
 - ADetailer control truth and effectiveness evidence (PR-REFINE-160, COMPLETE / ACCEPTED; PR #81, hosted `required` and `affected` passed, independent reviews found no blocker): new ADetailer cards
   default Face and Hand passes on (saved/historical configurations that omit the flag keep their meaning; the overall stage flag is
   untouched). The GUI no longer offers Max Detections or Mask Feather (the pinned ADetailer-Neo `af228eba` has no such arguments),
@@ -17,7 +33,7 @@ Updated: 2026-10-10
   img2img request. No detector, backend, controller or queue change (one static helper in the runner has a small precedence fix). See
   `docs/Subsystems/Image/PR-REFINE-160_ADetailer_Control_Truth_and_Effectiveness_Evidence.md`.
 
-- Z-Image-Turbo FP8-scaled feasibility (PR-IMG-MODELS-153, read-only phase complete; local, hosted CI and review pending):
+- Z-Image-Turbo FP8-scaled feasibility (PR-IMG-MODELS-153, read-only phase complete; PR #80 merged to `main` at `68aafadf`):
   verdict `ELIGIBLE_FOR_OWNER_AUTHORIZATION`, which is **conditional eligibility only** (no source, identity or hard-resource
   disproof found), not confirmation of hardware fit. The exact installed stack (FP8-scaled transformer with a complete
   `scaled_fp8` marker + per-layer `scale_weight` convention, a Qwen3 4B encoder byte-identical to the PR-IMG-115 one, FLUX.1 AE)
