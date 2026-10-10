@@ -1,6 +1,6 @@
 # PR-GUI-111 — Thumbnail Recovery and Operator Tooltip Correctness
 
-Status: local implementation complete; hosted CI and independent review pending.
+Status: COMPLETE / ACCEPTED / INTEGRATED (PR #76; hosted `required` and GUI `affected` lanes passed).
 
 Narrow corrective follow-up to PR-GUI-110 (`PR-GUI-110_Focused_Operator_Workspace.md`). Presentation only: no generation,
 queue admission, NJR, runtime or controller behavior changed. Execution profile: Narrow, known root cause; Claude Code

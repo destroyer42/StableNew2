@@ -4,7 +4,15 @@ Updated: 2026-10-09
 
 ## Repository
 
-- Installed model readiness (PR-IMG-MODELS-150, local implementation; hosted CI and review pending): header-only
+- Klein Base 9B feasibility (PR-IMG-MODELS-151, read-only phase complete; local, hosted CI and review pending):
+  verdict `NO_GO_RESOURCE_RISK`. A read-only qualification evaluator (`tools/qualification/img151/`) measured the exact
+  candidate (transformer 18.2 GB BF16, plain BF16 Qwen3-8B 16.4 GB, FLUX.2 VAE; byte-identical to the cached downloads, equality
+  with the official weights unverified) and this host (34.1 GB RAM, 12 GB RTX 4070 Ti): even the best-case resident footprint
+  exceeds usable physical RAM, the scaled peak exceeds the commit headroom and the BF16 transformer cannot be VRAM-resident.
+  The pinned Forge does support the 9B in software. No model load, generation or Forge launch occurred; PR-150's gate still
+  refuses the model before any write. See `docs/Subsystems/Image/PR-IMG-MODELS-151_Klein_Base_9B_Feasibility.md`.
+
+- Installed model readiness (PR-IMG-MODELS-150, COMPLETE / ACCEPTED / INTEGRATED; PR #77, hosted `required` and the full three-shard census passed): header-only
   component evidence distinguishes a dependency-bearing FLUX-style transformer, Qwen3 text encoders and FLUX VAEs, and a
   pure readiness projection separates file presence, identity, header-required dependencies, Forge's catalog, Forge's live
   module selection and exact-profile qualification. A positively identified, unqualified multi-component checkpoint (the
@@ -23,8 +31,8 @@ Updated: 2026-10-09
   preview labels and narrow comboboxes stay readable/inspectable. At the 1366 x 768 simulation the usable
   scroll viewport grew from 158/239/223 px to 354/366/336 px (Review/SVD/Video). No generation, queue, NJR,
   runtime or dependency behavior changed. See
-  `docs/Subsystems/GUI/PR-GUI-110_Focused_Operator_Workspace.md`. Follow-up PR-GUI-111 (local; hosted CI and
-  review pending) makes thumbnail requests recoverable after a worker-start or decode failure and shows a combobox
+  `docs/Subsystems/GUI/PR-GUI-110_Focused_Operator_Workspace.md`. Follow-up PR-GUI-111 (COMPLETE / ACCEPTED / INTEGRATED; PR #76, hosted `required` and `affected` passed) makes thumbnail
+  requests recoverable after a worker-start or decode failure and shows a combobox
   tooltip on keyboard focus only for truncated values
   (`docs/Subsystems/GUI/PR-GUI-111_Thumbnail_Recovery_and_Tooltip_Correctness.md`).
 
