@@ -17,7 +17,6 @@ from tkinter import ttk
 from typing import Any
 
 from src.gui.theme_v2 import MUTED_LABEL_STYLE
-from src.gui.widgets.responsive_wrap_v2 import bind_wraplength
 from src.image_backends.forge_klein_profile import is_klein_transformer_name
 from src.image_backends.model_readiness import ModelReadiness
 from src.image_backends.model_readiness_probe import probe_model_readiness
@@ -48,9 +47,12 @@ class ModelReadinessPresenter:
         self.frame.columnconfigure(0, weight=1)
         self.button = ttk.Button(self.frame, text="Check readiness", command=self.check)
         self.button.grid(row=0, column=1, sticky="e", padx=(8, 0))
-        self.label = ttk.Label(self.frame, text=NOT_CHECKED, style=MUTED_LABEL_STYLE, justify="left")
+        # A fixed wrap like every other Base Generation caption: the Pipeline's compact presentation (PR-GUI-100)
+        # caps and restores wraps exactly, which a width-following wrap would break (its round-trip is asserted).
+        self.label = ttk.Label(
+            self.frame, text=NOT_CHECKED, style=MUTED_LABEL_STYLE, justify="left", wraplength=420
+        )
         self.label.grid(row=0, column=0, sticky="ew")
-        bind_wraplength(self.label)
         row = parent.grid_size()[1]
         self.frame.grid(row=row, column=0, columnspan=4, sticky="ew", pady=(6, 0))
         self.frame.bind("<Destroy>", self._on_destroy, add="+")
