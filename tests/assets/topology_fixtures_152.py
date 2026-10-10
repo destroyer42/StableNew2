@@ -87,6 +87,7 @@ def qwen3_encoder(hidden: int, *, quantized: bool = False, layers: int = 36) -> 
     tensors = {"model.embed_tokens.weight": ("BF16", [16, hidden])}
     for index in range(layers):
         tensors[f"model.layers.{index}.self_attn.q_norm.weight"] = ("BF16", [4])
+        tensors[f"model.layers.{index}.post_attention_layernorm.weight"] = ("BF16", [hidden])
         if quantized and index == 0:
             tensors[f"model.layers.{index}.mlp.up_proj.weight"] = ("F8_E4M3", [4, 4])
             tensors[f"model.layers.{index}.mlp.up_proj.weight_scale"] = ("F32", [1])

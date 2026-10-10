@@ -1,6 +1,6 @@
 # PR-IMG-MODELS-152 — Single-authority asset inventory, component compatibility and model-bundle discovery
 
-Status: LOCAL IMPLEMENTATION COMPLETE; hosted CI and independent review pending. Class: Standard/substantial on a known
+Status: COMPLETE / ACCEPTED / INTEGRATED (PR #79, merged to `main` at `6bb2be58`; hosted `required` and `affected` passed, independent reviews found no blocker). Class: Standard/substantial on a known
 architecture. Claude Code Sonnet 5.5 High / Codex GPT-6.1 Sol High, Windows Local/Desktop. Controller Surface Assessment: no
 controller or Tk change.
 
