@@ -7,10 +7,11 @@ injected. Nothing here can build those real ports; only ``physical`` (disabled b
 
 Order of one case (each ``*_attempted`` record and ``generation_dispatched`` is made durable BEFORE its action)::
 
-    gates -> operator confirmation -> fresh re-measure -> claim -> sampler -> managed_start_attempted -> start ->
-    ownership + readiness -> startup_observed -> option defaults -> selection_attempted -> selection -> selection_confirmed ->
-    pre-dispatch gates -> generation_dispatched -> ONE POST (supervised) -> owned shutdown -> settle -> fault snapshot ->
-    adjudication -> terminal_evidence + outcome
+    gates -> operator confirmation + owner passphrase -> fresh re-measure (baseline, fault snapshot, resources) ->
+    sampler proven healthy -> claim -> managed_start_attempted -> start -> boot-window ownership + readiness ->
+    endpoint ownership -> startup_observed -> option defaults -> selection_attempted -> selection (supervised) ->
+    selection_confirmed -> pre-dispatch gates -> generation_dispatched -> ONE POST (supervised) -> owned shutdown ->
+    settle -> fault snapshot -> adjudication -> terminal_evidence + outcome
 
 There is no loop around the POST, no retry, no second request and no re-claim.
 """
@@ -28,6 +29,7 @@ from typing import Any, Protocol
 from tools.qualification.img154.core import Finding, Observation
 from tools.qualification.img154.evidence import (
     FAULT_SETTLE_S,
+    FAULT_SOURCES,
     NO_NEW_EVENTS_COMPLETE_COVERAGE,
     UNKNOWN_COVERAGE_GAP,
     DurableJsonlWriter,
@@ -51,6 +53,7 @@ from tools.qualification.img154.preflight import (
     PreflightInputs,
     PreflightPolicy,
     PreflightResult,
+    QuiescentBaselineEvidence,
     ValidatedBaseline,
     evaluate_preflight,
     validate_quiescent_baseline,
@@ -70,6 +73,7 @@ from tools.qualification.img154b.authorization import (
     OwnerAuthorization,
     confirmation_phrase,
     verify_authorization,
+    verify_passphrase,
 )
 from tools.qualification.img154b.bundle import BundleError, EvidenceBundle
 from tools.qualification.img154b.fence import CaseFence, FenceRefusal
@@ -147,7 +151,7 @@ class HttpPort(Protocol):
 class RuntimePort(Protocol):
     def start(self) -> Mapping[str, Any]: ...
 
-    def verify_ownership(self) -> OwnershipFacts: ...
+    def verify_ownership(self, *, require_listener: bool = True) -> OwnershipFacts: ...
 
     def stop(self) -> ShutdownResult: ...
 
@@ -161,6 +165,8 @@ class SamplerPort(Protocol):
     provenance: dict[str, str]
     #: number of samples evaluated by the monitor so far (a fresh sample is evidence the sampler is delivering)
     sample_count: int
+    #: consecutive samples with every essential field ok and no latched stop or uncertainty
+    clean_streak: int
 
     def start(self) -> None: ...
 
@@ -191,10 +197,19 @@ class Collected:
     facts: Mapping[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class Remeasured:
+    """What is taken again after the operator's (unbounded) confirmation and immediately before the claim."""
+
+    observations: Mapping[str, Observation]
+    quiescent_baseline: QuiescentBaselineEvidence | None = None
+    fault_before: FaultSnapshot | None = None
+
+
 class PreflightCollector(Protocol):
     def collect(self) -> Collected: ...
 
-    def remeasure(self) -> Mapping[str, Observation]: ...
+    def remeasure(self) -> Remeasured: ...
 
     def recheck_served(self) -> list[Finding]: ...
 
@@ -224,6 +239,8 @@ class CasePorts:
     sampler_factory: SamplerFactory
     faults: Callable[[], FaultSnapshot | None]
     confirm: Callable[[Mapping[str, Any]], str]
+    #: the owner's passphrase, read without echo (compared with the record's salted verifier)
+    passphrase: Callable[[], str]
     clock: ClockPort
     bundle: EvidenceBundle
     sample_path: Path
@@ -288,8 +305,14 @@ def stage_from_progress(progress: object) -> StageInfo:
         state.get("sampling_step"),
         state.get("job_count"),
     )
-    numbers = (steps, step, jobs)
-    if any(isinstance(n, bool) or not isinstance(n, int) for n in numbers):
+    if (
+        isinstance(steps, bool)
+        or isinstance(step, bool)
+        or isinstance(jobs, bool)
+        or not isinstance(steps, int)
+        or not isinstance(step, int)
+        or not isinstance(jobs, int)
+    ):
         return StageInfo()
     if jobs > 0 and steps > 1 and 0 <= step < steps - 1:
         return StageInfo("denoise", "forge_api")
@@ -399,18 +422,29 @@ class CaseCoordinator:
             self._refuse("OPERATOR_CONFIRMATION_MISMATCH")
             return self._finish_unclaimed(summary)
 
+        # the secret only the owner holds; the record stores a salted verifier, never the passphrase
+        if authorization is None or not verify_passphrase(authorization, self.ports.passphrase()):
+            self._refuse("OWNER_PASSPHRASE_MISMATCH")
+            return self._finish_unclaimed(summary)
+
         fresh = self.ports.collector.remeasure()
-        device = fresh.get("gpu_device_id")
+        device = fresh.observations.get("gpu_device_id")
         if device is None or device.value != inputs.launch_device_id or device.status != "ok":
             self._refuse("DEVICE_IDENTITY_NOT_REVERIFIED")
             return self._finish_unclaimed(summary)
         merged = replace(
             inputs,
+            quiescent_baseline=fresh.quiescent_baseline or inputs.quiescent_baseline,
+            fault_baseline_coverage=_fault_coverage(fresh.fault_before)
+            if fresh.fault_before is not None
+            else inputs.fault_baseline_coverage,
             observations={
                 **inputs.observations,
-                **{k: v for k, v in fresh.items() if k != "gpu_device_id"},
+                **{k: v for k, v in fresh.observations.items() if k != "gpu_device_id"},
             },
         )
+        if fresh.fault_before is not None:
+            collected = replace(collected, fault_before=fresh.fault_before)
         final = evaluate_preflight(
             merged,
             now_mono_s=clock.mono(),
@@ -505,7 +539,7 @@ class CaseCoordinator:
         decision: PreflightResult,
         baseline: ValidatedBaseline | None,
     ) -> CaseReport:
-        ports, run, clock, _cfg = self.ports, self._run, self.ports.clock, self.config
+        ports, run, clock = self.ports, self._run, self.ports.clock
         fence = ports.fence
         provenance = {
             "authorization": authorization.record_digest() if authorization else None,
@@ -515,14 +549,6 @@ class CaseCoordinator:
             "source_sha256": collected.code.source_sha256,
             "policy_revision": self.manifest.policy_revision,
         }
-        try:
-            fence.claim(provenance=provenance)
-        except FenceRefusal as exc:
-            self._refuse(exc.code)
-            return self._finish_unclaimed(self._preflight_summary(decision, ()))
-        run.claimed = True
-        run.started_mono = clock.mono()
-        sampler: SamplerPort | None = None
         monitor = SafetyMonitor(
             self._monitor_config
             or MonitorConfig(
@@ -533,6 +559,9 @@ class CaseCoordinator:
         writer = DurableJsonlWriter(
             ports.sample_path, max_bytes=4 * 1024 * 1024, max_files=8, redact=False
         )
+        # The sampler is built and PROVEN healthy before the case is consumed: a sampler that cannot deliver must not burn the
+        # single authorized attempt, and no process may start without proven-good telemetry.
+        sampler: SamplerPort | None = None
         try:
             sampler = ports.sampler_factory(
                 monitor, writer, lambda: self._run.stage, lambda: self._endpoint_state
@@ -543,14 +572,53 @@ class CaseCoordinator:
                 baseline=baseline.as_dict() if baseline else None,
             )
             sampler.start()
+            healthy = self._sampler_is_healthy(sampler)
+        except Exception as exc:  # noqa: BLE001 - nothing was claimed, started or sent
+            self._refuse(f"SAMPLER_UNAVAILABLE:{type(exc).__name__}")
+            self._stop_sampler(sampler)
+            return self._finish_unclaimed(self._preflight_summary(decision, ()))
+        if not healthy:
+            self._refuse("SAMPLER_NOT_HEALTHY")
+            self._stop_sampler(sampler)
+            return self._finish_unclaimed(self._preflight_summary(decision, ()))
+        try:
+            fence.claim(provenance=provenance)
+        except FenceRefusal as exc:
+            self._refuse(exc.code)
+            self._stop_sampler(sampler)
+            return self._finish_unclaimed(self._preflight_summary(decision, ()))
+        run.claimed = True
+        run.started_mono = clock.mono()
+        try:
             self._lifecycle(sampler, collected)
         except BaseException as exc:  # noqa: BLE001 - always tear down and record, then re-raise interrupts
             run.exception = type(exc).__name__
             if not isinstance(exc, Exception):
                 self._teardown(sampler)
+                self._stop_sampler(sampler)
                 self._record_terminal(collected, decision, baseline, sampler)
                 raise
         return self._teardown_and_adjudicate(sampler, collected, decision, baseline)
+
+    def _stop_sampler(self, sampler: SamplerPort | None) -> None:
+        if sampler is None:
+            return
+        try:
+            sampler.stop()
+        except Exception as exc:  # noqa: BLE001 - the record of the run matters more than the thread
+            self._refuse(f"SAMPLER_STOP_FAILED:{type(exc).__name__}")
+
+    def _sampler_is_healthy(self, sampler: SamplerPort) -> bool:
+        """Three consecutive clean samples (every essential field ok, nothing latched) before anything is consumed."""
+
+        deadline = self.ports.clock.mono() + 20.0
+        while self.ports.clock.mono() < deadline:
+            if self._halted(sampler) or sampler.harness_fault:
+                return False
+            if sampler.clean_streak >= 3:
+                return True
+            self.ports.clock.sleep(0.5)
+        return False
 
     def _halted(self, sampler: SamplerPort) -> bool:
         sampler.watchdog_tick()
@@ -571,39 +639,39 @@ class CaseCoordinator:
             run.exception = type(exc).__name__
             self._endpoint_state = "start_failed"
             return
-        ownership = runtime.verify_ownership()
-        run.ownership = ownership
-        if not ownership.owned:
-            run.loader_failed = True
-            self._refuse("OWNERSHIP_NOT_VERIFIED")
-            return
-        # ---- readiness (bounded; ownership and halt re-checked every iteration)
+        # ---- boot window: the manager returns right after the process is created; the endpoint binds tens of seconds
+        # later. The process identity must hold the whole time; a listener is required only once the endpoint answers,
+        # and a listener OUTSIDE the owned tree is a refusal at every moment.
         deadline = clock.mono() + cfg.ready_timeout_s
-        ready = False
+        options: Mapping[str, Any] | None = None
         while clock.mono() < deadline:
             if self._halted(sampler):
                 return
+            boot = runtime.verify_ownership(require_listener=False)
+            run.ownership = boot
+            if not boot.owned:
+                run.loader_failed = True
+                self._refuse("OWNERSHIP_NOT_VERIFIED", *boot.problems)
+                return
             probe = http.get_json(OPTIONS_ENDPOINT, timeout_s=5.0)
             if probe.status == 200 and isinstance(probe.body, Mapping):
-                ready = True
                 options = probe.body
                 break
-            if not runtime.verify_ownership().owned:
-                run.loader_failed = True
-                self._refuse("OWNED_PROCESS_LOST_BEFORE_READY")
-                return
             clock.sleep(1.0)
-        if not ready:
+        if options is None:
             run.loader_failed = True
             self._refuse("READINESS_TIMEOUT")
             return
+        # ---- the endpoint that answered must be the owned tree's (never selection against a process we do not own)
+        endpoint = runtime.verify_ownership(require_listener=True)
+        run.ownership = endpoint
+        if not (endpoint.owned and endpoint.endpoint_in_tree):
+            run.loader_failed = True
+            self._refuse("ENDPOINT_NOT_OWNED", *endpoint.problems)
+            return
         self._endpoint_state = "responding"
-        run.ownership = runtime.verify_ownership()
         fence.record_stage(
-            "startup_observed",
-            pid=started.get("pid"),
-            ownership=run.ownership.as_dict(),
-            ready=True,
+            "startup_observed", pid=started.get("pid"), ownership=endpoint.as_dict(), ready=True
         )
         run.startup_observed = True
         # ---- the sampling-path options must be at their pinned defaults BEFORE the selection
@@ -612,28 +680,37 @@ class CaseCoordinator:
             run.loader_failed = True
             self._refuse(*[f.code for f in findings])
             return
-        # ---- selection (record first, then act, then read back)
+        # ---- selection (record first, then act, then read back); the ownership is re-verified immediately before
         self._mark("model_selection", "operator")
+        again_owned = runtime.verify_ownership(require_listener=True)
+        run.ownership = again_owned
+        if not (again_owned.owned and again_owned.endpoint_in_tree):
+            run.loader_failed = True
+            self._refuse("ENDPOINT_NOT_OWNED_BEFORE_SELECTION", *again_owned.problems)
+            return
         fence.record_stage("selection_attempted", endpoint=OPTIONS_ENDPOINT)
         if self._halted(sampler):
             return
-        posted = http.post_json(
+        posted, aborted = self._supervised_request(
+            sampler,
             OPTIONS_ENDPOINT,
             _json_bytes(selection_payload(ports.served_paths)),
             timeout_s=cfg.options_timeout_s,
+            progress=False,
         )
-        if posted.status != 200:
+        if aborted:
+            return  # a monitor halt during the selection: the owned stop was requested and nothing else is sent
+        if posted is None or posted.status != 200:
             run.loader_failed = True
             self._refuse("SELECTION_REJECTED")
             return
         readback = http.get_json(OPTIONS_ENDPOINT, timeout_s=30.0)
-        selection = verify_selection(
-            readback.body if isinstance(readback.body, Mapping) else None, ports.served_paths
-        )
-        again = verify_sampling_options(
-            readback.body if isinstance(readback.body, Mapping) else None
-        )
-        problems = [f for f in (*selection, *again) if f.severity != "info"]
+        body = readback.body if isinstance(readback.body, Mapping) else None
+        problems = [
+            f
+            for f in (*verify_selection(body, ports.served_paths), *verify_sampling_options(body))
+            if f.severity != "info"
+        ]
         if readback.status != 200 or problems:
             run.loader_failed = True
             self._refuse("SELECTION_NOT_CONFIRMED", *[f.code for f in problems])
@@ -651,76 +728,96 @@ class CaseCoordinator:
             "unknown",
             note="generation in flight; no verified phase signal until sampling starts",
         )
-        run.stage = StageInfo()
         fence.record_stage(
             "generation_dispatched",
             endpoint=TXT2IMG_ENDPOINT,
             payload_digest=self.payload.payload_digest,
         )
         run.dispatched = True
-        self._supervised_post(sampler)
+        self._generate(sampler)
 
     def _predispatch(self, sampler: SamplerPort) -> list[str]:
         ports, run = self.ports, self._run
         problems: list[str] = []
-        # Two fresh samples after the selection: the violation streak rules need consecutive readings, and a stale or silent
-        # sampler must not be mistaken for a quiet machine.
+        # Two fresh CLEAN samples after the selection: the violation streak rules need consecutive readings, and a stale,
+        # silent or incomplete sampler must not be mistaken for a quiet machine.
         wanted = sampler.sample_count + 2
         deadline = self.ports.clock.mono() + 15.0
-        while sampler.sample_count < wanted and self.ports.clock.mono() < deadline:
+        while self.ports.clock.mono() < deadline:
             if self._halted(sampler):
+                break
+            if sampler.sample_count >= wanted and sampler.clean_streak >= 2:
                 break
             self.ports.clock.sleep(0.5)
         if self._halted(sampler):
             problems.append("HALT_BEFORE_DISPATCH")
         if sampler.sample_count < wanted:
             problems.append("NO_FRESH_SAMPLES_BEFORE_DISPATCH")
+        elif sampler.clean_streak < 2:
+            problems.append("NO_CLEAN_SAMPLES_BEFORE_DISPATCH")
         if sampler.harness_fault:
             problems.append("SAMPLER_FAULT_BEFORE_DISPATCH")
-        owned = ports.runtime.verify_ownership()
-        if not owned.owned:
+        owned = ports.runtime.verify_ownership(require_listener=True)
+        if not (owned.owned and owned.endpoint_in_tree):
             problems.append("OWNERSHIP_LOST_BEFORE_DISPATCH")
         run.ownership = owned
         problems.extend(f.code for f in ports.collector.recheck_served())
         problems.extend(f.code for f in verify_payload(dict(self.payload.body), self.manifest))
         return problems
 
-    def _supervised_post(self, sampler: SamplerPort) -> None:
-        ports, run, _clock, cfg = self.ports, self._run, self.ports.clock, self.config
+    def _supervised_request(
+        self,
+        sampler: SamplerPort,
+        path: str,
+        body: bytes,
+        *,
+        timeout_s: float,
+        progress: bool,
+    ) -> tuple[HttpResult | None, bool]:
+        """ONE request on a worker thread under the 1 Hz watchdog. ``aborted`` means a monitor halt ended the wait: the
+        manager-owned stop was requested and nothing further is sent. A request that raises is reported as unknown."""
+
+        ports, run, cfg = self.ports, self._run, self.config
         holder: dict[str, Any] = {}
 
         def send() -> None:
             try:
-                holder["result"] = ports.http.post_json(
-                    TXT2IMG_ENDPOINT, self.payload.wire_bytes, timeout_s=cfg.generation_timeout_s
-                )
+                holder["result"] = ports.http.post_json(path, body, timeout_s=timeout_s)
             except BaseException as exc:  # noqa: BLE001 - the outcome is unknown; it is never re-sent
                 holder["error"] = type(exc).__name__
 
-        worker = threading.Thread(target=send, name="img154b-generation-post", daemon=True)
+        worker = threading.Thread(target=send, name="img154b-supervised-post", daemon=True)
         worker.start()
+        aborted = False
         while worker.is_alive():
             worker.join(cfg.supervision_interval_s)
             if not worker.is_alive():
                 break
-            self._poll_progress()
+            if progress:
+                self._poll_progress()
             if self._halted(sampler) or sampler.harness_fault:
-                self._mark("stopping", "operator", reason="monitor halt during generation")
+                self._mark("stopping", "operator", reason="monitor halt during a request")
                 run.shutdown = ports.runtime.stop()  # manager-owned only; never a second request
                 worker.join(cfg.abort_join_s)
+                aborted = True
                 break
         if "result" in holder:
-            run.response = holder["result"]
-        elif "error" in holder or worker.is_alive():
-            run.response = HttpResult(None, None, holder.get("error", "no_response_before_abort"))
-        if run.response is not None and run.response.status == 200:
-            run.validation = validate_response(
-                run.response.status, run.response.body, self.manifest
-            )
-        elif run.response is not None and run.response.status is not None:
-            run.validation = validate_response(
-                run.response.status, run.response.body, self.manifest
-            )
+            return holder["result"], aborted
+        error = holder.get("error", "no_response_before_abort")
+        return HttpResult(None, None, error), aborted
+
+    def _generate(self, sampler: SamplerPort) -> None:
+        run = self._run
+        response, _ = self._supervised_request(
+            sampler,
+            TXT2IMG_ENDPOINT,
+            self.payload.wire_bytes,
+            timeout_s=self.config.generation_timeout_s,
+            progress=True,
+        )
+        run.response = response
+        if response is not None and response.status is not None:
+            run.validation = validate_response(response.status, response.body, self.manifest)
 
     def _poll_progress(self) -> None:
         try:
@@ -767,9 +864,12 @@ class CaseCoordinator:
             waited += step
             if sampler is not None:
                 sampler.watchdog_tick()
-        if sampler is not None:
-            sampler.stop()
-        after = ports.faults()
+        self._stop_sampler(sampler)
+        try:
+            after = ports.faults()
+        except Exception as exc:  # noqa: BLE001 - an unreadable snapshot is an unknown, never a clean claim
+            after = None
+            self._refuse(f"FAULT_SNAPSHOT_FAILED:{type(exc).__name__}")
         seconds_after = max(0.0, clock.mono() - (run.ended_mono or clock.mono()))
         classification = classify_faults(
             collected.fault_before, after, seconds_after_run=seconds_after
@@ -981,6 +1081,13 @@ def _latched_of(samples: Sequence[Mapping[str, Any]]) -> str:
         if isinstance(value, str) and order.get(value, 0) > order[top]:
             top = value
     return top
+
+
+def _fault_coverage(snapshot: FaultSnapshot) -> dict[str, str]:
+    return {
+        name: (snapshot.sources[name].coverage if name in snapshot.sources else "not_collected")
+        for name in FAULT_SOURCES
+    }
 
 
 def _snapshot_dict(snapshot: FaultSnapshot | None) -> dict[str, Any]:

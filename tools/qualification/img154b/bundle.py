@@ -75,7 +75,7 @@ class EvidenceBundle:
         """A generated artifact (the output image): stored once, hashed, never redacted (it is the evidence itself)."""
 
         self._write(f"artifacts/{name}", data)
-        return self._files[f"artifacts/{name}"]["sha256"]
+        return str(self._files[f"artifacts/{name}"]["sha256"])
 
     def note_item(self, item: str, reference: Any) -> None:
         self._items[item] = reference

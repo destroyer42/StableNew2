@@ -375,16 +375,36 @@ def test_t70_an_unreadable_source_tree_is_inconclusive_not_verified():
 # --- T71: remeasure and recheck ------------------------------------------------------------------------------------------
 
 
-def test_t71_remeasure_returns_fresh_readings_and_the_device_identity():
-    world, collector, _ = collect()
-    world.now += 40.0
+def test_t71_remeasure_returns_fresh_readings_a_new_window_a_new_fault_snapshot_and_the_device_identity():
+    world, collector, collected = collect()
+    world.now += 600.0  # the operator's unbounded wait
     world.memory["commit_headroom_bytes"] = 31 * GIB
+    world.faults = ev.FaultSnapshot(
+        "2026-01-01T12:10:00+00:00",
+        BOOT,
+        {
+            name: ev.FaultSourceSnapshot(name, "complete", frozenset({"1", "2"}))
+            for name in ev.FAULT_SOURCES
+        },
+    )
     fresh = collector.remeasure()
-    assert fresh["commit_headroom_bytes"].value == 31 * GIB
-    assert fresh["commit_headroom_bytes"].observed_mono_s == world.now
-    assert fresh["gpu_device_id"].value == DEVICE and fresh["gpu_device_id"].status == "ok"
+    assert fresh.observations["commit_headroom_bytes"].value == 31 * GIB
+    assert fresh.observations["commit_headroom_bytes"].observed_mono_s == world.now
+    assert fresh.observations["gpu_device_id"].value == DEVICE
+    assert fresh.observations["gpu_device_id"].status == "ok"
+    # a window of its own, ending at the new time (the original one is far past the 60 s limit)
+    assert fresh.quiescent_baseline is not None
+    assert (
+        fresh.quiescent_baseline.samples[-1].mono_s
+        > collected.inputs.quiescent_baseline.samples[-1].mono_s + 500
+    )
+    validated, findings = pf.validate_quiescent_baseline(
+        fresh.quiescent_baseline, now_mono_s=world.now, launch_device_id=DEVICE, launch_boot_id=BOOT
+    )
+    assert validated is not None, findings
+    assert fresh.fault_before is world.faults and collector.fault_before is world.faults
     world.device = None
-    assert collector.remeasure()["gpu_device_id"].status == "missing"
+    assert collector.remeasure().observations["gpu_device_id"].status == "missing"
 
 
 def test_t71_an_unwired_served_recheck_is_a_refusal_never_a_silent_pass():

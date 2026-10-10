@@ -7,6 +7,7 @@ Subcommands (all offline or read-only):
 * ``layout-plan``    the isolated layout, served paths and storage cost for a proposed root (creates nothing).
 * ``challenge``      the exact-case binding and challenge digest an owner would review (writes nothing).
 * ``dry-run``        the one-case plan: stages, gates, thresholds and what is required before any live step.
+* ``passphrase-verifier``  derives the salted verifier of an owner-chosen passphrase (prompts without echo).
 
 The physical path is a different module (``physical``) and is not importable from here.
 """
@@ -14,6 +15,7 @@ The physical path is a different module (``physical``) and is not importable fro
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import sys
 from collections.abc import Sequence
@@ -73,6 +75,24 @@ def _challenge(args: argparse.Namespace) -> dict[str, Any]:
     }
 
 
+def _passphrase_verifier(args: argparse.Namespace) -> dict[str, Any]:
+    """Derive the salted verifier of an owner-chosen passphrase (read without echo; never stored or printed)."""
+
+    first = getpass.getpass("Choose the owner passphrase (not echoed): ")
+    second = getpass.getpass("Repeat it: ")
+    if first != second or len(first) < au.MIN_PASSPHRASE_CHARS:
+        raise SystemExit(
+            f"the passphrases differ or are shorter than {au.MIN_PASSPHRASE_CHARS} characters"
+        )
+    salt = au.new_passphrase_salt()
+    return {
+        "passphrase_salt": salt,
+        "passphrase_iterations": au.PASSPHRASE_ITERATIONS,
+        "passphrase_verifier": au.derive_verifier(first, salt),
+        "note": "Copy these three fields into the owner's record. The passphrase itself is never written anywhere.",
+    }
+
+
 def _dry_run(args: argparse.Namespace) -> dict[str, Any]:
     plan = build_manifest()
     payload = rq.build_txt2img_payload(plan)
@@ -88,6 +108,7 @@ def _dry_run(args: argparse.Namespace) -> dict[str, Any]:
         "policy": policy.as_dict(),
         "requires_before_any_live_step": [
             "separately recorded exact-case owner authorization (acceptance of the DIAG-GPU-130 residual risk included)",
+            "the owner's passphrase, typed without echo (its salted verifier is part of the record)",
             "clean, identified code revision matching the authorization",
             "fresh preflight PREPARED_FOR_OWNER_REVIEW at the launch moment with a harness-acquired quiescent baseline",
             "complete served-file proof at the isolated paths",
@@ -128,6 +149,10 @@ def build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--qualification-root", type=Path, required=True)
     sub.add_parser("challenge", help="the exact-case binding an owner would review; writes nothing")
     sub.add_parser("dry-run", help="the one-case plan and its gates")
+    sub.add_parser(
+        "passphrase-verifier",
+        help="derive the salted verifier of an owner passphrase (prompts without echo)",
+    )
     for item in sub.choices.values():
         item.add_argument(
             "--out", type=Path, default=None, help="write the redacted JSON report here"
@@ -142,6 +167,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "layout-plan": _layout_plan,
         "challenge": _challenge,
         "dry-run": _dry_run,
+        "passphrase-verifier": _passphrase_verifier,
     }
     result = redact_value(handlers[args.command](args))
     text = json.dumps(result, indent=2, sort_keys=True)

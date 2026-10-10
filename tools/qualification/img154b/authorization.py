@@ -11,7 +11,10 @@ digests, and that the activation path refuses under a test runner.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import re
+import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
@@ -24,6 +27,12 @@ from tools.qualification.img154b.request import SEMANTICS_REVISION, FrozenPayloa
 AUTHORIZATION_SCHEMA = "stablenew.img154b.owner-authorization.v1"
 RISK_ID = "DIAG-GPU-130"
 MAX_VALIDITY_S = 24 * 3600
+#: The owner's passphrase is a secret only the owner holds: the record stores a salted PBKDF2 verifier, never the passphrase,
+#: and the physical path reads it without echo. An agent or script that can write the record and drive a terminal still
+#: cannot start the run without it. (A record is otherwise just unsigned JSON.)
+PASSPHRASE_ITERATIONS = 600_000
+MIN_PASSPHRASE_ITERATIONS = 100_000
+MIN_PASSPHRASE_CHARS = 12
 REQUIRED_STATEMENT = (
     "I, the product owner, authorize exactly one physical qualification case with the frozen manifest, payload and code "
     "revision named here, and I accept the residual unresolved DIAG-GPU-130 GPU hard-failure risk, including a black screen, "
@@ -70,6 +79,9 @@ class OwnerAuthorization:
     expires_utc: str
     statement: str
     challenge: str
+    passphrase_salt: str
+    passphrase_verifier: str
+    passphrase_iterations: int
 
     def record_digest(self) -> str:
         return digest(
@@ -82,6 +94,7 @@ class OwnerAuthorization:
                 "authorized_utc": self.authorized_utc,
                 "expires_utc": self.expires_utc,
                 "challenge": self.challenge,
+                "passphrase_verifier": self.passphrase_verifier,
             }
         )
 
@@ -146,17 +159,77 @@ def parse_authorization(raw: object) -> OwnerAuthorization:
                 "expires_utc",
                 "statement",
                 "challenge",
+                "passphrase_salt",
+                "passphrase_verifier",
             )
         }
         cases, retries = raw["cases"], raw["retries"]
+        iterations = raw["passphrase_iterations"]
     except KeyError as exc:
         raise AuthorizationError(f"missing field {exc.args[0]!r}") from exc
     if any(not isinstance(value, str) or not value.strip() for value in fields.values()):
         raise AuthorizationError("every named field must be a non-empty string")
-    for number in (cases, retries):
+    for number in (cases, retries, iterations):
         if isinstance(number, bool) or not isinstance(number, int):
-            raise AuthorizationError("cases and retries must be integers")
-    return OwnerAuthorization(accepted_risks=tuple(risks), cases=cases, retries=retries, **fields)
+            raise AuthorizationError("cases, retries and passphrase_iterations must be integers")
+    return OwnerAuthorization(
+        accepted_risks=tuple(risks),
+        cases=cases,
+        retries=retries,
+        passphrase_iterations=iterations,
+        **fields,
+    )
+
+
+_HEX = re.compile(r"[0-9a-f]+")
+
+
+def new_passphrase_salt() -> str:
+    return secrets.token_hex(16)
+
+
+def derive_verifier(passphrase: str, salt_hex: str, iterations: int = PASSPHRASE_ITERATIONS) -> str:
+    """Salted PBKDF2-HMAC-SHA256 of the owner's passphrase (what the record stores in place of the secret)."""
+
+    return hashlib.pbkdf2_hmac(
+        "sha256", passphrase.encode("utf-8"), bytes.fromhex(salt_hex), int(iterations)
+    ).hex()
+
+
+def passphrase_findings(auth: OwnerAuthorization) -> list[Finding]:
+    """Shape of the verifier (not the secret): lowercase hex salt and verifier and a sufficient work factor."""
+
+    problems: list[Finding] = []
+    if not (_HEX.fullmatch(auth.passphrase_salt) and len(auth.passphrase_salt) >= 32):
+        problems.append(
+            Finding("AUTHORIZATION_PASSPHRASE_SALT", "refuse", "the passphrase salt is malformed")
+        )
+    if not (_HEX.fullmatch(auth.passphrase_verifier) and len(auth.passphrase_verifier) == 64):
+        problems.append(
+            Finding(
+                "AUTHORIZATION_PASSPHRASE_VERIFIER",
+                "refuse",
+                "the passphrase verifier is malformed",
+            )
+        )
+    if auth.passphrase_iterations < MIN_PASSPHRASE_ITERATIONS:
+        problems.append(
+            Finding(
+                "AUTHORIZATION_PASSPHRASE_WORK_FACTOR",
+                "refuse",
+                "the passphrase work factor is too low",
+            )
+        )
+    return problems
+
+
+def verify_passphrase(auth: OwnerAuthorization, typed: str | None) -> bool:
+    """Constant-time comparison of the typed secret against the record's verifier. ``False`` for anything unusable."""
+
+    if not isinstance(typed, str) or len(typed) < MIN_PASSPHRASE_CHARS or passphrase_findings(auth):
+        return False
+    derived = derive_verifier(typed, auth.passphrase_salt, auth.passphrase_iterations)
+    return hmac.compare_digest(derived, auth.passphrase_verifier)
 
 
 def read_authorization_text(text: str) -> OwnerAuthorization:
@@ -226,6 +299,7 @@ def verify_authorization(
             "AUTHORIZATION_STATEMENT",
             "the authorization statement is not the required exact statement",
         )
+    findings.extend(passphrase_findings(auth))
     if auth.challenge != authorization_challenge(plan, payload, code):
         mismatch(
             "AUTHORIZATION_CHALLENGE", "the record does not carry the challenge of this exact case"
@@ -248,7 +322,3 @@ def verify_authorization(
                 "the authorization validity window is invalid or longer than 24 hours",
             )
     return findings
-
-
-def source_digest(text: str) -> str:
-    return hashlib.sha256(text.encode("utf-8")).hexdigest()

@@ -844,8 +844,13 @@ class OwnedRuntime:
         }
         return dict(self.start_details)
 
-    def verify_ownership(self) -> OwnershipFacts:
-        """The exact manager PID, its process tree and the endpoint listener, re-verified on every call."""
+    def verify_ownership(self, *, require_listener: bool = True) -> OwnershipFacts:
+        """The exact manager PID, its process tree and the endpoint listener, re-verified on every call.
+
+        ``require_listener=False`` is the boot window: the process is identified (manager ownership, exact PID, unchanged start
+        time) but the endpoint has not bound its port yet. A listener OUTSIDE the owned tree is a refusal in every mode, and a
+        listener inside the tree is required once the endpoint answers (``require_listener=True``).
+        """
 
         problems: list[str] = []
         manager = getattr(self._forge, "manager", None)
@@ -866,13 +871,15 @@ class OwnedRuntime:
         )
         if not unchanged:
             problems.append("owned root process start time changed or is unknown (pid reuse)")
-        tree = (pid, *self.facts.children(pid)) if pid is not None else ()
+        # a root that no longer exists has no tree (a stale single-pid tree would read as "missing" process memory)
+        root_exists = pid is not None and self.facts.exists(pid)
+        tree = (pid, *self.facts.children(pid)) if root_exists and pid is not None else ()
         listeners = tuple(self.facts.listening_pids(self.profile.port))
         in_tree = bool(listeners) and all(item in tree for item in listeners)
-        if not listeners:
-            problems.append("nothing listens on the qualification port")
-        elif not in_tree:
+        if listeners and not in_tree:
             problems.append("a process outside the owned tree listens on the qualification port")
+        elif not listeners and require_listener:
+            problems.append("nothing listens on the qualification port")
         return OwnershipFacts(
             not problems, pid, tree, listeners, in_tree, unchanged, tuple(problems)
         )

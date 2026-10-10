@@ -19,10 +19,10 @@ no queue, runner, history, compiler, PromptPack, profile or GUI authority is add
 | Capability | State |
 | --- | --- |
 | Import of any module | Pure. An audit-hooked subprocess test proves no process start, no network, no native-library load (beyond `import ctypes`'s own kernel32) and no write at import. |
-| `python -m tools.qualification.img154b.cli` (default CLI) | `request`, `layout-plan`, `challenge`, `dry-run`. Offline or read-only. It cannot import the live module. |
+| `python -m tools.qualification.img154b.cli` (default CLI) | `request`, `layout-plan`, `challenge`, `dry-run`, `passphrase-verifier`. Offline or read-only. It cannot import the live module. |
 | `physical preflight` | Read-only live preflight. Starts, selects and sends nothing; consumes no case. |
 | `physical materialize --confirm-copy` | Copies the three verified files (about 14.5 GB) into the isolated layout. Filesystem only. **Not run.** |
-| `physical execute` | The single physical case. Refuses unless: Windows, not under a test runner, `STABLENEW_IMG154B_PHYSICAL=ONE-CASE`, `--attempt-identity` equals the computed identity, an interactive TTY, an owner authorization record at the stable location, then a typed exact-case phrase. **Not run.** |
+| `physical execute` | The single physical case. Refuses unless: Windows, not under a test runner, `STABLENEW_IMG154B_PHYSICAL=ONE-CASE`, `--attempt-identity` equals the computed identity, an interactive TTY, an owner authorization record at the stable location, then a typed exact-case phrase and the owner's passphrase (no echo). **Not run.** |
 | `TECHNICAL_PASS_CONSTRAINED` | Reachable only with a `physical` execution authority that only the `execute` path can mint, plus complete evidence. A synthetic authority tops out at `INSTRUMENTATION_GAP`. |
 
 Git authorization honoured: local branch, implementation, synthetic validation and local commits only; nothing pushed, no PR,
@@ -82,9 +82,12 @@ labels), `report.py` (one residual-risk text and one checklist line).
 * **Exact-case owner authorization** recorded outside the package (`<attempt identity>.owner-authorization.json` in the stable
   record directory), bound to the case identity, manifest digest, payload digest, request-semantics revision, policy and
   evidence revisions, git SHA and the executed-source hash, naming `DIAG-GPU-130` among the accepted risks, scope one case and
-  no retry, the exact statement and the exact challenge digest, valid for at most 24 hours. Nothing in this package writes one
-  (an AST test enforces it) and the record cannot be cryptographically attributed to the owner; the controls are the exact
-  binding, the expiry, the interactive typed phrase and the refusal under a test runner.
+  no retry, the exact statement and the exact challenge digest, valid for at most 24 hours, and carrying a **salted PBKDF2
+  verifier of an owner-chosen passphrase** (`cli passphrase-verifier`). Nothing in this package writes a record (an AST test
+  enforces it). The record is unsigned JSON, so the controls are: the exact binding, the expiry, the interactive typed phrase
+  (composed by the operator from labelled values; the assembled phrase is not printed), **the passphrase only the owner knows,
+  read without echo and never stored or logged**, and the refusal under a test runner. A script that can write the record and
+  drive a console still cannot start the run without the passphrase; the owner must not share it with automation.
 * **Trusted code revision**: a clean checkout with an identified SHA; the source hash covers `img154` and `img154b`.
 * **Fresh, independently validated baselines**: a window of at least 20 samples over at least 20 s, ending within 60 s, taken
   by the harness's own sampler, bound to the NVML device digest and the boot identity of the launch reading, dedicated VRAM
@@ -94,8 +97,12 @@ labels), `report.py` (one residual-risk text and one checklist line).
   free >= 30 GiB, dedicated VRAM <= baseline + 512 MiB.
 * Exact served-file proof, resolved request semantics, verified managed-runtime marker (revision, status, Python minor),
   validated launch profile, complete required telemetry coverage, no competing or foreign runtime, no prior attempt (stable
-  record **and** workspace ledger), the operator's typed phrase, then a **fresh re-measurement** (and device re-check) before
-  the claim. A drop between assessment and claim refuses with nothing consumed.
+  record **and** workspace ledger), the operator's typed phrase and the owner's passphrase, then a **fresh re-measurement**
+  after that unbounded wait: a new fault snapshot, a new 25-second quiescent window, the device identity again, and the
+  resource readings last. A drop (or a stale or mismatched baseline) refuses with nothing consumed.
+* **The sampler is proven healthy before the case is consumed**: three consecutive samples with every essential field `ok`
+  and nothing latched, otherwise the run refuses unclaimed. A claim therefore never precedes working telemetry, and no
+  process starts without it.
 
 ## Atomic no-retry dispatch fence
 
@@ -118,7 +125,11 @@ and unverifiable all refuse), an exact launch command (`--uv --api --port --data
 directory pinned, inherited `COMMANDLINE_ARGS` neutralized because Forge appends it to its argv, caches redirected into the
 isolated root, no model-reference flag), and an ownership check immediately before every runtime-changing step: manager
 ownership, exact PID and unchanged start time, the process tree, and that every listener on the port is inside the owned tree.
-There is no signal, kill, taskkill or other PID authority in the package (AST-enforced). If the manager-owned stop does not
+The manager returns as soon as the process exists and Forge binds the port tens of seconds later, so verification has two
+modes: during the boot window it requires the process identity but no listener (and fails fast if the root exits or a listener
+outside the tree appears); once the endpoint answers it requires every listener to be inside the owned tree, before
+`startup_observed` is recorded and again before the selection request. The selection request is itself supervised by the
+monitor watchdog. There is no signal, kill, taskkill or other PID authority in the package (AST-enforced). If the manager-owned stop does not
 return in time or leaves a survivor, the automation ends and prints operator recovery instructions.
 
 ## Telemetry: available and limited
@@ -155,9 +166,10 @@ technical result, never stability, repeatability or production support.
 
 | Evidence | Result |
 | --- | --- |
-| New focused suites (`tests/tools/test_img154b_*.py`: request, fence, adjudication, preflight, runtime, sampler, case, collector, boundary) | all pass (see the counts in the completion report) |
+| New focused suites (`tests/tools/test_img154b_*.py`: request, fence, adjudication, authorization, preflight, runtime, sampler, case, collector, boundary) | all pass (see the counts in the completion report) |
+| Independent read-only review (separate agent, base commit `e8382f46`) | Verified the request semantics, fence, no-replay HTTP and native structure layouts. Found two blockers and two HIGH issues that the fakes had hidden, all fixed with regressions: (B1) ownership demanded a listener immediately after the non-blocking start; (B2) a ctypes structure's `_fields_` was assigned per instance, so a second PDH query in a process failed; (H1) no ownership gate between readiness and the selection request; (H2) post-stop samples counted as missing process-tree coverage so a flawless run could never pass. Also fixed: sampler construction and health proof before the claim, guarded post-run path, non-echoed owner passphrase, supervised selection request, fresh baseline after the operator wait, daemon provider threads, NVML init lock, BOM-tolerant record read, Euler extra options. |
 | Unchanged 154A suites and PR-115/151/152/153 plus the WebUI process-manager ownership suites | pass |
-| Mutation probes (15 high-risk rules: non-exclusive claim, skipped ownership, post-then-record, ignored confirmation, shift key, CFG 0, no-shutdown pass, ignored device mismatch, hard-link alias, authorization removed, unconditional shutdown verification, second POST budget, torn ledger as clean, unverified selection, no fresh-sample wait) | all killed (two survived the first run; the cross-process test was not sensitive to a stale pre-check and the shutdown test did not cover an unobserved tree, so two regressions were added) |
+| Mutation probes (26 high-risk rules, including non-exclusive claim, skipped or stale ownership, post-then-record, ignored confirmation and passphrase, shift key, CFG 0, no-shutdown pass, ignored device mismatch, hard-link alias, authorization removed, unconditional shutdown verification, second POST budget, torn ledger as clean, unverified selection, no fresh-sample wait, boot-window listener, endpoint ownership, skipped sampler proof, stale single-pid tree, re-assigned PDH fields) | all killed (two survived the first round; the cross-process test was not sensitive to a stale pre-check and the shutdown test did not cover an unobserved tree, so two regressions were added) |
 | Anchors against the installed pinned tree (read-only text) | 23 anchors, 14 payload keys, no findings |
 | Real native providers, read-only, 12.5 s | all fields ok, cadence and latency as above |
 | Live read-only preflight (below) | refused, as expected |
@@ -177,10 +189,13 @@ needs a near-idle desktop (commit total at most about 12.8 GiB) still holds.
 ## Residual risks and what remains unproven
 
 * `DIAG-GPU-130` black-screen / live-kernel recurrences are unresolved and unattributed; no monitor can recover them.
-* Every numeric threshold and the baseline-validation criteria are provisional; the RAM stop rule is uncalibrated.
+* Every numeric threshold and the baseline-validation criteria are provisional; the RAM stop rule is uncalibrated. PR-IMG-115
+  already saw 0.01 GB of available RAM during a benign load, so the 1 GiB floor held for 10 s may stop a healthy run
+  (`RESOURCE_ABORT_REQUESTED`), which consumes the case. The threshold was not relaxed; that is an owner decision.
 * The semantics are a source reading, never exercised; image quality, load time and peak memory are unknown.
 * File provenance is exact bytes only; official provenance is unverified.
-* The owner-authorization record's authorship cannot be proven in software.
+* The owner-authorization record is unsigned; its authorship rests on the passphrase only the owner holds, and an owner who
+  shares the passphrase with automation defeats that control.
 * The dispatch is an hour-scale, single blocking request; the real HTTP path and the OwnedForge start have only been tested
   against fakes and a loopback test server.
 
@@ -188,5 +203,6 @@ needs a near-idle desktop (commit total at most about 12.8 GiB) still holds.
 
 The harness is ready for review and, **if the owner then separately authorizes it**, a first run. Sequence: independent review
 and hosted CI; owner decision on the residual risk; `physical materialize --confirm-copy` into an isolated root; a quiet
-desktop meeting the unchanged thresholds; `cli challenge`; the owner records the authorization; `physical execute` in an
-interactive terminal with the environment opt-in. A refusal at any gate consumes nothing.
+desktop meeting the unchanged thresholds; `cli passphrase-verifier` and `cli challenge`; the owner records the authorization
+(including the verifier); `physical execute` in an interactive terminal with the environment opt-in, the typed phrase and the
+passphrase. A refusal at any gate consumes nothing.

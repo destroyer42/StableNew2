@@ -22,7 +22,7 @@ import os
 import threading
 import time
 from collections.abc import Callable, Mapping, Sequence
-from concurrent.futures import Future, ThreadPoolExecutor, wait
+from concurrent.futures import Future, wait
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any, Protocol
@@ -93,7 +93,7 @@ class NativeMemoryProvider:
     """``GetPerformanceInfo`` commit and physical memory, as exact integer bytes (never ``RAM + pagefile - reserve``)."""
 
     name = "windows_memory"
-    fields = (
+    fields: tuple[str, ...] = (
         "commit_total_bytes",
         "commit_limit_bytes",
         "commit_headroom_bytes",
@@ -163,7 +163,7 @@ class NvmlProvider:
     """
 
     name = "nvml"
-    fields = (
+    fields: tuple[str, ...] = (
         "vram_used_bytes",
         "vram_total_bytes",
         "gpu_temperature_c",
@@ -181,13 +181,14 @@ class NvmlProvider:
         self.device_id: str | None = None
         self.device_name: str | None = None
         self._initialized = False
+        self._init_lock = threading.Lock()
 
     def _load(self) -> Any:
         if self._lib is not None:
             return self._lib
         for path in _nvml_candidates():
             if os.path.isfile(path):
-                self._lib = ctypes.WinDLL(path)  # type: ignore[attr-defined]
+                self._lib = ctypes.WinDLL(path)  # type: ignore[attr-defined,unused-ignore]
                 return self._lib
         raise ProviderUnavailable("nvml.dll was not found in the driver locations")
 
@@ -195,6 +196,10 @@ class NvmlProvider:
         return int(getattr(self._load(), name)(*args))
 
     def _initialize(self) -> None:
+        with self._init_lock:
+            self._initialize_locked()
+
+    def _initialize_locked(self) -> None:
         if self._initialized:
             return
         if self._call("nvmlInit_v2") != NVML_SUCCESS:
@@ -340,7 +345,7 @@ def enumerate_dxgi_adapters() -> list[
         (ctypes.c_ubyte * 8)(0xA8, 0x29, 0x25, 0x3C, 0x83, 0xD1, 0xB3, 0x87),
     )
     root = os.environ.get("SystemRoot") or r"C:\Windows"
-    dxgi = ctypes.WinDLL(os.path.join(root, "System32", "dxgi.dll"))  # type: ignore[attr-defined]
+    dxgi = ctypes.WinDLL(os.path.join(root, "System32", "dxgi.dll"))  # type: ignore[attr-defined,unused-ignore]
     factory = ctypes.c_void_p()
     if dxgi.CreateDXGIFactory1(ctypes.byref(iid), ctypes.byref(factory)) != 0 or not factory.value:
         raise ProviderUnavailable("CreateDXGIFactory1 failed")
@@ -423,7 +428,7 @@ class PdhProvider:
     """
 
     name = "windows_pdh"
-    fields = ("shared_vram_bytes", "hard_pages_input_per_s")
+    fields: tuple[str, ...] = ("shared_vram_bytes", "hard_pages_input_per_s")
     SHARED = "\\GPU Adapter Memory(*)\\Shared Usage"
     DEDICATED = "\\GPU Adapter Memory(*)\\Dedicated Usage"
     PAGES = "\\Memory\\Pages Input/sec"
@@ -482,6 +487,20 @@ class PdhProvider:
         )
 
 
+class _PdhValue(ctypes.Union):
+    _fields_ = [("l", ctypes.c_long), ("d", ctypes.c_double), ("q", ctypes.c_longlong)]
+
+
+class _PdhItem(ctypes.Structure):
+    """``PDH_FMT_COUNTERVALUE_ITEM_W``: name pointer, status, 8-byte value union (24 bytes on x64).
+
+    Defined once at module level: a ctypes structure's ``_fields_`` can be assigned only once, so a per-instance assignment
+    made every second ``_PdhQuery`` in a process fail.
+    """
+
+    _fields_ = [("name", ctypes.c_wchar_p), ("status", ctypes.c_ulong), ("value", _PdhValue)]
+
+
 class _PdhQuery:  # pragma: no cover - exercised by the opt-in Windows smoke
     """The minimal native PDH wrapper (English counter names, large/double formatted values, array counters)."""
 
@@ -489,24 +508,13 @@ class _PdhQuery:  # pragma: no cover - exercised by the opt-in Windows smoke
     PDH_FMT_LARGE = 0x00000400
     PDH_MORE_DATA = 0x800007D2
 
-    class _Value(ctypes.Union):
-        _fields_ = [("l", ctypes.c_long), ("d", ctypes.c_double), ("q", ctypes.c_longlong)]
-
-    class _Item(ctypes.Structure):
-        pass
-
     def __init__(self) -> None:
         root = os.environ.get("SystemRoot") or r"C:\Windows"
-        self._pdh = ctypes.WinDLL(os.path.join(root, "System32", "pdh.dll"))  # type: ignore[attr-defined]
+        self._pdh = ctypes.WinDLL(os.path.join(root, "System32", "pdh.dll"))  # type: ignore[attr-defined,unused-ignore]
         self._query = ctypes.c_void_p()
         if self._pdh.PdhOpenQueryW(None, 0, ctypes.byref(self._query)) != 0:
             raise ProviderUnavailable("PdhOpenQuery failed")
         self._counters: dict[str, ctypes.c_void_p] = {}
-        self._Item._fields_ = [
-            ("name", ctypes.c_wchar_p),
-            ("status", ctypes.c_ulong),
-            ("value", self._Value),
-        ]
 
     def add(self, path: str) -> None:
         handle = ctypes.c_void_p()
@@ -536,7 +544,7 @@ class _PdhQuery:  # pragma: no cover - exercised by the opt-in Windows smoke
             != 0
         ):
             return {}
-        items = ctypes.cast(buffer, ctypes.POINTER(self._Item))
+        items = ctypes.cast(buffer, ctypes.POINTER(_PdhItem))
         result: dict[str, float | None] = {}
         for index in range(count.value):
             item = items[index]
@@ -556,7 +564,7 @@ class ProcessTreeProvider:
     """Resident and private memory of exactly the owned process tree (the pids come from the verified ownership facts)."""
 
     name = "owned_process_tree"
-    fields = ("forge_tree_working_set_bytes", "forge_tree_private_bytes")
+    fields: tuple[str, ...] = ("forge_tree_working_set_bytes", "forge_tree_private_bytes")
 
     def __init__(
         self,
@@ -614,7 +622,7 @@ class FaultEventProvider:
     """Slow-cadence new-fault-record observation (an injected callable; production wraps the 154A snapshot diff)."""
 
     name = "fault_events"
-    fields = ("fault_events",)
+    fields: tuple[str, ...] = ("fault_events",)
 
     def __init__(self, observe: Callable[[], Sequence[str]]) -> None:
         self._observe = observe
@@ -627,6 +635,32 @@ class FaultEventProvider:
 
 
 # ------------------------------------------------------------------------------------------------------- sampler
+
+#: The fields whose simultaneous ``ok`` status makes a sample "clean" for the pre-dispatch streak.
+ESSENTIAL_FIELDS = (
+    "commit_headroom_bytes",
+    "ram_available_bytes",
+    "vram_used_bytes",
+    "vram_total_bytes",
+    "shared_vram_bytes",
+    "gpu_temperature_c",
+    "gpu_device_present",
+)
+
+
+def _submit_daemon(function: Callable[[], ProviderReading], name: str) -> Future[ProviderReading]:
+    """Run one provider read on its own DAEMON thread and return a ``Future`` (a pool's workers are not daemons)."""
+
+    future: Future[ProviderReading] = Future()
+
+    def run() -> None:
+        try:
+            future.set_result(function())
+        except BaseException as exc:  # noqa: BLE001 - delivered to the sampler as a failed reading
+            future.set_exception(exc)
+
+    threading.Thread(target=run, name=name, daemon=True).start()
+    return future
 
 
 @dataclass(frozen=True)
@@ -680,7 +714,6 @@ class TelemetrySampler:
         endpoint: Callable[[], str] | None = None,
         owner: Callable[[], Mapping[str, Any]] | None = None,
         config: SamplerConfig | None = None,
-        executor: ThreadPoolExecutor | None = None,
         sleep_until: Callable[[float], bool] | None = None,
     ) -> None:
         self.config = config or SamplerConfig()
@@ -692,10 +725,7 @@ class TelemetrySampler:
         self._endpoint = endpoint or (lambda: "unknown")
         self._owner = owner or (lambda: {})
         self._lock = threading.Lock()
-        self._executor = executor or ThreadPoolExecutor(
-            max_workers=max(1, len(self._providers)), thread_name_prefix="img154b-sample"
-        )
-        self._owns_executor = executor is None
+        self._clean_streak = 0
         self._pending: dict[str, Future[ProviderReading]] = {}
         self._last_slow: dict[str, float] = {}
         self._cached_slow: dict[str, ProviderReading] = {}
@@ -736,7 +766,9 @@ class TelemetrySampler:
                 last = self._last_slow.get(provider.name)
                 due = last is None or now - last >= self.config.slow_interval_s
                 if due and pending is None:
-                    self._pending[provider.name] = self._executor.submit(provider.read)
+                    self._pending[provider.name] = _submit_daemon(
+                        provider.read, f"img154b-{provider.name}"
+                    )
                     self._last_slow[provider.name] = now
                 cached = self._cached_slow.get(provider.name)
                 if cached is not None:
@@ -749,7 +781,7 @@ class TelemetrySampler:
                 for name in provider.fields:
                     values[name], status[name] = None, STUCK
                 continue
-            future = self._executor.submit(provider.read)
+            future = _submit_daemon(provider.read, f"img154b-{provider.name}")
             self._pending[provider.name] = future
             fast[provider.name] = future
         if fast:
@@ -825,6 +857,12 @@ class TelemetrySampler:
                 },
             )
             decision = self._monitor.ingest(sample)
+            essential_ok = all(status.get(name) == OK for name in ESSENTIAL_FIELDS)
+            self._clean_streak = (
+                self._clean_streak + 1
+                if essential_ok and decision.latched_action not in HALT_LEVELS
+                else 0
+            )
             self.last_values = {k: v for k, v in values.items() if k != "fault_events"}
             action = decision.latched_action
             record = {
@@ -923,6 +961,12 @@ class TelemetrySampler:
     def sample_count(self) -> int:
         return self._seq
 
+    @property
+    def clean_streak(self) -> int:
+        """Consecutive samples with every essential field ``ok`` and no latched stop or uncertainty."""
+
+        return self._clean_streak
+
     # --------------------------------------------------------------------------------------------------- thread
     def start(self) -> None:
         if self._thread is not None:
@@ -959,8 +1003,7 @@ class TelemetrySampler:
         thread = self._thread
         if thread is not None:
             thread.join(timeout_s)
-        if self._owns_executor:
-            self._executor.shutdown(wait=False, cancel_futures=True)
+        # provider threads are daemons: a native call that never returns cannot hold the interpreter open at exit
 
 
 def _num(value: object) -> float | None:

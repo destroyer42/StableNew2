@@ -679,3 +679,107 @@ def test_t44_a_slow_cadence_provider_never_delays_the_tick_even_when_it_is_very_
     assert sampler.halt is None  # nothing was observed yet: absence of a report is not a report
     release.set()
     sampler.stop()
+
+
+# --- T49-T52: independent-review findings -------------------------------------------------------------------------------
+
+
+def test_t49_the_pdh_item_structure_is_defined_once_and_never_reassigned_per_instance():
+    import ast
+    from pathlib import Path
+
+    assert [name for name, _ in sp._PdhItem._fields_] == ["name", "status", "value"]
+    assert ctypes.sizeof(sp._PdhItem) == (24 if ctypes.sizeof(ctypes.c_void_p) == 8 else 16)
+    tree = ast.parse(Path(sp.__file__).read_text(encoding="utf-8"))
+    for function in [n for n in ast.walk(tree) if isinstance(n, ast.FunctionDef)]:
+        for node in ast.walk(function):
+            targets = node.targets if isinstance(node, ast.Assign) else []
+            for target in targets:
+                assert not (isinstance(target, ast.Attribute) and target.attr == "_fields_"), (
+                    function.name
+                )
+    # a ctypes structure's _fields_ is final: re-assigning it on a second instance raised AttributeError in a real run
+    with pytest.raises(AttributeError):
+        sp._PdhItem._fields_ = []
+
+
+@pytest.mark.skipif(
+    sys.platform != "win32" or os.environ.get("STABLENEW_IMG154B_NATIVE_SMOKE") != "1",
+    reason="opt-in Windows read-only native-counter smoke (set STABLENEW_IMG154B_NATIVE_SMOKE=1)",
+)
+def test_t49_two_native_pdh_queries_can_coexist_in_one_process():
+    first, second = sp._PdhQuery(), sp._PdhQuery()
+    for query in (first, second):
+        query.add(sp.PdhProvider.PAGES)
+        query.collect()
+        query.close()
+
+
+def test_t50_provider_threads_are_daemons_so_a_hung_native_call_cannot_hold_the_interpreter(
+    tmp_path,
+):
+    release = threading.Event()
+    hung = FakeProvider("nvml", sp.NvmlProvider.fields, GOOD_GPU, block=release)
+    sampler, _, _ = make_sampler(
+        tmp_path, providers(gpu=hung), config=sp.SamplerConfig(provider_timeout_s=0.05)
+    )
+    sampler.sample_once()
+    workers = [t for t in threading.enumerate() if t.name == "img154b-nvml"]
+    assert workers and all(t.daemon for t in workers)
+    release.set()
+
+
+def test_t51_the_clean_streak_counts_complete_samples_and_resets_on_any_gap_or_latch(tmp_path):
+    flaky_status = {"shared_vram_bytes": "ok"}
+    pdh = FakeProvider("windows_pdh", sp.PdhProvider.fields, GOOD_PDH, flaky_status)
+    sampler, clock, _ = make_sampler(tmp_path, providers(pdh=pdh))
+    for expected in (1, 2, 3):
+        sampler.sample_once()
+        clock.advance(1.0)
+        assert sampler.clean_streak == expected
+    flaky_status["shared_vram_bytes"] = "missing"  # one incomplete essential field
+    sampler.sample_once()
+    clock.advance(1.0)
+    assert sampler.clean_streak == 0
+    flaky_status["shared_vram_bytes"] = "ok"
+    sampler.sample_once()
+    assert sampler.clean_streak == 1
+
+
+def test_t51_a_latched_stop_is_never_clean(tmp_path):
+    low = FakeProvider(
+        "windows_memory",
+        sp.NativeMemoryProvider.fields,
+        {**GOOD_MEMORY, "commit_headroom_bytes": 3 * GIB},
+    )
+    sampler, clock, _ = make_sampler(tmp_path, providers(memory=low))
+    for _ in range(4):
+        sampler.sample_once()
+        clock.advance(1.0)
+    assert sampler.halt is not None and sampler.clean_streak == 0
+
+
+def test_t52_nvml_is_initialized_exactly_once_under_concurrent_first_use():
+    class SlowNvml(FakeNvml):
+        def nvmlInit_v2(self):
+            time.sleep(0.05)  # widen the race window
+            return super().nvmlInit_v2()
+
+    library = SlowNvml([DEVICE])
+    provider = sp.NvmlProvider(library)
+    results: list[str] = []
+    errors: list[Exception] = []
+
+    def use():
+        try:
+            results.append(provider.identify())
+        except Exception as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    threads = [threading.Thread(target=use) for _ in range(6)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(5)
+    assert errors == [] and len(set(results)) == 1 and len(results) == 6
+    assert library.initialized == 1

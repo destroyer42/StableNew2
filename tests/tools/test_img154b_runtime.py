@@ -604,3 +604,51 @@ def test_t32_a_stop_that_never_observed_the_tree_or_the_root_gone_is_not_verifie
         result.succeeded and not result.verified
     )  # absence of an observation is not a clean shutdown
     assert result.outcome == "requested_unverified"
+
+
+# --- T33-T34: boot-window ownership and the tree after the stop (independent-review findings) ----------------------------
+
+
+def test_t33_the_boot_window_needs_the_process_identity_not_a_listener(profile):
+    runtime, _, facts = started_runtime(profile, facts=FakeFacts(listeners=()))
+    boot = runtime.verify_ownership(require_listener=False)
+    assert boot.owned and boot.listener_pids == () and not boot.endpoint_in_tree
+    assert boot.pid == 4242 and boot.start_time_unchanged
+    strict = runtime.verify_ownership(require_listener=True)
+    assert not strict.owned and any("nothing listens" in p for p in strict.problems)
+    facts.listeners = [4243]  # the endpoint bound, inside the owned tree
+    bound = runtime.verify_ownership(require_listener=True)
+    assert bound.owned and bound.endpoint_in_tree
+
+
+def test_t33_a_listener_outside_the_owned_tree_refuses_in_every_mode(profile):
+    runtime, _, _ = started_runtime(profile, facts=FakeFacts(listeners=(9999,)))
+    for mode in (False, True):
+        facts = runtime.verify_ownership(require_listener=mode)
+        assert not facts.owned and not facts.endpoint_in_tree
+        assert any("outside the owned tree" in p for p in facts.problems)
+
+
+def test_t33_the_boot_window_still_fails_fast_when_the_root_exits_or_the_manager_disowns(profile):
+    runtime, _, facts = started_runtime(profile, facts=FakeFacts(listeners=()))
+    facts.alive.clear()
+    gone = runtime.verify_ownership(require_listener=False)
+    assert not gone.owned and any("does not exist" in p for p in gone.problems)
+    disowned, _, _ = started_runtime(profile, owns=False, facts=FakeFacts(listeners=()))
+    assert not disowned.verify_ownership(require_listener=False).owned
+
+
+def test_t34_after_the_root_is_gone_the_tree_is_empty_so_process_memory_is_not_applicable(profile):
+    from tools.qualification.img154b import sampler as sp
+
+    runtime, _, facts = started_runtime(profile)
+    assert runtime.verify_ownership().tree == (4242, 4243)
+    facts.alive.clear()  # the owned stop removed the tree
+    after = runtime.verify_ownership()
+    assert (
+        after.tree == ()
+    )  # a stale single-pid tree would read as "missing" memory for the whole settle interval
+    provider = sp.ProcessTreeProvider(
+        lambda: runtime.verify_ownership().tree, reader=lambda pid: None
+    )
+    assert set(provider.read().status.values()) == {"not_applicable"}

@@ -55,6 +55,11 @@ def png_b64() -> str:
 
 PNG = png_b64()
 
+PASSPHRASE = "a long owner passphrase"
+PASSPHRASE_SALT = "0123456789abcdef0123456789abcdef"
+PASSPHRASE_ITERATIONS = 100_000
+PASSPHRASE_VERIFIER = au.derive_verifier(PASSPHRASE, PASSPHRASE_SALT, PASSPHRASE_ITERATIONS)
+
 
 # --- fakes ---------------------------------------------------------------------------------------------------------------
 
@@ -166,7 +171,7 @@ class FakeCollector:
         fresh["gpu_device_id"] = Observation(
             "gpu_device_id", self.device_after, "id", "fake", self.clock.mono(), UTC_NOW, "ok"
         )
-        return fresh
+        return cs.Remeasured(fresh, baseline_window(self.clock), complete_faults())
 
     def recheck_served(self):
         self.events.add("recheck_served")
@@ -174,12 +179,20 @@ class FakeCollector:
 
 
 class FakeRuntime:
-    def __init__(self, events, *, owned=True, start_raises=None, shutdown=None):
+    """``listening`` becomes true only when the endpoint first answers (Forge binds its port tens of seconds after start)."""
+
+    def __init__(
+        self, events, *, owned=True, start_raises=None, shutdown=None, foreign_listener=False
+    ):
         self.events = events
         self.owned = owned
         self.start_raises = start_raises
         self.shutdown = shutdown or rt.ShutdownResult(True, True, False, True, (), "ok")
+        self.foreign_listener = foreign_listener
+        self.listening = False
         self.stops = 0
+        self.foreign_after_ready = False
+        self.ownership_calls: list[bool] = []
 
     def start(self):
         self.events.add("runtime.start")
@@ -187,11 +200,21 @@ class FakeRuntime:
             raise self.start_raises
         return {"pid": 4242, "owns_process": self.owned}
 
-    def verify_ownership(self):
+    def verify_ownership(self, *, require_listener=True):
         self.events.add("verify_ownership")
-        problems = () if self.owned else ("manager does not report launch-session ownership",)
+        self.ownership_calls.append(require_listener)
+        problems = []
+        if not self.owned:
+            problems.append("manager does not report launch-session ownership")
+        foreign = self.foreign_listener or (self.foreign_after_ready and self.listening)
+        listeners = (9999,) if foreign else ((4243,) if self.listening else ())
+        if foreign:
+            problems.append("a process outside the owned tree listens on the qualification port")
+        elif not listeners and require_listener:
+            problems.append("nothing listens on the qualification port")
+        in_tree = bool(listeners) and not foreign
         return rt.OwnershipFacts(
-            self.owned, 4242, (4242, 4243), (4243,), self.owned, True, problems
+            not problems, 4242, (4242, 4243), listeners, in_tree, True, tuple(problems)
         )
 
     def stop(self):
@@ -205,9 +228,21 @@ class FakeRuntime:
 
 class FakeHttp:
     def __init__(
-        self, events, clock, *, options=None, generation=None, drop_module=False, never_ready=False
+        self,
+        events,
+        clock,
+        *,
+        options=None,
+        generation=None,
+        drop_module=False,
+        never_ready=False,
+        boot_failures=2,
     ):
         self.events, self.clock = events, clock
+        self.boot_failures = (
+            boot_failures  # connection-refused answers while the endpoint is still binding
+        )
+        self.on_ready = None
         self.options = dict(rq.EXPECTED_SAMPLING_OPTIONS)
         self.options.update(hide_schedulers=[], sd_model_checkpoint="", forge_additional_modules=[])
         self.options.update(options or {})
@@ -223,8 +258,11 @@ class FakeHttp:
         self.events.add("http.get", path)
         if path.startswith("/sdapi/v1/progress"):
             return cs.HttpResult(200, self.progress)
-        if self.never_ready:
+        if self.never_ready or self.boot_failures > 0:
+            self.boot_failures -= 1 if not self.never_ready else 0
             return cs.HttpResult(None, None, "connection refused")
+        if self.on_ready is not None:
+            self.on_ready()
         return cs.HttpResult(200, dict(self.options))
 
     def post_json(self, path, body, *, timeout_s):
@@ -257,8 +295,18 @@ class FakeSampler:
     """A SamplerPort whose stream and halts are scripted; it writes real sample records through the coordinator's writer."""
 
     def __init__(
-        self, monitor, writer, stage, endpoint, *, samples=20, status_overrides=None, script=None
+        self,
+        monitor,
+        writer,
+        stage,
+        endpoint,
+        *,
+        samples=20,
+        status_overrides=None,
+        script=None,
+        unhealthy=False,
     ):
+        self.unhealthy = unhealthy
         self.writer = writer
         self.halt_event = threading.Event()
         self.halt = None
@@ -290,6 +338,10 @@ class FakeSampler:
     @property
     def sample_count(self):
         return self.ticks
+
+    @property
+    def clean_streak(self):
+        return 0 if self.unhealthy else self.ticks
 
     def watchdog_tick(self):
         self.ticks += 1
@@ -324,6 +376,9 @@ class Harness:
         self.collector = options.pop("collector", None) or FakeCollector(self.clock, self.events)
         self.runtime = options.pop("runtime", None) or FakeRuntime(self.events)
         self.http = options.pop("http", None) or FakeHttp(self.events, self.clock)
+        # the endpoint binds only after the manager returned: the runtime starts listening when the endpoint first answers
+        self.http.on_ready = lambda: setattr(self.runtime, "listening", True)
+        self.secret = options.pop("secret", PASSPHRASE)
         self.sampler_kwargs = options.pop("sampler", {})
         self.fault_after = options.pop("fault_after", "same")
         self.typed = options.pop("typed", None)
@@ -337,6 +392,11 @@ class Harness:
         self.samplers: list[FakeSampler] = []
         self.bundle_dir = tmp_path / "bundle"
         assert not options, options
+
+    def use_http(self, http):
+        self.http = http
+        self.http.on_ready = lambda: setattr(self.runtime, "listening", True)
+        return http
 
     def _authorization(self, **overrides):
         base = {
@@ -357,6 +417,9 @@ class Harness:
             "expires_utc": "2026-01-01T23:00:00+00:00",
             "statement": au.REQUIRED_STATEMENT,
             "challenge": au.authorization_challenge(self.manifest, self.payload, CODE),
+            "passphrase_salt": PASSPHRASE_SALT,
+            "passphrase_verifier": PASSPHRASE_VERIFIER,
+            "passphrase_iterations": PASSPHRASE_ITERATIONS,
         }
         base.update(overrides)
         return au.parse_authorization(base)
@@ -385,6 +448,7 @@ class Harness:
             sampler_factory=self.make_sampler,
             faults=self.faults,
             confirm=self.confirm,
+            passphrase=lambda: self.secret,
             clock=self.clock.port(),
             bundle=EvidenceBundle(self.bundle_dir, sync=lambda fd: None),
             sample_path=self.tmp / "samples.jsonl",
@@ -641,7 +705,7 @@ def test_t52_a_changed_gpu_or_an_unchecked_device_identity_is_refused(tmp_path):
 
     def without_identity():
         fresh = original()
-        fresh.pop("gpu_device_id")
+        fresh.observations.pop("gpu_device_id")
         return fresh
 
     h2.collector.remeasure = without_identity
@@ -798,7 +862,7 @@ def test_t56_unverified_ownership_never_proceeds_to_the_endpoint(tmp_path):
 
 def test_t56_a_readiness_timeout_is_a_loader_failure_and_never_reaches_selection(tmp_path):
     h = Harness(tmp_path, http=None)
-    h.http = FakeHttp(h.events, h.clock, never_ready=True)
+    h.use_http(FakeHttp(h.events, h.clock, never_ready=True))
     h.config = replace(h.config, ready_timeout_s=5.0)
     report = h.run()
     assert report.result.result_class == ev.LOADER_FAILED
@@ -808,7 +872,7 @@ def test_t56_a_readiness_timeout_is_a_loader_failure_and_never_reaches_selection
 
 def test_t56_non_default_sampling_options_stop_the_run_before_any_selection(tmp_path):
     h = Harness(tmp_path, http=None)
-    h.http = FakeHttp(h.events, h.clock, options={"beta_dist_alpha": 0.9})
+    h.use_http(FakeHttp(h.events, h.clock, options={"beta_dist_alpha": 0.9}))
     report = h.run()
     assert report.result.result_class == ev.LOADER_FAILED
     assert "OPTION_NOT_DEFAULT" in report.refusals
@@ -819,7 +883,7 @@ def test_t56_a_silently_dropped_module_is_caught_by_the_read_back_and_nothing_is
     tmp_path,
 ):
     h = Harness(tmp_path, http=None)
-    h.http = FakeHttp(h.events, h.clock, drop_module=True)
+    h.use_http(FakeHttp(h.events, h.clock, drop_module=True))
     report = h.run()
     assert report.result.result_class == ev.LOADER_FAILED
     assert "SELECTION_MODULES_MISMATCH" in report.refusals
@@ -1199,6 +1263,7 @@ class SteppedSampler:
         self.clock = clock
 
     sample_count = property(lambda self: self.inner.sample_count)
+    clean_streak = property(lambda self: self.inner.clean_streak)
     halt_event = property(lambda self: self.inner.halt_event)
     halt = property(lambda self: self.inner.halt)
     harness_fault = property(lambda self: self.inner.harness_fault)
@@ -1334,7 +1399,227 @@ def test_t66_the_coordinator_performs_no_io_of_its_own_and_one_post_per_action()
         and isinstance(n.func, ast.Attribute)
         and n.func.attr == "post_json"
     ]
-    assert len(posts) == 2  # the selection and the single generation request
+    assert (
+        len(posts) == 1
+    )  # one call site: both the selection and the generation go through it, supervised
+    supervised = [
+        n
+        for n in ast.walk(tree)
+        if isinstance(n, ast.Call)
+        and isinstance(n.func, ast.Attribute)
+        and n.func.attr == "_supervised_request"
+    ]
+    assert len(supervised) == 2  # the selection request and the single generation request
     assert not [
         n for n in ast.walk(tree) if isinstance(n, ast.While) and "post_json" in ast.dump(n)
     ]
+
+
+# --- T80-T86: independent-review findings --------------------------------------------------------------------------------
+
+
+def test_t80_the_manager_returns_before_the_endpoint_binds_and_the_run_still_proceeds(tmp_path):
+    h = Harness(
+        tmp_path
+    )  # two refused connections first; the listener exists only once the endpoint answers
+    report = h.run()
+    assert report.claimed and report.executed
+    assert h.runtime.ownership_calls[0] is False  # the boot window never demanded a listener
+    assert True in h.runtime.ownership_calls  # ... and one was required once the endpoint answered
+    option_gets = [r for r in h.http.requests if r[0] == "GET" and r[1] == "/sdapi/v1/options"]
+    assert len(option_gets) >= 4  # two refused + one answered + the read-back
+
+
+def test_t80_a_listener_outside_the_owned_tree_during_boot_is_refused_before_any_request(tmp_path):
+    h = Harness(tmp_path)
+    h.runtime = FakeRuntime(h.events, foreign_listener=True)
+    report = h.run()
+    assert report.result.result_class == ev.LOADER_FAILED
+    assert "OWNERSHIP_NOT_VERIFIED" in report.refusals
+    assert not h.http.requests  # nothing was sent while a stranger held the port
+    assert h.runtime.stops == 1
+
+
+def test_t81_an_endpoint_that_is_not_the_owned_tree_never_receives_the_selection(tmp_path):
+    h = Harness(tmp_path)
+    h.runtime.foreign_after_ready = (
+        True  # another process binds the port and is the one that answers
+    )
+    report = h.run()
+    assert report.result.result_class == ev.LOADER_FAILED
+    assert "ENDPOINT_NOT_OWNED" in report.refusals
+    assert not [r for r in h.http.requests if r[0] == "POST"]
+    assert "startup_observed" not in report.stages
+
+
+def test_t82_an_unhealthy_sampler_refuses_before_the_case_is_consumed_or_anything_starts(tmp_path):
+    h = Harness(tmp_path, sampler={"unhealthy": True})
+    report = h.run()
+    assert report.result.result_class == ev.PREFLIGHT_REFUSED
+    assert "SAMPLER_NOT_HEALTHY" in report.refusals
+    assert not report.claimed and h.fence.state().status == "none"
+    assert "runtime.start" not in h.events.names() and not h.http.requests
+    assert h.samplers[0].stopped
+
+
+def test_t82_a_sampler_that_cannot_be_built_refuses_without_consuming_the_case(tmp_path):
+    h = Harness(tmp_path)
+
+    def broken(monitor, writer, stage, endpoint):
+        raise RuntimeError("NVML identify failed")
+
+    h.make_sampler = broken
+    report = h.run()
+    assert report.result.result_class == ev.PREFLIGHT_REFUSED
+    assert any(r.startswith("SAMPLER_UNAVAILABLE") for r in report.refusals)
+    assert not report.claimed and h.fence.state().status == "none"
+
+
+def test_t83_an_unreadable_fault_snapshot_and_a_failing_sampler_stop_still_end_in_a_recorded_non_pass(
+    tmp_path,
+):
+    def denied():
+        raise OSError("event log denied")
+
+    h = Harness(tmp_path, authority=physical(), fault_after=denied)
+    original_stop = FakeSampler.stop
+
+    def failing_stop(self, timeout_s=5.0):
+        original_stop(self, timeout_s)
+        raise RuntimeError("thread would not join")
+
+    FakeSampler.stop = failing_stop
+    try:
+        report = h.run()
+    finally:
+        FakeSampler.stop = original_stop
+    assert not report.result.is_pass
+    assert report.result.result_class == ev.INSTRUMENTATION_GAP
+    assert any(r.startswith("FAULT_SNAPSHOT_FAILED") for r in report.refusals)
+    assert any(r.startswith("SAMPLER_STOP_FAILED") for r in report.refusals)
+    assert h.fence.state().status == "terminal"  # the evidence was not lost to the exception
+
+
+def test_t83_an_unexpected_ledger_error_while_closing_the_case_is_reported_and_leaves_it_open(
+    tmp_path,
+):
+    h = Harness(tmp_path, authority=physical())
+
+    def broken(manifest, outcome):
+        raise StopIteration
+
+    h.fence._ledger.record_outcome = broken
+    report = h.run()
+    assert not report.result.is_pass
+    assert any(r.startswith("TERMINAL_RECORD_FAILED") for r in report.refusals)
+    assert h.fence.state().status == "open"  # ambiguous and consumed; never re-opened or repaired
+
+
+def test_t84_a_halt_during_the_selection_request_stops_through_the_manager_and_sends_nothing_more(
+    tmp_path,
+):
+    h = Harness(tmp_path)
+    release = threading.Event()
+    original_post = h.http.post_json
+
+    def slow_selection(path, body, *, timeout_s):
+        if path == "/sdapi/v1/options":
+            h.http.requests.append(("POST", path, body))
+            release.wait(5)
+            return cs.HttpResult(None, None, "connection reset by the stopped runtime")
+        return original_post(path, body, timeout_s=timeout_s)
+
+    h.http.post_json = slow_selection
+    original_stop = h.runtime.stop
+
+    def stop():
+        release.set()
+        return original_stop()
+
+    h.runtime.stop = stop
+
+    def script(sampler):
+        in_flight = [r for r in h.http.requests if r[0] == "POST" and r[1] == "/sdapi/v1/options"]
+        if in_flight and sampler.halt is None:
+            sampler.fire("REQUEST_OWNER_STOP", "SHARED_MEMORY_GROWTH")
+
+    h.sampler_kwargs = {"script": script}
+    h.config = replace(h.config, supervision_interval_s=0.05, abort_join_s=2.0)
+    report = h.run()
+    assert not h.http.generation_posts()
+    assert h.runtime.stops == 1
+    assert report.halt["codes"] == ["SHARED_MEMORY_GROWTH"]
+    assert report.result.result_class == ev.RESOURCE_ABORT_REQUESTED
+    assert "selection_confirmed" not in report.stages
+
+
+def test_t85_the_baseline_and_fault_snapshot_are_taken_again_after_a_long_operator_wait(tmp_path):
+    h = Harness(tmp_path)
+    original_confirm = h.confirm
+
+    def slow_confirm(summary):
+        h.clock.now += (
+            600.0  # ten minutes at the prompt: the first window (60 s limit) is long stale
+        )
+        return original_confirm(summary)
+
+    h.confirm = slow_confirm
+    report = h.run()
+    assert report.claimed and report.executed
+    assert report.preflight["decision"] == "PREPARED_FOR_OWNER_REVIEW"
+
+
+def test_t85_without_a_fresh_baseline_the_stale_one_refuses_and_consumes_nothing(tmp_path):
+    h = Harness(tmp_path)
+    original_remeasure = h.collector.remeasure
+    original_confirm = h.confirm
+
+    def slow_confirm(summary):
+        h.clock.now += 600.0
+        return original_confirm(summary)
+
+    def without_window():
+        fresh = original_remeasure()
+        return cs.Remeasured(fresh.observations, None, None)
+
+    h.confirm = slow_confirm
+    h.collector.remeasure = without_window
+    report = h.run()
+    assert not report.claimed and "FINAL_REMEASURE_REFUSED" in report.refusals
+    assert "BASELINE_STALE" in report.refusals
+
+
+@pytest.mark.parametrize(
+    "secret", ["", "short", "wrong passphrase value", "A LONG OWNER PASSPHRASE"]
+)
+def test_t86_the_owner_passphrase_is_required_and_a_wrong_one_consumes_nothing(tmp_path, secret):
+    h = Harness(tmp_path, secret=secret)
+    report = h.run()
+    assert report.result.result_class == ev.PREFLIGHT_REFUSED
+    assert "OWNER_PASSPHRASE_MISMATCH" in report.refusals
+    assert not report.claimed and h.fence.state().status == "none"
+    assert "runtime.start" not in h.events.names() and "remeasure" not in h.events.names()
+
+
+def test_t86_the_passphrase_is_asked_only_after_the_typed_phrase_and_never_written(tmp_path):
+    h = Harness(tmp_path, typed="wrong phrase")
+    asked = []
+    original = h.coordinator
+
+    def coordinator():
+        coord = original()
+        previous = coord.ports.passphrase
+        coord.ports.passphrase = lambda: (asked.append(1), previous())[1]
+        return coord
+
+    h.coordinator = coordinator
+    report = h.run()
+    assert "OPERATOR_CONFIRMATION_MISMATCH" in report.refusals and asked == []
+    h2 = Harness(tmp_path / "ok")
+    h2.run()
+    leaked = [
+        p
+        for p in (tmp_path / "ok").rglob("*")
+        if p.is_file() and PASSPHRASE.encode() in p.read_bytes()
+    ]
+    assert leaked == []

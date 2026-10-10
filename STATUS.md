@@ -13,7 +13,8 @@ Updated: 2026-10-10
   managed source at preflight. Built: an immutable payload, atomic `O_EXCL` no-retry dispatch fence with ordered durable stages,
   copy-based isolated layout and served-file proof, a manager-owned lifecycle adapter (no kill/signal authority), a native ~1 Hz
   sampler (NVML, PDH, DXGI adapter map, exact commit bytes) feeding the 154A monitor, harness-acquired quiescent baselines,
-  exact-case owner authorization (never written by the package), a one-case coordinator and an eight-class adjudication. A
+  exact-case owner authorization with an owner-passphrase verifier (never written by the package), a one-case coordinator and an
+  eight-class adjudication; an independent review found and drove fixes for two blockers (non-blocking start, PDH struct). A
   read-only live preflight on this workstation was refused as expected (isolated files not materialized; commit headroom
   26.6 GiB < 37 GiB; available RAM 16.1 GiB < 20 GiB); thresholds were not relaxed. No Forge was started, no model loaded or
   selected and nothing generated; the physical run needs a separate explicit owner authorization and acceptance of the

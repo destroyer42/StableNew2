@@ -13,6 +13,7 @@ No other module imports this one; importing it performs no I/O. Nothing in this 
 from __future__ import annotations
 
 import argparse
+import getpass
 import http.client
 import json
 import os
@@ -44,7 +45,6 @@ from tools.qualification.img154b import collector as co
 from tools.qualification.img154b import runtime as rt
 from tools.qualification.img154b import sampler as sp
 from tools.qualification.img154b.authorization import (
-    AuthorizationError,
     OwnerAuthorization,
     read_authorization_text,
 )
@@ -417,23 +417,25 @@ def run_preflight(config: HostConfig) -> dict[str, Any]:
         policy=PreflightPolicy(),
         manifest=config.manifest,
     )
-    return redact_value(
-        {
-            "mode": "live_read_only_preflight",
-            "decision": decision.decision,
-            "prepared": decision.decision == PREPARED,
-            "reason_codes": list(decision.reason_codes),
-            "measurements": dict(decision.measurements),
-            "pending_owner_decisions": list(decision.pending_owner_decisions),
-            "code_revision": {"state": collected.code.state, "sha": collected.code.sha},
-            "payload_digest": payload.payload_digest,
-            "attempt_identity": config.manifest.attempt_identity(),
-            "manifest_digest": config.manifest.digest(),
-            "claimed": False,
-            "started_anything": False,
-            "statement": "A read-only observation. PREPARED_FOR_OWNER_REVIEW is not permission to run.",
-        }
-    )  # type: ignore[no-any-return]
+    return dict(
+        redact_value(
+            {
+                "mode": "live_read_only_preflight",
+                "decision": decision.decision,
+                "prepared": decision.decision == PREPARED,
+                "reason_codes": list(decision.reason_codes),
+                "measurements": dict(decision.measurements),
+                "pending_owner_decisions": list(decision.pending_owner_decisions),
+                "code_revision": {"state": collected.code.state, "sha": collected.code.sha},
+                "payload_digest": payload.payload_digest,
+                "attempt_identity": config.manifest.attempt_identity(),
+                "manifest_digest": config.manifest.digest(),
+                "claimed": False,
+                "started_anything": False,
+                "statement": "A read-only observation. PREPARED_FOR_OWNER_REVIEW is not permission to run.",
+            }
+        )
+    )
 
 
 def run_materialize(config: HostConfig) -> list[dict[str, Any]]:
@@ -468,8 +470,9 @@ def read_authorization(
 ) -> OwnerAuthorization | None:
     path = record_root / f"{manifest.attempt_identity()}{AUTHORIZATION_SUFFIX}"
     try:
-        return read_authorization_text(path.read_text(encoding="utf-8"))
-    except (OSError, AuthorizationError):
+        # utf-8-sig: an editor-added BOM must not turn a real record into "absent"; an undecodable file is simply unusable
+        return read_authorization_text(path.read_text(encoding="utf-8-sig"))
+    except (OSError, ValueError):  # AuthorizationError and UnicodeDecodeError are both ValueError
         return None
 
 
@@ -480,8 +483,11 @@ def interactive_confirm(summary: Mapping[str, Any]) -> str:
     sys.stdout.write(
         "Residual DIAG-GPU-130 hard-failure risk applies; no software can recover a hung GPU driver.\n"
     )
-    sys.stdout.write("Type the exact phrase below to proceed, or anything else to refuse:\n")
-    sys.stdout.write(f"  {summary['expected_phrase']}\n> ")
+    # The assembled phrase is deliberately NOT printed: the operator composes it from the labelled values above.
+    sys.stdout.write(
+        "Type RUN-ONE-PHYSICAL-CASE followed by the case, manifest and payload values above, "
+        "separated by single spaces, or anything else to refuse:\n> "
+    )
     sys.stdout.flush()
     try:
         return sys.stdin.readline().strip()
@@ -548,9 +554,9 @@ def run_execute(config: HostConfig, attempt_identity_arg: str | None) -> int:
         stage: Callable[[], Any],
         endpoint: Callable[[], str],
     ) -> Any:
-        providers, _ = sp.build_native_providers(
-            lambda: runtime.verify_ownership().tree, fault_events=observe_new_fault_records
-        )
+        # the SAME provider objects the preflight used (one NVML initialization, one PDH query per counter set), plus the
+        # slow-cadence fault-event observer
+        providers = [*readers.providers, sp.FaultEventProvider(observe_new_fault_records)]
         return sp.TelemetrySampler(
             providers,
             monitor,
@@ -574,6 +580,7 @@ def run_execute(config: HostConfig, attempt_identity_arg: str | None) -> int:
         sampler_factory=make_sampler,
         faults=faults,
         confirm=interactive_confirm,
+        passphrase=lambda: getpass.getpass("Owner passphrase (not echoed): "),
         clock=ClockPort(time.monotonic, lambda: datetime.now(UTC).isoformat(), time.sleep),
         bundle=EvidenceBundle(run_dir),
         sample_path=run_dir / "samples.jsonl",
@@ -581,7 +588,15 @@ def run_execute(config: HostConfig, attempt_identity_arg: str | None) -> int:
     )
     authority = mint_physical_authority(authorization.record_digest() if authorization else "")
     coordinator = CaseCoordinator(ports, manifest=plan, payload=payload, config=CaseConfig())
-    report = coordinator.run(authority, authorization)
+    try:
+        report = coordinator.run(authority, authorization)
+    finally:
+        for (
+            provider
+        ) in readers.providers:  # release the PDH queries (the sampler's threads are daemons)
+            close = getattr(provider, "close", None)
+            if callable(close):
+                close()
     summary = redact_value(report.as_dict())
     (run_dir / "case-report.redacted.json").write_text(
         json.dumps(summary, indent=2, sort_keys=True), encoding="utf-8"

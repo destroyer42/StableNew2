@@ -123,11 +123,13 @@ class FenceState:
 
 
 def _inside(child: Path, parent: Path) -> bool:
+    """Case-insensitive containment after resolving links, junctions and short names where they exist."""
+
     child_parts = [
-        part.lower() for part in os.path.abspath(child).replace("\\", "/").split("/") if part
+        part.lower() for part in os.path.realpath(child).replace("\\", "/").split("/") if part
     ]
     parent_parts = [
-        part.lower() for part in os.path.abspath(parent).replace("\\", "/").split("/") if part
+        part.lower() for part in os.path.realpath(parent).replace("\\", "/").split("/") if part
     ]
     return bool(parent_parts) and child_parts[: len(parent_parts)] == parent_parts
 
@@ -273,5 +275,6 @@ class CaseFence:
         self.record_stage("terminal_evidence", proposed_outcome=outcome, **facts)
         try:
             self._ledger.record_outcome(self.manifest, outcome)
-        except (LedgerRefusal, OSError) as exc:
-            raise FenceRefusal(STAGE_REFUSED, str(exc)) from exc
+        except (LedgerRefusal, OSError, StopIteration, KeyError, ValueError, TypeError) as exc:
+            # anything that prevents the outcome record leaves the case open (ambiguous), reported as a refusal
+            raise FenceRefusal(STAGE_REFUSED, f"{type(exc).__name__}: {exc}") from exc

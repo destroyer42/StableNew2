@@ -127,7 +127,7 @@ def _decode_png(b64: str, width: int, height: int) -> tuple[bytes, dict[str, Any
 
     from tools.qualification.img115.run import _decode_png as decode
 
-    return decode(b64, width, height)  # type: ignore[no-any-return]
+    return decode(b64, width, height)
 
 
 def _bad(
@@ -267,7 +267,7 @@ def validate_response(
         http_status=http_status,
         images_returned=1,
         decodable=decodable,
-        dimensions=tuple(size) if decodable and size else None,  # type: ignore[arg-type]
+        dimensions=(int(size[0]), int(size[1])) if decodable and size else None,
         dimensions_ok=bool(decodable and decoded.get("dimensions_ok")),
         nontrivial=bool(decodable and decoded.get("non_constant")),
         pixel_std=decoded.get("pixel_std"),
@@ -343,15 +343,17 @@ def evaluate_telemetry_coverage(
     missing = tuple(name for name, fraction in fractions.items() if fraction < min_fraction)
     if missing:
         reasons.append("field_coverage_below_threshold")
-    seqs = [r.get("sample_seq") for r in samples]
-    if any(not isinstance(s, int) or isinstance(s, bool) for s in seqs):
+    raw_seqs = [r.get("sample_seq") for r in samples]
+    seqs = [s for s in raw_seqs if isinstance(s, int) and not isinstance(s, bool)]
+    if len(seqs) != len(raw_seqs):
         reasons.append("sequence_invalid")
     else:
         if seqs != sorted(set(seqs)) or (seqs and seqs[-1] - seqs[0] + 1 != len(seqs)):
             reasons.append("sequence_gap_or_disorder")
-    monos = [r.get("mono_s") for r in samples]
+    raw_monos = [r.get("mono_s") for r in samples]
+    monos = [float(m) for m in raw_monos if isinstance(m, int | float) and not isinstance(m, bool)]
     largest: float | None = None
-    if all(isinstance(m, int | float) and not isinstance(m, bool) for m in monos) and monos:
+    if len(monos) == len(raw_monos) and monos:
         steps = [b - a for a, b in zip(monos, monos[1:], strict=False)]
         if any(step < 0 for step in steps):
             reasons.append("clock_not_monotonic")

@@ -36,7 +36,7 @@ from tools.qualification.img154.preflight import (
     QuiescentBaselineEvidence,
 )
 from tools.qualification.img154b.authorization import CodeRevision
-from tools.qualification.img154b.case import Collected
+from tools.qualification.img154b.case import Collected, Remeasured
 from tools.qualification.img154b.request import (
     FrozenPayload,
     SourceReader,
@@ -290,14 +290,22 @@ class LiveCollector:
             facts=facts,
         )
 
-    def remeasure(self) -> Mapping[str, Observation]:
-        """Fresh resource readings and the device identity, immediately before the claim."""
+    def remeasure(self) -> Remeasured:
+        """Everything time-sensitive, taken again immediately before the claim (after the operator's unbounded wait).
+
+        Order matters: the fault snapshot (slow), then a fresh quiescent window by the same native sampler, then the resource
+        readings LAST so they are the freshest values the thresholds judge. The device identity is read again as well.
+        """
 
         r = self.readers
+        fault_before = r.fault_snapshot()
+        self.fault_before = fault_before
+        boot_id = fault_before.boot_id if fault_before is not None else None
+        device = r.device_id()
+        baseline = self.acquire_baseline(device, boot_id)
         observations, _ = self._read_providers()
         observations["pagefile_volume_free_bytes"] = r.pagefile_free()
         observations["evidence_volume_free_bytes"] = r.evidence_free()
-        device = r.device_id()
         observations["gpu_device_id"] = Observation(
             "gpu_device_id",
             device,
@@ -307,7 +315,7 @@ class LiveCollector:
             r.utc(),
             "ok" if device else "missing",
         )
-        return observations
+        return Remeasured(observations, baseline, fault_before)
 
     def recheck_served(self) -> list[Finding]:
         """The cheap size/mtime re-check against the full proof; unwired means refused, never silently fine."""

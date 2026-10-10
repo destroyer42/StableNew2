@@ -299,7 +299,13 @@ def test_t86_nothing_imports_the_physical_module_and_the_default_cli_cannot_reac
 
     parser = cli.build_parser()
     commands = next(a for a in parser._actions if isinstance(a, argparse._SubParsersAction)).choices
-    assert set(commands) == {"request", "layout-plan", "challenge", "dry-run"}
+    assert set(commands) == {
+        "request",
+        "layout-plan",
+        "challenge",
+        "dry-run",
+        "passphrase-verifier",
+    }
     flags = {opt for p in commands.values() for a in p._actions for opt in a.option_strings}
     assert not {
         f

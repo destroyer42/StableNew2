@@ -261,19 +261,27 @@ def validate_quiescent_baseline(
         age = float("nan")
     if any(b - a > rules.max_gap_s for a, b in zip(times, times[1:], strict=False)):
         unproven("BASELINE_GAP", "the window has a sampling gap")
-    used = [s.vram_used_bytes for s in evidence.samples]
-    shared = [s.shared_vram_bytes for s in evidence.samples]
-    util = [s.gpu_utilization_percent for s in evidence.samples]
-    for name, values in (("VRAM", used), ("SHARED", shared), ("UTILIZATION", util)):
-        if any(
-            not isinstance(v, int | float) or isinstance(v, bool) or v < 0 or v != v for v in values
-        ):
+    raw = {
+        "VRAM": [s.vram_used_bytes for s in evidence.samples],
+        "SHARED": [s.shared_vram_bytes for s in evidence.samples],
+        "UTILIZATION": [s.gpu_utilization_percent for s in evidence.samples],
+    }
+    series: dict[str, list[float]] = {}
+    for name, values in raw.items():
+        numbers = [
+            float(v)
+            for v in values
+            if isinstance(v, int | float) and not isinstance(v, bool) and v >= 0 and v == v
+        ]
+        if len(numbers) != len(values):
             unproven(
                 f"BASELINE_{name}_INCOMPLETE",
                 f"{name.lower()} readings are missing, invalid or negative",
             )
+        series[name] = numbers
     if findings:
         return None, findings
+    used, shared, util = series["VRAM"], series["SHARED"], series["UTILIZATION"]
     if max(used) - min(used) > rules.max_vram_spread_bytes:
         refuse("BASELINE_NOT_QUIESCENT", "dedicated VRAM varied too much across the window")
     if max(shared) - min(shared) > rules.max_shared_spread_bytes:
