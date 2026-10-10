@@ -1,22 +1,21 @@
 # PR-IMG-MODELS-154A — Z-Image-Turbo FP8-scaled: safety preparation only
 
 Status: **PREPARATION COMPLETE (local branch); hosted CI and independent review pending.**
-Package classification: **`PASS_PREPARATION_ONLY`**. That means the pure contracts, the deterministic monitor simulations and
-the opt-in read-only host probe all ran; it does **not** mean the workload is safe, ready or qualified. No numeric threshold
+Package classification: **`PASS_PREPARATION_ONLY`**. That means the preparation implementation and deterministic monitor simulations passed. The current host preflight is a separate disposition: **REFUSED or INCONCLUSIVE is unacceptable for physical qualification**, regardless of a preparation implementation PASS. No numeric threshold
 is proven, no stop rule is enforceable, and physical qualification is neither authorized nor implemented.
 
 Execution profile: Standard, qualification-only (`tools/qualification/img154/`, no production `src/` change). Claude Code
 Sonnet 5.5 High / Codex GPT-6.1 Sol High, Windows Local/Desktop. Controller Surface Assessment: no controller touched.
-Token-efficient validation: focused deterministic tests, the related PR-115/151/152/153 suites, one `run_pr_gate.py`, one opt-in
-read-only probe. Base: `origin/main` `668b4dc8` (PR-153 and PR-REFINE-160 already integrated; no overlap with either).
+Token-efficient validation: failing-before-fix synthetic regressions, focused PR-154A tests, the unchanged related PR-115/151/152/153 suites, one final `run_pr_gate.py`, hosted `required`/applicable `affected`, and one independent read-only targeted review. No new live probe or physical run in this repair. High effort is selected for expected successful-work cost: interacting freshness, missing-data and no-replay contracts make retries more expensive than the nominal model saving. Base: `origin/main` `668b4dc8` (PR-153 and PR-REFINE-160 already integrated; no overlap with either).
 
 ## Absolute boundary
 
 The package contains no callable path to launch Forge, load or select a model, send a generation request, cancel or terminate
-anything, or change a driver, pagefile or setting. A source guard test enforces this (no network, process-control or filesystem
-mutation imports/calls/command text; `subprocess` only in `probes.py`, only `run`, only through a fixed read-only allow-list whose interpreter is resolved to an absolute system path (never from the working
-directory or PATH); a
-CLI with exactly `manifest`, `dry-run`, `read-only-probe`). Lifecycle remains `WebUIProcessManager`'s alone and is not imported.
+anything, or change a driver, pagefile or setting. The AST/source guard discovers all qualification Python modules and resolves
+aliased/from imports and simple callable aliases. Narrow exceptions cover fixed read-only host queries, fixed read-only Git
+revision/status commands, loopback TCP observation, and the existing evidence writer/rotation. Static checking is limited source
+shape evidence; runtime fakes and behavioral tests are also required and it does not prove all transitive non-execution.
+The CLI has exactly `manifest`, `dry-run`, `read-only-probe`. Lifecycle remains `WebUIProcessManager`'s alone and is not imported.
 A later package (PR-IMG-MODELS-154B) must add and separately review execution, then obtain another explicit owner approval.
 
 ## What was built
@@ -39,7 +38,7 @@ A later package (PR-IMG-MODELS-154B) must add and separately review execution, t
 | Commit headroom at launch | >= 37 GiB (PR-153 high analogue 30.7 GiB x 1.2) | provisional | `GetPerformanceInfo` CommitLimit-CommitTotal, no privilege | no (no launcher) |
 | Available physical RAM at launch | >= 20 GiB | provisional (judgment) | `GetPerformanceInfo` PhysicalAvailable | no |
 | Pagefile-volume free space | >= 30 GiB | provisional; relevance unproven (allocated pagefile is a fixed 18 GiB) | CIM + disk usage | no |
-| Dedicated VRAM at launch | <= measured quiescent baseline + 512 MiB | baseline-relative; a baseline measured earlier is required | `nvidia-smi` via the existing inspector | no |
+| Dedicated VRAM at launch | <= measured quiescent baseline + 512 MiB | baseline-relative; remains INCONCLUSIVE until independently validated device/boot-bound, timestamped quiescent evidence exists | `nvidia-smi` via the existing inspector | no |
 | Stop: RAM available | < 1 GiB for > 10 s | provisional, **uncalibrated** | `GetPerformanceInfo` | no |
 | Stop: commit headroom | < 4 GiB (2 samples) | provisional | `GetPerformanceInfo` | no |
 | Stop: dedicated VRAM | >= 95% of total (2 samples) | provisional | `nvidia-smi` | no |
@@ -67,8 +66,9 @@ with only the application and development tools open, commit headroom 23.4 GiB, 
 
 Feasibility: the **37 GiB commit headroom is reachable in principle** (limit 49.76 GiB) **but only when current commit total is
 at most about 12.8 GiB**, which neither reading approached; the 20 GiB RAM minimum likewise needs a near-idle desktop. Neither was
-met in either reading. The evaluator's pass over the first reading refused with `REFUSED_RUNTIME_CONFLICT` (the managed Forge
-was running; it was observed and left untouched) and listed both resource refusals. The policy is never lowered, and no setting
+met in either reading. The **first saved probe's readings were stale** and cannot establish the reported resource refusals.
+The subsequent fresh probe supplied the reported commit/RAM resource refusals; the running managed Forge also produced
+`REFUSED_RUNTIME_CONFLICT` (observed and left untouched). The policy is never lowered, and no setting
 is changed, in response.
 
 ## Findings and remaining uncertainty
@@ -87,7 +87,7 @@ is changed, in response.
 ## Entry conditions for PR-IMG-MODELS-154B
 
 Independent review of this package; a new owner decision; reconciled request semantics; served-file hash proof at the isolated
-paths; re-measured preflight immediately before dispatch; ledger attempt recorded before any send (the ledger is append-only and never rotates; attempts need the single-instance
+paths; independently validated device/boot-bound quiescent VRAM baseline; re-measured preflight immediately before dispatch; stable owner-authorized case identity and ledger attempt recorded before any send (the ledger is append-only and never rotates; attempts need the single-instance
 lock because the check-then-append is not atomic across processes); `WebUIProcessManager`-only
 lifecycle; baseline and post fault snapshots with a settle interval; explicit acceptance of the residual GPU hard-failure risk.
 The packet lists these as the one-case acceptance checklist.
@@ -106,8 +106,31 @@ Run (all read-only; reports go to an ignored directory such as `reports/`):
 python -m tools.qualification.img154.report manifest
 python -m tools.qualification.img154.report dry-run --out reports/img154/dry_run.json
 python -m tools.qualification.img154.report read-only-probe --models-root <models dir> --forge-install <managed install> \
-    --qualification-root <proposed isolated root> --reserve <path> --vram-baseline-mib <prior quiescent value> --out reports/img154/probe.json
+    --qualification-root <proposed isolated root> --reserve <path> --out reports/img154/probe.json
 ```
 
-`--hash` reads and hashes only the three named files (about 14.5 GB). The packet carries no raw prompt, profile path or hardware
+`--hash` reads and hashes only the three named files (about 14.5 GB), **before** time-sensitive resource observations.
+The 30-second policy is unchanged. `--vram-baseline-mib` is an unverified operator assertion, never a fresh measurement,
+and cannot satisfy the baseline-relative threshold. Phase A implements no independent baseline acquisition/validation path.
+Live CLI `REFUSED` or `HOLD` exits 1 after writing the packet; offline dry-run exits 0 when its simulation packet is produced.
+Packets preserve per-source fault coverage, record IDs and `not_compared` continuity; a single snapshot cannot prove continuity.
+Live packets identify Git HEAD as clean/dirty/unverifiable and hash the actual qualification source files; offline fake packets
+explicitly mark revision evidence `not_collected` and cannot be used as a physical operator packet.
+ The packet carries no raw prompt, profile path or hardware
 identifier; the evidence writer redacts the same way.
+
+## Focused safety-contract repair (S1-S8)
+
+Missing data breaks physical-duration/debounce continuity, but never erases observed violation evidence. An unresolved per-field
+unknown interval exceeding 10 seconds escalates to `CANNOT_VERIFY_SAFE_STATE`, even with alternating missing/violating samples;
+only confirmed fresh recovery clears that interval. Actual contiguous violations retain their existing thresholds and latching.
+All clocks, timestamps, ages and age limits reject invalid/non-finite values. Skipped sample IDs and stale samples break physical continuity. Invalid/reversed fault-snapshot times, disappeared complete-coverage records and missing baseline sources preserve explicit uncertainty. The append-only ledger stores full manifest/request
+provenance and uses stable case identity independent of policy or request edits. A new case identity is an owner decision,
+never automatic retry/replay. Legacy/malformed/unreadable ledger history fails closed and is not migrated or repaired.
+Redaction retains guidance/CFG/sampler/scheduler/shift while protecting personal paths with spaces. Empty reserved paths are
+refused, and duplicate valid asset hashes are detected before role-specific mismatch returns.
+
+Preparation implementation evidence and workstation preflight remain separate. This repair performs no physical qualification;
+served-file proof, baseline provenance, payload semantics, actual sampler latency, enforceable stopping, the cross-process ledger
+lock and residual GPU risk remain prerequisites for separately authorized PR-154B. Hosted CI and independent targeted review
+must be assessed on the final repair SHA before merge consideration.

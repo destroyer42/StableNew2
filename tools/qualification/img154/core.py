@@ -7,6 +7,7 @@ import json
 import math
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 GIB = 1024**3
@@ -17,6 +18,27 @@ OK, MISSING, STALE, ERROR, INVALID = "ok", "missing", "stale", "error", "invalid
 
 # Tolerated observation-timestamp skew ahead of the evaluating clock before a sample is called invalid.
 CLOCK_SKEW_TOLERANCE_S = 0.5
+
+
+def valid_time(value: object) -> bool:
+    """Finite nonnegative seconds in the injected monotonic domain; booleans are not times."""
+    return (
+        not isinstance(value, bool)
+        and isinstance(value, int | float)
+        and math.isfinite(value)
+        and value >= 0
+    )
+
+
+def valid_utc(value: object) -> bool:
+    """An explicitly supplied wall-clock timestamp must be an aware ISO timestamp."""
+    if not isinstance(value, str):
+        return False
+    try:
+        taken = datetime.fromisoformat(value)
+        return taken.tzinfo is not None and math.isfinite(taken.timestamp())
+    except (ValueError, TypeError, OverflowError, OSError):
+        return False
 
 
 @dataclass(frozen=True)
@@ -55,6 +77,8 @@ class Observation:
         all refused so a failed sensor can never be mistaken for a zero or a pass.
         """
 
+        if self.observed_utc is not None and not valid_utc(self.observed_utc):
+            return None, INVALID
         if self.status != OK:
             return None, self.status
         if self.units != units:
@@ -71,7 +95,11 @@ class Observation:
             return None, INVALID
         if self.observed_mono_s is None:
             return None, STALE
-        age = now_mono_s - float(self.observed_mono_s)
+        if not all(valid_time(v) for v in (self.observed_mono_s, now_mono_s, max_age_s)):
+            return None, INVALID
+        age = now_mono_s - self.observed_mono_s
+        if not math.isfinite(age):
+            return None, INVALID
         if age < -CLOCK_SKEW_TOLERANCE_S:
             return None, "clock_skew"
         if age > max_age_s:
@@ -84,6 +112,7 @@ class Observation:
             "value": self.value,
             "units": self.units,
             "source": self.source,
+            "observed_mono_s": self.observed_mono_s,
             "observed_utc": self.observed_utc,
             "status": self.status,
             "detail": self.detail,

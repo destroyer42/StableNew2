@@ -28,7 +28,7 @@ from typing import Any
 
 from tools.qualification.img151.feasibility import READ_ONLY_COMMANDS as _IMG151_COMMANDS
 
-from .core import ERROR, GIB, MIB, MISSING, OK, Observation
+from .core import ERROR, GIB, MIB, MISSING, OK, Observation, digest, is_hex_digest
 from .evidence import (
     ACCEPTED_BASELINE_COVERAGE,
     BOUNDED,
@@ -38,6 +38,7 @@ from .evidence import (
     NOT_COLLECTED,
     FaultSnapshot,
     FaultSourceSnapshot,
+    hash_files,
 )
 from .isolation import (
     QUALIFICATION_PORT,
@@ -134,6 +135,61 @@ def run_allow_listed(argv: Sequence[str], *, timeout_s: float = 20.0) -> str | N
     except (OSError, subprocess.SubprocessError):
         return None
     return done.stdout if done.returncode == 0 else None
+
+
+def collect_code_revision() -> dict[str, Any]:
+    """Read-only Git revision plus actual qualification-source hashes, including dirty bytes.
+
+    A clean HEAD is asserted only when Git verifies the checkout and the entire status is clean.
+    Hashes provide an inspectable code identifier even when Git is unavailable; no model is read.
+    """
+    root = Path(__file__).resolve().parents[3]
+    paths = sorted(Path(__file__).parent.rglob("*.py"))
+    hashes = {str(p.relative_to(root)).replace("\\", "/"): hash_files([p])[p.name] for p in paths}
+    info: dict[str, Any] = {
+        "state": "unverifiable",
+        "sha": None,
+        "source_sha256": digest(hashes),
+        "source_hashes": hashes,
+    }
+    git = shutil.which("git")
+    if git is None:
+        return info
+    try:
+        # Fixed read-only commands. No fetch, hooks, checkout, or repository mutation.
+        head = subprocess.run(
+            [git, "-C", str(root), "rev-parse", "--show-toplevel", "HEAD"],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        status = subprocess.run(
+            [
+                git,
+                "--no-optional-locks",
+                "-C",
+                str(root),
+                "status",
+                "--porcelain",
+                "--untracked-files=all",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        lines = head.stdout.strip().splitlines()
+        if (
+            head.returncode == status.returncode == 0
+            and len(lines) == 2
+            and Path(lines[0]).resolve() == root
+            and is_hex_digest(lines[1], length=40)
+        ):
+            info.update(sha=lines[1], state="dirty" if status.stdout.strip() else "clean")
+    except (OSError, subprocess.SubprocessError):
+        pass
+    return info
 
 
 # ---------------------------------------------------------------------------------------------- observation helpers

@@ -156,6 +156,7 @@ PLANNED_TELEMETRY_FIELDS = (
 
 @dataclass(frozen=True)
 class QualificationManifest:
+    case_id: str = "img154-zimage-turbo-owner-case-1"
     assets: Mapping[str, AssetSpec] = field(default_factory=lambda: dict(FROZEN_ASSETS))
     forge_pin: str = FORGE_PIN
     intent: FrozenIntent = field(default_factory=FrozenIntent)
@@ -163,6 +164,16 @@ class QualificationManifest:
     stop_policy_revision: str = STOP_POLICY_REVISION
     evidence_contract_revision: str = EVIDENCE_CONTRACT_REVISION
     operator_preflight_revision: str = OPERATOR_PREFLIGHT_REVISION
+
+    def attempt_identity(self) -> str:
+        """Owner-authorized case identity, unaffected by request or policy edits.
+
+        Changing a case ID requires a genuinely distinct owner-authorized case, never a retry.
+        Full request, asset and policy provenance remain in the append-only attempt record.
+        """
+        if not isinstance(self.case_id, str) or not self.case_id.strip():
+            raise ValueError("owner-authorized case identity is required")
+        return digest({"namespace": "stablenew.img154.attempt.v1", "case_id": self.case_id})
 
     def served_relative_paths(self) -> dict[str, str]:
         """Where each file would be SERVED under an isolated ``forge-data`` directory (posix-style, relative)."""
@@ -178,6 +189,8 @@ class QualificationManifest:
     def as_dict(self) -> dict[str, Any]:
         return {
             "schema": MANIFEST_SCHEMA,
+            "case_id": self.case_id,
+            "attempt_identity": self.attempt_identity(),
             "status": "PROPOSED_NOT_APPLIED",
             "assets": {
                 role: {
@@ -246,6 +259,16 @@ def verify_assets(
         if item is None:
             findings.append(Finding("ASSET_MISSING", "refuse", f"{role}: not present"))
             continue
+        if is_hex_digest(item.sha256):
+            if item.sha256 in seen_digests:
+                findings.append(
+                    Finding(
+                        "ASSET_ROLE_COLLISION",
+                        "refuse",
+                        f"{role} and {seen_digests[item.sha256]} are the same bytes",
+                    )
+                )
+            seen_digests[item.sha256] = role
         if item.name != spec.filename:
             findings.append(
                 Finding(
@@ -285,16 +308,6 @@ def verify_assets(
                 )
             )
             continue
-        if item.sha256 in seen_digests:
-            findings.append(
-                Finding(
-                    "ASSET_ROLE_COLLISION",
-                    "refuse",
-                    f"{role} and {seen_digests[item.sha256]} are the same bytes",
-                )
-            )
-            continue
-        seen_digests[item.sha256] = role
     return findings
 
 

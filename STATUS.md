@@ -5,13 +5,17 @@ Updated: 2026-10-10
 ## Repository
 
 - Z-Image-Turbo FP8-scaled safety preparation (PR-IMG-MODELS-154A, `PASS_PREPARATION_ONLY`; local branch, hosted CI and
-  independent review pending): pure, fake-driven contracts in `tools/qualification/img154/` for a later, separately authorized
+  independent review pending; focused S1-S8 safety repair): pure, fake-driven contracts in `tools/qualification/img154/` for a later, separately authorized
   physical qualification: a frozen **proposed** exact-candidate and intent manifest (three files by bytes and full SHA-256, Forge
   pin `d70373eb`), served-file proof that a source match cannot satisfy, isolation/port/ownership validation, a fail-closed preflight
   evaluator (`REFUSED_*`/`INCONCLUSIVE`/`PREPARED_FOR_OWNER_REVIEW`, never go/safe), an injected-sample monitor state machine that
   only requests an owner stop, redacted fsync-per-record evidence, a no-replay dispatch ledger and an operator packet. An opt-in
   read-only probe confirmed every essential Windows counter is obtainable without elevation; every numeric limit stays
   **provisional** (37 GiB commit headroom needs a near-idle desktop, about 12.8 GiB commit total) and no stop rule is enforceable.
+  Preparation implementation PASS is separate from host `REFUSED`/`INCONCLUSIVE`, neither acceptable for physical qualification.
+  The first saved probe was stale; the subsequent fresh probe supplied the reported resource refusals. Missing/violating alternation
+  now has bounded unknown-data escalation, freshness rejects non-finite times, live hashing precedes resource collection, unverified
+  VRAM baselines remain inconclusive, and attempt identity survives policy changes. No new physical or live probe was run in the repair.
   The package has no launch, model-selection, request or termination path (source-guard tested) and changes no production
   behavior. Physical qualification (PR-IMG-MODELS-154B) is neither authorized nor implemented. See
   `docs/Subsystems/Image/PR-IMG-MODELS-154A_ZImage_Turbo_Safety_Preparation.md`.

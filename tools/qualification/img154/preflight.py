@@ -16,7 +16,8 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-from .core import GIB, MIB, Finding, Observation
+from .core import GIB, MIB, Finding, Observation, valid_time, valid_utc
+from .evidence import FAULT_SOURCES
 from .manifest import POLICY_REVISION, QualificationManifest, build_manifest
 
 NOT_ASSESSED = "NOT_ASSESSED"
@@ -85,6 +86,12 @@ class Threshold:
     sensitivity: str
 
     def passes(self, value: float) -> bool:
+        if (
+            not valid_time(value)
+            or not valid_time(self.limit)
+            or self.comparator not in (">=", "<=")
+        ):
+            return False
         return value >= self.limit if self.comparator == ">=" else value <= self.limit
 
     def as_dict(self) -> dict[str, Any]:
@@ -207,6 +214,8 @@ class PreflightResult:
         """A stale assessment, or one for a different manifest, never authorizes or supports anything."""
 
         plan = manifest or build_manifest()
+        if not all(valid_time(v) for v in (now_mono_s, self.assessed_mono_s, max_age_s)):
+            return False
         age = now_mono_s - self.assessed_mono_s
         return self.prepared and 0 <= age <= max_age_s and self.manifest_digest == plan.digest()
 
@@ -322,14 +331,10 @@ def _resource_findings(
             )
     if base_why:
         inconclusive("VRAM_BASELINE", base_why)
-    elif used is not None and base is not None:
-        over = used - base
-        measurements["vram_over_baseline_mib"] = round(over / MIB)
-        if not policy.vram_over_baseline.passes(over):
-            refuse(
-                "VRAM_ABOVE_QUIESCENT_BASELINE",
-                "dedicated VRAM in use exceeds the measured quiescent baseline allowance",
-            )
+    else:
+        # Phase A has no independently validated device/boot-bound quiescent evidence.
+        # A numeric observation, even freshly timestamped, cannot establish that provenance.
+        inconclusive("VRAM_BASELINE", "unverified")
 
     evidence_free, why = _numeric(inputs, "evidence_volume_free_bytes", "bytes", now, policy)
     if evidence_free is None:
@@ -358,6 +363,27 @@ def evaluate_preflight(
         )
 
     findings: list[Finding] = []
+    if (
+        not valid_time(now_mono_s)
+        or not valid_time(rules.max_observation_age_s)
+        or (now_utc is not None and not valid_utc(now_utc))
+    ):
+        findings.append(
+            Finding(
+                "FRESHNESS_CLOCK_OR_LIMIT_INVALID", "inconclusive", "freshness cannot be assessed"
+            )
+        )
+    for threshold in (
+        rules.commit_headroom,
+        rules.available_ram,
+        rules.pagefile_volume_free,
+        rules.vram_over_baseline,
+        rules.evidence_free,
+    ):
+        if not valid_time(threshold.limit) or threshold.comparator not in (">=", "<="):
+            findings.append(
+                Finding("THRESHOLD_INVALID", "inconclusive", "policy threshold is invalid")
+            )
     refusal_reasons: list[str] = []
     measurements: dict[str, Any] = {}
 
@@ -415,7 +441,8 @@ def evaluate_preflight(
             )
         )
     else:
-        for source, state in sorted(baseline.items()):
+        for source in FAULT_SOURCES:
+            state = baseline.get(source, "not_collected")
             if state not in ("complete", "bounded_lookback"):
                 findings.append(
                     Finding(

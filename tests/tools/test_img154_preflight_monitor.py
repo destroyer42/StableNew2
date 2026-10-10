@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from dataclasses import replace
 
 import pytest
 
@@ -69,9 +70,10 @@ def evaluate(inputs, *, now=NOW):
 # --- decision vocabulary -------------------------------------------------------------------------------------------------
 
 
-def test_good_inputs_are_only_prepared_for_owner_review_with_decisions_pending():
+def test_numeric_baseline_remains_inconclusive_with_decisions_pending():
     result = evaluate(good_inputs())
-    assert result.decision == pf.PREPARED
+    assert result.decision == pf.INCONCLUSIVE
+    assert "VRAM_BASELINE_UNVERIFIED" in result.reason_codes
     assert "RESIDUAL_GPU_RISK_ACCEPTANCE" in result.pending_owner_decisions
     assert "PHASE_B_PHYSICAL_QUALIFICATION_AUTHORIZATION" in result.pending_owner_decisions
 
@@ -180,24 +182,20 @@ def test_t08_headroom_above_limit_is_an_inconsistent_reading():
 )
 def test_t09_minimums_pass_at_exact_equality_and_fail_one_byte_below(name, limit):
     at_limit = evaluate(good_inputs(observations=good_observations(**{name: limit})))
-    assert at_limit.decision == pf.PREPARED
+    assert at_limit.decision == pf.INCONCLUSIVE
+    assert not any(code.endswith("BELOW_THRESHOLD") for code in at_limit.reason_codes)
     below = evaluate(good_inputs(observations=good_observations(**{name: limit - 1})))
     assert below.decision == pf.REFUSED_RESOURCE_THRESHOLD
 
 
-def test_t09_vram_over_baseline_maximum_edge():
-    base = 2.2 * GIB
-    allowance = 512 * MIB
-    at_edge = good_observations(
-        vram_used_bytes=base + allowance, vram_quiescent_baseline_bytes=base
-    )
-    assert evaluate(good_inputs(observations=at_edge)).decision == pf.PREPARED
-    over = good_observations(
-        vram_used_bytes=base + allowance + 1, vram_quiescent_baseline_bytes=base
-    )
-    result = evaluate(good_inputs(observations=over))
-    assert result.decision == pf.REFUSED_RESOURCE_THRESHOLD
-    assert "VRAM_ABOVE_QUIESCENT_BASELINE" in result.reason_codes
+def test_t09_vram_maximum_comparator_edges_do_not_validate_a_baseline():
+    threshold = pf.PreflightPolicy().vram_over_baseline
+    assert threshold.passes(512 * MIB)
+    assert not threshold.passes(512 * MIB + 1)
+    result = evaluate(good_inputs())
+    assert result.decision == pf.INCONCLUSIVE
+    assert "VRAM_BASELINE_UNVERIFIED" in result.reason_codes
+    assert "vram_over_baseline_mib" not in result.measurements
 
 
 def test_t09_vram_without_a_measured_baseline_is_inconclusive_never_assumed():
@@ -225,7 +223,8 @@ def test_t09_launch_headroom_leaves_room_above_the_simulated_commit_stop():
 
 
 def test_preflight_assessment_goes_stale_and_binds_to_the_manifest():
-    result = evaluate(good_inputs())
+    # Synthetic PREPARED result tests freshness only; numeric baseline cannot produce it.
+    result = replace(evaluate(good_inputs()), decision=pf.PREPARED)
     assert result.is_current(now_mono_s=NOW + 10, max_age_s=30)
     assert not result.is_current(now_mono_s=NOW + 31, max_age_s=30)
     other = mf.QualificationManifest(forge_pin="f" * 40)
@@ -265,7 +264,7 @@ def test_prior_dispatch_declined_risk_and_bad_evidence_path_refuse():
     )
     assert evaluate(good_inputs(evidence_dir_valid=False)).decision == pf.REFUSED_EVIDENCE_PATH
     accepted = evaluate(good_inputs(residual_gpu_risk_accepted=True))
-    assert accepted.decision == pf.PREPARED
+    assert accepted.decision == pf.INCONCLUSIVE
     assert "RESIDUAL_GPU_RISK_ACCEPTANCE" not in accepted.pending_owner_decisions
 
 
@@ -289,7 +288,10 @@ def test_incomplete_fault_baseline_is_inconclusive_and_bounded_lookback_is_accep
     result = evaluate(good_inputs(fault_baseline_coverage=partial))
     assert result.decision == pf.INCONCLUSIVE
     bounded = dict(FAULTS, system_log="bounded_lookback")
-    assert evaluate(good_inputs(fault_baseline_coverage=bounded)).decision == pf.PREPARED
+    assert (
+        "FAULT_BASELINE_INCOMPLETE"
+        not in evaluate(good_inputs(fault_baseline_coverage=bounded)).reason_codes
+    )
     assert evaluate(good_inputs(fault_baseline_coverage=None)).decision == pf.INCONCLUSIVE
 
 

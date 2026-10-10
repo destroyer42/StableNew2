@@ -21,10 +21,11 @@ from __future__ import annotations
 
 import math
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
+from dataclasses import field as dataclass_field
 from typing import Any
 
-from .core import CLOCK_SKEW_TOLERANCE_S, GIB, Finding
+from .core import CLOCK_SKEW_TOLERANCE_S, GIB, Finding, valid_time, valid_utc
 
 NONE = "NONE"
 WARN = "WARN"
@@ -140,7 +141,7 @@ class Sample:
     fault_events: tuple[str, ...] = ()
     stage: str = "unknown"
     stage_source: str = "unknown"
-    extra: Mapping[str, Any] = field(
+    extra: Mapping[str, Any] = dataclass_field(
         default_factory=dict
     )  # utilization, power, process-tree sizes, pagefile, hard faults
 
@@ -157,13 +158,14 @@ class MonitorConfig:
     max_sample_gap_s: float = 3.0
     max_sample_age_s: float = 3.0
     lost_samples_limit: int = 3
+    max_unknown_data_s: float = 10.0
     ram_warn_bytes: float = 4 * GIB
     commit_warn_bytes: float = 8 * GIB
     vram_warn_ratio: float = 0.90
     temperature_warn_c: float = 75.0
     shared_baseline_bytes: float | None = None
     #: stage -> deadline seconds. EMPTY by default: no deadline is evidenced, so the stall rule is inactive.
-    stall_deadlines_s: Mapping[str, float] = field(default_factory=dict)
+    stall_deadlines_s: Mapping[str, float] = dataclass_field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -201,6 +203,8 @@ class SafetyMonitor:
 
     def __init__(self, config: MonitorConfig | None = None, *, clock: Callable[[], float]) -> None:
         self.config = config or MonitorConfig()
+        if policy_findings(self.config):
+            raise ValueError("invalid monitor policy")
         self._clock = clock
         self.reset()
 
@@ -214,6 +218,10 @@ class SafetyMonitor:
         self._last_arrival: float | None = None
         self._started_at: float | None = None
         self._ram_violation_start: float | None = None
+        self.observed_violations: dict[str, int] = {}
+        self._unknown_since: dict[str, float] = {}
+        self._pending_since: dict[str, float] = {}
+        self._clock_last: float | None = None
         self._streaks = {"commit": 0, "vram": 0, "shared": 0, "temperature": 0}
         self._lost = 0
         self._stage = "unknown"
@@ -222,6 +230,12 @@ class SafetyMonitor:
 
     def begin_observation(self) -> None:
         self._started_at = self._clock()
+
+    def _valid_clock(self, now: object) -> bool:
+        if not valid_time(now) or (self._clock_last is not None and now < self._clock_last):
+            return False
+        self._clock_last = now
+        return True
 
     @property
     def latched_action(self) -> str:
@@ -256,6 +270,13 @@ class SafetyMonitor:
         now = self._clock()
         cfg = self.config
         codes: list[tuple[str, str]] = []
+        if not self._valid_clock(now) or (
+            self._started_at is not None and not valid_time(self._started_at)
+        ):
+            return self._decide([(HARNESS_FAULT, "CLOCK_INVALID")], self._last_seq)
+        for field, since in self._unknown_since.items():
+            if now - since > cfg.max_unknown_data_s:
+                codes.append((CANNOT_VERIFY_SAFE_STATE, f"UNKNOWN_DATA:{field}"))
         reference = self._last_arrival if self._last_arrival is not None else self._started_at
         if reference is None:
             codes.append((HARNESS_FAULT, "MONITOR_NOT_STARTED"))
@@ -271,6 +292,14 @@ class SafetyMonitor:
         now = self._clock()
         codes: list[tuple[str, str]] = []
 
+        if not self._valid_clock(now) or (
+            self._started_at is not None and not valid_time(self._started_at)
+        ):
+            return self._decide([(HARNESS_FAULT, "CLOCK_INVALID")], sample.seq)
+
+        if not valid_utc(sample.utc):
+            return self._decide([(HARNESS_FAULT, "SAMPLE_UTC_INVALID")], sample.seq)
+
         # structural validation: a harness defect is not a device finding
         if not isinstance(sample.seq, int) or isinstance(sample.seq, bool):
             return self._decide([(HARNESS_FAULT, "SAMPLE_SEQUENCE_INVALID")], None)
@@ -282,6 +311,8 @@ class SafetyMonitor:
         if mono > now + CLOCK_SKEW_TOLERANCE_S:
             return self._decide([(HARNESS_FAULT, "SAMPLE_FROM_FUTURE")], sample.seq)
 
+        sequence_gap = self._last_seq is not None and sample.seq > self._last_seq + 1
+        prior_mono = self._last_mono
         stale = now - mono > cfg.max_sample_age_s
         gap = self._last_mono is not None and mono - self._last_mono > cfg.max_sample_gap_s
         self._last_seq, self._last_mono, self._last_arrival = sample.seq, mono, now
@@ -290,6 +321,10 @@ class SafetyMonitor:
             codes.append((CANNOT_VERIFY_SAFE_STATE, "TELEMETRY_STALE"))
         if gap:
             codes.append((CANNOT_VERIFY_SAFE_STATE, "TELEMETRY_GAP"))
+        if sequence_gap:
+            codes.append((WARN, "SAMPLE_SEQUENCE_GAP"))
+        if gap or stale or sequence_gap:
+            # Unobserved samples cannot establish contiguous physical violations.
             self._ram_violation_start = None
             self._streaks = dict.fromkeys(self._streaks, 0)
 
@@ -309,7 +344,7 @@ class SafetyMonitor:
             and None not in (ram, commit, used, temperature)
             and total is not None
             and total > 0
-            and sample.gpu_device_present is not None
+            and isinstance(sample.gpu_device_present, bool)
         )
         if essential_ok:
             self._lost = 0
@@ -320,6 +355,53 @@ class SafetyMonitor:
             else:
                 codes.append((WARN, "SAMPLE_INCOMPLETE"))
 
+        ratio = used / total if used is not None and total else None
+        states = {
+            "ram_available_bytes": None if ram is None else ram < cfg.ram_floor_bytes,
+            "commit_headroom_bytes": None
+            if commit is None
+            else commit < cfg.commit_headroom_floor_bytes,
+            "vram_used_bytes": None if ratio is None else ratio >= cfg.vram_ratio_stop,
+            "gpu_temperature_c": None
+            if temperature is None
+            else temperature >= cfg.temperature_stop_c,
+            "gpu_device_present": None
+            if not isinstance(sample.gpu_device_present, bool)
+            else not sample.gpu_device_present,
+        }
+        if cfg.shared_baseline_bytes is not None:
+            states["shared_vram_bytes"] = (
+                None
+                if shared is None
+                else shared - cfg.shared_baseline_bytes > cfg.shared_delta_stop_bytes
+            )
+        for field, violation in states.items():
+            if violation is True and not stale:
+                # Preserve the actual reading even when an intervening sample was lost.
+                self.observed_violations[field] = self.observed_violations.get(field, 0) + 1
+                self.events.append(
+                    {
+                        "event": "observed_violation",
+                        "field": field,
+                        "seq": sample.seq,
+                        "mono_s": mono,
+                    }
+                )
+            if stale or gap or sequence_gap:
+                violation = None
+            if violation is False:
+                # Only fresh, confirmed recovery clears unresolved evidence.
+                self._unknown_since.pop(field, None)
+                self._pending_since.pop(field, None)
+            else:
+                self._pending_since.setdefault(
+                    field, prior_mono if sequence_gap and prior_mono is not None else mono
+                )
+                if violation is None:
+                    self._unknown_since.setdefault(field, self._pending_since[field])
+                since = self._unknown_since.get(field)
+                if since is not None and mono - since > cfg.max_unknown_data_s:
+                    codes.append((CANNOT_VERIFY_SAFE_STATE, f"UNKNOWN_DATA:{field}"))
         if not stale:
             self._evaluate_rules(codes, mono, ram, commit, used, total, shared, temperature)
 
@@ -415,6 +497,25 @@ def policy_findings(config: MonitorConfig) -> list[Finding]:
     """Self-consistency of the proposed policy numbers (a review aid, not a safety claim)."""
 
     findings: list[Finding] = []
+    numbers = [
+        value
+        for key, value in config.__dict__.items()
+        if key not in ("stall_deadlines_s", "shared_baseline_bytes")
+    ]
+    numbers.extend(config.stall_deadlines_s.values())
+    if config.shared_baseline_bytes is not None:
+        numbers.append(config.shared_baseline_bytes)
+    if not all(valid_time(v) for v in numbers):
+        return [
+            Finding(
+                "POLICY_NUMBER_INVALID", "refuse", "policy values must be finite and nonnegative"
+            )
+        ]
+    if any(
+        not isinstance(v, int) or isinstance(v, bool)
+        for v in (config.instant_debounce_samples, config.lost_samples_limit)
+    ):
+        return [Finding("DEBOUNCE_INVALID", "refuse", "sample counts must be integers")]
     if config.commit_warn_bytes <= config.commit_headroom_floor_bytes:
         findings.append(
             Finding(

@@ -18,8 +18,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from .core import GIB, MIB, Finding, Observation
+from .core import GIB, MIB, Finding, Observation, valid_time
 from .evidence import (
+    FAULT_SOURCES,
     NOT_COLLECTED,
     DispatchLedger,
     FileLedgerStore,
@@ -55,7 +56,7 @@ from .preflight import (
     PreflightResult,
     evaluate_preflight,
 )
-from .probes import Clocks, ProbeResult, collect_live_observations
+from .probes import Clocks, ProbeResult, collect_code_revision, collect_live_observations
 
 PACKET_SCHEMA = "stablenew.img154.operator-packet.v1"
 PHASE_A_PASS = "PASS_PREPARATION_ONLY"
@@ -235,7 +236,7 @@ def dry_run_scenarios() -> list[dict[str, Any]]:
 
 
 def threshold_feasibility(
-    policy: PreflightPolicy, probe: ProbeResult | None
+    policy: PreflightPolicy, probe: ProbeResult | None, *, now_mono_s: float | None = None
 ) -> list[dict[str, Any]]:
     """Whether each provisional preflight number is reachable on this host (read from the probe), and whether it holds now."""
 
@@ -245,8 +246,10 @@ def threshold_feasibility(
     def value(name: str) -> float | None:
         item = observed.get(name)
         return (
-            float(item.value)
-            if item is not None and item.status == "ok" and isinstance(item.value, int | float)
+            item.number(
+                units="bytes", now_mono_s=now_mono_s, max_age_s=policy.max_observation_age_s
+            )[0]
+            if item is not None and now_mono_s is not None
             else None
         )
 
@@ -297,25 +300,13 @@ def classify_package(
     manifest: QualificationManifest,
     probe: ProbeResult | None,
 ) -> tuple[str, list[str]]:
-    """``PASS_PREPARATION_ONLY`` only when the contracts hold AND every essential counter and fault source was obtained here.
-
-    Anything else is ``HOLD_PRECONDITION_UNPROVEN`` with the reasons. Neither value says the workload is safe to run.
-    """
-
-    reasons: list[str] = []
+    """Implementation simulation verdict only; host preflight is a separate disposition."""
+    reasons = []
     if not all(item["ok"] for item in scenarios):
         reasons.append("deterministic monitor dry run did not reproduce its expected outcomes")
     if policy_findings(MonitorConfig()):
         reasons.append("proposed stop policy is internally inconsistent")
-    if probe is None:
-        reasons.append("no read-only host probe was run: counter availability is unproven")
-    else:
-        reasons.extend(probe.gaps)
-        for name in ESSENTIAL_TELEMETRY:
-            if probe.telemetry_coverage.get(name) != "available":
-                reasons.append(f"essential telemetry not available: {name}")
-    blocking = list(dict.fromkeys(reasons))
-    return (PHASE_A_PASS if not blocking else PHASE_A_HOLD), blocking
+    return (PHASE_A_PASS if not reasons else PHASE_A_HOLD), reasons
 
 
 def _disposition(result: PreflightResult | None) -> str:
@@ -357,7 +348,9 @@ def build_packet(
         "manifest_digest": plan.digest(),
         "intended_run": "frozen_not_executed",
         "policy": rules.as_dict(),
-        "threshold_feasibility": threshold_feasibility(rules, probe),
+        "threshold_feasibility": threshold_feasibility(
+            rules, probe, now_mono_s=preflight.assessed_mono_s if preflight else None
+        ),
         "stop_rules": {
             "classification": {k: dict(v) for k, v in RULE_CLASSIFICATION.items()},
             "config": MonitorConfig().__dict__ | {"stall_deadlines_s": {}},
@@ -368,6 +361,33 @@ def build_packet(
         "telemetry_availability": available,
         "probe_gaps": list(probe.gaps) if probe is not None else ["no read-only probe was run"],
         "environment": probe.environment if probe is not None else {},
+        "code_revision": probe.environment.get(
+            "code_revision", {"state": "unverifiable", "sha": None}
+        )
+        if probe is not None
+        else {"state": "not_collected", "sha": None},
+        "fault_evidence": {
+            "taken_utc": probe.fault_snapshot.taken_utc if probe and probe.fault_snapshot else None,
+            "boot_identity": probe.fault_snapshot.boot_id
+            if probe and probe.fault_snapshot
+            else None,
+            "continuity": "not_compared",
+            "sources": {
+                name: {
+                    "coverage": state.coverage if state else NOT_COLLECTED,
+                    "record_ids": sorted(state.record_ids) if state else [],
+                    "detail": state.detail if state else "source not collected",
+                    "continuity": "not_compared",
+                }
+                for name in FAULT_SOURCES
+                for state in [
+                    probe.fault_snapshot.sources.get(name)
+                    if probe and probe.fault_snapshot
+                    else None
+                ]
+            },
+        },
+        "physical_qualification_acceptable": False,
         "residual_risks": [dict(item) for item in RESIDUAL_RISKS],
         "phase_b_acceptance_checklist": list(PHASE_B_CHECKLIST),
         "invalid_if": list(INVALIDATION_CONDITIONS),
@@ -375,7 +395,7 @@ def build_packet(
     return redact_value(packet)  # type: ignore[no-any-return]
 
 
-PACKET_MAX_AGE_S = 300.0
+PACKET_MAX_AGE_S = 30.0
 
 
 def packet_is_current(
@@ -389,6 +409,8 @@ def packet_is_current(
 
     plan = manifest or build_manifest()
     problems: list[str] = []
+    if not valid_time(max_age_s):
+        return False, ["freshness age limit is invalid"]
     if packet.get("manifest_digest") != plan.digest():
         problems.append("manifest digest differs from the packet")
     if packet.get("disposition") != "PREPARED_FOR_OWNER_REVIEW":
@@ -402,7 +424,7 @@ def packet_is_current(
     except (TypeError, ValueError):
         problems.append("preflight assessment has no usable timestamp")
     else:
-        if age < 0 or age > max_age_s:
+        if not valid_time(age) or age > max_age_s:
             problems.append("preflight assessment is stale")
     return (not problems), problems
 
@@ -485,7 +507,9 @@ def build_parser() -> argparse.ArgumentParser:
         "--reserve", action="append", default=[], help="a reserved path the root must not overlap"
     )
     probe.add_argument(
-        "--vram-baseline-mib", type=float, help="operator-supplied prior quiescent VRAM measurement"
+        "--vram-baseline-mib",
+        type=float,
+        help="unverified assertion only; baseline remains INCONCLUSIVE",
     )
     return parser
 
@@ -541,7 +565,12 @@ def _pin_findings(install: Path, plan: QualificationManifest) -> list[Finding]:
 
 
 def _read_only_inputs(
-    args: _Args, plan: QualificationManifest, probe: ProbeResult, clocks: Clocks
+    args: _Args,
+    plan: QualificationManifest,
+    probe: ProbeResult,
+    clocks: Clocks,
+    *,
+    measured_assets: dict[str, FileMeasurement | None] | None = None,
 ) -> PreflightInputs:
     sections: dict[str, list[Finding] | None] = {
         "assets": None,
@@ -554,7 +583,10 @@ def _read_only_inputs(
     }
     if args.models_root is not None:
         sections["assets"] = verify_assets(
-            _measure_assets(args.models_root, plan, hash_files=args.hash_files), plan
+            measured_assets
+            if measured_assets is not None
+            else _measure_assets(args.models_root, plan, hash_files=args.hash_files),
+            plan,
         )
     if args.forge_install is not None:
         sections["pin"] = _pin_findings(args.forge_install, plan)
@@ -577,7 +609,7 @@ def _read_only_inputs(
         )
         evidence_valid = False if isolation_codes else (None if incomplete else True)
         ledger_path = args.qualification_root / "evidence" / "dispatch-ledger.jsonl"
-        ledger_state = DispatchLedger(FileLedgerStore(ledger_path)).preflight_state(plan.digest())
+        ledger_state = DispatchLedger(FileLedgerStore(ledger_path)).preflight_state(plan)
         from .probes import probe_evidence_volume
 
         observations["evidence_volume_free_bytes"] = probe_evidence_volume(
@@ -588,9 +620,11 @@ def _read_only_inputs(
             "vram_quiescent_baseline_bytes",
             float(args.vram_baseline_mib) * MIB,
             "bytes",
-            "operator-supplied prior measurement",
-            clocks.mono(),
-            clocks.utc(),
+            "unverified operator assertion (not a measurement)",
+            None,
+            None,
+            status="invalid",
+            detail="no timestamp, device/boot binding or independently validated quiescent provenance",
         )
     coverage = (
         {
@@ -626,8 +660,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "dry-run":
         packet = build_packet(manifest=plan, mode="offline_dry_run")
     else:
+        measured = (
+            _measure_assets(args.models_root, plan, hash_files=args.hash_files)
+            if args.models_root is not None
+            else None
+        )
+        revision = collect_code_revision()
         probe = collect_live_observations(clocks)
-        inputs = _read_only_inputs(args, plan, probe, clocks)
+        probe.environment["code_revision"] = revision
+        inputs = _read_only_inputs(args, plan, probe, clocks, measured_assets=measured)
         result = evaluate_preflight(
             inputs,
             now_mono_s=clocks.mono(),
@@ -650,6 +691,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                 return 2
         args.out.parent.mkdir(parents=True, exist_ok=True)
         args.out.write_text(json.dumps(packet, indent=2, sort_keys=True), encoding="utf-8")
+    if args.command == "read-only-probe" and packet["disposition"] != "PREPARED_FOR_OWNER_REVIEW":
+        return 1
     return 0
 
 

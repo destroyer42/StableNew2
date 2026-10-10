@@ -420,3 +420,18 @@ def test_t06_altered_added_or_forbidden_intent_blocks():
     assert {"INTENT_FORBIDDEN_FIELD", "INTENT_DRIFT"} <= codes(forbidden)
     assert "INTENT_NOT_PRESENTED" in codes(mf.verify_intent(None))
     assert "INTENT_NOT_CANONICAL" in codes(mf.verify_intent({**fields, "cfg_scale": float("nan")}))
+
+
+@pytest.mark.parametrize("empty", ["", "   ", None])
+def test_reserved_paths_cannot_be_empty(empty):
+    reserved = dict(RESERVED, repository=empty)
+    findings = iso.validate_isolation(ROOT, reserved, FakeFs())
+    assert "ISOLATION_RESERVED_PATH_INVALID" in codes(findings)
+
+
+def test_collision_is_detected_even_when_a_role_has_the_wrong_frozen_digest():
+    measured = all_exact()
+    vae = measured["vae"]
+    measured["text_encoder"] = dataclasses.replace(measured["text_encoder"], sha256=vae.sha256)
+    findings = codes(mf.verify_assets(measured))
+    assert {"ASSET_ROLE_COLLISION", "ASSET_SHA256_MISMATCH"} <= findings

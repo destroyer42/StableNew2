@@ -12,23 +12,25 @@ import os
 import re
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from .core import MIB, Finding, canonical_json, digest
+from .core import MIB, Finding, canonical_json, digest, valid_time, valid_utc
+from .manifest import QualificationManifest
 
 EVIDENCE_SCHEMA = "stablenew.img154.evidence.v1"
 
 # ----------------------------------------------------------------------------------------------------- redaction
 
-_USER_PATH = re.compile(r"(?i)(?:[A-Z]:)?[\\/]+(?:Users|home)[\\/]+[^\\/\s\"']+")
+_USER_PATH = re.compile(r"(?i)(?:[A-Z]:)?[\\/]+(?:Users|home)[\\/]+[^\"'\r\n<>|;,]+")
 _SERIAL_PAIR = re.compile(
     r"(?i)\b(serial(?:number|_number)?|uuid|guid|machineguid|hwid)\b(\s*[=:]\s*)\S+"
 )
 _MAC = re.compile(r"\b(?:[0-9A-Fa-f]{2}[:-]){5}[0-9A-Fa-f]{2}\b")
 _PROMPT_KEYS = frozenset({"prompt", "negative_prompt"})
 _SECRET_KEY = re.compile(
-    r"(?i)(serial|uuid|guid|hwid|machine_?id|username|user_?name|password|token|secret)"
+    r"(?i)(?:^|_)(serial(?:number|_number)?|uuid|guid|machineguid|hwid|machine_?id|username|user_?name|password|token|secret)(?:$|_)"
 )
 
 
@@ -247,6 +249,10 @@ def classify_faults(
         return FaultClassification(UNKNOWN_COVERAGE_GAP, {}, ("snapshot_missing",), False)
     new: dict[str, tuple[str, ...]] = {}
     gaps: list[str] = []
+    if not valid_utc(before.taken_utc) or not valid_utc(after.taken_utc):
+        gaps.append("snapshot_timestamp_invalid")
+    elif datetime.fromisoformat(after.taken_utc) < datetime.fromisoformat(before.taken_utc):
+        gaps.append("snapshot_time_reversed")
     for name in FAULT_SOURCES:
         old, now = before.sources.get(name), after.sources.get(name)
         if old is None or now is None:
@@ -259,10 +265,12 @@ def classify_faults(
             gaps.append(f"{name}:{now.coverage}")
         elif BOUNDED in (old.coverage, now.coverage) and not (old.record_ids & now.record_ids):
             gaps.append(f"{name}:lookback_continuity_unproven")
+        elif old.coverage == now.coverage == COMPLETE and not old.record_ids <= now.record_ids:
+            gaps.append(f"{name}:records_disappeared")
         added = tuple(sorted(now.record_ids - old.record_ids))
         if added:
             new[name] = added
-    if seconds_after_run is None or seconds_after_run < FAULT_SETTLE_S:
+    if not valid_time(seconds_after_run) or seconds_after_run < FAULT_SETTLE_S:
         gaps.append("settle_time_not_elapsed")
     if before.boot_id and after.boot_id and before.boot_id != after.boot_id:
         return FaultClassification(BOOT_CHANGED, new, tuple(gaps), True)
@@ -317,8 +325,15 @@ class FileLedgerStore:
         if not self.path.exists():
             return []
         records, torn, corrupt = read_jsonl(self.path)
-        if torn or corrupt:
-            raise OSError("ledger is torn or corrupt; ambiguous, not repaired")
+        if (
+            torn
+            or corrupt
+            or any(
+                record.get("schema") != EVIDENCE_SCHEMA or record.get("seq") != index
+                for index, record in enumerate(records, start=1)
+            )
+        ):
+            raise OSError("ledger is torn, corrupt or discontinuous; ambiguous, not repaired")
         return records
 
     def append(self, record: dict[str, Any]) -> None:
@@ -334,29 +349,59 @@ class DispatchLedger:
     def __init__(self, store: LedgerStore) -> None:
         self._store = store
 
-    def state(self, manifest_digest: str) -> str:
-        """``none`` | ``ambiguous`` (attempt without outcome) | ``completed`` | ``unknown`` (unreadable store)."""
-
+    def state(self, manifest: QualificationManifest) -> str:
+        """State for the stable owner case; malformed/legacy history fails closed."""
         try:
-            records = [r for r in self._store.read() if r.get("manifest_digest") == manifest_digest]
-        except (OSError, ValueError):
+            identity = manifest.attempt_identity()
+            history = self._store.read()
+            attempts: dict[str, dict[str, Any]] = {}
+            outcomes: set[str] = set()
+            for record in history:
+                key = record["attempt_identity"]
+                if record["kind"] == "attempt":
+                    frozen = record["manifest"]
+                    if (
+                        key in attempts
+                        or not isinstance(frozen, dict)
+                        or key
+                        != digest(
+                            {
+                                "namespace": "stablenew.img154.attempt.v1",
+                                "case_id": frozen["case_id"],
+                            }
+                        )
+                        or frozen["attempt_identity"] != key
+                        or digest(frozen) != record["manifest_digest"]
+                        or digest(frozen["intent"]) != record["request_digest"]
+                    ):
+                        return "unknown"
+                    attempts[key] = record
+                elif record["kind"] == "outcome":
+                    if (
+                        key not in attempts
+                        or key in outcomes
+                        or not isinstance(record["outcome"], str)
+                    ):
+                        return "unknown"
+                    if record["manifest_digest"] != attempts[key]["manifest_digest"]:
+                        return "unknown"
+                    outcomes.add(key)
+                else:
+                    return "unknown"
+        except (OSError, ValueError, TypeError, KeyError, AttributeError):
             return "unknown"
-        if not records:
+        if identity not in attempts:
             return "none"
-        if any(r.get("kind") == "outcome" for r in records):
-            return "completed"
-        return "ambiguous"
+        return "completed" if identity in outcomes else "ambiguous"
 
-    def preflight_state(self, manifest_digest: str) -> str:
-        """The value the preflight evaluator consumes."""
-
-        state = self.state(manifest_digest)
+    def preflight_state(self, manifest: QualificationManifest) -> str:
+        state = self.state(manifest)
         return {"none": "none", "ambiguous": "ambiguous", "completed": "dispatched"}.get(
             state, "unknown"
         )
 
-    def record_attempt(self, manifest_digest: str, request_digest: str) -> None:
-        state = self.state(manifest_digest)
+    def record_attempt(self, manifest: QualificationManifest) -> None:
+        state = self.state(manifest)
         if state != "none":
             raise LedgerRefusal(
                 f"attempt refused: ledger state is {state!r}; there is no retry or replay"
@@ -364,16 +409,30 @@ class DispatchLedger:
         self._store.append(
             {
                 "kind": "attempt",
-                "manifest_digest": manifest_digest,
-                "request_digest": request_digest,
+                "attempt_identity": manifest.attempt_identity(),
+                "manifest_digest": manifest.digest(),
+                "request_digest": manifest.request_digest(),
+                "manifest": manifest.as_dict(),
             }
         )
 
-    def record_outcome(self, manifest_digest: str, outcome: str) -> None:
-        if self.state(manifest_digest) != "ambiguous":
+    def record_outcome(self, manifest: QualificationManifest, outcome: str) -> None:
+        if self.state(manifest) != "ambiguous":
             raise LedgerRefusal("an outcome can only close a recorded, unresolved attempt")
+        if not isinstance(outcome, str) or not outcome:
+            raise LedgerRefusal("an outcome must be stated")
+        attempt = next(
+            r
+            for r in self._store.read()
+            if r["kind"] == "attempt" and r["attempt_identity"] == manifest.attempt_identity()
+        )
         self._store.append(
-            {"kind": "outcome", "manifest_digest": manifest_digest, "outcome": outcome}
+            {
+                "kind": "outcome",
+                "attempt_identity": manifest.attempt_identity(),
+                "manifest_digest": attempt["manifest_digest"],
+                "outcome": outcome,
+            }
         )
 
 

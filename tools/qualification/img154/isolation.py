@@ -202,7 +202,20 @@ def validate_isolation(
                 )
             )
 
-    missing = [label for label in required_reserved if label not in reserved]
+    missing = [
+        label
+        for label in required_reserved
+        if label not in reserved or not str(reserved[label]).strip()
+    ]
+    for label, path in reserved.items():
+        if not isinstance(path, str) or not path.strip() or not fs.is_absolute(path):
+            findings.append(
+                Finding(
+                    "ISOLATION_RESERVED_PATH_INVALID",
+                    "refuse",
+                    f"{label}: reserved path must be nonempty and absolute",
+                )
+            )
     if missing:
         findings.append(
             Finding(
@@ -213,6 +226,8 @@ def validate_isolation(
         )
 
     for label, other in reserved.items():
+        if not isinstance(other, str) or not other.strip() or not fs.is_absolute(other):
+            continue
         relation = _overlap(
             {stated_parts, resolved_parts}, {_parts(str(other)), _parts(fs.resolve(str(other)))}
         )

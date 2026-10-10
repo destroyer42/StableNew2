@@ -12,6 +12,7 @@ import json
 import os
 import re
 import sys
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
@@ -27,7 +28,7 @@ from tools.qualification.img154 import report as rep
 from tools.qualification.img154.core import GIB, MIB, Observation
 
 PACKAGE = Path(mf.__file__).parent
-MODULES = ("core", "manifest", "isolation", "preflight", "monitor", "evidence", "probes", "report")
+MODULES = tuple(sorted(p.stem for p in PACKAGE.rglob("*.py") if p.name != "__init__.py"))
 
 
 # --- T16 -----------------------------------------------------------------------------------------------------------------
@@ -35,30 +36,29 @@ MODULES = ("core", "manifest", "isolation", "preflight", "monitor", "evidence", 
 
 def test_t16_ledger_allows_exactly_one_attempt_and_never_a_replay():
     ledger = ev.DispatchLedger(ev.MemoryLedgerStore())
-    digest = mf.build_manifest().digest()
-    request = mf.build_manifest().request_digest()
+    digest = mf.build_manifest()
     assert ledger.state(digest) == "none"
-    ledger.record_attempt(digest, request)
+    ledger.record_attempt(digest)
     assert ledger.state(digest) == "ambiguous"
     assert ledger.preflight_state(digest) == "ambiguous"
     with pytest.raises(ev.LedgerRefusal):
-        ledger.record_attempt(digest, request)  # an ambiguous attempt is never replayed
+        ledger.record_attempt(digest)  # an ambiguous attempt is never replayed
     ledger.record_outcome(digest, "loader_failed")
     assert ledger.state(digest) == "completed"
     assert ledger.preflight_state(digest) == "dispatched"
     with pytest.raises(ev.LedgerRefusal):
-        ledger.record_attempt(digest, request)  # not even after a recorded failure: no retry
+        ledger.record_attempt(digest)  # not even after a recorded failure: no retry
     with pytest.raises(ev.LedgerRefusal):
         ledger.record_outcome(digest, "again")
 
 
 def test_t16_unreadable_ledger_is_unknown_and_refuses_attempts():
     ledger = ev.DispatchLedger(ev.MemoryLedgerStore(fail_reads=True))
-    digest = "d" * 64
+    digest = mf.build_manifest()
     assert ledger.state(digest) == "unknown"
     assert ledger.preflight_state(digest) == "unknown"
     with pytest.raises(ev.LedgerRefusal):
-        ledger.record_attempt(digest, "r" * 64)
+        ledger.record_attempt(digest)
     with pytest.raises(ev.LedgerRefusal):
         ledger.record_outcome(digest, "x")
 
@@ -92,10 +92,10 @@ def test_t17_records_cannot_spoof_reserved_keys_and_sequence_survives_a_restart(
     assert {r["schema"] for r in records} == {ev.EVIDENCE_SCHEMA}
 
 
-def test_t16_ledgers_are_per_manifest_and_a_changed_manifest_is_a_new_case():
+def test_t16_only_a_distinct_owner_case_has_a_new_attempt():
     ledger = ev.DispatchLedger(ev.MemoryLedgerStore())
-    ledger.record_attempt("a" * 64, "r" * 64)
-    assert ledger.state("b" * 64) == "none"
+    ledger.record_attempt(mf.build_manifest())
+    assert ledger.state(mf.QualificationManifest(case_id="owner-authorized-case-b")) == "none"
 
 
 def test_t16_file_ledger_is_durable_and_a_torn_tail_is_ambiguous(tmp_path):
@@ -103,12 +103,12 @@ def test_t16_file_ledger_is_durable_and_a_torn_tail_is_ambiguous(tmp_path):
     syncs = []
     store = ev.FileLedgerStore(path, sync=syncs.append)
     ledger = ev.DispatchLedger(store)
-    ledger.record_attempt("a" * 64, "r" * 64)
+    ledger.record_attempt(mf.build_manifest())
     assert len(syncs) == 1  # fsync before the attempt may proceed
-    assert ev.DispatchLedger(ev.FileLedgerStore(path)).state("a" * 64) == "ambiguous"
+    assert ev.DispatchLedger(ev.FileLedgerStore(path)).state(mf.build_manifest()) == "ambiguous"
     with path.open("ab") as stream:
         stream.write(b'{"kind":"outcome","manifest_di')  # a crash mid-write
-    assert ev.DispatchLedger(ev.FileLedgerStore(path)).state("a" * 64) == "unknown"
+    assert ev.DispatchLedger(ev.FileLedgerStore(path)).state(mf.build_manifest()) == "unknown"
 
 
 # --- T17 -----------------------------------------------------------------------------------------------------------------
@@ -262,7 +262,7 @@ def test_t18_new_records_and_a_changed_boot_are_findings():
 def test_t18_bounded_lookback_requires_overlap_to_prove_continuity():
     def bounded(ids):
         return ev.FaultSnapshot(
-            "t",
+            "2026-01-01T00:00:00+00:00",
             "b",
             {n: ev.FaultSourceSnapshot(n, ev.BOUNDED, frozenset(ids)) for n in ev.FAULT_SOURCES},
         )
@@ -395,7 +395,11 @@ def prepared_result():
         evidence_dir_valid=True,
         ledger_state="none",
     )
-    return pf.evaluate_preflight(inputs, now_mono_s=NOW, now_utc="2026-01-01T00:00:00+00:00")
+    # Synthetic PREPARED fixture for packet freshness, not a baseline validation claim.
+    return replace(
+        pf.evaluate_preflight(inputs, now_mono_s=NOW, now_utc="2026-01-01T00:00:00+00:00"),
+        decision=pf.PREPARED,
+    )
 
 
 def test_t19_packet_is_valid_only_for_the_prepared_assessment_of_this_manifest():
@@ -463,7 +467,8 @@ def test_dry_run_packet_reads_no_host_state_and_is_a_hold(monkeypatch, tmp_path,
     packet = json.loads(out.read_text(encoding="utf-8"))
     assert packet["mode"] == "offline_dry_run"
     assert packet["disposition"] == "HOLD"
-    assert packet["phase_a_classification"] == rep.PHASE_A_HOLD
+    assert packet["phase_a_classification"] == rep.PHASE_A_PASS
+    assert packet["physical_qualification_acceptable"] is False
     assert all(item["ok"] for item in packet["stop_rules"]["monitor_dry_run"])
     assert "PR-IMG-MODELS-154A" in capsys.readouterr().out
 
@@ -784,9 +789,11 @@ FORBIDDEN_STRINGS = (
 
 
 def _trees():
-    for name in MODULES:
-        path = PACKAGE / f"{name}.py"
-        yield name, ast.parse(path.read_text(encoding="utf-8"))
+    for path in sorted(PACKAGE.rglob("*.py")):
+        yield (
+            path.relative_to(PACKAGE).with_suffix("").as_posix(),
+            ast.parse(path.read_text(encoding="utf-8")),
+        )
 
 
 def _dotted(node):
@@ -797,6 +804,135 @@ def _dotted(node):
     if isinstance(node, ast.Name):
         parts.append(node.id)
     return ".".join(reversed(parts))
+
+
+def source_guard_problems(name, tree):
+    """Alias-aware conservative guard; behavioral fakes remain the execution-boundary evidence.
+
+    Exceptions: fixed read-only query runner and Git provenance reader in probes;
+    loopback socket observation in _tcp_state; evidence rotation only in evidence.
+    This guards source shape, not arbitrary Python execution or all transitive imports.
+    """
+    bindings = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                bindings[alias.asname or alias.name.split(".")[0]] = (
+                    alias.name if alias.asname else alias.name.split(".")[0]
+                )
+        elif isinstance(node, ast.ImportFrom):
+            for alias in node.names:
+                bindings[alias.asname or alias.name] = f"{node.module or ''}.{alias.name}"
+
+    def resolved(node):
+        value = _dotted(node)
+        head, dot, rest = value.partition(".")
+        return bindings.get(head, head) + (dot + rest if dot else "")
+
+    # Also cover simple local aliases (including aliased callable imports).
+    for _ in range(3):
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Assign) and isinstance(node.value, ast.Name | ast.Attribute):
+                for target in node.targets:
+                    if isinstance(target, ast.Name):
+                        bindings[target.id] = resolved(node.value)
+    parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+    problems = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import | ast.ImportFrom):
+            imports = (
+                [a.name for a in node.names]
+                if isinstance(node, ast.Import)
+                else [node.module or "", *[f"{node.module or ''}.{a.name}" for a in node.names]]
+            )
+            for module in imports:
+                if (
+                    any(
+                        module == forbidden or module.startswith(forbidden + ".")
+                        for forbidden in FORBIDDEN_IMPORTS
+                    )
+                    or module.startswith(FORBIDDEN_PREFIXES)
+                    or module.startswith(("runpy", "importlib", "multiprocessing", "pty"))
+                ):
+                    problems.append(f"{name}: import {module}")
+        if not isinstance(node, ast.Call):
+            continue
+        called = resolved(node.func)
+        scope = parents.get(node)
+        while scope is not None and not isinstance(scope, ast.FunctionDef | ast.AsyncFunctionDef):
+            scope = parents.get(scope)
+        owner = scope.name if scope is not None else "<module>"
+        if (
+            called in FORBIDDEN_CALLS
+            or called in {"eval", "exec", "__import__", "compile"}
+            or called.startswith(("os.spawn", "os.exec", "os.posix_spawn", "runpy.", "importlib."))
+            or isinstance(node.func, ast.Attribute)
+            and node.func.attr in FORBIDDEN_METHODS
+        ):
+            problems.append(f"{name}: call {called}")
+        if called.startswith("subprocess."):
+            expected_argv = {
+                "run_allow_listed": ["[executable, *argv[1:]]"],
+                "collect_code_revision": [
+                    "[git, '-C', str(root), 'rev-parse', '--show-toplevel', 'HEAD']",
+                    "[git, '--no-optional-locks', '-C', str(root), 'status', '--porcelain', '--untracked-files=all']",
+                ],
+            }
+            allowed_shapes = {
+                ast.dump(ast.parse(expr, mode="eval").body) for expr in expected_argv.get(owner, [])
+            }
+            if (
+                not node.args
+                or ast.dump(node.args[0]) not in allowed_shapes
+                or any(keyword.arg == "shell" for keyword in node.keywords)
+            ):
+                problems.append(f"{name}: unsupported process argv or shell")
+            if not (
+                name == "probes"
+                and called == "subprocess.run"
+                and owner in {"run_allow_listed", "collect_code_revision"}
+            ):
+                problems.append(f"{name}: unsupported process call {called}")
+        if isinstance(node.func, ast.Attribute) and node.func.attr in {"connect", "connect_ex"}:
+            if not (name == "probes" and owner == "_tcp_state"):
+                problems.append(f"{name}: unsupported socket call {called}")
+        if (
+            called == "getattr"
+            and node.args
+            and resolved(node.args[0]) in {"os", "subprocess", "socket"}
+        ):
+            problems.append(f"{name}: dynamic execution-capable attribute")
+    return problems
+
+
+def test_s6_discovered_module_set_has_no_unsupported_execution():
+    assert source_guard_problems(
+        "unsafe_new_module", ast.parse("from os import system as call; call('x')")
+    )
+    assert [
+        (name, source_guard_problems(name, tree))
+        for name, tree in _trees()
+        if source_guard_problems(name, tree)
+    ] == []
+
+
+@pytest.mark.parametrize(
+    "source",
+    [
+        "import os as alias; alias.system('x')",
+        "from os import system as alias; alias('x')",
+        "from subprocess import run as alias; alias(['x'])",
+        "import subprocess as alias; alias.Popen(['x'])",
+        "from requests import post as alias; alias('x')",
+        "import os; call = os.system; call('x')",
+        "import os; getattr(os, 'system')('x')",
+        "__import__('os').system('x')",
+        "from os import spawnv; spawnv(0,'x',[])",
+        "from src.api import WebUIProcessManager as Alias; Alias()",
+    ],
+)
+def test_s6_aliases_from_imports_and_execution_calls_are_rejected(source):
+    assert source_guard_problems("added_module", ast.parse(source))
 
 
 def test_t21_no_network_process_control_or_filesystem_mutation_code_exists():
@@ -837,8 +973,9 @@ def test_t21_subprocess_exists_only_in_the_probe_module_and_only_as_run():
 
 
 def test_t21_no_forbidden_command_text_and_every_allow_listed_query_is_a_read():
-    for name in MODULES:
-        text = (PACKAGE / f"{name}.py").read_text(encoding="utf-8")
+    for path in sorted(PACKAGE.rglob("*.py")):
+        name = path.relative_to(PACKAGE).as_posix()
+        text = path.read_text(encoding="utf-8")
         for needle in FORBIDDEN_STRINGS:
             if needle in {"WebUIProcessManager", "OwnedForge"}:
                 # these names may be MENTIONED in prose, never imported or called
@@ -919,14 +1056,15 @@ def reg_commit_comparison():
     assert refused.decision == pf.REFUSED_RESOURCE_THRESHOLD
     assert "COMMIT_HEADROOM_BELOW_THRESHOLD" in refused.reason_codes
     accepted = pf.evaluate_preflight(good, now_mono_s=NOW)
-    assert accepted.decision == pf.PREPARED
+    assert accepted.decision == pf.INCONCLUSIVE
+    assert "VRAM_BASELINE_UNVERIFIED" in accepted.reason_codes
     assert "COMMIT_HEADROOM_BELOW_THRESHOLD" not in accepted.reason_codes
 
 
 def reg_stale_sensor_is_not_evidence():
     observations = dict(_good_inputs().observations)
     observations["ram_available_bytes"] = Observation(
-        "ram_available_bytes", 25 * GIB, "bytes", "fake", NOW - 10_000, None
+        "ram_available_bytes", 25 * GIB, "bytes", "fake", NOW - 1000, None
     )
     result = pf.evaluate_preflight(_good_inputs(observations=observations), now_mono_s=NOW)
     assert result.decision == pf.INCONCLUSIVE
@@ -976,13 +1114,16 @@ def reg_missing_event_log_is_not_clean():
     assert (
         ev.classify_faults(before, after, seconds_after_run=600).status == ev.UNKNOWN_COVERAGE_GAP
     )
+    assert (
+        "wer_reports:inaccessible" in ev.classify_faults(before, after, seconds_after_run=600).gaps
+    )
 
 
 def reg_ambiguous_attempt_is_never_retried():
     ledger = ev.DispatchLedger(ev.MemoryLedgerStore())
-    ledger.record_attempt("a" * 64, "r" * 64)
+    ledger.record_attempt(mf.build_manifest())
     with pytest.raises(ev.LedgerRefusal):
-        ledger.record_attempt("a" * 64, "r" * 64)
+        ledger.record_attempt(mf.build_manifest())
 
 
 def _mutant_inverted_commit(monkeypatch):
@@ -1090,3 +1231,24 @@ def test_mutation_probe_regression_passes_on_real_code_and_fails_on_the_mutant(
     mutate(monkeypatch)
     with pytest.raises((AssertionError, pytest.fail.Exception)):
         regression()
+
+
+def test_s6_guard_discovers_new_nested_modules(monkeypatch, tmp_path):
+    import sys as unused_alias
+
+    del unused_alias
+    nested = tmp_path / "nested"
+    nested.mkdir()
+    (nested / "new_module.py").write_text(
+        "from subprocess import Popen as launch; launch(['x'])", encoding="utf-8"
+    )
+    monkeypatch.setattr(sys.modules[__name__], "PACKAGE", tmp_path)
+    found = [(name, source_guard_problems(name, tree)) for name, tree in _trees()]
+    assert len(found) == 1 and found[0][0] == "nested/new_module" and found[0][1]
+
+
+def test_s6_process_exception_does_not_allow_arbitrary_argv():
+    source = (
+        "import subprocess\ndef collect_code_revision():\n    subprocess.run(['unsafe-launch'])"
+    )
+    assert source_guard_problems("probes", ast.parse(source))
