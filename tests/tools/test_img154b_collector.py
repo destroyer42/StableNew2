@@ -424,3 +424,57 @@ def test_t72_code_revision_comes_from_the_read_only_probe_and_dirty_trees_are_no
     world.code = {"state": "unverifiable", "sha": None, "source_sha256": "b" * 64}
     _, _, collected = collect(world)
     assert not collected.code.trusted
+
+
+@pytest.mark.parametrize(
+    "port,processes,expected",
+    [
+        (iso.PortObservation("127.0.0.1", 7886, "occupied"), [], "RUNTIME_PORT_OCCUPIED"),
+        (iso.PortObservation("127.0.0.1", 7886, "unverifiable"), [], "RUNTIME_PORT_UNVERIFIED"),
+        (None, [], "PORT_NOT_OBSERVED"),
+        (iso.PortObservation("127.0.0.1", 7886, "free"), None, "PROCESS_LIST_UNAVAILABLE"),
+        (
+            iso.PortObservation("127.0.0.1", 7886, "free"),
+            [iso.ProcessObservation(9, "webui.py")],
+            "RUNTIME_CONFLICT_FOREIGN_OWNER",
+        ),
+    ],
+)
+def test_r3_remeasure_refreshes_runtime_sections(port, processes, expected):
+    world, collector, _ = collect()
+    world.port, world.processes = port, processes
+    fresh = collector.remeasure()
+    assert expected in [f.code for findings in fresh.sections.values() for f in findings]
+    assert fresh.runtime_observed_mono_s <= world.now
+
+
+def test_r2_collector_reads_current_code_identity_instead_of_saved_code():
+    world, collector, _ = collect()
+    world.code = {"state": "unverifiable", "sha": None, "source_sha256": None}
+    assert not collector.recheck_code().trusted
+
+
+@pytest.mark.parametrize("reader", ["port", "processes"])
+def test_r3_runtime_assessment_reader_exception_is_unknown(reader):
+    world, collector, _ = collect()
+
+    def unavailable():
+        raise TimeoutError("timed out")
+
+    setattr(collector.readers, reader, unavailable)
+    when, sections = collector._runtime_assessment()
+    expected = "PORT_NOT_OBSERVED" if reader == "port" else "PROCESS_LIST_UNAVAILABLE"
+    assert any(f.code == expected for findings in sections.values() for f in findings)
+
+
+def test_r3_runtime_timestamp_precedes_slow_inventory():
+    world, collector, _ = collect()
+    start = world.now
+
+    def processes():
+        world.sleep(31)
+        return []
+
+    collector.readers.processes = processes
+    when, _ = collector._runtime_assessment()
+    assert when == start and world.now - when == 31

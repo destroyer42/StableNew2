@@ -147,12 +147,24 @@ encoder load, transformer load and VAE decode have no verified signal and stay `
 inactive. The 80 C, 95% VRAM, low-memory and shared-memory stop thresholds remain provisional and are not validated
 protection; a monitor stop is a request routed through the owned shutdown, and no software can recover a hung GPU driver.
 
+Immediately before the atomic claim, after operator interaction and sampler-health proof, the harness refreshes the
+process inventory and port state, re-reads the trusted Git/source identity and checks the original authorization record's
+file identity and complete bytes. It revalidates exact manifest/payload/policy/risk binding with fresh UTC and rejects expired,
+modified, replaced, absent or unverifiable records before consuming the case. Runtime findings and resource preflight must
+remain within the existing freshness window; unknown or conflicting state refuses. Loopback reachability confers no ownership.
+
 ## Stop, fault and result behavior
 
 A latched `REQUEST_OWNER_STOP`, `CANNOT_VERIFY_SAFE_STATE` or `HARNESS_FAULT` persists its trigger, source, time and last
 readings, halts progression, requests only the manager-owned shutdown, sends no second request and keeps an ambiguous
 dispatch ambiguous. Two fresh clean samples are required after the selection and before the dispatch record. The single POST
-runs in a worker thread supervised by the 1 Hz watchdog, so a blocking request cannot blind the monitor.
+runs in a worker thread supervised by the 1 Hz watchdog, with an independent overall monotonic deadline: 600 s for
+selection, 1800 s for generation. Expiration is flush/fsync recorded in `requests.jsonl` before the manager-owned stop; the
+POST and progress-observation workers share the existing bounded abort-join budget. Progress GETs run on a single
+non-overlapping observation worker, so trickling or stalled responses cannot blind the supervisor; late observation results
+cannot mutate an aborted case. An unjoined worker is explicitly reported as possibly outstanding. No
+selection or generation progresses after an abort, no request is retried, and a late response cannot restore PASS. A dispatched
+POST remains ambiguous even if shutdown is verified; a timeout does not prove Forge never received or executed it.
 
 Classes: `PREFLIGHT_REFUSED`, `LOADER_FAILED`, `RESOURCE_ABORT_REQUESTED`, `AMBIGUOUS_DISPATCH`, `SYSTEM_OR_GPU_FAULT`,
 `INSTRUMENTATION_GAP`, `OUTPUT_VALIDATION_FAIL`, `TECHNICAL_PASS_CONSTRAINED`. A pass needs the physical authority, a claim,
@@ -163,6 +175,12 @@ evidence bundle and `NO_NEW_EVENTS_COMPLETE_COVERAGE` after the 120 s settle int
 technical result, never stability, repeatability or production support.
 
 ## Validation
+
+The R1 import audit initializes standard-library `ctypes` separately before importing any harness module: CPython 3.14.8
+`Lib/ctypes/__init__.py` initializes `pythonapi = PyDLL(None)` on Linux (the known hosted T89 event), and kernel32 on Windows.
+Every subsequent native-library load remains audited and rejected, including `None` and kernel32. Unexpected process,
+outbound-network and filesystem-write events remain rejected. This import isolation is not a hosted corrected-SHA verdict;
+Linux `affected` CI must pass after separately authorized publication.
 
 | Evidence | Result |
 | --- | --- |

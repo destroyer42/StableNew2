@@ -13,11 +13,13 @@ from __future__ import annotations
 import hashlib
 import hmac
 import json
+import os
 import re
 import secrets
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Any
 
 from tools.qualification.img154.core import Finding, digest, valid_utc
@@ -322,3 +324,39 @@ def verify_authorization(
                 "the authorization validity window is invalid or longer than 24 hours",
             )
     return findings
+
+
+@dataclass(frozen=True)
+class AuthorizationRecord:
+    """Read-only snapshot: exact bytes AND filesystem identity of the originally approved record."""
+
+    path: Path
+    authorization: OwnerAuthorization
+    identity: tuple[int, int, int, int]
+    content_sha256: str
+
+    def is_current(self, approved: OwnerAuthorization) -> bool:
+        current = read_authorization_record(self.path)
+        return approved == self.authorization and current == self
+
+
+def _file_identity(info: os.stat_result) -> tuple[int, int, int, int]:
+    # Windows stat/fstat disagree on legacy ctime; inode, size, mtime and the full content digest bind this record.
+    return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
+
+
+def read_authorization_record(path: Path) -> AuthorizationRecord | None:
+    """No writing or caching: disappearance, replacement, content/metadata change or an unstable read refuses."""
+
+    try:
+        before = _file_identity(path.stat())
+        with path.open("rb") as stream:
+            opened = _file_identity(os.fstat(stream.fileno()))
+            content = stream.read()
+            after = _file_identity(os.fstat(stream.fileno()))
+        if not (before == opened == after == _file_identity(path.stat())):
+            return None
+        approved = read_authorization_text(content.decode("utf-8-sig"))
+        return AuthorizationRecord(path, approved, before, hashlib.sha256(content).hexdigest())
+    except (OSError, ValueError):
+        return None

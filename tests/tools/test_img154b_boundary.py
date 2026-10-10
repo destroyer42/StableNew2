@@ -258,7 +258,7 @@ def test_t84_nothing_in_the_package_can_write_an_owner_authorization():
             isinstance(n, ast.Name) and n.id == "AUTHORIZATION_SUFFIX" for n in ast.walk(function)
         ):
             users.append(function.name)
-    assert users == ["read_authorization"]
+    assert users == ["read_owner_record"]
     for name, module_tree in _trees():
         for node in ast.walk(module_tree):
             if (
@@ -424,6 +424,7 @@ def test_t88_materialize_needs_its_own_explicit_confirmation(tmp_path, capsys):
 AUDIT = textwrap.dedent(
     """
     import json, sys
+    import ctypes  # isolate CPython ctypes.pythonapi initialization BEFORE auditing any harness import
     events = []
     WATCHED = {"subprocess.Popen", "os.system", "socket.connect", "socket.bind", "socket.getaddrinfo", "ctypes.dlopen",
                "os.remove", "os.mkdir", "os.rename", "os.rmdir", "shutil.copyfile", "os.exec", "os.spawn", "os.fork"}
@@ -448,6 +449,11 @@ AUDIT = textwrap.dedent(
 )
 
 
+def unexpected_import_events(events):
+    # No native-load allowance: CPython ctypes initialization is isolated before the package audit.
+    return [event for event in events if event != "socket.bind:(('::1', 0),)"]
+
+
 def test_t89_importing_every_module_has_no_process_network_native_or_write_side_effect():
     script = AUDIT % {"modules": list(MODULES), "repo": str(REPO_ROOT)}
     done = subprocess.run(  # noqa: S603
@@ -464,11 +470,10 @@ def test_t89_importing_every_module_has_no_process_network_native_or_write_side_
     )
     assert done.returncode == 0, done.stderr
     events = json.loads(done.stdout.strip().splitlines()[-1])
-    # Two known, third-party/stdlib probes that are not harness actions: ``import ctypes`` loads kernel32 for GetLastError, and
-    # urllib3 (reached through the PR-154A probe module's import chain) binds an ephemeral loopback IPv6 socket to test for
-    # IPv6 support. Anything else is a side effect of this package.
-    tolerated = {"ctypes.dlopen:('kernel32',)", "socket.bind:(('::1', 0),)"}
-    assert [event for event in events if event not in tolerated] == []
+    # ctypes was initialized in isolation (CPython 3.14.8 Lib/ctypes/__init__.py: pythonapi = PyDLL(None) on Linux;
+    # kernel32 on Windows). EVERY subsequent native load, including None/kernel32, remains audited and rejected.
+    # urllib3's established ephemeral IPv6 loopback capability probe is the sole tolerated package import event.
+    assert unexpected_import_events(events) == []
 
 
 # --- the HTTP client -----------------------------------------------------------------------------------------------------
@@ -637,3 +642,33 @@ def test_t91_request_reverification_fails_closed_on_an_unreadable_source(tmp_pat
 def test_t92_every_module_imports_cleanly_on_any_platform():
     for name in MODULES:
         importlib.import_module(f"tools.qualification.img154b.{name}")
+
+
+@pytest.mark.parametrize(
+    "event,args",
+    [
+        ("ctypes.dlopen", (None,)),
+        ("ctypes.dlopen", ("kernel32",)),
+        ("ctypes.dlopen", ("unexpected-native-library",)),
+        ("subprocess.Popen", ("unexpected-process",)),
+        ("socket.connect", (None, ("example.com", 443))),
+        ("open", ("unexpected-output", "w", 0)),
+        ("os.mkdir", ("unexpected-directory",)),
+    ],
+)
+def test_r1_audit_still_detects_side_effects_after_ctypes_bootstrap(event, args):
+    script = AUDIT % {"modules": [], "repo": str(REPO_ROOT)}
+    script = script.replace(
+        "print(json.dumps(events))", f"sys.audit({event!r}, *{args!r})\nprint(json.dumps(events))"
+    )
+    done = subprocess.run(
+        [sys.executable, "-I", "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )  # noqa: S603
+    assert done.returncode == 0, done.stderr
+    events = json.loads(done.stdout.strip().splitlines()[-1])
+    assert unexpected_import_events(events) == events
+    assert len(events) == 1 and events[0].startswith("open-write:" if event == "open" else event)

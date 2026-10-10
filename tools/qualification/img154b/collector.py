@@ -303,6 +303,7 @@ class LiveCollector:
         boot_id = fault_before.boot_id if fault_before is not None else None
         device = r.device_id()
         baseline = self.acquire_baseline(device, boot_id)
+        runtime_time, sections = self._runtime_assessment()
         observations, _ = self._read_providers()
         observations["pagefile_volume_free_bytes"] = r.pagefile_free()
         observations["evidence_volume_free_bytes"] = r.evidence_free()
@@ -315,9 +316,35 @@ class LiveCollector:
             r.utc(),
             "ok" if device else "missing",
         )
-        return Remeasured(observations, baseline, fault_before)
+        return Remeasured(observations, baseline, fault_before, sections, runtime_time)
 
     def recheck_served(self) -> list[Finding]:
         """The cheap size/mtime re-check against the full proof; unwired means refused, never silently fine."""
 
         return list(self.readers.served_unchanged())
+
+    def recheck_runtime(self) -> tuple[float, Mapping[str, list[Finding] | None]]:
+        return self._runtime_assessment()
+
+    def _runtime_assessment(self) -> tuple[float, dict[str, list[Finding]]]:
+        # Stamp BEFORE the readers, so slow or timed-out inventory cannot appear fresh.
+        r = self.readers
+        when = r.mono()
+        try:
+            processes = r.processes()
+        except Exception:  # noqa: BLE001 - inaccessible inventory is not an empty inventory
+            processes = None
+        try:
+            port = r.port()
+        except Exception:  # noqa: BLE001 - an unverifiable endpoint is not free
+            port = None
+        return when, {
+            "processes": validate_process_conflicts(processes),
+            "endpoint": validate_endpoint(port),
+        }
+
+    def recheck_code(self) -> CodeRevision:
+        try:
+            return CodeRevision.from_probe(self.readers.code_revision())
+        except Exception:  # noqa: BLE001 - fail closed at the claim boundary
+            return CodeRevision("unverifiable", None, None)

@@ -19,7 +19,7 @@ from PIL import Image
 from tools.qualification.img154 import evidence as ev
 from tools.qualification.img154 import manifest as mf
 from tools.qualification.img154 import preflight as pf
-from tools.qualification.img154.core import GIB, Observation
+from tools.qualification.img154.core import GIB, Finding, Observation
 from tools.qualification.img154b import adjudication as adj
 from tools.qualification.img154b import authorization as au
 from tools.qualification.img154b import case as cs
@@ -127,6 +127,7 @@ class FakeCollector:
         self.served_findings = []
         self.device_after = DEVICE
         self.workspace = "none"
+        self.runtime_sections = {"processes": [], "endpoint": []}
 
     def _observations(self, headroom):
         c = self.clock
@@ -171,7 +172,18 @@ class FakeCollector:
         fresh["gpu_device_id"] = Observation(
             "gpu_device_id", self.device_after, "id", "fake", self.clock.mono(), UTC_NOW, "ok"
         )
-        return cs.Remeasured(fresh, baseline_window(self.clock), complete_faults())
+        result = cs.Remeasured(fresh, baseline_window(self.clock), complete_faults())
+        result.sections = self.runtime_sections
+        result.runtime_observed_mono_s = self.clock.mono()
+        return result
+
+    def recheck_runtime(self):
+        self.events.add("recheck_runtime")
+        return self.clock.mono(), self.runtime_sections
+
+    def recheck_code(self):
+        self.events.add("recheck_code")
+        return self.code
 
     def recheck_served(self):
         self.events.add("recheck_served")
@@ -454,6 +466,7 @@ class Harness:
             sample_path=self.tmp / "samples.jsonl",
             served_paths=SERVED,
         )
+        ports.authorization_current = lambda approved: approved == self.authorization
         return cs.CaseCoordinator(
             ports, manifest=self.manifest, payload=self.payload, config=self.config
         )
@@ -1623,3 +1636,479 @@ def test_t86_the_passphrase_is_asked_only_after_the_typed_phrase_and_never_writt
         if p.is_file() and PASSPHRASE.encode() in p.read_bytes()
     ]
     assert leaked == []
+
+
+# --- R1-R4 final safety corrections (deterministic ports; no host/runtime actions) ----------------
+
+
+def assert_unconsumed(h, report):
+    assert not report.claimed and not report.executed, report.as_dict()
+    assert h.fence.state().status == "none"
+    assert "runtime.start" not in h.events.names()
+    assert h.runtime.stops == 0 and not h.http.requests
+    assert all(s.stopped for s in h.samplers)
+
+
+@pytest.mark.parametrize("when", ["confirmation", "passphrase", "sampler_health"])
+def test_r2_expiry_during_operator_or_sampler_wait_refuses_before_claim(tmp_path, when):
+    h = Harness(tmp_path)
+    current = [UTC_NOW]
+    h.clock.utc = lambda: current[0]
+
+    def expire():
+        current[0] = "2026-01-02T00:00:00+00:00"
+
+    if when == "confirmation":
+        original = h.confirm
+        h.confirm = lambda summary: (expire(), original(summary))[1]
+    elif when == "passphrase":
+        original = h.coordinator
+
+        def coordinator():
+            c = original()
+            c.ports.passphrase = lambda: (expire(), PASSPHRASE)[1]
+            return c
+
+        h.coordinator = coordinator
+    else:
+        h.sampler_kwargs = {"script": lambda sampler: expire()}
+    report = h.run()
+    assert_unconsumed(h, report)
+    assert "AUTHORIZATION_EXPIRED" in report.refusals
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        au.CodeRevision("clean", "c" * 40, "b" * 64),
+        au.CodeRevision("clean", "a" * 40, "d" * 64),
+        au.CodeRevision("dirty", "a" * 40, "b" * 64),
+        au.CodeRevision("unverifiable", None, None),
+    ],
+)
+def test_r2_code_drift_during_wait_refuses_without_consuming(tmp_path, code):
+    h = Harness(tmp_path)
+    original = h.confirm
+
+    def confirm(summary):
+        h.collector.code = code
+        return original(summary)
+
+    h.confirm = confirm
+    report = h.run()
+    assert_unconsumed(h, report)
+    assert any(
+        code in report.refusals
+        for code in ("CODE_REVISION_UNTRUSTED", "AUTHORIZATION_CODE_MISMATCH")
+    )
+
+
+@pytest.mark.parametrize("mode", ["changed", "absent", "error", "unwired"])
+def test_r2_record_continuity_is_required_at_claim(tmp_path, mode):
+    h = Harness(tmp_path)
+    c = h.coordinator()
+    if mode == "unwired":
+        c.ports.authorization_current = None
+    elif mode == "error":
+
+        def unavailable(approved):
+            raise OSError("unreadable")
+
+        c.ports.authorization_current = unavailable
+    else:
+        c.ports.authorization_current = lambda approved: False
+    report = c.run(h.authority, h.authorization)
+    assert_unconsumed(h, report)
+    assert "AUTHORIZATION_RECORD_NOT_CURRENT" in report.refusals
+
+
+def test_r2_valid_authorization_code_and_fresh_state_continue_to_claim(tmp_path):
+    h = Harness(tmp_path)
+    original_claim = h.fence.claim
+
+    def claim(**kw):
+        assert h.events.names()[-1] == "recheck_code"
+        return original_claim(**kw)
+
+    h.fence.claim = claim
+    report = h.run()
+    assert report.claimed and report.executed and not report.result.is_pass
+
+
+@pytest.mark.parametrize(
+    "section,code,severity",
+    [
+        ("processes", "RUNTIME_CONFLICT_FOREIGN_OWNER", "refuse"),
+        ("endpoint", "RUNTIME_PORT_OCCUPIED", "refuse"),
+        ("processes", "PROCESS_LIST_UNAVAILABLE", "inconclusive"),
+        ("endpoint", "RUNTIME_PORT_UNVERIFIED", "inconclusive"),
+    ],
+)
+def test_r3_new_runtime_or_unknown_inventory_after_confirmation_refuses(
+    tmp_path, section, code, severity
+):
+    h = Harness(tmp_path)
+    original = h.confirm
+
+    def confirm(summary):
+        h.collector.runtime_sections[section] = [Finding(code, severity, "changed during wait")]
+        return original(summary)
+
+    h.confirm = confirm
+    report = h.run()
+    assert_unconsumed(h, report)
+    assert code in report.refusals
+
+
+def test_r3_final_preflight_cannot_age_out_during_sampler_health(tmp_path):
+    h = Harness(tmp_path)
+    h.sampler_kwargs = {"script": lambda sampler: h.clock.sleep(31) if sampler.ticks == 3 else None}
+    report = h.run()
+    assert_unconsumed(h, report)
+    assert "FINAL_PREFLIGHT_STALE" in report.refusals
+
+
+class ScriptedPostWorker:
+    """No real thread or sleeping: join advances the injected clock; the transport never completes unless scripted."""
+
+    def __init__(self, target, clock, *, complete_after=None, **kw):
+        self.target, self.clock = target, clock
+        self.complete_after = complete_after
+        self.name = kw.get("name")
+        self.joins = 0
+        self.alive_checks = 0
+        self.alive = True
+
+    def start(self):
+        if self.name == "img154b-progress-observation":
+            self.target()
+            self.alive = False
+
+    def is_alive(self):
+        self.alive_checks += 1
+        if self.alive_checks > 40:
+            raise RuntimeError("UNBOUNDED_SUPERVISION_SPIN")
+        return self.alive
+
+    def join(self, seconds):
+        self.joins += 1
+        if self.joins > 12:
+            raise RuntimeError("UNBOUNDED_SUPERVISION")
+        self.clock.sleep(seconds)
+        if self.complete_after is not None and self.joins >= self.complete_after:
+            self.target()
+            self.alive = False
+
+
+@pytest.mark.parametrize("path", [rq.OPTIONS_ENDPOINT, rq.TXT2IMG_ENDPOINT])
+@pytest.mark.parametrize("stop_mode", ["clean", "timed_out", "unverified", "raises"])
+def test_r4_overall_deadline_bounds_live_worker_and_records_uncertainty(
+    tmp_path, monkeypatch, path, stop_mode
+):
+    h = Harness(tmp_path)
+    h.config = replace(h.config, supervision_interval_s=1, abort_join_s=2)
+    c = h.coordinator()
+    workers = []
+
+    def thread(target, **kw):
+        worker = ScriptedPostWorker(target, h.clock, **kw)
+        workers.append(worker)
+        return worker
+
+    monkeypatch.setattr(cs.threading, "Thread", thread)
+    if stop_mode == "raises":
+        h.runtime.stop = lambda: (_ for _ in ()).throw(OSError("stop unavailable"))
+    elif stop_mode != "clean":
+        h.runtime.shutdown = rt.ShutdownResult(
+            True, False, stop_mode == "timed_out", False, (), stop_mode
+        )
+    writer = ev.DurableJsonlWriter(tmp_path / "requests.jsonl", redact=False)
+    c._request_writer = writer
+    sampler = h.make_sampler(None, writer, lambda: c._run.stage, lambda: "fake")
+    response, aborted = c._supervised_request(sampler, path, b"{}", timeout_s=3, progress=True)
+    assert aborted and response.status is None
+    assert h.clock.now <= 5005
+    assert sampler.ticks >= 3
+    assert c._run.shutdown is not None
+    assert c._run.shutdown.verified == (stop_mode == "clean")
+    assert workers[0].is_alive()
+    records = ev.read_jsonl(writer.path)[0]
+    assert any(r.get("reason") == "overall_deadline" for r in records)
+    assert any(r.get("worker_outstanding") is True for r in records)
+    assert "POST_OVERALL_TIMEOUT" in c._run.refusals
+
+
+def test_r4_completion_within_deadline_is_accepted(tmp_path, monkeypatch):
+    h = Harness(tmp_path)
+    c = h.coordinator()
+    monkeypatch.setattr(
+        cs.threading,
+        "Thread",
+        lambda target, **kw: ScriptedPostWorker(target, h.clock, complete_after=1, **kw),
+    )
+    writer = ev.DurableJsonlWriter(tmp_path / "requests.jsonl", redact=False)
+    c._request_writer = writer
+    sampler = h.make_sampler(None, writer, lambda: c._run.stage, lambda: "fake")
+    response, aborted = c._supervised_request(
+        sampler,
+        rq.OPTIONS_ENDPOINT,
+        cs._json_bytes(rq.selection_payload(SERVED)),
+        timeout_s=3,
+        progress=False,
+    )
+    assert response.status == 200 and not aborted
+    assert h.runtime.stops == 0
+
+
+def test_r4_late_worker_completion_never_turns_aborted_generation_into_pass(tmp_path, monkeypatch):
+    h = Harness(tmp_path, authority=physical())
+    h.config = replace(
+        h.config,
+        generation_timeout_s=3,
+        options_timeout_s=7,
+        supervision_interval_s=1,
+        abort_join_s=2,
+    )
+    workers = []
+
+    def thread(target, **kw):
+        worker = ScriptedPostWorker(target, h.clock, complete_after=1 if not workers else 4, **kw)
+        workers.append(worker)
+        return worker
+
+    monkeypatch.setattr(cs.threading, "Thread", thread)
+    report = h.run()
+    assert report.claimed and report.executed
+    assert report.result.result_class == ev.AMBIGUOUS_DISPATCH
+    assert not report.result.is_pass and report.output is None
+    assert len(h.http.generation_posts()) == 1
+    assert h.runtime.stops == 1 and h.fence.state().status == "terminal"
+    again = Harness(tmp_path, fence=make_second(h))
+    again.bundle_dir = tmp_path / "again"
+    assert "REFUSED_PRIOR_DISPATCH" in again.run().refusals and not again.http.requests
+
+
+@pytest.mark.parametrize("change", ["delete", "replace", "mutate", "invalid"])
+def test_r2_real_record_continuity_gate_refuses_before_claim(tmp_path, change):
+    from dataclasses import asdict
+
+    h = Harness(tmp_path)
+    path = tmp_path / "synthetic-authorization.json"
+    data = {"schema": au.AUTHORIZATION_SCHEMA, **asdict(h.authorization)}
+    path.write_text(json.dumps(data), encoding="utf-8")
+    original_record = au.read_authorization_record(path)
+    c = h.coordinator()
+    c.ports.authorization_current = original_record.is_current
+    original = c.ports.confirm
+
+    def confirm(summary):
+        if change == "delete":
+            path.unlink()
+        elif change == "replace":
+            other = tmp_path / "replacement.json"
+            other.write_bytes(path.read_bytes())
+            other.replace(path)
+        elif change == "invalid":
+            path.write_text("invalid", encoding="utf-8")
+        else:
+            data["accepted_risks"] = []
+            path.write_text(json.dumps(data), encoding="utf-8")
+        return original(summary)
+
+    c.ports.confirm = confirm
+    report = c.run(h.authority, h.authorization)
+    assert_unconsumed(h, report)
+    assert "AUTHORIZATION_RECORD_NOT_CURRENT" in report.refusals
+
+
+@pytest.mark.parametrize("age", [None, float("nan"), float("inf"), -31, 31])
+def test_r3_runtime_observation_timestamp_must_be_valid_and_current(tmp_path, age):
+    h = Harness(tmp_path)
+    original = h.collector.remeasure
+
+    def remeasure():
+        fresh = original()
+        fresh.runtime_observed_mono_s = None if age is None else h.clock.mono() - age
+        return fresh
+
+    h.collector.remeasure = remeasure
+    report = h.run()
+    assert_unconsumed(h, report)
+    assert "FINAL_PREFLIGHT_STALE" in report.refusals
+
+
+@pytest.mark.parametrize(
+    "reader", ["remeasure", "recheck_served", "recheck_code", "recheck_runtime"]
+)
+def test_r2_r3_final_reader_exception_is_an_unconsumed_refusal(tmp_path, reader):
+    h = Harness(tmp_path)
+
+    def inaccessible():
+        raise TimeoutError("inventory timed out")
+
+    setattr(h.collector, reader, inaccessible)
+    assert_unconsumed(h, h.run())
+
+
+def test_r4_monitor_halt_precedes_deadline_and_discards_late_success(tmp_path, monkeypatch):
+    h = Harness(tmp_path)
+    c = h.coordinator()
+    c._request_writer = ev.DurableJsonlWriter(tmp_path / "requests.jsonl", redact=False)
+    workers = []
+
+    def thread(target, **kw):
+        worker = ScriptedPostWorker(target, h.clock, complete_after=2, **kw)
+        workers.append(worker)
+        return worker
+
+    monkeypatch.setattr(cs.threading, "Thread", thread)
+    sampler = h.make_sampler(None, c._request_writer, lambda: c._run.stage, lambda: "fake")
+    sampler.script = lambda s: s.fire("REQUEST_OWNER_STOP", "RAM_LOW") if s.ticks == 2 else None
+    response, aborted = c._supervised_request(
+        sampler,
+        rq.OPTIONS_ENDPOINT,
+        cs._json_bytes(rq.selection_payload(SERVED)),
+        timeout_s=600,
+        progress=False,
+    )
+    assert aborted and response.status is None
+    assert "POST_MONITOR_ABORT" in c._run.refusals and "POST_OVERALL_TIMEOUT" not in c._run.refusals
+    assert h.runtime.stops == 1 and not workers[0].is_alive()
+
+
+def test_r4_intermittent_progress_cannot_extend_post_budget(tmp_path, monkeypatch):
+    h = Harness(tmp_path)
+    c = h.coordinator()
+    c._request_writer = ev.DurableJsonlWriter(tmp_path / "requests.jsonl", redact=False)
+    monkeypatch.setattr(
+        cs.threading, "Thread", lambda target, **kw: ScriptedPostWorker(target, h.clock, **kw)
+    )
+    sampler = h.make_sampler(None, c._request_writer, lambda: c._run.stage, lambda: "fake")
+    response, aborted = c._supervised_request(
+        sampler, rq.TXT2IMG_ENDPOINT, b"{}", timeout_s=3, progress=True
+    )
+    progress = [r for r in h.http.requests if r[1].startswith(rq.PROGRESS_ENDPOINT)]
+    assert len(progress) >= 2 and aborted and response.status is None
+    assert h.clock.mono() <= 5033 and h.runtime.stops == 1
+
+
+def test_r4_selection_timeout_stops_progression_before_generation(tmp_path, monkeypatch):
+    h = Harness(tmp_path)
+    h.config = replace(h.config, options_timeout_s=3, generation_timeout_s=7, abort_join_s=2)
+    starts = []
+
+    def thread(target, **kw):
+        starts.append(h.clock.mono())
+        return ScriptedPostWorker(target, h.clock, **kw)
+
+    monkeypatch.setattr(cs.threading, "Thread", thread)
+    report = h.run()
+    assert report.requests[0]["mono_s"] - starts[0] == h.config.options_timeout_s
+    assert report.claimed and not report.executed and not report.result.is_pass
+    assert "POST_OVERALL_TIMEOUT" in report.refusals
+    assert "selection_attempted" in report.stages and "generation_dispatched" not in report.stages
+    assert not h.http.generation_posts() and h.runtime.stops == 1
+
+
+def test_r4_timeout_record_is_durable_before_owned_stop(tmp_path, monkeypatch):
+    h = Harness(tmp_path)
+    c = h.coordinator()
+    c._request_writer = ev.DurableJsonlWriter(tmp_path / "requests.jsonl", redact=False)
+    monkeypatch.setattr(
+        cs.threading, "Thread", lambda target, **kw: ScriptedPostWorker(target, h.clock, **kw)
+    )
+    original = h.runtime.stop
+
+    def stop():
+        records, torn, corrupt = ev.read_jsonl(c._request_writer.path)
+        assert not torn and not corrupt
+        assert records[-1]["reason"] == "overall_deadline" and records[-1]["ambiguous"]
+        return original()
+
+    h.runtime.stop = stop
+    sampler = h.make_sampler(None, c._request_writer, lambda: c._run.stage, lambda: "fake")
+    _, aborted = c._supervised_request(
+        sampler, rq.OPTIONS_ENDPOINT, b"{}", timeout_s=3, progress=False
+    )
+    assert aborted and h.runtime.stops == 1
+
+
+@pytest.mark.parametrize(
+    "section,code",
+    [("processes", "RUNTIME_CONFLICT_FOREIGN_OWNER"), ("endpoint", "RUNTIME_PORT_OCCUPIED")],
+)
+def test_r3_conflict_during_sampler_health_is_freshly_refused_before_claim(tmp_path, section, code):
+    h = Harness(tmp_path)
+    h.sampler_kwargs = {
+        "script": lambda sampler: h.collector.runtime_sections.__setitem__(
+            section, [Finding(code, "refuse", "appeared during sampler health")]
+        )
+    }
+    report = h.run()
+    assert_unconsumed(h, report)
+    assert code in report.refusals
+
+
+@pytest.mark.parametrize("halt", [False, True])
+def test_r4_stalled_progress_observation_cannot_blind_supervisor(tmp_path, monkeypatch, halt):
+    h = Harness(tmp_path)
+    h.config = replace(h.config, supervision_interval_s=1, abort_join_s=2)
+    c = h.coordinator()
+    c._request_writer = ev.DurableJsonlWriter(tmp_path / "requests.jsonl", redact=False)
+    workers = []
+
+    def thread(target, **kw):
+        worker = ScriptedPostWorker(target, h.clock, **kw)
+        if kw["name"] == "img154b-progress-observation":
+            worker.start = (
+                lambda: None
+            )  # pending/stalled GET worker; never completes or frees its slot
+        workers.append((kw["name"], worker))
+        return worker
+
+    monkeypatch.setattr(cs.threading, "Thread", thread)
+
+    def progress(path, *, timeout_s):
+        # Represents a trickling/stalled GET: socket timeout is no overall bound.
+        # A synchronous call makes the injected clock jump beyond the POST budget.
+        h.clock.sleep(20)
+        return cs.HttpResult(200, h.http.progress)
+
+    h.http.get_json = progress
+    sampler = h.make_sampler(None, c._request_writer, lambda: c._run.stage, lambda: "fake")
+    if halt:
+        sampler.script = lambda s: s.fire("REQUEST_OWNER_STOP", "RAM_LOW") if s.ticks == 2 else None
+    response, aborted = c._supervised_request(
+        sampler, rq.TXT2IMG_ENDPOINT, b"{}", timeout_s=3, progress=True
+    )
+    assert aborted and response.status is None
+    assert c._run.requests[0]["mono_s"] - 5000 == (1 if halt else 3)
+    assert h.runtime.stops == 1
+    assert [name for name, _ in workers] == [
+        "img154b-supervised-post",
+        "img154b-progress-observation",
+    ]
+    assert c._run.requests[-1]["progress_worker_outstanding"] is True
+    assert "PROGRESS_OBSERVER_MAY_BE_OUTSTANDING" in c._run.refusals
+
+
+def test_r3_evidence_records_the_actual_claim_boundary_assessment(tmp_path):
+    from datetime import datetime, timedelta
+
+    h = Harness(tmp_path)
+    h.clock.utc = lambda: (
+        datetime.fromisoformat(UTC_NOW) + timedelta(seconds=h.clock.mono() - 5000)
+    ).isoformat()
+    claimed_utc = []
+    original = h.fence.claim
+
+    def claim(**kw):
+        claimed_utc.append(h.clock.utc())
+        return original(**kw)
+
+    h.fence.claim = claim
+    report = h.run()
+    assert report.claimed
+    assert report.preflight["assessed_utc"] == claimed_utc[0]
+    persisted = json.loads((h.bundle_dir / "raw" / "preflight.json").read_text())
+    assert persisted["assessed_utc"] == claimed_utc[0]

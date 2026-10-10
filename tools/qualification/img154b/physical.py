@@ -45,8 +45,9 @@ from tools.qualification.img154b import collector as co
 from tools.qualification.img154b import runtime as rt
 from tools.qualification.img154b import sampler as sp
 from tools.qualification.img154b.authorization import (
+    AuthorizationRecord,
     OwnerAuthorization,
-    read_authorization_text,
+    read_authorization_record,
 )
 from tools.qualification.img154b.bundle import EvidenceBundle
 from tools.qualification.img154b.case import (
@@ -465,15 +466,19 @@ def run_materialize(config: HostConfig) -> list[dict[str, Any]]:
 # ----------------------------------------------------------------------------------------------------------- execute
 
 
+def read_owner_record(
+    record_root: Path, manifest: QualificationManifest
+) -> AuthorizationRecord | None:
+    return read_authorization_record(
+        record_root / f"{manifest.attempt_identity()}{AUTHORIZATION_SUFFIX}"
+    )
+
+
 def read_authorization(
     record_root: Path, manifest: QualificationManifest
 ) -> OwnerAuthorization | None:
-    path = record_root / f"{manifest.attempt_identity()}{AUTHORIZATION_SUFFIX}"
-    try:
-        # utf-8-sig: an editor-added BOM must not turn a real record into "absent"; an undecodable file is simply unusable
-        return read_authorization_text(path.read_text(encoding="utf-8-sig"))
-    except (OSError, ValueError):  # AuthorizationError and UnicodeDecodeError are both ValueError
-        return None
+    record = read_owner_record(record_root, manifest)
+    return record.authorization if record else None
 
 
 def interactive_confirm(summary: Mapping[str, Any]) -> str:
@@ -497,7 +502,8 @@ def interactive_confirm(summary: Mapping[str, Any]) -> str:
 
 def run_execute(config: HostConfig, attempt_identity_arg: str | None) -> int:
     plan = config.manifest
-    authorization = read_authorization(config.record_root, plan)
+    owner_record = read_owner_record(config.record_root, plan)
+    authorization = owner_record.authorization if owner_record else None
     request = ActivationRequest(
         platform=sys.platform,
         env=os.environ,
@@ -585,6 +591,8 @@ def run_execute(config: HostConfig, attempt_identity_arg: str | None) -> int:
         bundle=EvidenceBundle(run_dir),
         sample_path=run_dir / "samples.jsonl",
         served_paths=layout.served_paths,
+        authorization_current=lambda approved: owner_record is not None
+        and owner_record.is_current(approved),
     )
     authority = mint_physical_authority(authorization.record_digest() if authorization else "")
     coordinator = CaseCoordinator(ports, manifest=plan, payload=payload, config=CaseConfig())

@@ -26,7 +26,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Protocol
 
-from tools.qualification.img154.core import Finding, Observation
+from tools.qualification.img154.core import Finding, Observation, valid_time
 from tools.qualification.img154.evidence import (
     FAULT_SETTLE_S,
     FAULT_SOURCES,
@@ -204,6 +204,8 @@ class Remeasured:
     observations: Mapping[str, Observation]
     quiescent_baseline: QuiescentBaselineEvidence | None = None
     fault_before: FaultSnapshot | None = None
+    sections: Mapping[str, list[Finding] | None] = field(default_factory=dict)
+    runtime_observed_mono_s: float | None = None
 
 
 class PreflightCollector(Protocol):
@@ -212,6 +214,10 @@ class PreflightCollector(Protocol):
     def remeasure(self) -> Remeasured: ...
 
     def recheck_served(self) -> list[Finding]: ...
+
+    def recheck_code(self) -> CodeRevision: ...
+
+    def recheck_runtime(self) -> tuple[float, Mapping[str, list[Finding] | None]]: ...
 
 
 SamplerFactory = Callable[
@@ -245,6 +251,8 @@ class CasePorts:
     bundle: EvidenceBundle
     sample_path: Path
     served_paths: Mapping[str, str]
+    #: confirms byte and file identity continuity of the originally approved owner record; unwired refuses
+    authorization_current: Callable[[OwnerAuthorization], bool] | None = None
 
 
 @dataclass
@@ -263,6 +271,7 @@ class CaseReport:
     evidence: dict[str, Any] | None = None
     recovery_instructions: tuple[str, ...] = ()
     exception: str | None = None
+    requests: tuple[dict[str, Any], ...] = ()
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -280,6 +289,7 @@ class CaseReport:
             "evidence": self.evidence,
             "recovery_instructions": list(self.recovery_instructions),
             "exception": self.exception,
+            "requests": list(self.requests),
         }
 
 
@@ -341,6 +351,7 @@ class _Run:
     refusals: list[str] = field(default_factory=list)
     started_mono: float | None = None
     ended_mono: float | None = None
+    requests: list[dict[str, Any]] = field(default_factory=list)
 
 
 class CaseCoordinator:
@@ -363,6 +374,9 @@ class CaseCoordinator:
         self._run = _Run()
         self._endpoint_state = "not_started"
         self._authority_kind = AUTHORITY_SYNTHETIC
+        self._request_writer = DurableJsonlWriter(
+            ports.sample_path.with_name("requests.jsonl"), redact=False, rotate=False
+        )
 
     # ---------------------------------------------------------------------------------------------- helpers
     def _mark(self, stage: str, source: str, **facts: Any) -> None:
@@ -427,13 +441,21 @@ class CaseCoordinator:
             self._refuse("OWNER_PASSPHRASE_MISMATCH")
             return self._finish_unclaimed(summary)
 
-        fresh = self.ports.collector.remeasure()
+        try:
+            fresh = self.ports.collector.remeasure()
+        except Exception as exc:  # noqa: BLE001 - no claim or runtime action on inaccessible final observations
+            self._refuse(f"FINAL_REMEASURE_UNAVAILABLE:{type(exc).__name__}")
+            return self._finish_unclaimed(summary)
         device = fresh.observations.get("gpu_device_id")
         if device is None or device.value != inputs.launch_device_id or device.status != "ok":
             self._refuse("DEVICE_IDENTITY_NOT_REVERIFIED")
             return self._finish_unclaimed(summary)
         merged = replace(
             inputs,
+            sections={
+                **inputs.sections,
+                **{name: fresh.sections.get(name) for name in ("processes", "endpoint")},
+            },
             quiescent_baseline=fresh.quiescent_baseline or inputs.quiescent_baseline,
             fault_baseline_coverage=_fault_coverage(fresh.fault_before)
             if fresh.fault_before is not None
@@ -452,7 +474,12 @@ class CaseCoordinator:
             policy=self.policy,
             manifest=self.manifest,
         )
-        served_findings = self.ports.collector.recheck_served()
+        try:
+            served_findings = self.ports.collector.recheck_served()
+        except Exception as exc:  # noqa: BLE001 - an inaccessible served proof is not a pass
+            served_findings = [
+                Finding("SERVED_RECHECK_UNAVAILABLE", "inconclusive", type(exc).__name__)
+            ]
         if (
             final.decision != PREPARED
             or not final.is_current(
@@ -477,7 +504,15 @@ class CaseCoordinator:
             launch_boot_id=merged.launch_boot_id,
             policy=self.policy.baseline,
         )
-        return self._execute(authority, authorization, collected, final, baseline)
+        return self._execute(
+            authority,
+            authorization,
+            collected,
+            final,
+            baseline,
+            merged,
+            fresh.runtime_observed_mono_s,
+        )
 
     # -------------------------------------------------------------------------------------------- gating
     def _merged_ledger_state(self, collected: Collected) -> str:
@@ -538,6 +573,8 @@ class CaseCoordinator:
         collected: Collected,
         decision: PreflightResult,
         baseline: ValidatedBaseline | None,
+        final_inputs: PreflightInputs,
+        runtime_observed_mono_s: float | None,
     ) -> CaseReport:
         ports, run, clock = self.ports, self._run, self.ports.clock
         fence = ports.fence
@@ -581,6 +618,81 @@ class CaseCoordinator:
             self._refuse("SAMPLER_NOT_HEALTHY")
             self._stop_sampler(sampler)
             return self._finish_unclaimed(self._preflight_summary(decision, ()))
+        # No operator/sampler wait may sit between the final authorization gate and the atomic claim.
+        # Refresh runtime findings after sampler-health proof too; no process inventory is carried across that wait.
+        try:
+            claim_runtime_time, claim_sections = ports.collector.recheck_runtime()
+        except Exception:  # noqa: BLE001 - unavailable inventory is never a clean runtime assessment
+            claim_runtime_time, claim_sections = None, {}
+        final_inputs = replace(
+            final_inputs,
+            sections={
+                **final_inputs.sections,
+                **{name: claim_sections.get(name) for name in ("processes", "endpoint")},
+            },
+        )
+        # Re-read code and the approved record, then obtain UTC AFTER those potentially slow reads.
+        try:
+            current_code = ports.collector.recheck_code()
+        except Exception:  # noqa: BLE001 - an unreadable identity is never trusted
+            current_code = CodeRevision("unverifiable", None, None)
+        try:
+            record_current = bool(
+                authorization is not None
+                and ports.authorization_current is not None
+                and ports.authorization_current(authorization)
+            )
+        except Exception:  # noqa: BLE001 - disappearance, replacement or inaccessible record refuses
+            record_current = False
+        gate_time = clock.mono()
+        gates = verify_authorization(
+            authorization,
+            manifest=self.manifest,
+            payload=self.payload,
+            code=current_code,
+            now_utc=clock.utc(),
+        )
+        gates.extend(verify_payload(dict(self.payload.body), self.manifest))
+        if not record_current:
+            gates.append(
+                Finding(
+                    "AUTHORIZATION_RECORD_NOT_CURRENT",
+                    "refuse",
+                    "approved record changed or cannot be reverified",
+                )
+            )
+        runtime_current = (
+            runtime_observed_mono_s is not None
+            and valid_time(runtime_observed_mono_s)
+            and claim_runtime_time is not None
+            and valid_time(claim_runtime_time)
+            and 0 <= gate_time - claim_runtime_time <= self.config.preflight_max_age_s
+            and valid_time(gate_time)
+            and 0 <= gate_time - runtime_observed_mono_s <= self.config.preflight_max_age_s
+        )
+        refreshed = evaluate_preflight(
+            final_inputs,
+            now_mono_s=gate_time,
+            now_utc=clock.utc(),
+            policy=self.policy,
+            manifest=self.manifest,
+        )
+        if (
+            not runtime_current
+            or not decision.is_current(
+                now_mono_s=gate_time,
+                max_age_s=self.config.preflight_max_age_s,
+                manifest=self.manifest,
+            )
+            or refreshed.decision != PREPARED
+        ):
+            self._refuse("FINAL_PREFLIGHT_STALE", *refreshed.reason_codes)
+        if gates or run.refusals:
+            self._refuse(*(f.code for f in gates))
+            self._stop_sampler(sampler)
+            return self._finish_unclaimed(self._preflight_summary(refreshed, gates))
+        collected = replace(collected, code=current_code, inputs=final_inputs)
+        decision = refreshed
         try:
             fence.claim(provenance=provenance)
         except FenceRefusal as exc:
@@ -774,41 +886,123 @@ class CaseCoordinator:
         timeout_s: float,
         progress: bool,
     ) -> tuple[HttpResult | None, bool]:
-        """ONE request on a worker thread under the 1 Hz watchdog. ``aborted`` means a monitor halt ended the wait: the
-        manager-owned stop was requested and nothing further is sent. A request that raises is reported as unknown."""
+        """One POST with an independent monotonic budget. An abort never accepts a late result or sends again."""
 
         ports, run, cfg = self.ports, self._run, self.config
         holder: dict[str, Any] = {}
+        deadline = ports.clock.mono() + timeout_s
 
         def send() -> None:
             try:
                 holder["result"] = ports.http.post_json(path, body, timeout_s=timeout_s)
-            except BaseException as exc:  # noqa: BLE001 - the outcome is unknown; it is never re-sent
+            except BaseException as exc:  # noqa: BLE001 - outcome unknown, never re-sent
                 holder["error"] = type(exc).__name__
+            finally:
+                holder["completed_mono_s"] = ports.clock.mono()
 
         worker = threading.Thread(target=send, name="img154b-supervised-post", daemon=True)
         worker.start()
-        aborted = False
-        while worker.is_alive():
-            worker.join(cfg.supervision_interval_s)
+        reason: str | None = None
+        progress_worker: threading.Thread | None = None
+        progress_holder: dict[str, HttpResult | None] = {}
+        while True:
+            halted = self._halted(sampler) or sampler.harness_fault
+            now = ports.clock.mono()
+            if halted:
+                reason = "monitor_halt"
+                break
+            if now >= deadline:
+                reason = "overall_deadline"
+                break
+            if progress_worker is not None and not progress_worker.is_alive():
+                observed = progress_holder.get("result")
+                if observed is not None:
+                    self._apply_progress(observed)
+                progress_worker = None
+                progress_holder = {}
             if not worker.is_alive():
-                break
-            if progress:
-                self._poll_progress()
-            if self._halted(sampler) or sampler.harness_fault:
-                self._mark("stopping", "operator", reason="monitor halt during a request")
-                run.shutdown = ports.runtime.stop()  # manager-owned only; never a second request
-                worker.join(cfg.abort_join_s)
-                aborted = True
-                break
-        if "result" in holder:
-            return holder["result"], aborted
-        error = holder.get("error", "no_response_before_abort")
-        return HttpResult(None, None, error), aborted
+                if holder.get("completed_mono_s", now) >= deadline:
+                    reason = "overall_deadline"
+                    break
+                if "result" in holder:
+                    return holder["result"], False
+                return HttpResult(None, None, holder.get("error", "no_response")), False
+            if progress and progress_worker is None:
+                # A socket inactivity timeout cannot bound a trickling GET. Keep a single observation worker;
+                # it cannot block the watchdog/deadline or mutate the case after this supervisor exits.
+                observation_timeout = min(3.0, deadline - now)
+                observation_holder = progress_holder
+
+                def observe_progress(
+                    holder: dict[str, HttpResult | None] = observation_holder,
+                    timeout: float = observation_timeout,
+                ) -> None:
+                    holder["result"] = self._poll_progress(timeout_s=timeout)
+
+                progress_worker = threading.Thread(
+                    target=observe_progress, name="img154b-progress-observation", daemon=True
+                )
+                progress_worker.start()
+            remaining = deadline - ports.clock.mono()
+            if remaining > 0:
+                worker.join(min(cfg.supervision_interval_s, remaining))
+
+        self._refuse(
+            "POST_OVERALL_TIMEOUT" if reason == "overall_deadline" else "POST_MONITOR_ABORT"
+        )
+        self._mark("stopping", "operator", reason=reason, endpoint=path)
+        self._request_event(
+            path,
+            reason=reason,
+            timeout_s=timeout_s,
+            ambiguous=True,
+            worker_outstanding=worker.is_alive(),
+        )
+        try:
+            run.shutdown = ports.runtime.stop()  # sole manager-owned lifecycle authority
+        except Exception as exc:  # noqa: BLE001 - failed stop retains uncertainty
+            run.shutdown = ShutdownResult(
+                True, False, False, False, detail=f"stop raised {type(exc).__name__}"
+            )
+        join_deadline = ports.clock.mono() + cfg.abort_join_s
+        worker.join(cfg.abort_join_s)
+        if progress_worker is not None:
+            progress_worker.join(max(0.0, join_deadline - ports.clock.mono()))
+        if progress_worker is not None and progress_worker.is_alive():
+            self._refuse("PROGRESS_OBSERVER_MAY_BE_OUTSTANDING")
+        if worker.is_alive():
+            self._refuse("POST_WORKER_MAY_BE_OUTSTANDING")
+        self._request_event(
+            path,
+            reason="abort_shutdown",
+            progress_worker_outstanding=bool(
+                progress_worker is not None and progress_worker.is_alive()
+            ),
+            shutdown=run.shutdown.as_dict(),
+            ambiguous=True,
+            worker_outstanding=worker.is_alive(),
+        )
+        # Even a successful response after the abort cannot resurrect the case.
+        return HttpResult(None, None, reason), True
+
+    def _request_event(self, path: str, **facts: Any) -> None:
+        event = {
+            "kind": "request_abort",
+            "endpoint": path,
+            "mono_s": self.ports.clock.mono(),
+            "utc": self.ports.clock.utc(),
+            **facts,
+        }
+        self._run.requests.append(event)
+        try:
+            self._request_writer.append(event)  # flush/fsync BEFORE requesting owned shutdown
+        except OSError as exc:
+            self._refuse("POST_ABORT_RECORD_FAILED")
+            self._run.exception = type(exc).__name__
 
     def _generate(self, sampler: SamplerPort) -> None:
         run = self._run
-        response, _ = self._supervised_request(
+        response, aborted = self._supervised_request(
             sampler,
             TXT2IMG_ENDPOINT,
             self.payload.wire_bytes,
@@ -816,16 +1010,18 @@ class CaseCoordinator:
             progress=True,
         )
         run.response = response
-        if response is not None and response.status is not None:
+        if not aborted and response is not None and response.status is not None:
             run.validation = validate_response(response.status, response.body, self.manifest)
 
-    def _poll_progress(self) -> None:
+    def _poll_progress(self, *, timeout_s: float = 3.0) -> HttpResult | None:
         try:
-            result = self.ports.http.get_json(
-                PROGRESS_ENDPOINT + "?skip_current_image=true", timeout_s=3.0
+            return self.ports.http.get_json(
+                PROGRESS_ENDPOINT + "?skip_current_image=true", timeout_s=timeout_s
             )
         except Exception:  # noqa: BLE001 - observation only
-            return
+            return None
+
+    def _apply_progress(self, result: HttpResult) -> None:
         if result.status == 200:
             stage = stage_from_progress(result.body)
             current = self._run.stage
@@ -947,7 +1143,12 @@ class CaseCoordinator:
             self._refuse(f"TERMINAL_RECORD_FAILED:{exc.code}")
             result = classify_case(facts)
         instructions: tuple[str, ...] = ()
-        if shutdown is not None and shutdown.outcome in ("timed_out", "requested_unverified"):
+        if (
+            shutdown is not None and shutdown.outcome in ("timed_out", "requested_unverified")
+        ) or any(
+            code in run.refusals
+            for code in ("POST_WORKER_MAY_BE_OUTSTANDING", "PROGRESS_OBSERVER_MAY_BE_OUTSTANDING")
+        ):
             instructions = RECOVERY_INSTRUCTIONS
         return CaseReport(
             result=result,
@@ -964,6 +1165,7 @@ class CaseCoordinator:
             evidence=bundle["index"],
             recovery_instructions=instructions,
             exception=run.exception,
+            requests=tuple(run.requests),
         )
 
     def _bundle(
@@ -985,6 +1187,7 @@ class CaseCoordinator:
             b.put_json("effective_request", self.payload.as_dict())
             b.put_json("preflight", decision.as_dict())
             b.put_json("phases", run.phases)
+            b.put_json("requests", run.requests)
             b.put_json(
                 "code_revision",
                 {

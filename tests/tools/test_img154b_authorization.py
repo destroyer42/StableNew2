@@ -197,3 +197,36 @@ def test_t100_a_mismatched_or_short_passphrase_is_refused_without_output(
     with pytest.raises(SystemExit):
         cli.main(["passphrase-verifier"])
     assert "passphrase_verifier" not in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("change", ["content", "delete", "replace", "invalid", "risk", "policy"])
+def test_r2_authorization_snapshot_refuses_file_changes(tmp_path, change):
+    import json
+    from dataclasses import asdict
+
+    from tests.tools.test_img154b_case import Harness
+
+    h = Harness(tmp_path)
+    path = tmp_path / "synthetic-authorization.json"
+    data = {"schema": au.AUTHORIZATION_SCHEMA, **asdict(h.authorization)}
+    path.write_text(json.dumps(data), encoding="utf-8")
+    record = au.read_authorization_record(path)
+    assert record is not None and record.is_current(h.authorization)
+    if change == "delete":
+        path.unlink()
+    elif change == "replace":
+        replacement = tmp_path / "replacement.json"
+        replacement.write_bytes(path.read_bytes())
+        replacement.replace(path)
+    elif change == "invalid":
+        path.write_text("broken", encoding="utf-8")
+    else:
+        data[
+            "authorized_by"
+            if change == "content"
+            else "accepted_risks"
+            if change == "risk"
+            else "policy_revision"
+        ] = "changed"
+        path.write_text(json.dumps(data), encoding="utf-8")
+    assert not record.is_current(h.authorization)
