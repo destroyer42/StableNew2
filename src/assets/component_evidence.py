@@ -57,6 +57,14 @@ _PATCH_FACTOR = 4
 _BUNDLED_TEXT_ENCODER_PREFIXES = ("cond_stage_model.", "conditioner.", "text_encoders.", "text_encoder.")
 _BUNDLED_VAE_PREFIXES = ("first_stage_model.", "vae.")
 _QUANTIZED_DTYPES = frozenset({"F8_E4M3", "F8_E5M2", "U8", "I8"})
+#: Final key components that are quantization scales. An ordinary RMSNorm parameter named ``norm.scale`` is not one.
+_QUANT_SCALE_SUFFIXES = frozenset(
+    {"weight_scale", "scale_weight", "input_scale", "scale_input", "weight_scale_2", "weight_scale_inv"}
+)
+
+
+def is_quantization_scale_key(name: str) -> bool:
+    return name.rsplit(".", 1)[-1] in _QUANT_SCALE_SUFFIXES or "comfy_quant" in name
 
 
 @dataclass(frozen=True)
@@ -99,7 +107,7 @@ def precision_facts(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) 
     by_bytes: Counter[str] = Counter()
     for name, dtype in dtypes.items():
         by_bytes[dtype] += _tensor_elements(shapes.get(name, [])) * _DTYPE_BYTES.get(dtype, 0)
-    scale_keys = sum(1 for name in shapes if "scale" in name or "comfy_quant" in name)
+    scale_keys = sum(1 for name in shapes if is_quantization_scale_key(name))
     quantized = sorted(dtype for dtype in histogram if dtype in _QUANTIZED_DTYPES)
     floats = {dtype for dtype in histogram if dtype in ("BF16", "F16", "F32")}
     if quantized and scale_keys:
@@ -256,7 +264,7 @@ def _qwen3(shapes: Mapping[str, list[int]], dtypes: Mapping[str, str]) -> Compon
     layers = _indices(shapes, r"layers\.(\d+)\.")
     vocab, hidden = embed
     quantized = any(dtype in _QUANTIZED_DTYPES for dtype in dtypes.values()) or any(
-        "scale" in name or "comfy_quant" in name for name in shapes
+        is_quantization_scale_key(name) for name in shapes
     )
     facts: dict[str, Any] = {
         "hidden_size": hidden,

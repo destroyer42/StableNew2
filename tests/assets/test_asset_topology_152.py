@@ -44,6 +44,7 @@ RECORD = {
         "dominant_dtype_by_bytes": "BF16",
         "file_name": "flux-2-klein-base-9b.safetensors",
         "size_bytes": None,
+        "sha256": None,
     },
 }
 
@@ -798,9 +799,9 @@ def _not_working_tree(webui: Path) -> None:
 
 def _recorded(webui: Path) -> list[dict]:
     record = json.loads(json.dumps(RECORD))
-    record["applies_to"]["size_bytes"] = (
-        (webui / "models/Stable-diffusion/flux-2-klein-base-9b.safetensors").stat().st_size
-    )
+    target = webui / "models/Stable-diffusion/flux-2-klein-base-9b.safetensors"
+    record["applies_to"]["size_bytes"] = target.stat().st_size
+    record["applies_to"]["sha256"] = hashlib.sha256(target.read_bytes()).hexdigest()
     return [record]
 
 
@@ -856,11 +857,9 @@ def test_a16_five_not_working_cases_are_classified_separately_and_the_no_go_is_c
 
     priority = {leaf(item["bundle"]): item for item in report["priority_candidates"]["items"]}
     exact = priority["flux-2-klein-base-9b.safetensors"]["recorded_outcome"]
-    assert (
-        exact["applies"]
-        and exact["verdict"] == "NO_GO_RESOURCE_RISK"
-        and exact["match_basis"].startswith("name_and_size")
-    )
+    # name and size alone are an explicitly unverified relation: the historical verdict is kept, never attributed
+    assert exact["applies"] is False and exact["relation"] == "name_and_size_similar_unverified"
+    assert exact["historical_verdict"] == "NO_GO_RESOURCE_RISK" and "verdict" not in exact
     sibling = cases["flux2Klein_9bBase.safetensors"]["recorded_outcome"]
     assert (
         sibling["applies"] is False
@@ -882,7 +881,9 @@ def test_a16_five_not_working_cases_are_classified_separately_and_the_no_go_is_c
         for b in report["bundles"]["items"]
         if b["bundle_id"].endswith(":flux-2-klein-base-9b.safetensors")
     )["readiness"]
-    assert readiness["hardware_qualified"] == "recorded_no_go_resource_risk"
+    assert (
+        readiness["hardware_qualified"] == NOT_CHECKED
+    )  # an unverified observation is not promoted
     assert "ready" not in json.dumps(report["bundles"]).replace("not_ready", "")
 
 

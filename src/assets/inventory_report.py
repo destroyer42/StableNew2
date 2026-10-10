@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, replace
@@ -200,56 +201,87 @@ def runtime_section(state: Mapping[str, Any] | None) -> dict[str, Any]:
 # --------------------------------------------------------------------------------------------------- qualification
 
 
+_FULL_SHA = re.compile(r"[0-9a-f]{64}")
+_RELATION_ORDER = (
+    "sha256_verified",
+    "name_and_size_similar_unverified",
+    "verified_bytes_differ",
+    "same_structural_class_unevaluated",
+)
+
+
 def _recorded_match(
     bundle: ModelBundleEvidence,
     scan_files: Mapping[str, ObservedFile],
     records: Sequence[Mapping[str, Any]],
 ) -> dict[str, Any] | None:
-    """A recorded measured outcome applies to one exact candidate; structure alone never transfers a verdict."""
+    """Relate one observed bundle to the recorded measured outcomes; only verified identity attributes a verdict.
+
+    A verdict applies (``applies=True``) only when the file's cached, fingerprint-validated SHA-256 equals the record's
+    complete ``sha256``. A matching name and size is an explicitly *unverified* similarity that keeps the historical verdict
+    visible without attributing it; a digest prefix/suffix is never identity. Every record is examined, in ``id`` order, and
+    the strongest relation wins (ties resolve to the first id), so the result does not depend on the caller's list order.
+    """
 
     primary = next((scan_files[name] for name in bundle.members if name in scan_files), None)
     if primary is None:
         return None
-    for record in records:
+    digest = primary.identity.sha256 if primary.identity.status == "verified" else None
+    found: list[tuple[int, str, dict[str, Any]]] = []
+    for record in sorted(records, key=lambda item: str(item.get("id"))):
         target = record.get("applies_to", {})
-        structural = (
-            bundle.architecture == target.get("architecture")
-            and bundle.facts.get("hidden_size") == target.get("hidden_size")
-            and bundle.quantization.get("precision_layout") == target.get("precision_layout")
-            and bundle.quantization.get("dominant_dtype_by_bytes")
-            == target.get("dominant_dtype_by_bytes")
-        )
-        if not structural:
-            continue
-        same_name_size = primary.name.casefold() == str(
-            target.get("file_name", "")
-        ).casefold() and primary.size == target.get("size_bytes")
-        digest = primary.identity.sha256 if primary.identity.status == "verified" else None
-        prefix, suffix = target.get("sha256_prefix"), target.get("sha256_suffix")
-        if digest and prefix and suffix and digest.startswith(prefix) and digest.endswith(suffix):
-            basis = "sha256_prefix_suffix_match"
-        elif digest and prefix and suffix:
-            return {
-                "record": record["id"],
-                "applies": False,
-                "reason": "verified bytes differ from the evaluated candidate",
-            }
-        elif same_name_size:
-            basis = "name_and_size_match_bytes_unverified"
+        full = target.get("sha256")
+        full = full.lower() if isinstance(full, str) and _FULL_SHA.fullmatch(full.lower()) else None
+        if digest and full and digest == full:
+            relation, extra = (
+                "sha256_verified",
+                {"applies": True, "verdict": record["verdict"], "match_basis": "sha256_verified"},
+            )
         else:
-            return {
-                "record": record["id"],
-                "applies": False,
-                "reason": "same structural class as the evaluated candidate but a different file; the verdict is not transferred and this file is unevaluated",
-            }
-        return {
-            "record": record["id"],
-            "applies": True,
-            "verdict": record["verdict"],
-            "match_basis": basis,
-            "scope": record.get("scope"),
-        }
-    return None
+            structural = (
+                bundle.architecture == target.get("architecture")
+                and bundle.facts.get("hidden_size") == target.get("hidden_size")
+                and bundle.quantization.get("precision_layout") == target.get("precision_layout")
+                and bundle.quantization.get("dominant_dtype_by_bytes")
+                == target.get("dominant_dtype_by_bytes")
+            )
+            if not structural:
+                continue
+            similar = primary.name.casefold() == str(
+                target.get("file_name", "")
+            ).casefold() and primary.size == target.get("size_bytes")
+            if digest and full:
+                relation, reason = (
+                    "verified_bytes_differ",
+                    "the file's verified SHA-256 differs from the evaluated candidate",
+                )
+                extra = {"applies": False, "reason": reason}
+            elif similar:
+                relation = "name_and_size_similar_unverified"
+                extra = {
+                    "applies": False,
+                    "reason": "name and size resemble the evaluated candidate but byte identity is not verified; historical evidence only",
+                    "historical_verdict": record["verdict"],
+                }
+            else:
+                relation = "same_structural_class_unevaluated"
+                extra = {
+                    "applies": False,
+                    "reason": "same structural class as the evaluated candidate but a different file; the verdict is not transferred and this file is unevaluated",
+                }
+        found.append(
+            (
+                _RELATION_ORDER.index(relation),
+                str(record["id"]),
+                {
+                    "record": record["id"],
+                    "relation": relation,
+                    "scope": record.get("scope"),
+                    **extra,
+                },
+            )
+        )
+    return min(found, key=lambda row: (row[0], row[1]))[2] if found else None
 
 
 # --------------------------------------------------------------------------------------------------- backlog
@@ -309,6 +341,12 @@ def _next_diagnostic(
             return (
                 f"Recorded outcome {recorded['verdict']} for this exact candidate ({recorded['record']}); candidate-specific, not retried.",
                 "recorded measured outcome",
+            )
+        if recorded and recorded.get("relation") == "name_and_size_similar_unverified":
+            return (
+                f"Historical {recorded['historical_verdict']} ({recorded['record']}) exists for a file of this name and size; "
+                "byte identity is not verified here, so it is not attributed. Verify the SHA-256 explicitly; treat as unqualified.",
+                "historical evidence; identity unverified",
             )
         return (
             "Same structure as an evaluated full-precision candidate, but this file was not itself evaluated; treat as "

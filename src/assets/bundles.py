@@ -540,8 +540,15 @@ def build_bundles(scan: ObservationScan) -> tuple[ModelBundleEvidence, ...]:
     """Group-first, then pair: logical packages replace their shard files as the only candidates."""
 
     by_path = {item.path: item for item in scan.files}
-    encoders = [item for item in scan.files if item.kind == "text_encoder"]
-    vaes = [item for item in scan.files if item.kind == "vae"]
+    # A shard is never a dependency candidate on its own: its header is partial. Indexed package members and
+    # shard-named files are kept in the inventory but excluded from pairing (no sharded-model execution is modelled).
+    sharded = {path for package in scan.packages if package.index_file for path in package.members}
+
+    def whole(item: ObservedFile) -> bool:
+        return item.path not in sharded and not _SHARD_NAME.search(item.name.lower())
+
+    encoders = [item for item in scan.files if item.kind == "text_encoder" and whole(item)]
+    vaes = [item for item in scan.files if item.kind == "vae" and whole(item)]
     bundles: list[ModelBundleEvidence] = []
     packaged: set[str] = set()
     for package in scan.packages:

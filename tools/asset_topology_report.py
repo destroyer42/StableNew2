@@ -28,7 +28,8 @@ from src.assets.inventory_report import build_report, render_console, render_jso
 from src.assets.observation import ScanLimits  # noqa: E402
 from src.assets.registry import AssetRegistry  # noqa: E402
 
-#: The one recorded measured outcome (PR-IMG-MODELS-151). It is attached only to the exact evaluated candidate.
+#: The one recorded measured outcome (PR-IMG-MODELS-151, historical resource evidence). Attributed to a file only when its
+#: verified SHA-256 equals the complete digest below; a matching name and size is reported as unverified similarity.
 RECORDED_OUTCOMES: tuple[dict[str, Any], ...] = (
     {
         "id": "PR-IMG-MODELS-151",
@@ -41,8 +42,7 @@ RECORDED_OUTCOMES: tuple[dict[str, Any], ...] = (
             "dominant_dtype_by_bytes": "BF16",
             "file_name": "flux-2-klein-base-9b.safetensors",
             "size_bytes": 18_157_185_200,
-            "sha256_prefix": "9105af6c",
-            "sha256_suffix": "41ca",
+            "sha256": "9105af6c7eec805baadd0b0dce89a3eea0d22d8577953376471b4823a36641ca",
         },
     },
 )

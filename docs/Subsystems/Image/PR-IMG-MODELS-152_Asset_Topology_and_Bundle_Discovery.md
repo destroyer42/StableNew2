@@ -35,7 +35,7 @@ members, so the default `refresh()` never reads them and no second identity set 
   never the name or size); `.pt/.pth/.ckpt/.bin` are `FORMAT_UNINSPECTED` and never deserialized.
 * **Packages**: every `*.safetensors.index.json` is validated (plain shard names inside the directory, duplicate keys,
   mapping vs shard headers, missing/extra/conflicting shards, declared `total_size` vs the shard files) and grouped into one
-  logical package *before* any pairing. Shards of a defective or index-less group are never standalone candidates. `config.json`
+  logical package *before* any pairing. Shards of a defective or index-less group are never standalone candidates, and no shard (indexed or shard-named) of a text encoder or VAE is offered as a dependency candidate; they stay in the inventory. `config.json`
   and tokenizer/license files are associated only through a validated package boundary (or a directory with exactly one model
   file); a `config.json` shared by several model files is reported unassociated, and only allow-listed config keys are retained.
 
@@ -44,7 +44,7 @@ members, so the default `refresh()` never reads them and no second identity set 
 One shape classifier (`classify_checkpoint_shapes`) serves both the registry path and component evidence: SD1.x/SD2.x are no
 longer labelled SDXL; SDXL inpainting (9-channel input) and refiner are distinct; **Turbo** is a subtype only from embedded
 metadata (`modelspec.*`, `ss_base_model_version`), never a name. Precision is reported as the full dtype histogram, byte
-shares, scale/quantization keys and a layout (`plain`, `mixed_float`, `mixed_scaled`, `unknown`) with the dominant dtype named
+shares, quantization-scale keys (`weight_scale`, `scale_weight`, `input_scale`, `comfy_quant`; ordinary `norm.scale` RMSNorm parameters do not count) and a layout (`plain`, `mixed_float`, `mixed_scaled`, `unknown`) with the dominant dtype named
 *by tensor count* and *by bytes* separately — an FP8 checkpoint stores most tensors as F32 scales, so a single dtype is never the
 layout. Added signatures were grounded on real headers: Z-Image DiT, Qwen-Image DiT, Qwen-Image VAE; VAEs carry latent channels
 **and** family (`flux1_ae`, `flux2_vae`, `ldm_kl_4ch`, `qwen_image_vae`) **and** key format (native vs Diffusers). Anything without a
@@ -73,9 +73,11 @@ LoRA/embedding hints are counts plus a bounded name list of tensor-family matche
 with `--include-paths`. Sections: roots scanned/not scanned, file vs logical-model counts, unrecognized, collisions
 (different size or two different verified digests prove `different`; equal name and size stay `unverified`), exact-path aliases,
 packages, adapters, bundles, the five operator `Not Working` cases classified separately, a ranked qualification backlog and
-the recorded candidate-specific outcome. `Not Working` is operator-provided status, never a verdict. The PR-151 `NO_GO_RESOURCE_RISK`
-is attached only to the exact evaluated file (name + size, or the recorded SHA prefix/suffix when identity is verified); a
-same-structure sibling is reported as unevaluated.
+the recorded candidate-specific outcome. `Not Working` is operator-provided status, never a verdict. The PR-151 `NO_GO_RESOURCE_RISK` is kept as historical resource evidence and is *attributed* (`applies=true`) only when the file's
+cached, fingerprint-validated SHA-256 equals the record's complete digest. A matching name and size is reported as
+`name_and_size_similar_unverified` (historical verdict visible, nothing attributed, `hardware_qualified` stays `not_checked`);
+a digest prefix/suffix is never identity; verified differing bytes and same-structure siblings are `applies=false`. Every
+record is examined in id order and the strongest relation wins.
 
 `--forge-url` (`src/image_backends/model_inventory_reconcile.py`) is the only runtime contact: GET-only reads of an
 endpoint that is already running, identity-checked through `classify_client_runtime`. A failed read is `unavailable`, a
