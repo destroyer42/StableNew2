@@ -198,7 +198,6 @@ def _controller_with_failing_fast_probe(monkeypatch, results):
         "src.controller.webui_connection_controller.app_config.get_webui_autostart_enabled", lambda: True
     )
     monkeypatch.setattr("src.controller.webui_connection_controller.time.sleep", lambda *a, **k: None)
-    monkeypatch.setattr("src.api.healthcheck.find_webui_port", lambda *a, **k: None)
     constructed = mock.Mock()
     monkeypatch.setattr("src.controller.webui_connection_controller.WebUIProcessManager", constructed)
     monkeypatch.setattr(

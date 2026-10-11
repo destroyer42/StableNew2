@@ -118,20 +118,6 @@ def test_app_controller_uses_runtime_ports_for_client_and_runner(monkeypatch) ->
     assert controller.pipeline_runner == runtime_ports.runner_calls[0]
 
 
-def test_app_controller_discovery_uses_runtime_ports(monkeypatch) -> None:
-    runtime_ports = _RuntimePortsStub()
-    controller = AppController.__new__(AppController)
-    controller._runtime_ports = runtime_ports
-    monkeypatch.setattr(
-        "src.utils.webui_discovery.find_webui_api_port",
-        lambda **_kwargs: "http://127.0.0.1:7862",
-    )
-
-    client = AppController._create_api_client_with_discovery(controller)
-
-    assert client == {"base_url": "http://127.0.0.1:7862"}
-
-
 def test_video_workflow_controller_accepts_registry_port(tmp_path: Path) -> None:
     source = tmp_path / "source.png"
     end = tmp_path / "end.png"

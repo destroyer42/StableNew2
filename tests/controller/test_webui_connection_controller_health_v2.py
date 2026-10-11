@@ -22,6 +22,8 @@ def _build_controller(monkeypatch, results, *, retry_count=1):
     )
     fake_pm = mock.Mock()
     fake_pm.return_value.start.return_value = True
+    fake_pm.return_value.exit_diagnostics.return_value = None
+    fake_pm.return_value.startup_timeout_seconds = 0.05
     monkeypatch.setattr("src.controller.webui_connection_controller.WebUIProcessManager", fake_pm)
     monkeypatch.setattr(
         "src.controller.webui_connection_controller.build_default_webui_process_config",
@@ -94,7 +96,7 @@ def test_ensure_connected_records_timing_snapshot(monkeypatch):
     assert timing is not None
     assert timing["state"] == "ready"
     assert timing["autostart_invoked"] is True
-    assert timing["retry_attempts_used"] == 1
+    assert timing["retry_attempts_used"] == 0  # owned startup is one bounded managed wait
     assert timing["fast_probe_elapsed_ms"] >= 0.0
     assert timing["total_elapsed_ms"] >= 0.0
 

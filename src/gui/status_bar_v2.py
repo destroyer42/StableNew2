@@ -217,7 +217,7 @@ class StatusBarV2(ttk.Frame):
                 state_key = str(state).lower()
             except Exception:
                 state_key = ""
-        if state_key == "connected":
+        if state_key in ("connected", "ready"):  # READY is the enum value; "connected" the legacy string
             self._launch_button.state(["disabled"])
             self._retry_button.state(["disabled"])
         elif state_key == "connecting":

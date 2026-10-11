@@ -22,6 +22,12 @@ evidence. Read `STATUS.md`, this map, and only the relevant section of
   `src/controller/app_controller_services/runtime_projection_coordinator.py` /
   `src/gui/app_state_projection_sink.py` (versioned async publication) ->
   `tests/gui_v2/test_preview_draft_recovery_112.py`.
+- Managed WebUI endpoint/lifecycle consistency (PR-RUNTIME-WEBUI-170):
+  `docs/Subsystems/Runtime/PR-RUNTIME-WEBUI-170_Managed_WebUI_Endpoint_and_Lifecycle_Consistency.md` ->
+  `src/controller/webui_connection_controller.py` (single-flight, epoch-guarded, no alternate ports) ->
+  `src/api/webui_process_manager.py` (`_start_lock`, startup window, `check_health` refusal) /
+  `src/api/healthcheck.py` -> `src/gui/status_bar_v2.py` (READY controls) ->
+  `tests/controller/test_webui_endpoint_lifecycle_170.py`.
 - Model Comparison global-positive parity (PR-IMG-MODELS-160):
   `docs/Subsystems/Image/PR-IMG-MODELS-160_Model_Comparison_Global_Positive_Parity.md` ->
   `src/learning/model_comparison.py::global_positive_ownership` (ownership read from the arm's compiled policy) /

@@ -1259,39 +1259,6 @@ class AppController:
         except Exception:
             logger.exception("Failed to start system watchdog")
 
-    def _create_api_client_with_discovery(self) -> Any:
-        """
-        Create API client with automatic port discovery.
-
-        WebUI auto-increments ports (7860 → 7861 → 7862...) when instances collide.
-        This scans ports 7860-7869 to find the active WebUI instance.
-
-        Returns:
-            SDWebUIClient configured with discovered or default URL
-        """
-        import logging
-
-        from src.utils.webui_discovery import find_webui_api_port
-
-        logger = logging.getLogger(__name__)
-
-        # Try to discover actual WebUI port
-        discovered_url = find_webui_api_port(
-            base_url="http://127.0.0.1",
-            start_port=7860,
-            max_attempts=10  # Check ports 7860-7869
-        )
-
-        if discovered_url:
-            logger.info(f"[controller] Discovered WebUI at {discovered_url}")
-            return self._runtime_ports.create_client(base_url=discovered_url)
-        else:
-            # Fall back to default or environment variable
-            import os
-            default_url = os.getenv("STABLENEW_WEBUI_BASE_URL", "http://127.0.0.1:7860")
-            logger.warning(f"[controller] WebUI discovery failed, using {default_url}")
-            return self._runtime_ports.create_client(base_url=default_url)
-
     def notify_queue_activity(self) -> None:
         import time
 

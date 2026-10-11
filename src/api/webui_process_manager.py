@@ -122,6 +122,10 @@ class WebUIProcessManager:
         self._last_ready_event: WebUIReadyEvent | None = None
         self._ready_listeners: list[Callable[[WebUIReadyEvent], None]] = []
         self._ready_lock = threading.Lock()
+        # Serializes launches: bootstrap, Launch and Retry can race, but only one process is ever started.
+        self._start_lock = threading.RLock()
+        # False from launch until a readiness proof for that launch; bounds the no-restart startup window.
+        self._proven_ready_since_launch = False
         self._process: subprocess.Popen | None = None
         self._owns_process = False
         self._launch_session_command: tuple[str, ...] | None = None
@@ -193,6 +197,7 @@ class WebUIProcessManager:
             logger.debug("Failed to clear stale readiness failure state", exc_info=True)
         with self._ready_lock:
             self._ready_epoch += 1
+            self._proven_ready_since_launch = True
             event = WebUIReadyEvent(
                 epoch=self._ready_epoch,
                 source=source,
@@ -386,6 +391,21 @@ class WebUIProcessManager:
                 if healthy:
                     log_with_ctx(logger, logging.DEBUG, "WebUI already healthy", ctx=ctx)
                     return True
+                if self._within_startup_window():
+                    # A process still inside its normal startup window is not unhealthy yet: wait for it (bounded)
+                    # instead of killing and relaunching it.
+                    logger.info(
+                        "Owned WebUI is still inside its startup window; waiting instead of restarting"
+                    )
+                    try:
+                        wait_for_managed_startup(
+                            self,
+                            self._configured_base_url(),
+                            timeout_s=self._startup_window_remaining(),
+                        )
+                        return True
+                    except Exception:
+                        logger.warning("Owned WebUI did not become ready within its startup window")
                 logger.warning("Existing WebUI process unhealthy; restarting")
             except Exception:
                 logger.warning("Health check failed while WebUI claimed running")
@@ -419,40 +439,57 @@ class WebUIProcessManager:
 
         try:
             return wait_for_webui_ready(url, timeout=15.0, poll_interval=3.0)
-        except Exception:
-            if self._config.runtime_identity != "a1111_webui":
-                # Managed Forge listens on its own configured endpoint. Scanning the A1111 port range and rebinding
-                # to whatever answers would adopt an external process, which StableNew never does.
-                return False
-            # PR-PORT-DISCOVERY: If health check failed on expected port, try to discover
-            # WebUI on alternate ports in case previous shutdown left orphan on port 7860
-            # and WebUI auto-incremented to 7861
-            logger.warning(
-                "[PORT-DISCOVERY] Health check failed on %s, scanning for WebUI on alternate ports...",
-                url,
+        except Exception as exc:
+            # The configured endpoint is authoritative for every runtime. Scanning other ports and rebinding to
+            # whatever answers would adopt an external process, which StableNew never does.
+            log_with_ctx(
+                logger,
+                logging.WARNING,
+                "WebUI health check failed at its configured endpoint; alternate ports are never probed or adopted",
+                ctx=LogContext(subsystem="api"),
+                extra_fields={
+                    "event": "webui_port_discovery_refused",
+                    "configured_endpoint": url,
+                    "runtime_identity": self.runtime_identity,
+                    "owned_pid": self._pid if self.owns_process else None,
+                    "error": str(exc),
+                },
             )
-            try:
-                discovered_port = discover_webui_port(base_port=7860, max_offset=10)
-                if discovered_port and discovered_port != 7860:
-                    logger.warning(
-                        "[PORT-DISCOVERY] ⚠ Found WebUI on port %d instead of expected 7860. "
-                        "This indicates an orphaned process was blocking port 7860. "
-                        "Updating base_url to use discovered port.",
-                        discovered_port,
-                    )
-                    # Update the config to use the discovered port
-                    self._config.base_url = f"http://127.0.0.1:{discovered_port}"
-                    # Try health check again with the correct port
-                    return wait_for_webui_ready(
-                        self._config.base_url, timeout=5.0, poll_interval=1.0
-                    )
-            except Exception as exc:
-                logger.debug("[PORT-DISCOVERY] Port discovery failed: %s", exc)
+            return False
 
+    @property
+    def startup_timeout_seconds(self) -> float:
+        """The bounded window a legitimate startup may take before it is treated as failed."""
+
+        value = getattr(self._config, "startup_timeout_seconds", None)
+        return float(value) if isinstance(value, (int, float)) and value > 0 else 60.0
+
+    def _startup_window_remaining(self) -> float:
+        started = self._start_time
+        if started is None:
+            return 0.0
+        return max(self.startup_timeout_seconds - (time.time() - started), 0.0)
+
+    def _within_startup_window(self) -> bool:
+        """An owned, live process that has not yet proven readiness and is inside its startup window."""
+
+        try:
+            return bool(
+                self.owns_process
+                and self.is_running()
+                and not self._proven_ready_since_launch
+                and self._startup_window_remaining() > 0.0
+            )
+        except Exception:
             return False
 
     def start(self) -> subprocess.Popen:
-        """Start the WebUI process if not already running."""
+        """Start the WebUI process if not already running (concurrent callers get the one process)."""
+
+        with self._start_lock:
+            return self._start_locked()
+
+    def _start_locked(self) -> subprocess.Popen:
 
         # CRITICAL: Don't start WebUI if StableNew GUI is not running
         # This prevents orphaned processes from crashed sessions from spawning WebUI
@@ -564,6 +601,7 @@ class WebUIProcessManager:
             self._claim_global_registration()
             self._attach_pid_to_container(self._pid)
             self._start_time = time.time()
+            self._proven_ready_since_launch = False
             launch_msg = format_launch_message(
                 run_session_id=run_session_id,
                 pid=self._pid,
@@ -1200,62 +1238,6 @@ class WebUIProcessManager:
             logger.info("[Orphan Monitor] No owned WebUI process; no OS action taken")
 
         logger.debug("[Orphan Monitor] Monitor thread exiting")
-
-
-def discover_webui_port(base_port: int = 7860, max_offset: int = 10) -> int | None:
-    """
-    Discover which port the WebUI is actually running on.
-
-    PR-PORT-DISCOVERY: Scans ports starting from base_port, checking if WebUI
-    is responding on any of them. This handles cases where port 7860 is blocked
-    and WebUI auto-increments to 7861, 7862, etc.
-
-    Args:
-        base_port: Starting port to check (default 7860)
-        max_offset: Maximum port offset to scan (checks base_port through base_port+max_offset)
-
-    Returns:
-        Port number where WebUI is responding, or None if not found
-    """
-    import socket
-
-    from src.api.healthcheck import check_webui_health
-
-    logger.info(
-        "[PORT-DISCOVERY] Scanning for WebUI on ports %d-%d...", base_port, base_port + max_offset
-    )
-
-    for offset in range(max_offset + 1):
-        port = base_port + offset
-
-        # Quick TCP connection test first
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                sock.settimeout(0.5)
-                result = sock.connect_ex(("127.0.0.1", port))
-                if result != 0:
-                    # Port not listening, skip health check
-                    continue
-        except Exception:
-            continue
-
-        # Port is listening - verify it's actually WebUI
-        test_url = f"http://127.0.0.1:{port}"
-        logger.info("[PORT-DISCOVERY] Port %d is listening, testing if it's WebUI...", port)
-
-        try:
-            if check_webui_health(test_url, timeout=2.0):
-                logger.info("[PORT-DISCOVERY] ✓ Found WebUI on port %d", port)
-                return port
-        except Exception as exc:
-            logger.debug("[PORT-DISCOVERY] Port %d health check failed: %s", port, exc)
-
-    logger.warning(
-        "[PORT-DISCOVERY] WebUI not found on any port in range %d-%d",
-        base_port,
-        base_port + max_offset,
-    )
-    return None
 
 
 def kill_orphaned_webui_processes_blocking_port(
